@@ -31,6 +31,8 @@ printf "bootstrap:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 FAKE_PSQL_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 printf "psql:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
+# Whether it runs in the container or on the host, the client needs its credential.
+: "${PGPASSWORD:?psql was invoked without PGPASSWORD}"
 if [[ "${OCS_TEST_FAIL_PSQL:-false}" == "true" ]]; then exit 1; fi
 
 registry="$OCS_TEST_DATABASE_REGISTRY"
@@ -80,18 +82,32 @@ printf "uv:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 
 FAKE_DOCKER_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
-# `docker ps` names the stand-in Redis container, unless the test asked for the
-# no-container case; `docker exec <container> redis-cli ...` hands the rest of the
-# arguments to the redis-cli fake on PATH.
+# `docker ps` lists the stand-in service containers with the port mappings the helpers
+# match on, minus whichever one a test blanked out to exercise the host fallback;
+# `docker exec <container> <client> ...` hands the rest of the arguments to the client
+# fake on PATH.
 if [[ "${1:-}" == "ps" ]]; then
-    container="${OCS_TEST_REDIS_CONTAINER-ocs_test_redis}"
-    printf 'unrelated_container 0.0.0.0:5432->5432/tcp\n'
-    [[ -z "$container" ]] || printf '%s 0.0.0.0:6379->6379/tcp\n' "$container"
+    redis_container="${OCS_TEST_REDIS_CONTAINER-ocs_test_redis}"
+    postgres_container="${OCS_TEST_POSTGRES_CONTAINER-ocs_test_postgres}"
+    [[ -z "$postgres_container" ]] \
+        || printf '%s 0.0.0.0:5432->5432/tcp\n' "$postgres_container"
+    [[ -z "$redis_container" ]] \
+        || printf '%s 0.0.0.0:6379->6379/tcp\n' "$redis_container"
     exit 0
 fi
 
 if [[ "${1:-}" == "exec" ]]; then
     shift
+    while [[ "${1:-}" == -* ]]; do
+        # The environment a real `docker exec -e` would hand the client, kept so the
+        # fakes see what the real commands would.
+        if [[ "$1" == "-e" ]]; then
+            export "${2?docker exec -e needs a value}"
+            shift 2
+            continue
+        fi
+        shift
+    done
     printf "docker-exec:%s\n" "$1" >> "$OCS_TEST_COMMAND_LOG"
     shift
     exec "$@"
@@ -468,19 +484,53 @@ def test_redis_registry_falls_back_to_a_host_client_without_a_container(
     assert "redis-registry:allocate:feature_6:" in command_output
 
 
-def test_redis_client_reports_when_no_client_is_reachable(
-    tmp_path: Path,
+def test_psql_runs_inside_the_postgres_container(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
+    _, worktree, env, command_log = worktree_fixture
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_test_postgres" in command_output
+    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
+
+
+def test_psql_falls_back_to_a_host_client_without_a_container(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_TEST_POSTGRES_CONTAINER"] = ""
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    assert "docker-exec:" not in command_output
+    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
+
+
+@pytest.mark.parametrize(
+    ("helper", "arguments"),
+    [
+        pytest.param("ocs_redis_cli", ("PING",), id="redis"),
+        pytest.param("ocs_psql", ("postgres", "-c", "SELECT 1"), id="postgres"),
+    ],
+)
+def test_service_clients_report_when_no_client_is_reachable(
+    tmp_path: Path,
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    helper: str,
+    arguments: tuple[str, ...],
+) -> None:
     _, worktree, env, _ = worktree_fixture
-    # A PATH holding neither a container nor a redis-cli -- only the shell that runs the
+    # A PATH holding neither a container nor a client -- only the shell that runs the
     # helper -- so the helper has to say so rather than fail on a missing command.
     bare_bin = tmp_path / "bare-bin"
     bare_bin.mkdir()
     (bare_bin / "bash").symlink_to(shutil.which("bash") or "/bin/bash")
     env["PATH"] = str(bare_bin)
 
-    result = _run_worktree_helper(worktree, "ocs_redis_cli", "PING", env=env, check=False)
+    result = _run_worktree_helper(worktree, helper, *arguments, env=env, check=False)
 
     assert result.returncode != 0
     assert "docker-compose-dev.yml" in result.stderr

@@ -89,19 +89,15 @@ ocs_worktree_resource_name() {
     ocs_sanitize_resource_name "$raw_name"
 }
 
-# Redis for local development runs in the container `docker-compose-dev.yml` defines, and
-# a host redis-cli is not something we can count on being installed, so registry and
-# flush commands go through the client inside that container. Only one container can hold
-# the host Redis port at a time, which is what makes looking it up by published port
-# unambiguous.
-ocs_redis_container() {
-    local port="${OCS_REDIS_PORT:-6379}"
+# Postgres and Redis run in the containers `docker-compose-dev.yml` defines, and neither
+# `psql` nor `redis-cli` is something we can count on being installed on the host, so the
+# clients we reach for are the ones inside those containers. A service is identified by
+# the host port it publishes -- only one container can hold a given port at a time, which
+# makes that unambiguous -- and named directly by `OCS_POSTGRES_CONTAINER` or
+# `OCS_REDIS_CONTAINER` when discovery needs overriding.
+ocs_container_publishing_port() {
+    local port="$1"
     local container
-
-    if [[ -n "${OCS_REDIS_CONTAINER:-}" ]]; then
-        printf '%s\n' "$OCS_REDIS_CONTAINER"
-        return 0
-    fi
 
     command -v docker >/dev/null 2>&1 || return 1
     # The mapping is read out of `docker ps` rather than asked for with `--filter
@@ -119,6 +115,23 @@ ocs_redis_container() {
     printf '%s\n' "$container"
 }
 
+ocs_report_missing_client() {
+    local client="$1"
+    local port="$2"
+
+    echo "No container publishes port $port and no $client is installed on the host." >&2
+    echo "Start the development services with: docker compose -f docker-compose-dev.yml up -d" >&2
+    return 1
+}
+
+ocs_redis_container() {
+    if [[ -n "${OCS_REDIS_CONTAINER:-}" ]]; then
+        printf '%s\n' "$OCS_REDIS_CONTAINER"
+        return 0
+    fi
+    ocs_container_publishing_port "${OCS_REDIS_PORT:-6379}"
+}
+
 ocs_redis_cli() {
     local container
 
@@ -128,13 +141,11 @@ ocs_redis_cli() {
     fi
     # A Redis reachable on the host port without a container of its own -- a service
     # container in CI, or a locally installed server -- still answers a host client.
-    if command -v redis-cli >/dev/null 2>&1; then
-        redis-cli "$@"
-        return
+    if ! command -v redis-cli >/dev/null 2>&1; then
+        ocs_report_missing_client redis-cli "${OCS_REDIS_PORT:-6379}"
+        return 1
     fi
-    echo "No Redis container publishes port ${OCS_REDIS_PORT:-6379} and no redis-cli is installed." >&2
-    echo "Start the development services with: docker compose -f docker-compose-dev.yml up -d" >&2
-    return 1
+    redis-cli "$@"
 }
 
 ocs_redis_registry_command() {
@@ -346,16 +357,39 @@ ocs_templates_are_enabled() {
     [[ "${OCS_DISABLE_DATABASE_TEMPLATES:-false}" != "true" ]]
 }
 
+ocs_postgres_container() {
+    if [[ -n "${OCS_POSTGRES_CONTAINER:-}" ]]; then
+        printf '%s\n' "$OCS_POSTGRES_CONTAINER"
+        return 0
+    fi
+    ocs_container_publishing_port "${OCS_POSTGRES_PORT:-5432}"
+}
+
+# Every caller passes its statement inline with -c/-tAc, so nothing here depends on the
+# client sharing a filesystem with the worktree; `localhost` names the server either way,
+# the container's own or the one its published port leads to.
 ocs_psql() {
     local database="$1"
     shift
-
-    PGPASSWORD=postgres psql \
-        -h localhost \
-        -U postgres \
-        -d "$database" \
-        -v ON_ERROR_STOP=1 \
+    local container
+    local psql_command=(
+        psql
+        -h localhost
+        -U postgres
+        -d "$database"
+        -v ON_ERROR_STOP=1
         "$@"
+    )
+
+    if container=$(ocs_postgres_container); then
+        docker exec -e PGPASSWORD=postgres "$container" "${psql_command[@]}"
+        return
+    fi
+    if ! command -v psql >/dev/null 2>&1; then
+        ocs_report_missing_client psql "${OCS_POSTGRES_PORT:-5432}"
+        return 1
+    fi
+    PGPASSWORD=postgres "${psql_command[@]}"
 }
 
 ocs_database_exists() {
