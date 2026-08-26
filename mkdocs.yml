@@ -178,3 +178,4 @@ nav:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
     - Feature Flags: admin_guides/feature_flags.md
+    - OAuth Applications: admin_guides/oauth_applications.md
