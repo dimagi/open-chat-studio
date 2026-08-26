@@ -53,6 +53,15 @@ jobs:
 
     - name: Checkout
       uses: actions/checkout@v7
+      with:
+        # git describe needs the tags, which a shallow clone omits.
+        fetch-tags: true
+        fetch-depth: 0
+
+    - name: Resolve OCS version
+      id: ocs-version
+      # Matches `v*` only, so the chat widget's `w_v*` tags cannot win.
+      run: echo "version=$(git describe --tags --match 'v*' --always)" >> "$GITHUB_OUTPUT"
 
     - name: Set Deploy Env
       # Set the deploy env based on the input from the event or else from the branch
@@ -143,6 +152,8 @@ jobs:
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile
+        build-args: |
+          OCS_VERSION=${{ steps.ocs-version.outputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3
