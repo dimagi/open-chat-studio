@@ -155,3 +155,19 @@ def test_team_member_gets_a_live_widget_on_an_unpublished_chatbot(client, team_w
     html = _get(client).content.decode()
     assert "not published" in html.lower()
     assert 'disabled="true"' not in html
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("host", "expected_status"),
+    [
+        pytest.param("[2001:db8::1]:8000", 200, id="same-ipv6-host"),
+        pytest.param("[2001:db8::2]:8000", 404, id="other-ipv6-host"),
+    ],
+)
+def test_page_host_check_on_an_ipv6_site(client, team_with_users, settings, host, expected_status):
+    settings.ALLOWED_HOSTS = ["[2001:db8::1]", "[2001:db8::2]"]
+    Site.objects.filter(id=1).update(domain="[2001:db8::1]:8000")
+    Site.objects.clear_cache()
+    _channel(team_with_users)
+    assert _get(client, host=host).status_code == expected_status

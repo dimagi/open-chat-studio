@@ -14,7 +14,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
 from apps.experiments.models import Experiment
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
-from apps.web.meta import canonical_hostname, get_server_root
+from apps.web.meta import canonical_hostname, get_server_root, hostname_of
 from apps.web.waf import WafRule, waf_allow
 
 CSP = (
@@ -56,7 +56,7 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @public_chat_rate_limited
 def public_link_page(request, token: str):
-    if request.get_host().split(":")[0].lower() != canonical_hostname():
+    if hostname_of(request.get_host()) != canonical_hostname():
         raise Http404()
     channel = (
         ExperimentChannel.objects.select_related("experiment", "team")

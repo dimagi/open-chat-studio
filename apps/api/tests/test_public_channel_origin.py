@@ -131,3 +131,18 @@ def test_logged_in_user_on_the_page_lands_on_the_public_channel(public_channel, 
     assert response.status_code == 201, response.content
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
     assert session.experiment_channel == public_channel
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [
+        pytest.param("https://[2001:db8::1]:8443", True, id="same-ipv6-host"),
+        pytest.param("https://[2001:db8::1]", True, id="same-ipv6-host-no-port"),
+        pytest.param("https://[2001:db8::2]", False, id="other-ipv6-host"),
+    ],
+)
+def test_public_channel_origin_rule_on_an_ipv6_site(public_channel, origin, allowed):
+    Site.objects.filter(id=1).update(domain="[2001:db8::1]:8443")
+    Site.objects.clear_cache()
+    assert channel_origin_allowed(_request(origin=origin), public_channel) is allowed

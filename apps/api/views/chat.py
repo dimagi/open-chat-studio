@@ -376,12 +376,12 @@ def _published_public_version(experiment) -> tuple[Experiment | None, Response |
     return published, None
 
 
-def _public_channel_refusal(request, experiment, experiment_channel) -> Response | None:
-    """A 409 when a public link cannot serve a visitor, else None. Team members are exempt so
-    they can try the page before publishing."""
+def _public_channel_admission(request, experiment, experiment_channel) -> tuple[Experiment | None, Response | None]:
+    """The published version a public visitor is admitted to, or the 409 that refuses them.
+    (None, None) for other channels and for team members, who may try the page before publishing."""
     if experiment_channel.platform != ChannelPlatform.PUBLIC or _is_team_member(request, experiment):
-        return None
-    return _published_public_version(experiment)[1]
+        return None, None
+    return _published_public_version(experiment)
 
 
 def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
@@ -582,8 +582,10 @@ def chat_start_session(request):
     if disabled := _channel_disabled_response(experiment_channel):
         return disabled
 
-    if refusal := _public_channel_refusal(request, experiment, experiment_channel):
+    published, refusal = _public_channel_admission(request, experiment, experiment_channel)
+    if refusal:
         return refusal
+    experiment_version = experiment_version or published
 
     if request.user.is_authenticated:
         user = request.user

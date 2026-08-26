@@ -217,3 +217,15 @@ def test_regeneration_revokes_the_old_key_and_the_live_session(team_with_users):
     response = _send(client, started["session_id"], started["session_token"])
     assert response.status_code == 400
     assert "ended" in response.json()["error"]
+
+
+@pytest.mark.django_db()
+def test_start_response_describes_the_published_version(team_with_users):
+    channel = _public_channel(team_with_users)
+    working = channel.experiment
+    working.name = "Renamed draft"
+    working.save()
+    response = _start(APIClient(), working)
+    assert response.status_code == 201, response.content
+    assert response.json()["chatbot"]["name"] == working.versions.get(is_default_version=True).name
+    assert response.json()["chatbot"]["name"] != "Renamed draft"

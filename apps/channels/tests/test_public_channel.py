@@ -9,7 +9,7 @@ from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.channels.forms import PublicChannelForm
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -233,3 +233,25 @@ def test_removing_a_public_channel_ends_live_sessions(client, public_channel):
     assert client.post(url).status_code == 200
     live.refresh_from_db()
     assert live.is_complete
+
+
+@pytest.mark.django_db()
+def test_regeneration_rolls_back_when_ending_sessions_fails(client, public_channel, public_flag, monkeypatch):
+    _operator(client, public_channel.team, "change_experimentchannel")
+
+    def boom(self):
+        raise RuntimeError("sessions unavailable")
+
+    monkeypatch.setattr(ExperimentChannel, "end_live_sessions", boom)
+    url = reverse(
+        "channels:channel_edit_dialog",
+        args=[public_channel.team.slug, public_channel.experiment_id, public_channel.id],
+    )
+    with pytest.raises(RuntimeError):
+        client.post(
+            url,
+            data={"name": public_channel.name, "platform": "public", "enabled": "on", "regenerate_link": "1"},
+            HTTP_HX_REQUEST="true",
+        )
+    public_channel.refresh_from_db()
+    assert public_channel.extra_data["widget_token"] == TOKEN

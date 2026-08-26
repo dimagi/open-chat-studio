@@ -10,6 +10,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.urls import reverse
 from telebot import TeleBot, apihelper
 
@@ -78,10 +79,10 @@ class ChannelFormWrapper:
         if self.extra_form and self.extra_form.is_valid():
             config_data = self.extra_form.cleaned_data
 
-        instance = self.channel_form.save(self.experiment, config_data)
-
-        if self.extra_form and hasattr(self.extra_form, "post_save"):
-            self.extra_form.post_save(channel=instance)
+        with transaction.atomic():
+            instance = self.channel_form.save(self.experiment, config_data)
+            if self.extra_form and hasattr(self.extra_form, "post_save"):
+                self.extra_form.post_save(channel=instance)
 
         return instance
 
