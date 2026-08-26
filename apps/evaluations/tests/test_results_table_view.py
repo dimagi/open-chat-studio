@@ -245,6 +245,36 @@ class TestResultsTableCuratedColumns:
             f"sentiment ({evaluator.name})",
         ]
 
+    def test_long_free_text_fields_are_clamped_not_left_to_blow_out_row_height(self, client, team_with_users):
+        """Dataset Input, Generated Response, and free-text evaluator fields (e.g. this
+        run's "score") are all attacker-length-controlled/model-generated text that can run
+        arbitrarily long - each gets wrapped in the line-clamp so one long row doesn't
+        expand every row in the table. `title` carries the untruncated text for a hover
+        tooltip since the clamp itself hides it."""
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        long_text = "word " * 200
+        output = EvaluatorResult(
+            message={
+                "input": {"content": long_text, "role": "human"},
+                "output": {"content": "hi", "role": "ai"},
+                "context": {},
+                "history": [],
+                "metadata": {},
+            },
+            result={"sentiment": "positive", "score": 1},
+            generated_response=long_text,
+        ).model_dump()
+        EvaluationResultFactory.create(output=output, team=team_with_users, run=run, evaluator=evaluator)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
+        response = client.get(url)
+
+        content = response.content.decode()
+        assert content.count(f'line-clamp-2 max-w-md" title="{long_text}"') == 2
+
     def test_tokens_column_present_only_when_cost_tracking_enabled(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])

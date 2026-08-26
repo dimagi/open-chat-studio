@@ -805,6 +805,22 @@ def evaluation_message_tokens(config_id: int, run_id: int) -> dict[int, int]:
     return {row["extra__message_id"]: int(row["tokens"]) for row in rows}
 
 
+def evaluation_message_cost(config_id: int, run_id: int) -> dict[int, Decimal]:
+    """Total cost per dataset message, keyed by message id, for one run - the per-result
+    detail panel's cost figure, mirroring `evaluation_message_tokens` but summing `cost`
+    instead of `quantity`.
+    """
+    rows = (
+        UsageRecord.objects.filter(
+            evaluation_config_id=config_id, extra__evaluation_run_id=run_id, extra__message_id__isnull=False
+        )
+        .values("extra__message_id")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .order_by()
+    )
+    return {row["extra__message_id"]: row["cost"] for row in rows}
+
+
 def evaluation_config_cost_summary(config: EvaluationConfig) -> EvaluationConfigCostSummary:
     """Aggregate spend across every run of one config: last 30 days and all time, each
     with its own confidence flags (mirrors `cost_summary`'s per-period counters).

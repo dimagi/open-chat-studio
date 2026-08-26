@@ -12,6 +12,7 @@ from django.utils import timezone
 from apps.cost_tracking.models import Confidence
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
+    evaluation_message_cost,
     evaluation_message_tokens,
     evaluation_run_cost,
     evaluation_run_costs,
@@ -299,3 +300,55 @@ def test_evaluation_message_tokens_with_no_usage_is_empty():
     run = EvaluationRunFactory.create(team=config.team, config=config)
 
     assert evaluation_message_tokens(config.id, run.id) == {}
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_cost_sums_judge_and_generation_per_message():
+    """Mirrors `evaluation_message_tokens`, summing `cost` instead of `quantity` - the
+    detail panel's per-result cost figure."""
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+    message_one, message_two = 101, 102
+
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.10"),
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.05"),
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.02"),
+        extra={"evaluation_run_id": run.id, "message_id": message_two},
+    )
+    # No message_id - excluded, not summed as 0.
+    UsageRecordFactory.create(
+        team=config.team, evaluation_config=config, cost=Decimal("9"), extra={"evaluation_run_id": run.id}
+    )
+    # A different run in the same config must not leak into this run's per-message totals.
+    other_run = EvaluationRunFactory.create(team=config.team, config=config)
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("9"),
+        extra={"evaluation_run_id": other_run.id, "message_id": message_one},
+    )
+
+    cost = evaluation_message_cost(config.id, run.id)
+
+    assert cost == {message_one: Decimal("0.15"), message_two: Decimal("0.02")}
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_cost_with_no_usage_is_empty():
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+
+    assert evaluation_message_cost(config.id, run.id) == {}

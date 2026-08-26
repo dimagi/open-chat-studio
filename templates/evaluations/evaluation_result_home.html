@@ -118,7 +118,7 @@
         </div>
 
         {# Run details disclosure #}
-        <details open class="group mt-4 pt-4 border-t border-base-200">
+        <details close class="group mt-4 pt-4 border-t border-base-200">
           <summary class="cursor-pointer text-sm font-medium text-base-content/70 select-none">
             <span class="hidden group-open:inline">Hide run details</span>
             <span class="inline group-open:hidden">Show run details</span>
@@ -254,6 +254,27 @@
           <div id="results-table" hx-get="{{ table_url }}" hx-trigger="load"></div>
         </div>
       </div>
+      {# Detail side panel: table rows hx-get their result into here (see EvaluationResultDetailView) #}
+      <div id="result-detail-panel"></div>
+      <script>
+        // Keeps the results table's active row in sync with whichever result the side
+        // panel is currently showing. Table and panel are two independent htmx-swapped
+        // fragments (a table row click only swaps the panel, prev/next only swaps the
+        // panel, a filter pill only swaps the table), so this re-syncs after any of
+        // those swaps rather than only on the initial click.
+        function syncEvalResultHighlight() {
+          const activeId = document.getElementById('result-detail-panel-overlay')?.dataset.resultId ?? null;
+          document.querySelectorAll('#results-table tr[data-result-id]').forEach(function (row) {
+            row.classList.toggle('row-highlight', activeId !== null && row.dataset.resultId === activeId);
+          });
+        }
+        window.syncEvalResultHighlight = syncEvalResultHighlight;
+        document.body.addEventListener('htmx:afterSwap', function (event) {
+          if (event.target && (event.target.id === 'result-detail-panel' || event.target.id === 'results-table')) {
+            syncEvalResultHighlight();
+          }
+        });
+      </script>
     {% elif evaluation_run.status == "failed" %}
       <div class="alert alert-error">
         <div>
