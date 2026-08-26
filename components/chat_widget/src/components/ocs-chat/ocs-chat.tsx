@@ -48,6 +48,13 @@ export class OcsChat {
 
   private static readonly STORAGE_TEST_KEY = '__ocs_test__';
 
+  // Recognised `persistent-session` strings after trimming and lowercasing.
+  // Anything else, including the empty string, resolves to `local`.
+  private static readonly PERSISTENCE_MODES_BY_VALUE: Readonly<Record<string, PersistenceMode>> = {
+    tab: 'tab',
+    false: 'off',
+  };
+
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
   private static readonly SUPPORTED_FILE_EXTENSIONS = [
@@ -1822,13 +1829,12 @@ export class OcsChat {
   private getPersistenceMode(): PersistenceMode {
     // Typed as unknown because a host page can assign any value to the prop.
     const raw: unknown = this.persistentSession;
-    // An unset or falsy value means no persistence. The prop keeps its `true`
-    // default so an absent attribute still resolves to `local`.
-    if (raw === undefined || raw === null || raw === false || raw === 0) return 'off';
-    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : raw;
-    if (value === 'tab') return 'tab';
-    if (value === 'false') return 'off';
-    return 'local';
+    // A falsy non-string value (unset, null, false, 0) means no persistence.
+    // The prop keeps its `true` default so an absent attribute still resolves
+    // to `local`, and the empty string is looked up like any other string.
+    if (!raw && raw !== '') return 'off';
+    if (typeof raw !== 'string') return 'local';
+    return OcsChat.PERSISTENCE_MODES_BY_VALUE[raw.trim().toLowerCase()] ?? 'local';
   }
 
   private getStorage(): Storage | undefined {
