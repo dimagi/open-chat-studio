@@ -230,7 +230,7 @@ DELETED_MODELS = [
 
 When a replacement is specified:
 - Pipeline node references are updated to use the replacement model
-- Direct FK references (assistants, analyses, etc.) are updated to the replacement
+- Direct FK references (analyses, evaluators, etc.) are updated to the replacement
 - The deletion notification tells teams which replacement was applied
 
 When no replacement is specified:
@@ -246,7 +246,7 @@ Both the deprecation notification and the deletion command use the OCS notificat
 Notifications include:
 - Which model was deprecated/deleted
 - The replacement model (if any)
-- Counts of affected chatbots, pipelines, and assistants
+- Counts of affected chatbots, pipelines, and evaluators
 
 ### Slug conventions
 
