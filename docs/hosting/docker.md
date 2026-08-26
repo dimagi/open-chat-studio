@@ -13,28 +13,47 @@ This guide covers deploying Open Chat Studio on a single server or small cluster
 - A domain name with DNS pointing to your server
 - A reverse proxy (nginx, Caddy, Traefik) handling TLS termination
 
-## Step 1: Build the Image
+## Step 1: Get the Image
 
-Clone the repository, check out the release you want to run, and build the
-production image.
+Releases are published to `ghcr.io/dimagi/open-chat-studio`, which
+`docker-compose.prod.yml` pulls by default. You only need the repository for the
+compose file and `.env`:
 
 ```bash
 git clone https://github.com/dimagi/open-chat-studio.git
 cd open-chat-studio
 git checkout v1.0.0
-
-docker build -t open-chat-studio:latest .
 ```
 
-The checked-out tag determines the version you run; `docker-compose.prod.yml`
-refers to the image as `open-chat-studio:latest` regardless. To upgrade, check
-out the new tag and rebuild.
+Set `OCS_VERSION` in your `.env` to the release you want (see
+[Releases and Upgrades](./releases.md)), then pull:
+
+```bash
+# .env
+OCS_VERSION=1.0.0
+```
+
+```bash
+docker compose -f docker-compose.prod.yml pull
+```
+
+Pin an exact release rather than tracking `latest`, so an upgrade is always a
+change you chose.
+
+### Building it yourself
+
+Published images are `linux/amd64`, so arm64 hosts build from source. `docker
+compose build` tags the local build under the same name the compose file
+expects, so nothing else changes:
+
+```bash
+docker compose -f docker-compose.prod.yml build
+```
 
 !!! warning "Don't build from `main`"
     `main` is Dimagi's continuous-deployment branch — it moves several times a
     day, has not been through the release soak, and carries no migration notes.
-    See [Releases and Upgrades](./releases.md) for the tagged release train and
-    the supported upgrade path.
+    Always build from a release tag.
 
 ## Step 2: Create the Environment File
 
@@ -156,9 +175,8 @@ docker compose -f docker-compose.prod.yml run --rm web python manage.py <command
 # Apply migrations after an upgrade
 docker compose -f docker-compose.prod.yml run --rm migrate
 
-# Upgrade to a new release
-git checkout v1.1.0
-docker build -t open-chat-studio:latest .
+# Upgrade to a new release: bump OCS_VERSION in .env, then
+docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 

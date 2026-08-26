@@ -60,25 +60,34 @@ tag carries the same operator notes as its body.
 
 ## Getting a release
 
-There is currently no published container image, so a release is consumed as a
-git tag and built locally. Following
-[Docker Compose deployment](docker.md), check out the tag before building:
+Each release is published as a container image to
+[`ghcr.io/dimagi/open-chat-studio`](https://github.com/dimagi/open-chat-studio/pkgs/container/open-chat-studio),
+tagged `1.2.3`, `1.2`, and `latest`. Set `OCS_VERSION` to the release you want
+and pull it:
 
 ```bash
-git clone https://github.com/dimagi/open-chat-studio.git
-cd open-chat-studio
-git checkout v1.0.0
-
-docker build -t open-chat-studio:latest .
+# .env
+OCS_VERSION=1.2.3
 ```
 
-The checked-out tag is what determines the version you run. Record which tag a
-deployment was built from — without a published image or an in-app version
-string, that note is the only way to tell later.
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
 
-Do not deploy from `main`. It is Dimagi's continuous-deployment branch: it moves
-several times a day, has not been through the release soak, and carries no
-migration notes.
+**Pin `OCS_VERSION` to an exact release** rather than tracking `latest`. It
+makes an upgrade a change you chose, keeps the previous image on disk to roll
+back to, and means `docker compose up` on a rebuilt host doesn't silently jump
+versions.
+
+Images are `linux/amd64`. On arm64, build from source instead.
+
+### Building from source
+
+Still supported, and required on arm64. Check out the tag first — see
+[Docker Compose deployment](docker.md). Do not build from `main`: it is Dimagi's
+continuous-deployment branch, moves several times a day, has not been through
+the release soak, and carries no migration notes.
 
 ## Upgrading
 
@@ -92,7 +101,8 @@ migration notes.
    lists every breaking change and the action each requires.
 5. Back up your database. Some migrations are not reversible, and the notes say
    which.
-6. Check out the tag, build, deploy, and run `python manage.py migrate`.
+6. Bump `OCS_VERSION`, then `docker compose -f docker-compose.prod.yml pull`
+   and `up -d`. The `migrate` service runs migrations before `web` starts.
 
 **Upgrade one minor at a time.** Upgrading from the immediately preceding minor
 release is what gets tested. Skipping versions is unsupported — if you are

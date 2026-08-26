@@ -31,11 +31,25 @@ version section when a release is cut.
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
      State the default and whether it is required. -->
+- `OCS_VERSION`: new, optional, defaults to `latest`. Read by
+  `docker-compose.prod.yml` to select which published image tag to run. Pin it
+  to the release you intend to run rather than tracking `latest`. (#4283)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
      backing-service versions, resource requirements, new external
      dependencies. -->
+- Container images are now published to
+  `ghcr.io/dimagi/open-chat-studio` on each release tag, so an upgrade is a
+  pull rather than a local build. Images are `linux/amd64` only; arm64
+  operators still build from source. The first image is published with the
+  first release tag. (#4283)
+- The base image moved from Debian 11 (bullseye) to Debian 12 (bookworm),
+  because bullseye's LTS window has closed. This affects you only if you build
+  the image yourself: ffmpeg goes 4.x to 5.1 and the bundled `psql` client goes
+  13 to 15. Audio conversion was verified against ffmpeg 5.1 across the mp3,
+  opus and wav paths. No action required if you pull the published image. (#4283)
+- Container images no longer contain the `.git` directory. (#4283)
 
 ### Deprecated
 <!-- Signals intent to remove. Every entry names the earliest version in which

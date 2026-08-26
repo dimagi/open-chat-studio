@@ -185,17 +185,19 @@ against category `Announcements` — there is no supported REST create endpoint.
 
 ## Known gaps
 
-Deliberately unresolved at the time this process was written:
-
-1. **No published container image.** Operators clone and build from the tag. A
-   workflow publishing `ghcr.io/dimagi/open-chat-studio:vX.Y.Z` on tag push
-   would make upgrades a pull instead of a build, and commits us to maintaining
-   a public image.
-2. **No version surfaced in the app.** `pyproject.toml` says `0.1.0` and is
-   unused. An operator cannot tell what they are running. Needs a single source
-   of truth, bumped at tag time and exposed (footer, health endpoint, or both).
+1. **The image publish path has never run.** `publish_image.yml` builds and
+   pushes `ghcr.io/dimagi/open-chat-studio` on `v*` tag push, but no `v*` tag
+   exists yet, so no image has been published. The first release cut is also the
+   first live exercise of that workflow — expect to babysit it, and confirm the
+   package is public before pointing operators at it.
+2. **amd64 only.** `publish_image.yml` builds a single architecture. Operators
+   on arm64 still build their own. Needs a native arm runner; QEMU would mean
+   compiling C extensions and the node asset build under emulation.
 3. **Announcement posts are manual.** Step 9 is a hand-written Discussions post.
    Worth automating off the tag push once the cadence has settled.
+4. **Publishing a public image is an ongoing commitment.** Base-image CVEs are
+   now ours to patch on a schedule rather than whenever we happen to rebuild,
+   and operators will pin to `latest` whether we want them to or not.
 
 ## Ownership
 
