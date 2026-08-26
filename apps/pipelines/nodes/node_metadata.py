@@ -56,6 +56,47 @@ def get_node_parameter_values(
     }
 
 
+def usable_llm_provider_models(team: Team) -> QuerySet:
+    """The LLM models `team` can actually call: its own or shared with every team, of a type it holds
+    a provider for, and not deprecated."""
+    provider_types = set(LlmProvider.objects.filter(team=team).values_list("type", flat=True))
+    return _usable_models(LlmProviderModel.objects.for_team(team), provider_types)
+
+
+def team_source_materials(team: Team, include_versions: bool = False) -> QuerySet:
+    """The source material `team` may reference."""
+    return SourceMaterial.objects.filter(**_resource_filters(team, include_versions))
+
+
+def team_assistants(team: Team, include_versions: bool = False) -> QuerySet:
+    """The assistants `team` may reference."""
+    return OpenAiAssistant.objects.filter(**_resource_filters(team, include_versions))
+
+
+def team_collections(team: Team, include_versions: bool = False) -> QuerySet:
+    """The media collections `team` may reference. Both these and the indexes are ``Collection``
+    rows, split only by ``is_index``."""
+    return Collection.objects.filter(**_resource_filters(team, include_versions), is_index=False)
+
+
+def team_collection_indexes(team: Team, include_versions: bool = False) -> QuerySet:
+    """The searchable indexes `team` may reference."""
+    return Collection.objects.filter(**_resource_filters(team, include_versions), is_index=True)
+
+
+def _resource_filters(team: Team, include_versions: bool) -> dict:
+    """Scoping shared by every versioned team resource. Versions are excluded by default: one
+    belongs to a published pipeline, not to something a caller may point a new node at."""
+    filters = {"team": team}
+    if not include_versions:
+        filters["working_version"] = None
+    return filters
+
+
+def _usable_models(queryset: QuerySet, provider_types: set[str]) -> QuerySet:
+    return queryset.filter(type__in=provider_types, deprecated=False)
+
+
 def _team_llm_options(team: Team, usable_models_only: bool) -> tuple[list[dict], QuerySet]:
     """The team's LLM providers and the models it may pair them with.
 
@@ -66,8 +107,7 @@ def _team_llm_options(team: Team, usable_models_only: bool) -> tuple[list[dict],
     llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
     llm_provider_models = LlmProviderModel.objects.for_team(team)
     if usable_models_only:
-        provider_types = {provider["type"] for provider in llm_providers}
-        llm_provider_models = llm_provider_models.filter(type__in=provider_types, deprecated=False)
+        llm_provider_models = _usable_models(llm_provider_models, {provider["type"] for provider in llm_providers})
     return llm_providers, llm_provider_models
 
 
@@ -105,18 +145,10 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
 
 def _team_resource_options(team: Team, include_versions: bool) -> dict:
     """The team's referenceable resources, each with a link into the UI for the builder's edit button."""
-    common_filters = {"team": team}
-    if not include_versions:
-        common_filters["working_version"] = None
-    source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
-    collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
-    collection_indexes = (
-        Collection.objects.filter(**common_filters)
-        .filter(team=team, is_index=True)
-        .values("id", "name", "is_remote_index")
-        .all()
-    )
+    source_materials = team_source_materials(team, include_versions).values("id", "topic")
+    assistants = team_assistants(team, include_versions).values("id", "name")
+    collections = team_collections(team, include_versions).values("id", "name")
+    collection_indexes = team_collection_indexes(team, include_versions).values("id", "name", "is_remote_index")
 
     def _collection_url(collection_id: int) -> str:
         return reverse("documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection_id})
