@@ -2,9 +2,12 @@
 and every live session on the channel is ended so a token-required session cannot keep running
 for the rest of its token lifetime."""
 
+from unittest.mock import Mock
+
 import pytest
 from django.urls import reverse
 
+from apps.channels.forms import PublicChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -72,3 +75,53 @@ def test_end_live_sessions_reports_the_count_and_skips_complete_ones(public_chan
         experiment_channel=public_channel, status=SessionStatus.COMPLETE
     ).count()
     assert complete_count == 3
+
+
+class TestPublicChannelForm:
+    def test_new_channel_gets_a_token_and_lists(self):
+        form = PublicChannelForm(
+            data={"welcome_messages": "Hello\nHow can I help?", "starter_questions": "Opening hours"},
+            experiment=Mock(),
+        )
+        assert form.is_valid(), form.errors
+        assert len(form.cleaned_data["widget_token"]) == 32
+        assert form.cleaned_data["welcome_messages"] == ["Hello", "How can I help?"]
+        assert form.cleaned_data["starter_questions"] == ["Opening hours"]
+
+    def test_lists_are_optional(self):
+        form = PublicChannelForm(data={}, experiment=Mock())
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["welcome_messages"] == []
+        assert form.cleaned_data["starter_questions"] == []
+
+    def test_existing_token_is_preserved(self):
+        channel = Mock()
+        channel.extra_data = {"widget_token": TOKEN, "welcome_messages": [], "starter_questions": []}
+        form = PublicChannelForm(data={}, channel=channel, experiment=Mock())
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["widget_token"] == TOKEN
+
+    def test_regenerate_mints_a_new_token(self):
+        channel = Mock()
+        channel.extra_data = {"widget_token": TOKEN}
+        form = PublicChannelForm(data={"regenerate_link": "1"}, channel=channel, experiment=Mock())
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["widget_token"] != TOKEN
+        assert len(form.cleaned_data["widget_token"]) == 32
+
+
+@pytest.mark.django_db()
+def test_saving_a_regenerated_form_ends_live_sessions(public_channel):
+    live = ExperimentSessionFactory.create(
+        experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
+    )
+    form = PublicChannelForm(
+        data={"regenerate_link": "1"}, channel=public_channel, experiment=public_channel.experiment
+    )
+    assert form.is_valid(), form.errors
+    public_channel.extra_data = form.cleaned_data
+    public_channel.save()
+    form.post_save(public_channel)
+    live.refresh_from_db()
+    assert live.is_complete
+    assert "ended" in form.success_message

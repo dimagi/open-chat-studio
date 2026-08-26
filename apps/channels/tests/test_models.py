@@ -2,6 +2,7 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
+from apps.channels.forms import PublicChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.webhooks import TelegramWebhookManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -312,8 +313,5 @@ class TestPublicChannelPlatform:
     def test_public_identifier_key_is_the_widget_token(self):
         assert ChannelPlatform.PUBLIC.channel_identifier_key == "widget_token"
 
-    @pytest.mark.xfail(strict=True, reason="PublicChannelForm lands in task 9")
     def test_public_extra_form_is_the_public_channel_form(self, experiment):
-        from apps.channels.forms import PublicChannelForm  # noqa: PLC0415  # ty: ignore[unresolved-import]
-
         assert isinstance(ChannelPlatform.PUBLIC.extra_form(experiment=experiment), PublicChannelForm)
