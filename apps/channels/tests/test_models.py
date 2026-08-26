@@ -310,6 +310,10 @@ class TestPublicChannelPlatform:
         platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
         assert ChannelPlatform.PUBLIC not in platforms
 
+    def test_existing_public_channel_with_flag_off_does_not_raise(self, experiment):
+        platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
+        assert ChannelPlatform.PUBLIC not in platforms
+
     def test_public_identifier_key_is_the_widget_token(self):
         assert ChannelPlatform.PUBLIC.channel_identifier_key == "widget_token"
 

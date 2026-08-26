@@ -8,7 +8,6 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
-from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 
@@ -23,14 +22,6 @@ def _canonical_site(db, settings):
     settings.ALLOWED_HOSTS = [CANONICAL, "other.example.com", "testserver"]
     yield
     Site.objects.clear_cache()
-
-
-@pytest.fixture(autouse=True)
-def _public_channel_flag_enabled(db, team_with_users):
-    flag = Flag.objects.create(name="flag_public_channel")
-    flag.teams.add(team_with_users)
-    flag.flush()
-    return flag
 
 
 def _channel(team, *, consent=False, publish=True, enabled=True):

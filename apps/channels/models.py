@@ -94,7 +94,7 @@ class ChannelPlatform(models.TextChoices):
 
         # Platforms already used should not be displayed
         for platform in used_platforms:
-            platform_availability.pop(platform)
+            platform_availability.pop(platform, None)
 
         return cast(dict[Self, bool], platform_availability)
 
