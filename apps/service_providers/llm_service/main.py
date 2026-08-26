@@ -61,13 +61,9 @@ class LlmService(pydantic.BaseModel):
     # instantiation - mostly tests - falls back to the "unknown" default.
     _type: str = "unknown"
     supports_transcription: bool = False
-    supports_assistants: bool = False
     supported_image_content_types: ClassVar[frozenset[str]] = DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def get_raw_client(self) -> SyncAPIClient:
-        raise NotImplementedError
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
         raise NotImplementedError
 
     def get_chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
@@ -241,13 +237,6 @@ class OpenAILlmService(OpenAIGenericService):
 
     def get_raw_client(self) -> OpenAI:
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        from apps.service_providers.llm_service.openai_assistant import (  # noqa: PLC0415 - lazy: isolates heavy langchain_classic dep
-            OpenAIAssistantRunnable,
-        )
-
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=self.get_raw_client())
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self.get_raw_client().audio.transcriptions.create(

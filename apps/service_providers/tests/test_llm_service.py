@@ -14,10 +14,8 @@ from apps.service_providers.models import LlmProviderTypes
 
 def test_open_ai_service():
     assert LlmProviderTypes.openai.supports_transcription
-    assert LlmProviderTypes.openai.supports_assistants
     service = LlmProviderTypes.openai.get_llm_service({"openai_api_key": "test"})
     assert service.supports_transcription
-    assert service.supports_assistants
 
 
 def test_azure_ai_service():
@@ -83,7 +81,6 @@ def test_voyage_ai_service():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     assert isinstance(service, VoyageAILlmService)
     assert not service.supports_transcription
-    assert not service.supports_assistants
 
 
 def test_voyage_ai_service_returns_local_index_manager():
