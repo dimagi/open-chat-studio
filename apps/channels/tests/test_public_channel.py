@@ -5,11 +5,13 @@ for the rest of its token lifetime."""
 from unittest.mock import Mock
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.channels.forms import PublicChannelForm
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -125,3 +127,71 @@ def test_saving_a_regenerated_form_ends_live_sessions(public_channel):
     live.refresh_from_db()
     assert live.is_complete
     assert "ended" in form.success_message
+
+
+def _operator(client, team, codename):
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename=codename))
+    client.force_login(user)
+    return user
+
+
+@pytest.fixture()
+def public_flag(experiment):
+    flag = Flag.objects.create(name="flag_public_channel")
+    flag.teams.add(experiment.team)
+    flag.flush()
+    return flag
+
+
+@pytest.mark.django_db()
+def test_create_dialog_makes_a_public_channel_with_a_token(client, experiment, public_flag):
+    _operator(client, experiment.team, "add_experimentchannel")
+    url = reverse("channels:channel_create_dialog", args=[experiment.team.slug, experiment.id, "public"])
+    response = client.post(
+        url,
+        data={
+            "name": "Public link",
+            "platform": "public",
+            "enabled": "on",
+            "welcome_messages": "Hello",
+            "starter_questions": "",
+        },
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200, response.content
+    channel = experiment.experimentchannel_set.get(platform=ChannelPlatform.PUBLIC)
+    assert len(channel.extra_data["widget_token"]) == 32
+    assert channel.extra_data["welcome_messages"] == ["Hello"]
+    assert channel.public_url.encode() in response.content
+
+
+@pytest.mark.django_db()
+def test_create_dialog_refuses_without_the_flag(client, experiment):
+    _operator(client, experiment.team, "add_experimentchannel")
+    url = reverse("channels:channel_create_dialog", args=[experiment.team.slug, experiment.id, "public"])
+    response = client.get(url)
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db()
+def test_edit_dialog_regenerates_and_ends_sessions(client, public_channel, public_flag):
+    _operator(client, public_channel.team, "change_experimentchannel")
+    live = ExperimentSessionFactory.create(
+        experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
+    )
+    url = reverse(
+        "channels:channel_edit_dialog",
+        args=[public_channel.team.slug, public_channel.experiment_id, public_channel.id],
+    )
+    response = client.post(
+        url,
+        data={"name": public_channel.name, "platform": "public", "enabled": "on", "regenerate_link": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200, response.content
+    public_channel.refresh_from_db()
+    live.refresh_from_db()
+    assert public_channel.extra_data["widget_token"] != TOKEN
+    assert live.is_complete
+    assert b"Link regenerated" in response.content
