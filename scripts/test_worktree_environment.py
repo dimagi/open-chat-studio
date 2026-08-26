@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from dataclasses import dataclass
@@ -76,6 +77,29 @@ FAKE_UV_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 printf "uv:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 """
+
+FAKE_DOCKER_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+# `docker ps` names the stand-in Redis container, unless the test asked for the
+# no-container case; `docker exec <container> redis-cli ...` hands the rest of the
+# arguments to the redis-cli fake on PATH.
+if [[ "${1:-}" == "ps" ]]; then
+    container="${OCS_TEST_REDIS_CONTAINER-ocs_test_redis}"
+    printf 'unrelated_container 0.0.0.0:5432->5432/tcp\n'
+    [[ -z "$container" ]] || printf '%s 0.0.0.0:6379->6379/tcp\n' "$container"
+    exit 0
+fi
+
+if [[ "${1:-}" == "exec" ]]; then
+    shift
+    printf "docker-exec:%s\n" "$1" >> "$OCS_TEST_COMMAND_LOG"
+    shift
+    exec "$@"
+fi
+
+exit 1
+"""
+
 
 FAKE_REDIS_CLI_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -304,6 +328,7 @@ def worktree_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[P
     _write_executable(fake_bin / "psql", FAKE_PSQL_SCRIPT)
     _write_executable(fake_bin / "uv", FAKE_UV_SCRIPT)
     _write_executable(fake_bin / "redis-cli", FAKE_REDIS_CLI_SCRIPT)
+    _write_executable(fake_bin / "docker", FAKE_DOCKER_SCRIPT)
 
     env = {
         "OCS_TEST_COMMAND_LOG": str(command_log),
@@ -416,6 +441,49 @@ def test_redis_registry_allocates_distinct_databases_and_reuses_assignments(
 
     assert first_database != second_database
     assert repeated_database == first_database
+
+
+def test_redis_registry_runs_inside_the_redis_container(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+
+    _allocate_redis_database(worktree, env, "feature_6")
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_test_redis" in command_output
+    assert "redis-registry:allocate:feature_6:" in command_output
+
+
+def test_redis_registry_falls_back_to_a_host_client_without_a_container(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_TEST_REDIS_CONTAINER"] = ""
+
+    _allocate_redis_database(worktree, env, "feature_6")
+
+    command_output = command_log.read_text()
+    assert "docker-exec:" not in command_output
+    assert "redis-registry:allocate:feature_6:" in command_output
+
+
+def test_redis_client_reports_when_no_client_is_reachable(
+    tmp_path: Path,
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    # A PATH holding neither a container nor a redis-cli -- only the shell that runs the
+    # helper -- so the helper has to say so rather than fail on a missing command.
+    bare_bin = tmp_path / "bare-bin"
+    bare_bin.mkdir()
+    (bare_bin / "bash").symlink_to(shutil.which("bash") or "/bin/bash")
+    env["PATH"] = str(bare_bin)
+
+    result = _run_worktree_helper(worktree, "ocs_redis_cli", "PING", env=env, check=False)
+
+    assert result.returncode != 0
+    assert "docker-compose-dev.yml" in result.stderr
 
 
 def test_redis_registry_reports_exhaustion(

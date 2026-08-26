@@ -89,6 +89,54 @@ ocs_worktree_resource_name() {
     ocs_sanitize_resource_name "$raw_name"
 }
 
+# Redis for local development runs in the container `docker-compose-dev.yml` defines, and
+# a host redis-cli is not something we can count on being installed, so registry and
+# flush commands go through the client inside that container. Only one container can hold
+# the host Redis port at a time, which is what makes looking it up by published port
+# unambiguous.
+ocs_redis_container() {
+    local port="${OCS_REDIS_PORT:-6379}"
+    local container
+
+    if [[ -n "${OCS_REDIS_CONTAINER:-}" ]]; then
+        printf '%s\n' "$OCS_REDIS_CONTAINER"
+        return 0
+    fi
+
+    command -v docker >/dev/null 2>&1 || return 1
+    # The mapping is read out of `docker ps` rather than asked for with `--filter
+    # publish=`, which podman's docker CLI shim rejects as an invalid filter. awk keeps
+    # reading after the match instead of exiting: closing the pipe early would fail
+    # `docker ps` under `pipefail` and turn a found container into a lookup failure.
+    container=$(
+        docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null \
+            | awk -v mapping=":$port->" '
+                !found && index($0, mapping) { container = $1; found = 1 }
+                END { if (found) print container }
+            '
+    )
+    [[ -n "$container" ]] || return 1
+    printf '%s\n' "$container"
+}
+
+ocs_redis_cli() {
+    local container
+
+    if container=$(ocs_redis_container); then
+        docker exec "$container" redis-cli "$@"
+        return
+    fi
+    # A Redis reachable on the host port without a container of its own -- a service
+    # container in CI, or a locally installed server -- still answers a host client.
+    if command -v redis-cli >/dev/null 2>&1; then
+        redis-cli "$@"
+        return
+    fi
+    echo "No Redis container publishes port ${OCS_REDIS_PORT:-6379} and no redis-cli is installed." >&2
+    echo "Start the development services with: docker compose -f docker-compose-dev.yml up -d" >&2
+    return 1
+}
+
 ocs_redis_registry_command() {
     local operation="$1"
     local resource_name="$2"
@@ -152,7 +200,7 @@ end
 
 return redis.error_reply("Unknown worktree Redis registry operation")'
 
-    redis-cli \
+    ocs_redis_cli \
         -e \
         -n "$registry_database" \
         --raw \
