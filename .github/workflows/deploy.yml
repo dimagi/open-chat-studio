@@ -153,7 +153,7 @@ jobs:
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile
         build-args: |
-          OCS_VERSION=${{ steps.ocs-version.outputs.version }}
+          OCS_BUILD_VERSION=${{ steps.ocs-version.outputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3

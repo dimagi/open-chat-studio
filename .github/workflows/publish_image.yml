@@ -68,7 +68,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            OCS_VERSION=${{ steps.ocs-version.outputs.version }}
+            OCS_BUILD_VERSION=${{ steps.ocs-version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Deliberately NOT using deploy.yml's zstd-compressed output: zstd

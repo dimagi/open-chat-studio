@@ -42,7 +42,12 @@ SECRET_KEY = env("SECRET_KEY")
 # `v1.2.0` for a tagged release, `v1.2.0-37-gabc1234` for a build off main, and
 # `unknown` when built outside CI. Deliberately not exposed to unauthenticated
 # users.
-OCS_VERSION = env("OCS_VERSION", default="unknown")
+#
+# NOT named OCS_VERSION: docker-compose.prod.yml already uses that for the image
+# tag to pull, and passes `.env` as an `env_file` to every app service. Compose
+# puts env_file above the image's ENV, so an operator pinning OCS_VERSION would
+# silently overwrite this with their tag.
+OCS_BUILD_VERSION = env("OCS_BUILD_VERSION", default="unknown")
 
 
 # Shared bearer token for the cross-team provider usage/key reporting admin
@@ -744,7 +749,7 @@ if SENTRY_DSN:
         environment=env("SENTRY_ENVIRONMENT", default="development"),
         # `None` lets the SDK fall back to its own detection rather than
         # attributing every local build to a release literally named "unknown".
-        release=OCS_VERSION if OCS_VERSION != "unknown" else None,
+        release=OCS_BUILD_VERSION if OCS_BUILD_VERSION != "unknown" else None,
         # `attach_stacktrace=True` sends stack-frame locals with every event; the scrubber redacts
         # secrets (e.g. the CommCare Connect encryption key) from them. See config/sentry.py.
         event_scrubber=get_event_scrubber(),
