@@ -621,6 +621,7 @@ class ChatMessageCreationStage(ProcessingStage):
             message_type=ChatMessageType.HUMAN,
             content=ctx.user_query,
             metadata=metadata,
+            external_ids=ctx.message.external_ids,
         )
 
         # Tag voice messages

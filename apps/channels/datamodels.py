@@ -106,6 +106,12 @@ class BaseMessage(BaseModel):
 
     participant_id: str
     remote_id: str | None = Field(default=None)
+    external_ids: list[str] = Field(default=[])
+    """Provider message IDs this message was built from, namespaced by platform.
+    Set by each channel's `parse()`, read by DuplicateDeliveryStage, written to
+    ChatMessage.external_ids by ChatMessageCreationStage. Distinct from `remote_id`,
+    which identifies the participant, not the message."""
+
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
