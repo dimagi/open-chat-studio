@@ -265,6 +265,11 @@ def handle_email_message(self, email_data: dict, channel_id: int | None = None, 
 
     message = EmailMessageDatamodel(**email_data)
 
+    if self.request.retries:
+        # This is a Celery retry, not a provider replay. The failed attempt already recorded
+        # these ids, so keeping them would have DuplicateDeliveryStage drop every retry.
+        message.external_ids = []
+
     if channel_id is not None:
         # Post-deploy payload: routing already happened in the webhook handler.
         try:

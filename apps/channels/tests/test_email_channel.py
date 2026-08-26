@@ -868,6 +868,45 @@ class TestHandleEmailMessageTask:
             assert ec_kwarg.id == channel.id
             mock_instance.new_user_message.assert_called_once()
 
+    @pytest.mark.parametrize(
+        ("retries", "expected_ids"),
+        [
+            pytest.param(0, ["email:<msg1@example.com>"], id="first-attempt-is-recorded"),
+            pytest.param(1, [], id="celery-retry-is-not-deduplicated"),
+        ],
+    )
+    def test_a_celery_retry_is_not_treated_as_a_provider_replay(self, team_with_users, retries, expected_ids):
+        """A failed attempt has already recorded its ids, so carrying them into the retry would
+        have DuplicateDeliveryStage drop it and leave the participant with no reply at all."""
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello bot",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+            "external_ids": ["email:<msg1@example.com>"],
+        }
+
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message.apply(
+                kwargs={"email_data": email_data, "channel_id": channel.id}, retries=retries, throw=True
+            )
+
+        message = mock_instance.new_user_message.call_args.args[0]
+        assert message.external_ids == expected_ids
+
     def test_task_legacy_payload_falls_back_to_routing(self, team_with_users):
         """Tasks queued before deploy won't carry channel_id; the task should
         still resolve the channel via the existing routing chain."""
