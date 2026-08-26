@@ -312,37 +312,31 @@ def _check_start_session_access(
     return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
 
 
-def _record_participant_name(participant, experiment, team, name: str) -> None:
-    """Store the caller-supplied display name on the participant and their experiment data.
+def _record_participant_details(
+    participant, experiment, team, *, name: str | None = None, participant_timezone: str | None = None
+) -> None:
+    """Store caller-supplied details on the participant's data for this chatbot.
 
-    Written in both places because they are read in different contexts: the participant record
-    labels them across the team, while the ParticipantData copy is what a pipeline sees as
-    ``{participant_data.name}``. Both writes are conditional so a repeat session start with an
-    unchanged name is a no-op rather than a pair of UPDATEs.
+    The name is also written to the participant record, because the two are read in different
+    contexts: the participant record labels them across the team, while the ParticipantData copy
+    is what a pipeline sees as ``{participant_data.name}``. The time zone is scoped to one
+    experiment because a participant may talk to several chatbots from different devices, and
+    each chat's data is read on its own.
+
+    One ParticipantData row is fetched for both fields, and every write is conditional so a
+    repeat session start with unchanged values is a no-op rather than a run of UPDATEs.
     """
-    if participant.name != name:
+    if name and participant.name != name:
         participant.name = name
         participant.save(update_fields=["name"])
+
     participant_data, _ = ParticipantData.objects.get_or_create(
         participant=participant, experiment=experiment, team=team, defaults={"data": {}}
     )
-    if participant_data.data.get("name") != name:
-        participant_data.data["name"] = name
-        participant_data.save(update_fields=["data"])
-
-
-def _record_participant_timezone(participant, experiment, team, participant_timezone: str) -> None:
-    """Store the caller-supplied time zone on the participant's data for this chatbot.
-
-    Scoped to one experiment because that is what the field documents: a participant may talk to
-    several chatbots from different devices, and each chat's data is read on its own. The write is
-    conditional so a repeat session start with an unchanged zone is a no-op rather than an UPDATE.
-    """
-    participant_data, _ = ParticipantData.objects.get_or_create(
-        participant=participant, experiment=experiment, team=team, defaults={"data": {}}
-    )
-    if participant_data.data.get("timezone") != participant_timezone:
-        participant_data.data = {**participant_data.data, "timezone": participant_timezone}
+    supplied = {"name": name, "timezone": participant_timezone}
+    changed = {key: value for key, value in supplied.items() if value and participant_data.data.get(key) != value}
+    if changed:
+        participant_data.data = {**participant_data.data, **changed}
         participant_data.save(update_fields=["data"])
 
 
@@ -537,11 +531,8 @@ def chat_start_session(request):
     else:
         participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
 
-    if name:
-        _record_participant_name(participant, experiment, team, name)
-
-    if participant_timezone:
-        _record_participant_timezone(participant, experiment, team, participant_timezone)
+    if name or participant_timezone:
+        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 

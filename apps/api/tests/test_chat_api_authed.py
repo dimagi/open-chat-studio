@@ -155,6 +155,26 @@ def test_start_chat_session_with_name(authed_user, authed_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_start_chat_session_records_name_and_timezone_together(authed_user, authed_client, experiment):
+    """A request carrying both fields writes them to the same ParticipantData row in one pass."""
+    url = reverse("api:chat:start-session")
+    data = {
+        "chatbot_id": experiment.public_id,
+        "participant_remote_id": authed_user.email,
+        "participant_name": "John Doe",
+        "timezone": "Africa/Johannesburg",
+    }
+
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    participant = Participant.objects.get(identifier=authed_user.email)
+    participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment)
+    assert participant_data.data == {"name": "John Doe", "timezone": "Africa/Johannesburg"}
+    assert ParticipantData.objects.filter(participant=participant).count() == 1
+
+
+@pytest.mark.django_db()
 def test_start_chat_session_records_the_timezone_for_the_started_chatbot_only(authed_user, authed_client, experiment):
     """Participant data is per chatbot, so the time zone lands on the chatbot whose session started."""
     url = reverse("api:chat:start-session")

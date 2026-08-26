@@ -1,6 +1,6 @@
 import textwrap
+from zoneinfo import available_timezones
 
-import pytz
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -346,7 +346,7 @@ class ChatStartSessionRequest(serializers.Serializer):
 
     def validate_timezone(self, value):
         # An unrecognised zone must not block the session start; drop it instead.
-        return value if value and value in pytz.all_timezones_set else None
+        return value if value and value in available_timezones() else None
 
 
 class ChatStartSessionResponse(serializers.Serializer):
