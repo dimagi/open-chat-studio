@@ -12,10 +12,10 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
-from apps.api.authentication import embed_key_authorizes_channel, oauth_resolved_channel
+from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel, oauth_resolved_channel
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
-from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
+from apps.channels.utils import get_experiment_session_cached
 from apps.oauth.permissions import is_client_credentials_request
 from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
@@ -98,13 +98,7 @@ class WidgetDomainPermission(BasePermission):
             # ever runs.
             return True
 
-        origin_domain = extract_domain_from_headers(request)
-        if not origin_domain:
-            return False
-
-        experiment_channel = request.auth
-        allowed_domains = experiment_channel.extra_data.get("allowed_domains", [])
-        return validate_domain(origin_domain, allowed_domains)
+        return channel_origin_allowed(request, request.auth)
 
 
 class SessionAccessPermission(BasePermission):

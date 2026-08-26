@@ -16,6 +16,11 @@ def get_server_root(is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS) -> st
     return f"{get_protocol(is_secure)}://{Site.objects.get_current().domain}"
 
 
+def canonical_hostname() -> str:
+    """The hostname OCS is served from, for origin checks: the Site domain without a port."""
+    return Site.objects.get_current().domain.split(":")[0].lower()
+
+
 def absolute_url(relative_url: str, is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS):
     """
     Returns the complete absolute url for a given path - for use in emails or API integrations.
