@@ -361,18 +361,18 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:
-        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+        if self.platform_enum not in ChannelPlatform.widget_platforms():
             return None
         return widget_versions.get_widget_update_status(self.widget_version)
 
     @property
     def widget_auth_level(self) -> "WidgetAuthLevel | None":
-        """The required auth level for embedded widget channels, or None for other platforms.
+        """The required auth level for widget channels (embedded widget and public link), or None for other platforms.
 
-        `required_auth_level` is only meaningful for EMBEDDED_WIDGET channels; every other
+        `required_auth_level` is only meaningful for widget platforms; every other
         platform returns None so callers fall back to their non-widget behaviour.
         """
-        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+        if self.platform_enum not in ChannelPlatform.widget_platforms():
             return None
         return WidgetAuthLevel(self.required_auth_level)
 
@@ -382,6 +382,8 @@ class ExperimentChannel(BaseTeamModel):
 
         None for non-widget channels or a NONE-level widget channel (no floor).
         """
+        if self.platform_enum not in ChannelPlatform.widget_platforms():
+            return None
         level = self.widget_auth_level
         if level is None:
             return None
@@ -390,6 +392,8 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def pending_min_widget_version(self) -> str | None:
         """Minimum widget version the pending auth level will require, if a bump is pending."""
+        if self.platform_enum not in ChannelPlatform.widget_platforms():
+            return None
         if self.pending_auth_level is None:
             return None
         return widget_versions.min_version_for_level(self.pending_auth_level)

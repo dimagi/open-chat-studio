@@ -259,3 +259,11 @@ _migration = importlib.import_module("apps.channels.migrations.0029_experimentch
 )
 def test_migration_level_for_version(widget_version, expected):
     assert _migration._level_for_version(widget_version) == expected
+
+
+@pytest.mark.django_db()
+def test_public_channel_carries_the_default_session_token_level(experiment):
+    channel = ExperimentChannelFactory.create(
+        experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": WIDGET_TOKEN}
+    )
+    assert channel.widget_auth_level == WidgetAuthLevel.SESSION_TOKEN
