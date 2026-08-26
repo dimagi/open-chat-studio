@@ -8,10 +8,17 @@ from functools import cache
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
+from apps.pipelines.nodes.base import OptionsSource, PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
-from .contract import MUST_MATCH, OPTIONS_KEYED_BY, PER_KEYWORD_OUTPUT, SINGLE_OUTPUT, UI_KEY_TRANSLATIONS
+from .contract import (
+    MUST_MATCH,
+    OPTIONS_KEYED_BY,
+    PARAMETER_OPTION_SOURCES,
+    PER_KEYWORD_OUTPUT,
+    SINGLE_OUTPUT,
+    UI_KEY_TRANSLATIONS,
+)
 
 
 @cache
@@ -43,6 +50,19 @@ def get_node_type_schema(node_type: str) -> dict:
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     """The option keys a single node type reads, or ``None`` if no such type is served."""
     return _option_keys_by_type().get(node_type)
+
+
+def parameter_option_mapping(node_type: str) -> dict[str, OptionsSource]:
+    """One node type's reference params, each mapped to the option list it draws from.
+
+    Worth carrying around because a param is not always named for its list --
+    ``source_material_id`` draws from ``OptionsSource.source_material``.
+    """
+    return {
+        param: option_key
+        for param, option_key in _sources_by_type().get(node_type, {}).items()
+        if option_key in PARAMETER_OPTION_SOURCES
+    }
 
 
 def served_option_keys() -> frozenset[str]:
@@ -128,19 +148,30 @@ def _documentation_url(schema: dict) -> str | None:
 
 
 @cache
+def _sources_by_type() -> dict[str, dict[str, OptionsSource]]:
+    """``node type -> {param: the option list it draws from}``, read off ``ui:optionsSource``.
+
+    Withheld params and params with no source are left out. Unlike :func:`parameter_option_mapping`
+    this keeps the params whose list names no team records -- the prompt-variable lists among them.
+    """
+    return {
+        schema["title"]: {
+            name: prop["ui:optionsSource"]
+            for name, prop in schema["properties"].items()
+            if not prop.get("api:exclude") and prop.get("ui:optionsSource")
+        }
+        for schema in _available_schemas()
+    }
+
+
+@cache
 def _option_keys_by_type() -> dict[str, frozenset[str]]:
-    """The `/pipeline/options/` keys each node type's params can draw from, read off
-    ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
+    """The `/pipeline/options/` keys each node type's params can draw from. A known type that reads
+    nothing yields an empty set, not a missing key."""
     keys_by_type = {}
     for schema in _available_schemas():
-        properties = schema["properties"]
-        keys = set()
-        for prop in properties.values():
-            if prop.get("api:exclude"):
-                continue
-            if source := prop.get("ui:optionsSource"):
-                keys.add(source)
-        if "llm_provider_id" in properties:
+        keys = set(_sources_by_type()[schema["title"]].values())
+        if "llm_provider_id" in schema["properties"]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type

@@ -617,6 +617,15 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if isinstance(field, models.ForeignKey) and field.remote_field.on_delete is models.SET_NULL
         ]
 
+    @classmethod
+    def resource_param_names(cls) -> frozenset[str]:
+        """The param names ``resource_params`` produces, whatever the node's type.
+
+        ``to_flow_node`` merges all of these into every node's params, its type declaring them or
+        not, so a caller writing params back has to tell the mirrored ids from the declared ones.
+        """
+        return frozenset({f"{field_name}_id" for field_name in cls.resource_fk_fields()} | {"collection_index_ids"})
+
     def resource_params(self) -> dict:
         """The ids of the resources this node references, read off its FK columns and M2M.
 
