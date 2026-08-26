@@ -6,6 +6,7 @@ from django.core.cache import cache as default_cache
 from django.core.cache import caches
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
@@ -26,6 +27,22 @@ def _isolate_rate_limit_counters():
     _clear_rate_limit_counters()
     yield
     _clear_rate_limit_counters()
+
+
+@pytest.fixture()
+def record_delivery(db):
+    """Records a delivery as already handled, the way ChatMessageCreationStage would have."""
+
+    def _record(team, external_ids):
+        chat = Chat.objects.create(team=team, name="recorded chat")
+        return ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="already handled",
+            external_ids=external_ids,
+        )
+
+    return _record
 
 
 @pytest.fixture()
