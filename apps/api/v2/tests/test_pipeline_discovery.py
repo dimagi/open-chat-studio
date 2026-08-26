@@ -9,9 +9,14 @@ import pytest
 from django.urls import reverse
 from rest_framework import serializers
 
-from apps.api.v2.discovery.node_types import _property, option_keys_for_node_type
+from apps.api.v2.discovery import options as discovery_options
+from apps.api.v2.discovery.node_types import (
+    _property,
+    option_keys_for_node_type,
+)
+from apps.api.v2.discovery.options import _clean_options
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
-from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE, PipelineOptionsView, TeamOptionsView
+from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -453,7 +458,7 @@ def test_clean_options_recurses_into_nested_dicts():
         },
     }
 
-    cleaned = PipelineOptionsView._clean_options(nested)
+    cleaned = _clean_options(nested)
 
     assert cleaned["built_in_tools"]["openai"] == [{"value": "web-search", "label": "Web Search"}]
     assert cleaned["tool_config"]["anthropic"]["web-search"] == [
@@ -532,14 +537,14 @@ def test_the_response_is_shaped_by_the_serializer_not_passed_through_raw(team_wi
     """`ResourceOptionSerializer.value` documents an integer. If the endpoint just forwarded the built
     dict, a value that happened to arrive as a string would reach the client as one instead of being
     coerced -- proof the response actually goes through `PipelineOptionsSerializer`."""
-    real_options_for_team = TeamOptionsView._options_for_team.__func__
+    real_options_for_team = discovery_options.options_for_team
 
-    def stringified_value(cls, team):
-        options = real_options_for_team(cls, team)
+    def stringified_value(team):
+        options = real_options_for_team(team)
         options["source_material"][0]["value"] = str(options["source_material"][0]["value"])
         return options
 
-    monkeypatch.setattr(TeamOptionsView, "_options_for_team", classmethod(stringified_value))
+    monkeypatch.setattr("apps.api.v2.discovery.views.options_for_team", stringified_value)
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     value = client.get(reverse("api:v2:pipeline-options")).json()["source_material"][0]["value"]

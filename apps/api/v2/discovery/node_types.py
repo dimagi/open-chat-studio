@@ -1,4 +1,4 @@
-"""Reshapes the builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
+"""Reshapes the UI builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
 `/pipeline/nodes/` serves."""
 
 import hashlib
@@ -32,6 +32,14 @@ def get_node_types() -> list[dict]:
     return node_types
 
 
+def get_node_type_schema(node_type: str) -> dict:
+    """The named node type as ``/pipeline/nodes/`` serves it, or a 404 naming the valid ones."""
+    for node in get_node_types():
+        if node["type"] == node_type:
+            return node
+    raise unknown_node_type(node_type)
+
+
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     """The option keys a single node type reads, or ``None`` if no such type is served."""
     return _option_keys_by_type().get(node_type)
@@ -60,8 +68,8 @@ def etag(payload: list | dict) -> str:
 
 
 def _available_schemas() -> list[dict]:
-    """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
-    types and the structural ones the server manages."""
+    """The UI builder's schemas behind the listed node types. ``ui:can_add`` is False for the
+    deprecated types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
 
 
@@ -99,7 +107,7 @@ def _property(name: str, prop: dict) -> dict:
 
 
 def _param_links(name: str) -> dict:
-    """The cross-param rules the builder enforces in JS and the schema never stated."""
+    """The cross-param rules the UI builder enforces in JS and the schema never stated."""
     links = {}
     if name in MUST_MATCH:
         links["must_match"] = MUST_MATCH[name]
@@ -109,8 +117,8 @@ def _param_links(name: str) -> dict:
 
 
 def _documentation_url(schema: dict) -> str | None:
-    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the builder
-    joins it in the browser, an API client has no base to join it to."""
+    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the UI
+    builder joins it in the browser, an API client has no base to join it to."""
     link = schema.get("ui:documentation_link")
     if not link:
         return None
