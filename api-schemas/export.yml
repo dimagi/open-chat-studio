@@ -2415,6 +2415,13 @@ components:
         translations:
           description: Dictionary of translated text keyed by the language code
         metadata: {}
+        external_ids:
+          type: array
+          items:
+            type: string
+            maxLength: 600
+          description: Provider message IDs this message was built from, namespaced
+            by platform.
         chat:
           type: integer
       required:
