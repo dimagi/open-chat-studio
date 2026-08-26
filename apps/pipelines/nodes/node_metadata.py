@@ -6,7 +6,8 @@ and UI concerns so both callers can use it.
 """
 
 import inspect
-from collections.abc import Iterable
+from collections import defaultdict
+from collections.abc import Callable, Iterable
 
 from django.db.models import QuerySet
 from django.db.models.functions import Lower
@@ -14,12 +15,14 @@ from django.urls import reverse
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
+from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.teams.models import Team
+from apps.utils.fields import as_int
 from apps.utils.prompt import PromptVars
 from apps.utils.schema_utils import collapse_optional_types, resolve_references
 
@@ -305,3 +308,130 @@ def _get_node_schema(node_class: type) -> dict:
     schema.pop("$defs", None)
     collapse_optional_types(schema)
     return schema
+
+
+# --------------------------------------------------------------------------------------------------
+# Which of a set of supplied values a team may actually use, one function per option list whose
+# values a team could be denied. Reached through `get_resolver`; the write API refuses a param naming
+# anything these do not return (see `apps.api.v2.pipeline_edit.references`).
+#
+# They live beside the querysets the option lists are built from so that what a client is offered and
+# what a write accepts cannot come apart.
+#
+# Each asks after the values it was handed rather than building the list to pick them out of: a write
+# runs this while holding the pipeline row, so the cost must not grow with the team.
+#
+# Values arrive straight off a request body, so each has to survive anything JSON can express -- a
+# dict where an id belongs, a list where a name does. None of them may raise on one: the caller
+# reports what a resolver leaves out as a 400, so raising would answer a bad body with a 500.
+# --------------------------------------------------------------------------------------------------
+
+
+def reachable_llm_providers(team: Team, values: list) -> set:
+    return _rows_named_by(LlmProvider.objects.filter(team=team), values)
+
+
+def reachable_llm_provider_models(team: Team, values: list) -> set:
+    return _rows_named_by(usable_llm_provider_models(team), values)
+
+
+def reachable_source_materials(team: Team, values: list) -> set:
+    return _rows_named_by(team_source_materials(team), values)
+
+
+def reachable_assistants(team: Team, values: list) -> set:
+    return _rows_named_by(team_assistants(team), values)
+
+
+def reachable_collections(team: Team, values: list) -> set:
+    return _rows_named_by(team_collections(team), values)
+
+
+def reachable_collection_indexes(team: Team, values: list) -> set:
+    return _rows_named_by(team_collection_indexes(team), values)
+
+
+def reachable_synthetic_voices(team: Team, values: list) -> set:
+    return _rows_named_by(get_speakable_voices(team), values)
+
+
+def reachable_custom_actions(team: Team, values: list) -> set:
+    """Values are ``"<custom action id>:<operation id>"``.
+
+    Owning the action is not enough: the operation has to be one its schema publishes and one the
+    team allowed -- the same test ``get_custom_action_operation_choices`` applies when deciding what
+    to offer.
+    """
+    wanted: dict[int, set[str]] = defaultdict(set)
+    for value in values:
+        action_id, _, operation_id = value.partition(":") if isinstance(value, str) else ("", "", "")
+        if operation_id and (parsed := as_int(action_id)) is not None:
+            wanted[parsed].add(operation_id)
+    if not wanted:
+        return set()
+    reachable = set()
+    # Deferred to match the offer path: neither column is read here, and `api_schema` is a large
+    # JSONField to be pulling over while the pipeline row is locked.
+    for action in CustomAction.objects.filter(team=team, id__in=wanted).defer("api_schema", "prompt"):
+        published = action.get_operations_by_id()
+        reachable |= {
+            f"{action.id}:{operation_id}"
+            for operation_id in wanted[action.id]
+            if operation_id in action.allowed_operations and operation_id in published
+        }
+    return reachable
+
+
+def reachable_tools(_team: Team, values: list) -> set:
+    """The agent tools are a fixed vocabulary rather than rows, so no team narrows them. Checked all
+    the same: an unknown name would otherwise be stored and only surface when the bot ran.
+
+    Only a string can name a tool, and asking whether an unhashable value is one would raise, so
+    anything else is simply not among them.
+    """
+    offered = {value for value, _label in AgentTools.user_tool_choices()}
+    return {value for value in values if isinstance(value, str) and value in offered}
+
+
+def _rows_named_by(queryset: QuerySet, values: list) -> set:
+    """The supplied values that name a row in ``queryset``, one query however many were sent.
+
+    A value that is not an id at all -- a string, a dict, a bool -- simply names no row. ``as_int``
+    is what ``Node._sync_resource_fk_fields`` writes the columns through, so the two agree on which
+    values are ids in the first place.
+    """
+    ids = {parsed for parsed in map(as_int, values) if parsed is not None}
+    if not ids:
+        return set()
+    return set(queryset.filter(id__in=ids).values_list("id", flat=True))
+
+
+#: The resolver behind each option list, keyed on the list rather than the param, because the list is
+#: what decides the permitted values -- ``source_material_id`` is the param, ``source_material`` the
+#: list it chooses from. ``contract.PARAMETER_OPTION_SOURCES`` is the set of sources a write checks;
+#: ``test_every_checked_param_has_a_resolver`` says every one of those is a key here.
+RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
+    OptionsSource.llm_provider_id: reachable_llm_providers,
+    OptionsSource.llm_provider_model_id: reachable_llm_provider_models,
+    OptionsSource.source_material: reachable_source_materials,
+    OptionsSource.assistant: reachable_assistants,
+    OptionsSource.collection: reachable_collections,
+    OptionsSource.collection_index: reachable_collection_indexes,
+    OptionsSource.synthetic_voice_id: reachable_synthetic_voices,
+    OptionsSource.custom_actions: reachable_custom_actions,
+    OptionsSource.tools: reachable_tools,
+}
+
+
+def get_resolver(source: OptionsSource) -> Callable[[Team, list], set]:
+    """The function answering "which of these values may this team actually use?" for one option list.
+
+    Raises for a list that can deny nothing -- the prompt-variable lists, and the tool-config lists
+    that nest their options under provider types. Reaching here with one of those means something
+    asked to check a value against a list that cannot refuse it, which is a bug rather than a
+    permissive answer.
+    """
+    try:
+        return RESOLVERS[source]
+    except KeyError:
+        raise NotImplementedError(f"'{source}' has no resolver: it offers nothing a team could be denied.") from None

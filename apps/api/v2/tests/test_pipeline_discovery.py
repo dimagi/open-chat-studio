@@ -36,6 +36,16 @@ def team(db):
 
 @pytest.fixture()
 def team_with_resources(db):
+    return make_team_with_resources()
+
+
+@pytest.fixture()
+def team_with_every_resource(team_with_resources):
+    """One entry in every option list, so a shape assertion has something to look at in each."""
+    return add_remaining_resources(team_with_resources)
+
+
+def make_team_with_resources():
     team = TeamWithUsersFactory.create()
     LlmProviderFactory.create(team=team, type="openai", name="Prod OpenAI")
     LlmProviderModelFactory.create(team=team, type="openai")
@@ -48,10 +58,7 @@ def team_with_resources(db):
     return team
 
 
-@pytest.fixture()
-def team_with_every_resource(team_with_resources):
-    """One entry in every option list, so a shape assertion has something to look at in each."""
-    team = team_with_resources
+def add_remaining_resources(team):
     CollectionFactory.create(
         team=team,
         name="Support KB",
