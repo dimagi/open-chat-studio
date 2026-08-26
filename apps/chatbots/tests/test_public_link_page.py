@@ -143,4 +143,4 @@ def test_chatbot_home_shows_a_copy_chip_for_the_public_link(client, team_with_us
     url = reverse("chatbots:single_chatbot_home", args=[team_with_users.slug, channel.experiment_id])
     html = client.get(url, HTTP_HOST=CANONICAL).content.decode()
     assert channel.public_url in html
-    assert f'id="public-link-{channel.id}"' in html
+    assert f'<input id="public-link-{channel.id}" type="hidden"' in html

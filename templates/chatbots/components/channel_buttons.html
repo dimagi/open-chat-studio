@@ -24,10 +24,10 @@
   </button>
 {% endfor %}
 {% for channel in channels %}
-  {% if channel.platform == "public" %}
+  {% if channel.platform_enum == "public" %}
     {% with id_str=channel.id|stringformat:"s" %}
       {% with link_id="public-link-"|add:id_str %}
-        {% include "generic/copy_chip.html" with copy_element_id=link_id copy_value=channel.public_url action_text="Copy link" extra_styles="btn-ghost" %}
+        {% include "generic/copy_chip.html" with copy_element_id=link_id copy_value=channel.public_url action_text="Copy link" extra_styles="btn-ghost" show_value=0 %}
       {% endwith %}
     {% endwith %}
   {% endif %}
