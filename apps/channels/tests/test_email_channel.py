@@ -15,6 +15,7 @@ from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import EmailMessage, RawAttachment
+from apps.channels.deduplication import external_ids_for
 from apps.channels.email_channel import (
     EmailChannel,
     EmailSender,
@@ -945,6 +946,16 @@ class TestEmailInboundHandler:
         json.dumps(email_data)  # raises TypeError if Celery would EncodeError
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_email_with_no_message_id_is_let_through(self, team_with_users):
+        _make_email_channel(team_with_users, email_address="bot@chat.openchatstudio.com", is_default=True)
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", message_id="")
+
+        with patch("apps.channels.tasks.handle_email_message") as task_mock:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        task_mock.delay.assert_called_once()
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_thread_reply_allowed_through(self, team_with_users):
         """Reply via In-Reply-To is enqueued even when to-address doesn't match a channel."""
         team = team_with_users
@@ -1355,6 +1366,24 @@ class TestEmailInboundHandlerWithAttachments:
         kwargs = delay.call_args.kwargs
         assert kwargs["channel_id"] == channel.id
         assert len(kwargs["email_data"]["attachment_file_ids"]) == 1
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_replay_is_dropped_before_files_are_persisted(self, team_with_users, record_delivery):
+        """The whole reason Email checks at the boundary rather than leaving it to the stage: by the
+        time the pipeline runs, the attachments of a replay are already written."""
+        team = team_with_users
+        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
+        inbound = _make_inbound_with_attachments(
+            [pdf], to_email="bot@chat.openchatstudio.com", message_id="<replay@example.com>"
+        )
+        record_delivery(channel.team, external_ids_for("email", "<replay@example.com>"))
+
+        with patch("apps.channels.tasks.handle_email_message") as task_mock:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        task_mock.delay.assert_not_called()
+        assert not File.objects.filter(team=team).exists()
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com", "example.com"])
     def test_handler_no_files_saved_when_no_channel_match(self, team_with_users):

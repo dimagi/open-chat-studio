@@ -18,6 +18,7 @@ from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
+from apps.channels.deduplication import is_duplicate_delivery
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.sender import ChannelSender
 from apps.channels.utils import is_email_domain_allowed
@@ -443,6 +444,15 @@ def email_inbound_handler(sender, event, **kwargs):
         return
 
     set_current_team(channel.team)
+
+    if is_duplicate_delivery(email_msg.external_ids, channel.team_id):
+        logger.info(
+            "Ignoring replayed inbound email %s on channel %s",
+            email_msg.message_id,
+            channel.id,
+            extra={"channel_id": channel.id, "external_ids": email_msg.external_ids},
+        )
+        return
 
     accepted_ids: list[int] = []
     skipped: list[dict] = []
