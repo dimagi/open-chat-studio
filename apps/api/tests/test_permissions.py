@@ -83,49 +83,50 @@ def _request(*, has_perms: bool):
     return request
 
 
-@pytest.fixture()
-def machine_token(db):
-    """A real client-credentials token. `is_client_credentials_request` walks auth -> application ->
-    authorization_grant_type, so a stub would prove no more than that the branch exists."""
-    team = TeamWithUsersFactory.create()
-    application = OAuth2Application.objects.create(
-        name="machine-app",
-        team=team,
-        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
-        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
-    )
-    return OAuth2AccessToken.objects.create(
-        application=application,
-        team=team,
-        token="machine-token",
-        scope="chatbots:write",
-        expires=timezone.now() + timedelta(days=1),
-    )
+class TestRequiresTeamPermission:
+    """The gate every façade write sits behind: a human credential is held to the team
+    permissions its membership grants, a machine token to its OAuth scope."""
 
+    @pytest.fixture()
+    def machine_token(self, db):
+        """A real client-credentials token. `is_client_credentials_request` walks auth -> application ->
+        authorization_grant_type, so a stub would prove no more than that the branch exists."""
+        team = TeamWithUsersFactory.create()
+        application = OAuth2Application.objects.create(
+            name="machine-app",
+            team=team,
+            client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        )
+        return OAuth2AccessToken.objects.create(
+            application=application,
+            team=team,
+            token="machine-token",
+            scope="chatbots:write",
+            expires=timezone.now() + timedelta(days=1),
+        )
 
-@pytest.mark.parametrize("has_perms", [True, False], ids=["holder-allowed", "non-holder-denied"])
-def test_requires_team_permission_follows_the_users_permissions(has_perms):
-    assert _NeedsChange().has_permission(_request(has_perms=has_perms), view=None) is has_perms
+    @pytest.mark.parametrize("has_perms", [True, False], ids=["holder-allowed", "non-holder-denied"])
+    def test_requires_team_permission_follows_the_users_permissions(self, has_perms):
+        assert _NeedsChange().has_permission(_request(has_perms=has_perms), view=None) is has_perms
 
+    def test_requires_team_permission_refuses_a_subclass_that_declares_nothing(self):
+        """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone. It
+        fires when the class is defined rather than when its endpoint is first called: an open door that
+        only shows itself under traffic is one that ships.
+        """
+        with pytest.raises(ImproperlyConfigured):
 
-def test_requires_team_permission_refuses_a_subclass_that_declares_nothing():
-    """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone. It
-    fires when the class is defined rather than when its endpoint is first called: an open door that
-    only shows itself under traffic is one that ships.
-    """
-    with pytest.raises(ImproperlyConfigured):
+            class _DeclaresNothing(RequiresTeamPermission):
+                pass
 
-        class _DeclaresNothing(RequiresTeamPermission):
-            pass
+    @pytest.mark.django_db()
+    def test_requires_team_permission_defers_machine_tokens_to_the_scope(self, machine_token):
+        """A machine token authenticates as AnonymousUser, so there is no membership-derived
+        permission to check; authorization rests on the OAuth scope and the token's pinned team."""
+        request = Mock(user=AnonymousUser(), auth=machine_token)
 
-
-@pytest.mark.django_db()
-def test_requires_team_permission_defers_machine_tokens_to_the_scope(machine_token):
-    """A machine token authenticates as AnonymousUser, so there is no membership-derived
-    permission to check; authorization rests on the OAuth scope and the token's pinned team."""
-    request = Mock(user=AnonymousUser(), auth=machine_token)
-
-    assert _NeedsChange().has_permission(request, view=None) is True
+        assert _NeedsChange().has_permission(request, view=None) is True
 
 
 @pytest.mark.parametrize(
