@@ -14,7 +14,15 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import { TranslationStrings, TranslationManager, defaultTranslations } from '../../utils/translations';
-import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle, SessionAccessError } from '../../services/chat-session-service';
+import {
+  ChatSessionService,
+  ChatMessage,
+  MessagePollingHandle,
+  TaskPollingHandle,
+  SessionAccessError,
+  ChatAuthError,
+  AuthTokenProvider,
+} from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
 interface PointerEvent {
@@ -115,6 +123,15 @@ export class OcsChat {
    * Authentication key for embedded channels
    */
   @Prop() embedKey?: string;
+
+  /**
+   * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel
+   * requires one. Mint it in the host application's backend and return it here;
+   * the widget asks once per session start and never writes one to local storage.
+   * `forceRefresh` is set when the previous token was rejected. Being
+   * a function, this is a JavaScript property with no HTML attribute equivalent.
+   */
+  @Prop() authTokenProvider?: AuthTokenProvider;
 
   /**
    * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
@@ -446,6 +463,7 @@ export class OcsChat {
         taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
         messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
         sessionToken: this.currentSessionToken,
+        authTokenProvider: this.authTokenProvider,
       });
     }
     return this.chatService;
@@ -638,8 +656,17 @@ export class OcsChat {
       this.dispatchWidgetEvent('ocs:session:started', { sessionId: this.activeSessionId });
 
       this.startMessagePolling();
-    } catch (_error) {
+    } catch (error) {
       if (epoch !== this.sessionEpoch) return;
+      // An admission refusal is not a transient failure and retrying will not fix
+      // it, so say so with the server's own wording rather than the generic start
+      // failure text. That wording is deliberately opaque -- every cause (missing,
+      // stale or unauthorised credential) answers the same -- so it names the
+      // problem without telling a prober which check failed.
+      if (error instanceof ChatAuthError) {
+        this.handleError(error.message);
+        return;
+      }
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
@@ -917,6 +944,11 @@ export class OcsChat {
   @Watch('versionNumber')
   async chatbotConfigHandler() {
     await this.clearSession();
+  }
+
+  @Watch('authTokenProvider')
+  authTokenProviderHandler(provider?: AuthTokenProvider) {
+    this.chatService?.setAuthTokenProvider(provider);
   }
 
   /**
