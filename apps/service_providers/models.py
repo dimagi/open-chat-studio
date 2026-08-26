@@ -70,7 +70,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     openai = (
         "openai",
         _("OpenAI"),
-        {"supports_transcription": True, "supports_assistants": True, "max_vector_stores": 2},
+        {"supports_transcription": True, "max_vector_stores": 2},
     )
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
@@ -93,10 +93,6 @@ class LlmProviderTypes(LlmProviderType, Enum):
     @property
     def supports_transcription(self):
         return self.additional_config.get("supports_transcription", False)
-
-    @property
-    def supports_assistants(self):
-        return self.additional_config.get("supports_assistants", False)
 
     @property
     def max_vector_stores(self) -> int | None:

@@ -256,7 +256,11 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
 # for the type. The stub is built here rather than from a node class, which is the point:
 # resolve_node_class still returns None, so Pipeline.validate keeps reporting "Unknown node type"
 # and the pipeline cannot build. See issue #4254.
-REMOVED_NODE_TYPES: dict[str, str] = {}
+REMOVED_NODE_TYPES: dict[str, str] = {
+    "AssistantNode": (
+        "OpenAI retired the Assistants API on 26 August 2026. Delete this node and use an LLM node instead."
+    ),
+}
 
 
 def get_node_schemas() -> list[dict]:

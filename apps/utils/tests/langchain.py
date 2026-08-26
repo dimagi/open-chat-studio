@@ -12,11 +12,9 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, Base
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from openai import OpenAI
 from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService, OpenAIGenericService
-from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 
 
 class FakeLlm(FakeListChatModel):
@@ -72,10 +70,6 @@ class FakeLlmService(LlmService):
     def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []
 
@@ -86,10 +80,6 @@ class FakeOpenAILlmService(OpenAIGenericService):
 
     def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []

@@ -183,7 +183,6 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
     for provider in team.llmprovider_set.all():
         providers[provider.id] = {
             "models": provider_models_by_type[provider.type],
-            "supports_assistants": provider.type_enum.supports_assistants,
         }
     return providers
 
