@@ -251,9 +251,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 graph.build_runnable()
             except PipelineBuildError as e:
                 report = error_report(errors, [e])
-            except PipelineNodeBuildError as e:
-                # Not a PipelineBuildError subclass, and carries no node id of its own.
-                report["pipeline"].append(str(e))
+            except PipelineNodeBuildError:
+                # Not a PipelineBuildError subclass, and carries no node id of its own. Every node
+                # validated cleanly above or this branch would not have run, so what lands here is a
+                # build-stage failure the node checks could not name — and its message may be a raw
+                # pydantic dump wrapped at the build site, naming the classes behind the node.
+                #
+                # Logged rather than reported, for the same reason as the catch-all in
+                # ``_node_validation_errors``: the report is served over the API.
+                logger.exception("Pipeline %s could not be built", self.id)
+                report["pipeline"].append("This pipeline could not be built. Check the values of its nodes' params.")
 
         return report
 
