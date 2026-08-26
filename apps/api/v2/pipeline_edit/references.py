@@ -1,24 +1,28 @@
 """Strict reference checking for node params (#4140, W6).
 
-The one check that refuses rather than reports, because nothing downstream would ever tell the
-caller. ``Node._sync_resource_fk_fields`` tests a referenced row against ``_base_manager`` with no
-team filter, so another team's id is not coerced to null — it goes straight into the FK column, and
-``Pipeline.validate`` says nothing about it.
+Refuses rather than reports: nothing downstream would tell the caller. Another team's id lands in
+the FK column untouched, and ``Pipeline.validate`` says nothing about it.
 
-Valid means the option list ``/pipeline/options/`` already offered for that param
-(``reference_sources_for_type`` maps the one to the other), which is what keeps "what we offer" and
-"what we accept" from drifting apart. Only the lists know the whole answer: ``SyntheticVoice`` has
-no team column, ``LlmProviderModel.team`` is nullable for the global models, and ``custom_actions``,
-``tools`` and ``collection_index_ids`` are team-scoped with no FK column at all.
+``PARAMETER_OPTION_SOURCES`` says which ``/pipeline/options/`` lists a team could be denied a value
+from, and so which params are references. Each of those lists has a resolver that asks the database
+what the team may actually use; they live in ``apps.pipelines.nodes.node_metadata``, beside the
+querysets the option lists themselves are built from, so what a client is offered and what a write
+accepts cannot come apart. The two are held to that by
+``test_a_write_accepts_exactly_the_values_the_options_endpoint_offers``.
+
+A resolver is reached through the source rather than the param -- ``node_metadata.get_resolver`` --
+because the source is what decides the permitted values; the param name is only how the request body
+spells it, and what an error has to be reported against. ``parameter_option_mapping`` carries a node
+type's params over to the sources they draw from.
 """
 
 from typing import Any
 
 from rest_framework.exceptions import ValidationError
 
-from apps.api.v2.discovery.node_types import reference_param_names, reference_sources_for_type
-from apps.api.v2.discovery.options import options_for_team
+from apps.api.v2.discovery.node_types import parameter_option_mapping
 from apps.pipelines.nodes.base import BasePipelineNode
+from apps.pipelines.nodes.node_metadata import get_resolver
 from apps.teams.models import Team
 
 from .node_params import is_list_param
@@ -28,68 +32,57 @@ from .node_params import is_list_param
 UNSET = (None, [], "")
 
 
-def option_lists_for(team: Team, params: dict[str, Any], node_class: type[BasePipelineNode] | None = None) -> dict:
-    """``team``'s option lists, built only if ``params`` could name a resource at all.
-
-    ``node_class`` is the exact answer and POST has it. A PATCH does not -- the node's type comes
-    from the graph, under the lock -- so it settles for the union across every served type. Either
-    way the set asked about here is a superset of the one :func:`_reference_errors` goes on to use,
-    which is what makes an empty return safe: it can only happen when there is nothing to check.
-    """
-    names = reference_sources_for_type(node_class.__name__).keys() if node_class else reference_param_names()
-    if not params or names.isdisjoint(params):
-        return {}
-    return options_for_team(team)
-
-
-def check_references(options: dict, node_class: type[BasePipelineNode], params: dict[str, Any]) -> None:
+def check_references(team: Team, node_class: type[BasePipelineNode], params: dict[str, Any]) -> None:
     """Refuse ``params`` naming a resource the team cannot reach.
 
     Only the params actually sent are checked, so a PATCH never fails on a stale value it is not
     touching. A nonexistent id and another team's id are the same answer on purpose: separating them
     would report whether an id exists in some other team.
     """
-    if errors := _reference_errors(options, node_class, params):
+
+    if errors := _reference_errors(team, node_class, params):
         raise ValidationError({"params": errors})
 
 
-def _reference_errors(options: dict, node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, str]:
-    """``param -> why its value names something out of reach``, for the params actually sent.
+def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, str]:
+    """The params naming a resource the team cannot reach, keyed by param name, each with a message
+    saying which option list to choose from instead.
 
-    A list-valued param is only read as a list when the value actually is one: nothing type-checks
-    params before this runs, so a bare id can arrive where a list belongs, and iterating that would
-    be a 500 in place of a rejected write.
+    A param is only looked at if it is a reference and carries a value. ``None``, ``""`` and ``[]``
+    unset a reference, so there is nothing to check.
     """
     node_type = node_class.__name__
-    sources = reference_sources_for_type(node_type)
-    referencing = {param: value for param, value in params.items() if param in sources and value not in UNSET}
+    param_option_map = parameter_option_mapping(node_type)
     errors: dict[str, str] = {}
-    for param, value in referencing.items():
-        source = sources[param]
-        offered = options.get(source, [])
-        if not isinstance(offered, list):
-            # A dict-shaped source nests its options under provider types, so there is no flat set
-            # to check a value against. The two that exist are excluded by name; this keeps one
-            # added later from raising here rather than being skipped.
+    for param, value in params.items():
+        if param not in param_option_map or value in UNSET:
             continue
-        allowed = {option["value"] for option in offered}
-        supplied = value if is_list_param(node_class, param) and isinstance(value, list | tuple | set) else [value]
-        unknown = [item for item in supplied if not _is_offered(item, allowed)]
-        if unknown:
+        # `is_list_param` reads the declaration, `isinstance` the value: `params` is untyped here,
+        # so a bare `5` arrives where `[5]` belongs and iterating it would be a 500, not a 400.
+        requested_values = (
+            value if is_list_param(node_class, param) and isinstance(value, list | tuple | set) else [value]
+        )
+        # Via the source, not the param: the source is what says which records are on offer, and
+        # `test_every_checked_param_has_a_resolver` is what says each one reached here has a
+        # resolver rather than raising.
+        available_values = get_resolver(param_option_map[param])(team, requested_values)
+        if unknown := [item for item in requested_values if _is_not_allowed(item, available_values)]:
             errors[param] = (
                 f"Not available to this team: {', '.join(repr(item) for item in unknown)}. "
-                f"Choose from the '{source}' list in GET /api/v2/pipeline/options/{node_type}/."
+                f"Choose from the '{param_option_map[param]}' list in GET /api/v2/pipeline/options/{node_type}/."
             )
     return errors
 
 
-def _is_offered(item: Any, allowed: set) -> bool:
-    """Whether ``item`` is one of the values the team was offered.
+def _is_not_allowed(item: Any, allowed: set) -> bool:
+    """Whether ``item`` is none of the values the team may use.
 
-    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs.
-    Unhashable is no option either way, so it counts as unknown rather than raising.
+    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs. A
+    resolver has already declined to return such a value -- none of them may raise on one -- so this
+    only has to avoid raising on it in turn: unhashable is no resource either way, so it counts as
+    unknown.
     """
     try:
-        return item in allowed
+        return item not in allowed
     except TypeError:
-        return False
+        return True

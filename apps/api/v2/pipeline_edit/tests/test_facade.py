@@ -5,43 +5,69 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from apps.pipelines.models import Node
+from apps.utils.factories.documents import CollectionFactory
 
 from .conftest import node_url, nodes_url
 
+#: How many queries a PATCH is allowed to run while it holds the pipeline row, and the reason this
+#: is pinned to a number rather than compared against itself: rebuilding the team's option lists in
+#: there -- which is how the check used to work -- adds a dozen at a stroke, and nothing else in the
+#: test would notice. Raising it is a decision about how long the row is held, so make it a
+#: deliberate one and say in the commit what the extra queries buy.
+QUERIES_UNDER_THE_LOCK = 27
+
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", ["post", "patch"])
-def test_the_option_lists_are_built_before_the_pipeline_row_is_locked(client, chatbot, llm, verb):
+def test_a_reference_check_reads_only_the_ids_it_was_sent(client, chatbot, llm, team):
     """The graph is read, merged and written back under a row lock: without it, two concurrent
-    writes would each merge into the pre-write graph and the second would drop the first.
+    writes would each merge into the pre-write graph and the second would drop the first. A PATCH
+    only learns the node's type from that graph, so its reference check runs inside the lock.
 
-    Checking a reference, though, costs around fifteen queries and parses every custom action's
-    OpenAPI schema. Doing that while holding the row would serialise concurrent edits to the same
-    chatbot for the whole of it, so it happens before the lock is taken.
+    What keeps that from serialising concurrent edits is that the check asks after the ids that were
+    sent rather than building the lists to pick them out of. Two things have to hold for that, and
+    they fail on different axes, so each is asserted against the axis it moves on:
 
-    Query capture rather than threads: a real concurrency test would be slow and flaky.
+    * the count stays at :data:`QUERIES_UNDER_THE_LOCK` -- building the option lists in here is a
+      fixed dozen extra queries, so only an absolute number catches it. It is the team's rows that
+      would grow those lists, but not the number of queries reading them, which is why comparing a
+      small team against a large one proves nothing.
+    * it does not move with the number of ids sent, which is the axis a resolver querying per value
+      instead of per param would grow on.
+
+    Query counting rather than threads: a real concurrency test would be slow and flaky.
     """
     provider, model = llm
-    params = {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
     node_id = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json").json()["node"][
         "node_id"
     ]
 
-    with CaptureQueriesContext(connection) as captured:
-        if verb == "post":
-            client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt", "params": params}, format="json")
-        else:
-            client.patch(node_url(chatbot, node_id), {"params": params}, format="json")
+    def patch_cost(params: dict) -> int:
+        with CaptureQueriesContext(connection) as captured:
+            response = client.patch(node_url(chatbot, node_id), {"params": params}, format="json")
+        assert response.status_code == 200, response.content
+        sql = [query["sql"] for query in captured.captured_queries]
+        locks = [index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query]
+        assert locks, "the pipeline row was never locked"
+        return len(sql) - min(locks)
 
-    sql = [query["sql"] for query in captured.captured_queries]
-    locks = [index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query]
-    # The team-scoped provider list, which only `options_for_team` asks for -- as opposed to the
-    # by-id existence checks `_sync_resource_fk_fields` runs while persisting, which belong inside.
-    built = [index for index, query in enumerate(sql) if '"service_providers_llmprovider"."team_id"' in query]
+    llm_params = {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
+    patch_cost(llm_params)  # discarded: the first write of the process warms caches the later ones reuse
+    assert patch_cost(llm_params) == QUERIES_UNDER_THE_LOCK, "see the constant"
 
-    assert locks, "the pipeline row was never locked"
-    assert built, "the option lists were never built, so this proves nothing"
-    assert max(built) < min(locks), f"option lists were built under the lock (at {built}, lock at {locks})"
+    indexes = [
+        CollectionFactory.create(
+            team=team,
+            name=f"KB {index}",
+            summary=f"KB {index}",
+            is_index=True,
+            llm_provider=None,
+            embedding_provider_model=None,
+        )
+        for index in range(12)
+    ]
+    one_id = patch_cost({"collection_index_ids": [indexes[0].id]})
+
+    assert patch_cost({"collection_index_ids": [index.id for index in indexes]}) == one_id
 
 
 @pytest.mark.django_db()

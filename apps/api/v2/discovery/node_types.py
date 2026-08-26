@@ -9,13 +9,13 @@ from typing import cast
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.nodes.base import BasePipelineNode, PipelineRouterNode, resolve_node_class
+from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource, PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
     MUST_MATCH,
-    NON_REFERENCE_OPTION_SOURCES,
     OPTIONS_KEYED_BY,
+    PARAMETER_OPTION_SOURCES,
     PER_KEYWORD_OUTPUT,
     SINGLE_OUTPUT,
     UI_KEY_TRANSLATIONS,
@@ -63,37 +63,33 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     return _option_keys_by_type().get(node_type)
 
 
-def reference_sources_for_type(node_type: str) -> dict[str, str]:
-    """``param -> the /pipeline/options/ key its value must be drawn from``, for one node type.
+def parameter_option_mapping(node_type: str) -> dict[str, OptionsSource]:
+    """One node type's reference params, each mapped to the option list it draws its values from.
 
-    Only the params whose value names something the team holds; see
-    ``NON_REFERENCE_OPTION_SOURCES`` for what that leaves out. An unserved node type has none.
+    A param is not always named for its list, which is the whole reason to carry the pairing around.
+    For ``LLMResponseWithPrompt``::
 
-    Read off the schemas rather than off ``Node``'s resource FK columns, which cover a different
-    set: ``custom_actions`` and ``tools`` are team-scoped and have no column, while ``assistant_id``
-    has one and is not a param of any served type. The columns also could not supply the option-list
-    key each param draws from, which is what a rejection has to name for the client to fix it.
+        {
+            "llm_provider_id": OptionsSource.llm_provider_id,
+            "llm_provider_model_id": OptionsSource.llm_provider_model_id,
+            "source_material_id": OptionsSource.source_material,
+            "collection_id": OptionsSource.collection,
+            "collection_index_ids": OptionsSource.collection_index,
+            "tools": OptionsSource.tools,
+            "custom_actions": OptionsSource.custom_actions,
+            "synthetic_voice_id": OptionsSource.synthetic_voice_id,
+        }
     """
     return {
-        param: source
-        for param, source in _sources_by_type().get(node_type, {}).items()
-        if source not in NON_REFERENCE_OPTION_SOURCES
+        param: option_key
+        for param, option_key in _sources_by_type().get(node_type, {}).items()
+        if option_key in PARAMETER_OPTION_SOURCES
     }
 
 
 def served_option_keys() -> frozenset[str]:
     """Every option key some listed node type can reference."""
     return frozenset().union(*_option_keys_by_type().values())
-
-
-@cache
-def reference_param_names() -> frozenset[str]:
-    """Every param name that, on some served type, names a resource the team has to hold.
-
-    Type-agnostic on purpose: it answers "could this body need the option lists at all?" before the
-    node's type is known, which is what lets a PATCH build them outside the pipeline row lock.
-    """
-    return frozenset(param for node_type in _sources_by_type() for param in reference_sources_for_type(node_type))
 
 
 def unknown_node_type(requested_type: str) -> NotFound:
@@ -174,9 +170,13 @@ def _documentation_url(schema: dict) -> str | None:
 
 
 @cache
-def _sources_by_type() -> dict[str, dict[str, str]]:
-    """``node type -> {param: the /pipeline/options/ key it draws from}``, read off
-    ``ui:optionsSource``. Withheld params and params with no source are left out."""
+def _sources_by_type() -> dict[str, dict[str, OptionsSource]]:
+    """``node type -> {param: the option list it draws from}``, read off ``ui:optionsSource``.
+
+    Withheld params and params with no source are left out. Unlike
+    :func:`parameter_option_mapping` this keeps the params whose list names no team records -- the
+    prompt-variable lists among them -- so it is the whole declared mapping, references or not.
+    """
     return {
         schema["title"]: {
             name: prop["ui:optionsSource"]

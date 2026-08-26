@@ -71,6 +71,31 @@ def test_a_list_sent_for_a_scalar_reference_is_refused(client, chatbot, llm):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "tools",
+    [
+        pytest.param([{"a": 1}], id="dict-in-the-list"),
+        pytest.param({"a": 1}, id="dict-for-the-list"),
+        pytest.param([["one-off-reminder"]], id="a-real-name-nested-in-a-list"),
+        pytest.param(["not_a_tool"], id="unknown-name"),
+    ],
+)
+def test_a_tool_the_team_cannot_use_is_refused(client, chatbot, tools):
+    """``tools`` is the one reference whose values are names rather than ids, so it is the one
+    resolver that never parses what it was handed. It still has to answer rather than raise: an
+    unhashable value cannot be looked up in the vocabulary, and asking would be a 500 in place of
+    this 400.
+    """
+    response = client.post(
+        nodes_url(chatbot), {"type": "LLMResponseWithPrompt", "params": {"tools": tools}}, format="json"
+    )
+
+    assert response.status_code == 400, response.content
+    assert "tools" in response.json()["params"]
+    assert not Node.objects.filter(pipeline=chatbot.pipeline, type="LLMResponseWithPrompt").exists()
+
+
+@pytest.mark.django_db()
 def test_a_scalar_sent_for_a_list_valued_reference_is_refused(client, chatbot, team):
     """The other shape: a bare id where a list belongs. Read as one unreachable value rather than
     iterated over as if it were a list."""

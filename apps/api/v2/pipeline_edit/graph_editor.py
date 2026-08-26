@@ -21,6 +21,7 @@ from apps.pipelines.flow import (
 )
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
+from apps.teams.models import Team
 
 from .facade import PipelineEdit
 from .node_params import node_params, writable_params
@@ -85,7 +86,7 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
     return PipelineEdit(diff=_diff(NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
 
 
-def plan_update(flow: dict, options: dict, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
@@ -107,8 +108,7 @@ def plan_update(flow: dict, options: dict, node_id: str, label: str | None, para
         # node of such a type is not something the API has to withhold.
         node_class = get_node_class(content.type)
         params = writable_params(node_class, params)
-        check_references(options, node_class, params)
-        # Merge first: the model is all-or-nothing, so it must see the whole node.
+        check_references(team, node_class, params)
         content.params = node_params(node_class, node_id, {**stored_params(content), **params})
     else:
         # Drops the resource-id mirror `to_flow_node` merged in; normalising here would write every
