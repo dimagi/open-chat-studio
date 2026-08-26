@@ -281,3 +281,39 @@ def test_webhook_url_for_telegram_channel():
 
     assert str(channel.external_id) in url
     assert url.startswith("https://")
+
+
+@pytest.mark.django_db()
+class TestPublicChannelPlatform:
+    """PUBLIC is a widget platform, one per chatbot, offered only behind flag_public_channel."""
+
+    @pytest.fixture()
+    def public_flag_enabled(self, experiment):
+        flag = Flag.objects.create(name="flag_public_channel")
+        flag.teams.add(experiment.team)
+        flag.flush()
+        return flag
+
+    def test_widget_platforms_are_the_two_widget_served_platforms(self):
+        assert ChannelPlatform.widget_platforms() == [ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC]
+
+    def test_public_hidden_when_flag_off(self, experiment):
+        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+        assert ChannelPlatform.PUBLIC not in platforms
+
+    def test_public_available_when_flag_on(self, experiment, public_flag_enabled):
+        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+        assert platforms[ChannelPlatform.PUBLIC] is True
+
+    def test_public_hidden_once_used(self, experiment, public_flag_enabled):
+        platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
+        assert ChannelPlatform.PUBLIC not in platforms
+
+    def test_public_identifier_key_is_the_widget_token(self):
+        assert ChannelPlatform.PUBLIC.channel_identifier_key == "widget_token"
+
+    @pytest.mark.xfail(strict=True, reason="PublicChannelForm lands in task 9")
+    def test_public_extra_form_is_the_public_channel_form(self, experiment):
+        from apps.channels.forms import PublicChannelForm  # noqa: PLC0415  # ty: ignore[unresolved-import]
+
+        assert isinstance(ChannelPlatform.PUBLIC.extra_form(experiment=experiment), PublicChannelForm)

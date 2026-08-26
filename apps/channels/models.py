@@ -40,11 +40,17 @@ class ChannelPlatform(models.TextChoices):
     EVALUATIONS = "evaluations", "Evaluations"
     EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"
     EMAIL = "email", "Email"
+    PUBLIC = "public", "Public link"
 
     @classmethod
     def team_global_platforms(cls):
         """These platforms should only ever have one channel per team"""
         return [cls.API, cls.WEB, cls.EVALUATIONS]
+
+    @classmethod
+    def widget_platforms(cls) -> list["ChannelPlatform"]:
+        """Platforms the chat widget serves through the Chat API with an embed key."""
+        return [cls.EMBEDDED_WIDGET, cls.PUBLIC]
 
     @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
@@ -79,6 +85,12 @@ class ChannelPlatform(models.TextChoices):
         else:
             platform_availability[cls.EMAIL] = True
 
+        flag = Flag.get("flag_public_channel")
+        if flag.is_active_for_team(team):
+            platform_availability[cls.PUBLIC] = True
+        else:
+            platform_availability.pop(cls.PUBLIC, None)
+
         # Platforms already used should not be displayed
         for platform in used_platforms:
             platform_availability.pop(platform)
@@ -110,6 +122,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.EmbeddedWidgetChannelForm(**kwargs)
             case self.EMAIL:
                 return forms.EmailChannelForm(**kwargs)
+            case self.PUBLIC:
+                return forms.PublicChannelForm(**kwargs)
         return None
 
     @property
@@ -134,6 +148,8 @@ class ChannelPlatform(models.TextChoices):
                 return "widget_token"
             case self.EMAIL:
                 return "email_address"
+            case self.PUBLIC:
+                return "widget_token"
         return None
 
     @staticmethod

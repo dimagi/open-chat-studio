@@ -1812,6 +1812,7 @@ components:
       - evaluations
       - embedded_widget
       - email
+      - public
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1825,6 +1826,7 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+        * `public` - Public link
     SessionModelUsage:
       type: object
       properties:
