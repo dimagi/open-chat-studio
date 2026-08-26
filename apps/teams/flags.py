@@ -47,8 +47,6 @@ class Flags(FlagInfo, Enum):
 
     NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
 
-    CHAT_WIDGET = ("flag_chat_widget", "Use the embedded chat widget on the full-page web chat (POC)")
-
     PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
 
     TESTING_CUSTOM_ACTIONS = (
