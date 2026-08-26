@@ -43,3 +43,22 @@ Note: When this PR is merged and the checkbox above is checked, Claude will auto
 
 Add any notes here that will help Claude write the changelog and docs.
 -->
+
+### Operator Impact
+- [ ] Self-hosted operators must know about or act on this change
+
+<!--
+Check the box above if a self-hosted operator has to do something, or would be
+surprised on upgrade: migrations, new/renamed/removed settings or env vars, a
+change in deployment shape (process types, queues, backing-service versions),
+a deprecation or removal, or a security fix needing operator action.
+
+This is separate from the docs/changelog checkbox above, which covers the
+user-facing product changelog. If checked, add an entry under `[Unreleased]` in
+the repo-root `CHANGELOG.md` in this PR. See RELEASING.md.
+
+Leave unchecked for a change that is purely a feature, improvement or bug fix
+with none of the above — those reach operators through the user-facing
+changelog. A feature PR that also carries a migration or a settings change is
+still operator-impacting: check the box and log the migration.
+-->
