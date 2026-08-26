@@ -194,14 +194,12 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
-    def create_new_version(self, new_assistant=None, new_node=None, is_copy=False):  # ty: ignore[invalid-method-override]
-        action_holders = [new_assistant, new_node]
-        if not any(action_holders):
-            raise ValueError("Either new_assistant or new_node must be provided")
-        if len([holder for holder in action_holders if holder is not None]) > 1:
-            raise ValueError("Only one of new_assistant or new_node can be provided")
+    def create_new_version(self, new_node=None, is_copy=False):  # ty: ignore[invalid-method-override]
+        # The assistant FK survives for Phase 2 but nothing creates a version against one, so a
+        # node is now the only holder a new version can have.
+        if new_node is None:
+            raise ValueError("new_node must be provided")
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
-        new_instance.assistant = new_assistant
         new_instance.node = new_node
         if not is_copy:
             new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)
