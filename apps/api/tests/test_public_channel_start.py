@@ -189,3 +189,31 @@ def test_send_on_a_live_public_session_uses_the_published_version(team_with_user
     assert response.status_code == 202, response.content
     published = channel.experiment.versions.get(is_default_version=True)
     assert seen["kwargs"]["experiment_id"] == published.id
+
+
+@pytest.mark.django_db()
+def test_send_refuses_once_a_consent_form_is_published(team_with_users):
+    channel = _public_channel(team_with_users)
+    client = APIClient()
+    started = _start(client, channel.experiment).json()
+    working = channel.experiment
+    working.consent_form = ConsentFormFactory.create(team=team_with_users)
+    working.save()
+    working.create_new_version(make_default=True)
+    response = _send(client, started["session_id"], started["session_token"])
+    assert response.status_code == 409
+    assert response.json()["code"] == "consent_unavailable"
+
+
+@pytest.mark.django_db()
+def test_regeneration_revokes_the_old_key_and_the_live_session(team_with_users):
+    channel = _public_channel(team_with_users)
+    client = APIClient()
+    started = _start(client, channel.experiment).json()
+    channel.extra_data["widget_token"] = "public_token_regenerated_00000000000"
+    channel.save()
+    channel.end_live_sessions()
+    assert _start(client, channel.experiment).status_code == 401
+    response = _send(client, started["session_id"], started["session_token"])
+    assert response.status_code == 400
+    assert "ended" in response.json()["error"]

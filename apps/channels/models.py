@@ -535,5 +535,7 @@ class ExperimentChannel(BaseTeamModel):
         return None
 
     def soft_delete(self):
+        if self.platform == ChannelPlatform.PUBLIC:
+            self.end_live_sessions()
         self.deleted = True
         self.save()

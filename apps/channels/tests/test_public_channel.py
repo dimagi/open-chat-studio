@@ -186,3 +186,50 @@ def test_edit_dialog_regenerates_and_ends_sessions(client, public_channel, publi
     assert public_channel.extra_data["widget_token"] != TOKEN
     assert live.is_complete
     assert b"Link regenerated" in response.content
+
+
+def test_blank_lines_are_dropped_from_the_lists():
+    form = PublicChannelForm(
+        data={"welcome_messages": "Hello\r\n\r\nWorld\r\n", "starter_questions": "  \r\nHours?\r\n"},
+        experiment=Mock(),
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["welcome_messages"] == ["Hello", "World"]
+    assert form.cleaned_data["starter_questions"] == ["Hours?"]
+
+
+@pytest.mark.django_db()
+def test_disabling_through_the_dialog_ends_live_sessions(client, public_channel, public_flag):
+    _operator(client, public_channel.team, "change_experimentchannel")
+    live = ExperimentSessionFactory.create(
+        experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
+    )
+    url = reverse(
+        "channels:channel_edit_dialog",
+        args=[public_channel.team.slug, public_channel.experiment_id, public_channel.id],
+    )
+    response = client.post(
+        url,
+        data={"name": public_channel.name, "platform": "public", "disabled_message": "Back soon"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200, response.content
+    public_channel.refresh_from_db()
+    live.refresh_from_db()
+    assert public_channel.is_disabled
+    assert public_channel.extra_data["widget_token"] == TOKEN
+    assert live.is_complete
+
+
+@pytest.mark.django_db()
+def test_removing_a_public_channel_ends_live_sessions(client, public_channel):
+    _operator(client, public_channel.team, "delete_experimentchannel")
+    live = ExperimentSessionFactory.create(
+        experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
+    )
+    url = reverse(
+        "channels:delete_channel", args=[public_channel.team.slug, public_channel.experiment_id, public_channel.id]
+    )
+    assert client.post(url).status_code == 200
+    live.refresh_from_db()
+    assert live.is_complete

@@ -68,7 +68,7 @@ def public_link_page(request, token: str):
 
     state, published = _page_state(channel)
     shown = published or channel.experiment
-    user = request.user if request.user.is_authenticated else None
+    member = request.user.is_authenticated and channel.team.members.filter(id=request.user.id).exists()
     response = TemplateResponse(
         request,
         "chatbots/public_link.html",
@@ -82,7 +82,8 @@ def public_link_page(request, token: str):
             "api_base_url": get_server_root(),
             "welcome_json": json.dumps(channel.extra_data.get("welcome_messages", [])),
             "starters_json": json.dumps(channel.extra_data.get("starter_questions", [])),
-            "user": user,
+            "user": request.user if member else None,
+            "widget_enabled": state.live or member,
         },
     )
     response["X-Robots-Tag"] = "noindex"

@@ -381,18 +381,21 @@ def _public_channel_refusal(request, experiment, experiment_channel) -> Response
 
 def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
     """The version a request on `session` runs against, or a 409 for a public session whose
-    published version has gone. Other channels keep the published-or-working fallback, and so
-    do team members on a public channel so they can preview an unpublished chatbot through its
-    page."""
+    published version has gone or now carries a consent form. Other channels keep the
+    published-or-working fallback, and so do team members on a public channel so they can
+    preview an unpublished chatbot through its page."""
     channel = session.experiment_channel
     if channel is None or channel.platform != ChannelPlatform.PUBLIC:
         return session.experiment_version, None
     if _is_team_member(request, session.experiment):
         return session.experiment_version, None
     try:
-        return resolve_chatbot_version(session.experiment, VersionSelectionRule.LATEST_PUBLISHED), None
+        published = resolve_chatbot_version(session.experiment, VersionSelectionRule.LATEST_PUBLISHED)
     except NoPublishedVersion:
         return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
+    if published.consent_form_id:
+        return None, Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
+    return published, None
 
 
 def _get_requested_version(experiment, version_number):

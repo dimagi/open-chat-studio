@@ -32,7 +32,7 @@
           persistent-session="false"
           welcome-messages="{{ welcome_json }}"
           starter-questions="{{ starters_json }}"
-          {% if not state.live %}disabled="true"{% endif %}
+          {% if not widget_enabled %}disabled="true"{% endif %}
           {% if user %}user-id="{{ user.email }}" user-name="{{ user.get_full_name }}"{% endif %}
         ></open-chat-studio-widget>
       </div>

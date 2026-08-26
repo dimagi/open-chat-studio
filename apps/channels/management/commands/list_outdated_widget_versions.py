@@ -79,7 +79,7 @@ class Command(BaseCommand):
             .values("count")[:1]
         )
         channels = (
-            ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET)
+            ExperimentChannel.objects.filter(platform__in=ChannelPlatform.widget_platforms())
             .select_related("experiment", "team")
             .annotate(session_count=session_count)
             .filter(session_count__gt=0)

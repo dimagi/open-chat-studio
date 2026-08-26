@@ -10,6 +10,7 @@ from django.urls import reverse
 from apps.channels.models import ChannelPlatform
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
+from apps.utils.factories.user import UserFactory
 
 TOKEN = "public_token_1234567890123456789012"
 CANONICAL = "ocs.example.com"
@@ -136,3 +137,21 @@ def test_chatbot_home_shows_a_copy_chip_for_the_public_link(client, team_with_us
     html = client.get(url, HTTP_HOST=CANONICAL).content.decode()
     assert channel.public_url in html
     assert f'<input id="public-link-{channel.id}" type="hidden"' in html
+
+
+@pytest.mark.django_db()
+def test_logged_in_non_member_gets_no_user_id(client, team_with_users):
+    _channel(team_with_users)
+    client.force_login(UserFactory.create())
+    html = _get(client).content.decode()
+    assert "user-id=" not in html
+    assert "user-name=" not in html
+
+
+@pytest.mark.django_db()
+def test_team_member_gets_a_live_widget_on_an_unpublished_chatbot(client, team_with_users):
+    _channel(team_with_users, publish=False)
+    client.force_login(team_with_users.members.first())
+    html = _get(client).content.decode()
+    assert "not published" in html.lower()
+    assert 'disabled="true"' not in html

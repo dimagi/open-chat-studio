@@ -772,8 +772,16 @@ class PublicLinkParams(forms.Widget):
         return context
 
 
+class LinesField(SimpleArrayField):
+    """One entry per non-blank line; blank and trailing lines are dropped rather than rejected."""
+
+    def to_python(self, value):
+        lines = [line.strip() for line in (value or "").splitlines()]
+        return super().to_python("\n".join(line for line in lines if line))
+
+
 def _lines_field(label: str, help_text: str, placeholder: str) -> SimpleArrayField:
-    return SimpleArrayField(
+    return LinesField(
         forms.CharField(max_length=500),
         delimiter="\n",
         required=False,
@@ -804,6 +812,7 @@ class PublicChannelForm(ExtraFormBase):
         super().__init__(*args, **kwargs)
         self.initial = dict(self.initial)
         self._previous_token = self.channel.extra_data.get("widget_token") if self.channel else None
+        self._previously_enabled = bool(self.channel and self.channel.enabled)
         if self._previous_token:
             self.initial["widget_token"] = self._previous_token
             self.fields["widget_token"].widget = PublicLinkParams(channel=self.channel)
@@ -826,6 +835,9 @@ class PublicChannelForm(ExtraFormBase):
             self.success_message = (
                 f"Link regenerated. The old link no longer works and {ended} live conversation(s) were ended."
             )
+        elif self._previously_enabled and not channel.enabled:
+            ended = channel.end_live_sessions()
+            self.success_message = f"Channel disabled. {ended} live conversation(s) were ended."
         else:
             self.success_message = "Channel saved successfully"
 

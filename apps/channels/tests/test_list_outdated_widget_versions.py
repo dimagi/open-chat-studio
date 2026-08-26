@@ -221,3 +221,14 @@ def test_csv_output():
 @pytest.mark.django_db()
 def test_no_results_message():
     assert "No active chatbots are running an outdated widget version." in _run()
+
+
+@pytest.mark.django_db()
+def test_public_link_channels_are_reported_too():
+    channel = _widget_channel("0.7.0", platform=ChannelPlatform.PUBLIC)
+    _add_session(channel)
+
+    output = _run()
+
+    assert channel.experiment.name in output
+    assert "0.7.0" in output
