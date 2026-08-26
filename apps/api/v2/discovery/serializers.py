@@ -54,40 +54,24 @@ class NodeTypeNotFoundSerializer(serializers.Serializer):
 
 
 class ResourceOptionSerializer(serializers.Serializer):
-    """One of the team's stored resources. Write `value` into the param; `label` is for humans
-    reading a diff."""
+    """One of the team's stored resources. Write `value` into the param or setting of the same name;
+    `label` is for humans reading a diff."""
 
-    value = serializers.IntegerField(help_text="The resource's id. Write this into the node param.")
+    value = serializers.IntegerField(
+        help_text="The resource's id. Write this into the param or setting of the same name."
+    )
     label = serializers.CharField(help_text="What the resource is called.")
 
 
-class ToolOptionSerializer(serializers.Serializer):
-    """One selectable tool. Write `value` into the param; `label` is for humans reading a diff."""
+class ProviderOptionSerializer(ResourceOptionSerializer):
+    """One of the team's configured service providers. `label` is the name the team gave it."""
 
-    value = serializers.CharField(
-        help_text=(
-            "Write this into the node param. Opaque -- copy it verbatim and never construct one. "
-            "`custom_actions` values in particular are composite identifiers rather than names."
-        )
-    )
-    label = serializers.CharField()
+    type = serializers.CharField(help_text="What the provider talks to -- `openai`, `anthropic`, `aws`, `langfuse`.")
 
 
-class ProviderOptionSerializer(serializers.Serializer):
-    """One of the team's configured service providers."""
-
-    value = serializers.IntegerField(help_text="The provider's id. Write this into the node param.")
-    label = serializers.CharField(help_text="The name the team gave the provider.")
-    type = serializers.CharField(
-        help_text="What the provider talks to -- `openai`, `anthropic`, `aws`. The join key for `must_match`."
-    )
-
-
-class LlmProviderModelOptionSerializer(serializers.Serializer):
+class LlmProviderModelOptionSerializer(ResourceOptionSerializer):
     """A model the team can call, given the providers it holds."""
 
-    value = serializers.IntegerField(help_text="The model's id. Write this into the node param.")
-    label = serializers.CharField()
     type = serializers.CharField(
         help_text="The provider type that serves the model. Must equal the `type` of the chosen `llm_provider_id`."
     )
@@ -100,20 +84,44 @@ class LlmProviderModelOptionSerializer(serializers.Serializer):
     )
 
 
-class SyntheticVoiceOptionSerializer(serializers.Serializer):
+class SyntheticVoiceOptionSerializer(ResourceOptionSerializer):
     """A voice, and the voice provider that speaks it."""
 
-    value = serializers.IntegerField(help_text="The voice's id. Write this into the node param.")
-    label = serializers.CharField()
-    type = serializers.CharField(help_text="The service the voice comes from -- `aws`, `azure`, `openai`.")
+    type = serializers.CharField(
+        help_text=(
+            "The service the voice comes from -- `aws`, `azure`, `openai`. A voice is only speakable "
+            "by a voice provider of the same `type`."
+        )
+    )
     provider_id = serializers.IntegerField(
         allow_null=True,
         help_text=(
             "The voice provider that owns this voice, or null for a shared voice any provider of the "
-            "same `type` can speak. The chatbot's own provider is its `voice.provider_id` -- see the "
-            "chatbot detail endpoint."
+            "same `type` can speak. A voice that names a provider can only be paired with that one."
         ),
     )
+
+
+class ChoiceOptionSerializer(serializers.Serializer):
+    """One value of a param or setting drawn from a fixed list rather than from the team's resources.
+
+    `value` is the string the field stores, not a resource id.
+    """
+
+    value = serializers.CharField(help_text="Write this into the param or setting of the same name.")
+    label = serializers.CharField(help_text="How the value reads in the UI.")
+
+
+class ToolOptionSerializer(serializers.Serializer):
+    """One selectable tool. Write `value` into the param; `label` is for humans reading a diff."""
+
+    value = serializers.CharField(
+        help_text=(
+            "Write this into the node param. Opaque -- copy it verbatim and never construct one. "
+            "`custom_actions` values in particular are composite identifiers rather than names."
+        )
+    )
+    label = serializers.CharField()
 
 
 class PromptVariableSerializer(serializers.Serializer):
@@ -133,9 +141,20 @@ class PipelineOptionsSerializer(serializers.Serializer):
     from `/pipeline/options/{node_type}/` carries a subset, and any response may carry keys not
     listed here as new node params are added."""
 
-    llm_provider_id = ProviderOptionSerializer(many=True, required=False)
+    llm_provider_id = ProviderOptionSerializer(
+        many=True,
+        required=False,
+        help_text="The LLM providers the team has configured. `type` is the join key for `must_match`.",
+    )
     llm_provider_model_id = LlmProviderModelOptionSerializer(many=True, required=False)
-    synthetic_voice_id = SyntheticVoiceOptionSerializer(many=True, required=False)
+    synthetic_voice_id = SyntheticVoiceOptionSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "The voices a node can speak in. The chatbot's own provider is its `voice.provider_id` -- "
+            "see the chatbot detail endpoint."
+        ),
+    )
     source_material = ResourceOptionSerializer(many=True, required=False)
     collection = ResourceOptionSerializer(
         many=True, required=False, help_text="Media collections -- files a node can talk about."
@@ -190,39 +209,6 @@ class PipelineOptionsSerializer(serializers.Serializer):
     )
 
 
-class SettingResourceOptionSerializer(serializers.Serializer):
-    """One of the team's stored resources, selectable for a chatbot setting."""
-
-    value = serializers.IntegerField(help_text="The resource's id. Write this into the setting of the same name.")
-    label = serializers.CharField(help_text="What the resource is called.")
-
-
-class SettingProviderOptionSerializer(SettingResourceOptionSerializer):
-    """One of the team's configured service providers."""
-
-    type = serializers.CharField(help_text="What the provider talks to -- `aws`, `azure`, `langfuse`.")
-
-
-class SettingSyntheticVoiceOptionSerializer(SettingResourceOptionSerializer):
-    """A voice the chatbot can speak in."""
-
-    type = serializers.CharField(help_text="The service the voice comes from. Must equal the `voice_provider`'s type.")
-    provider_id = serializers.IntegerField(
-        allow_null=True,
-        help_text=(
-            "The voice provider that owns this voice, or null for a shared voice any provider of the "
-            "same `type` can speak. A voice owned by a provider can only be paired with that one."
-        ),
-    )
-
-
-class SettingChoiceOptionSerializer(serializers.Serializer):
-    """One value of a setting drawn from a fixed list rather than from the team's resources."""
-
-    value = serializers.CharField(help_text="Write this into the setting of the same name.")
-    label = serializers.CharField(help_text="How the value reads in the UI.")
-
-
 class ChatbotOptionsSerializer(serializers.Serializer):
     """The documented keys. Each holds the values for the chatbot setting of the same name.
 
@@ -230,10 +216,10 @@ class ChatbotOptionsSerializer(serializers.Serializer):
     keys not documented here as new settings are added.
     """
 
-    voice_provider = SettingProviderOptionSerializer(
+    voice_provider = ProviderOptionSerializer(
         many=True, required=False, help_text="The voice providers the team has configured."
     )
-    synthetic_voice = SettingSyntheticVoiceOptionSerializer(
+    synthetic_voice = SyntheticVoiceOptionSerializer(
         many=True,
         required=False,
         help_text=(
@@ -241,12 +227,12 @@ class ChatbotOptionsSerializer(serializers.Serializer):
             "speakable by a provider of the same `type`, so pick the pair together."
         ),
     )
-    voice_response_behaviour = SettingChoiceOptionSerializer(
+    voice_response_behaviour = ChoiceOptionSerializer(
         many=True, required=False, help_text="When the chatbot answers with voice."
     )
-    trace_provider = SettingProviderOptionSerializer(
+    trace_provider = ProviderOptionSerializer(
         many=True, required=False, help_text="Where the chatbot's traces are sent."
     )
-    consent_form = SettingResourceOptionSerializer(
+    consent_form = ResourceOptionSerializer(
         many=True, required=False, help_text="The consent forms the team has written."
     )

@@ -1249,29 +1249,29 @@ components:
         voice_provider:
           type: array
           items:
-            $ref: '#/components/schemas/SettingProviderOption'
+            $ref: '#/components/schemas/ProviderOption'
           description: The voice providers the team has configured.
         synthetic_voice:
           type: array
           items:
-            $ref: '#/components/schemas/SettingSyntheticVoiceOption'
+            $ref: '#/components/schemas/SyntheticVoiceOption'
           description: Every voice one of the team's `voice_provider` entries can
             speak. A voice is only speakable by a provider of the same `type`, so
             pick the pair together.
         voice_response_behaviour:
           type: array
           items:
-            $ref: '#/components/schemas/SettingChoiceOption'
+            $ref: '#/components/schemas/ChoiceOption'
           description: When the chatbot answers with voice.
         trace_provider:
           type: array
           items:
-            $ref: '#/components/schemas/SettingProviderOption'
+            $ref: '#/components/schemas/ProviderOption'
           description: Where the chatbot's traces are sent.
         consent_form:
           type: array
           items:
-            $ref: '#/components/schemas/SettingResourceOption'
+            $ref: '#/components/schemas/ResourceOption'
           description: The consent forms the team has written.
     ChatbotVersion:
       type: object
@@ -1289,6 +1289,22 @@ components:
           type: string
       required:
       - name
+    ChoiceOption:
+      type: object
+      description: |-
+        One value of a param or setting drawn from a fixed list rather than from the team's resources.
+
+        `value` is the string the field stores, not a resource id.
+      properties:
+        value:
+          type: string
+          description: Write this into the param or setting of the same name.
+        label:
+          type: string
+          description: How the value reads in the UI.
+      required:
+      - label
+      - value
     CodeNodeParams:
       type: object
       properties:
@@ -2110,9 +2126,11 @@ components:
       properties:
         value:
           type: integer
-          description: The model's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
+          description: What the resource is called.
         type:
           type: string
           description: The provider type that serves the model. Must equal the `type`
@@ -2404,6 +2422,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProviderOption'
+          description: The LLM providers the team has configured. `type` is the join
+            key for `must_match`.
         llm_provider_model_id:
           type: array
           items:
@@ -2412,6 +2432,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SyntheticVoiceOption'
+          description: The voices a node can speak in. The chatbot's own provider
+            is its `voice.provider_id` -- see the chatbot detail endpoint.
         source_material:
           type: array
           items:
@@ -2539,18 +2561,20 @@ components:
       - type
     ProviderOption:
       type: object
-      description: One of the team's configured service providers.
+      description: One of the team's configured service providers. `label` is the
+        name the team gave it.
       properties:
         value:
           type: integer
-          description: The provider's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
-          description: The name the team gave the provider.
+          description: What the resource is called.
         type:
           type: string
-          description: What the provider talks to -- `openai`, `anthropic`, `aws`.
-            The join key for `must_match`.
+          description: What the provider talks to -- `openai`, `anthropic`, `aws`,
+            `langfuse`.
       required:
       - label
       - type
@@ -2567,12 +2591,13 @@ components:
     ResourceOption:
       type: object
       description: |-
-        One of the team's stored resources. Write `value` into the param; `label` is for humans
-        reading a diff.
+        One of the team's stored resources. Write `value` into the param or setting of the same name;
+        `label` is for humans reading a diff.
       properties:
         value:
           type: integer
-          description: The resource's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
           description: What the resource is called.
@@ -2644,78 +2669,6 @@ components:
         body:
           type: string
           description: Jinja2 body template; the pipeline input is used when blank.
-    SettingChoiceOption:
-      type: object
-      description: One value of a setting drawn from a fixed list rather than from
-        the team's resources.
-      properties:
-        value:
-          type: string
-          description: Write this into the setting of the same name.
-        label:
-          type: string
-          description: How the value reads in the UI.
-      required:
-      - label
-      - value
-    SettingProviderOption:
-      type: object
-      description: One of the team's configured service providers.
-      properties:
-        value:
-          type: integer
-          description: The resource's id. Write this into the setting of the same
-            name.
-        label:
-          type: string
-          description: What the resource is called.
-        type:
-          type: string
-          description: What the provider talks to -- `aws`, `azure`, `langfuse`.
-      required:
-      - label
-      - type
-      - value
-    SettingResourceOption:
-      type: object
-      description: One of the team's stored resources, selectable for a chatbot setting.
-      properties:
-        value:
-          type: integer
-          description: The resource's id. Write this into the setting of the same
-            name.
-        label:
-          type: string
-          description: What the resource is called.
-      required:
-      - label
-      - value
-    SettingSyntheticVoiceOption:
-      type: object
-      description: A voice the chatbot can speak in.
-      properties:
-        value:
-          type: integer
-          description: The resource's id. Write this into the setting of the same
-            name.
-        label:
-          type: string
-          description: What the resource is called.
-        type:
-          type: string
-          description: The service the voice comes from. Must equal the `voice_provider`'s
-            type.
-        provider_id:
-          type: integer
-          nullable: true
-          description: The voice provider that owns this voice, or null for a shared
-            voice any provider of the same `type` can speak. A voice owned by a provider
-            can only be paired with that one.
-      required:
-      - label
-      - provider_id
-      - type
-      - value
     SourceMaterial:
       type: object
       properties:
@@ -2764,18 +2717,21 @@ components:
       properties:
         value:
           type: integer
-          description: The voice's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
+          description: What the resource is called.
         type:
           type: string
           description: The service the voice comes from -- `aws`, `azure`, `openai`.
+            A voice is only speakable by a voice provider of the same `type`.
         provider_id:
           type: integer
           nullable: true
           description: The voice provider that owns this voice, or null for a shared
-            voice any provider of the same `type` can speak. The chatbot's own provider
-            is its `voice.provider_id` -- see the chatbot detail endpoint.
+            voice any provider of the same `type` can speak. A voice that names a
+            provider can only be paired with that one.
       required:
       - label
       - provider_id
