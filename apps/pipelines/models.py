@@ -1,12 +1,13 @@
 import contextlib
 import copy
+import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cached_property
 from uuid import uuid4
 
 import pydantic
-from django.db import models, transaction
+from django.db import DatabaseError, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -38,6 +39,8 @@ from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
+
+logger = logging.getLogger("ocs.pipelines")
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -278,6 +281,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Raised from inside a validator for a broken resource reference (e.g. a deleted
             # provider model); pydantic doesn't wrap it, so fold it into the report here.
             return {"root": str(e)}
+        except DatabaseError:
+            # Never swallowed: inside an atomic block a caught database error leaves the transaction
+            # aborted, so reporting it as a node error would raise again on the next query.
+            raise
+        except Exception:  # noqa: BLE001 - a broken node must not take the whole read down
+            # Anything a validator raises before pydantic can wrap it — a wrong-typed param reaching
+            # a `mode="before"` validator, say. This runs on every read of a pipeline, so an
+            # unparseable node has to be reportable rather than 500 /inspect/ for good.
+            #
+            # Logged rather than reported: this branch catches anything at all, so the message is as
+            # likely to expose how the server is put together as to say something useful, and the
+            # report is served over the API.
+            logger.exception("Node %s of pipeline %s could not be validated", node.flow_id, node.pipeline_id)
+            return {"root": "This node could not be read. Check the values of its params."}
         return {}
 
     @property
