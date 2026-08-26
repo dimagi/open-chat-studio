@@ -11,6 +11,7 @@ from mailparser_reply import EmailReplyParser
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 from apps.channels.const import MESSAGE_TYPES
+from apps.channels.deduplication import external_ids_for
 from apps.channels.models import ChannelPlatform
 from apps.documents.readers import Document
 from apps.files.models import File
@@ -108,8 +109,8 @@ class BaseMessage(BaseModel):
     remote_id: str | None = Field(default=None)
     external_ids: list[str] = Field(default=[])
     """Provider message IDs this message was built from, namespaced by platform.
-    Set by each channel's `parse()`, read by DuplicateDeliveryStage, written to
-    ChatMessage.external_ids by ChatMessageCreationStage. Distinct from `remote_id`,
+    Built with `external_ids_for` where the delivery is parsed, read by DuplicateDeliveryStage,
+    written to ChatMessage.external_ids by ChatMessageCreationStage. Distinct from `remote_id`,
     which identifies the participant, not the message."""
 
     message_text: str
@@ -141,6 +142,7 @@ class TelegramMessage(BaseMessage):
             content_type=update_obj.message.content_type,
             media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
             message_id=update_obj.message.message_id,
+            external_ids=external_ids_for("telegram", update_obj.message.chat.id, update_obj.message.message_id),
         )
 
 
@@ -195,6 +197,7 @@ class TwilioMessage(BaseMessage):
     @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
+        message_sid = message_data.get("MessageSid")
         prefix = message_data["From"].split(":")[0]
         message_type = message_data.get("MessageType", "text")
 
@@ -223,6 +226,7 @@ class TwilioMessage(BaseMessage):
             attachment_mime_type=message_data.get("MediaContentType0"),
             platform=platform,
             remote_id=phone_number,
+            external_ids=external_ids_for("twilio", message_sid),
         )
 
 
@@ -337,6 +341,7 @@ class WhatsAppMessage(BaseMessage):
         # messages that don't carry one.
         phone_number = cls.get_phone_number(message_data)
         participant_id = cls.get_bsuid(message_data) or phone_number
+        message_id = message.get("id")
         return cls(
             participant_id=participant_id,
             message_text=body,
@@ -345,8 +350,9 @@ class WhatsAppMessage(BaseMessage):
             media_url=media_payload.get("url"),
             attachment_mime_type=attachment_mime_type,
             attachment_filename=media_payload.get("filename") if message_type == "document" else None,
-            whatsapp_message_id=message.get("id"),
+            whatsapp_message_id=message_id,
             remote_id=phone_number,
+            external_ids=external_ids_for("whatsapp", message_id),
         )
 
 
@@ -432,6 +438,7 @@ class EmailMessage(BaseMessage):
             body
         )
         stripped_text = reply.latest_reply or body
+        message_id = inbound.get("Message-ID", "")
 
         message = EmailMessage(
             participant_id=inbound.from_email.addr_spec,
@@ -439,9 +446,10 @@ class EmailMessage(BaseMessage):
             from_address=inbound.from_email.addr_spec,
             to_address=inbound.to[0].addr_spec if inbound.to else "",
             subject=inbound.subject or "",
-            message_id=inbound.get("Message-ID", ""),
+            message_id=message_id,
             in_reply_to=inbound.get("In-Reply-To"),
             references=_parse_references(inbound.get("References", "")),
+            external_ids=external_ids_for("email", message_id),
         )
         message._raw_attachments = _extract_raw_attachments(inbound)
         return message

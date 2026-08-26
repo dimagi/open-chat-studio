@@ -124,6 +124,18 @@ def _make_session(team, channel, external_id, participant_email="user@example.co
 
 
 class TestEmailMessageParse:
+    @pytest.mark.parametrize(
+        ("message_id", "expected"),
+        [
+            pytest.param("<msg1@example.com>", ["email:<msg1@example.com>"], id="with-a-message-id"),
+            pytest.param("", [], id="without-a-message-id"),
+        ],
+    )
+    def test_parse_records_the_provider_id(self, message_id, expected):
+        result = EmailMessage.parse(_make_inbound_message(message_id=message_id))
+
+        assert result.external_ids == expected
+
     def test_basic_parse(self):
         inbound = _make_inbound_message()
         result = EmailMessage.parse(inbound)

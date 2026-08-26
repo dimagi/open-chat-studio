@@ -1,14 +1,18 @@
+import json
+
 import pytest
+from telebot import types
 
 from apps.channels.datamodels import (
     BaseMessage,
+    TelegramMessage,
     TwilioMessage,
     WhatsAppMessage,
     is_non_conversational_whatsapp_message,
     looks_like_bsuid,
 )
 from apps.channels.models import ChannelPlatform
-from apps.channels.tests.message_examples import meta_cloud_api_messages, turnio_messages
+from apps.channels.tests.message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
 
 
 class TestBaseMessage:
@@ -157,3 +161,69 @@ class TestTwilioMessageParseBSUID:
         assert parsed.platform == ChannelPlatform.FACEBOOK
         assert parsed.participant_id == "1234567890"
         assert parsed.remote_id is None
+
+
+def _raw_telegram_update(chat_id: int, message_id: int) -> str:
+    return json.dumps(
+        {
+            "update_id": 432101234,
+            "message": {
+                "message_id": message_id,
+                "from": {"id": chat_id, "is_bot": False, "first_name": "John"},
+                "chat": {"id": chat_id, "first_name": "John", "type": "private"},
+                "date": 1690376696,
+                "text": "Hi there",
+            },
+        }
+    )
+
+
+def _turnio_without_message_id() -> dict:
+    message_data = turnio_messages.text_message()
+    message_data["messages"][0].pop("id")
+    return message_data
+
+
+def _twilio_without_message_sid() -> dict:
+    message_data = twilio_messages.Whatsapp.text_message()
+    message_data.pop("MessageSid")
+    return message_data
+
+
+class TestExternalIds:
+    """Each channel records the provider message id it was built from, and records nothing when the
+    provider sent none -- an unidentifiable delivery is processed, never dropped."""
+
+    @pytest.mark.parametrize(
+        ("parse", "expected"),
+        [
+            # Telegram message ids are unique only within a chat, so the chat id is part of the key.
+            pytest.param(
+                lambda: TelegramMessage.parse(types.Update.de_json(_raw_telegram_update(chat_id=123, message_id=576))),
+                ["telegram:123:576"],
+                id="telegram",
+            ),
+            pytest.param(
+                lambda: WhatsAppMessage.parse(turnio_messages.text_message()),
+                ["whatsapp:ABCDEFGHIJKL_Ags-sF0gx5ts0DDMxw"],
+                id="whatsapp",
+            ),
+            pytest.param(
+                lambda: WhatsAppMessage.parse(_turnio_without_message_id()),
+                [],
+                id="whatsapp-without-an-id",
+            ),
+            pytest.param(
+                lambda: TwilioMessage.parse(twilio_messages.Whatsapp.text_message()),
+                ["twilio:BBBBBBBBBB"],
+                id="twilio",
+            ),
+            pytest.param(
+                lambda: TwilioMessage.parse(_twilio_without_message_sid()),
+                [],
+                id="twilio-without-a-sid",
+            ),
+        ],
+    )
+    def test_parse_records_the_provider_id(self, parse, expected):
+        assert parse().external_ids == expected
