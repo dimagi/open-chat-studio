@@ -23,11 +23,7 @@ fi
 
 resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
 
-PGPASSWORD=postgres psql \
-    -h localhost \
-    -U postgres \
-    -v ON_ERROR_STOP=1 \
-    -c "DROP DATABASE IF EXISTS \"$resource_name\" WITH (FORCE)"
+ocs_drop_database "$resource_name"
 
 if redis_database=$(ocs_lookup_redis_database "$resource_name"); then
     redis-cli -n "$redis_database" FLUSHDB

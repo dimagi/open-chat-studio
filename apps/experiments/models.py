@@ -516,7 +516,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
     cloning (or owned by a single row) and never copied between rows in a family."""
 
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # Null for a chatbot created by a client-credentials (machine) token, which has no user.
+    # ``CASCADE`` is retained deliberately: nullable permits an ownerless row, it does not change
+    # what happens when an owner *is* deleted.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
     pipeline = models.ForeignKey(
@@ -994,16 +997,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
 
-    @property
-    def is_public(self) -> bool:
-        """
-        Whether or not a bot is public depends on the `participant_allowlist`. If it's empty, the bot is public.
-        """
-        return len(self.participant_allowlist) == 0
-
-    def is_participant_allowed(self, identifier: str):
-        return identifier in self.participant_allowlist or self.team.members.filter(email=identifier).exists()
-
     def _get_version_details(self) -> VersionDetails:
         """
         Returns a `Version` instance representing the experiment version.
@@ -1012,12 +1005,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             VersionField(group_name="General", name="name", raw_value=self.name),
             VersionField(group_name="General", name="description", raw_value=self.description),
             VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
-            VersionField(
-                group_name="General",
-                name="allowlist",
-                raw_value=self.participant_allowlist,
-                to_display=VersionFieldDisplayFormatters.format_array_field,
-            ),
             # Consent
             VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
             VersionField(

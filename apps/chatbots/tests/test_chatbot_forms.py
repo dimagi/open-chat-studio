@@ -91,3 +91,12 @@ def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_us
     assert own_consent.id in consent_ids
     assert versioned_consent.id not in consent_ids
     assert other_consent.id not in consent_ids
+
+
+@pytest.mark.django_db()
+def test_settings_form_has_no_allowlist_field(rf, experiment):
+    request = rf.get("/")
+    request.team = experiment.team
+    request.user = experiment.team.members.first()
+
+    assert "participant_allowlist" not in ChatbotSettingsForm(request=request, instance=experiment).fields

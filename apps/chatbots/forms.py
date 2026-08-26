@@ -1,8 +1,8 @@
 from django import forms
 from django.db import transaction
-from waffle import flag_is_active
 
 from apps.channels.models import ExperimentChannel
+from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -46,7 +46,6 @@ class ChatbotForm(forms.ModelForm):
 class ChatbotSettingsForm(forms.ModelForm):
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    participant_allowlist = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = Experiment
@@ -61,12 +60,10 @@ class ChatbotSettingsForm(forms.ModelForm):
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form",
-            "participant_allowlist",
             "seed_message",
             "file_uploads_enabled",
         ]
         labels = {
-            "participant_allowlist": "Participant allowlist",
             "voice_provider": "Speech Provider",
             "voice_response_behaviour": "Response Provider",
         }
@@ -81,9 +78,8 @@ class ChatbotSettingsForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.request = request
         team = request.team
-        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(request, "flag_open_ai_voice_engine"):
-            exclude_services = []
+        # Shared with the write API so the two offer the same set (see excluded_voice_services).
+        exclude_services = excluded_voice_services(request)
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
@@ -94,13 +90,6 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.fields["voice_provider"].widget.attrs = {
             "x-model.fill": "voiceProvider",
         }
-
-    def clean_participant_allowlist(self):
-        cleaned_identifiers = []
-        identifiers = filter(None, self.cleaned_data["participant_allowlist"].split(","))
-        for identifier in identifiers:
-            cleaned_identifiers.append(identifier.replace(" ", ""))
-        return cleaned_identifiers
 
     @transaction.atomic()
     def save(self, commit=True):

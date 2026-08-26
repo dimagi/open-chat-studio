@@ -17,7 +17,7 @@ from apps.api.session_tokens import session_token_expired, validate_session_toke
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.oauth.permissions import is_client_credentials_request
-from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
 from apps.utils.rate_limit import check as check_rate_limit
 from apps.utils.rate_limit import client_ip
@@ -60,11 +60,12 @@ class BaseKeyAuthentication(BaseAuthentication):
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
         user = token.user
         request.user = user
-        request.team = token.team
-        request.team_membership = get_team_membership_for_request(request)
-        if not request.team_membership:
+        set_request_attrs(request, team=token.team)
+        membership = get_team_membership_for_request(request)
+        if not membership:
             _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed()
+        set_request_attrs(request, team_membership=membership)
 
         # this is unset by the request_finished signal
         set_current_team(token.team)
@@ -168,20 +169,9 @@ class SessionAccessPermission(BasePermission):
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
-        # public / allowlist fallback is only reachable for NONE-level widget channels
-        # (and non-widget sessions, where level is None).
-        if level is not None and level != WidgetAuthLevel.NONE:
-            return False
-
-        experiment = session.experiment
-        if experiment.is_public:
-            return True
-
-        participant_id = session.participant.identifier
-        if not participant_id:
-            return False
-
-        return experiment.is_participant_allowed(participant_id)
+        # keyless fallback is only reachable for NONE-level widget channels (and non-widget
+        # sessions, where level is None).
+        return level is None or level == WidgetAuthLevel.NONE
 
     def _user_is_session_participant(self, user, session) -> bool:
         return user.is_authenticated and session.participant and session.participant.user_id == user.id

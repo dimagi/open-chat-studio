@@ -1,4 +1,4 @@
-import { ChatSessionService, SessionAccessError } from './chat-session-service';
+import { ChatSessionService, SessionAccessError, ChatAuthError } from './chat-session-service';
 
 function progressMessage(content: string) {
   return {
@@ -535,5 +535,226 @@ describe('ChatSessionService deprecation headers', () => {
     await service.startSession({ chatbot_id: 'c1' });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ChatSessionService auth token', () => {
+  const startUrl = 'https://example.com/api/chat/start/';
+  let fetchMock: jest.Mock;
+
+  function okResponse() {
+    return {
+      ok: true,
+      status: 201,
+      headers: { get: () => null },
+      json: () => Promise.resolve({ session_id: 's-1', chatbot: {}, participant: {} }),
+    } as unknown as Response;
+  }
+
+  function deniedResponse() {
+    return {
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: () => null },
+      json: () => Promise.resolve({ error: 'Authentication required to chat with this chatbot', code: 'chat_access_denied' }),
+    } as unknown as Response;
+  }
+
+  function service(options: Partial<ConstructorParameters<typeof ChatSessionService>[0]> = {}) {
+    return new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      csrfTokenProvider: () => undefined,
+      ...options,
+    });
+  }
+
+  function headersOf(call: number): Record<string, string> {
+    return fetchMock.mock.calls[call][1].headers;
+  }
+
+  beforeEach(() => {
+    fetchMock = jest.fn().mockResolvedValue(okResponse());
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  it('sends the provider token as a bearer credential on start', async () => {
+    await service({ authTokenProvider: () => 'tok-abc' }).startSession({});
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(startUrl);
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-abc');
+  });
+
+  it('omits the header entirely when there is no provider', async () => {
+    await service().startSession({});
+
+    expect(headersOf(0)).not.toHaveProperty('Authorization');
+  });
+
+  it('omits the header when the provider yields nothing', async () => {
+    await service({ authTokenProvider: () => undefined }).startSession({});
+
+    expect(headersOf(0)).not.toHaveProperty('Authorization');
+  });
+
+  it('asks the provider afresh for every session start', async () => {
+    // No stored token: a credential the service held onto would go stale without
+    // anything noticing.
+    const provider = jest.fn().mockResolvedValueOnce('tok-1').mockResolvedValueOnce('tok-2');
+    const svc = service({ authTokenProvider: provider });
+
+    await svc.startSession({});
+    await svc.startSession({});
+
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-1');
+    expect(headersOf(1)['Authorization']).toBe('Bearer tok-2');
+  });
+
+  it('keeps the bearer token off session-bound requests', async () => {
+    const svc = service({ authTokenProvider: () => 'tok-abc', sessionToken: 'sess-1' });
+
+    expect(svc.getUploadHeaders()).not.toHaveProperty('Authorization');
+
+    await svc.pollTaskOnce('s-1', 't-1');
+    await svc.sendMessage('s-1', {});
+    await svc.fetchMessages('s-1');
+
+    for (let call = 0; call < fetchMock.mock.calls.length; call++) {
+      expect(headersOf(call)).not.toHaveProperty('Authorization');
+    }
+  });
+
+  it('passes forceRefresh false on the first ask', async () => {
+    const provider = jest.fn().mockResolvedValue('tok-fresh');
+    await service({ authTokenProvider: provider }).startSession({});
+
+    expect(provider).toHaveBeenCalledWith({ forceRefresh: false });
+  });
+
+  it('accepts a synchronous provider', async () => {
+    await service({ authTokenProvider: () => 'tok-sync' }).startSession({});
+
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-sync');
+  });
+
+  it('retries once with forceRefresh when the first token is rejected', async () => {
+    fetchMock.mockResolvedValueOnce(deniedResponse()).mockResolvedValueOnce(okResponse());
+    const provider = jest.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
+
+    const result = await service({ authTokenProvider: provider }).startSession({});
+
+    expect(result.session_id).toBe('s-1');
+    expect(provider.mock.calls).toEqual([[{ forceRefresh: false }], [{ forceRefresh: true }]]);
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-cached');
+    expect(headersOf(1)['Authorization']).toBe('Bearer tok-fresh');
+  });
+
+  it('gives up after one retry rather than looping', async () => {
+    fetchMock.mockResolvedValue(deniedResponse());
+    const provider = jest.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
+
+    await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toThrow(ChatAuthError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(provider).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resend a token the refresh did not change', async () => {
+    fetchMock.mockResolvedValue(deniedResponse());
+    const provider = jest.fn().mockResolvedValue('tok-rejected');
+
+    await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toThrow(ChatAuthError);
+    expect(provider).toHaveBeenCalledTimes(2);
+    // The refresh produced the same token, so the retry would have been an
+    // identical request against a throttled endpoint.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an unauthenticated start once the provider can mint a token', async () => {
+    // The provider was not ready when the user first sent, so the request went out
+    // without a credential; the refresh is what makes it recoverable.
+    fetchMock.mockResolvedValueOnce(deniedResponse()).mockResolvedValueOnce(okResponse());
+    const provider = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce('tok-ready');
+
+    await service({ authTokenProvider: provider }).startSession({});
+
+    expect(headersOf(0)).not.toHaveProperty('Authorization');
+    expect(headersOf(1)['Authorization']).toBe('Bearer tok-ready');
+  });
+
+  it('does not retry when there is no provider to mint a fresh token', async () => {
+    fetchMock.mockResolvedValue(deniedResponse());
+
+    await expect(service().startSession({})).rejects.toThrow(ChatAuthError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('raises ChatAuthError carrying the server error and code', async () => {
+    fetchMock.mockResolvedValue(deniedResponse());
+
+    await expect(service().startSession({})).rejects.toMatchObject({
+      name: 'ChatAuthError',
+      status: 401,
+      code: 'chat_access_denied',
+      message: 'Authentication required to chat with this chatbot',
+    });
+  });
+
+  it('does not confuse a 401 with a 403 rejection of an existing session', async () => {
+    fetchMock.mockResolvedValue(deniedResponse());
+
+    const error = await service()
+      .startSession({})
+      .catch(e => e);
+    expect(error).toBeInstanceOf(ChatAuthError);
+    expect(error).not.toBeInstanceOf(SessionAccessError);
+  });
+
+  it('reports a provider that throws as an auth failure rather than a generic error', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const thrown = new Error('mint endpoint down for tok-secret');
+    const provider = jest.fn().mockRejectedValue(thrown);
+
+    await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toMatchObject({
+      name: 'ChatAuthError',
+      code: 'auth_token_unavailable',
+      // Generic on purpose: this message is shown in the transcript and persisted,
+      // so the host's exception text must not ride along into localStorage.
+      message: 'Could not obtain an authentication token',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // ...but it is still available to whoever is debugging the integration.
+    expect(consoleError).toHaveBeenCalledWith('[open-chat-studio-widget] authTokenProvider failed', thrown);
+    consoleError.mockRestore();
+  });
+
+  it('picks up a replaced provider without rebuilding the service', async () => {
+    const svc = service({ authTokenProvider: () => 'tok-old' });
+    await svc.startSession({});
+    svc.setAuthTokenProvider(() => 'tok-new');
+    await svc.startSession({});
+
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-old');
+    expect(headersOf(1)['Authorization']).toBe('Bearer tok-new');
+  });
+
+  it('stops sending a credential when the provider is removed', async () => {
+    const svc = service({ authTokenProvider: () => 'tok-old' });
+    await svc.startSession({});
+    svc.setAuthTokenProvider(undefined);
+    await svc.startSession({});
+
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-old');
+    expect(headersOf(1)).not.toHaveProperty('Authorization');
+  });
+
+  it('picks up a provider installed after construction', async () => {
+    const svc = service();
+    svc.setAuthTokenProvider(() => 'tok-late');
+    await svc.startSession({});
+
+    expect(headersOf(0)['Authorization']).toBe('Bearer tok-late');
   });
 });
