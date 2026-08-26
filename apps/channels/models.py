@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Self, cast
@@ -375,6 +376,39 @@ class ExperimentChannel(BaseTeamModel):
         if self.platform_enum not in ChannelPlatform.widget_platforms():
             return None
         return WidgetAuthLevel(self.required_auth_level)
+
+    @property
+    def public_url(self) -> str:
+        """The shareable page for a public link channel."""
+        return absolute_url(reverse("public_link", args=[self.extra_data["widget_token"]]))
+
+    def regenerate_widget_token(self) -> str:
+        """Replace the embed key and end every live session that was started with the old one.
+
+        A token-required session is admitted on its session token alone, so without the second
+        step a session started before regeneration would run for the rest of its token lifetime.
+        """
+        new_token = secrets.token_urlsafe(24)
+        self.extra_data = {**self.extra_data, "widget_token": new_token}
+        self.save(update_fields=["extra_data"])
+        self.end_live_sessions()
+        return new_token
+
+    def end_live_sessions(self) -> int:
+        """Mark every non-complete session on this channel COMPLETE. Returns how many."""
+        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models imports channels.models
+            ExperimentSession,
+            SessionStatus,
+        )
+
+        ended = 0
+        now = timezone.now()
+        for session in ExperimentSession.objects.filter(experiment_channel=self).exclude(status=SessionStatus.COMPLETE):
+            session.status = SessionStatus.COMPLETE
+            session.ended_at = now
+            session.save(update_fields=["status", "ended_at"])
+            ended += 1
+        return ended
 
     @property
     def min_widget_version(self) -> str | None:
