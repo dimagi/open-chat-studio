@@ -32,94 +32,91 @@ PLACEHOLDER_ID_PARAMS = frozenset(
 )
 
 
-def test_every_served_type_has_an_example():
-    assert set(FULL_PARAMS) == set(SERVED_TYPES)
-    assert set(NOTES) == set(SERVED_TYPES)
+class TestExampleShape:
+    """What the examples say, held against the node schemas without going near the endpoint."""
 
+    def test_every_served_type_has_an_example(self):
+        assert set(FULL_PARAMS) == set(SERVED_TYPES)
+        assert set(NOTES) == set(SERVED_TYPES)
 
-@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
-def test_an_example_names_exactly_the_params_its_type_declares(node_type):
-    """Both directions matter: an example carrying a param the type does not declare documents a key
-    that does nothing, and one leaving a param out sends the reader to the JSON Schema anyway.
-    """
-    declared = set(get_node_type_schema(node_type)["schema"]["properties"])
+    @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+    def test_an_example_names_exactly_the_params_its_type_declares(self, node_type):
+        """Both directions matter: an example carrying a param the type does not declare documents a
+        key that does nothing, and one leaving a param out sends the reader to the JSON Schema anyway.
+        """
+        declared = set(get_node_type_schema(node_type)["schema"]["properties"])
 
-    assert set(FULL_PARAMS[node_type]) == declared
+        assert set(FULL_PARAMS[node_type]) == declared
 
+    @pytest.mark.parametrize("build", [create_examples, update_examples], ids=["create", "update"])
+    def test_the_examples_are_request_only_and_named_after_their_type(self, build):
+        """drf-spectacular puts a `response_only` example under the response instead, where a request
+        body would read as something the endpoint returns.
 
-@pytest.mark.parametrize("build", [create_examples, update_examples], ids=["create", "update"])
-def test_the_examples_are_request_only_and_named_after_their_type(build):
-    """drf-spectacular puts a `response_only` example under the response instead, where a request
-    body would read as something the endpoint returns.
+        A set, not a list: the examples are ordered simplest type first so the list reads as an
+        introduction, which is not the order the discovery endpoint serves them in.
+        """
+        examples = [example for example in build() if example.name != MINIMAL_CREATE.name]
 
-    A set, not a list: the examples are ordered simplest type first so the list reads as an
-    introduction, which is not the order the discovery endpoint serves them in.
-    """
-    examples = [example for example in build() if example.name != MINIMAL_CREATE.name]
+        assert {example.name for example in examples} == set(SERVED_TYPES)
+        assert all(example.request_only for example in build())
 
-    assert {example.name for example in examples} == set(SERVED_TYPES)
-    assert all(example.request_only for example in build())
-
-
-def test_only_the_create_examples_carry_a_type():
-    """`type` is what POST needs and what PATCH refuses -- a node's type decides what its params
-    mean, so it is fixed once the node exists."""
-    assert all("type" in example.value for example in create_examples())
-    assert not any("type" in example.value for example in update_examples())
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
-def test_a_documented_create_example_is_accepted(client, chatbot, node_type, reference_ids):
-    """The whole example, sent as documented bar the placeholder ids. Accepted *and* free of node
-    errors -- a body that persists while reporting an error is a poor example to publish.
-    """
-    example = next(example for example in create_examples() if example.name == node_type)
-    body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
-
-    response = client.post(nodes_url(chatbot), body, format="json")
-
-    assert response.status_code == 201, response.content
-    assert response.json()["pipeline_errors"]["node"] == {}
+    def test_only_the_create_examples_carry_a_type(self):
+        """`type` is what POST needs and what PATCH refuses -- a node's type decides what its params
+        mean, so it is fixed once the node exists."""
+        assert all("type" in example.value for example in create_examples())
+        assert not any("type" in example.value for example in update_examples())
 
 
 @pytest.mark.django_db()
-def test_the_minimal_create_example_is_accepted(client, chatbot):
-    response = client.post(nodes_url(chatbot), MINIMAL_CREATE.value, format="json")
+class TestExamplesAreAccepted:
+    """Each example sent as documented, bar the placeholder ids."""
 
-    assert response.status_code == 201, response.content
+    @pytest.fixture()
+    def reference_ids(self, llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice):
+        """Real ids for the params whose example values are placeholders, keyed by param name."""
+        provider, model = llm
+        support_kb, billing_kb = collection_indexes
+        return {
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "source_material_id": source_material.id,
+            "collection_id": media_collection.id,
+            "collection_index_ids": [support_kb.id, billing_kb.id],
+            "custom_actions": [f"{custom_action.id}:weather_get"],
+            "synthetic_voice_id": synthetic_voice.id,
+        }
 
+    @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+    def test_a_documented_create_example_is_accepted(self, client, chatbot, node_type, reference_ids):
+        """Accepted *and* free of node errors -- a body that persists while reporting an error is a
+        poor example to publish."""
+        example = next(example for example in create_examples() if example.name == node_type)
+        body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
 
-@pytest.mark.django_db()
-@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
-def test_a_documented_update_example_is_accepted(client, chatbot, node_type, reference_ids):
-    """PATCHed onto a node created from its type alone, which is the state the minimal create
-    example leaves one in -- so this is the second half of the loop the two examples describe."""
-    created = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
-    assert created.status_code == 201, created.content
-    example = next(example for example in update_examples() if example.name == node_type)
-    body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
+        response = client.post(nodes_url(chatbot), body, format="json")
 
-    response = client.patch(node_url(chatbot, created.json()["node"]["node_id"]), body, format="json")
+        assert response.status_code == 201, response.content
+        assert response.json()["pipeline_errors"]["node"] == {}
 
-    assert response.status_code == 200, response.content
-    assert response.json()["pipeline_errors"]["node"] == {}
+    def test_the_minimal_create_example_is_accepted(self, client, chatbot):
+        response = client.post(nodes_url(chatbot), MINIMAL_CREATE.value, format="json")
 
+        assert response.status_code == 201, response.content
 
-@pytest.fixture()
-def reference_ids(llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice):
-    """Real ids for the params whose example values are placeholders, keyed by param name."""
-    provider, model = llm
-    support_kb, billing_kb = collection_indexes
-    return {
-        "llm_provider_id": provider.id,
-        "llm_provider_model_id": model.id,
-        "source_material_id": source_material.id,
-        "collection_id": media_collection.id,
-        "collection_index_ids": [support_kb.id, billing_kb.id],
-        "custom_actions": [f"{custom_action.id}:weather_get"],
-        "synthetic_voice_id": synthetic_voice.id,
-    }
+    @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+    def test_a_documented_update_example_is_accepted(self, client, chatbot, node_type, reference_ids):
+        """PATCHed onto a node created from its type alone, which is the state the minimal create
+        example leaves one in -- so this is the second half of the loop the two examples describe."""
+        created = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
+        assert created.status_code == 201, created.content
+        example = next(example for example in update_examples() if example.name == node_type)
+        body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
+
+        response = client.patch(node_url(chatbot, created.json()["node"]["node_id"]), body, format="json")
+
+        assert response.status_code == 200, response.content
+        assert response.json()["pipeline_errors"]["node"] == {}
 
 
 def _with_real_ids(params: dict, reference_ids: dict) -> dict:

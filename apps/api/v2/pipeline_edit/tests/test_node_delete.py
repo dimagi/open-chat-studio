@@ -4,21 +4,13 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import add_edge, node_url, nodes_url
+from .conftest import add_edge, add_llm_node, node_url
 
 
 @pytest.fixture()
 def wired_llm_node(client, chatbot, llm):
     """An LLM node spliced between Start and End, so deleting it has edges to take with it."""
-    provider, model = llm
-    node_id = client.post(
-        nodes_url(chatbot),
-        {
-            "type": "LLMResponseWithPrompt",
-            "params": {"llm_provider_id": provider.id, "llm_provider_model_id": model.id},
-        },
-        format="json",
-    ).json()["node"]["node_id"]
+    node_id = add_llm_node(client, chatbot, llm)
     start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
     end = chatbot.pipeline.node_set.get(type="EndNode").flow_id
     # Spliced, not added alongside: with the direct Start -> End edge still there, removing this
@@ -83,3 +75,14 @@ def test_delete_allows_a_deprecated_node_type(client, chatbot):
 
     assert response.status_code == 200, response.content
     assert not Node.objects.filter(pipeline=chatbot.pipeline, flow_id="Passthrough-1").exists()
+
+
+@pytest.mark.django_db()
+def test_deleting_a_node_leaves_the_other_rows_alone(client, chatbot, llm):
+    """`update_nodes_from_data` reads its mapping as the whole graph membership, so a diff that
+    named only the deleted node would reconcile every other node away."""
+    node_id = add_llm_node(client, chatbot, llm)
+
+    client.delete(node_url(chatbot, node_id))
+
+    assert set(chatbot.pipeline.node_set.values_list("type", flat=True)) == {"StartNode", "EndNode"}

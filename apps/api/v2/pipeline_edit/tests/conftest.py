@@ -170,3 +170,25 @@ def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:
         for edge in pipeline.data["edges"]
         if edge["source"] == source
     }
+
+
+def add_llm_node(client, chatbot, llm) -> str:
+    """An LLM node created the way an agent would, so its stored params are the full default set."""
+    provider, model = llm
+    response = client.post(
+        nodes_url(chatbot),
+        {
+            "type": "LLMResponseWithPrompt",
+            "params": {"llm_provider_id": provider.id, "llm_provider_model_id": model.id},
+        },
+        format="json",
+    )
+    assert response.status_code == 201, response.content
+    return response.json()["node"]["node_id"]
+
+
+def add_bare_node(client, chatbot, node_type: str) -> str:
+    """A node created from its type alone, so a PATCH of it has only defaults to overwrite."""
+    response = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
+    assert response.status_code == 201, response.content
+    return response.json()["node"]["node_id"]
