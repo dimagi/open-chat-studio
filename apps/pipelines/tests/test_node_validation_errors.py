@@ -1,8 +1,7 @@
 """What `Pipeline.validate()` does with a node it cannot parse at all.
 
-`validate()` parses every node on every read, so a node it cannot parse has to be reportable:
-raising instead would take `/inspect/` and every write to that pipeline down with it, and the node
-has no id the caller could delete it by.
+It parses every node on every read, so an unparseable node has to be reportable: raising instead
+would take `/inspect/` and every write to that pipeline down with it.
 """
 
 import logging
@@ -17,9 +16,8 @@ from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 @pytest.mark.django_db()
 def test_a_param_of_the_wrong_python_type_is_reported(caplog):
     """`CodeNode.check_reserved_session_state_keys` runs `mode="before"` and regex-searches the
-    value, so an integer raises `TypeError` -- which pydantic does not wrap into a
-    `ValidationError`. The report says the node is unreadable; the exception itself goes to the log,
-    since an unrestricted `except` can catch anything and the report is served over the API."""
+    value, so an integer raises `TypeError`, which pydantic does not wrap. The report says the node
+    is unreadable; the exception goes to the log, since the report is served over the API."""
     pipeline = PipelineFactory.create()
     node = NodeFactory.create(pipeline=pipeline, type="CodeNode", params={"name": "broken", "code": 123})
 

@@ -1,8 +1,8 @@
 """The option lists a team may draw on, as `/pipeline/options/` serves them.
 
 Split out of the view because the write endpoints check references against exactly these lists:
-what the API offers a client and what it accepts back have to be the same set, or discovery is
-lying. See ``contract.py`` for how a param name maps onto a key here.
+what the API offers and what it accepts back have to be the same set. See ``contract.py`` for how a
+param name maps onto a key here.
 """
 
 from typing import Any
@@ -21,14 +21,11 @@ PROMPT_VAR_OPTION_SOURCES = (
 
 
 def options_for_team(team: Team) -> dict:
-    """Every option list the team can draw on, with the builder-only affordances stripped.
-    Scoping to a node type happens after this.
-
-    Unlike the builders, this serves only what a client may write, so the models the team cannot
-    call are left out.
+    """Every option list the team can draw on, with the UI builder's own affordances stripped and
+    the models the team cannot call left out. Scoping to a node type happens after this.
 
     A dozen queries and a few hundred milliseconds, mostly parsing custom actions' OpenAPI schemas,
-    so callers that need it twice should hold the result rather than ask again.
+    so a caller needing it twice should hold the result rather than ask again.
     """
     options = _clean_options(get_node_parameter_values(team=team, usable_models_only=True))
     options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)
@@ -36,7 +33,7 @@ def options_for_team(team: Team) -> dict:
 
 
 def _clean_options(value: Any) -> Any:
-    """Strip the builder-only affordances off every option list. Recurses -- ``built_in_tools``
+    """Strip the UI builder's own affordances off every option list. Recurses -- ``built_in_tools``
     and ``tool_config`` nest their lists inside dicts keyed by provider type."""
     if isinstance(value, dict):
         return {key: _clean_options(item) for key, item in value.items()}
@@ -46,12 +43,12 @@ def _clean_options(value: Any) -> Any:
 
 
 def _is_placeholder(option: Any) -> bool:
-    """A builder entry standing in for "nothing chosen". It names no resource to reference."""
+    """A UI builder entry standing in for "nothing chosen". It names no resource to reference."""
     return isinstance(option, dict) and option.get("value") == ""
 
 
 def _clean_option(option: Any) -> Any:
-    """One option entry, with its ``edit_url`` link into the Django UI dropped."""
+    """One option entry, with its ``edit_url`` link into the UI builder dropped."""
     if not isinstance(option, dict):
         return option
     return {key: item for key, item in option.items() if key != "edit_url"}

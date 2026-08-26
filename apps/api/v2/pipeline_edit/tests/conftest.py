@@ -60,11 +60,11 @@ def media_collection(team):
 
 @pytest.fixture()
 def collection_indexes(team):
-    """`collection_index_ids`. Two of them: selecting more than one is what obliges the prompt to
-    use `{collection_index_summaries}`, so one index would leave that rule unexercised.
+    """`collection_index_ids`. Two of them, because selecting more than one is what obliges the
+    prompt to use `{collection_index_summaries}`.
 
     Each carries a summary because that is what a local index is required to have once more than one
-    is selected -- the summaries are what the model is given to choose between them with.
+    is selected -- the summaries are what the model chooses between them with.
     """
     return [
         CollectionFactory.create(
@@ -141,8 +141,8 @@ def stored_node_params(chatbot, node_id: str) -> dict:
 def add_edge(pipeline, source: str, target: str, source_handle: str = "output") -> str:
     """Wire two nodes by writing the edge straight into ``Pipeline.data``.
 
-    The edge endpoints are a separate ticket, so the tests here that need a wired graph build one
-    the way the builder's save does: ``Pipeline.data`` holds the edges and nothing else (ADR-0049).
+    The edge endpoints are a separate ticket, so a test needing a wired graph builds one the way the
+    UI builder's save does: ``Pipeline.data`` holds the edges and nothing else (ADR-0049).
     """
     edge_id = f"edge-{source}-{source_handle}-{target}"
     pipeline.data["edges"].append(
@@ -162,7 +162,7 @@ def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:
     """``{edge_id: (sourceHandle, target)}`` for the stored edges leaving ``source``.
 
     Handle and target together, so one assertion says which edges survived an edit, which handle
-    each ended up on, and that none of them changed where it points.
+    each ended up on, and that none changed where it points.
     """
     pipeline.refresh_from_db()
     return {

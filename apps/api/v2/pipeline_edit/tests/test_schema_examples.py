@@ -1,13 +1,10 @@
 """The documented request examples are real request bodies (#4140).
 
 ``params`` is a free-form object in the schema, so these examples are the only place the API says
-what a body for a given node type looks like. That makes them documentation nothing would otherwise
-check: a param renamed on a node model, or a type added, leaves them quietly wrong, and the reader
-finds out by having their request refused.
+what a body for a given node type looks like -- documentation nothing would otherwise check.
 
-So they are held to the node schemas here, on all three counts that can go stale: every served type
-is covered, each example names exactly the params its type declares, and each is a body the endpoint
-accepts.
+Held to the node schemas here on all three counts that can go stale: every served type is covered,
+each example names exactly the params its type declares, and each is a body the endpoint accepts.
 """
 
 import pytest
@@ -19,10 +16,9 @@ from .conftest import node_url, nodes_url
 
 SERVED_TYPES = [node_type["type"] for node_type in get_node_types()]
 
-#: The params whose example values are placeholder ids, so a test that actually sends one has to
-#: swap in ids the team holds. Not the same set as `contract.PARAMETER_OPTION_SOURCES`, which names option
-#: lists: `tools` and `custom_actions` are checked references too, but only `custom_actions` carries
-#: an id -- the tool names are a fixed vocabulary, so the example already uses real ones.
+#: The params whose example values are placeholder ids, so a test that sends one has to swap in ids
+#: the team holds. Not `contract.PARAMETER_OPTION_SOURCES`, which names option lists: `tools` is a
+#: checked reference too, but its names are a fixed vocabulary the example already uses real ones of.
 PLACEHOLDER_ID_PARAMS = frozenset(
     {
         "llm_provider_id",
@@ -43,9 +39,8 @@ def test_every_served_type_has_an_example():
 
 @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
 def test_an_example_names_exactly_the_params_its_type_declares(node_type):
-    """Both directions matter. A param the type does not declare is dropped on the way in, so an
-    example carrying one documents a key that does nothing; a param left out leaves the reader to
-    discover it from the JSON Schema, which is what the examples exist to save them from.
+    """Both directions matter: an example carrying a param the type does not declare documents a key
+    that does nothing, and one leaving a param out sends the reader to the JSON Schema anyway.
     """
     declared = set(get_node_type_schema(node_type)["schema"]["properties"])
 
@@ -77,8 +72,7 @@ def test_only_the_create_examples_carry_a_type():
 @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
 def test_a_documented_create_example_is_accepted(client, chatbot, node_type, reference_ids):
     """The whole example, sent as documented bar the placeholder ids. Accepted *and* free of node
-    errors: a body that persists while reporting an error would be a poor thing to publish as the
-    example of how to build the type.
+    errors -- a body that persists while reporting an error is a poor example to publish.
     """
     example = next(example for example in create_examples() if example.name == node_type)
     body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
@@ -132,9 +126,8 @@ def _with_real_ids(params: dict, reference_ids: dict) -> dict:
     """``params`` with each placeholder id replaced by one the team holds, and nothing else touched.
 
     The assertion holds the list of params needing a substitute and the fixture supplying them to
-    each other, so neither can gain an entry without the other. It says nothing about ``params``: a
-    reference param added to a node type and to neither of those goes unsubstituted, and fails as a
-    400 in whichever example test sends it.
+    each other, so neither can gain an entry without the other. A reference param added to a node
+    type and to neither goes unsubstituted, and fails as a 400 in whichever example test sends it.
     """
     unknown = PLACEHOLDER_ID_PARAMS.symmetric_difference(reference_ids)
     assert not unknown, f"no id to substitute for {sorted(unknown)}"

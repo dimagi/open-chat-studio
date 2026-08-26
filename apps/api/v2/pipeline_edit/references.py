@@ -4,16 +4,12 @@ Refuses rather than reports: nothing downstream would tell the caller. Another t
 the FK column untouched, and ``Pipeline.validate`` says nothing about it.
 
 ``PARAMETER_OPTION_SOURCES`` says which ``/pipeline/options/`` lists a team could be denied a value
-from, and so which params are references. Each of those lists has a resolver that asks the database
-what the team may actually use; they live in ``apps.pipelines.nodes.node_metadata``, beside the
-querysets the option lists themselves are built from, so what a client is offered and what a write
-accepts cannot come apart. The two are held to that by
-``test_a_write_accepts_exactly_the_values_the_options_endpoint_offers``.
+from, and so which params are references. Each has a resolver in ``node_metadata`` that asks the
+database what the team may actually use.
 
-A resolver is reached through the source rather than the param -- ``node_metadata.get_resolver`` --
-because the source is what decides the permitted values; the param name is only how the request body
-spells it, and what an error has to be reported against. ``parameter_option_mapping`` carries a node
-type's params over to the sources they draw from.
+A resolver is reached through the source rather than the param, because the source decides the
+permitted values; the param name is only how the body spells it, and what an error is reported
+against. ``parameter_option_mapping`` carries a type's params over to the sources they draw from.
 """
 
 from typing import Any
@@ -36,7 +32,7 @@ def check_references(team: Team, node_class: type[BasePipelineNode], params: dic
     """Refuse ``params`` naming a resource the team cannot reach.
 
     Only the params actually sent are checked, so a PATCH never fails on a stale value it is not
-    touching. A nonexistent id and another team's id are the same answer on purpose: separating them
+    touching. A nonexistent id and another team's id get the same answer on purpose: separating them
     would report whether an id exists in some other team.
     """
 
@@ -46,10 +42,8 @@ def check_references(team: Team, node_class: type[BasePipelineNode], params: dic
 
 def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, str]:
     """The params naming a resource the team cannot reach, keyed by param name, each with a message
-    saying which option list to choose from instead.
-
-    A param is only looked at if it is a reference and carries a value. ``None``, ``""`` and ``[]``
-    unset a reference, so there is nothing to check.
+    naming the option list to choose from instead. Only references carrying a value are looked at --
+    ``None``, ``""`` and ``[]`` unset one, so there is nothing to check.
     """
     node_type = node_class.__name__
     param_option_map = parameter_option_mapping(node_type)
@@ -62,9 +56,8 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
         requested_values = (
             value if is_list_param(node_class, param) and isinstance(value, list | tuple | set) else [value]
         )
-        # Via the source, not the param: the source is what says which records are on offer, and
-        # `test_every_checked_param_has_a_resolver` is what says each one reached here has a
-        # resolver rather than raising.
+        # Via the source, not the param: the source is what says which records are on offer.
+        # `test_every_checked_param_has_a_resolver` says every one reached here has a resolver.
         available_values = get_resolver(param_option_map[param])(team, requested_values)
         if unknown := [item for item in requested_values if _is_not_allowed(item, available_values)]:
             errors[param] = (
@@ -77,10 +70,9 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
 def _is_not_allowed(item: Any, allowed: set) -> bool:
     """Whether ``item`` is none of the values the team may use.
 
-    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs. A
-    resolver has already declined to return such a value -- none of them may raise on one -- so this
-    only has to avoid raising on it in turn: unhashable is no resource either way, so it counts as
-    unknown.
+    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs. The
+    resolver has already declined to return such a value, so this only has to avoid raising on it in
+    turn: unhashable is no resource either way, so it counts as unknown.
     """
     try:
         return item not in allowed

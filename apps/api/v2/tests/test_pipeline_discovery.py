@@ -213,31 +213,28 @@ def _checked_params(client) -> dict[str, OptionsSource]:
 
 @pytest.mark.django_db()
 def test_every_checked_param_has_a_resolver(team):
-    """A write checks each reference param by querying for the record itself, through the resolver
-    on the source it draws from. A source with no resolver raises rather than writing, so this is
-    the loud version of that."""
+    """A write checks each reference param through the resolver on the source it draws from. A source
+    with no resolver raises rather than writing, so this is the loud version of that."""
     for param, source in _checked_params(ApiTestClient(team.members.first(), team)).items():
         assert get_resolver(source), f"{param} -> {source}"
 
 
 def test_every_checked_source_has_a_resolver():
-    """The test above only reaches the sources some served type declares, which leaves the ones
-    behind a deprecated node type -- ``assistant`` today -- resting on nothing. Serving such a type
-    again should not be what discovers its resolver is missing, so the whole checked set is held to
-    having one here, node types not involved.
+    """The test above only reaches the sources some served type declares, leaving the ones behind a
+    deprecated type -- ``assistant`` today -- resting on nothing. Serving such a type again should
+    not be what discovers its resolver is missing, so the whole checked set is held to having one.
     """
     assert set(RESOLVERS) >= PARAMETER_OPTION_SOURCES
 
 
 @pytest.mark.django_db()
 def test_a_write_accepts_exactly_the_values_the_options_endpoint_offers(team_with_every_resource):
-    """The façade's one hard promise, and the reason a resolver is allowed to query on its own: an
-    id `/pipeline/options/` offered is an id a write takes, and nothing else is.
+    """The façade's one hard promise: an id `/pipeline/options/` offered is an id a write takes, and
+    nothing else is.
 
     Checked against a second team holding the same kinds of resource, so each resolver has real ids
-    to refuse as well as accept. `ours` is the whole expected answer even for the lists the two
-    teams share -- the tool names are a fixed vocabulary and the global LLM models belong to
-    everyone, so those ids are in `ours` already.
+    to refuse as well as accept. `ours` is the whole expected answer even for the lists the two teams
+    share, since the values those hold -- tool names, global LLM models -- are in `ours` already.
     """
     team = team_with_every_resource
     other = add_remaining_resources(make_team_with_resources())
@@ -253,8 +250,8 @@ def test_a_write_accepts_exactly_the_values_the_options_endpoint_offers(team_wit
 @pytest.mark.django_db()
 def test_a_collection_and_an_index_are_not_interchangeable(team_with_every_resource):
     """The one pair a resolver could confuse without either option list noticing: both are
-    ``Collection`` rows sharing one id space, split only by ``is_index``. Every other reference
-    param draws on a table of its own, so the test above already shows it ids it must refuse.
+    ``Collection`` rows in one id space, split only by ``is_index``. Every other reference param
+    draws on a table of its own, so the test above already shows it ids it must refuse.
     """
     team = team_with_every_resource
     options = options_for_team(team)
@@ -271,9 +268,9 @@ def test_a_collection_and_an_index_are_not_interchangeable(team_with_every_resou
 @pytest.mark.django_db()
 def test_an_unknown_tool_name_is_refused(team):
     """The one resolver the equality test above cannot exercise: the tool names are a fixed
-    vocabulary, so both teams are offered the same set and it has nothing of the other team's to
-    refuse. What it does have to refuse is a name no team holds, and a value that is not a name at
-    all -- the vocabulary is a set, so asking whether an unhashable value is in it would raise.
+    vocabulary, so both teams are offered the same set and there is nothing of the other team's to
+    refuse. What it must refuse is a name no team holds, and a value that is not a name at all --
+    the vocabulary is a set, so asking whether an unhashable value is in it would raise.
     """
     offered = {option["value"] for option in options_for_team(team)["tools"]}
     assert offered, "no tools offered, so this would prove nothing"
@@ -287,11 +284,10 @@ def test_an_unknown_tool_name_is_refused(team):
 def test_unchecked_params_offer_no_team_values(team_with_every_resource):
     """The inverse, and the reason `PARAMETER_OPTION_SOURCES` can be stated as an allowlist.
 
-    A source left out of it is never checked against anything, so leaving one out has to be
-    self-evidently safe: its option list must hold nothing a team could be denied. The lists that
-    qualify today are the prompt variables, which document what a template may interpolate rather
-    than what the param may hold, and the two tool lists, which are dicts keyed by provider type.
-    A new source carrying team-scoped `value` entries fails here until it is named a reference.
+    A source left out of it is never checked against anything, so its option list must hold nothing
+    a team could be denied. The lists that qualify today are the prompt variables and the two tool
+    lists. A new source carrying team-scoped `value` entries fails here until it is named a
+    reference.
     """
     client = ApiTestClient(team_with_every_resource.members.first(), team_with_every_resource)
     options = client.get(reverse("api:v2:pipeline-options")).json()
@@ -309,8 +305,7 @@ def test_unchecked_params_offer_no_team_values(team_with_every_resource):
 def test_reference_sources_match_the_ones_the_schemas_use(team):
     """`PARAMETER_OPTION_SOURCES` is matched against the `ui:optionsSource` values read off the node
     schemas, and the two sides are maintained apart -- one in `contract.py`, one on the pydantic
-    fields. A rename on either would quietly empty the intersection and leave every write checking
-    nothing."""
+    fields. A rename on either would quietly empty the intersection, leaving every write unchecked."""
     client = ApiTestClient(team.members.first(), team)
 
     checked = {
@@ -323,15 +318,14 @@ def test_reference_sources_match_the_ones_the_schemas_use(team):
 
 
 def test_every_mirrored_resource_param_is_checked():
-    """A param mirrored to one of `Node`'s resource FK columns names a row of the team's, so it has
-    to draw from a source `PARAMETER_OPTION_SOURCES` names -- otherwise the id is written unchecked and
-    nothing downstream notices: it lands in the FK column and `Pipeline.validate` says nothing.
+    """A param mirrored to one of `Node`'s resource FK columns names a row of the team's, so it has to
+    draw from a source `PARAMETER_OPTION_SOURCES` names -- otherwise the id lands in the FK column
+    unchecked and `Pipeline.validate` says nothing about it.
 
-    `PARAMETER_OPTION_SOURCES` reaches those sources from the param names by stripping an `_id`/`_ids`
-    suffix, which holds only as long as an option list stays named after the param that reads it.
-    This is that assumption checked against what the schemas actually declare: a mirrored param
-    whose `ui:optionsSource` is not the one its name implies falls out of the derived set, and
-    fails here rather than going unchecked on every write.
+    That set is derived from the param names by stripping an `_id`/`_ids` suffix, which holds only as
+    long as an option list stays named after the param that reads it. Here that assumption meets what
+    the schemas declare: a mirrored param whose `ui:optionsSource` is not the one its name implies
+    falls out of the derived set and fails here rather than going unchecked on every write.
     """
     mirrored = Node.resource_param_names()
 

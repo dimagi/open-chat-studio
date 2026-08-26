@@ -2,25 +2,18 @@
 
 ``params`` is a free-form object in the schema -- what it may hold depends on the ``type``, and one
 endpoint serves every type -- so the schema alone cannot say what a body for a given type looks
-like. These examples do, one per served type, each naming *every* param that type declares.
+like. These examples do, one per served type, each naming *every* param that type declares. Two
+things they say that it cannot: a param's name is the node type's own rather than the
+``/pipeline/options/`` list it draws from (``source_material_id`` is the param, ``source_material``
+the list), and every id here is a placeholder for one that endpoint serves.
 
-Two things are easy to get wrong from the schema alone, and both are the reason these exist:
-
-* A param's name is the node type's own, which is not always the name of the ``/pipeline/options/``
-  list it draws its values from: ``source_material_id`` is the param, ``source_material`` is the
-  list. The examples use the param names, because that is what a request body carries.
-* An id here is only a placeholder. Real ones come from
-  ``GET /api/v2/pipeline/options/{node_type}/``, which serves exactly the values a write accepts.
-
-Held to the node schemas by ``tests/test_schema_examples.py``: every served type must appear here,
-each entry must name every param its type declares and no others, and each must be a body the
-endpoint actually accepts.
+Held to the node schemas by ``tests/test_schema_examples.py``.
 """
 
 from drf_spectacular.utils import OpenApiExample
 
-#: ``node type -> every param that type declares``. Resource ids are placeholders; see the module
-#: docstring. Values are otherwise realistic, since an example is read as a starting point.
+#: ``node type -> every param that type declares``. Resource ids are placeholders; the rest are
+#: realistic, since an example is read as a starting point.
 FULL_PARAMS: dict[str, dict] = {
     "CodeNode": {
         "name": "trim_answer",
@@ -110,8 +103,8 @@ FULL_PARAMS: dict[str, dict] = {
     },
 }
 
-#: What each type's example is worth pointing out, shown as the example's summary in the docs. Kept
-#: beside the params rather than in them so the payloads stay readable as payloads.
+#: Each type's example summary, kept beside the params rather than in them so the payloads stay
+#: readable as payloads.
 NOTES: dict[str, str] = {
     "CodeNode": "`code` must define `main(input, **kwargs)`.",
     "RenderTemplate": "Jinja2 template, using `{{ ... }}`.",
@@ -148,11 +141,9 @@ def create_examples() -> list[OpenApiExample]:
 
 
 def update_examples() -> list[OpenApiExample]:
-    """The same bodies without ``type``, which a PATCH may not send: a node's type decides what its
-    params mean, so it is fixed once the node exists.
+    """The same bodies without ``type``, which a PATCH may not send.
 
-    Every param is shown for completeness, but a PATCH merges key by key -- send only the ones you
-    are changing and the rest are left as they are.
+    Every param is shown for completeness, but a PATCH merges key by key.
     """
     return [
         OpenApiExample(
@@ -166,5 +157,5 @@ def update_examples() -> list[OpenApiExample]:
 
 
 def _label(node_type: str) -> str:
-    """A display name for the example's node. Free text -- the builder shows it, nothing reads it."""
+    """A display name for the example's node. Free text -- the UI builder shows it, nothing reads it."""
     return f"My {node_type}"

@@ -1,10 +1,9 @@
 """Authorization for the pipeline façade (#4140).
 
 One view class serves all three node endpoints, and every gate on it turns on the *credential*
-rather than the verb: the read-only API-key gate and the OAuth resource scope both treat POST, PATCH
-and DELETE alike as unsafe methods, and the chatbot lookup is the same for all three. So only the
-model-permission gate — the one place the verb could have changed the answer — is exercised per
-verb; the rest are checked once.
+rather than the verb: the read-only API-key gate and the OAuth resource scope treat POST, PATCH and
+DELETE alike as unsafe methods. So only the model-permission gate -- the one place the verb could
+change the answer -- is exercised per verb; the rest are checked once.
 """
 
 import pytest
@@ -62,7 +61,7 @@ ALLOWED_STATUS = {"post": 201, "patch": 200, "delete": 200}
     ],
 )
 def test_every_verb_requires_change_experiment(team_with_roles, verb, group, allowed):
-    """Team membership alone is not enough: the role has to hold the permission the builder
+    """Team membership alone is not enough: the role has to hold the permission the UI builder
     requires. All three verbs, because this is where the verb map matters -- the stock
     `DjangoModelPermissions` one would have demanded `delete_experiment` for DELETE."""
     chatbot = ChatbotFactory.create(team=team_with_roles)

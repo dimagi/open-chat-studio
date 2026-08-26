@@ -1,4 +1,4 @@
-"""Reshapes the builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
+"""Reshapes the UI builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
 `/pipeline/nodes/` serves."""
 
 import hashlib
@@ -51,8 +51,7 @@ def get_node_type_schema(node_type: str) -> dict:
 def get_node_class(node_type: str) -> type[BasePipelineNode]:
     """The node class behind a type this API publishes, or :func:`get_node_type_schema`'s 404.
 
-    The served types are exactly the resolvable node classes, so past the schema lookup this cannot
-    come back None.
+    The served types are exactly the resolvable node classes, so past the lookup this cannot be None.
     """
     get_node_type_schema(node_type)
     return cast(type[BasePipelineNode], resolve_node_class(node_type))
@@ -64,21 +63,10 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def parameter_option_mapping(node_type: str) -> dict[str, OptionsSource]:
-    """One node type's reference params, each mapped to the option list it draws its values from.
+    """One node type's reference params, each mapped to the option list it draws from.
 
-    A param is not always named for its list, which is the whole reason to carry the pairing around.
-    For ``LLMResponseWithPrompt``::
-
-        {
-            "llm_provider_id": OptionsSource.llm_provider_id,
-            "llm_provider_model_id": OptionsSource.llm_provider_model_id,
-            "source_material_id": OptionsSource.source_material,
-            "collection_id": OptionsSource.collection,
-            "collection_index_ids": OptionsSource.collection_index,
-            "tools": OptionsSource.tools,
-            "custom_actions": OptionsSource.custom_actions,
-            "synthetic_voice_id": OptionsSource.synthetic_voice_id,
-        }
+    Worth carrying around because a param is not always named for its list --
+    ``source_material_id`` draws from ``OptionsSource.source_material``.
     """
     return {
         param: option_key
@@ -110,8 +98,8 @@ def etag(payload: list | dict) -> str:
 
 
 def _available_schemas() -> list[dict]:
-    """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
-    types and the structural ones the server manages."""
+    """The UI builder's schemas behind the listed node types. ``ui:can_add`` is False for the
+    deprecated types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
 
 
@@ -149,7 +137,7 @@ def _property(name: str, prop: dict) -> dict:
 
 
 def _param_links(name: str) -> dict:
-    """The cross-param rules the builder enforces in JS and the schema never stated."""
+    """The cross-param rules the UI builder enforces in JS and the schema never stated."""
     links = {}
     if name in MUST_MATCH:
         links["must_match"] = MUST_MATCH[name]
@@ -159,8 +147,8 @@ def _param_links(name: str) -> dict:
 
 
 def _documentation_url(schema: dict) -> str | None:
-    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the builder
-    joins it in the browser, an API client has no base to join it to."""
+    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the UI
+    builder joins it in the browser, an API client has no base to join it to."""
     link = schema.get("ui:documentation_link")
     if not link:
         return None
@@ -173,9 +161,8 @@ def _documentation_url(schema: dict) -> str | None:
 def _sources_by_type() -> dict[str, dict[str, OptionsSource]]:
     """``node type -> {param: the option list it draws from}``, read off ``ui:optionsSource``.
 
-    Withheld params and params with no source are left out. Unlike
-    :func:`parameter_option_mapping` this keeps the params whose list names no team records -- the
-    prompt-variable lists among them -- so it is the whole declared mapping, references or not.
+    Withheld params and params with no source are left out. Unlike :func:`parameter_option_mapping`
+    this keeps the params whose list names no team records -- the prompt-variable lists among them.
     """
     return {
         schema["title"]: {

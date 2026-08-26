@@ -1,11 +1,9 @@
 """The one locked read-modify-write every pipeline façade endpoint runs (#4140, W2/W7).
 
-A pipeline is edited through per-node and per-edge endpoints rather than a whole-graph PUT, and
-each of them is the same three steps around a different diff: lock the ``Pipeline`` row, hand the
-builder's own patch engine a one-item ``PipelineDiffPayload``, then persist the way the builder's
-save does. Going through ``apply_pipeline_patch`` rather than editing the graph here keeps the API
-off a second persistence path — and inherits its rule that removing a node removes that node's
-edges with it.
+Every façade edit is the same three steps around a different diff: lock the ``Pipeline`` row, hand
+the UI builder's own patch engine a one-item ``PipelineDiffPayload``, then persist the way the UI
+builder's save does. Reusing ``apply_pipeline_patch`` keeps the API off a second persistence path,
+and inherits its rule that removing a node removes that node's edges with it.
 """
 
 from collections.abc import Callable
@@ -41,14 +39,11 @@ def edit_pipeline(
 
     ``plan`` is handed the current graph (``Pipeline.flow_data`` — nodes rebuilt from their rows,
     since ``Pipeline.data`` no longer lists them, ADR-0049) and returns the edit to make. It runs
-    inside the lock, so what it reads is what gets written; raising from it aborts before anything
-    is persisted.
+    inside the lock, so what it reads is what gets written.
 
-    ``respond`` builds the response body, and runs inside the lock too. That is not for consistency
-    — the row is already written by then — but so that a body that cannot be built takes the write
-    down with it. Building it after the commit is how a node the server could not parse used to
-    persist and then 500 every later read of the pipeline, with the caller never learning the id it
-    would need to delete the thing again.
+    ``respond`` runs inside the lock too, so that a body that cannot be built takes the write down
+    with it: building it after the commit is how a node the server could not parse used to persist
+    and then 500 every later read of the pipeline.
     """
     with transaction.atomic():
         chatbot = get_working_chatbot(request.team, public_id)
@@ -63,11 +58,9 @@ def edit_pipeline(
 def _locked_pipeline(chatbot: Experiment) -> Pipeline:
     """The chatbot's pipeline, locked for the rest of the transaction.
 
-    Team-scoped as well as addressed by pk: tenancy would hold through the chatbot alone, but the
-    boundary is cheap to restate and this is a write path.
-
-    Prefetched because ``flow_data`` rebuilds every node from its row and reads the
-    ``collection_indexes`` M2M per node.
+    Team-scoped as well as addressed by pk: tenancy holds through the chatbot alone, but this is a
+    write path and the boundary is cheap to restate. Prefetched because ``flow_data`` rebuilds every
+    node from its row and reads the ``collection_indexes`` M2M per node.
     """
     if chatbot.pipeline_id is None:
         # Every chatbot the UI or POST /chatbots/ creates is pipeline-backed, but nothing in the
@@ -85,9 +78,9 @@ def _locked_pipeline(chatbot: Experiment) -> Pipeline:
 def _persist(pipeline: Pipeline, flow: dict, diff: PipelineDiffPayload) -> None:
     """Merge ``diff`` into the graph and save it, exactly as ``_handle_pipeline_patch`` does.
 
-    ``edit_revision`` is bumped for the builder's benefit, not ours: its own PATCH refuses a save
-    whose ``base_revision`` has moved on, so an API write that left the revision alone would let an
-    open builder session overwrite this edit without ever seeing a conflict.
+    ``edit_revision`` is bumped for the UI builder's benefit: its own PATCH refuses a save whose
+    ``base_revision`` has moved on, so leaving the revision alone would let an open UI builder
+    session overwrite this edit without ever seeing a conflict.
     """
     edge_data, node_data = apply_pipeline_patch(flow, diff)
     pipeline.data = edge_data.model_dump()

@@ -36,14 +36,13 @@ OutputHandles = dict[str, str | None]
 PARKING_STEP_X = 400
 PARKING_Y = 200
 
-#: The id suffix the builder's own ``getNodeId`` produces, and how many draws are spent trying to
-#: find a free one before falling back to a full-length uuid.
+#: The id suffix the UI builder's own ``getNodeId`` produces, and how many draws are spent looking
+#: for a free one before falling back to a full-length uuid.
 SHORT_ID_LENGTH = 5
 ID_ATTEMPTS = 5
 
-#: ``PipelineDiffPayload`` requires this, but ``apply_pipeline_patch`` never reads it: it is the
-#: builder's optimistic-concurrency token, and the façade holds a row lock instead (W7), so there is
-#: no revision for it to check against.
+#: ``PipelineDiffPayload`` requires this, but ``apply_pipeline_patch`` never reads it: it is the UI
+#: builder's optimistic-concurrency token, and the façade holds a row lock instead (W7).
 UNUSED_BASE_REVISION = 0
 
 
@@ -60,10 +59,10 @@ class NodeIsServerManaged(APIException):
 def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Add a node of ``node_type`` to ``flow``.
 
-    The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the builder's own
+    The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the UI builder's own
     ``getNodeId`` produces, so an API-built graph is indistinguishable from a hand-built one.
 
-    Params are already checked by the time this runs: the type is known from the request body, so
+    Params are already checked by the time this runs -- the type comes from the request body, so
     nothing here has to wait on the graph.
     """
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
@@ -92,13 +91,8 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
     changing one setting does not mean resending the whole node.
 
-    An edit that changes which output handles the node offers takes that node's edges with it: a
-    dropped router keyword drops the edge that served it, and a keyword that only moved carries its
-    edge along. See :func:`_rewired_edges` -- there is no edge endpoint an agent could use to clear
-    up after itself, so leaving the wreckage would only strand it.
-
-    Start and End are refused outright, whichever half of the body is sent: a label-only edit to
-    one is as refused as a change to its params.
+    An edit that changes which output handles the node offers takes that node's edges with it -- see
+    :func:`_rewired_edges`. Start and End are refused outright, label-only edits included.
     """
     node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
@@ -123,11 +117,10 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
 def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
     """Remove a node, and with it every edge that named it.
 
-    The edges go because the patch engine culls them, not because the caller asked: an edge left
-    pointing at a node that no longer exists breaks cycle detection and reachability outright.
-
-    Start and End are refused rather than removed, the same way an edit to one is: they are the
-    types POST will not create, so removing one would leave a chatbot only the builder could repair.
+    The edges go because the patch engine culls them: an edge pointing at a node that no longer
+    exists breaks cycle detection and reachability outright. Start and End are refused rather than
+    removed -- POST will not create them, so removing one would leave a chatbot only the UI builder
+    could repair.
     """
     _node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
@@ -137,8 +130,8 @@ def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
 def refuse_if_server_managed(node_type: str) -> None:
     """Refuse to touch a node the server owns — Start and End, the two the API will not create.
 
-    ``can_delete`` is the builder's own flag for this and is False for exactly those two, so the API
-    withholds the same nodes the builder does rather than keeping a list of its own.
+    ``can_delete`` is the UI builder's own flag for this and is False for exactly those two, so the
+    API withholds the same nodes rather than keeping a list of its own.
     """
     node_class = resolve_node_class(node_type)
     # A type naming no node class -- removed since, or never one -- has no flag to consult, and is
@@ -152,9 +145,9 @@ def refuse_if_server_managed(node_type: str) -> None:
 def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     """The graph's node with this id, and its content, or a 404.
 
-    Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. The content is
-    handed back separately because ``FlowNode.data`` is optional -- the stored blob is layout-only
-    (ADR-0049) -- while a node from ``flow_data`` has always had its content rebuilt from its row.
+    Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. The content comes
+    back separately because ``FlowNode.data`` is optional -- the stored blob is layout-only
+    (ADR-0049) -- while a node from ``flow_data`` has had its content rebuilt from its row.
     """
     for node in flow.get("nodes", []):
         if node["id"] == node_id:
@@ -166,11 +159,9 @@ def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
 def stored_params(content: FlowNodeData) -> dict[str, Any]:
     """The params a node's row actually holds, out of the graph's copy of them.
 
-    ``Node.to_flow_node`` merges the resource-id mirror into *every* node type's params, so the
-    graph shows a ``CodeNode`` carrying ``llm_provider_id`` and six others it does not declare.
-    Merging that back would write those keys to the row on any edit, including a label-only one --
-    and the write's own response would then be a body the caller cannot send back, because PATCH
-    refuses a param the type does not declare.
+    ``Node.to_flow_node`` merges the resource-id mirror into *every* node type's params, so the graph
+    shows a ``CodeNode`` carrying ``llm_provider_id`` and six others it does not declare. Merging
+    that back would write those keys to the row on any edit, label-only ones included.
     """
     node_class = resolve_node_class(content.type)
     declared = set(node_class.model_fields) if node_class is not None else set()
@@ -181,8 +172,8 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
 def settable_params(node: Node) -> dict[str, Any]:
     """A node row's params, narrowed to the ones a client may send back.
 
-    The write response is documented as a valid request body, so it must not carry a param that
-    PATCH would refuse -- ``mcp_tools`` is stored with its default but withheld from the schema.
+    The write response is documented as a valid request body, so it must not carry a param PATCH
+    would refuse -- ``mcp_tools`` is stored with its default but withheld from the schema.
     """
     params = node.params or {}
     try:
@@ -197,15 +188,11 @@ def settable_params(node: Node) -> dict[str, Any]:
 def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: dict[str, Any]) -> dict[str, Any]:
     """The params a new node starts life with: the type's defaults, then what the client sent.
 
-    The defaults are written to the row rather than only reported, so the node reads back through
-    ``/inspect/`` as the same thing the create response described — ``update_nodes_from_data`` stores
-    params verbatim, so anything not written here simply is not there.
-
-    ``name`` is required and has no default, so the server supplies one: the node id, which is what
-    the builder writes when a node is dragged onto the canvas.
-
-    Run through the model on the way out, the same as an edit is: a create and a later PATCH that
-    sends the same value should not store two different things.
+    The defaults are written to the row rather than only reported -- ``update_nodes_from_data``
+    stores params verbatim, so anything not written here simply is not there on the next read.
+    ``name`` is required and has no default, so the server supplies the node id, as the UI builder
+    does. Run through the model on the way out, the same as an edit is, so a create and a later PATCH
+    of the same value store the same thing.
     """
     defaults = {
         field_name: field.get_default(call_default_factory=True)
@@ -219,9 +206,9 @@ def parking_position(flow: dict) -> dict:
     """Where a node with no wiring goes: clear to the right of every node already placed, bar the
     End node, which is moved out of the way instead (see :func:`_reparked_end_nodes`).
 
-    Positions are cosmetic — they exist so a human opening the builder can read the graph, and
-    nothing about execution or validity depends on them. Placing a node beside the source it is
-    wired to is a later refinement (W11); until then this only has to avoid stacking nodes.
+    Positions are cosmetic — they exist so a human opening the UI builder can read the graph.
+    Placing a node beside the source it is wired to is a later refinement (W11); until then this
+    only has to avoid stacking nodes.
     """
     placed = [node for node in flow.get("nodes", []) if node.get("type") != REACT_FLOW_END_TYPE]
     rightmost = max((node.get("position", {}).get("x") or 0 for node in placed), default=0)
@@ -238,13 +225,10 @@ def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
 def _unused_node_id(flow: dict, node_type: str) -> str:
     """A node id no node in this graph already has.
 
-    Five hex characters is about a million ids, which is plenty per pipeline but not so many that a
+    Five hex characters is about a million ids -- plenty per pipeline, but not so many that a
     collision can be waved away: ``apply_pipeline_patch`` treats an add whose id already exists as a
-    no-op, so a clash would answer 201 while describing the node that was already there.
-
-    Bounded rather than looping until it wins: the retries are what make a collision a non-event,
-    and the full-length fallback is what stops an exhausted or degenerate id source from hanging
-    the request instead.
+    no-op, so a clash would answer 201 while describing the node that was already there. Bounded
+    rather than looping, so an exhausted or degenerate id source cannot hang the request.
     """
     taken = {node["id"] for node in flow.get("nodes", [])}
     for _attempt in range(ID_ATTEMPTS):
@@ -260,9 +244,8 @@ def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
     The End node has to stay rightmost: a node level with it or past it reads as a step after the
     end. One already clear to the right is left where someone put it, and only its x ever moves.
 
-    The move carries content because that is the only kind of node diff ``apply_pipeline_patch``
-    writes position columns for, and its params are narrowed like an edit's -- writing the graph's
-    copy back would store the resource-id mirror ``to_flow_node`` merges into every node.
+    The move carries content because that is the only node diff ``apply_pipeline_patch`` writes
+    position columns for, with params narrowed as an edit's are (see :func:`stored_params`).
     """
     moved = []
     for stored in flow.get("nodes", []):
@@ -287,8 +270,7 @@ def _output_handles(content: FlowNodeData) -> OutputHandles:
     """A node's output handles as ``{handle: branch label}``.
 
     The label is what identifies a router's branch across an edit: the handle is only a position in
-    ``keywords``, and positions move. A node whose type names no node class reports no handles, so
-    nothing about its wiring is inferred from an edit either.
+    ``keywords``, and positions move. A node whose type names no node class reports no handles.
     """
     return {handle["handle"]: handle["label"] for handle in output_handles(content.type, content.params, content.id)}
 
@@ -297,13 +279,11 @@ def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: Outpu
     """What an edit that changed a node's output handles does to the edges leaving it.
 
     Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
-    keywords renumbers the third rather than freeing a slot. Going by position alone would delete
-    the third branch's edge and quietly hand its target to the second, so old handles are matched to
-    new ones by branch label instead: an edge follows its branch wherever it moved, and a branch
-    that is gone takes its edge with it -- which is what the builder's own ``deleteKeyword`` does.
-
-    Only the handles this edit removed are acted on. An edge already stranded when the edit arrived
-    -- left by an import, or a builder session -- stays, and stays reported in ``errors.edge``.
+    keywords renumbers the third rather than freeing a slot -- going by position alone would hand
+    the third branch's target to the second. So old handles are matched to new ones by branch label:
+    an edge follows its branch wherever it moved, and a branch that is gone takes its edge with it,
+    as the UI builder's ``deleteKeyword`` does. An edge already stranded when the edit arrived stays,
+    and stays reported in ``errors.edge``.
     """
     moved_to = _handle_remap(before, after)
     update: list[FlowEdge] = []
@@ -324,9 +304,8 @@ def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: Outpu
 def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
     """Where each handle the node used to offer has ended up, keyed by the handle it was.
 
-    A handle whose branch the edit removed is absent from the result: its edge has nowhere to go.
-    A rename counts as a removal, because nothing in the body says otherwise -- the old branch is
-    not in the new list, and inheriting its target would wire the new one somewhere nobody chose.
+    A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts as
+    a removal, since inheriting the old branch's target would wire the new one somewhere nobody chose.
     """
     if _labels_are_distinct(before) and _labels_are_distinct(after):
         destinations = {label: handle for handle, label in after.items()}

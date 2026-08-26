@@ -78,9 +78,9 @@ def output_handles(node_type: str, params: dict, node_id: str, django_node: Node
     End has no outputs.
 
     Takes the params rather than only a stored :class:`~apps.pipelines.models.Node` so a caller
-    holding an edit that has not been written yet can ask what the node *would* offer. ``django_node``
-    is what the row-backed caller passes to get full validation; without it a router falls back to
-    the unvalidated path below, which is enough because no router's branches depend on its row.
+    holding an unwritten edit can ask what the node *would* offer. ``django_node`` is what the
+    row-backed caller passes for full validation; without it a router falls back to the unvalidated
+    path below, which is enough because no router's branches depend on its row.
     """
     if node_type == EndNode.__name__:
         return []

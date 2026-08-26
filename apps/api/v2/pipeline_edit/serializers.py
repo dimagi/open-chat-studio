@@ -12,8 +12,8 @@ from apps.pipelines.models import Node
 
 from .graph_editor import settable_params
 
-#: Where a param's name comes from, which is the one thing a free-form ``params`` object cannot say
-#: for itself. Spelled out on both write bodies, since a client reads one or the other.
+#: Where a param's name comes from -- the one thing a free-form ``params`` object cannot say for
+#: itself. Spelled out on both write bodies, since a client reads one or the other.
 PARAM_NAMES = (
     "Param names are the node type's own, as published by "
     "`GET /api/v2/pipeline/nodes/{node_type}/`. They are not always the name of the "
@@ -23,8 +23,8 @@ PARAM_NAMES = (
     "actually ended up holding."
 )
 
-#: Keys a client might reasonably try to set that the server owns, and why it does (W5). Called out
-#: by name because the generic "unrecognised field" answer reads as a typo rather than as a rule.
+#: Keys a client might reasonably try to set that the server owns (W5). Named individually because
+#: the generic "unrecognised field" answer reads as a typo rather than as a rule.
 SERVER_ASSIGNED_KEYS = {
     "node_id": "Node ids are assigned by the server and returned in the response; they cannot be chosen.",
     "position": "Node positions are assigned by the server; move a node in the pipeline builder instead.",
@@ -68,8 +68,8 @@ class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 class WrittenNodeSerializer(serializers.Serializer):
     """A node as a write returns it.
 
-    Deliberately not the inspect node shape: inspect keeps resource ids out of ``params`` and
-    renders the resolved resources instead, whereas this is the shape you can send back.
+    Deliberately not the inspect node shape: inspect renders the resolved resources instead of the
+    ids in ``params``, whereas this is the shape you can send back.
     """
 
     node_id = serializers.CharField(source="flow_id")
@@ -81,15 +81,14 @@ class WrittenNodeSerializer(serializers.Serializer):
     @extend_schema_field(serializers.DictField())
     def get_params(self, node: Node) -> dict:
         # Narrowed to what a client may send back: a node is stored with a default for every field
-        # its type declares, including the ones the API withholds from the schema, and reporting
-        # one of those would make this response a body PATCH refuses.
+        # its type declares, withheld ones included, and reporting one of those would make this
+        # response a body PATCH refuses.
         return settable_params(node)
 
     @extend_schema_field(OutputHandleSerializer(many=True))
     def get_output_handles(self, node: Node) -> list:
-        # Server-derived (W5): a router gets one handle per branch keyword, a plain node the single
-        # standard output. Returned on every write so the next call can wire an edge from it
-        # without a re-read.
+        # Server-derived (W5). Returned on every write so the next call can wire an edge from a
+        # handle without a re-read.
         return node_output_handles(node)
 
 
@@ -114,8 +113,7 @@ class PipelineWriteSerializer(serializers.Serializer):
     """What every façade write reports back about the pipeline it just changed.
 
     The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
-    read and write. ``pipeline_errors`` is what the publish gate rejects on; ``unwired_handles`` is
-    advisory and never blocks anything.
+    read and write.
     """
 
     pipeline_valid = serializers.BooleanField(

@@ -23,8 +23,7 @@ _DEFAULT_PIPELINE_DATA = {
                 "id": "start",
                 "type": StartNode.__name__,
                 # Named as `_get_start_and_end_nodes` names them. Without it both nodes read as
-                # name=None and `Pipeline.validate()` reports a duplicate-name error no real
-                # pipeline has.
+                # name=None and `Pipeline.validate()` reports a duplicate-name error.
                 "params": {"name": "start"},
             },
         },

@@ -1,9 +1,8 @@
 """POST /api/v2/chatbots/{id}/pipeline/nodes/ (#4140, spec §6.2).
 
-What the endpoint produces, and what it refuses. The rule the refusals encode: a structurally-sound
-node always persists, even when it is semantically incomplete, so an agent can build a graph a piece
-at a time. What does *not* persist is a request naming something that does not exist — a node type,
-or a resource id.
+The rule the refusals encode: a structurally-sound node always persists, even when it is
+semantically incomplete, so an agent can build a graph a piece at a time. What does *not* persist is
+a request naming something that does not exist — a node type, or a resource id.
 """
 
 from unittest.mock import Mock, patch
@@ -44,11 +43,9 @@ def test_create_fills_in_the_node_types_defaults(client, chatbot):
     """`type` alone has to be enough to add a node.
 
     The node class is the only place the defaults live, and `update_nodes_from_data` stores params
-    verbatim -- so unless they are materialized here, a node created through the API reads back from
-    /inspect/ as the handful of keys the client happened to send. `name` is required on every type
-    and has no default, so the server supplies the node id, which is what the builder writes when a
-    node is dragged onto the canvas; the label is the type's display name, since the builder shows
-    it and blank would read as nothing at all.
+    verbatim, so unless they are materialized here the node reads back from /inspect/ as the handful
+    of keys the client happened to send. `name` is required on every type and has no default, so the
+    server supplies the node id, as the UI builder does; the label defaults to the type's own.
     """
     response = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
 
@@ -122,7 +119,7 @@ def test_create_parks_the_node_clear_of_the_existing_ones(client, chatbot):
 
 @pytest.mark.django_db()
 def test_create_leaves_the_output_node_where_it_is_when_the_new_node_lands_short_of_it(client, chatbot):
-    """A layout someone arranged in the builder is not rearranged for the sake of it: a new node
+    """A layout someone arranged in the UI builder is not rearranged for the sake of it: a new node
     that fits to the output's left leaves it alone."""
     _place(chatbot.pipeline, start=100, end=800)
 
@@ -160,8 +157,7 @@ def test_create_moves_the_output_node_without_rewriting_what_it_holds(client, ch
 
 @pytest.mark.django_db()
 def test_an_unknown_node_type_is_refused(client, chatbot):
-    """404, the same answer /pipeline/nodes/{type}/ gives: the name is of a type that does not
-    exist, whichever way the client happened to name it. The valid ones come back with it."""
+    """404, the same answer /pipeline/nodes/{type}/ gives, with the valid types alongside it."""
     response = client.post(nodes_url(chatbot), {"type": "Frobnicator"}, format="json")
 
     assert response.status_code == 404, response.content
@@ -300,7 +296,7 @@ def test_a_list_valued_reference_is_checked_per_entry(client, chatbot, team):
 def test_a_malformed_custom_action_reference_is_refused(client, chatbot):
     """`custom_actions` entries are the composite "{action_id}:{operation_id}" strings the server
     hands out, and `Node.update_from_params` splits them on the colon -- so a value that is not one
-    would be a 500 rather than a rejected write if it got as far as being saved."""
+    would be a 500 rather than a rejected write if it reached the save."""
     response = client.post(
         nodes_url(chatbot),
         {"type": "LLMResponseWithPrompt", "params": {"custom_actions": ["not-a-reference"]}},
@@ -313,16 +309,14 @@ def test_a_malformed_custom_action_reference_is_refused(client, chatbot):
 
 
 # ---------------------------------------------------------------------------------------------
-# One test per served node type, each sending every param that type declares.
+# One test per served node type, each sending every param that type declares. Written out with the
+# whole body as a literal rather than parametrised over a table, so what was sent can be read at
+# the place it is sent.
 #
-# Written out one test per type, with the whole body as a literal, rather than parametrised over a
-# table: the point of these is that you can read what was sent to the endpoint at the place it is
-# sent, and a table would put the payloads somewhere else.
-#
-# Each asserts `body["node"]["params"] == <the params sent>`, which is an equality in both
-# directions: it says the endpoint stored what it was given, and -- because a node is stored with a
-# value for every param its type declares -- that the payload named every param there is. A param
-# added to a type therefore fails the test for that type rather than quietly going untested.
+# Each asserts `body["node"]["params"] == <the params sent>`, an equality in both directions: the
+# endpoint stored what it was given, and -- because a node is stored with a value for every param
+# its type declares -- the payload named every param there is. So a param added to a type fails
+# that type's test rather than quietly going untested.
 # ---------------------------------------------------------------------------------------------
 
 #: The types covered below. Guarded by `test_every_served_type_sends_a_full_payload`, which is what
@@ -389,8 +383,8 @@ def test_create_a_render_template_node_with_every_param(client, chatbot):
 
 @pytest.mark.django_db()
 def test_create_a_send_email_node_with_every_param(client, chatbot):
-    """`recipient_list` is stored as sent, spacing included: the model only checks the addresses
-    parse, since the field doubles as a Jinja template that is rendered at run time instead."""
+    """`recipient_list` is stored as sent, spacing included: the model only checks that the addresses
+    parse, since the field doubles as a Jinja template rendered at run time."""
     payload = {
         "type": "SendEmail",
         "label": "Email the transcript",
@@ -441,8 +435,8 @@ def test_create_an_extract_structured_data_node_with_every_param(client, chatbot
 
 @pytest.mark.django_db()
 def test_create_an_extract_participant_data_node_with_every_param(client, chatbot, llm):
-    """The same node as `ExtractStructuredData` plus `key_name`, which nests what it extracted under
-    that key in the participant's data instead of merging it in at the top level."""
+    """`ExtractStructuredData` plus `key_name`, which nests what it extracted under that key in the
+    participant's data instead of merging it in at the top level."""
     provider, model = llm
     payload = {
         "type": "ExtractParticipantData",
@@ -471,9 +465,8 @@ def test_create_an_extract_participant_data_node_with_every_param(client, chatbo
 @pytest.mark.django_db()
 def test_create_a_router_node_with_every_param(client, chatbot, llm):
     """`keywords` come back upper-cased -- the model does that on the way in, so the handles and the
-    edges keyed off them are upper-cased too. A router's prompt sees a narrower set of template
-    variables than an LLM node's: `participant_data`, `temp_state` and `session_state`, and nothing
-    resource-backed.
+    edges keyed off them are too. A router's prompt sees a narrower set of template variables than an
+    LLM node's: `participant_data`, `temp_state`, `session_state`, and nothing resource-backed.
     """
     provider, model = llm
     payload = {

@@ -77,8 +77,8 @@ def team_assistants(team: Team, include_versions: bool = False) -> QuerySet:
 
 
 def team_collections(team: Team, include_versions: bool = False) -> QuerySet:
-    """The media collections `team` may reference. Indexes are a separate list -- see
-    :func:`team_collection_indexes` -- though both are ``Collection`` rows."""
+    """The media collections `team` may reference. Both these and the indexes are ``Collection``
+    rows, split only by ``is_index``."""
     return Collection.objects.filter(**_resource_filters(team, include_versions), is_index=False)
 
 
@@ -88,8 +88,8 @@ def team_collection_indexes(team: Team, include_versions: bool = False) -> Query
 
 
 def _resource_filters(team: Team, include_versions: bool) -> dict:
-    """Scoping shared by every versioned team resource. Excluding the versions is the default: a
-    version belongs to a published pipeline, not to something a caller may point a new node at."""
+    """Scoping shared by every versioned team resource. Versions are excluded by default: one
+    belongs to a published pipeline, not to something a caller may point a new node at."""
     filters = {"team": team}
     if not include_versions:
         filters["working_version"] = None
@@ -311,21 +311,19 @@ def _get_node_schema(node_class: type) -> dict:
 
 
 # --------------------------------------------------------------------------------------------------
-# Which of a set of supplied values a team may actually use, one function per option list whose values
-# a team could be denied. Reached through `get_resolver`; the write API refuses a param naming
+# Which of a set of supplied values a team may actually use, one function per option list whose
+# values a team could be denied. Reached through `get_resolver`; the write API refuses a param naming
 # anything these do not return (see `apps.api.v2.pipeline_edit.references`).
 #
-# They live here, beside the querysets the option lists themselves are built from, so that what a
-# client is offered and what a write accepts cannot come apart -- which is what
-# `test_a_write_accepts_exactly_the_values_the_options_endpoint_offers` holds them to.
+# They live beside the querysets the option lists are built from so that what a client is offered and
+# what a write accepts cannot come apart.
 #
 # Each asks after the values it was handed rather than building the list to pick them out of: a write
-# runs this while holding the pipeline row, so the cost must not grow with the size of the team.
+# runs this while holding the pipeline row, so the cost must not grow with the team.
 #
-# Values arrive straight off a request body, so each has to survive being handed anything JSON can
-# express -- a dict where an id belongs, a list where a name does. Nothing here may raise on one:
-# the caller reports what a resolver leaves out as a 400, so raising would answer a malformed body
-# with a 500 instead.
+# Values arrive straight off a request body, so each has to survive anything JSON can express -- a
+# dict where an id belongs, a list where a name does. None of them may raise on one: the caller
+# reports what a resolver leaves out as a 400, so raising would answer a bad body with a 500.
 # --------------------------------------------------------------------------------------------------
 
 
@@ -360,9 +358,9 @@ def reachable_synthetic_voices(team: Team, values: list) -> set:
 def reachable_custom_actions(team: Team, values: list) -> set:
     """Values are ``"<custom action id>:<operation id>"``.
 
-    Owning the action is not enough on its own: the operation has to be one its schema publishes and
-    one the team allowed, which is the same test ``get_custom_action_operation_choices`` applies to
-    decide what to offer.
+    Owning the action is not enough: the operation has to be one its schema publishes and one the
+    team allowed -- the same test ``get_custom_action_operation_choices`` applies when deciding what
+    to offer.
     """
     wanted: dict[int, set[str]] = defaultdict(set)
     for value in values:
@@ -388,8 +386,8 @@ def reachable_tools(_team: Team, values: list) -> set:
     """The agent tools are a fixed vocabulary rather than rows, so no team narrows them. Checked all
     the same: an unknown name would otherwise be stored and only surface when the bot ran.
 
-    Only a string can name a tool, and asking whether an unhashable value is one would raise rather
-    than answer, so anything else is simply not among them.
+    Only a string can name a tool, and asking whether an unhashable value is one would raise, so
+    anything else is simply not among them.
     """
     offered = {value for value, _label in AgentTools.user_tool_choices()}
     return {value for value in values if isinstance(value, str) and value in offered}
@@ -398,9 +396,9 @@ def reachable_tools(_team: Team, values: list) -> set:
 def _rows_named_by(queryset: QuerySet, values: list) -> set:
     """The supplied values that name a row in ``queryset``, one query however many were sent.
 
-    Values arrive straight off a request body, so a value that is not an id at all -- a string, a
-    dict, a bool -- simply names no row. ``as_int`` is what ``Node._sync_resource_fk_fields`` writes
-    the columns through, so the two agree on which values are ids in the first place.
+    A value that is not an id at all -- a string, a dict, a bool -- simply names no row. ``as_int``
+    is what ``Node._sync_resource_fk_fields`` writes the columns through, so the two agree on which
+    values are ids in the first place.
     """
     ids = {parsed for parsed in map(as_int, values) if parsed is not None}
     if not ids:
@@ -408,11 +406,10 @@ def _rows_named_by(queryset: QuerySet, values: list) -> set:
     return set(queryset.filter(id__in=ids).values_list("id", flat=True))
 
 
-#: The resolver behind each option list, keyed on the list rather than on the param, because the list
-#: is what decides the permitted values -- ``source_material_id`` is the param and ``source_material``
-#: the list it chooses from. ``apps.api.v2.discovery.contract.PARAMETER_OPTION_SOURCES`` is the set of
-#: sources a write checks, and ``test_every_checked_param_has_a_resolver`` is what says every one of
-#: those is a key here.
+#: The resolver behind each option list, keyed on the list rather than the param, because the list is
+#: what decides the permitted values -- ``source_material_id`` is the param, ``source_material`` the
+#: list it chooses from. ``contract.PARAMETER_OPTION_SOURCES`` is the set of sources a write checks;
+#: ``test_every_checked_param_has_a_resolver`` says every one of those is a key here.
 RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
     OptionsSource.llm_provider_id: reachable_llm_providers,
     OptionsSource.llm_provider_model_id: reachable_llm_provider_models,
@@ -429,10 +426,10 @@ RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
 def get_resolver(source: OptionsSource) -> Callable[[Team, list], set]:
     """The function answering "which of these values may this team actually use?" for one option list.
 
-    Raises for a list that can deny nothing: the prompt-variable lists document what a template may
-    interpolate, and the two tool-config lists nest their options under provider types. Reaching
-    here with one of those would mean something asked to check a value against a list that cannot
-    refuse it, which is a bug rather than a permissive answer.
+    Raises for a list that can deny nothing -- the prompt-variable lists, and the tool-config lists
+    that nest their options under provider types. Reaching here with one of those means something
+    asked to check a value against a list that cannot refuse it, which is a bug rather than a
+    permissive answer.
     """
     try:
         return RESOLVERS[source]

@@ -85,11 +85,8 @@ def _request(*, has_perms: bool):
 
 @pytest.fixture()
 def machine_token(db):
-    """A real client-credentials token.
-
-    `is_client_credentials_request` walks auth -> application -> authorization_grant_type, so only
-    a real token exercises the branch; a stub would prove no more than that the branch exists.
-    """
+    """A real client-credentials token. `is_client_credentials_request` walks auth -> application ->
+    authorization_grant_type, so a stub would prove no more than that the branch exists."""
     team = TeamWithUsersFactory.create()
     application = OAuth2Application.objects.create(
         name="machine-app",
@@ -112,11 +109,9 @@ def test_requires_team_permission_follows_the_users_permissions(has_perms):
 
 
 def test_requires_team_permission_refuses_a_subclass_that_declares_nothing():
-    """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone.
-    #4140-#4145 all subclass this, so the failure has to be loud rather than permissive.
-
-    It fires when the class is defined rather than when its endpoint is first called: an open door
-    that only shows itself under traffic is one that ships.
+    """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone. It
+    fires when the class is defined rather than when its endpoint is first called: an open door that
+    only shows itself under traffic is one that ships.
     """
     with pytest.raises(ImproperlyConfigured):
 

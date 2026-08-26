@@ -83,8 +83,7 @@ def test_a_list_sent_for_a_scalar_reference_is_refused(client, chatbot, llm):
 def test_a_tool_the_team_cannot_use_is_refused(client, chatbot, tools):
     """``tools`` is the one reference whose values are names rather than ids, so it is the one
     resolver that never parses what it was handed. It still has to answer rather than raise: an
-    unhashable value cannot be looked up in the vocabulary, and asking would be a 500 in place of
-    this 400.
+    unhashable value cannot be looked up, and asking would be a 500 in place of this 400.
     """
     response = client.post(
         nodes_url(chatbot), {"type": "LLMResponseWithPrompt", "params": {"tools": tools}}, format="json"

@@ -17,8 +17,8 @@ from apps.pipelines.nodes.base import BasePipelineNode, UiSchema
 def writable_params(node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, Any]:
     """``params`` narrowed to the ones a client may set on this type.
 
-    Drops a name the type does not declare (it would be stored and then ignored at run time) and one
-    the discovery API withholds via ``UiSchema.api_exclude`` — never offered, so not settable.
+    Drops a name the type does not declare -- it would be stored and then ignored at run time -- and
+    one the discovery API withholds via ``UiSchema.api_exclude``: never offered, so not settable.
     """
     return {name: value for name, value in params.items() if _is_writable(node_class, name)}
 
@@ -27,7 +27,7 @@ def node_params(node_class: type[BasePipelineNode], node_id: str, merged: dict[s
     """``merged`` as the type defines it: normalised where it parses, filtered where it does not.
 
     Validation reports rather than refuses — a node that does not parse is stored and its errors come
-    back in ``pipeline_errors``, which is how an agent builds one up over several calls and how the
+    back in ``pipeline_errors``, which is how a node gets built up over several calls and how the UI
     builder saves one. ``Pipeline.validate`` tolerates every way a node can fail to parse, so this
     cannot wedge a later read.
     """

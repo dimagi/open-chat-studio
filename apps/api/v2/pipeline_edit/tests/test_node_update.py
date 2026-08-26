@@ -88,7 +88,7 @@ def test_patch_refuses_another_teams_resource(client, chatbot, llm_node):
 
 @pytest.mark.django_db()
 def test_patch_accepts_the_teams_own_resource(client, chatbot, llm_node):
-    """Guards the guard. The option lists are built in the view and handed to ``plan_update``, so a
+    """Guards the guard: the option lists are built in the view and handed to ``plan_update``, so a
     PATCH that names a reference has to actually get them -- handing over an empty set would refuse
     every id, which the refusal above cannot tell apart from working."""
     ours = LlmProviderFactory.create(team=chatbot.team, type="openai")
@@ -161,10 +161,8 @@ def router(client, chatbot, llm):
 @pytest.mark.django_db()
 def test_editing_router_keywords_regenerates_the_output_handles(client, chatbot, router):
     """Handles are positional (`output_i` serves `keywords[i]`) and the model upper-cases the
-    keywords, so the labels read back upper-cased whatever case they were sent in.
-
-    The added branch has nowhere to go, which is a normal state while building: it comes back under
-    `unwired_handles` and not as an error.
+    keywords, so the labels read back upper-cased whatever case they were sent in. The added branch
+    has nowhere to go, which comes back under `unwired_handles` rather than as an error.
     """
     response = client.patch(
         node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
@@ -188,9 +186,8 @@ def test_dropping_a_middle_keyword_moves_the_branches_below_it_up(client, chatbo
     keeps its target -- dropping `output_2` on position alone would have left CANCEL routing to
     RESCHEDULE's target instead.
 
-    RESCHEDULE's own edge goes with the branch, the way the builder's `deleteKeyword` drops it:
-    there is no edge endpoint an agent could use to clear up after itself, so it must not be left
-    behind as a stranded edge either.
+    RESCHEDULE's own edge goes with the branch, the way the UI builder's `deleteKeyword` drops it:
+    there is no edge endpoint an agent could use to clear up after itself.
     """
     client.patch(
         node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
@@ -232,9 +229,9 @@ def test_reordering_keywords_keeps_each_branch_on_its_own_target(client, chatbot
 
 @pytest.mark.django_db()
 def test_renaming_a_keyword_deletes_its_edge_rather_than_handing_it_over(client, chatbot, llm, router):
-    """A rename reads as one branch gone and another new, because nothing in the body says
-    otherwise. The old branch's edge goes with it and the new branch comes back unwired, rather than
-    quietly inheriting a target nobody chose for it."""
+    """A rename reads as one branch gone and another new, since nothing in the body says otherwise:
+    the old branch's edge goes with it and the new branch comes back unwired, rather than quietly
+    inheriting a target nobody chose for it."""
     scheduled, rescheduled = (add_llm_node(client, chatbot, llm) for _ in range(2))
     kept = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
     add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
@@ -248,8 +245,8 @@ def test_renaming_a_keyword_deletes_its_edge_rather_than_handing_it_over(client,
 
 @pytest.mark.django_db()
 def test_an_edge_already_stranded_before_the_edit_is_left_alone(client, chatbot, llm, router):
-    """Only the handles this edit removed are followed. An edge on a handle the node never offered
-    -- an import, or a builder session -- is still reported and still the agent's to deal with."""
+    """Only the handles this edit removed are followed. An edge on a handle the node never offered is
+    still reported and still the agent's to deal with."""
     start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
     add_edge(chatbot.pipeline, start, router)
     stranded = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_7")
@@ -301,8 +298,7 @@ def test_editing_a_plain_node_leaves_its_edge_alone(client, chatbot, llm_node):
     ],
 )
 def test_a_server_managed_node_cannot_be_edited(client, chatbot, node_type, body):
-    """Start and End are the server's, whichever half of the body names them -- carving out the
-    label would make it two rules instead of one.
+    """Start and End are the server's, whichever half of the body names them.
 
     409 rather than 404, and the same answer DELETE gives: the node is there and the address is
     right, so the refusal is about what the node is, not about where it was looked for."""
@@ -318,16 +314,14 @@ def test_a_server_managed_node_cannot_be_edited(client, chatbot, node_type, body
 
 
 # ---------------------------------------------------------------------------------------------
-# One test per served node type, each PATCHing every param that type declares.
+# One test per served node type, each PATCHing every param that type declares. Written out with the
+# whole body as a literal rather than parametrised over a table, so what was sent can be read at
+# the place it is sent.
 #
 # Every node starts from `type` alone, so it holds nothing but the type's defaults, and the PATCH
-# then names every param there is: the merge has to end up writing all of them, and the assertion
-# that the response reports exactly what was sent says both that it did and -- because a node holds
-# a value for every param its type declares -- that nothing was left out of the body.
-#
-# Written out one test per type, with the whole body as a literal, rather than parametrised over a
-# table: the point of these is that you can read what was sent to the endpoint at the place it is
-# sent, and a table would put the payloads somewhere else.
+# then names every param there is: asserting the response reports exactly what was sent says both
+# that the merge wrote all of them and -- because a node holds a value for every param its type
+# declares -- that nothing was left out of the body.
 # ---------------------------------------------------------------------------------------------
 
 #: The types covered below. Guarded by `test_every_served_type_is_patched_in_full`, which is what
@@ -401,8 +395,8 @@ def test_patch_a_render_template_node_with_every_param(client, chatbot):
 
 @pytest.mark.django_db()
 def test_patch_a_send_email_node_with_every_param(client, chatbot):
-    """`recipient_list` is stored as sent, spacing included: the model only checks the addresses
-    parse, since the field doubles as a Jinja template that is rendered at run time instead."""
+    """`recipient_list` is stored as sent, spacing included: the model only checks that the addresses
+    parse, since the field doubles as a Jinja template rendered at run time."""
     node_id = add_bare_node(client, chatbot, "SendEmail")
     payload = {
         "label": "Email the transcript",
@@ -453,8 +447,8 @@ def test_patch_an_extract_structured_data_node_with_every_param(client, chatbot,
 
 @pytest.mark.django_db()
 def test_patch_an_extract_participant_data_node_with_every_param(client, chatbot, llm):
-    """The same node as `ExtractStructuredData` plus `key_name`, which nests what it extracted under
-    that key in the participant's data instead of merging it in at the top level."""
+    """`ExtractStructuredData` plus `key_name`, which nests what it extracted under that key in the
+    participant's data instead of merging it in at the top level."""
     provider, model = llm
     node_id = add_bare_node(client, chatbot, "ExtractParticipantData")
     payload = {
@@ -482,10 +476,9 @@ def test_patch_an_extract_participant_data_node_with_every_param(client, chatbot
 
 @pytest.mark.django_db()
 def test_patch_a_router_node_with_every_param(client, chatbot, llm):
-    """`keywords` come back upper-cased -- the model does that on the way in, so the handles this
-    edit regenerates are upper-cased too. A router's prompt sees a narrower set of template
-    variables than an LLM node's: `participant_data`, `temp_state` and `session_state`, and nothing
-    resource-backed.
+    """`keywords` come back upper-cased -- the model does that on the way in, so the handles this edit
+    regenerates are too. A router's prompt sees a narrower set of template variables than an LLM
+    node's: `participant_data`, `temp_state`, `session_state`, and nothing resource-backed.
     """
     provider, model = llm
     node_id = add_bare_node(client, chatbot, "RouterNode")

@@ -282,20 +282,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # provider model); pydantic doesn't wrap it, so fold it into the report here.
             return {"root": str(e)}
         except DatabaseError:
-            # Never swallowed: inside an atomic block a caught database error leaves the
-            # transaction aborted, so reporting it as a node error would raise again on the next
-            # query with nothing to say about where it came from.
+            # Never swallowed: inside an atomic block a caught database error leaves the transaction
+            # aborted, so reporting it as a node error would raise again on the next query.
             raise
         except Exception:  # noqa: BLE001 - a broken node must not take the whole read down
-            # Anything a validator raises before pydantic can wrap it: a param whose value is the
-            # wrong Python type reaching a `mode="before"` validator or an FK assignment, say. This
-            # runs on every read of a pipeline, so an unparseable node has to be reportable —
-            # otherwise one bad row 500s /inspect/ and every write to that pipeline for good.
+            # Anything a validator raises before pydantic can wrap it — a wrong-typed param reaching
+            # a `mode="before"` validator, say. This runs on every read of a pipeline, so an
+            # unparseable node has to be reportable rather than 500 /inspect/ for good.
             #
-            # The exception goes to the log rather than into the report. Every other branch here
-            # reports a message written to be read by whoever sent the params; this one catches
-            # anything at all, so its message is as likely to expose how the server is put together
-            # as it is to say something useful, and the report is served over the API.
+            # Logged rather than reported: this branch catches anything at all, so the message is as
+            # likely to expose how the server is put together as to say something useful, and the
+            # report is served over the API.
             logger.exception("Node %s of pipeline %s could not be validated", node.flow_id, node.pipeline_id)
             return {"root": "This node could not be read. Check the values of its params."}
         return {}
@@ -624,9 +621,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def resource_param_names(cls) -> frozenset[str]:
         """The param names ``resource_params`` produces, whatever the node's type.
 
-        Every node's params carry all of these once ``to_flow_node`` has merged them in, including
-        the nodes whose type declares none of them — so a caller writing params back has to tell
-        the mirrored ids apart from the ones the node actually declared.
+        ``to_flow_node`` merges all of these into every node's params, its type declaring them or
+        not, so a caller writing params back has to tell the mirrored ids from the declared ones.
         """
         return frozenset({f"{field_name}_id" for field_name in cls.resource_fk_fields()} | {"collection_index_ids"})
 

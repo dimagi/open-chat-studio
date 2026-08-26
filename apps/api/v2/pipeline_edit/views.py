@@ -2,7 +2,7 @@
 
 A chatbot's pipeline is edited one node at a time rather than replaced wholesale: the server holds
 the graph and applies the change, so a client never has to reproduce a whole document to alter one
-setting, and two façade edits to different nodes cannot overwrite each other.
+setting, and two edits to different nodes cannot overwrite each other.
 """
 
 from drf_spectacular.types import OpenApiTypes
@@ -81,8 +81,8 @@ class PipelineNodeEditView(GenericAPIView):
 
     permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
-    # So that OPTIONS on the detail route describes its PATCH body: the editing verb here is PATCH,
-    # which stock DRF metadata leaves out entirely.
+    # So that OPTIONS on the detail route describes its PATCH body, which stock DRF metadata leaves
+    # out entirely.
     metadata_class = DescribesPatch
     # Only here so the generic view has a queryset; permissions are not derived from it.
     queryset = Pipeline.objects.none()
@@ -90,7 +90,7 @@ class PipelineNodeEditView(GenericAPIView):
     def get_serializer_class(self) -> type[serializers.Serializer]:
         """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
 
-        `DescribesPatch` calls this once per verb it describes via a `clone_request`, so OPTIONS
+        `DescribesPatch` calls this once per verb it describes, via a `clone_request`, so OPTIONS
         still resolves the right body for each.
         """
         return NodeCreateSerializer if self.request.method == "POST" else NodeUpdateSerializer
@@ -189,7 +189,7 @@ class PipelineNodeEditView(GenericAPIView):
                 request,
                 id,
                 # The node's type comes from the graph, so its params can only be checked under the
-                # lock -- the team is handed in so the check can look its references up there.
+                # lock; the team goes in so the check can look its references up there.
                 lambda flow: plan_update(flow, request.team, node_id, label, params),
                 self._write_response,
             )
@@ -217,8 +217,7 @@ class PipelineNodeEditView(GenericAPIView):
         },
     )
     def delete(self, request, id: str, node_id: str) -> Response:
-        # `plan_delete` names no node, so the response reports the pipeline alone: there is no node
-        # left to describe.
+        # `plan_delete` names no node, so the response reports the pipeline alone.
         return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._write_response))
 
     @staticmethod
