@@ -9,8 +9,6 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
-from apps.assistants.models import OpenAiAssistant
-from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import (
@@ -27,11 +25,6 @@ from apps.teams.utils import current_team
 from apps.web.forms import set_form_fields_disabled
 
 _ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
-
-
-def get_related_assistants(team):
-    related_assistants = OpenAiAssistant.objects.filter(team=team)
-    return [Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in related_assistants]
 
 
 def _team_files_export_context(team):
@@ -59,7 +52,6 @@ def _manage_team_context(request, team, *, team_form=None, public_key_form=None)
         "team_form": team_form or TeamChangeForm(instance=team),
         "invitation_form": InvitationForm(team=team),
         "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
-        "related_assistants": get_related_assistants(team),
         "notify_recipients_form": NotifyRecipientsForm,
         "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
         **_team_files_export_context(team),
