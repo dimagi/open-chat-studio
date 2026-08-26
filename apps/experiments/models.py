@@ -1745,22 +1745,12 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
-            OpenAiAssistant,
-        )
         from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            AssistantNode,
             LLMResponseWithPrompt,
             RouterNode,
         )
 
         if self.experiment.pipeline:
-            assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
-            results = OpenAiAssistant.objects.filter(
-                id__in=assistant_ids, instructions__contains="{participant_data}"
-            ).exists()
-            if results:
-                return True
             llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts

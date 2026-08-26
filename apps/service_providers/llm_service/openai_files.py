@@ -6,15 +6,13 @@ OpenAI Assistants API — they are ordinary Files API calls. The live consumer i
 Assistants feature, so they moved here ahead of that app's removal. See issue #4254.
 """
 
-import contextlib
 import logging
-import pathlib
 from io import BytesIO
 
 import openai
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from apps.files.models import File, FilePurpose
+from apps.files.models import File
 
 logger = logging.getLogger("ocs.openai_files")
 
@@ -49,22 +47,3 @@ def _openai_create_file_with_retries(client, filename, bytesio):
     # "assistants" is a Files API purpose value, not a dependency on the Assistants API. Whether
     # OpenAI keeps honouring it after the Assistants retirement is unverified — see issue #4254.
     return client.files.create(file=(filename, bytesio), purpose="assistants")
-
-
-def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
-    """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance.
-
-    This is used at runtime to pull down files the assistant generates during a run
-    (code-interpreter outputs, generated images), which are attached to the chat as
-    conversation media — hence MESSAGE_MEDIA rather than ASSISTANT (bot config).
-    """
-    file = client.files.retrieve(file_id)
-    filename = file.filename
-    with contextlib.suppress(Exception):
-        filename = pathlib.Path(file.filename).name
-
-    file_content_obj = client.files.content(file_id)
-
-    return File.from_external_source(
-        filename, file_content_obj, file_id, "openai", team_id, purpose=FilePurpose.MESSAGE_MEDIA
-    )
