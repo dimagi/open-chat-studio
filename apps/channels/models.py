@@ -14,7 +14,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.channels import widget_versions
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.teams.models import BaseTeamModel, Flag
 from apps.web.meta import absolute_url
 
@@ -387,11 +387,6 @@ class ExperimentChannel(BaseTeamModel):
 
     def end_live_sessions(self) -> int:
         """Mark every non-complete session on this channel COMPLETE. Returns how many."""
-        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models imports channels.models
-            ExperimentSession,
-            SessionStatus,
-        )
-
         ended = 0
         now = timezone.now()
         for session in ExperimentSession.objects.filter(experiment_channel=self).exclude(status=SessionStatus.COMPLETE):
