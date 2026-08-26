@@ -8,10 +8,15 @@
 # simpler single-server setups.
 
 x-app: &app
+  # Published images: `docker compose pull` fetches the version in OCS_VERSION
+  # (see https://github.com/dimagi/open-chat-studio/pkgs/container/open-chat-studio).
+  # Building from source instead: `docker compose build` tags the local build
+  # under this same name, so both paths work. Pin OCS_VERSION in .env rather
+  # than tracking `latest`, so an upgrade is a deliberate change.
   build:
     context: .
     dockerfile: Dockerfile
-  image: open-chat-studio:latest
+  image: ghcr.io/dimagi/open-chat-studio:${OCS_VERSION:-latest}
   restart: unless-stopped
   env_file:
     # .env is read first so .env.prod values (if present) win on conflicts.
