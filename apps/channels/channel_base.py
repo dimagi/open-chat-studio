@@ -14,8 +14,8 @@ from apps.channels.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantIdentifierStage,
     ParticipantResolverStage,
-    ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
     SessionActivationStage,
@@ -126,7 +126,7 @@ class ChannelBase(ABC):
         """
         return MessageProcessingPipeline(
             core_stages=[
-                ParticipantValidationStage(),
+                ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
                 # After the participant stages so the static reply is addressable and
@@ -304,7 +304,8 @@ class ChannelBase(ABC):
             terminal_stages=[
                 ResponseSendingStage(should_voice_fallback_to_text=self._should_voice_fallback_to_text),
                 SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
-                PersistenceStage(),
+                # No PersistenceStage -- ctx.bot_response is an unsaved placeholder, so tagging or
+                # attaching voice audio to it would fail. The caller writes the history row.
                 # No ActivityTrackingStage -- caller manages session activity
             ],
         )

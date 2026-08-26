@@ -581,7 +581,6 @@ def _full_bot():
         pipeline=pipeline,
         description="Customer support bot",
         seed_message="Welcome",
-        participant_allowlist=["+27123"],
         consent_form=consent,
         voice_provider=voice_provider,
         synthetic_voice=synthetic_voice,
@@ -802,7 +801,6 @@ def _expected_full_response(bot):
             "echo_transcript": True,
             "debug_mode_enabled": False,
             "file_uploads_enabled": False,
-            "participant_allowlist": ["+27123"],
         },
         "consent_form": {
             "id": bot.consent.id,

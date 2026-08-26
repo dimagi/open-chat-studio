@@ -11,7 +11,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -119,6 +119,34 @@ class TestTwilio:
 
         assert attachment_call_2.kwargs["body"] == file2.name
         assert attachment_call_2.kwargs["media_url"] == file2.download_link(session.id)
+
+    @pytest.mark.django_db()
+    @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
+    @patch("apps.service_providers.messaging_service.TwilioService.client")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
+    @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
+    def test_ad_hoc_voice_message_is_sent_without_persisting_voice_attachment(
+        self, synthesize_voice_mock, send_voice_message, twilio_client_mock, twilio_provider
+    ):
+        """An ad hoc bot message on a voice-always bot is delivered as voice. The mini-pipeline's
+        bot_response is an unsaved ChatMessage, so nothing may try to tag or attach files to it."""
+        synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
+        experiment = ExperimentFactory.create(
+            team=twilio_provider.team, voice_response_behaviour=VoiceResponseBehaviours.ALWAYS
+        )
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=twilio_provider,
+            experiment=experiment,
+            extra_data={"number": "123"},
+        )
+        session = ExperimentSessionFactory.create(experiment_channel=channel, experiment=experiment)
+        whatsapp_channel = WhatsappChannel(session.experiment, session.experiment_channel, session)
+
+        whatsapp_channel.send_message_to_user("Hi there")
+
+        send_voice_message.assert_called_once()
+        assert File.objects.filter(name="voice_note.ogg").count() == 0
 
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.TwilioService.client")

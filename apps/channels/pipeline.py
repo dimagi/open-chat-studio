@@ -59,7 +59,6 @@ class MessageProcessingContext:
     participant: Participant | None = None
     participant_data: ParticipantData | None = None
     participant_identifier: str | None = None
-    participant_allowed: bool = False
 
     user_query: str | None = None
     transcript: str | None = None

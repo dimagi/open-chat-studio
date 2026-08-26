@@ -18,7 +18,7 @@ from rest_framework import serializers
 
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
-from apps.experiments.helpers import excluded_voice_services, normalize_participant_allowlist
+from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import TraceProvider, VoiceProvider
@@ -125,15 +125,9 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
-            "participant_allowlist",
             "seed_message",
             "file_uploads_enabled",
         ]
-
-    def validate_participant_allowlist(self, value: list[str]) -> list[str]:
-        # Same normalisation the UI form applies, for the same reason: identifiers are matched
-        # exactly, so an unstripped one silently matches nothing.
-        return normalize_participant_allowlist(value)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
@@ -212,7 +206,6 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
-            "participant_allowlist",
             "seed_message",
             "file_uploads_enabled",
         ]
@@ -226,7 +219,6 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "echo_transcript",
             "debug_mode_enabled",
             "conversational_consent_enabled",
-            "participant_allowlist",
             "seed_message",
             "file_uploads_enabled",
         ]

@@ -170,20 +170,9 @@ class SessionAccessPermission(BasePermission):
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
-        # public / allowlist fallback is only reachable for NONE-level widget channels
-        # (and non-widget sessions, where level is None).
-        if level is not None and level != WidgetAuthLevel.NONE:
-            return False
-
-        experiment = session.experiment
-        if experiment.is_public:
-            return True
-
-        participant_id = session.participant.identifier
-        if not participant_id:
-            return False
-
-        return experiment.is_participant_allowed(participant_id)
+        # keyless fallback is only reachable for NONE-level widget channels (and non-widget
+        # sessions, where level is None).
+        return level is None or level == WidgetAuthLevel.NONE
 
     def _user_is_session_participant(self, user, session) -> bool:
         return user.is_authenticated and session.participant and session.participant.user_id == user.id
