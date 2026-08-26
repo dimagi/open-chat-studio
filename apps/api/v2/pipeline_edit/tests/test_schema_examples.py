@@ -1,0 +1,141 @@
+"""The documented request examples are real request bodies (#4140).
+
+``params`` is a free-form object in the schema, so these examples are the only place the API says
+what a body for a given node type looks like. That makes them documentation nothing would otherwise
+check: a param renamed on a node model, or a type added, leaves them quietly wrong, and the reader
+finds out by having their request refused.
+
+So they are held to the node schemas here, on all three counts that can go stale: every served type
+is covered, each example names exactly the params its type declares, and each is a body the endpoint
+accepts.
+"""
+
+import pytest
+
+from apps.api.v2.discovery.node_types import get_node_type_schema, get_node_types
+from apps.api.v2.pipeline_edit.examples import FULL_PARAMS, MINIMAL_CREATE, NOTES, create_examples, update_examples
+
+from .conftest import node_url, nodes_url
+
+SERVED_TYPES = [node_type["type"] for node_type in get_node_types()]
+
+#: The params whose example values are placeholder ids, so a test that actually sends one has to
+#: swap in ids the team holds. Not the same set as `contract.PARAMETER_OPTION_SOURCES`, which names option
+#: lists: `tools` and `custom_actions` are checked references too, but only `custom_actions` carries
+#: an id -- the tool names are a fixed vocabulary, so the example already uses real ones.
+PLACEHOLDER_ID_PARAMS = frozenset(
+    {
+        "llm_provider_id",
+        "llm_provider_model_id",
+        "source_material_id",
+        "collection_id",
+        "collection_index_ids",
+        "custom_actions",
+        "synthetic_voice_id",
+    }
+)
+
+
+def test_every_served_type_has_an_example():
+    assert set(FULL_PARAMS) == set(SERVED_TYPES)
+    assert set(NOTES) == set(SERVED_TYPES)
+
+
+@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+def test_an_example_names_exactly_the_params_its_type_declares(node_type):
+    """Both directions matter. A param the type does not declare is dropped on the way in, so an
+    example carrying one documents a key that does nothing; a param left out leaves the reader to
+    discover it from the JSON Schema, which is what the examples exist to save them from.
+    """
+    declared = set(get_node_type_schema(node_type)["schema"]["properties"])
+
+    assert set(FULL_PARAMS[node_type]) == declared
+
+
+@pytest.mark.parametrize("build", [create_examples, update_examples], ids=["create", "update"])
+def test_the_examples_are_request_only_and_named_after_their_type(build):
+    """drf-spectacular puts a `response_only` example under the response instead, where a request
+    body would read as something the endpoint returns.
+
+    A set, not a list: the examples are ordered simplest type first so the list reads as an
+    introduction, which is not the order the discovery endpoint serves them in.
+    """
+    examples = [example for example in build() if example.name != MINIMAL_CREATE.name]
+
+    assert {example.name for example in examples} == set(SERVED_TYPES)
+    assert all(example.request_only for example in build())
+
+
+def test_only_the_create_examples_carry_a_type():
+    """`type` is what POST needs and what PATCH refuses -- a node's type decides what its params
+    mean, so it is fixed once the node exists."""
+    assert all("type" in example.value for example in create_examples())
+    assert not any("type" in example.value for example in update_examples())
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+def test_a_documented_create_example_is_accepted(client, chatbot, node_type, reference_ids):
+    """The whole example, sent as documented bar the placeholder ids. Accepted *and* free of node
+    errors: a body that persists while reporting an error would be a poor thing to publish as the
+    example of how to build the type.
+    """
+    example = next(example for example in create_examples() if example.name == node_type)
+    body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
+
+    response = client.post(nodes_url(chatbot), body, format="json")
+
+    assert response.status_code == 201, response.content
+    assert response.json()["pipeline_errors"]["node"] == {}
+
+
+@pytest.mark.django_db()
+def test_the_minimal_create_example_is_accepted(client, chatbot):
+    response = client.post(nodes_url(chatbot), MINIMAL_CREATE.value, format="json")
+
+    assert response.status_code == 201, response.content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
+def test_a_documented_update_example_is_accepted(client, chatbot, node_type, reference_ids):
+    """PATCHed onto a node created from its type alone, which is the state the minimal create
+    example leaves one in -- so this is the second half of the loop the two examples describe."""
+    created = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
+    assert created.status_code == 201, created.content
+    example = next(example for example in update_examples() if example.name == node_type)
+    body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
+
+    response = client.patch(node_url(chatbot, created.json()["node"]["node_id"]), body, format="json")
+
+    assert response.status_code == 200, response.content
+    assert response.json()["pipeline_errors"]["node"] == {}
+
+
+@pytest.fixture()
+def reference_ids(llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice):
+    """Real ids for the params whose example values are placeholders, keyed by param name."""
+    provider, model = llm
+    support_kb, billing_kb = collection_indexes
+    return {
+        "llm_provider_id": provider.id,
+        "llm_provider_model_id": model.id,
+        "source_material_id": source_material.id,
+        "collection_id": media_collection.id,
+        "collection_index_ids": [support_kb.id, billing_kb.id],
+        "custom_actions": [f"{custom_action.id}:weather_get"],
+        "synthetic_voice_id": synthetic_voice.id,
+    }
+
+
+def _with_real_ids(params: dict, reference_ids: dict) -> dict:
+    """``params`` with each placeholder id replaced by one the team holds, and nothing else touched.
+
+    The assertion holds the list of params needing a substitute and the fixture supplying them to
+    each other, so neither can gain an entry without the other. It says nothing about ``params``: a
+    reference param added to a node type and to neither of those goes unsubstituted, and fails as a
+    400 in whichever example test sends it.
+    """
+    unknown = PLACEHOLDER_ID_PARAMS.symmetric_difference(reference_ids)
+    assert not unknown, f"no id to substitute for {sorted(unknown)}"
+    return {name: reference_ids.get(name, value) for name, value in params.items()}

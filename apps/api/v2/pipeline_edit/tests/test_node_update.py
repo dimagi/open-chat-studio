@@ -2,11 +2,12 @@
 
 import pytest
 
+from apps.api.v2.discovery.node_types import get_node_types
 from apps.pipelines.models import Node
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
-from .conftest import add_edge, node_url, nodes_url, outgoing_handles
+from .conftest import add_edge, node_url, nodes_url, outgoing_handles, stored_node_params
 
 
 def add_llm_node(client, chatbot, llm) -> str:
@@ -314,3 +315,300 @@ def test_a_server_managed_node_cannot_be_edited(client, chatbot, node_type, body
     assert "cannot be edited or deleted" in response.json()["detail"]
     after = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
     assert (after.label, after.params) == (before.label, before.params)
+
+
+# ---------------------------------------------------------------------------------------------
+# One test per served node type, each PATCHing every param that type declares.
+#
+# Every node starts from `type` alone, so it holds nothing but the type's defaults, and the PATCH
+# then names every param there is: the merge has to end up writing all of them, and the assertion
+# that the response reports exactly what was sent says both that it did and -- because a node holds
+# a value for every param its type declares -- that nothing was left out of the body.
+#
+# Written out one test per type, with the whole body as a literal, rather than parametrised over a
+# table: the point of these is that you can read what was sent to the endpoint at the place it is
+# sent, and a table would put the payloads somewhere else.
+# ---------------------------------------------------------------------------------------------
+
+#: The types covered below. Guarded by `test_every_served_type_is_patched_in_full`, which is what
+#: fails when a new node type is served and nothing here PATCHes it a full body.
+FULL_PAYLOAD_TYPES = {
+    "CodeNode",
+    "ExtractParticipantData",
+    "ExtractStructuredData",
+    "LLMResponseWithPrompt",
+    "RenderTemplate",
+    "RouterNode",
+    "SendEmail",
+    "StaticRouterNode",
+}
+
+
+def test_every_served_type_is_patched_in_full():
+    assert {node_type["type"] for node_type in get_node_types()} == FULL_PAYLOAD_TYPES
+
+
+def add_bare_node(client, chatbot, node_type: str) -> str:
+    """A node created from its type alone, so a PATCH of it has only defaults to overwrite."""
+    response = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
+    assert response.status_code == 201, response.content
+    return response.json()["node"]["node_id"]
+
+
+@pytest.mark.django_db()
+def test_patch_a_code_node_with_every_param(client, chatbot):
+    node_id = add_bare_node(client, chatbot, "CodeNode")
+    payload = {
+        "label": "Trim the answer",
+        "params": {
+            "name": "trim_answer",
+            "code": "def main(input: str, **kwargs) -> str:\n    return input.strip()\n",
+            "tag": "trimmed",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Trim the answer"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()
+
+
+@pytest.mark.django_db()
+def test_patch_a_render_template_node_with_every_param(client, chatbot):
+    node_id = add_bare_node(client, chatbot, "RenderTemplate")
+    payload = {
+        "label": "Format the reply",
+        "params": {
+            "name": "format_reply",
+            "template_string": "Hi {{ participant_data.name }} -- {{ input }}",
+            "tag": "formatted",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Format the reply"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()
+
+
+@pytest.mark.django_db()
+def test_patch_a_send_email_node_with_every_param(client, chatbot):
+    """`recipient_list` is stored as sent, spacing included: the model only checks the addresses
+    parse, since the field doubles as a Jinja template that is rendered at run time instead."""
+    node_id = add_bare_node(client, chatbot, "SendEmail")
+    payload = {
+        "label": "Email the transcript",
+        "params": {
+            "name": "email_transcript",
+            "recipient_list": "support@example.test, escalations@example.test",
+            "subject": "Transcript for {{ participant_details.identifier }}",
+            "body": "{{ input }}",
+            "tag": "emailed",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Email the transcript"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()
+
+
+@pytest.mark.django_db()
+def test_patch_an_extract_structured_data_node_with_every_param(client, chatbot, llm):
+    provider, model = llm
+    node_id = add_bare_node(client, chatbot, "ExtractStructuredData")
+    payload = {
+        "label": "Pull out the order",
+        "params": {
+            "name": "extract_order",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "llm_model_parameters": {"temperature": 0.2},
+            "data_schema": '{"order_number": "the order the participant is asking about"}',
+            "tag": "extracted",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Pull out the order"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()
+
+
+@pytest.mark.django_db()
+def test_patch_an_extract_participant_data_node_with_every_param(client, chatbot, llm):
+    """The same node as `ExtractStructuredData` plus `key_name`, which nests what it extracted under
+    that key in the participant's data instead of merging it in at the top level."""
+    provider, model = llm
+    node_id = add_bare_node(client, chatbot, "ExtractParticipantData")
+    payload = {
+        "label": "Remember the order",
+        "params": {
+            "name": "remember_order",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "llm_model_parameters": {"temperature": 0.2},
+            "data_schema": '{"order_number": "the order the participant is asking about"}',
+            "key_name": "orders",
+            "tag": "remembered",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Remember the order"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()
+
+
+@pytest.mark.django_db()
+def test_patch_a_router_node_with_every_param(client, chatbot, llm):
+    """`keywords` come back upper-cased -- the model does that on the way in, so the handles this
+    edit regenerates are upper-cased too. A router's prompt sees a narrower set of template
+    variables than an LLM node's: `participant_data`, `temp_state` and `session_state`, and nothing
+    resource-backed.
+    """
+    provider, model = llm
+    node_id = add_bare_node(client, chatbot, "RouterNode")
+    payload = {
+        "label": "Triage the request",
+        "params": {
+            "name": "triage",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "llm_model_parameters": {"temperature": 0.0},
+            "prompt": "Route on what {participant_data} is asking for.",
+            "keywords": ["schedule", "reschedule", "cancel"],
+            "default_keyword_index": 2,
+            "tag_output_message": True,
+            "history_type": "named",
+            "history_name": "triage-history",
+            "history_mode": "max_history_length",
+            "user_max_token_limit": 4000,
+            "max_history_length": 25,
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Triage the request"
+    assert body["node"]["params"] == {**payload["params"], "keywords": ["SCHEDULE", "RESCHEDULE", "CANCEL"]}
+    assert body["node"]["output_handles"] == [
+        {"handle": "output_0", "label": "SCHEDULE"},
+        {"handle": "output_1", "label": "RESCHEDULE"},
+        {"handle": "output_2", "label": "CANCEL"},
+    ]
+    assert body["pipeline_errors"]["node"] == {}
+
+
+@pytest.mark.django_db()
+def test_patch_a_static_router_node_with_every_param(client, chatbot):
+    """Routes on a key in stored data rather than by asking a model, so it takes no LLM params --
+    `data_source` says which of the three data bags to read and `route_key` which key in it."""
+    node_id = add_bare_node(client, chatbot, "StaticRouterNode")
+    payload = {
+        "label": "Route on the plan",
+        "params": {
+            "name": "route_on_plan",
+            "keywords": ["free", "pro"],
+            "default_keyword_index": 0,
+            "tag_output_message": True,
+            "data_source": "session_state",
+            "route_key": "plan",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Route on the plan"
+    assert body["node"]["params"] == {**payload["params"], "keywords": ["FREE", "PRO"]}
+    assert body["node"]["output_handles"] == [
+        {"handle": "output_0", "label": "FREE"},
+        {"handle": "output_1", "label": "PRO"},
+    ]
+    assert body["pipeline_errors"]["node"] == {}
+
+
+@pytest.mark.django_db()
+def test_patch_an_llm_node_with_every_param(
+    client, chatbot, llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice
+):
+    """The type with the most to say, and the only one whose params constrain each other: a resource
+    param and its prompt variable each require the other, so `source_material_id` obliges the prompt
+    to use `{source_material}`, `collection_id` obliges `{media}`, more than one index obliges
+    `{collection_index_summaries}`, and a tool obliges whatever it needs -- `{participant_data}` for
+    `update-user-data`, `{current_datetime}` for `one-off-reminder`.
+
+    All in one PATCH, which is the only way this node can reach that state: sending the resource and
+    the prompt that names it in separate calls would have each of them refused on its own.
+    """
+    provider, model = llm
+    support_kb, billing_kb = collection_indexes
+    node_id = add_bare_node(client, chatbot, "LLMResponseWithPrompt")
+    payload = {
+        "label": "Answer the question",
+        "params": {
+            "name": "answer",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "llm_model_parameters": {"temperature": 0.4},
+            "prompt": (
+                "You are a support agent. Answer from {source_material}, the files in {media} and "
+                "whichever of {collection_index_summaries} fits. You are talking to "
+                "{participant_data} and it is now {current_datetime}."
+            ),
+            "history_type": "named",
+            "history_name": "support-history",
+            "history_mode": "summarize",
+            "user_max_token_limit": 8000,
+            "max_history_length": 30,
+            "source_material_id": source_material.id,
+            "collection_id": media_collection.id,
+            "collection_index_ids": [support_kb.id, billing_kb.id],
+            "max_results": 5,
+            "generate_citations": False,
+            "tools": ["update-user-data", "one-off-reminder", "calculator"],
+            "custom_actions": [f"{custom_action.id}:weather_get"],
+            "built_in_tools": ["web-search", "code-execution"],
+            "tool_config": {
+                "web-search": {
+                    "allowed_domains": ["docs.example.test"],
+                    "blocked_domains": ["forum.example.test"],
+                }
+            },
+            "synthetic_voice_id": synthetic_voice.id,
+            "tag": "answered",
+        },
+    }
+
+    response = client.patch(node_url(chatbot, node_id), payload, format="json")
+
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["node"]["label"] == "Answer the question"
+    assert body["node"]["params"] == payload["params"]
+    assert body["pipeline_errors"]["node"] == {}
+    assert stored_node_params(chatbot, node_id).items() >= payload["params"].items()

@@ -12,6 +12,17 @@ from apps.pipelines.models import Node
 
 from .graph_editor import settable_params
 
+#: Where a param's name comes from, which is the one thing a free-form ``params`` object cannot say
+#: for itself. Spelled out on both write bodies, since a client reads one or the other.
+PARAM_NAMES = (
+    "Param names are the node type's own, as published by "
+    "`GET /api/v2/pipeline/nodes/{node_type}/`. They are not always the name of the "
+    "`/pipeline/options/` list a param draws its values from -- `source_material_id` is the param, "
+    "`source_material` is the list it chooses from -- so send the param name. A name the type does "
+    "not declare is dropped rather than refused, and the response reports the params the node "
+    "actually ended up holding."
+)
+
 #: Keys a client might reasonably try to set that the server owns, and why it does (W5). Called out
 #: by name because the generic "unrecognised field" answer reads as a typo rather than as a rule.
 SERVER_ASSIGNED_KEYS = {
@@ -48,8 +59,8 @@ class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
         required=False,
         default=dict,
         help_text=(
-            "The node's configuration, under the flat names its type declares. Anything omitted "
-            "takes the type's default."
+            "The node's configuration. Anything omitted takes the type's default, so `type` alone "
+            "is a valid body. " + PARAM_NAMES
         ),
     )
 
@@ -95,7 +106,7 @@ class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     params = serializers.DictField(
         required=False,
         default=dict,
-        help_text="The params to change, under the flat names the node's type declares. Others are left as they are.",
+        help_text="The params to change; the ones you leave out are left as they are. " + PARAM_NAMES,
     )
 
 
