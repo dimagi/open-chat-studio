@@ -19,12 +19,7 @@ from langchain_core.runnables import (
 )
 from pydantic import ConfigDict
 
-from apps.assistants.sync import (
-    _openai_create_file_with_retries,
-    convert_to_openai_tool,
-    create_files_remote,
-    get_and_store_openai_file,
-)
+from apps.assistants.sync import convert_to_openai_tool
 from apps.chat.agent.openapi_tool import ToolArtifact
 from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import Experiment
@@ -33,6 +28,11 @@ from apps.service_providers.llm_service.adapters import AssistantAdapter
 from apps.service_providers.llm_service.history_managers import (
     AssistantPipelineHistoryManager,
     ExperimentHistoryManager,
+)
+from apps.service_providers.llm_service.openai_files import (
+    _openai_create_file_with_retries,
+    create_files_remote,
+    get_and_store_openai_file,
 )
 from apps.service_providers.llm_service.parsers import custom_parse_ai_message
 
