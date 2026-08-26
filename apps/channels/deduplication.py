@@ -57,3 +57,23 @@ def is_duplicate_delivery(external_ids: list[str], team_id: int) -> bool:
 
 def connect_external_ids(messages: list[dict]) -> list[str]:
     return [namespaced_id("connect", message["message_id"]) for message in messages]
+
+
+def unseen_connect_messages(messages: list[dict], team_id: int) -> list[dict]:
+    """The messages in a Connect batch that have not been delivered before.
+
+    Connect is the one channel that filters raw dicts before anything is parsed, because a batch of
+    N provider messages becomes a single `ChatMessage`: a partly replayed batch is not a duplicate
+    as a whole, so `DuplicateDeliveryStage` would let it through, and by the time the pipeline runs
+    the batch has been joined into one `message_text` it could not drop part of anyway.
+    """
+    unseen = unseen_message_ids(connect_external_ids(messages), team_id)
+    fresh = []
+    for message in messages:
+        external_id = namespaced_id("connect", message["message_id"])
+        if external_id in unseen:
+            # Discarding as we go also collapses an id repeated *within* one batch: it has no
+            # recorded delivery yet, so `unseen` alone would let both copies through.
+            unseen.discard(external_id)
+            fresh.append(message)
+    return fresh

@@ -21,6 +21,7 @@ from apps.channels.datamodels import (
     WhatsAppMessage,
 )
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
+from apps.channels.deduplication import connect_external_ids
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.facebook_channel import FacebookMessengerChannel
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
@@ -198,7 +199,11 @@ def handle_commcare_connect_message(self, experiment_id: int, participant_data_i
     # If the user sent multiple messages, we should append it together instead of the bot replying to each one
     user_message = "\n\n".join(decrypted_messages)
 
-    message = BaseMessage(participant_id=participant_data.participant.identifier, message_text=user_message)
+    message = BaseMessage(
+        participant_id=participant_data.participant.identifier,
+        message_text=user_message,
+        external_ids=connect_external_ids(messages),
+    )
     channel = CommCareConnectChannel(
         experiment=resolve_published_or_working(experiment_channel.experiment), experiment_channel=experiment_channel
     )

@@ -31,6 +31,7 @@ from rest_framework.views import APIView
 from apps.api.permissions import verify_hmac
 from apps.channels import meta_webhook, tasks, turn_webhook
 from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
+from apps.channels.deduplication import unseen_connect_messages
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -352,11 +353,18 @@ def new_connect_message(request: HttpRequest):
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
+    messages = unseen_connect_messages(serializer.data["messages"], channel.team_id)
+    dropped = len(serializer.data["messages"]) - len(messages)
+    if dropped:
+        log.info("Dropped %s duplicate CommCare Connect message(s) on channel %s", dropped, connect_channel_id)
+    if not messages:
+        return HttpResponse()
+
     count_channel_delivery(request, channel)
     tasks.handle_commcare_connect_message.delay(
         experiment_id=participant_data.experiment_id,
         participant_data_id=participant_data.id,
-        messages=serializer.data["messages"],
+        messages=messages,
     )
     return HttpResponse()
 
