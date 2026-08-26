@@ -29,7 +29,7 @@ The DAG of nodes that defines a Chatbot's runtime behaviour, edited in a visual 
 An immutable snapshot of a Pipeline. Each Chatbot Version owns exactly one Pipeline Version (snapshot-paired, 1:1). A Pipeline Version is **not** independently published — there is no Published Pipeline Version concept. Whichever Pipeline Version is paired with the Published Chatbot Version is the one external Channels execute.
 
 **Pipeline Node**:
-A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Assistant, Router, Custom Action, …) that determines its behaviour, plus a `params` JSON blob configured via the visual editor. Nodes are independently versioned alongside their Pipeline.
+A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Router, Custom Action, …) that determines its behaviour, plus a `params` JSON blob configured via the visual editor. Nodes are independently versioned alongside their Pipeline.
 
 **Version Selection Rule**:
 The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
@@ -113,8 +113,8 @@ A specific model offering a **Provider** can serve — e.g. `gpt-4o`, `claude-op
 Distinct from the **LLM Provider**: a Provider is the credentialed account, a Model is a catalogue entry. They are **independent rows joined by provider `type`, not a foreign key**, and a Pipeline Node selects *both* — a Provider and a Model. May be Team-scoped or a global (Team-less) catalogue row. The same Provider/Model split applies to embeddings (an **Embedding Provider Model** paired with a Provider).
 _Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosing both.
 
-**OpenAI Assistant**:
-A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. Pipelines invoke one via an `AssistantNode`.
+**OpenAI Assistant** _(removed)_:
+A Team-scoped wrapper around a resource in OpenAI's Assistants API, invoked from a pipeline via an `AssistantNode`. OpenAI retired that API on 26 August 2026 and the feature was removed in #4254; only the `OpenAiAssistant`/`ToolResources` models and their Django admin survive, pending a phase-2 data drop. A pipeline still holding an `AssistantNode` renders it as a **Removed Node** and cannot be built.
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
@@ -167,9 +167,9 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - A **Channel** stores an FK to a Chatbot's family head; at message-receipt time it routes to that Chatbot's **Published Version**, and the resulting Session is bound to that version. The web widget and API can override with an explicit version number, which is how teams "chat with the Working Version" for testing.
 - A **Participant** belongs to one **Team** and one platform; the same human across two platforms is two **Participants**.
 - An **Evaluation Run** generates outputs against one **Chatbot Version**, resolved from its **Evaluation Config** at run time and pinned on the Run. Same machinery as Channel routing — Working vs Published is decided per-Config.
-- A **Pipeline Node** of type `AssistantNode` references one **OpenAI Assistant**; pipelines also reference **Custom Action Operations** to make outbound HTTP calls.
+- A **Pipeline** references **Custom Action Operations** to make outbound HTTP calls.
 - **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
-- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **OpenAI Assistants**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
+- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
 
 ## Example dialogue
 
