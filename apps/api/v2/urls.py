@@ -37,7 +37,7 @@ urlpatterns = [
     ),
     path(
         "chatbots/<str:id>/pipeline/nodes/<str:node_id>/",
-        PipelineNodeEditView.as_view(http_method_names=["patch", "options"]),
+        PipelineNodeEditView.as_view(http_method_names=["patch", "delete", "options"]),
         name="pipeline-node-update",
     ),
     path("", include(router.urls)),

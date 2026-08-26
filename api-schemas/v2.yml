@@ -281,6 +281,54 @@ paths:
         '409':
           description: The node is part of the pipeline's structure (the Start or
             End node) and cannot be edited or deleted through the API.
+    delete:
+      operationId: pipeline_node_delete
+      description: |-
+        Remove a node from the chatbot's working (draft) pipeline, along with every edge that referenced it — you do not have to unwire it first.
+
+        The hole this leaves is reported rather than refused: unsplicing a node usually breaks the path to the End node, which comes back in `pipeline_errors` for you to repair.
+
+        The Start and End nodes cannot be removed — nor edited. They are part of the pipeline's structure and cannot be added back through the API.
+      summary: Remove a Pipeline Node
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: node_id
+        schema:
+          type: string
+        description: The node's server-assigned id, as returned by a write or by GET
+          /api/v2/chatbots/{id}/inspect/.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineWrite'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot or node.
+        '409':
+          description: The node is part of the pipeline's structure and cannot be
+            deleted.
   /api/v2/me/:
     get:
       operationId: me
@@ -2583,6 +2631,33 @@ components:
           - $ref: '#/components/schemas/DefaultLlmProvider'
           description: A provider/model pair that already satisfies the `must_match`
             rule.
+    PipelineWrite:
+      type: object
+      description: |-
+        What every façade write reports back about the pipeline it just changed.
+
+        The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
+        read and write.
+      properties:
+        pipeline_valid:
+          type: boolean
+          description: 'Whether the pipeline validates cleanly: all three error buckets
+            empty, and nothing more.'
+        pipeline_errors:
+          $ref: '#/components/schemas/PipelineBuildErrors'
+        unwired_handles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InspectOutputHandle'
+          description: 'Advisory ''what still needs wiring'' map, keyed by ``node_id``:
+            every output handle with no outgoing edge and every implicit ``input``
+            handle with no incoming edge. Never an error and never blocks a publish.'
+      required:
+      - pipeline_errors
+      - pipeline_valid
+      - unwired_handles
     PlatformEnum:
       enum:
       - telegram

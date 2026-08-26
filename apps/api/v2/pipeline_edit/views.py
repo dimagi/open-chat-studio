@@ -20,12 +20,13 @@ from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
-from .graph_editor import plan_create, plan_update
+from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
 from .serializers import (
     NodeCreateSerializer,
     NodeUpdateSerializer,
     NodeWriteSerializer,
+    PipelineWriteSerializer,
     WrittenNodeSerializer,
 )
 
@@ -65,13 +66,13 @@ SERVER_MANAGED = OpenApiResponse(
 
 
 class PipelineNodeEditView(GenericAPIView):
-    """The façade's node endpoints: add a node, edit one.
+    """The façade's node endpoints: add a node, edit one, remove one.
 
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers --
     otherwise a PATCH to the collection route would reach ``patch`` with no ``node_id`` and raise
     instead of answering 405.
 
-    Editing a chatbot's composition is a *change* to the chatbot whatever the verb, so the stock
+    Deleting a node is a *change* to the chatbot, not a deletion of it, so the stock
     ``DjangoModelPermissions`` verb map is replaced rather than extended.
     """
 
@@ -172,6 +173,31 @@ class PipelineNodeEditView(GenericAPIView):
         return Response(
             edit_pipeline(request, id, lambda flow: plan_update(flow, node_id, label, params), self._write_response)
         )
+
+    @extend_schema(
+        operation_id="pipeline_node_delete",
+        summary="Remove a Pipeline Node",
+        description=(
+            "Remove a node from the chatbot's working (draft) pipeline, along with every edge that "
+            "referenced it — you do not have to unwire it first.\n\n"
+            "The hole this leaves is reported rather than refused: unsplicing a node usually breaks "
+            "the path to the End node, which comes back in `pipeline_errors` for you to repair.\n\n"
+            "The Start and End nodes cannot be removed — nor edited. They are part of the "
+            "pipeline's structure and cannot be added back through the API."
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID, NODE_ID],
+        request=None,
+        responses={
+            200: PipelineWriteSerializer,
+            403: FORBIDDEN,
+            404: OpenApiResponse(description="No such chatbot or node."),
+            409: OpenApiResponse(description="The node is part of the pipeline's structure and cannot be deleted."),
+        },
+    )
+    def delete(self, request, id: str, node_id: str) -> Response:
+        # `plan_delete` names no node, so the response reports the pipeline alone.
+        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._write_response))
 
     @staticmethod
     def _write_response(pipeline: Pipeline, node_id: str | None) -> dict:

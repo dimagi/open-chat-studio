@@ -98,6 +98,19 @@ def plan_update(flow: dict, node_id: str, label: str | None, params: dict[str, A
     return PipelineEdit(diff=_diff(NodeDiff(update=[node])), node_id=node_id)
 
 
+def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
+    """Remove a node, and with it every edge that named it.
+
+    The edges go because the patch engine culls them: an edge pointing at a node that no longer
+    exists breaks cycle detection and reachability outright. Start and End are refused rather than
+    removed -- POST will not create them, so removing one would leave a chatbot only the UI builder
+    could repair.
+    """
+    _node, content = find_node(flow, node_id)
+    refuse_if_server_managed(content.type)
+    return PipelineEdit(diff=_diff(NodeDiff(delete=[node_id])))
+
+
 def refuse_if_server_managed(node_type: str) -> None:
     """Refuse to touch a node the server owns — Start and End, the two the API will not create.
 
