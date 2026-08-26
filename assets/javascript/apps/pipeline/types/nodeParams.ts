@@ -34,6 +34,7 @@ export type JsonSchema = {
   "ui:can_add": boolean;
   "ui:can_delete": boolean;
   "ui:deprecated": boolean;
+  "ui:removed"?: boolean;
   "ui:deprecation_message"?: string;
   "ui:documentation_link"?: string;
   "ui:order"?: string[];

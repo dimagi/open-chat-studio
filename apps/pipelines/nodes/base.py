@@ -565,6 +565,8 @@ class NodeSchema(BaseModel):
     can_add: bool | None = None
     deprecated: bool = False
     deprecation_message: str | None = None
+    removed: bool = False
+    """The node class is gone; this schema is a stub so stored nodes of the type still render."""
     documentation_link: str | None = None
     field_order: list[str] | None = Field(
         None,
@@ -583,7 +585,7 @@ class NodeSchema(BaseModel):
         if self.can_add is None:
             self.can_add = is_pipeline_node
 
-        if self.deprecated:
+        if self.deprecated or self.removed:
             self.can_add = False
         return self
 
@@ -593,6 +595,7 @@ class NodeSchema(BaseModel):
         schema["ui:can_delete"] = self.can_delete
         schema["ui:can_add"] = self.can_add
         schema["ui:deprecated"] = self.deprecated
+        schema["ui:removed"] = self.removed
         if self.deprecated and self.deprecation_message:
             schema["ui:deprecation_message"] = self.deprecation_message
         if self.field_order:

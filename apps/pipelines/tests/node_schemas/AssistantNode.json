@@ -1,0 +1,14 @@
+{
+  "title": "AssistantNode",
+  "type": "object",
+  "description": "OpenAI retired the Assistants API on 26 August 2026. Delete this node and use an LLM node instead.",
+  "properties": {},
+  "ui:label": "Removed Node",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:can_delete": true,
+  "ui:can_add": false,
+  "ui:deprecated": true,
+  "ui:removed": true,
+  "ui:deprecation_message": "OpenAI retired the Assistants API on 26 August 2026. Delete this node and use an LLM node instead.",
+  "ui:icon": "fa-solid fa-circle-xmark"
+}

@@ -16,7 +16,7 @@ from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
-from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.nodes.base import NodeSchema, OptionsSource
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.teams.models import Team
 from apps.utils.prompt import PromptVars
@@ -238,6 +238,19 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
     }
 
 
+# Node types whose class has been removed, mapped to the message shown on the stored node.
+#
+# Pipelines still holding one have to open in the editor, so the builder is served a stub schema
+# for the type. The stub is built here rather than from a node class, which is the point:
+# resolve_node_class still returns None, so Pipeline.validate keeps reporting "Unknown node type"
+# and the pipeline cannot build. See issue #4254.
+REMOVED_NODE_TYPES = {
+    "AssistantNode": (
+        "OpenAI retired the Assistants API on 26 August 2026. Delete this node and use an LLM node instead."
+    ),
+}
+
+
 def get_node_schemas() -> list[dict]:
     schemas = []
 
@@ -250,7 +263,32 @@ def get_node_schemas() -> list[dict]:
     for node_class in node_classes:
         schemas.append(_get_node_schema(node_class))
 
+    schemas.extend(_removed_node_schema(node_type, message) for node_type, message in REMOVED_NODE_TYPES.items())
+
     return schemas
+
+
+def _removed_node_schema(node_type: str, message: str) -> dict:
+    """A stub schema for a node type with no class behind it.
+
+    Shaped like a real node schema so the builder needs no special case: the title matches the
+    stored ``Node.type``, there are no editable params, and it carries the same ``ui:*`` keys
+    every node has.
+    """
+    schema: dict = {
+        "title": node_type,
+        "type": "object",
+        "description": message,
+        "properties": {},
+    }
+    NodeSchema(
+        label="Removed Node",
+        icon="fa-solid fa-circle-xmark",
+        removed=True,
+        deprecated=True,
+        deprecation_message=message,
+    )(schema)
+    return schema
 
 
 def _get_node_schema(node_class: type) -> dict:

@@ -175,6 +175,9 @@ function NodeHeader({
         </div>
         <div className="px-10 m-1 text-lg font-bold text-center align-middle">
           <DeprecationNotice nodeSchema={nodeSchema}/>
+          {nodeSchema["ui:removed"] && (
+            <span className="badge badge-warning badge-sm mr-2 align-middle">Removed</span>
+          )}
           {header}
           <p className="text-xs font-light text-gray-500 dark:text-gray-600">{nodeId}</p>
         </div>
@@ -196,7 +199,11 @@ function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
         tabIndex={0}
         className="dropdown-content card card-sm bg-base-100 z-1 w-64 shadow-md">
         <div className="card-body">
-          <p>This node type has been deprecated and will be removed in future.</p>
+          <p>
+            {nodeSchema["ui:removed"]
+              ? "This node type has been removed. The node no longer runs and the pipeline cannot be saved until it is deleted."
+              : "This node type has been deprecated and will be removed in future."}
+          </p>
           {customMessage && <p dangerouslySetInnerHTML={{__html: customMessage}}></p>}
         </div>
       </div>

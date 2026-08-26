@@ -32,5 +32,6 @@
   "ui:documentation_link": "/concepts/pipelines/nodes/#python-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-file-code",
-  "ui:label": "Python Node"
+  "ui:label": "Python Node",
+  "ui:removed": false
 }
