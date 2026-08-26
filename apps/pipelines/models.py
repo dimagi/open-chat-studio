@@ -61,11 +61,6 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 
         return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
 
-    def assistant_nodes(self):
-        from apps.pipelines.nodes.nodes import AssistantNode  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        return self.get_queryset().filter(type=AssistantNode.__name__)
-
 
 class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)

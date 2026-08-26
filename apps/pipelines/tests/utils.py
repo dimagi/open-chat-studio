@@ -238,21 +238,6 @@ def state_key_router_node(
     )
 
 
-def assistant_node(assistant_id: str, name: str | None = None):
-    return _with_node_id_and_name(
-        name,
-        "assistant",
-        {
-            "type": nodes.AssistantNode.__name__,
-            "params": {
-                "assistant_id": assistant_id,
-                "citations_enabled": True,
-                "input_formatter": "",
-            },
-        },
-    )
-
-
 def extract_participant_data_node(
     provider_id: str, provider_model_id: str, data_schema: str, key_name: str, name: str | None = None
 ):

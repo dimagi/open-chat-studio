@@ -476,7 +476,6 @@ class OptionsSource(StrEnum):
     llm_provider_id = "llm_provider_id"
     llm_provider_model_id = "llm_provider_model_id"
     source_material = "source_material"
-    assistant = "assistant"
     tools = "tools"
     custom_actions = "custom_actions"
     collection = "collection"
