@@ -58,7 +58,7 @@ class Command(IdempotentCommand):
             return
 
         # Build affected resources per model per team
-        affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set, "assistants": set}}}
+        affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set}}}
 
         for db_model, _replacement_name, _replacement_model in models_to_delete:
             affected_by_model[db_model.id] = get_affected_teams_data(db_model)
@@ -76,7 +76,6 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"    Team: {team.name}")
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
-                    self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
                     self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
@@ -105,7 +104,6 @@ class Command(IdempotentCommand):
                     affected=AffectedResources(
                         chatbots=data["chatbots"],
                         pipelines=data["pipelines"],
-                        assistants=data["assistants"],
                         evaluators=data["evaluators"],
                     ),
                 )
@@ -117,7 +115,7 @@ class Command(IdempotentCommand):
         """Move every reference to ``db_model`` onto ``replacement_model`` (or clear it) before delete."""
         new_value = replacement_model.id if replacement_model else None
 
-        # Update FK references (assistants, analyses, evaluators, etc.) to replacement, or let
+        # Update FK references (analyses, evaluators, etc.) to replacement, or let
         # cascade handle them
         if replacement_model:
             for obj in get_related_objects(db_model):
