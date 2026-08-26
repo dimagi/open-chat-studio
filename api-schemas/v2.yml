@@ -2948,8 +2948,7 @@ components:
         What every façade write reports back about the pipeline it just changed.
 
         The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
-        read and write. ``pipeline_errors`` is what the publish gate rejects on; ``unwired_handles`` is
-        advisory and never blocks anything.
+        read and write.
       properties:
         pipeline_valid:
           type: boolean
@@ -3441,8 +3440,8 @@ components:
       description: |-
         A node as a write returns it.
 
-        Deliberately not the inspect node shape: inspect keeps resource ids out of ``params`` and
-        renders the resolved resources instead, whereas this is the shape you can send back.
+        Deliberately not the inspect node shape: inspect renders the resolved resources instead of the
+        ids in ``params``, whereas this is the shape you can send back.
       properties:
         node_id:
           type: string
