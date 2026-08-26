@@ -118,6 +118,7 @@ def admin_home(request):
         context={
             "active_tab": "admin",
             "form": _get_form(request),
+            "ocs_version": settings.OCS_VERSION,
         },
     )
 
