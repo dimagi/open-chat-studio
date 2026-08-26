@@ -32,15 +32,6 @@ def test_public_url_is_the_absolute_token_route(public_channel):
 
 
 @pytest.mark.django_db()
-def test_regenerate_replaces_the_token(public_channel):
-    new_token = public_channel.regenerate_widget_token()
-    public_channel.refresh_from_db()
-    assert new_token != TOKEN
-    assert len(new_token) == 32
-    assert public_channel.extra_data["widget_token"] == new_token
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize(
     "status",
     [
@@ -49,13 +40,13 @@ def test_regenerate_replaces_the_token(public_channel):
         pytest.param(SessionStatus.PENDING, id="pending"),
     ],
 )
-def test_regenerate_ends_live_sessions(public_channel, status):
+def test_end_live_sessions_ends_each_live_status(public_channel, status):
     session = ExperimentSessionFactory.create(
         experiment=public_channel.experiment, experiment_channel=public_channel, status=status
     )
     other = ExperimentSessionFactory.create(experiment=public_channel.experiment, status=SessionStatus.ACTIVE)
 
-    public_channel.regenerate_widget_token()
+    public_channel.end_live_sessions()
 
     session.refresh_from_db()
     other.refresh_from_db()

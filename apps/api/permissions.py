@@ -94,8 +94,8 @@ class WidgetDomainPermission(BasePermission):
             # Each credential validates its own origin, and ChatOAuthAuthentication has already
             # applied the rule for this one — including the case this check cannot express, where a
             # blank domain list declares the channel server-only and an originless request is the
-            # correct shape. The `if not origin_domain` line below would reject it before the view
-            # ever runs.
+            # correct shape. The origin rule now lives in `channel_origin_allowed`, which would
+            # reject an originless server-only request before the view runs.
             return True
 
         return channel_origin_allowed(request, request.auth)

@@ -1,4 +1,3 @@
-import secrets
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Self, cast
@@ -379,20 +378,11 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def public_url(self) -> str:
-        """The shareable page for a public link channel."""
-        return absolute_url(reverse("public_link", args=[self.extra_data["widget_token"]]))
-
-    def regenerate_widget_token(self) -> str:
-        """Replace the embed key and end every live session that was started with the old one.
-
-        A token-required session is admitted on its session token alone, so without the second
-        step a session started before regeneration would run for the rest of its token lifetime.
-        """
-        new_token = secrets.token_urlsafe(24)
-        self.extra_data = {**self.extra_data, "widget_token": new_token}
-        self.save(update_fields=["extra_data"])
-        self.end_live_sessions()
-        return new_token
+        """The shareable page for a public link channel, or "" when it has no token yet."""
+        token = self.extra_data.get("widget_token")
+        if not token:
+            return ""
+        return absolute_url(reverse("public_link", args=[token]))
 
     def end_live_sessions(self) -> int:
         """Mark every non-complete session on this channel COMPLETE. Returns how many."""
