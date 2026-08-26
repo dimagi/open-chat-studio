@@ -41,7 +41,7 @@ SECRET_KEY = env("SECRET_KEY")
 # `git describe --tags --match 'v*' --always` (see RELEASING.md). Reads as
 # `v1.2.0` for a tagged release, `v1.2.0-37-gabc1234` for a build off main, and
 # `unknown` when built outside CI. Deliberately not exposed to unauthenticated
-# users: it tells an attacker which CVEs apply to the instance.
+# users.
 OCS_VERSION = env("OCS_VERSION", default="unknown")
 
 
