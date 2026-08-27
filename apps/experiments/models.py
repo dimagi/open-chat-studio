@@ -101,11 +101,6 @@ class VersionFieldDisplayFormatters:
         return template.render({"chip": Chip(label=name, url=url)})
 
     @staticmethod
-    def format_builtin_tools(tools: set) -> str:
-        """code_interpreter, file_search -> Code Interpreter, File Search"""
-        return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
-
-    @staticmethod
     def format_custom_action_operation(op) -> str:
         action = op.custom_action
         op_details = action.get_operations_by_id().get(op.operation_id)
