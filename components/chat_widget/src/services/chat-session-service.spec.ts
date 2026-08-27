@@ -1,4 +1,4 @@
-import { ChatSessionService, SessionAccessError, ChatAuthError } from './chat-session-service';
+import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError } from './chat-session-service';
 
 function progressMessage(content: string) {
   return {
@@ -427,6 +427,77 @@ describe('ChatSessionService session tokens', () => {
     } as unknown as Response);
 
     await expect(service.fetchMessages('s1')).rejects.toThrow('Failed to poll messages: Server Error');
+  });
+});
+
+describe('ChatSessionService consent', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
+
+  function jsonResponse(body: unknown, init: { ok?: boolean; status?: number; statusText?: string } = {}) {
+    return {
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      statusText: init.statusText ?? 'OK',
+      json: () => Promise.resolve(body),
+    } as Response;
+  }
+
+  function makeService() {
+    return new ChatSessionService({ apiBaseUrl: 'https://example.com', widgetVersion: '1.0.0' });
+  }
+
+  it('raises ConsentRequiredError, not SessionAccessError, on 403 consent_required', async () => {
+    const service = makeService();
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        jsonResponse({ error: 'Consent is required before chatting', code: 'consent_required', consent: consentBlock }, { ok: false, status: 403, statusText: 'Forbidden' }),
+      );
+
+    const failure = service.sendMessage('s1', { message: 'hi' });
+    await expect(failure).rejects.toBeInstanceOf(ConsentRequiredError);
+    await expect(failure).rejects.not.toBeInstanceOf(SessionAccessError);
+    await expect(failure).rejects.toMatchObject({ consent: consentBlock });
+  });
+
+  it('still raises SessionAccessError for other 403 codes', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Session has expired', code: 'session_expired' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    await expect(service.sendMessage('s1', { message: 'hi' })).rejects.toBeInstanceOf(SessionAccessError);
+  });
+
+  it('posts the accepted form version and resolves on 204', async () => {
+    const service = makeService();
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: new Headers(),
+      json: () => Promise.reject(new Error('no body')),
+    } as unknown as Response);
+
+    await expect(service.recordConsent('s1', 7)).resolves.toBeUndefined();
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.com/api/chat/s1/consent/');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ form_version_id: 7 });
+  });
+
+  it('raises ConsentRequiredError with the current form on 409 consent_stale', async () => {
+    const service = makeService();
+    const current = { ...consentBlock, form_version_id: 8 };
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse({ error: 'The consent form has changed', code: 'consent_stale', consent: current }, { ok: false, status: 409, statusText: 'Conflict' }));
+
+    const failure = service.recordConsent('s1', 7);
+    await expect(failure).rejects.toBeInstanceOf(ConsentRequiredError);
+    await expect(failure).rejects.toMatchObject({ consent: current });
   });
 });
 

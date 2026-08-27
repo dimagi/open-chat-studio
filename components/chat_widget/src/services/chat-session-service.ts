@@ -35,6 +35,21 @@ export class ChatAuthError extends Error {
 }
 
 /**
+ * The server holds the message until the participant accepts the chatbot's consent
+ * form (403 `consent_required`), or refuses a stale acceptance (409 `consent_stale`).
+ * Either way `consent` is the block to render; the session itself is still good.
+ */
+export class ConsentRequiredError extends Error {
+  readonly consent: ChatConsent;
+
+  constructor(consent: ChatConsent, message: string) {
+    super(message);
+    this.name = 'ConsentRequiredError';
+    this.consent = consent;
+  }
+}
+
+/**
  * Supplies the OAuth bearer token for `chat/start/`. Called once per session
  * start, and a second time with `forceRefresh` when the server rejected the
  * first token.
@@ -57,11 +72,23 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
 }
 
+/**
+ * The published version's consent form as the server describes it. `required` is
+ * false when the chatbot has no form, or the participant has already accepted it.
+ * Older backends omit the block entirely.
+ */
+export interface ChatConsent {
+  required: boolean;
+  form_version_id: number | null;
+  text: string | null;
+}
+
 export interface ChatStartSessionResponse {
   session_id: string;
   session_token?: string | null;
   chatbot: unknown;
   participant: unknown;
+  consent?: ChatConsent;
 }
 
 export interface ChatSendMessageResponse {
@@ -80,6 +107,7 @@ export interface ChatPollResponse {
   messages: ChatMessage[];
   has_more: boolean;
   session_status: 'active' | 'ended';
+  consent?: ChatConsent;
 }
 
 export interface ChatSessionServiceOptions {
@@ -184,6 +212,23 @@ export class ChatSessionService {
     }
 
     return response.json() as Promise<ChatSendMessageResponse>;
+  }
+
+  /**
+   * Record the participant's acceptance of the consent form version the server
+   * last described. Resolves on 204; rejects with `ConsentRequiredError` carrying
+   * the current block when the form has changed since (409 `consent_stale`).
+   */
+  async recordConsent(sessionId: string, formVersionId: number): Promise<void> {
+    const response = await this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/consent/`, {
+      method: 'POST',
+      headers: this.getJsonHeaders(),
+      body: JSON.stringify({ form_version_id: formVersionId }),
+    });
+
+    if (!response.ok) {
+      await this.raiseForStatus(response, 'Failed to record consent');
+    }
   }
 
   async pollTaskOnce(sessionId: string, taskId: string): Promise<ChatTaskPollResponse> {
@@ -397,14 +442,20 @@ export class ChatSessionService {
   private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
     let message = `${fallbackPrefix}: ${response.statusText}`;
     let code: string | undefined;
+    let consent: ChatConsent | undefined;
     try {
-      const data = (await response.json()) as { error?: string; code?: string };
+      const data = (await response.json()) as { error?: string; code?: string; consent?: ChatConsent };
       if (data?.error) {
         message = data.error;
       }
       code = data?.code;
+      consent = data?.consent;
     } catch {
       // non-JSON body; keep statusText fallback
+    }
+    // Before the generic 403: a consent refusal keeps the session, a token refusal discards it.
+    if (consent && (code === 'consent_required' || code === 'consent_stale')) {
+      throw new ConsentRequiredError(consent, message);
     }
     if (response.status === 403) {
       throw new SessionAccessError(response.status, code, message);
