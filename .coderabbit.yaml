@@ -16,6 +16,20 @@ reviews:
     - path: "**/migrations/*.py"
       instructions: |
         * Ensure that Django migrations are backwards compatible with the previous code to prevent errors during rollout.
+    - path: "**"
+      instructions: |
+        Check the "Invariants" section of AGENTS.md before flagging. In particular: PostgreSQL is the only supported database, so do not raise portability to SQLite/MySQL; dev tooling targets Linux/macOS only; and changelog/docs updates ship from a separate repo via the PR-template checkbox, so do not ask for them in the diff.
+        Do not propose hand-edits to generated files (`api-schemas/*.yml`, `components/chat_widget/src/components/**/readme.md`). Point at the serializer, schema hook, or JSDoc that produces them instead.
+    - path: "apps/**/*.py"
+      instructions: |
+        The `Experiment`, `Assistant` and `Pipeline` default managers already filter `is_archived=False`, and `is_editable` is defined as `not is_archived`. A view loading one of these through `objects` (e.g. `get_object_or_404`) therefore already rejects non-editable records — do not ask for a second editability check.
+    - path: "**/test_*.py"
+      instructions: |
+        An autouse fixture in `apps/conftest.py` unsets the current-team ContextVar around every test, so a missing `set_current_team()` token reset is not a cross-test leak.
+        Do flag tests that depend on migration-seeded global rows (`LlmProviderModel`, `PricingRule`): the suite runs with `--reuse-db`, which makes them order-dependent.
+    - path: "docs/**/*.md"
+      instructions: |
+        Design docs and ADRs. Cross-check status claims and decision IDs against the code in the diff, and verify that referenced issue and PR numbers are still open and actually cover the work being deferred to them. Stale cross-references are the highest-value finding in this tree.
   auto_review:
     auto_incremental_review: false
     ignore_title_keywords:
