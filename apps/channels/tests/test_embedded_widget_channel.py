@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from apps.channels.forms import (
+    ChannelFormWrapper,
     EmbeddedWidgetChannelForm,
 )
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
@@ -187,6 +188,33 @@ class TestEmbeddedWidgetChannelForm:
         assert form.is_valid()
         form.post_save(channel)
         assert bool(form.warning_message) == warns
+
+    @pytest.mark.django_db()
+    def test_creating_a_server_only_oauth_channel_through_the_wrapper(self):
+        """The whole point of row 3, end to end: a channel an admin can actually create in
+        `oauth` mode with no domain list, landing in the state the OAuth door needs — the mode
+        set, the auth level pinned, and no lingering ratchet.
+        """
+        experiment = ExperimentFactory.create()
+        wrapper = ChannelFormWrapper(
+            experiment=experiment,
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            data={
+                "platform": ChannelPlatform.EMBEDDED_WIDGET.value,
+                "name": "oauth-widget",
+                "enabled": "on",
+                "allowed_domains": "",
+                "credential_mode": CredentialMode.OAUTH,
+            },
+        )
+        assert wrapper.is_valid(), (wrapper.channel_form.errors, wrapper.extra_form.errors)
+        channel = wrapper.save()
+
+        channel.refresh_from_db()
+        assert channel.credential_mode == CredentialMode.OAUTH
+        assert channel.required_auth_level == WidgetAuthLevel.SESSION_TOKEN
+        assert channel.pending_auth_level is None
+        assert channel.extra_data["allowed_domains"] == []
 
     @pytest.mark.django_db()
     def test_the_embed_snippet_carries_a_token_provider_only_in_oauth_mode(self):
