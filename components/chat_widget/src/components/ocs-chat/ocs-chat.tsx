@@ -1972,6 +1972,61 @@ export class OcsChat {
     );
   }
 
+  private renderInputArea() {
+    return (
+      <div class="input-area">
+        {this.renderKioskRestart()}
+        <div class="input-container">
+          <textarea
+            ref={el => (this.textareaRef = el)}
+            class="message-textarea"
+            rows={1}
+            placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
+            value={this.messageInput}
+            onInput={e => this.handleInputChange(e)}
+            onKeyPress={e => this.handleKeyPress(e)}
+            disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+          ></textarea>
+          {/* File Upload Button */}
+          {this.allowAttachments && (
+            <input
+              ref={el => {
+                // Unclear why but after removing all attachments this is being set to `null`.
+                if (el) {
+                  this.fileInputRef = el;
+                }
+              }}
+              id="ocs-file-input"
+              type="file"
+              multiple
+              accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
+              onChange={e => this.handleFileSelect(e)}
+              class="hidden"
+            />
+          )}
+          {this.allowAttachments && (
+            <button
+              class="file-attachment-button"
+              onClick={() => this.fileInputRef?.click()}
+              disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+              title={this.translationManager.get('attach.add')}
+              aria-label={this.translationManager.get('attach.add')}
+            >
+              <PaperClipIcon />
+            </button>
+          )}
+          <button
+            class={`send-button ${!this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+            onClick={() => this.sendMessage(this.messageInput)}
+            disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
+          >
+            {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -2163,56 +2218,7 @@ export class OcsChat {
               {this.renderBanner('bottom')}
 
               {/* Input Area — kept visible but disabled when the widget is read-only */}
-              <div class="input-area">
-                {this.renderKioskRestart()}
-                <div class="input-container">
-                  <textarea
-                    ref={el => (this.textareaRef = el)}
-                    class="message-textarea"
-                    rows={1}
-                    placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
-                    value={this.messageInput}
-                    onInput={e => this.handleInputChange(e)}
-                    onKeyPress={e => this.handleKeyPress(e)}
-                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
-                  ></textarea>
-                  {/* File Upload Button */}
-                  {this.allowAttachments && (
-                    <input
-                      ref={el => {
-                        // Unclear why but after removing all attachments this is being set to `null`.
-                        if (el) {
-                          this.fileInputRef = el;
-                        }
-                      }}
-                      id="ocs-file-input"
-                      type="file"
-                      multiple
-                      accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
-                      onChange={e => this.handleFileSelect(e)}
-                      class="hidden"
-                    />
-                  )}
-                  {this.allowAttachments && (
-                    <button
-                      class="file-attachment-button"
-                      onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
-                      title={this.translationManager.get('attach.add')}
-                      aria-label={this.translationManager.get('attach.add')}
-                    >
-                      <PaperClipIcon />
-                    </button>
-                  )}
-                  <button
-                    class={`send-button ${!this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
-                    onClick={() => this.sendMessage(this.messageInput)}
-                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
-                  >
-                    {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
-                  </button>
-                </div>
-              </div>
+              {this.renderInputArea()}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
                   {this.translationManager.get('branding.poweredBy')}{' '}
