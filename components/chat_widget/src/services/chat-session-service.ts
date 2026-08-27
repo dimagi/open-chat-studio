@@ -138,6 +138,8 @@ export interface MessagePollingCallbacks {
   onMessages: (messages: ChatMessage[]) => void;
   /** Called once when the server reports the session has ended; polling stops first. */
   onSessionEnded?: () => void;
+  /** Called on every poll whose response carries a consent block. */
+  onConsent?: (consent: ChatConsent) => void;
   onError?: (error: Error) => void;
 }
 
@@ -352,6 +354,9 @@ export class ChatSessionService {
         const data = await this.fetchMessages(sessionId, since);
         if (data.messages.length > 0) {
           callbacks.onMessages(data.messages);
+        }
+        if (data.consent) {
+          callbacks.onConsent?.(data.consent);
         }
         if (data.session_status === 'ended') {
           this.stopMessagePolling();

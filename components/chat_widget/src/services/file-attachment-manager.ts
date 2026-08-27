@@ -1,3 +1,5 @@
+import type { ChatConsent } from './chat-session-service';
+
 export interface UploadedFile {
   id: number;
   name: string;
@@ -31,6 +33,8 @@ export interface UploadResult {
   uploadedIds: number[];
   errorMessage?: string;
   tokenRejected?: boolean;
+  /** Set when the upload was refused for consent (403 `consent_required`); the files are kept for retry. */
+  consent?: ChatConsent;
 }
 
 export class FileAttachmentManager {
@@ -119,12 +123,16 @@ export class FileAttachmentManager {
 
       if (!response.ok) {
         const errorData = await this.safeJson(response);
-        const errorMessage = (errorData && typeof errorData === 'object' && 'error' in errorData && (errorData as { error?: string }).error) || 'Failed to upload files';
+        const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; consent?: ChatConsent };
+        const errorMessage = body.error || 'Failed to upload files';
+        // Files are left unmarked on a consent refusal: they are re-uploaded once consent is recorded.
+        const consentRefused = response.status === 403 && body.code === 'consent_required';
         return {
-          selectedFiles: this.markPendingFilesWithError(existingFiles, errorMessage),
+          selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
           errorMessage,
-          tokenRejected: response.status === 403,
+          tokenRejected: response.status === 403 && !consentRefused,
+          consent: consentRefused ? body.consent : undefined,
         };
       }
 

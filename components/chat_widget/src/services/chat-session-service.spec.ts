@@ -332,6 +332,18 @@ describe('ChatSessionService.startMessagePolling', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('hands the consent block to onConsent on every poll', async () => {
+    const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
+    jest.spyOn(service, 'fetchMessages').mockResolvedValue({ ...pollResponse([]), consent: consentBlock });
+    const onConsent = jest.fn();
+
+    service.startMessagePolling('session-1', { getSince: () => undefined, onMessages: jest.fn(), onConsent });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(onConsent).toHaveBeenCalledWith(consentBlock);
+    expect(onConsent.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('does not throw when an ended session is reported without an onSessionEnded callback', async () => {
     const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([], 'ended'));
 
