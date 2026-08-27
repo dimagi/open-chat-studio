@@ -19,6 +19,60 @@ ENSURE_SETUP_SCRIPT = REPOSITORY_ROOT / "scripts" / "ensure-worktree-setup.sh"
 WORKTREE_ENVIRONMENT_SCRIPT = REPOSITORY_ROOT / "scripts" / "worktree-environment.sh"
 CODEX_HOOKS_FILE = REPOSITORY_ROOT / ".codex" / "hooks.json"
 
+
+# Enough of psql to answer "does this database exist?" and to remember the answer
+# changing, which is what picks between building a worktree database from scratch and
+# copying a template.
+
+
+STALE = "ocs_stale_postgres"
+ENV_NAME = "ocs_env_postgres"
+ENV_LINE = f"OCS_POSTGRES_CONTAINER={ENV_NAME}"
+ENV_QUOTED = f"OCS_POSTGRES_CONTAINER='{ENV_NAME}'"
+PSQL_QUERY_LOG_LINE = "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1"
+
+
+# Where `ocs_psql` is told to find its container, and what should come of it.
+@dataclass(frozen=True)
+class ContainerSourceScenario:
+    exported: str | None = None
+    env_file: str | None = None
+    listed: bool = True
+    expect: str | None = "ocs_test_postgres"
+    absent: str | None = None
+    stderr_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionGuardScenario:
+    database_name: str
+    thread_id: str
+    setup_script: str
+    expected_log: str | None
+    redis_url: str | None = None
+    python_version: str | None = None
+    migration_path: str | None = None
+
+
+def _run(
+    *command: str | Path,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
+    return subprocess.run(
+        [str(part) for part in command],
+        cwd=cwd,
+        env=process_env,
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
 FAKE_BOOTSTRAP_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 mkdir -p "$PWD/.venv" "$PWD/node_modules"
@@ -28,6 +82,7 @@ printf "bootstrap:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 # Enough of psql to answer "does this database exist?" and to remember the answer
 # changing, which is what picks between building a worktree database from scratch and
 # copying a template.
+
 FAKE_PSQL_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 printf "psql:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
@@ -126,7 +181,6 @@ fi
 exit 1
 """
 
-
 FAKE_REDIS_CLI_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${*: -1}" == "FLUSHDB" ]]; then
@@ -192,36 +246,6 @@ fi
 
 exit 1
 """
-
-
-@dataclass(frozen=True)
-class SessionGuardScenario:
-    database_name: str
-    thread_id: str
-    setup_script: str
-    expected_log: str | None
-    redis_url: str | None = None
-    python_version: str | None = None
-    migration_path: str | None = None
-
-
-def _run(
-    *command: str | Path,
-    cwd: Path,
-    env: dict[str, str] | None = None,
-    check: bool = True,
-) -> subprocess.CompletedProcess[str]:
-    process_env = os.environ.copy()
-    if env:
-        process_env.update(env)
-    return subprocess.run(
-        [str(part) for part in command],
-        cwd=cwd,
-        env=process_env,
-        check=check,
-        capture_output=True,
-        text=True,
-    )
 
 
 def _write_executable(path: Path, contents: str) -> None:
@@ -471,175 +495,129 @@ def test_redis_registry_allocates_distinct_databases_and_reuses_assignments(
     assert repeated_database == first_database
 
 
-def test_redis_registry_runs_inside_the_redis_container(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-
-    _allocate_redis_database(worktree, env, "feature_6")
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_test_redis" in command_output
-    assert "redis-registry:allocate:feature_6:" in command_output
-
-
-def test_redis_registry_falls_back_to_a_host_client_without_a_container(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    env["OCS_TEST_REDIS_CONTAINER"] = ""
-
-    _allocate_redis_database(worktree, env, "feature_6")
-
-    command_output = command_log.read_text()
-    assert "docker-exec:" not in command_output
-    assert "redis-registry:allocate:feature_6:" in command_output
-
-
-def test_psql_runs_inside_the_postgres_container(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_test_postgres" in command_output
-    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
-
-
-def test_psql_falls_back_to_a_host_client_without_a_container(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    env["OCS_TEST_POSTGRES_CONTAINER"] = ""
-
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    command_output = command_log.read_text()
-    assert "docker-exec:" not in command_output
-    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
-
-
+# Every place `ocs_psql` can be told which container to use, and what should come of it.
+# The name-shaped check on the last case matters because the value is interpolated into
+# `docker exec` and `.env` is a file anything can append to.
 @pytest.mark.parametrize(
-    "docker_exec_status",
+    "scenario",
     [
-        pytest.param("125", id="container_unusable"),
-        pytest.param("127", id="client_missing_inside_the_container"),
+        pytest.param(ContainerSourceScenario(), id="discovered_by_published_port"),
+        pytest.param(ContainerSourceScenario(listed=False, expect=None), id="no_container_so_host_client"),
+        pytest.param(ContainerSourceScenario(env_file=ENV_LINE, expect=ENV_NAME), id="named_in_the_env_file"),
+        pytest.param(ContainerSourceScenario(env_file=ENV_QUOTED, expect=ENV_NAME), id="named_in_the_env_file_quoted"),
+        pytest.param(
+            ContainerSourceScenario(env_file=ENV_LINE, exported="ocs_exported", expect="ocs_exported", absent=ENV_NAME),
+            id="environment_beats_the_env_file",
+        ),
+        pytest.param(
+            ContainerSourceScenario(exported="nope; rm -rf /", stderr_fragment="is not a container name"),
+            id="a_value_that_is_not_a_container_name",
+        ),
     ],
 )
-def test_psql_falls_back_to_a_host_client_when_the_container_cannot_run_one(
+def test_where_psql_finds_its_container(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-    docker_exec_status: str,
+    scenario: ContainerSourceScenario,
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
-    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = docker_exec_status
+    # Nothing sources `.env` before these scripts run, so a knob set there only works
+    # because they read the file themselves — the way OCS_WORKTREE_ID always has.
+    if scenario.env_file is not None:
+        with (worktree / ".env").open("a") as env_file:
+            env_file.write(f"{scenario.env_file}\n")
+    if scenario.exported is not None:
+        env["OCS_POSTGRES_CONTAINER"] = scenario.exported
+    if not scenario.listed:
+        env["OCS_TEST_POSTGRES_CONTAINER"] = ""
 
-    # Runs with check=True: the host client is what makes the query succeed at all.
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_test_postgres" in command_output
-    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
-
-
-def test_redis_registry_falls_back_to_a_host_client_when_the_container_cannot_run_one(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "127"
-
-    _allocate_redis_database(worktree, env, "feature_6")
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_test_redis" in command_output
-    assert "redis-registry:allocate:feature_6:" in command_output
-
-
-def test_psql_recovers_from_a_stale_container_override(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    # The shape of a name exported from a `.envrc` and outlived by its container: the
-    # override is unusable, but the container discovery would have found still is.
-    env["OCS_POSTGRES_CONTAINER"] = "ocs_stale_postgres"
-    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "125"
-    env["OCS_TEST_DOCKER_EXEC_FAILURE_CONTAINER"] = "ocs_stale_postgres"
-
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_stale_postgres" in command_output
-    assert "docker-exec:ocs_test_postgres" in command_output
-    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
-
-
-@pytest.mark.parametrize(
-    ("env_line", "expected_container"),
-    [
-        pytest.param("OCS_POSTGRES_CONTAINER=ocs_env_postgres", "ocs_env_postgres", id="bare"),
-        pytest.param("OCS_POSTGRES_CONTAINER='ocs_env_postgres'", "ocs_env_postgres", id="quoted"),
-    ],
-)
-def test_psql_reads_its_container_from_the_worktree_env_file(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-    env_line: str,
-    expected_container: str,
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    # Nothing sources `.env` before these scripts run, so a knob set there only works if
-    # they read the file themselves — the way OCS_WORKTREE_ID always has.
-    with (worktree / ".env").open("a") as env_file:
-        env_file.write(f"{env_line}\n")
-
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    assert f"docker-exec:{expected_container}" in command_log.read_text()
-
-
-def test_an_environment_variable_beats_the_worktree_env_file(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    with (worktree / ".env").open("a") as env_file:
-        env_file.write("OCS_POSTGRES_CONTAINER=ocs_env_postgres\n")
-    env["OCS_POSTGRES_CONTAINER"] = "ocs_exported_postgres"
-
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
-
-    command_output = command_log.read_text()
-    assert "docker-exec:ocs_exported_postgres" in command_output
-    assert "ocs_env_postgres" not in command_output
-
-
-def test_a_container_override_that_is_not_a_container_name_is_ignored(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    # The value is interpolated into `docker exec`, and `.env` is a file anything can
-    # write, so a name-shaped check is what keeps the rest of a line out of the command.
-    env["OCS_POSTGRES_CONTAINER"] = "nope; rm -rf /"
-
+    # check=True throughout: whichever client answers, the query has to succeed.
     result = _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
 
-    assert "is not a container name" in result.stderr
-    assert "docker-exec:ocs_test_postgres" in command_log.read_text()
+    command_output = command_log.read_text()
+    assert PSQL_QUERY_LOG_LINE in command_output
+    if scenario.expect is None:
+        assert "docker-exec:" not in command_output
+    else:
+        assert f"docker-exec:{scenario.expect}" in command_output
+    if scenario.absent is not None:
+        assert scenario.absent not in command_output
+    if scenario.stderr_fragment is not None:
+        assert scenario.stderr_fragment in result.stderr
 
 
-def test_psql_tries_each_container_source_once_when_none_can_run_a_client(
+@pytest.mark.parametrize(
+    ("listed", "expect_container"),
+    [
+        pytest.param(True, True, id="in_the_container"),
+        pytest.param(False, False, id="host_client_without_a_container"),
+    ],
+)
+def test_where_the_redis_registry_finds_its_client(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    listed: bool,
+    expect_container: bool,
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    if not listed:
+        env["OCS_TEST_REDIS_CONTAINER"] = ""
+
+    _allocate_redis_database(worktree, env, "feature_6")
+
+    command_output = command_log.read_text()
+    assert "redis-registry:allocate:feature_6:" in command_output
+    assert ("docker-exec:ocs_test_redis" in command_output) is expect_container
+
+
+# `docker exec` keeps 125/126/127 for itself: a container it cannot use, or no such
+# executable inside it. Asserting the exact sequence of attempts covers both what gets
+# tried and what does not get tried twice.
+# `docker exec` keeps 125/126/127 for itself: a container it cannot use, or no such
+# executable inside it. The exact sequence of attempts covers both what gets tried and
+# what is not tried twice — a stale override gives way to discovery, and an override that
+# stayed eligible after being rejected would come back forever.
+@pytest.mark.parametrize(
+    ("status", "failing_container", "override", "expected_attempts"),
+    [
+        pytest.param("125", None, None, ["ocs_test_postgres"], id="container_unusable"),
+        pytest.param("127", None, None, ["ocs_test_postgres"], id="no_client_inside_it"),
+        pytest.param("125", STALE, STALE, [STALE, "ocs_test_postgres"], id="a_stale_override_gives_way"),
+        pytest.param("127", None, STALE, [STALE, "ocs_test_postgres"], id="each_source_tried_once_when_none_can"),
+    ],
+)
+def test_psql_moves_on_when_a_container_cannot_run_a_client(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    status: str,
+    failing_container: str | None,
+    override: str | None,
+    expected_attempts: list[str],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = status
+    if failing_container is not None:
+        env["OCS_TEST_DOCKER_EXEC_FAILURE_CONTAINER"] = failing_container
+    if override is not None:
+        env["OCS_POSTGRES_CONTAINER"] = override
+
+    # check=True: whichever client ends up answering, the query has to succeed.
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    attempts = [line for line in command_output.splitlines() if line.startswith("docker-exec:")]
+    assert attempts == [f"docker-exec:{name}" for name in expected_attempts]
+    assert PSQL_QUERY_LOG_LINE in command_output
+
+
+def test_the_redis_registry_moves_on_when_the_container_cannot_run_a_client(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
-    # Both an override and a discoverable container, neither able to start a client. The
-    # rejection list is what has to end this: an override that stayed eligible after
-    # being rejected would be handed back on the next resolve, forever.
-    env["OCS_POSTGRES_CONTAINER"] = "ocs_stale_postgres"
     env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "127"
 
-    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+    _allocate_redis_database(worktree, env, "feature_6")
 
-    attempts = [line for line in command_log.read_text().splitlines() if line.startswith("docker-exec:")]
-    assert attempts == ["docker-exec:ocs_stale_postgres", "docker-exec:ocs_test_postgres"]
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_test_redis" in command_output
+    assert "redis-registry:allocate:feature_6:" in command_output
 
 
 def test_psql_does_not_retry_a_client_that_ran_and_failed(
