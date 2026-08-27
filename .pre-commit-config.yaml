@@ -18,6 +18,14 @@ repos:
       - id: check-merge-conflict
       - id: no-commit-to-branch
         args: [--branch, main]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      # Scans the staged diff only, so a clean tree stays clean and no allowlist
+      # is needed: the repo has zero hits in tracked files today. Local agent
+      # config under .claude/ and .codex/ is gitignored, and this is the backstop
+      # for when someone force-adds it anyway.
+      - id: gitleaks
   - repo: https://github.com/adamchainz/djade-pre-commit
     rev: '1.9.0'
     hooks:

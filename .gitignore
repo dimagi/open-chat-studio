@@ -30,6 +30,12 @@ venv
 .pytest_cache/
 .claude/worktrees
 
+# Local agent config. Only the shared, checked-in pieces are tracked; everything
+# else in these directories is per-machine and has leaked credentials before.
+.claude/settings.local.json
+.codex/*
+!.codex/hooks.json
+
 # uncomment these lines after setting up the front-end build pipeline in dev and production
 static/css/
 static/js/
