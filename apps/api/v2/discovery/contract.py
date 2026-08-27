@@ -24,7 +24,7 @@ def _resource_source(param: str) -> OptionsSource | None:
     Some keys keep the param's ``_id``/``_ids`` suffix (``synthetic_voice_id``), others drop it
     (``collection_id`` -> ``collection``), so both spellings are tried.
 
-    ``None`` for a mirrored FK no option list serves: nothing offers it, so no write can name it
+    ``None`` for a mirrored param no option list serves: nothing offers it, so no write can name it
     either. Left out rather than raised over, so an unrelated ``SET_NULL`` FK on ``Node`` cannot
     break this import.
     """
@@ -36,11 +36,10 @@ def _resource_source(param: str) -> OptionsSource | None:
 
 #: The option lists a team could be denied a value from, so a param drawing from one is checked
 #: before it is written. Keyed on the list, not the param: the list is what decides the permitted
-#: values. Derived from the FK mirror so a new resource FK on ``Node`` needs no edit here; ``tools``
-#: and ``custom_actions`` are named because no FK backs them.
+#: values. Derived from the resource mirror so a new resource relation on ``Node`` needs no edit
+#: here; ``tools`` is named because nothing in the database backs it.
 PARAMETER_OPTION_SOURCES: frozenset[OptionsSource] = frozenset(
-    {source for param in Node.resource_param_names() if (source := _resource_source(param))}
-    | {OptionsSource.tools, OptionsSource.custom_actions}
+    {source for param in Node.resource_param_names() if (source := _resource_source(param))} | {OptionsSource.tools}
 )
 
 # `ui:*` keys renamed for the client. Every other namespaced key is dropped.

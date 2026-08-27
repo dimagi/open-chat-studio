@@ -70,6 +70,11 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
         return self.get_queryset().filter(type=AssistantNode.__name__)
 
 
+#: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
+#: these related rows per node, so ``flow_data`` is an N+1 without them.
+NODE_RESOURCE_PREFETCHES = ("node_set__collection_indexes", "node_set__custom_action_operations")
+
+
 class Pipeline(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=128)
     data = SanitizedJSONField()
@@ -204,14 +209,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         prefetched ``node_set`` and of ``flow_data``'s cache. A caller that reads either after
         reconciling must call this first or it sees the pre-reconcile graph.
 
-        The rows are re-prefetched with their ``collection_indexes`` rather than just dropped,
-        since every caller here reads ``flow_data`` next and that reads the M2M per node.
+        The rows are re-prefetched with their resource relations rather than just dropped, since
+        every caller here reads ``flow_data`` next and that reads them per node.
         """
         # No fields: clears the whole prefetch cache, node_set included.
         self.refresh_from_db()
         with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
             del self.flow_data
-        models.prefetch_related_objects([self], "node_set__collection_indexes")
+        models.prefetch_related_objects([self], *NODE_RESOURCE_PREFETCHES)
 
     def validate(self, full=True) -> ErrorReport:
         """Every problem with this pipeline. All three buckets empty means it is valid.
@@ -325,8 +330,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
         # different fallback: that one returns the empty data as-is rather than rebuilding.
         flow = Flow(**(self.data or {"edges": []}))
-        # Each node reads its collection_indexes M2M (Node.resource_params), so callers fetch the
-        # pipeline with ``node_set__collection_indexes`` prefetched or this is an N+1.
+        # Each node reads related resource rows (Node.resource_params), so callers fetch the
+        # pipeline with ``NODE_RESOURCE_PREFETCHES`` prefetched or this is an N+1.
         flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
         return flow.model_dump()
 
@@ -369,8 +374,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         The version's stored ``data`` supplies the edges only.
         """
         node_data: dict[str, FlowNode | None] = {}
-        # to_flow_node reads each node's collection_indexes M2M — prefetch rather than query per row.
-        for version_node in version.node_set.prefetch_related("collection_indexes"):
+        # to_flow_node reads each node's resource relations — prefetch rather than query per row.
+        for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
             for spec in get_versioned_param_specs(version_node.type):
                 spec.revert_referenced_record(version_node, flow_node.data.params)
@@ -631,21 +636,30 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         ``to_flow_node`` merges all of these into every node's params, its type declaring them or
         not, so a caller writing params back has to tell the mirrored ids from the declared ones.
         """
-        return frozenset({f"{field_name}_id" for field_name in cls.resource_fk_fields()} | {"collection_index_ids"})
+        return frozenset(
+            {f"{field_name}_id" for field_name in cls.resource_fk_fields()} | {"collection_index_ids", "custom_actions"}
+        )
 
     def resource_params(self) -> dict:
-        """The ids of the resources this node references, read off its FK columns and M2M.
+        """The resources this node references, read off its FK columns, its M2M and its related rows.
 
-        Params carries copies of these ids, but the columns are the constraint-backed mirror of
-        them (see ``_sync_resource_fk_fields``): deleting a resource nulls the column while the
-        stale id lingers in params. ``to_flow_node`` serves what this returns, so a dangling
-        reference reads as unset rather than as an id that no longer resolves.
+        Params carries copies of these ids, but the rows are the constraint-backed mirror of them
+        (see ``_sync_resource_fk_fields`` and ``update_from_params``): deleting a resource nulls the
+        column or cascades the row away while the stale id lingers in params. ``to_flow_node`` serves
+        what this returns, so a dangling reference reads as unset rather than as an id that no longer
+        resolves.
         """
         resource_params = {
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
-        # sorted because the through rows have no ordering of their own and the read must be stable.
+        # sorted because the related rows have no ordering of their own and the read must be stable.
         resource_params["collection_index_ids"] = sorted(index.id for index in self.collection_indexes.all())
+        # ``CustomActionOperation`` rows are the mirror for ``custom_actions``: ``update_from_params``
+        # writes them, and deleting the action cascades them away. Read here in the param's own
+        # ``"<action id>:<operation id>"`` spelling.
+        resource_params["custom_actions"] = sorted(
+            operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all()
+        )
         return resource_params
 
     def _sync_resource_fk_fields(self):

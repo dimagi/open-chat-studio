@@ -170,7 +170,12 @@ class TestTheResponseEnvelope:
 #: compared against itself because rebuilding the team's option lists in there -- how the check used
 #: to work -- adds a dozen at a stroke and nothing else would notice. Raising it is a decision about
 #: how long the row is held, so say in the commit what the extra queries buy.
-QUERIES_UNDER_THE_LOCK = 27
+#:
+#: Two of these prefetch the ``CustomActionOperation`` rows (``NODE_RESOURCE_PREFETCHES``), once for
+#: the locked read and once for the rebuild after the write. They buy ``custom_actions`` being served
+#: from those rows rather than from the copy in params, and the count does not move with the number
+#: of nodes -- without them each node would read the table itself.
+QUERIES_UNDER_THE_LOCK = 29
 
 
 @pytest.mark.django_db()

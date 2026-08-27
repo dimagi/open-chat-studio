@@ -17,7 +17,7 @@ from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_write
 from apps.pipelines.flow import PipelineDiffPayload
-from apps.pipelines.models import Pipeline
+from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.patching import apply_pipeline_patch
 
 
@@ -69,7 +69,7 @@ def _locked_pipeline(chatbot: Experiment) -> Pipeline:
     # get_object_or_404 rather than .get(): the default manager hides archived rows, so an archived
     # pipeline is a DoesNotExist here and a 404 is the answer, not a 500.
     return get_object_or_404(
-        Pipeline.objects.select_for_update().prefetch_related("node_set__collection_indexes"),
+        Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES),
         pk=chatbot.pipeline_id,
         team_id=chatbot.team_id,
     )
