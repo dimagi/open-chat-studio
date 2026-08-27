@@ -234,3 +234,11 @@ describe('safe content is preserved', () => {
     assertContains(result, '<li>');
   });
 });
+
+describe('consent form HTML', () => {
+  it('keeps the form markup and strips scripts', () => {
+    const result = sanitizeHTML('<p>Please <strong>agree</strong></p><script>alert(1)</script>');
+    assertContains(result, '<strong>agree</strong>');
+    assertNotContains(result, '<script>');
+  });
+});

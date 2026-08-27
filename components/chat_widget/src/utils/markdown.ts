@@ -78,6 +78,14 @@ export const SANITIZE_CONFIG = {
   FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
 };
 
+/** Sanitize server-rendered HTML (already markdown-rendered) with the message config. */
+export function sanitizeHTML(html: string): string {
+  if (!html || typeof html !== 'string') {
+    return '';
+  }
+  return postProcessMarkdownHTML(DOMPurify.sanitize(html, SANITIZE_CONFIG));
+}
+
 export function renderMarkdownSync(content: string): string {
   if (!content || typeof content !== 'string') {
     return '';

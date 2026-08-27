@@ -638,6 +638,22 @@
     @apply flex gap-[8px];
   }
 
+  .consent-panel {
+    @apply flex flex-col gap-3;
+    padding-bottom: 1em;
+    color: var(--input-text-color);
+  }
+
+  .consent-text {
+    max-height: 40vh;
+    overflow-y: auto;
+    font-size: 0.9rem;
+  }
+
+  .consent-agree {
+    align-self: flex-end;
+  }
+
   .message-textarea {
     @apply flex-grow border border-gray-300 rounded-md resize-none focus:outline-blue-300;
     background-color: var(--input-bg-color);
