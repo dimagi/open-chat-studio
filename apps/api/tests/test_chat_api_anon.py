@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.files.models import FilePurpose
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -200,3 +200,42 @@ def test_session_poll_with_messages(api_client, session):
         "messages": [expected_messages[0]],
         "session_status": "active",
     }
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_records_timezone_in_participant_data(api_client, experiment):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "timezone": "Africa/Johannesburg"}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    participant_data = ParticipantData.objects.get(participant=session.participant, experiment=experiment)
+    assert participant_data.data["timezone"] == "Africa/Johannesburg"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "timezone_value",
+    [
+        pytest.param("Mars/Olympus_Mons", id="unrecognised-zone"),
+        pytest.param("", id="blank"),
+    ],
+)
+def test_start_chat_session_ignores_unknown_timezone(api_client, experiment, timezone_value):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "timezone": timezone_value}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_without_timezone_records_none(api_client, experiment):
+    url = reverse("api:chat:start-session")
+    response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()

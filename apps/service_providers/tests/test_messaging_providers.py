@@ -868,3 +868,105 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
         assert sent["recipient"] == self.BSUID
         assert sent["recipient_type"] == "individual"
         assert "to" not in sent
+
+
+class TestMetaCloudAPITemplateParameterText:
+    """Meta rejects template parameter values containing newlines, tabs, or more than four
+    consecutive spaces, so the bot message is flattened before it is substituted in."""
+
+    def _make_service(self):
+        return MetaCloudAPIService(access_token="test_token", business_id="123456")
+
+    def _mock_send_response(self):
+        return httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+
+    def _sent_parameter_texts(self, mock_post) -> list[str]:
+        return [
+            call.kwargs["json"]["template"]["components"][0]["parameters"][0]["text"]
+            for call in mock_post.call_args_list
+        ]
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            pytest.param("Hello\r\n\r\nWorld", "Hello World", id="crlf-paragraph-break"),
+            pytest.param("Hello\nWorld", "Hello World", id="lf-newline"),
+            pytest.param("Hello\rWorld", "Hello World", id="bare-cr"),
+            pytest.param("Hello\tWorld", "Hello World", id="tab"),
+            pytest.param("Hello          World", "Hello World", id="long-space-run"),
+            pytest.param("Hello\r\n  \r\nWorld", "Hello World", id="blank-line-with-spaces"),
+            pytest.param("  Hello World  ", "Hello World", id="leading-and-trailing-whitespace"),
+            pytest.param("Hello World", "Hello World", id="already-clean-is-untouched"),
+        ],
+    )
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_parameter_text_is_flattened(self, mock_post, raw, expected):
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_template_message(
+            message=raw, from_="phone123", to="+27826419977", platform=ChannelPlatform.WHATSAPP
+        )
+        assert self._sent_parameter_texts(mock_post) == [expected]
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_sentry_broadcast_message_sends_without_newlines(self, mock_post):
+        """The production broadcast that triggered OPEN-CHAT-STUDIO-2DS: a hand-written,
+        multi-paragraph message from a browser textarea, so every break arrives as CRLF."""
+        mock_post.return_value = self._mock_send_response()
+        message = (
+            "Niaje\r\n\r\nTuko na exciting news kutoka kwa MbogiTruu\r\n\r\n"
+            "DJ B - 0704 737 122 [https://bit.ly/DJBShujaaz]\r\n"
+            "Maria Kim - 0704 736 473 [https://bit.ly/MKShujaaz]"
+        )
+        self._make_service().send_template_message(
+            message=message, from_="phone123", to="254714942927", platform=ChannelPlatform.WHATSAPP
+        )
+        (sent,) = self._sent_parameter_texts(mock_post)
+        assert "\n" not in sent
+        assert "\r" not in sent
+        assert "\t" not in sent
+        assert "    " not in sent
+        assert sent.startswith("Niaje Tuko na exciting news")
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_flattening_happens_before_splitting(self, mock_post):
+        """Chunks are measured against the flattened text, so no chunk can exceed the limit
+        once the newlines it contained have collapsed."""
+        mock_post.return_value = self._mock_send_response()
+        service = self._make_service()
+        # 1200 words separated by CRLFs -- far over the limit, and every separator is a newline.
+        message = "\r\n".join(["word"] * 1200)
+        service.send_template_message(
+            message=message, from_="phone123", to="+27826419977", platform=ChannelPlatform.WHATSAPP
+        )
+        texts = self._sent_parameter_texts(mock_post)
+        assert len(texts) > 1
+        for text in texts:
+            assert "\n" not in text
+            assert "\r" not in text
+            assert len(text) <= MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_whitespace_only_message_sends_nothing(self, mock_post):
+        """A message that flattens to nothing has no parameter value Meta would accept."""
+        self._make_service().send_template_message(
+            message="  \r\n\t  ", from_="phone123", to="+27826419977", platform=ChannelPlatform.WHATSAPP
+        )
+        mock_post.assert_not_called()
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_plain_text_message_keeps_its_newlines(self, mock_post):
+        """Flattening is a template-parameter constraint only -- an in-window text send is
+        unaffected and keeps the operator's formatting."""
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_text_message(
+            message="Hello\r\n\r\nWorld",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        assert mock_post.call_args.kwargs["json"]["text"]["body"] == "Hello\r\n\r\nWorld"
