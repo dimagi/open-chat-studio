@@ -63,6 +63,7 @@ export class OcsChat {
     '.docx',
     '.xls',
     '.xlsx',
+    '.xlsm',
     '.csv',
     '.jpg',
     '.jpeg',
