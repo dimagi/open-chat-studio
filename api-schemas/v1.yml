@@ -1198,6 +1198,12 @@ components:
           type: string
           title: Paricipant Name
           description: Optional participant name
+        timezone:
+          type: string
+          title: Time zone
+          description: Optional IANA time zone name of the participant's device (e.g.
+            'Africa/Johannesburg'), recorded in the participant's data for this chatbot
+            only. Unrecognised time zone names are ignored.
       required:
       - chatbot_id
     ChatStartSessionResponse:
