@@ -100,3 +100,32 @@ def test_start_reports_no_consent_needed_without_a_form(api_client, plain_experi
     response = _start(api_client, plain_experiment)
 
     assert response.json()["consent"] == {"required": False, "form_version_id": None, "text": None}
+
+
+def _poll(api_client, session, **extra):
+    url = reverse("api:chat:poll-response", kwargs={"session_id": session.external_id})
+    return api_client.get(url, **extra)
+
+
+@pytest.mark.django_db()
+def test_poll_reports_consent_required_before_acceptance(api_client, session):
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.status_code == 200
+    assert response.json()["consent"]["required"] is True
+    assert response.json()["consent"]["form_version_id"] == session.experiment.consent_form_id
+
+
+@pytest.mark.django_db()
+def test_poll_reports_consent_satisfied_after_acceptance(api_client, session):
+    ParticipantData.objects.create(
+        team=session.team, participant=session.participant, experiment=session.experiment
+    ).record_consent()
+
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.json()["consent"] == {
+        "required": False,
+        "form_version_id": session.experiment.consent_form_id,
+        "text": None,
+    }

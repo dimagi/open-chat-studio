@@ -854,7 +854,12 @@ def chat_poll_response(request, session_id):
         messages = messages[:limit]
 
     session_status = "ended" if session.is_complete else "active"
-    response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
+    response_data = {
+        "messages": messages,
+        "has_more": has_more,
+        "session_status": session_status,
+        "consent": consent_block(session.experiment_version, participant_data_for(session)),
+    }
     return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
 
 

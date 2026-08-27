@@ -152,7 +152,16 @@ def test_session_poll(api_client, session):
     url = reverse("api:chat:poll-response", kwargs={"session_id": session.external_id})
     response = api_client.get(url)
     response_json = response.json()
-    assert response_json == {"has_more": False, "messages": [], "session_status": "active"}
+    assert response_json == {
+        "has_more": False,
+        "messages": [],
+        "session_status": "active",
+        "consent": {
+            "required": True,
+            "form_version_id": session.experiment.consent_form_id,
+            "text": session.experiment.consent_form.get_rendered_content(),
+        },
+    }
 
 
 @pytest.mark.django_db()
@@ -193,10 +202,16 @@ def test_session_poll_with_messages(api_client, session):
             "tags": ["test"],
         },
     ]
+    expected_consent = {
+        "required": True,
+        "form_version_id": session.experiment.consent_form_id,
+        "text": session.experiment.consent_form.get_rendered_content(),
+    }
     assert response.json() == {
         "has_more": False,
         "messages": expected_messages,
         "session_status": "active",
+        "consent": expected_consent,
     }
 
     response = api_client.get(url, data={"limit": 1})
@@ -204,6 +219,7 @@ def test_session_poll_with_messages(api_client, session):
         "has_more": True,
         "messages": [expected_messages[0]],
         "session_status": "active",
+        "consent": expected_consent,
     }
 
 
