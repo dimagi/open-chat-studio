@@ -1973,11 +1973,51 @@ export class OcsChat {
     );
   }
 
+  private isComposerLocked(): boolean {
+    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
+  }
+
+  private hasDraft(): boolean {
+    return !!this.messageInput.trim();
+  }
+
+  // Uploading keeps the send button styled as ready while it is disabled, so its label can say so.
+  private isSendReady(): boolean {
+    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && this.hasDraft();
+  }
+
+  private renderAttachmentControls() {
+    if (!this.allowAttachments) {
+      return null;
+    }
+    return [
+      <input
+        ref={el => {
+          // Unclear why but after removing all attachments this is being set to `null`.
+          if (el) {
+            this.fileInputRef = el;
+          }
+        }}
+        id="ocs-file-input"
+        type="file"
+        multiple
+        accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
+        onChange={e => this.handleFileSelect(e)}
+        class="hidden"
+      />,
+      <button
+        class="file-attachment-button"
+        onClick={() => this.fileInputRef?.click()}
+        disabled={this.isComposerLocked()}
+        title={this.translationManager.get('attach.add')}
+        aria-label={this.translationManager.get('attach.add')}
+      >
+        <PaperClipIcon />
+      </button>,
+    ];
+  }
+
   private renderInputArea() {
-    const composerLocked = this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
-    const hasDraft = !!this.messageInput.trim();
-    // Uploading keeps the button styled as ready while it is disabled, so the label can say so.
-    const sendReady = !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && hasDraft;
     return (
       <div class="input-area">
         {this.renderKioskRestart()}
@@ -1990,40 +2030,13 @@ export class OcsChat {
             value={this.messageInput}
             onInput={e => this.handleInputChange(e)}
             onKeyPress={e => this.handleKeyPress(e)}
-            disabled={composerLocked}
+            disabled={this.isComposerLocked()}
           ></textarea>
-          {/* File Upload Button */}
-          {this.allowAttachments && (
-            <input
-              ref={el => {
-                // Unclear why but after removing all attachments this is being set to `null`.
-                if (el) {
-                  this.fileInputRef = el;
-                }
-              }}
-              id="ocs-file-input"
-              type="file"
-              multiple
-              accept={OcsChat.SUPPORTED_FILE_EXTENSIONS.join(',') + ',text/*'}
-              onChange={e => this.handleFileSelect(e)}
-              class="hidden"
-            />
-          )}
-          {this.allowAttachments && (
-            <button
-              class="file-attachment-button"
-              onClick={() => this.fileInputRef?.click()}
-              disabled={composerLocked}
-              title={this.translationManager.get('attach.add')}
-              aria-label={this.translationManager.get('attach.add')}
-            >
-              <PaperClipIcon />
-            </button>
-          )}
+          {this.renderAttachmentControls()}
           <button
-            class={`send-button ${sendReady ? 'send-button-enabled' : 'send-button-disabled'}`}
+            class={`send-button ${this.isSendReady() ? 'send-button-enabled' : 'send-button-disabled'}`}
             onClick={() => this.sendMessage(this.messageInput)}
-            disabled={composerLocked || !hasDraft}
+            disabled={this.isComposerLocked() || !this.hasDraft()}
           >
             {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
           </button>
