@@ -83,7 +83,7 @@ def public_link_page(request, token: str):
             "welcome_json": json.dumps(channel.extra_data.get("welcome_messages", [])),
             "starters_json": json.dumps(channel.extra_data.get("starter_questions", [])),
             "user": request.user if member else None,
-            "widget_enabled": state.live or member,
+            "widget_enabled": state.live or (member and state.code != "disabled"),
         },
     )
     response["X-Robots-Tag"] = "noindex"

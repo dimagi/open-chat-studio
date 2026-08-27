@@ -158,6 +158,15 @@ def test_team_member_gets_a_live_widget_on_an_unpublished_chatbot(client, team_w
 
 
 @pytest.mark.django_db()
+def test_team_member_gets_a_disabled_widget_on_a_disabled_channel(client, team_with_users):
+    _channel(team_with_users, enabled=False)
+    client.force_login(team_with_users.members.first())
+    html = _get(client).content.decode()
+    assert "Back soon" in html
+    assert 'disabled="true"' in html
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("host", "expected_status"),
     [
