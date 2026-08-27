@@ -157,11 +157,20 @@ class TestVersionDetailsComparisonTarget:
 
         assert list(response.context["comparison_versions"]) == []
 
-    def test_unknown_comparison_target_is_not_found(self, client, team_with_users, viewer):
+    @pytest.mark.parametrize(
+        "compare_to",
+        [
+            pytest.param(99, id="no-such-version"),
+            pytest.param("abc", id="not-a-number"),
+            pytest.param(3, id="later-than-the-version-on-screen"),
+        ],
+    )
+    def test_invalid_comparison_target_is_not_found(self, client, team_with_users, viewer, compare_to):
+        """A later target would render the newer version in the "previous" column, inverting the diff."""
         client.force_login(viewer)
         experiment = _three_versions(team_with_users, viewer)
 
-        response = client.get(_details_url(team_with_users, experiment, 3, compare_to=99))
+        response = client.get(_details_url(team_with_users, experiment, 2, compare_to=compare_to))
 
         assert response.status_code == 404
 
