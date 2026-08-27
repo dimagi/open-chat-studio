@@ -159,7 +159,7 @@ def test_poll_queries_participant_data_when_the_version_has_a_form(api_client, s
 
 @pytest.mark.django_db()
 def test_poll_reports_consent_required_before_acceptance(api_client, session):
-    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.status_code == 200
     assert response.json()["consent"]["required"] is True
@@ -172,7 +172,7 @@ def test_poll_reports_consent_satisfied_after_acceptance(api_client, session):
         team=session.team, participant=session.participant, experiment=session.experiment
     ).record_consent(session.experiment.consent_form_id)
 
-    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.json()["consent"] == {
         "required": False,
@@ -201,7 +201,7 @@ def test_consent_carries_over_to_the_participants_later_sessions(api_client, ses
         experiment=session.experiment, participant=session.participant, session_token_required=False
     )
 
-    response = _poll(api_client, later_session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = _poll(api_client, later_session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.json()["consent"]["required"] is False
 
@@ -213,7 +213,7 @@ def test_a_republished_form_prompts_the_participant_again(api_client, session):
     session.experiment.consent_form.save()
     republished = session.experiment.create_new_version(make_default=True)
 
-    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.json()["consent"] == {
         "required": True,
@@ -293,7 +293,7 @@ def _upload(api_client, session, **extra):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("call", [pytest.param(_send, id="send"), pytest.param(_upload, id="upload")])
 def test_release_b_widget_is_refused_until_consent_is_recorded(api_client, session, call):
-    response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.status_code == 403
     body = response.json()
@@ -308,13 +308,13 @@ def test_release_b_widget_is_refused_until_consent_is_recorded(api_client, sessi
     [pytest.param(_send, 202, id="send"), pytest.param(_upload, 201, id="upload")],
 )
 def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, call, expected_status):
-    _consent(api_client, session, session.experiment.consent_form_id, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    _consent(api_client, session, session.experiment.consent_form_id, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     if call is _send:
         with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
-            response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+            response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
     else:
-        response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+        response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.status_code == expected_status
 
@@ -322,7 +322,11 @@ def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, c
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
     "widget_version",
-    [pytest.param("0.11.0", id="release-a"), pytest.param(None, id="no-header")],
+    [
+        pytest.param("0.11.0", id="release-a"),
+        pytest.param("0.12.0", id="published-without-consent-panel"),
+        pytest.param(None, id="no-header"),
+    ],
 )
 def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget_version):
     extra = {"HTTP_X_OCS_WIDGET_VERSION": widget_version} if widget_version else {}
@@ -335,8 +339,8 @@ def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget
 
 @pytest.mark.django_db()
 def test_poll_is_never_gated(api_client, session):
-    assert _send(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0").status_code == 403
+    assert _send(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0").status_code == 403
 
-    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     assert response.status_code == 200

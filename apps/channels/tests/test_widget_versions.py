@@ -150,9 +150,10 @@ class TestGetWidgetUpdateStatus:
         pytest.param("unknown", False, id="pre-header-widget"),
         pytest.param("garbage", False, id="unparseable"),
         pytest.param("0.11.0", False, id="release-a"),
-        pytest.param("0.12.0", True, id="release-b"),
+        pytest.param("0.12.0", False, id="published-without-consent-panel"),
+        pytest.param("0.13.0", True, id="release-b"),
         pytest.param("1.0.0", True, id="later"),
-        pytest.param("0.12.0rc1", False, id="release-b-prerelease"),
+        pytest.param("0.13.0rc1", False, id="release-b-prerelease"),
     ],
 )
 def test_widget_enforces_consent(version, expected):
