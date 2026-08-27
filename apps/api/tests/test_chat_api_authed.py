@@ -114,12 +114,10 @@ def test_start_chat_session_with_session_state(authed_user, authed_client, exper
 @pytest.mark.parametrize(
     ("participant_remote_id", "status_code"), [(None, 400), ("", 400), ("123", 400), ("user_email", 201)]
 )
-def test_start_chat_session_requires_auth_when_not_public(
+def test_start_chat_session_requires_the_users_email_as_remote_id(
     authed_user, authed_client, experiment, participant_remote_id, status_code
 ):
     url = reverse("api:chat:start-session")
-    experiment.participant_allowlist = [authed_user.email]
-    experiment.save()
     data = {"chatbot_id": experiment.public_id}
     if participant_remote_id is not None:
         data["participant_remote_id"] = participant_remote_id

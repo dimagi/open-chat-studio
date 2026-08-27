@@ -31,7 +31,7 @@ from apps.chatbots.views import (
 )
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
@@ -1318,3 +1318,36 @@ def test_session_view_shows_confidence_badge_for_estimated_rows(client, team_wit
     assert response.status_code == 200
     assert b'data-testid="session-usage-confidence-badge"' in response.content
     assert "Estimated" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_settings_page_has_no_allowlist_section(client, experiment):
+    client.force_login(experiment.team.members.first())
+    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b'id="allowlist-section"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_settings_save_ignores_a_posted_allowlist(client, experiment):
+    """The settings form no longer has a `participant_allowlist` field, so a posted value for it
+    is inert -- the save still succeeds and the column is untouched."""
+    experiment.participant_allowlist = ["+27123456789"]
+    experiment.save(update_fields=["participant_allowlist"])
+    client.force_login(experiment.team.members.first())
+    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
+
+    response = client.post(
+        url,
+        data={
+            "name": "Updated Chatbot Name",
+            "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
+            "participant_allowlist": "+27999999999",
+        },
+    )
+
+    assert response.status_code == 200
+    experiment.refresh_from_db()
+    assert experiment.name == "Updated Chatbot Name"
+    assert experiment.participant_allowlist == ["+27123456789"]

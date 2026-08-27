@@ -1054,12 +1054,6 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        participant_allowlist:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-          readOnly: true
         seed_message:
           type: string
           readOnly: true
@@ -1078,7 +1072,6 @@ components:
       - file_uploads_enabled
       - id
       - name
-      - participant_allowlist
       - pipeline_id
       - seed_message
       - synthetic_voice_id
@@ -1799,17 +1792,11 @@ components:
           type: boolean
         file_uploads_enabled:
           type: boolean
-        participant_allowlist:
-          type: array
-          items:
-            type: string
-          description: Identifiers permitted to chat; empty means no allowlist restriction.
       required:
       - conversational_consent_enabled
       - debug_mode_enabled
       - echo_transcript
       - file_uploads_enabled
-      - participant_allowlist
       - seed_message
       - voice_response_behaviour
     InspectStaticTrigger:
@@ -2283,11 +2270,6 @@ components:
         consent_form_id:
           type: integer
           nullable: true
-        participant_allowlist:
-          type: array
-          items:
-            type: string
-            maxLength: 128
         seed_message:
           type: string
           description: If set, send this message to the bot when the session starts,

@@ -16,7 +16,7 @@ from apps.channels.stages.core import (
     QueryExtractionStage,
     ResponseFormattingStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.tracing import TracingService
 
@@ -74,10 +74,11 @@ class EvaluationChannel(ChannelBase):
         # admin toggle, and an eval run is not participant access to the bot. Honouring a
         # disabled flag here would silently substitute the static message for the bot's
         # output and corrupt the run's results.
-        # ParticipantValidationStage omitted: the "evaluations" participant is internal,
-        # validating against participant_allowlist is meaningless (and would block private
-        # experiments). Nothing downstream in this pipeline reads ctx.participant_identifier.
+        # ParticipantIdentifierStage omitted: the "evaluations" participant is internal and
+        # nothing downstream in this pipeline reads ctx.participant_identifier.
         # SessionActivationStage omitted: the eval bot does not gate on session status.
+        # PersistenceStage omitted: eval runs never record early-exit text, voice or tags
+        # into the eval session's chat.
         return MessageProcessingPipeline(
             core_stages=[
                 MessageTypeValidationStage(),
@@ -87,7 +88,6 @@ class EvaluationChannel(ChannelBase):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )

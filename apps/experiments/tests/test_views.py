@@ -413,6 +413,14 @@ def test_experiment_session_message_view_missing_message(delay_mock, experiment,
 
 @pytest.mark.django_db()
 class TestPublicSessions:
+    def test_stored_allowlist_no_longer_hides_the_legacy_link(self, client):
+        experiment = ExperimentFactory.create(participant_allowlist=["+27123456789"])
+        url = reverse(
+            "experiments:start_session_public",
+            kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+        )
+        assert client.get(url).status_code == 200
+
     @pytest.mark.parametrize("is_user", [False, True])
     @mock.patch("apps.experiments.services.enqueue_static_triggers")
     def test_start_session_public_with_emtpy_identifier(self, _trigger_mock, is_user, client):

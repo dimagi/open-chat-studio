@@ -270,9 +270,7 @@ class PersistenceStage(ProcessingStage):
         if self._is_reset_command(ctx):
             return False
 
-        return ctx.participant_allowed and (
-            ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
-        )
+        return ctx.early_exit_response is not None or ctx.voice_audio is not None or bool(ctx.human_message_tags)
 
     def _is_reset_command(self, ctx: MessageProcessingContext) -> bool:
         """Check if the user's inbound message was the /reset command."""

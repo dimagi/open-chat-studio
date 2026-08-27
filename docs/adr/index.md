@@ -78,3 +78,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0054](0054-chat-session-tokens-expire-on-absolute-age.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Chat session tokens expire on absolute age, not inactivity |
 | [0055](0055-binary-field-type-extends-the-field-definition-union.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Binary field type extends the field definition union |
 | [0056](0056-client-credentials-applications-name-their-chatbots.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Client-credentials applications name the chatbots they may reach |
+| [0057](0057-remove-the-participant-allowlist.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Remove the participant allowlist |

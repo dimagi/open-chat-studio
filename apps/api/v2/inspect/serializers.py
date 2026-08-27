@@ -424,10 +424,6 @@ class InspectSettingsSerializer(serializers.Serializer):
     )
     debug_mode_enabled = serializers.BooleanField()
     file_uploads_enabled = serializers.BooleanField()
-    participant_allowlist = serializers.ListField(
-        child=serializers.CharField(),
-        help_text="Identifiers permitted to chat; empty means no allowlist restriction.",
-    )
 
 
 # ── Graph (topology digest) ───────────────────────────────────────────────────────────────────
