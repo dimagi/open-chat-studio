@@ -70,9 +70,7 @@ def _update_href(el):
     parts = href.split(":")
     if len(parts) != 4:
         return el
-    prefix, team_slug, owner_id, file_id = parts
-    if prefix != "file":
-        return el
+    _prefix, team_slug, owner_id, file_id = parts
     relative_url = reverse("experiments:download_file", args=[team_slug, owner_id, file_id])
     el.set(tag, relative_url)
     return el
