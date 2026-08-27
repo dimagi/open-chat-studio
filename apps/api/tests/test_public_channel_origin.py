@@ -115,10 +115,8 @@ def test_anonymous_start_from_a_foreign_origin_is_refused(public_channel):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("member", [pytest.param(True, id="team-member"), pytest.param(False, id="non-member")])
-def test_logged_in_user_on_the_page_lands_on_the_public_channel(public_channel, member):
-    team = public_channel.team
-    user = team.members.first() if member else UserFactory.create()
+def test_logged_in_team_member_on_the_page_lands_on_the_public_channel(public_channel):
+    user = public_channel.team.members.first()
     client = APIClient()
     client.force_login(user)
     response = _start(
@@ -131,6 +129,29 @@ def test_logged_in_user_on_the_page_lands_on_the_public_channel(public_channel, 
     assert response.status_code == 201, response.content
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
     assert session.experiment_channel == public_channel
+    assert session.participant.identifier == user.email
+
+
+@pytest.mark.django_db()
+def test_logged_in_non_member_on_the_page_starts_as_a_public_visitor(public_channel):
+    """The page withholds user-id from non-members, so the widget sends a generated id while the
+    browser still carries the OCS session cookie. The start treats them as any other visitor."""
+    user = UserFactory.create()
+    client = APIClient()
+    client.force_login(user)
+    response = _start(
+        client,
+        public_channel.experiment,
+        {"participant_remote_id": "ocs:1724750000000_abc123"},
+        HTTP_X_EMBED_KEY=TOKEN,
+        HTTP_ORIGIN=f"https://{CANONICAL}",
+    )
+    assert response.status_code == 201, response.content
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.experiment_channel == public_channel
+    assert session.participant.user is None
+    assert session.participant.identifier != user.email
+    assert session.participant.platform == "public"
 
 
 @pytest.mark.django_db()

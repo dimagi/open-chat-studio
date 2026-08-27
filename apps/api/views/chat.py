@@ -376,10 +376,17 @@ def _published_public_version(experiment) -> tuple[Experiment | None, Response |
     return published, None
 
 
-def _public_channel_admission(request, experiment, experiment_channel) -> tuple[Experiment | None, Response | None]:
+def _is_public_visitor(request, experiment, experiment_channel) -> bool:
+    """A caller on the public channel who is not a team member. The public page withholds
+    user-id from them, so they chat as an anonymous visitor even when the browser carries an
+    OCS session cookie; team members keep their identity so they can preview before publishing."""
+    return experiment_channel.platform == ChannelPlatform.PUBLIC and not _is_team_member(request, experiment)
+
+
+def _public_channel_admission(public_visitor: bool, experiment) -> tuple[Experiment | None, Response | None]:
     """The published version a public visitor is admitted to, or the 409 that refuses them.
     (None, None) for other channels and for team members, who may try the page before publishing."""
-    if experiment_channel.platform != ChannelPlatform.PUBLIC or _is_team_member(request, experiment):
+    if not public_visitor:
         return None, None
     return _published_public_version(experiment)
 
@@ -582,12 +589,13 @@ def chat_start_session(request):
     if disabled := _channel_disabled_response(experiment_channel):
         return disabled
 
-    published, refusal = _public_channel_admission(request, experiment, experiment_channel)
+    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
+    published, refusal = _public_channel_admission(public_visitor, experiment)
     if refusal:
         return refusal
     experiment_version = experiment_version or published
 
-    if request.user.is_authenticated:
+    if request.user.is_authenticated and not public_visitor:
         user = request.user
         participant_id = user.email
         # Enforce this for authenticated users
