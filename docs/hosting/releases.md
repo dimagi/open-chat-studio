@@ -15,7 +15,7 @@ Releases are tagged `vMAJOR.MINOR.PATCH` and follow
 
 | Bump | What it means for you |
 |------|----------------------|
-| PATCH | Bug and security fixes. Nothing to act on: no schema, config or behaviour change. |
+| PATCH | Bug and security fixes. *Usually* nothing to act on — no schema, config or behaviour change. Always read the release's **Security** section: a security fix ships as a PATCH and can still require action, such as rotating a credential. |
 | MINOR | New features and backward-compatible changes. May include additive migrations, which run automatically with no manual steps. |
 | MAJOR | Requires action. Manual migration steps, removed or renamed configuration, breaking API or webhook changes, or the removal of a feature that was in use. |
 

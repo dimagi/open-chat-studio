@@ -22,7 +22,8 @@ The PR template has two independent checkboxes, for two audiences:
 
 Most user-facing PRs need only the first. Check the second when an operator has
 to *do* something on upgrade — a migration, a new or changed setting, a change
-in deployment shape, a deprecation or removal. Some PRs need both, and a purely
+in deployment shape, a deprecation or removal, or a security fix that needs
+operator action such as rotating a credential. Some PRs need both, and a purely
 internal migration needs only the second. See [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md)
 for how those entries are cut into a tagged release.
 
