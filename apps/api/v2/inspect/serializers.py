@@ -500,6 +500,11 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "indexed_collections": ("collection_index_ids",),
     }
     _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
+    # ``assistant_id`` lost its render key when the Assistant node was removed (#4254), so it
+    # would otherwise fall through into ``params`` and expose an internal id. Kept out of
+    # ``_RESOURCE_PARAM_KEYS`` because no node type declares the field any more (pinned by
+    # test_resource_param_fields_are_real_node_fields). Goes with the stored rows in phase 2.
+    _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS | {"assistant_id"}
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -546,7 +551,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     def get_params(self, node) -> dict:
         # Resource ids are surfaced under their own keys, never echoed in params (and "name" is the
         # node label, exposed separately).
-        params = {k: v for k, v in (node.params or {}).items() if k not in self._RESOURCE_PARAM_KEYS and k != "name"}
+        params = {k: v for k, v in (node.params or {}).items() if k not in self._HIDDEN_PARAM_KEYS and k != "name"}
         # ``max_results`` only bounds index search, so surface it under a clearer name.
         if "max_results" in params:
             params["max_indexed_collection_search_results"] = params.pop("max_results")

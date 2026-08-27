@@ -723,15 +723,15 @@ def _expected_pipeline_nodes(bot):
                 "neural": True,
             },
         },
-        # A node whose type was removed (#4254). It still renders: the type is reported verbatim
-        # and its stored params come through the generic shape, with no resource key lifted out.
+        # The node the `assistant` key used to hang off. It renders as any other node now: the
+        # type and its stored params through the generic shape, with ``assistant_id`` suppressed --
+        # there is no resource key left to lift it into, so it would otherwise leak an internal id.
         {
             "node_id": "assist",
             "type": "AssistantNode",
             "label": "Assistant",
-            "params": {"citations_enabled": True, "assistant_id": str(bot.assistant.id)},
-            # No class behind the type, so no handles can be derived.
-            "output_handles": [],
+            "params": {"citations_enabled": True},
+            "output_handles": [{"handle": "output", "label": None}],
         },
     ]
 
@@ -850,15 +850,15 @@ def _expected_full_response(bot):
         # the unwired side of the llm node lands in the advisory map. Neither blocked the read.
         "pipeline_valid": False,
         "pipeline_errors": {
-            # The assist node names a type whose class was removed (#4254). It is reported against
-            # the node rather than crashing the read, which is what keeps the pipeline unbuildable.
-            "node": {"assist": {"root": "Unknown node type: AssistantNode"}},
+            "node": {},
             "edge": [],
             # Both terminals are missing and both are reported; neither hides the other.
             "pipeline": ["There should be exactly 1 Start node", "There should be exactly 1 End node"],
         },
-        # `assist` has no derivable handles, so nothing of its is reported unwired.
-        "unwired_handles": {"llm": [{"handle": "input", "label": None}]},
+        "unwired_handles": {
+            "llm": [{"handle": "input", "label": None}],
+            "assist": [{"handle": "output", "label": None}],
+        },
         "events": _expected_events(bot),
     }
 
