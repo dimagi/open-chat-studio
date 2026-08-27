@@ -217,11 +217,20 @@ class ReadOnlyAPIKeyPermission(BasePermission):
 
 
 class RequiresTeamPermission(BasePermission):
-    """Gate on ``required_permissions`` against the team the credential is scoped to.
+    """Gate on a fixed ``required_permissions`` list, resolved against the credential's team.
 
-    ``has_perms`` resolves against that team because the auth layer calls ``set_current_team``.
-    Client-credentials (machine) tokens have no user and so no membership-derived permissions; their
-    authorization rests on the OAuth scope and the token's pinned team.
+    For views where ``DjangoModelPermissionsWithView`` would ask the wrong question, because it
+    derives the permission from the HTTP verb and the view's queryset. Two cases: the verb does not
+    match the operation -- removing a node from a chatbot's pipeline is a change to the chatbot, so
+    the stock map's ``delete_experiment`` would refuse a role that may edit a chatbot but not delete
+    one -- or the queryset is not the thing being authorized, as on a sub-resource route whose
+    queryset exists only to satisfy ``GenericAPIView``. Declaring the permissions outright is then
+    the only way to say what the endpoint actually needs.
+
+    ``has_perms`` resolves against the credential's team because the auth layer calls
+    ``set_current_team``. Client-credentials (machine) tokens have no user and so no
+    membership-derived permissions; their authorization rests on the OAuth scope and the token's
+    pinned team.
     """
 
     # Annotation only, deliberately with no default: ``has_perms([])`` is ``all([])``, so an empty or
