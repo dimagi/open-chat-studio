@@ -111,6 +111,26 @@ def _poll(api_client, session, **extra):
 
 
 @pytest.mark.django_db()
+def test_poll_skips_the_participant_data_query_when_the_version_has_no_form(api_client, plain_experiment):
+    plain_session = ExperimentSessionFactory.create(experiment=plain_experiment, session_token_required=False)
+
+    with mock.patch("apps.api.chat_consent.participant_data_for") as mocked:
+        response = _poll(api_client, plain_session)
+
+    assert response.status_code == 200
+    mocked.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_poll_queries_participant_data_when_the_version_has_a_form(api_client, session):
+    with mock.patch("apps.api.chat_consent.participant_data_for", wraps=participant_data_for) as mocked:
+        response = _poll(api_client, session)
+
+    assert response.status_code == 200
+    mocked.assert_called_once_with(session)
+
+
+@pytest.mark.django_db()
 def test_poll_reports_consent_required_before_acceptance(api_client, session):
     response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
 
@@ -186,6 +206,17 @@ def test_recording_consent_on_an_ended_session_is_refused(api_client, session):
 
 
 @pytest.mark.django_db()
+def test_recording_consent_without_a_session_token_is_refused(api_client, consent_experiment):
+    token_required_session = ExperimentSessionFactory.create(experiment=consent_experiment)
+
+    response = _consent(api_client, token_required_session, consent_experiment.consent_form_id)
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "session_token_required"
+    assert participant_data_for(token_required_session) is None
+
+
+@pytest.mark.django_db()
 def test_recording_consent_does_not_touch_the_legacy_session_consent_date(api_client, session):
     _consent(api_client, session, session.experiment.consent_form_id)
 
@@ -217,14 +248,20 @@ def test_release_b_widget_is_refused_until_consent_is_recorded(api_client, sessi
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("call", [pytest.param(_send, id="send"), pytest.param(_upload, id="upload")])
-def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, call):
+@pytest.mark.parametrize(
+    ("call", "expected_status"),
+    [pytest.param(_send, 202, id="send"), pytest.param(_upload, 201, id="upload")],
+)
+def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, call, expected_status):
     _consent(api_client, session, session.experiment.consent_form_id, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
 
-    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+    if call is _send:
+        with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+            response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+    else:
         response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
 
-    assert response.status_code in (201, 202)
+    assert response.status_code == expected_status
 
 
 @pytest.mark.django_db()

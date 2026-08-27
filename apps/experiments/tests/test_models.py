@@ -784,6 +784,15 @@ class TestExperimentModel:
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
 
+    def test_create_new_version_persists_the_frozen_consent_form(self):
+        experiment = self._setup_original_experiment()
+
+        version = experiment.create_new_version(make_default=True)
+
+        persisted_version = Experiment.objects.get(id=version.id)
+        assert persisted_version.consent_form_id != experiment.consent_form_id
+        assert persisted_version.consent_form.working_version_id == experiment.consent_form_id
+
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
         assert new_version.pipeline.version_number == 1

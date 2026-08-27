@@ -152,6 +152,7 @@ class TestGetWidgetUpdateStatus:
         pytest.param("0.11.0", False, id="release-a"),
         pytest.param("0.12.0", True, id="release-b"),
         pytest.param("1.0.0", True, id="later"),
+        pytest.param("0.12.0rc1", False, id="release-b-prerelease"),
     ],
 )
 def test_widget_enforces_consent(version, expected):
