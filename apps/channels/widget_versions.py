@@ -95,6 +95,17 @@ def get_deprecation(version: str | None) -> WidgetDeprecation | None:
     return None
 
 
+def is_older_than(version: str | None, floor: str) -> bool:
+    """Whether `version` is below `floor`.
+
+    A missing or unparseable version counts as older than everything, the same rule
+    `is_deprecated` applies: a widget that cannot tell us its version cannot be assumed
+    to meet a floor.
+    """
+    parsed = _parse(version)
+    return parsed is None or parsed < Version(floor)
+
+
 def is_outdated(version: str | None) -> bool:
     """True if `version` is a known version older than LATEST_VERSION."""
     parsed = _parse(version)
@@ -138,6 +149,12 @@ AUTH_LEVEL_SESSION_TOKEN = 2
 # Widget releases that introduced each auth capability.
 EMBED_KEY_INTRODUCED = Version("0.5.1")
 SESSION_TOKEN_INTRODUCED = Version("0.9.0")
+
+# The release that ships the `authTokenProvider` prop, the only way a browser embed can
+# present a bearer token. Advisory: an older widget simply cannot send one and so fails
+# admission on its own, and nothing rejects a request on this version. It exists so the
+# channel dialog and the docs can name the release an `oauth`-mode embed needs.
+MIN_OAUTH_WIDGET_VERSION = "0.12.0"
 
 
 def level_for_version(version: str | None) -> int:
