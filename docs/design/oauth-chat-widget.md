@@ -870,7 +870,7 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 | # | File | Change |
 |---|---|---|
 | 1 | `apps/channels/models.py` | ~~`CredentialMode` choices; `credential_mode` column defaulting to `EMBED_KEY`; nullable `session_token_lifetime` (D7; null = use the global); `EMBEDDED_WIDGET` label → "Chat Widget & API"; `clean()`/`save()` + `CheckConstraint` pinning `SESSION_TOKEN` for `oauth` mode; add both columns to `EXPERIMENT_CHANNEL_FIELDS`~~ — **shipped** as `bot_channels.0033`. |
-| 2 | `apps/channels/widget_versions.py` | ~~`MIN_OAUTH_WIDGET_VERSION` (advisory)~~ — **shipped** at `0.12.0`, with `is_older_than()` alongside it. `ExperimentChannel.min_widget_version` returns it in `oauth` mode rather than the SESSION_TOKEN level's own `0.9.0`: only the `authTokenProvider` release can present a bearer token at all, so the level's floor understates what an `oauth` embed needs. Still advisory — nothing rejects a request on it, and the number names a release that is **not yet published** (row 15). |
+| 2 | `apps/channels/widget_versions.py` | ~~`MIN_OAUTH_WIDGET_VERSION` (advisory)~~ — **shipped** at `0.12.0`, with `is_older_than()` alongside it. `ExperimentChannel.min_widget_version` returns it in `oauth` mode rather than the SESSION_TOKEN level's own `0.9.0`: only the `authTokenProvider` release can present a bearer token at all, so the level's floor understates what an `oauth` embed needs. Still advisory — nothing rejects a request on it. `0.12.0` is published and `LATEST_VERSION` now points at it (row 15), so the floor and the release the embed snippet loads agree. |
 | 3 | `apps/channels/forms.py` | ~~`credential_mode` on `EmbeddedWidgetChannelForm`; `allowed_domains` required for `embed_key`, optional for `oauth`; instructions + link to the team's OAuth applications~~ — **shipped**, along with `session_token_lifetime` before it. Three things implementation settled. The field is `required=False` and a missing value falls back to the mode already stored, so an omitted field can never *relax* the credential a channel demands — the one direction that must not be reachable by accident. `post_save` writes it via `save(update_fields=…)`, which the model widens to carry D1's auth-level pin, so the form cannot produce the row the `CheckConstraint` forbids. And a save into `oauth` mode **warns** when the channel's last-reported `widget_version` is below row 2's floor: the floor is advisory, so an embed too old to send a token just fails admission with the door's deliberately opaque `401` ([D6](#d6-getting-a-401-out-of-drf)) — this is the only place an admin finds out before their visitors do. |
 | 4 | `apps/channels/tasks.py` | ~~Ratchet task skips channels already pinned to `SESSION_TOKEN` by their mode~~ — **shipped** (the queryset filters on `credential_mode`). |
 | 5 | `apps/oauth/models.py`, `forms.py`, `views.py` | ~~`allowed_chatbots` M2M + team-filtered picker~~ — **shipped in PR #4198**. No change. |
@@ -883,20 +883,17 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 | 12 | `apps/api/views/chat.py` | ~~`START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`~~ — **shipped**. Implementing it settled one thing the sketch in [D3](#d3-extend-the-existing-authorization-site) left open: the mode is checked wherever the *embed key* is the proof, which includes ADR-0053's cookie-bearing **non-member** with a key, not only the anonymous caller. That branch keeps its `403` (D6: a `401` at an authenticated caller reads as a broken session), so only the anonymous refusal is one of the door's uniform `401`s. |
 | 13 | `apps/api/v2/inspect/serializers.py` | **No change** — one platform, so the existing `EMBEDDED_WIDGET` guards stay correct. Expose `credential_mode` if the inspect API should report it. |
 | 14 | `config/settings.py` | ~~`CORS_ALLOW_HEADERS += ["authorization"]`; `chat:start` in `OAUTH2_PROVIDER["SCOPES"]` and `OAUTH_CLIENT_CREDENTIALS_SCOPES`; `CHAT_API_SCOPE`~~ — **shipped** (the new scope also lands in the generated `api-schemas/*.yml` security definitions). `CHAT_SESSION_TOKEN_LIFETIME` already **shipped in PR #4204**. |
-| 15 | `components/chat_widget` | ~~`authTokenProvider` (property-only, pull-based) as the single credential prop, `Authorization: Bearer` on `chat/start/` only (not `getCommonHeaders()`), `@Watch` so a provider installed later reaches the cached service, `ChatAuthError` as the `401` surface, no `localStorage`~~ — **shipped**. A static `auth-token` attribute was implemented and dropped; see [Browser embeds and the token](#browser-embeds-and-the-token) for why. Nothing for D7 in an *unbound* widget; the bound-widget dead-end (D7) is ADR-0054's own follow-up, not this document's. What remains is the **release**: npm publish, `LATEST_VERSION` bump and `MIN_OAUTH_WIDGET_VERSION` (row 2), all of which land together per `docs/developer_guides/widget_versioning.md`. |
+| 15 | `components/chat_widget` | ~~`authTokenProvider` (property-only, pull-based) as the single credential prop, `Authorization: Bearer` on `chat/start/` only (not `getCommonHeaders()`), `@Watch` so a provider installed later reaches the cached service, `ChatAuthError` as the `401` surface, no `localStorage`~~ — **shipped**. A static `auth-token` attribute was implemented and dropped; see [Browser embeds and the token](#browser-embeds-and-the-token) for why. Nothing for D7 in an *unbound* widget; the bound-widget dead-end (D7) is ADR-0054's own follow-up, not this document's. The **release** is done: `0.12.0` is on npm and `LATEST_VERSION` points at it, per `docs/developer_guides/widget_versioning.md`. |
 
 This work carries **one migration** (`credential_mode` + `session_token_lifetime` on the same
 `channels` migration; the platform change is a label only, and `allowed_chatbots` already shipped as
 `oauth.0004`) — **shipped as `bot_channels.0033`**, ahead of the rest, since the columns are inert
 until something can select the mode. The server admission path (rows 6–8, 11, 12, 14) followed as a
 second phase, the widget (row 15) as a third, and the admin-facing half (rows 2 and 3) as a fourth.
-`oauth` mode is now admin-selectable, so **the only thing left is the widget release** — an npm publish
-of `0.12.0` and the `LATEST_VERSION` bump that goes with it. That ordering is the wrong way round and
-has to be corrected before this ships: `MIN_OAUTH_WIDGET_VERSION` now names a release that does not
-exist on npm, so an admin who selects `oauth` today is told to upgrade to a version they cannot
-install. **Rows 2 and 3 must not reach production ahead of the publish.** Nothing is unsafe about it —
-the mode still admits only what [D4](#d4-what-makes-a-token-acceptable) accepts, and the floor is
-advisory — but the admin-facing copy is a promise the npm registry cannot yet keep. No change to
+With `0.12.0` published and `LATEST_VERSION` pointing at it, **every row is shipped**: `oauth` mode is
+admin-selectable and the snippet an admin copies loads a widget that can honour it. Rows 2 and 3 had to
+follow the publish rather than precede it — until then `MIN_OAUTH_WIDGET_VERSION` named a release nobody
+could install, and the admin-facing copy was a promise the npm registry could not keep. No change to
 `required_auth_level` semantics for existing channels — they all
 migrate to `EMBED_KEY` mode, which is exactly today's behaviour. One status code changed on an already-rejected path
 (`test_start_session_with_invalid_embed_key`, `403` → `401`, [D6](#d6-getting-a-401-out-of-drf)), and
@@ -1041,11 +1038,9 @@ is untouched by this work. Widget: header sent/omitted/rotated, never persisted.
 
 ## Open questions
 
-1. ~~**Which release becomes `MIN_OAUTH_WIDGET_VERSION`?**~~ **Decided and recorded: 0.12.0** — a
-   minor bump for an additive prop, over 0.11.0. It is in the code and quoted by the channel dialog,
-   but **0.12.0 is not published**, so `LATEST_VERSION` is still 0.11.0 and the constant currently
-   names a release nobody can install. That is the last thing on this document's critical path, and
-   the reason rows 2 and 3 must not reach production ahead of the publish.
+1. ~~**Which release becomes `MIN_OAUTH_WIDGET_VERSION`?**~~ **Settled and shipped: 0.12.0** — a
+   minor bump for an additive prop, over 0.11.0. Published to npm, with `LATEST_VERSION` pointing at
+   it, so the floor and the release the embed snippet loads are the same number.
 2. **Does the two-person setup flow hold up?** `oauth` mode needs a Team Admin (registers the
    application, names its chatbots) *and* a Chatbot Admin (creates the channel, sets the mode). Neither
    can finish alone. **Both halves are now built**, so the flow is answerable in the field rather than
