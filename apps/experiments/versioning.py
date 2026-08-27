@@ -336,6 +336,21 @@ class VersionsMixin:
     def latest_version(self):
         return self.versions.order_by("-created_at").first()
 
+    def get_previous_version(self) -> Self | None:
+        """The version immediately preceding this one, or None for the first version.
+
+        Uses `get_all()` so an archived predecessor is still returned.
+        """
+        if self.is_working_version or not hasattr(self, "version_number"):
+            return None
+        return (
+            type(self)
+            .objects.get_all()
+            .filter(working_version_id=self.working_version_id, version_number__lt=self.version_number)
+            .order_by("-version_number")
+            .first()
+        )
+
     def get_working_version(self) -> Self:
         """Returns the working version of this experiment family"""
         if self.is_working_version:

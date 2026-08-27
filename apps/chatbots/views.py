@@ -564,7 +564,12 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
+    version_details = experiment_version.version_details
+    previous_version = experiment_version.get_previous_version()
+    if previous_version:
+        version_details.compare(previous_version.version_details)
+
+    context = {"version_details": version_details, "experiment": experiment_version}
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 
