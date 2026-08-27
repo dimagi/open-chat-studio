@@ -12,7 +12,7 @@ def _details_url(team, experiment, version_number, compare_to=None):
 
 
 def _three_versions(team, owner):
-    """A chatbot with v1, v2 and v3, each renamed so every pair differs."""
+    """A chatbot at v1, v2 and v3, renamed between each."""
     experiment = ExperimentFactory.create(team=team, name="One", owner=owner)
     experiment.create_new_version()
     experiment.name = "Two"
@@ -50,7 +50,7 @@ def viewer(team_with_users):
 @pytest.mark.django_db()
 class TestVersionDetailsDiff:
     def test_diffs_against_the_previous_version(self, client, team_with_users, viewer):
-        """A version's details compare against its predecessor, so changed fields render as changed."""
+        """Changed fields are marked against the predecessor, not left flat."""
         client.force_login(viewer)
         experiment = ExperimentFactory.create(team=team_with_users, name="Original", owner=viewer)
         experiment.create_new_version()
@@ -77,7 +77,7 @@ class TestVersionDetailsDiff:
         assert response.context["version_details"].fields_changed is False
 
     def test_first_version_has_no_predecessor_to_diff(self, client, team_with_users, viewer):
-        """v1 has nothing before it, so the page renders without a diff rather than erroring."""
+        """v1 has no predecessor. The page renders without a diff rather than raising."""
         client.force_login(viewer)
         experiment = ExperimentFactory.create(team=team_with_users, name="Original", owner=viewer)
         first = experiment.create_new_version()
@@ -88,7 +88,7 @@ class TestVersionDetailsDiff:
         assert response.context["version_details"].fields_changed is False
 
     def test_archived_predecessor_still_diffs(self, client, team_with_users, viewer):
-        """The view shows archived versions, so an archived predecessor must not break the diff."""
+        """The view lists archived versions; archiving the predecessor must not blank the diff."""
         client.force_login(viewer)
         experiment = ExperimentFactory.create(team=team_with_users, name="Original", owner=viewer)
         first = experiment.create_new_version()
@@ -121,7 +121,7 @@ class TestVersionDetailsDiff:
 @pytest.mark.django_db()
 class TestVersionDetailsComparisonTarget:
     def test_compares_against_an_explicitly_chosen_version(self, client, team_with_users, viewer):
-        """`compare_to` overrides the default predecessor, so any two versions can be compared."""
+        """`compare_to` overrides the default predecessor."""
         client.force_login(viewer)
         experiment = _three_versions(team_with_users, viewer)
 
@@ -147,6 +147,15 @@ class TestVersionDetailsComparisonTarget:
 
         offered = [v.version_number for v in response.context["comparison_versions"]]
         assert offered == [2, 1]
+
+    def test_only_earlier_versions_are_offered(self, client, team_with_users, viewer):
+        """The selector lists earlier versions only, which leaves v1 with none."""
+        client.force_login(viewer)
+        experiment = _three_versions(team_with_users, viewer)
+
+        response = client.get(_details_url(team_with_users, experiment, 1))
+
+        assert list(response.context["comparison_versions"]) == []
 
     def test_unknown_comparison_target_is_not_found(self, client, team_with_users, viewer):
         client.force_login(viewer)

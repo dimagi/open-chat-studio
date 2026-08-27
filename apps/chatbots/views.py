@@ -564,10 +564,11 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    sibling_versions = (
+    # Earlier versions only. The diff then always reads oldest-to-newest, and any
+    # pair stays reachable by opening the newer of the two.
+    earlier_versions = (
         Experiment.objects.get_all()
-        .filter(working_version_id=experiment_id)
-        .exclude(version_number=version_number)
+        .filter(working_version_id=experiment_id, version_number__lt=version_number)
         .order_by("-version_number")
     )
 
@@ -587,7 +588,7 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
         "version_details": version_details,
         "experiment": experiment_version,
         "compare_to": compare_to,
-        "comparison_versions": sibling_versions,
+        "comparison_versions": earlier_versions,
     }
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
