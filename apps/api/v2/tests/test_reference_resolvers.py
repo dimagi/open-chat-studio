@@ -4,8 +4,8 @@
 (`apps/api/v2/pipeline_edit/references.py`). The two have to agree, so the promise is stated here as
 an equality: for every checked param, the resolver's answer is exactly the option list's contents.
 
-The resolvers themselves live in `apps/pipelines/nodes/node_metadata.py`; what the discovery
-endpoints serve is in `test_pipeline_discovery.py`.
+The resolvers themselves live in `apps/pipelines/nodes/node_metadata.py` and are reached through
+`OptionsSource.get_resolver`; what the discovery endpoints serve is in `test_pipeline_discovery.py`.
 """
 
 import pytest
@@ -16,7 +16,7 @@ from apps.api.v2.discovery.node_types import _sources_by_type, parameter_option_
 from apps.api.v2.discovery.options import options_for_team
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import OptionsSource
-from apps.pipelines.nodes.node_metadata import RESOLVERS, get_resolver
+from apps.pipelines.nodes.node_metadata import RESOLVERS
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -48,7 +48,7 @@ def test_every_checked_param_has_a_resolver(team):
     """A write checks each reference param through the resolver on the source it draws from. A source
     with no resolver raises rather than writing, so this is the loud version of that."""
     for param, source in _checked_params(ApiTestClient(team.members.first(), team)).items():
-        assert get_resolver(source), f"{param} -> {source}"
+        assert source.get_resolver(), f"{param} -> {source}"
 
 
 def test_every_checked_source_has_a_resolver():
@@ -57,6 +57,16 @@ def test_every_checked_source_has_a_resolver():
     not be what discovers its resolver is missing, so the whole checked set is held to having one.
     """
     assert set(RESOLVERS) >= PARAMETER_OPTION_SOURCES
+
+
+def test_a_source_that_can_deny_nothing_has_no_resolver():
+    """The other half of the promise above: asking for a resolver the registry does not hold raises
+    rather than answering permissively, so a param wired to such a source cannot go unchecked."""
+    unchecked = sorted(set(OptionsSource) - set(RESOLVERS), key=str)
+    assert unchecked, "every source has a resolver, so this would prove nothing"
+    for source in unchecked:
+        with pytest.raises(NotImplementedError, match="has no resolver"):
+            source.get_resolver()
 
 
 @pytest.mark.django_db()
@@ -76,7 +86,7 @@ def test_a_write_accepts_exactly_the_values_the_options_endpoint_offers(team_wit
         ours = {option["value"] for option in options_for_team(team)[option_key]}
         theirs = {option["value"] for option in options_for_team(other)[option_key]}
         assert ours, f"{option_key} offers nothing, so this would prove nothing"
-        assert get_resolver(option_key)(team, sorted(ours | theirs)) == ours, param
+        assert option_key.get_resolver()(team, sorted(ours | theirs)) == ours, param
 
 
 @pytest.mark.django_db()
@@ -93,8 +103,8 @@ def test_a_collection_and_an_index_are_not_interchangeable(team_with_every_resou
     assert indexes, "no indexes offered, so this would prove nothing"
 
     both = sorted(collections | indexes)
-    assert get_resolver(OptionsSource.collection)(team, both) == collections
-    assert get_resolver(OptionsSource.collection_index)(team, both) == indexes
+    assert OptionsSource.collection.get_resolver()(team, both) == collections
+    assert OptionsSource.collection_index.get_resolver()(team, both) == indexes
 
 
 @pytest.mark.django_db()
@@ -107,9 +117,9 @@ def test_an_unknown_tool_name_is_refused(team):
     offered = {option["value"] for option in options_for_team(team)["tools"]}
     assert offered, "no tools offered, so this would prove nothing"
 
-    assert get_resolver(OptionsSource.tools)(team, sorted(offered)) == offered
-    assert get_resolver(OptionsSource.tools)(team, ["not_a_tool"]) == set()
-    assert get_resolver(OptionsSource.tools)(team, [{"a": 1}, ["nested"], 7, None]) == set()
+    assert OptionsSource.tools.get_resolver()(team, sorted(offered)) == offered
+    assert OptionsSource.tools.get_resolver()(team, ["not_a_tool"]) == set()
+    assert OptionsSource.tools.get_resolver()(team, [{"a": 1}, ["nested"], 7, None]) == set()
 
 
 @pytest.mark.django_db()

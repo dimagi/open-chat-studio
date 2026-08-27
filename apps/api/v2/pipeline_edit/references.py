@@ -4,8 +4,8 @@ Refuses rather than reports: nothing downstream would tell the caller. Another t
 the FK column untouched, and ``Pipeline.validate`` says nothing about it.
 
 ``PARAMETER_OPTION_SOURCES`` says which ``/pipeline/options/`` lists a team could be denied a value
-from, and so which params are references. Each has a resolver in ``node_metadata`` that asks the
-database what the team may actually use.
+from, and so which params are references. ``OptionsSource.get_resolver`` hands back the function that
+asks the database what the team may actually use.
 
 A resolver is reached through the source rather than the param, because the source decides the
 permitted values; the param name is only how the body spells it, and what an error is reported
@@ -18,7 +18,6 @@ from rest_framework.exceptions import ValidationError
 
 from apps.api.v2.discovery.node_types import parameter_option_mapping
 from apps.pipelines.nodes.base import BasePipelineNode
-from apps.pipelines.nodes.node_metadata import get_resolver
 from apps.teams.models import Team
 
 from .node_params import is_list_param
@@ -58,7 +57,7 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
         )
         # Via the source, not the param: the source is what says which records are on offer.
         # `test_every_checked_param_has_a_resolver` says every one reached here has a resolver.
-        available_values = get_resolver(param_option_map[param])(team, requested_values)
+        available_values = param_option_map[param].get_resolver()(team, requested_values)
         if unknown := [item for item in requested_values if _is_not_allowed(item, available_values)]:
             errors[param] = (
                 f"Not available to this team: {', '.join(repr(item) for item in unknown)}. "

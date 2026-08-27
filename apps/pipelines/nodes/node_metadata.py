@@ -312,8 +312,8 @@ def _get_node_schema(node_class: type) -> dict:
 
 # --------------------------------------------------------------------------------------------------
 # Which of a set of supplied values a team may actually use, one function per option list whose
-# values a team could be denied. Reached through `get_resolver`; the write API refuses a param naming
-# anything these do not return (see `apps.api.v2.pipeline_edit.references`).
+# values a team could be denied. Reached through `OptionsSource.get_resolver`; the write API refuses a
+# param naming anything these do not return (see `apps.api.v2.pipeline_edit.references`).
 #
 # They live beside the querysets the option lists are built from so that what a client is offered and
 # what a write accepts cannot come apart.
@@ -409,7 +409,8 @@ def _rows_named_by(queryset: QuerySet, values: list) -> set:
 #: The resolver behind each option list, keyed on the list rather than the param, because the list is
 #: what decides the permitted values -- ``source_material_id`` is the param, ``source_material`` the
 #: list it chooses from. ``contract.PARAMETER_OPTION_SOURCES`` is the set of sources a write checks;
-#: ``test_every_checked_param_has_a_resolver`` says every one of those is a key here.
+#: ``test_every_checked_param_has_a_resolver`` says every one of those is a key here. Read it through
+#: ``OptionsSource.get_resolver``, which raises for a source this does not serve.
 RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
     OptionsSource.llm_provider_id: reachable_llm_providers,
     OptionsSource.llm_provider_model_id: reachable_llm_provider_models,
@@ -421,17 +422,3 @@ RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
     OptionsSource.custom_actions: reachable_custom_actions,
     OptionsSource.tools: reachable_tools,
 }
-
-
-def get_resolver(source: OptionsSource) -> Callable[[Team, list], set]:
-    """The function answering "which of these values may this team actually use?" for one option list.
-
-    Raises for a list that can deny nothing -- the prompt-variable lists, and the tool-config lists
-    that nest their options under provider types. Reaching here with one of those means something
-    asked to check a value against a list that cannot refuse it, which is a bug rather than a
-    permissive answer.
-    """
-    try:
-        return RESOLVERS[source]
-    except KeyError:
-        raise NotImplementedError(f"'{source}' has no resolver: it offers nothing a team could be denied.") from None
