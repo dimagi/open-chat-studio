@@ -22,8 +22,13 @@ compose file and `.env`:
 ```bash
 git clone https://github.com/dimagi/open-chat-studio.git
 cd open-chat-studio
+git fetch --tags
 git checkout v1.0.0
 ```
+
+On a clone you already have, `git fetch --tags` is what makes a newly published
+release visible — without it `git checkout` fails on a tag created after you
+cloned.
 
 Set `OCS_VERSION` in your `.env` to the release you want (see
 [Releases and Upgrades](./releases.md)), then pull:
@@ -172,12 +177,18 @@ docker compose -f docker-compose.prod.yml logs -f celery_worker
 # Run a management command
 docker compose -f docker-compose.prod.yml run --rm web python manage.py <command>
 
-# Apply migrations after an upgrade
-docker compose -f docker-compose.prod.yml run --rm migrate
-
-# Upgrade to a new release: bump OCS_VERSION in .env, then
+# Upgrade to a new release, in this order. Migrations must run on the new
+# image, so the pull comes first; running them before it applies the old
+# image's migrations and misses everything the new release added.
+git fetch --tags                      # make the new tag visible
+git checkout v1.1.0                   # compose file and .env for the release
+# bump OCS_VERSION in .env to 1.1.0
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
+
+# `up -d` runs the migrate service before web starts, so migrations are
+# already applied. Run it by hand only to re-check or after a manual rollback:
+docker compose -f docker-compose.prod.yml run --rm migrate
 ```
 
 ## Scaling
