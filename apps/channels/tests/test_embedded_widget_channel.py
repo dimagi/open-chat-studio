@@ -190,6 +190,20 @@ class TestEmbeddedWidgetChannelForm:
         assert bool(form.warning_message) == warns
 
     @pytest.mark.django_db()
+    def test_a_server_only_oauth_channel_is_not_warned_about_its_embed(self):
+        """A blank domain list refuses every browser request outright, so there is no embed for
+        the advisory floor to constrain and nothing for the admin to upgrade."""
+        channel = _widget_channel(widget_version=None)
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "", "credential_mode": CredentialMode.OAUTH},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        form.post_save(channel)
+        assert form.warning_message == ""
+
+    @pytest.mark.django_db()
     def test_creating_a_server_only_oauth_channel_through_the_wrapper(self):
         """The whole point of row 3, end to end: a channel an admin can actually create in
         `oauth` mode with no domain list, landing in the state the OAuth door needs — the mode

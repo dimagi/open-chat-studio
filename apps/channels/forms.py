@@ -823,6 +823,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         """
         if self._credential_mode != CredentialMode.OAUTH:
             return ""
+        if not self.cleaned_data.get("allowed_domains"):
+            # Server-only: a blank domain list refuses every browser request outright, so there
+            # is no embed for the floor to constrain and nothing for an admin to upgrade. Read
+            # from cleaned_data rather than the channel: this is the list being saved.
+            return ""
         version = channel.widget_version
         min_version = widget_versions.MIN_OAUTH_WIDGET_VERSION
         if not widget_versions.is_older_than(version, min_version):

@@ -74,13 +74,19 @@ def latest_deprecation() -> WidgetDeprecation | None:
     return max(DEPRECATIONS, key=lambda d: Version(d.below_version))
 
 
-def is_deprecated(version: str | None, deprecation: WidgetDeprecation) -> bool:
-    """Whether `version` falls under `deprecation`.
+def is_older_than(version: str | None, floor: str) -> bool:
+    """Whether `version` is below `floor`.
 
-    A missing or unparseable version is treated as older than everything.
+    A missing or unparseable version counts as older than everything: a widget that cannot
+    tell us its version cannot be assumed to meet a floor.
     """
     parsed = _parse(version)
-    return parsed is None or parsed < Version(deprecation.below_version)
+    return parsed is None or parsed < Version(floor)
+
+
+def is_deprecated(version: str | None, deprecation: WidgetDeprecation) -> bool:
+    """Whether `version` falls under `deprecation`."""
+    return is_older_than(version, deprecation.below_version)
 
 
 def get_deprecation(version: str | None) -> WidgetDeprecation | None:
@@ -93,17 +99,6 @@ def get_deprecation(version: str | None) -> WidgetDeprecation | None:
     if deprecation and is_deprecated(version, deprecation):
         return deprecation
     return None
-
-
-def is_older_than(version: str | None, floor: str) -> bool:
-    """Whether `version` is below `floor`.
-
-    A missing or unparseable version counts as older than everything, the same rule
-    `is_deprecated` applies: a widget that cannot tell us its version cannot be assumed
-    to meet a floor.
-    """
-    parsed = _parse(version)
-    return parsed is None or parsed < Version(floor)
 
 
 def is_outdated(version: str | None) -> bool:
