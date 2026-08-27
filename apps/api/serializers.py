@@ -349,6 +349,25 @@ class ChatStartSessionRequest(serializers.Serializer):
         return value if value and value in available_timezones() else None
 
 
+class ChatConsentSerializer(serializers.Serializer):
+    required = serializers.BooleanField(
+        label="Consent required",
+        help_text="True until the participant accepts the chatbot's consent form. Send and upload return"
+        " `403 consent_required` while this is true; poll is never gated.",
+    )
+    form_version_id = serializers.IntegerField(
+        label="Consent form version ID",
+        allow_null=True,
+        help_text="Identifies the frozen consent form text. Post it back to `/consent/`; a changed form"
+        " gets a new id and re-prompts.",
+    )
+    text = serializers.CharField(
+        label="Consent text",
+        allow_null=True,
+        help_text="Rendered HTML of the consent form. Present only while consent is required.",
+    )
+
+
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
     session_token = serializers.CharField(
@@ -360,6 +379,7 @@ class ChatStartSessionResponse(serializers.Serializer):
     )
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
+    consent = ChatConsentSerializer(read_only=True)
 
 
 class ChatSendMessageRequest(serializers.Serializer):
@@ -390,6 +410,7 @@ class ChatPollResponse(serializers.Serializer):
     session_status = serializers.ChoiceField(
         choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
     )
+    consent = ChatConsentSerializer(read_only=True)
 
 
 class TriggerBotMessageRequest(serializers.Serializer):
