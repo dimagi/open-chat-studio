@@ -140,6 +140,24 @@ describe('consent memory', () => {
     expect(page.rootInstance['consent']).toBeUndefined();
   });
 
+  it('falls back to asking when a silent consent post fails, without retrying or reporting', async () => {
+    const page = await mountWidget('persistent-session="true"');
+    window.localStorage.setItem('ocs-chat-consent-bot', '7');
+    const recordConsent = jest.fn().mockRejectedValue(new Error('boom'));
+    const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
+    stubService(page, { recordConsent, startMessagePolling });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    const callbacks = startMessagePolling.mock.calls[0][1];
+    callbacks.onConsent(consentBlock);
+    await settle(page);
+
+    expect(recordConsent).toHaveBeenCalledTimes(1);
+    expect(page.rootInstance['messages'].filter((m: { role: string }) => m.role === 'system')).toHaveLength(0);
+    expect(consentPanel(page)).not.toBeNull();
+  });
+
   it('takes a consent block delivered by polling', async () => {
     const page = await mountWidget('persistent-session="true"');
     const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
@@ -198,6 +216,23 @@ describe('hold and release', () => {
     expect(sendMessage).toHaveBeenCalledWith('session-1', expect.objectContaining({ message: 'hello' }));
     expect(consentPanel(page)).toBeNull();
     expect(page.root.shadowRoot.querySelector('.message-textarea')).not.toBeNull();
+  });
+
+  it('disables the agree button while the acceptance is in flight', async () => {
+    const page = await mountWidget();
+    let releasePost: () => void;
+    const recordConsent = jest.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
+    stubService(page, { recordConsent, sendMessage: processing() });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    (page.root.shadowRoot.querySelector('.consent-agree') as HTMLButtonElement).click();
+    await page.waitForChanges();
+
+    expect(page.root.shadowRoot.querySelector('.consent-agree').hasAttribute('disabled')).toBe(true);
+
+    releasePost();
+    await settle(page);
   });
 
   it('a consent refusal on send re-opens the panel without discarding the session', async () => {

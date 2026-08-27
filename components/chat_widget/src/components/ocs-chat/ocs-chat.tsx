@@ -309,7 +309,9 @@ export class OcsChat {
   @State() consent?: ChatConsent;
   /** The message held while the consent panel is up; released by acceptConsent(). */
   @State() heldMessage?: string;
-  private consentPostInFlight = false;
+  @State() consentPostInFlight = false;
+  /** Form version whose stored acceptance has already been re-posted this session. */
+  private autoConsentAttempted?: number;
   private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
   private buttonHorizontalSide: 'left' | 'right' = 'right';
   private buttonVerticalSide: 'top' | 'bottom' = 'bottom';
@@ -594,11 +596,19 @@ export class OcsChat {
     this.consent = consent;
     if (!consent.required || consent.form_version_id == null) return;
     if (this.storedConsentFormId() !== consent.form_version_id) return;
-    await this.postConsent(consent.form_version_id);
+    // Polling delivers the block on every cycle, so the re-post is attempted once per
+    // form version: a failed one leaves `required` set and the next send shows the panel.
+    if (this.autoConsentAttempted === consent.form_version_id) return;
+    this.autoConsentAttempted = consent.form_version_id;
+    await this.postConsent(consent.form_version_id, { silent: true });
   }
 
-  /** Post consent for `formVersionId`; on a stale refusal, drop the memory and keep the new block. */
-  private async postConsent(formVersionId: number): Promise<boolean> {
+  /**
+   * Post consent for `formVersionId`; on a stale refusal, drop the memory and keep the new
+   * block. A silent post is one the participant did not ask for, so a failure falls back to
+   * showing them the form rather than reporting an error they cannot act on.
+   */
+  private async postConsent(formVersionId: number, options: { silent?: boolean } = {}): Promise<boolean> {
     if (!this.activeSessionId || this.consentPostInFlight) return false;
     this.consentPostInFlight = true;
     const epoch = this.sessionEpoch;
@@ -619,7 +629,9 @@ export class OcsChat {
         this.handleSessionAccessError();
         return false;
       }
-      this.handleError(error instanceof Error ? error.message : 'Failed to record consent');
+      if (!options.silent) {
+        this.handleError(error instanceof Error ? error.message : 'Failed to record consent');
+      }
       return false;
     } finally {
       this.consentPostInFlight = false;
@@ -2051,6 +2063,7 @@ export class OcsChat {
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
     this.heldMessage = undefined;
+    this.autoConsentAttempted = undefined;
     if (this.allowAttachments) {
       this.selectedFiles = [];
     }
