@@ -2,20 +2,42 @@ from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
+from django.template.loader import render_to_string
+from django.urls import reverse
 
 from apps.channels.forms import (
     EmbeddedWidgetChannelForm,
 )
-from apps.channels.models import ChannelPlatform, ExperimentChannel, WidgetAuthLevel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import match_domain_pattern
+from apps.channels.widget_versions import MIN_OAUTH_WIDGET_VERSION
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
 
+def _widget_channel(**kwargs):
+    return ExperimentChannelFactory.create(
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        **kwargs,
+    )
+
+
+def _mock_experiment():
+    """A stand-in experiment for the DB-less form tests.
+
+    The form links to the team's OAuth applications, so it needs a reversible team slug --
+    a bare Mock reverses to nothing.
+    """
+    return Mock(team=Mock(slug="test-team"))
+
+
 class TestEmbeddedWidgetChannelForm:
     def test_form_generates_token_for_new_channel(self):
-        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com\n*.subdomain.com"}, experiment=Mock())
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com\n*.subdomain.com"}, experiment=_mock_experiment()
+        )
 
         assert form.is_valid()
         assert len(form.cleaned_data["widget_token"]) == 32
@@ -27,7 +49,7 @@ class TestEmbeddedWidgetChannelForm:
         channel.extra_data = {"widget_token": existing_token, "allowed_domains": ["example.com", "dimagi.com"]}
 
         form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": "example.com\ndimagi.com"}, channel=channel, experiment=Mock()
+            data={"allowed_domains": "example.com\ndimagi.com"}, channel=channel, experiment=_mock_experiment()
         )
 
         assert form.is_valid()
@@ -43,7 +65,7 @@ class TestEmbeddedWidgetChannelForm:
         ],
     )
     def test_domain_validation(self, domains_input, is_valid, expected_domains):
-        form = EmbeddedWidgetChannelForm(data={"allowed_domains": domains_input}, experiment=Mock())
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": domains_input}, experiment=_mock_experiment())
 
         assert form.is_valid() == is_valid
 
@@ -62,19 +84,135 @@ class TestEmbeddedWidgetChannelForm:
     )
     def test_allow_all_domains(self, domains_input, allow_all_input, expected_domains):
         form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": domains_input, "allow_all_domains": allow_all_input}, experiment=Mock()
+            data={"allowed_domains": domains_input, "allow_all_domains": allow_all_input}, experiment=_mock_experiment()
         )
         assert form.is_valid()
         assert form.cleaned_data["allowed_domains"] == expected_domains
 
-    def test_credential_mode_is_not_user_editable_yet(self):
-        """Nothing resolves an OAuth token, so selecting that mode would strand the channel."""
-        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
-        assert "credential_mode" not in form.fields
+    def test_credential_mode_defaults_to_the_public_widget(self):
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=_mock_experiment())
+        assert form.is_valid()
+        assert form._credential_mode == CredentialMode.EMBED_KEY
+
+    def test_the_credential_mode_help_text_links_to_the_teams_oauth_applications(self):
+        """Choosing `oauth` means work a Chatbot Admin may not be able to do: the token's
+        application has to list this chatbot, and that lives on the other side of the team."""
+        form = EmbeddedWidgetChannelForm(experiment=_mock_experiment())
+        help_text = form.fields["credential_mode"].help_text
+        assert reverse("oauth_apps:home", args=["test-team"]) in help_text
+        assert MIN_OAUTH_WIDGET_VERSION in help_text
+
+    @pytest.mark.parametrize(
+        ("mode", "is_valid"),
+        [
+            pytest.param(CredentialMode.EMBED_KEY, False, id="embed-key-needs-a-domain-list"),
+            pytest.param(CredentialMode.OAUTH, True, id="oauth-may-be-server-only"),
+        ],
+    )
+    def test_a_blank_domain_list_is_only_allowed_under_oauth(self, mode, is_valid):
+        """A blank list means server-only, which is honest for a machine integration but would
+        let a stolen embed key be used from anywhere."""
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "", "credential_mode": mode}, experiment=_mock_experiment()
+        )
+        assert form.is_valid() == is_valid
+        if not is_valid:
+            assert "allowed_domains" in form.errors
+
+    @pytest.mark.django_db()
+    def test_credential_mode_round_trips_without_leaking_into_extra_data(self):
+        channel = _widget_channel()
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "credential_mode": CredentialMode.OAUTH},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        # cleaned_data becomes the channel's extra_data, and this one has a column of its own
+        assert "credential_mode" not in form.cleaned_data
+
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.credential_mode == CredentialMode.OAUTH
+
+        reloaded = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
+        assert reloaded.initial["credential_mode"] == CredentialMode.OAUTH
+
+    @pytest.mark.django_db()
+    def test_switching_to_oauth_pins_the_auth_level(self):
+        """An `oauth` channel below SESSION_TOKEN issues no session token and is dead on arrival,
+        which the DB constraint forbids — so the partial save has to carry the pin."""
+        channel = _widget_channel(required_auth_level=WidgetAuthLevel.EMBED_KEY)
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "credential_mode": CredentialMode.OAUTH},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.required_auth_level == WidgetAuthLevel.SESSION_TOKEN
+        assert channel.min_widget_version == MIN_OAUTH_WIDGET_VERSION
+
+    @pytest.mark.django_db()
+    def test_omitting_the_credential_mode_keeps_the_one_already_stored(self):
+        """Omission must never relax the credential a channel demands."""
+        channel = _widget_channel(credential_mode=CredentialMode.OAUTH)
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com"}, channel=channel, experiment=channel.experiment
+        )
+        assert form.is_valid()
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.credential_mode == CredentialMode.OAUTH
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("widget_version", "warns"),
+        [
+            pytest.param(None, True, id="never-reported"),
+            pytest.param("0.11.0", True, id="too-old-to-send-a-token"),
+            pytest.param(MIN_OAUTH_WIDGET_VERSION, False, id="new-enough"),
+        ],
+    )
+    def test_oauth_mode_warns_when_the_live_embed_cannot_send_a_token(self, widget_version, warns):
+        """The version floor is advisory, so an old embed just fails admission with the door's
+        deliberately opaque 401. This is where an admin finds out before their visitors do."""
+        channel = _widget_channel(widget_version=widget_version)
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "credential_mode": CredentialMode.OAUTH},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        form.post_save(channel)
+        assert bool(form.warning_message) == warns
+
+    @pytest.mark.django_db()
+    def test_the_embed_snippet_carries_a_token_provider_only_in_oauth_mode(self):
+        """A pure-snippet embed cannot use `oauth` mode — the provider is a JavaScript property
+        with no attribute equivalent — so the token-minting requirement has to be visible here."""
+        channel = _widget_channel(credential_mode=CredentialMode.OAUTH)
+        snippet = render_to_string(
+            "experiments/share/widget.html",
+            {"experiment": channel.experiment, "embed_key": "tok_123456789012345678901234", "oauth": True},
+        )
+        assert "authTokenProvider" in snippet
+        assert "embed-key" not in snippet
+        # The dialog pastes this into a JS template literal.
+        assert "`" not in snippet
+        assert "${" not in snippet
+
+        public = render_to_string(
+            "experiments/share/widget.html",
+            {"experiment": channel.experiment, "embed_key": "tok_123456789012345678901234", "oauth": False},
+        )
+        assert "authTokenProvider" not in public
+        assert "embed-key" in public
 
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""
-        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=_mock_experiment())
         assert "required_auth_level" not in form.fields
 
     @pytest.mark.django_db()
@@ -129,7 +267,7 @@ class TestEmbeddedWidgetChannelForm:
     def test_session_token_lifetime_floor(self, lifetime):
         """A lifetime this short would make every session on the channel dead on arrival."""
         form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": "example.com", "session_token_lifetime": lifetime}, experiment=Mock()
+            data={"allowed_domains": "example.com", "session_token_lifetime": lifetime}, experiment=_mock_experiment()
         )
         assert not form.is_valid()
         assert "session_token_lifetime" in form.errors

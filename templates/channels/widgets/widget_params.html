@@ -30,6 +30,13 @@
           <i class="fa-solid fa-copy"></i> Copy
       </button>
     </div>
+    {% if widget.oauth %}
+      <div class="text-sm opacity-70 mt-2">
+        <i class="fa-solid fa-key me-1"></i>
+        This channel requires an OAuth token, so the embed token is ignored — a snippet that still
+        sends it keeps working, but it admits nobody on its own.
+      </div>
+    {% endif %}
     {% if widget.version_status %}
       <div role="alert" class="alert alert-{{ widget.version_status.level }} mt-3">
         <i class="fa-solid fa-circle-exclamation"></i>
@@ -67,6 +74,15 @@
     </h3>
     <div class="w-full">
       <p class="my-4">Use this HTML code to embed the chat window for your bot in a different site.</p>
+      {% if widget.oauth %}
+        <div role="alert" class="alert alert-info my-2">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>
+            The snippet includes an <code>authTokenProvider</code> stub. Point it at an endpoint in your
+            own backend that mints a short-lived token — the client secret must never reach page source.
+          </span>
+        </div>
+      {% endif %}
       <button class="my-2 btn btn-sm btn-primary justify-self-center" onclick="copyEmbed(event)" title="Copy to clipboard">
         <i class="fa-regular fa-copy"></i> Copy Widget Embed Code
       </button>
@@ -81,7 +97,7 @@
 <script>
   async function copyEmbed(event) {
     event.preventDefault()
-    const code = `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token %}`
+    const code = `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token oauth=widget.oauth %}`
     await SiteJS.app.copyTextToClipboard(event.target, code)
   }
 </script>

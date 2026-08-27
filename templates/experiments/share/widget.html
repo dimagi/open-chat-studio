@@ -1,7 +1,18 @@
 {# The rendered content of this template must be suitable for a Javascript string constant: #}
-{# - escape script tags #}{% load chat_widget_tags %}
+{# - escape script tags, and use no backticks or ${...}, which the enclosing template literal would consume #}
+{# The escaped tags are what djLint reads as orphans, hence the suppression. #}
+{% comment %}djlint:off H025{% endcomment %}{% load chat_widget_tags %}
 <!-- place this in the <head> section -->
 \<script type="module" src="{% widget_script_url %}"\>\<\/script\>
 
 <!-- place this where you want the widget button to appear -->
-<open-chat-studio-widget visible="false"  chatbot-id="{{ experiment.public_id }}" embed-key="{{ embed_key }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>
+{% if oauth %}<open-chat-studio-widget id="ocs-chat" visible="false"  chatbot-id="{{ experiment.public_id }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>
+
+<!-- this chatbot requires an OAuth token: mint a short-lived one in your backend (never put a client secret in the page) -->
+\<script\>
+  document.getElementById('ocs-chat').authTokenProvider = async ({ forceRefresh }) => {
+    const response = await fetch('/your-backend/mint-ocs-token', {cache: forceRefresh ? 'reload' : 'default'});
+    return (await response.json()).access_token;
+  };
+\<\/script\>{% else %}<open-chat-studio-widget visible="false"  chatbot-id="{{ experiment.public_id }}" embed-key="{{ embed_key }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>{% endif %}
+{% comment %}djlint:on{% endcomment %}
