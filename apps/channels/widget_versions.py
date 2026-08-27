@@ -139,6 +139,17 @@ AUTH_LEVEL_SESSION_TOKEN = 2
 EMBED_KEY_INTRODUCED = Version("0.5.1")
 SESSION_TOKEN_INTRODUCED = Version("0.9.0")
 
+# Widget release that collects consent in the composer (public channel design, D7). Consent is
+# enforced on the Chat API only for widgets from this release on: older widgets treat every 403
+# as a dead session and would restart in a loop.
+CONSENT_INTRODUCED = Version("0.12.0")
+
+
+def widget_enforces_consent(version: str | None) -> bool:
+    """Whether a widget on `version` understands the `consent_required` refusal."""
+    parsed = _parse(version)
+    return parsed is not None and parsed >= CONSENT_INTRODUCED
+
 
 def level_for_version(version: str | None) -> int:
     """The highest auth level a widget on `version` can satisfy.

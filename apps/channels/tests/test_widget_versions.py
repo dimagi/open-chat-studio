@@ -18,6 +18,7 @@ from apps.channels.widget_versions import (
     is_deprecated,
     is_outdated,
     latest_deprecation,
+    widget_enforces_consent,
     widget_script_url,
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -140,6 +141,21 @@ class TestGetWidgetUpdateStatus:
         assert status.level == "error"
         assert status.icon == "fa-circle-xmark"
         assert "unsupported" in status.message
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        pytest.param(None, False, id="no-header"),
+        pytest.param("unknown", False, id="pre-header-widget"),
+        pytest.param("garbage", False, id="unparseable"),
+        pytest.param("0.11.0", False, id="release-a"),
+        pytest.param("0.12.0", True, id="release-b"),
+        pytest.param("1.0.0", True, id="later"),
+    ],
+)
+def test_widget_enforces_consent(version, expected):
+    assert widget_enforces_consent(version) is expected
 
 
 def test_widget_script_url():
