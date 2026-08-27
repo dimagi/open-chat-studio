@@ -1,4 +1,7 @@
+from unittest import mock
+
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -188,3 +191,58 @@ def test_recording_consent_does_not_touch_the_legacy_session_consent_date(api_cl
 
     session.refresh_from_db()
     assert session.consent_date is None
+
+
+def _send(api_client, session, **extra):
+    url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
+    return api_client.post(url, data={"message": "hi"}, format="json", **extra)
+
+
+def _upload(api_client, session, **extra):
+    url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+    upload = SimpleUploadedFile("note.txt", b"hello", content_type="text/plain")
+    return api_client.post(url, data={"files": [upload]}, format="multipart", **extra)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("call", [pytest.param(_send, id="send"), pytest.param(_upload, id="upload")])
+def test_release_b_widget_is_refused_until_consent_is_recorded(api_client, session, call):
+    response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["code"] == "consent_required"
+    assert body["consent"]["form_version_id"] == session.experiment.consent_form_id
+    assert body["consent"]["text"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("call", [pytest.param(_send, id="send"), pytest.param(_upload, id="upload")])
+def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, call):
+    _consent(api_client, session, session.experiment.consent_form_id, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+        response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.status_code in (201, 202)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "widget_version",
+    [pytest.param("0.11.0", id="release-a"), pytest.param(None, id="no-header")],
+)
+def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget_version):
+    extra = {"HTTP_X_OCS_WIDGET_VERSION": widget_version} if widget_version else {}
+
+    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+        response = _send(api_client, session, **extra)
+
+    assert response.status_code == 202
+
+
+@pytest.mark.django_db()
+def test_poll_is_never_gated(api_client, session):
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.status_code == 200

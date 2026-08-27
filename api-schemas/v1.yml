@@ -130,6 +130,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatSendMessageResponse'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentRequired'
+          description: ''
   /api/chat/{session_id}/poll/:
     get:
       operationId: chat_poll_response
@@ -194,6 +200,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatUploadFileResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentRequired'
           description: ''
   /api/chat/start/:
     post:
@@ -1185,6 +1197,20 @@ components:
             accepted.
       required:
       - form_version_id
+    ChatConsentRequired:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: '`consent_required`.'
+        consent:
+          $ref: '#/components/schemas/ChatConsent'
+      required:
+      - code
+      - consent
+      - error
     ChatConsentStale:
       type: object
       properties:

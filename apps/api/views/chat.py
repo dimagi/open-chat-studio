@@ -26,7 +26,7 @@ from apps.api.authentication import (
     get_embed_key_channel,
     oauth_resolved_channel,
 )
-from apps.api.chat_consent import consent_block, participant_data_for
+from apps.api.chat_consent import consent_block, consent_refusal, participant_data_for
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
@@ -76,6 +76,15 @@ SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["chat_attachments"].split(",")
+
+CONSENT_REQUIRED_RESPONSE = inline_serializer(
+    "ChatConsentRequired",
+    {
+        "error": serializers.CharField(),
+        "code": serializers.CharField(help_text="`consent_required`."),
+        "consent": ChatConsentSerializer(),
+    },
+)
 
 logger = logging.getLogger("ocs.api_chat")
 
@@ -142,7 +151,8 @@ def validate_file_upload(file):
                     many=True,
                 )
             },
-        )
+        ),
+        403: CONSENT_REQUIRED_RESPONSE,
     },
     parameters=[
         OpenApiParameter(
@@ -165,6 +175,8 @@ def chat_upload_file(request, session_id):
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+    if refusal := consent_refusal(request, session, session.experiment_version):
+        return refusal
     files = request.FILES.getlist("files")
     if not files:
         return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
@@ -586,7 +598,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     summary="Send a message to a chat session",
     tags=["Chat"],
     request=ChatSendMessageRequestWithAttachments,
-    responses={202: ChatSendMessageResponse},
+    responses={202: ChatSendMessageResponse, 403: CONSENT_REQUIRED_RESPONSE},
     parameters=[
         OpenApiParameter(
             name="session_id",
@@ -654,6 +666,9 @@ def chat_send_message(request, session_id):
             experiment_version = session.experiment_version
     else:
         experiment_version = session.experiment_version
+
+    if refusal := consent_refusal(request, session, experiment_version):
+        return refusal
 
     attachment_data = []
     if attachment_ids:
