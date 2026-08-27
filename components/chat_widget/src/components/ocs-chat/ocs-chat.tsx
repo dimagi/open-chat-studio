@@ -993,13 +993,23 @@ export class OcsChat {
     }
   }
 
+  /**
+   * Bind a poller callback to the session that is current now. A clear (new
+   * chat, kiosk restart, expired session) bumps the epoch, so a callback that
+   * resolves afterwards belongs to a session the widget has moved on from and
+   * would otherwise write the old conversation into the new one.
+   */
+  private forCurrentSession<T extends unknown[]>(callback: (...args: T) => void): (...args: T) => void {
+    const epoch = this.sessionEpoch;
+    return (...args: T) => {
+      if (epoch !== this.sessionEpoch) return;
+      callback(...args);
+    };
+  }
+
   private startTaskPolling(taskId: string): void {
     if (!this.activeSessionId) return;
 
-    // The session this poll belongs to. A clear (new chat, kiosk restart,
-    // expired session) bumps the epoch, so callbacks that resolve afterwards
-    // belong to a session the widget has moved on from and are dropped.
-    const epoch = this.sessionEpoch;
     this.currentPollTaskId = taskId;
     this.isTyping = true;
     this.stopMessagePolling();
@@ -1009,8 +1019,7 @@ export class OcsChat {
     }
 
     this.taskPollingHandle = this.getChatService().pollTask(this.activeSessionId, taskId, {
-      onMessage: message => {
-        if (epoch !== this.sessionEpoch) return;
+      onMessage: this.forCurrentSession(message => {
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
         this.dispatchWidgetEvent('ocs:message:received', {
@@ -1024,13 +1033,11 @@ export class OcsChat {
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
         this.focusInput();
-      },
-      onProgress: message => {
-        if (epoch !== this.sessionEpoch) return;
+      }),
+      onProgress: this.forCurrentSession(message => {
         this.typingProgressMessage = message;
-      },
-      onTimeout: () => {
-        if (epoch !== this.sessionEpoch) return;
+      }),
+      onTimeout: this.forCurrentSession(() => {
         const timeoutMessage: ChatMessage = {
           created_at: new Date().toISOString(),
           role: 'system',
@@ -1046,9 +1053,8 @@ export class OcsChat {
         this.taskPollingHandle = undefined;
         this.startMessagePolling();
         this.focusInput();
-      },
-      onError: error => {
-        if (epoch !== this.sessionEpoch) return;
+      }),
+      onError: this.forCurrentSession(error => {
         this.typingProgressMessage = '';
         this.taskPollingHandle = undefined;
         if (error instanceof SessionAccessError) {
@@ -1057,7 +1063,7 @@ export class OcsChat {
         }
         this.handleError(error.message);
         this.startMessagePolling();
-      },
+      }),
     });
   }
 
@@ -1070,13 +1076,9 @@ export class OcsChat {
       return;
     }
 
-    // See startTaskPolling: callbacks that fire after the session was cleared
-    // would otherwise write the old conversation into the new one.
-    const epoch = this.sessionEpoch;
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
       getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
-      onMessages: messages => {
-        if (epoch !== this.sessionEpoch) return;
+      onMessages: this.forCurrentSession(messages => {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
         this.saveSessionToStorage();
@@ -1090,12 +1092,11 @@ export class OcsChat {
         }
         this.scrollToBottom();
         this.focusInput();
-      },
-      onSessionEnded: () => {
-        if (epoch !== this.sessionEpoch) return;
+      }),
+      onSessionEnded: this.forCurrentSession(() => {
         this.messagePollingHandle = undefined;
         this.handleSessionEnded();
-      },
+      }),
       onError: () => {
         // Silently ignore polling errors to match previous behaviour
       },
@@ -1973,6 +1974,10 @@ export class OcsChat {
   }
 
   private renderInputArea() {
+    const composerLocked = this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
+    const hasDraft = !!this.messageInput.trim();
+    // Uploading keeps the button styled as ready while it is disabled, so the label can say so.
+    const sendReady = !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && hasDraft;
     return (
       <div class="input-area">
         {this.renderKioskRestart()}
@@ -1985,7 +1990,7 @@ export class OcsChat {
             value={this.messageInput}
             onInput={e => this.handleInputChange(e)}
             onKeyPress={e => this.handleKeyPress(e)}
-            disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+            disabled={composerLocked}
           ></textarea>
           {/* File Upload Button */}
           {this.allowAttachments && (
@@ -2008,7 +2013,7 @@ export class OcsChat {
             <button
               class="file-attachment-button"
               onClick={() => this.fileInputRef?.click()}
-              disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+              disabled={composerLocked}
               title={this.translationManager.get('attach.add')}
               aria-label={this.translationManager.get('attach.add')}
             >
@@ -2016,9 +2021,9 @@ export class OcsChat {
             </button>
           )}
           <button
-            class={`send-button ${!this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+            class={`send-button ${sendReady ? 'send-button-enabled' : 'send-button-disabled'}`}
             onClick={() => this.sendMessage(this.messageInput)}
-            disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
+            disabled={composerLocked || !hasDraft}
           >
             {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
           </button>
