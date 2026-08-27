@@ -107,7 +107,10 @@ def _find_live_custom_action_references(custom_action):
       version is affected.
 
     Operations attached to an assistant rather than a node are ignored: the assistant feature
-    is removed (#4254), so nothing live can be broken through one.
+    is removed (#4254), so nothing live can be broken through one. Deliberately not a blocker --
+    there is no assistants UI left for the user to clear the reference from, so blocking would
+    leave the action undeletable. The trade-off is that deleting the action CASCADEs those
+    assistant-attached operation rows away before phase 2 gets to them.
     """
     operations = CustomActionOperation.objects.filter(custom_action=custom_action).select_related("node__pipeline")
 
