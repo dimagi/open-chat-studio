@@ -98,8 +98,8 @@ USER django
 # in the build context (see .dockerignore), so this cannot be derived here.
 # Deliberately last: the version changes on every build, so an earlier ENV
 # would invalidate the apt, dependency and collectstatic layers every time.
-ARG OCS_BUILD_VERSION=unknown
-ENV OCS_BUILD_VERSION=${OCS_BUILD_VERSION}
+ARG OCS_VERSION=unknown
+ENV OCS_VERSION=${OCS_VERSION}
 
 ENV PORT=8000
 

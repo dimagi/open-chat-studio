@@ -8,4 +8,4 @@ class Command(BaseCommand):
     help = "Print the OCS release this deployment was built from."
 
     def handle(self, *args, **options):
-        self.stdout.write(settings.OCS_BUILD_VERSION)
+        self.stdout.write(settings.OCS_VERSION)
