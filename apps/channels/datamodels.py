@@ -53,6 +53,12 @@ class Attachment(BaseModel):
     send_to_llm: bool = True
     """Setting this to False will prevent the attachment from being sent to the LLM node."""
 
+    upload_to_assistant: bool = False
+    """Inert. The Assistant node that consumed this is gone (#4254), but ``Attachment`` instances
+    are handed to user code in Python nodes, so the field is kept until phase 2 drops the rest of
+    the assistants data: a stored node doing ``att.upload_to_assistant = True`` would otherwise
+    raise and fail the run. Deliberately undocumented in ``PYTHON_NODE_HELP_PROMPT``."""
+
     @classmethod
     def from_file(cls, file, type: AttachmentType, session_id: int):
         return cls(
