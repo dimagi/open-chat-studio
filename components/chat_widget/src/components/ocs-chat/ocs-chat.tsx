@@ -513,6 +513,12 @@ export class OcsChat {
     this.activeSessionId = undefined;
     this.applySessionToken(undefined);
     this.clearSessionStorage();
+    // The panel cannot act without a session, and its button would sit inert over the
+    // composer the error asks the participant to resend from. The stored acceptance
+    // stays, so the fresh session re-posts it.
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    this.autoConsentAttempted = undefined;
     this.addErrorMessage(this.translationManager.get('status.sessionExpired', 'Your chat session expired. Starting a new chat — please resend your message.'));
   }
 
@@ -594,7 +600,13 @@ export class OcsChat {
    */
   private async applyConsent(consent: ChatConsent): Promise<void> {
     this.consent = consent;
-    if (!consent.required || consent.form_version_id == null) return;
+    if (!consent.required) {
+      // Consent was recorded elsewhere (another tab, another device) while a message
+      // waited on the panel; send it rather than dropping it when the panel closes.
+      await this.releaseHeldMessage();
+      return;
+    }
+    if (consent.form_version_id == null) return;
     if (this.storedConsentFormId() !== consent.form_version_id) return;
     // Polling delivers the block on every cycle, so the re-post is attempted once per
     // form version: a failed one leaves `required` set and the next send shows the panel.
@@ -851,6 +863,11 @@ export class OcsChat {
       return;
     }
 
+    // Both are restored if the server refuses the send for consent, so the retry after
+    // "I agree" carries the same bubble and the same already-uploaded files.
+    let optimisticMessage: ChatMessage | undefined;
+    let filesBeforeSend: SelectedFile[] = [];
+
     try {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
@@ -894,10 +911,12 @@ export class OcsChat {
               }))
           : [],
       };
+      optimisticMessage = userMessage;
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
       this.messageInput = '';
       if (this.allowAttachments) {
+        filesBeforeSend = this.selectedFiles;
         this.selectedFiles = []; // Clear selected files after sending
       }
       this.scrollToBottom();
@@ -938,7 +957,10 @@ export class OcsChat {
       if (error instanceof ConsentRequiredError) {
         this.consent = error.consent;
         this.forgetConsent();
-        this.dropOptimisticUserMessage(message);
+        this.dropOptimisticUserMessage(optimisticMessage);
+        if (this.allowAttachments && filesBeforeSend.length > 0) {
+          this.selectedFiles = filesBeforeSend;
+        }
         this.holdForConsent(message);
         return;
       }
@@ -958,11 +980,15 @@ export class OcsChat {
     this.isUploadingFiles = false;
   }
 
-  /** Remove the user bubble appended before a send the server refused for consent. */
-  private dropOptimisticUserMessage(message: string): void {
-    const content = message.trim();
-    const index = this.messages.length - 1 - [...this.messages].reverse().findIndex(m => m.role === 'user' && m.content === content);
-    if (index >= this.messages.length) return;
+  /**
+   * Remove the bubble this send appended, if it got that far. Matched by identity: an
+   * upload refused for consent throws before the bubble exists, and matching on the text
+   * would take an earlier message the participant had already sent.
+   */
+  private dropOptimisticUserMessage(message: ChatMessage | undefined): void {
+    if (!message) return;
+    const index = this.messages.indexOf(message);
+    if (index === -1) return;
     this.messages = [...this.messages.slice(0, index), ...this.messages.slice(index + 1)];
     this.saveSessionToStorage();
   }
@@ -973,11 +999,18 @@ export class OcsChat {
     if (formVersionId == null) return;
     const recorded = await this.postConsent(formVersionId);
     if (!recorded) return;
+    await this.releaseHeldMessage();
+  }
+
+  /**
+   * Send the message the consent panel was holding. Clears the hold before sending so a
+   * poll that clears the requirement at the same moment cannot send it twice.
+   */
+  private async releaseHeldMessage(): Promise<void> {
     const held = this.heldMessage;
+    if (held === undefined) return;
     this.heldMessage = undefined;
-    if (held) {
-      await this.sendMessage(held);
-    }
+    await this.sendMessage(held);
   }
 
   private handleStarterQuestionClick(question: string): void {

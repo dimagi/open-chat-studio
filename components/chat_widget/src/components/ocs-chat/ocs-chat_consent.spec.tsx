@@ -290,6 +290,90 @@ describe('hold and release', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('keeps an earlier message with the same text when an upload is refused for consent', async () => {
+    const page = await mountWidget('allow-attachments="true"');
+    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage: processing() });
+    page.rootInstance['messages'] = [{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hello', attachments: [] }];
+    const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
+    page.rootInstance['selectedFiles'] = [{ file }];
+    jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
+      selectedFiles: [{ file }],
+      uploadedIds: [],
+      errorMessage: 'Consent is required',
+      tokenRejected: false,
+      consent: consentBlock,
+    });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+
+    expect(page.rootInstance['messages'].filter((m: { role: string }) => m.role === 'user')).toHaveLength(1);
+  });
+
+  it('returns the composer when the session is rejected while the panel is open', async () => {
+    const page = await mountWidget();
+    const { SessionAccessError } = jest.requireActual('../../services/chat-session-service');
+    stubService(page, { recordConsent: jest.fn().mockRejectedValue(new SessionAccessError(403, 'session_expired', 'Session has expired')) });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    (page.root.shadowRoot.querySelector('.consent-agree') as HTMLButtonElement).click();
+    await settle(page);
+
+    expect(consentPanel(page)).toBeNull();
+    expect(page.root.shadowRoot.querySelector('.message-textarea')).not.toBeNull();
+    expect(page.rootInstance['heldMessage']).toBeUndefined();
+  });
+
+  it('asks again for a stored acceptance after the session is rejected and restarted', async () => {
+    const page = await mountWidget('persistent-session="true"');
+    window.localStorage.setItem('ocs-chat-consent-bot', '7');
+    stubService(page);
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    page.rootInstance['handleSessionAccessError']();
+    await settle(page);
+
+    expect(page.rootInstance['autoConsentAttempted']).toBeUndefined();
+  });
+
+  it('keeps uploaded attachments for the retry when the send is refused for consent', async () => {
+    const page = await mountWidget('allow-attachments="true"');
+    const sendMessage = jest.fn().mockRejectedValueOnce(new ConsentRequiredError(consentBlock, 'Consent is required')).mockResolvedValue({ task_id: 't', status: 'processing' });
+    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
+    const uploaded = { id: 42, name: 'a.txt', size: 5, content_type: 'text/plain' };
+    page.rootInstance['selectedFiles'] = [{ file }];
+    jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({ selectedFiles: [{ file, uploaded }], uploadedIds: [42] });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    (page.root.shadowRoot.querySelector('.consent-agree') as HTMLButtonElement).click();
+    await settle(page);
+
+    expect(sendMessage).toHaveBeenLastCalledWith('session-1', expect.objectContaining({ message: 'hello', attachment_ids: [42] }));
+  });
+
+  it('releases the held message when a poll reports consent is no longer required', async () => {
+    const page = await mountWidget();
+    const sendMessage = processing();
+    const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
+    stubService(page, { sendMessage, startMessagePolling });
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    const callbacks = startMessagePolling.mock.calls[0][1];
+    callbacks.onConsent(consented);
+    await settle(page);
+
+    expect(sendMessage).toHaveBeenCalledWith('session-1', expect.objectContaining({ message: 'hello' }));
+    expect(page.rootInstance['heldMessage']).toBeUndefined();
+    expect(consentPanel(page)).toBeNull();
+  });
+
   it('welcome messages and starter questions render before consent', async () => {
     const page = await mountWidget(`welcome-messages='["Hi there"]' starter-questions='["What can you do?"]'`);
     stubService(page);

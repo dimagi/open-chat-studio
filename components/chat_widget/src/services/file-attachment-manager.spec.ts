@@ -89,8 +89,10 @@ describe('FileAttachmentManager request headers', () => {
       headers: { 'X-Session-Token': 'tok-123' },
     });
 
+    // Not a token rejection: discarding the session would restart it straight into the
+    // same refusal. The file error stops the send instead.
     expect(result.consent).toBeUndefined();
-    expect(result.tokenRejected).toBe(true);
+    expect(result.tokenRejected).toBe(false);
     expect(result.selectedFiles[0].error).toBe('Consent is required');
   });
 
