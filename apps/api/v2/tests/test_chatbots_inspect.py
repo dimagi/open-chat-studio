@@ -724,12 +724,13 @@ def _expected_pipeline_nodes(bot):
             },
         },
         # A node whose type was removed (#4254). It still renders: the type is reported verbatim
-        # and its stored params come through the generic shape, with no resource key lifted out.
+        # and its stored params come through the generic shape. ``assistant_id`` is suppressed --
+        # there is no resource key left to lift it into, so it would otherwise leak an internal id.
         {
             "node_id": "assist",
             "type": "AssistantNode",
             "label": "Assistant",
-            "params": {"citations_enabled": True, "assistant_id": str(bot.assistant.id)},
+            "params": {"citations_enabled": True},
             # No class behind the type, so no handles can be derived.
             "output_handles": [],
         },
