@@ -1961,6 +1961,17 @@ export class OcsChat {
     );
   }
 
+  private renderKioskRestart() {
+    if (!this.shouldShowKioskRestart()) {
+      return null;
+    }
+    return (
+      <button class="kiosk-restart send-button send-button-enabled" onClick={() => void this.clearSession()}>
+        {this.translationManager.get('window.newChat')}
+      </button>
+    );
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -2153,11 +2164,7 @@ export class OcsChat {
 
               {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
-                {this.shouldShowKioskRestart() && (
-                  <button class="kiosk-restart send-button send-button-enabled" onClick={() => void this.clearSession()}>
-                    {this.translationManager.get('window.newChat')}
-                  </button>
-                )}
+                {this.renderKioskRestart()}
                 <div class="input-container">
                   <textarea
                     ref={el => (this.textareaRef = el)}
