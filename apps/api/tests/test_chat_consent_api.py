@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.api.chat_consent import consent_block, participant_data_for
-from apps.experiments.models import ParticipantData
+from apps.experiments.models import ParticipantData, SessionStatus
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ExperimentSessionFactory
 
 
@@ -175,7 +175,7 @@ def test_recording_consent_on_a_chatbot_without_a_form_is_stale(api_client, plai
 
 @pytest.mark.django_db()
 def test_recording_consent_on_an_ended_session_is_refused(api_client, session):
-    session.end()
+    session.update_status(SessionStatus.COMPLETE)
 
     response = _consent(api_client, session, session.experiment.consent_form_id)
 

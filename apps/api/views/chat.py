@@ -908,7 +908,7 @@ def chat_record_consent(request, session_id):
     session = get_experiment_session_cached(session_id)
     if not session:
         return NotFound()
-    if session.ended_at is not None:
+    if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
     version = session.experiment_version
