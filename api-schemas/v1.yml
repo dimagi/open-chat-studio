@@ -1999,6 +1999,8 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             usage:read: Read usage and activity data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header
