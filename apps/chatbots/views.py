@@ -564,12 +564,31 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    version_details = experiment_version.version_details
-    previous_version = experiment_version.get_previous_version()
-    if previous_version:
-        version_details.compare(previous_version.version_details)
+    sibling_versions = (
+        Experiment.objects.get_all()
+        .filter(working_version_id=experiment_id)
+        .exclude(version_number=version_number)
+        .order_by("-version_number")
+    )
 
-    context = {"version_details": version_details, "experiment": experiment_version}
+    requested = request.GET.get("compare_to")
+    if requested:
+        compare_to = get_object_or_404(
+            Experiment.objects.get_all(), working_version_id=experiment_id, version_number=requested
+        )
+    else:
+        compare_to = experiment_version.get_previous_version()
+
+    version_details = experiment_version.version_details
+    if compare_to:
+        version_details.compare(compare_to.version_details)
+
+    context = {
+        "version_details": version_details,
+        "experiment": experiment_version,
+        "compare_to": compare_to,
+        "comparison_versions": sibling_versions,
+    }
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 
