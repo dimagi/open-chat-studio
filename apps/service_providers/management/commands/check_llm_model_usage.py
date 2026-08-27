@@ -33,7 +33,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--include-archived",
             action="store_true",
-            help="Include archived versions in the count",
+            help="Include archived pipeline nodes in the count",
         )
 
     def handle(self, *args, **options):
@@ -79,8 +79,11 @@ class Command(BaseCommand):
         analyses_count = TranscriptAnalysis.objects.filter(llm_provider_model=model).count()
         translation_analyses_count = TranscriptAnalysis.objects.filter(translation_llm_provider_model=model).count()
 
-        # Pipeline nodes (JSON field references)
-        pipeline_nodes_count = Node.objects.filter(
+        # Pipeline nodes (JSON field references). ``Node.objects`` hides archived rows, so
+        # --include-archived has to reach for ``get_all()``; nodes are the only counted resource
+        # with an archived state, so this is what the flag means now.
+        nodes = Node.objects.get_all() if include_archived else Node.objects.all()
+        pipeline_nodes_count = nodes.filter(
             Q(params__llm_provider_model_id=model.id) | Q(params__llm_provider_model_id=str(model.id))
         ).count()
 
@@ -98,7 +101,6 @@ class Command(BaseCommand):
             "pipeline_nodes": pipeline_nodes_count,
             "total": total_count,
             "suggested_replacement": suggested_replacement,
-            "include_archived": include_archived,
         }
 
     def _get_suggested_replacement(self, model):
