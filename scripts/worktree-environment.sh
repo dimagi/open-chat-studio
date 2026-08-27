@@ -94,7 +94,10 @@ ocs_worktree_resource_name() {
 # clients we reach for are the ones inside those containers. A service is identified by
 # the host port it publishes -- only one container can hold a given port at a time, which
 # makes that unambiguous -- and named directly by `OCS_POSTGRES_CONTAINER` or
-# `OCS_REDIS_CONTAINER` when discovery needs overriding.
+# `OCS_REDIS_CONTAINER` when discovery needs overriding. The ports stay literal, matching
+# the ones `setup-worktree.sh` writes into DATABASE_URL and REDIS_URL: a port knob here
+# and a hardcoded port there would only half-move a service, and the half left behind
+# would be a FLUSHDB against whatever else answers on 6379.
 ocs_container_publishing_port() {
     local port="$1"
     local container
@@ -115,34 +118,82 @@ ocs_container_publishing_port() {
     printf '%s\n' "$container"
 }
 
+# `docker exec` reports its own inability to start anything -- no such container, the
+# container not running, no such executable inside it -- as 125, 126 or 127, and every
+# other status is the client's own. Only the first kind is worth retrying elsewhere:
+# retrying a client that did run would send the same statement to a second server.
+ocs_docker_exec_could_not_start() {
+    case "$1" in
+        125 | 126 | 127) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Left to the caller to turn into a failure, so that the message costs nothing under
+# `set -e`: reporting it with a non-zero status would abort the caller here rather than
+# where it decides what a missing client means.
 ocs_report_missing_client() {
     local client="$1"
     local port="$2"
 
-    echo "No container publishes port $port and no $client is installed on the host." >&2
+    echo "No container serving port $port can run $client, and none is installed on the host." >&2
     echo "Start the development services with: docker compose -f docker-compose-dev.yml up -d" >&2
-    return 1
 }
 
-ocs_redis_container() {
+# The container to exec into is handed back in OCS_RESOLVED_CONTAINER rather than on
+# stdout so that the answer can be kept: resolving it through a command substitution
+# would cache it in a subshell that exits immediately, and `ocs_psql` alone runs dozens
+# of times per setup -- a `docker ps` apiece. A container that turns out to be unable to
+# start a client is disqualified instead of being asked again; a stale name left in
+# `OCS_REDIS_CONTAINER` -- exported from a `.envrc` and outlived by its container -- then
+# gives way to discovery rather than costing the whole run its container.
+OCS_REDIS_CONTAINER_CACHE=""
+OCS_REDIS_CONTAINER_RESOLVED=false
+
+ocs_resolve_redis_container() {
+    OCS_RESOLVED_CONTAINER=""
     if [[ -n "${OCS_REDIS_CONTAINER:-}" ]]; then
-        printf '%s\n' "$OCS_REDIS_CONTAINER"
+        OCS_RESOLVED_CONTAINER=$OCS_REDIS_CONTAINER
         return 0
     fi
-    ocs_container_publishing_port "${OCS_REDIS_PORT:-6379}"
+    if [[ "$OCS_REDIS_CONTAINER_RESOLVED" != "true" ]]; then
+        OCS_REDIS_CONTAINER_CACHE=$(ocs_container_publishing_port 6379 || true)
+        OCS_REDIS_CONTAINER_RESOLVED=true
+    fi
+    OCS_RESOLVED_CONTAINER=$OCS_REDIS_CONTAINER_CACHE
+    [[ -n "$OCS_RESOLVED_CONTAINER" ]]
+}
+
+# Whichever source named the container that could not run a client stops naming it. Each
+# source can be emptied only once, so a run cannot loop over the same container.
+ocs_disqualify_redis_container() {
+    if [[ "${OCS_REDIS_CONTAINER:-}" == "$OCS_RESOLVED_CONTAINER" ]]; then
+        OCS_REDIS_CONTAINER=""
+    elif [[ "$OCS_REDIS_CONTAINER_CACHE" == "$OCS_RESOLVED_CONTAINER" ]]; then
+        OCS_REDIS_CONTAINER_CACHE=""
+    fi
 }
 
 ocs_redis_cli() {
-    local container
+    local status
 
-    if container=$(ocs_redis_container); then
-        docker exec "$container" redis-cli "$@"
-        return
+    if ocs_resolve_redis_container; then
+        status=0
+        docker exec "$OCS_RESOLVED_CONTAINER" redis-cli "$@" || status=$?
+        if [[ "$status" -eq 0 ]] || ! ocs_docker_exec_could_not_start "$status"; then
+            return "$status"
+        fi
+        echo "[ocs] $OCS_RESOLVED_CONTAINER could not run redis-cli; trying elsewhere." >&2
+        ocs_disqualify_redis_container
+        if ocs_resolve_redis_container; then
+            ocs_redis_cli "$@"
+            return
+        fi
     fi
     # A Redis reachable on the host port without a container of its own -- a service
     # container in CI, or a locally installed server -- still answers a host client.
     if ! command -v redis-cli >/dev/null 2>&1; then
-        ocs_report_missing_client redis-cli "${OCS_REDIS_PORT:-6379}"
+        ocs_report_missing_client redis-cli 6379
         return 1
     fi
     redis-cli "$@"
@@ -357,12 +408,29 @@ ocs_templates_are_enabled() {
     [[ "${OCS_DISABLE_DATABASE_TEMPLATES:-false}" != "true" ]]
 }
 
-ocs_postgres_container() {
+OCS_POSTGRES_CONTAINER_CACHE=""
+OCS_POSTGRES_CONTAINER_RESOLVED=false
+
+ocs_resolve_postgres_container() {
+    OCS_RESOLVED_CONTAINER=""
     if [[ -n "${OCS_POSTGRES_CONTAINER:-}" ]]; then
-        printf '%s\n' "$OCS_POSTGRES_CONTAINER"
+        OCS_RESOLVED_CONTAINER=$OCS_POSTGRES_CONTAINER
         return 0
     fi
-    ocs_container_publishing_port "${OCS_POSTGRES_PORT:-5432}"
+    if [[ "$OCS_POSTGRES_CONTAINER_RESOLVED" != "true" ]]; then
+        OCS_POSTGRES_CONTAINER_CACHE=$(ocs_container_publishing_port 5432 || true)
+        OCS_POSTGRES_CONTAINER_RESOLVED=true
+    fi
+    OCS_RESOLVED_CONTAINER=$OCS_POSTGRES_CONTAINER_CACHE
+    [[ -n "$OCS_RESOLVED_CONTAINER" ]]
+}
+
+ocs_disqualify_postgres_container() {
+    if [[ "${OCS_POSTGRES_CONTAINER:-}" == "$OCS_RESOLVED_CONTAINER" ]]; then
+        OCS_POSTGRES_CONTAINER=""
+    elif [[ "$OCS_POSTGRES_CONTAINER_CACHE" == "$OCS_RESOLVED_CONTAINER" ]]; then
+        OCS_POSTGRES_CONTAINER_CACHE=""
+    fi
 }
 
 # Every caller passes its statement inline with -c/-tAc, so nothing here depends on the
@@ -371,7 +439,7 @@ ocs_postgres_container() {
 ocs_psql() {
     local database="$1"
     shift
-    local container
+    local status
     local psql_command=(
         psql
         -h localhost
@@ -381,12 +449,22 @@ ocs_psql() {
         "$@"
     )
 
-    if container=$(ocs_postgres_container); then
-        docker exec -e PGPASSWORD=postgres "$container" "${psql_command[@]}"
-        return
+    if ocs_resolve_postgres_container; then
+        status=0
+        docker exec -e PGPASSWORD=postgres "$OCS_RESOLVED_CONTAINER" \
+            "${psql_command[@]}" || status=$?
+        if [[ "$status" -eq 0 ]] || ! ocs_docker_exec_could_not_start "$status"; then
+            return "$status"
+        fi
+        echo "[ocs] $OCS_RESOLVED_CONTAINER could not run psql; trying elsewhere." >&2
+        ocs_disqualify_postgres_container
+        if ocs_resolve_postgres_container; then
+            ocs_psql "$database" "$@"
+            return
+        fi
     fi
     if ! command -v psql >/dev/null 2>&1; then
-        ocs_report_missing_client psql "${OCS_POSTGRES_PORT:-5432}"
+        ocs_report_missing_client psql 5432
         return 1
     fi
     PGPASSWORD=postgres "${psql_command[@]}"

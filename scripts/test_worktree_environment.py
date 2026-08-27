@@ -87,6 +87,7 @@ set -euo pipefail
 # `docker exec <container> <client> ...` hands the rest of the arguments to the client
 # fake on PATH.
 if [[ "${1:-}" == "ps" ]]; then
+    printf "docker-ps\n" >> "$OCS_TEST_COMMAND_LOG"
     redis_container="${OCS_TEST_REDIS_CONTAINER-ocs_test_redis}"
     postgres_container="${OCS_TEST_POSTGRES_CONTAINER-ocs_test_postgres}"
     [[ -z "$postgres_container" ]] \
@@ -109,6 +110,15 @@ if [[ "${1:-}" == "exec" ]]; then
         shift
     done
     printf "docker-exec:%s\n" "$1" >> "$OCS_TEST_COMMAND_LOG"
+    # The statuses `docker exec` keeps for itself when it cannot start the client at all:
+    # 125 for a container it cannot use, 126 and 127 for the executable inside it.
+    # Unset, the failure covers every container; set, only the one it names, which is how
+    # a test leaves a working container to be discovered behind a stale override.
+    if [[ -n "${OCS_TEST_DOCKER_EXEC_FAILURE:-}" \
+        && "${OCS_TEST_DOCKER_EXEC_FAILURE_CONTAINER:-$1}" == "$1" ]]; then
+        echo "Error: could not exec in $1" >&2
+        exit "$OCS_TEST_DOCKER_EXEC_FAILURE"
+    fi
     shift
     exec "$@"
 fi
@@ -304,7 +314,9 @@ def worktree_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[P
     # Loading the Django settings reads the developer's own .env, so running these
     # tests from a worktree otherwise leaks that worktree's resource names into every
     # script the fixture starts.
-    for inherited_variable in ("OCS_WORKTREE_ID", "DATABASE_URL", "REDIS_URL"):
+    # PGPASSWORD joins them because the psql fake asserts on it: inheriting one from the
+    # developer's shell would satisfy that guard no matter what the helper passes.
+    for inherited_variable in ("OCS_WORKTREE_ID", "DATABASE_URL", "REDIS_URL", "PGPASSWORD"):
         monkeypatch.delenv(inherited_variable, raising=False)
 
     root = tmp_path / "main"
@@ -507,6 +519,96 @@ def test_psql_falls_back_to_a_host_client_without_a_container(
     command_output = command_log.read_text()
     assert "docker-exec:" not in command_output
     assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
+
+
+@pytest.mark.parametrize(
+    "docker_exec_status",
+    [
+        pytest.param("125", id="container_unusable"),
+        pytest.param("127", id="client_missing_inside_the_container"),
+    ],
+)
+def test_psql_falls_back_to_a_host_client_when_the_container_cannot_run_one(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    docker_exec_status: str,
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = docker_exec_status
+
+    # Runs with check=True: the host client is what makes the query succeed at all.
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_test_postgres" in command_output
+    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
+
+
+def test_redis_registry_falls_back_to_a_host_client_when_the_container_cannot_run_one(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "127"
+
+    _allocate_redis_database(worktree, env, "feature_6")
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_test_redis" in command_output
+    assert "redis-registry:allocate:feature_6:" in command_output
+
+
+def test_psql_recovers_from_a_stale_container_override(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    # The shape of a name exported from a `.envrc` and outlived by its container: the
+    # override is unusable, but the container discovery would have found still is.
+    env["OCS_POSTGRES_CONTAINER"] = "ocs_stale_postgres"
+    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "125"
+    env["OCS_TEST_DOCKER_EXEC_FAILURE_CONTAINER"] = "ocs_stale_postgres"
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_stale_postgres" in command_output
+    assert "docker-exec:ocs_test_postgres" in command_output
+    assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
+
+
+def test_psql_does_not_retry_a_client_that_ran_and_failed(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    # A statement the server rejects is the client's own failure, not the container's:
+    # running it again against whatever else answers on the host port would send the same
+    # statement to a second server.
+    env["OCS_TEST_FAIL_PSQL"] = "true"
+
+    result = _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env, check=False)
+
+    assert result.returncode == 1
+    assert command_log.read_text().count("psql:") == 1
+
+
+def test_service_container_is_resolved_once_per_shell(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+
+    # Every query would otherwise cost its own `docker ps`, and a single setup runs
+    # dozens of them.
+    _run(
+        "bash",
+        "-c",
+        'source "$1"; ocs_psql postgres -c "SELECT 1"; ocs_psql postgres -c "SELECT 2"',
+        "_",
+        worktree / "scripts" / "worktree-environment.sh",
+        cwd=worktree,
+        env=env,
+    )
+
+    command_output = command_log.read_text()
+    assert command_output.count("psql:") == 2
+    assert command_output.count("docker-ps") == 1
 
 
 @pytest.mark.parametrize(
