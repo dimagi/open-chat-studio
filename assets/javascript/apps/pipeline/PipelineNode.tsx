@@ -190,18 +190,21 @@ function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
   if (!nodeSchema["ui:deprecated"]) {
     return <></>;
   }
+  const removed = !!nodeSchema["ui:removed"];
   const customMessage = nodeSchema["ui:deprecation_message"] || "";
   return (
     <div className="dropdown">
       <div tabIndex={0} role="button" className="mr-2 text-warning inline-block tooltip hover:cursor-pointer"
-      data-tip="This node type has been deprecated. Click for details"><i className="fa-solid fa-exclamation-triangle"></i></div>
+      data-tip={`This node type has been ${removed ? "removed" : "deprecated"}. Click for details`}><i className="fa-solid fa-exclamation-triangle"></i></div>
       <div
         tabIndex={0}
         className="dropdown-content card card-sm bg-base-100 z-1 w-64 shadow-md">
         <div className="card-body">
           <p>
-            {nodeSchema["ui:removed"]
-              ? "This node type has been removed. The node no longer runs and the pipeline cannot be saved until it is deleted."
+            {removed
+              // The graph still saves (the editor POSTs and gets the errors back); it is the
+              // build/run that the unknown node type blocks. Don't tell the user saving is off.
+              ? "This node type has been removed. The node no longer runs, and the pipeline will not run until it is deleted."
               : "This node type has been deprecated and will be removed in future."}
           </p>
           {customMessage && <p dangerouslySetInnerHTML={{__html: customMessage}}></p>}
