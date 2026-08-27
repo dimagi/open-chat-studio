@@ -1337,6 +1337,15 @@ class ParticipantData(BaseTeamModel):
         self.system_metadata["consent"] = consent
         self.save(update_fields=["system_metadata"])
 
+    def record_consent(self) -> None:
+        """Record that the participant accepted the chatbot's consent form (D7 in the public channel design)."""
+        self.system_metadata = {
+            **self.system_metadata,
+            "consent": True,
+            "consent_at": timezone.now().isoformat(),
+        }
+        self.save(update_fields=["system_metadata"])
+
     class Meta:
         indexes = [
             models.Index(fields=["experiment"]),
