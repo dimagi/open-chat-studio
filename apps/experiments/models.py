@@ -892,6 +892,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
+            new_version.save(update_fields=["consent_form"])
 
         # Version the pipeline before the triggers so a trigger referencing this experiment's own
         # pipeline pins to the version just created here rather than spawning a redundant one.

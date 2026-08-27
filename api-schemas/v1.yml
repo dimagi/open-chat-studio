@@ -213,6 +213,10 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
+                    consent:
+                      required: false
+                      form_version_id: null
+                      text: null
                   summary: Session started with published version
                 StartSessionSpecificVersionResponse:
                   value:
@@ -226,6 +230,10 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
+                    consent:
+                      required: false
+                      form_version_id: null
+                      text: null
                   summary: Session started with specific version
           description: ''
         '401':
@@ -1105,6 +1113,31 @@ components:
       - assistant
       type: string
       description: '* `assistant` - assistant'
+    ChatConsent:
+      type: object
+      properties:
+        required:
+          type: boolean
+          title: Consent required
+          description: True until the participant accepts the chatbot's consent form.
+            Send and upload return `403 consent_required` while this is true; poll
+            is never gated.
+        form_version_id:
+          type: integer
+          nullable: true
+          title: Consent form version ID
+          description: Identifies the frozen consent form text. Post it back to `/consent/`;
+            a changed form gets a new id and re-prompts.
+        text:
+          type: string
+          nullable: true
+          title: Consent text
+          description: Rendered HTML of the consent form. Present only while consent
+            is required.
+      required:
+      - form_version_id
+      - required
+      - text
     ChatPollResponse:
       type: object
       properties:
@@ -1120,7 +1153,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/SessionStatusEnum'
           title: Current session status
+        consent:
+          allOf:
+          - $ref: '#/components/schemas/ChatConsent'
+          readOnly: true
       required:
+      - consent
       - has_more
       - messages
       - session_status
@@ -1225,8 +1263,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/Participant'
           readOnly: true
+        consent:
+          allOf:
+          - $ref: '#/components/schemas/ChatConsent'
+          readOnly: true
       required:
       - chatbot
+      - consent
       - participant
       - session_id
     ChatTaskPoll:
@@ -2005,6 +2048,8 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             usage:read: Read usage and activity data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header

@@ -44,6 +44,11 @@ def test_start_chat_session(team_with_users, api_client, experiment):
             "versions": [],
         },
         "participant": {"identifier": mock.ANY, "remote_id": ""},
+        "consent": {
+            "required": True,
+            "form_version_id": experiment.consent_form_id,
+            "text": experiment.consent_form.get_rendered_content(),
+        },
     }
     assert response_json["session_token"]  # token must be non-null
     assert response_json["participant"]["identifier"].startswith("anon:")

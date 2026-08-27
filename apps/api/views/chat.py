@@ -26,6 +26,7 @@ from apps.api.authentication import (
     get_embed_key_channel,
     oauth_resolved_channel,
 )
+from apps.api.chat_consent import consent_block, participant_data_for
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
@@ -444,6 +445,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
                     "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
                 },
                 "participant": {"identifier": "abc", "remote_id": "abc"},
+                "consent": {"required": False, "form_version_id": None, "text": None},
             },
             response_only=True,
         ),
@@ -460,6 +462,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
                     "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
                 },
                 "participant": {"identifier": "abc", "remote_id": "abc"},
+                "consent": {"required": False, "form_version_id": None, "text": None},
             },
             response_only=True,
         ),
@@ -557,6 +560,7 @@ def chat_start_session(request):
         "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
+        "consent": consent_block(experiment_version or session.experiment_version, participant_data_for(session)),
     }
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
