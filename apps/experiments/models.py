@@ -1338,12 +1338,21 @@ class ParticipantData(BaseTeamModel):
         self.system_metadata["consent"] = consent
         self.save(update_fields=["system_metadata"])
 
-    def record_consent(self) -> None:
-        """Record that the participant accepted the chatbot's consent form (D7 in the public channel design)."""
+    def has_consented_to(self, form_version_id: int) -> bool:
+        """Whether the participant accepted this frozen consent form.
+
+        Consent recorded without a form id (CommCare Connect, the legacy consent page) does not
+        cover any form: the participant has not seen this text.
+        """
+        return self.has_consented() and self.system_metadata.get("consent_form_version_id") == form_version_id
+
+    def record_consent(self, form_version_id: int) -> None:
+        """Record that the participant accepted a frozen consent form (D7 in the public channel design)."""
         self.system_metadata = {
             **self.system_metadata,
             "consent": True,
             "consent_at": timezone.now().isoformat(),
+            "consent_form_version_id": form_version_id,
         }
         self.save(update_fields=["system_metadata"])
 

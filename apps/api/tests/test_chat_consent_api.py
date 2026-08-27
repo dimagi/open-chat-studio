@@ -52,13 +52,40 @@ def test_consent_block_after_consent_keeps_the_form_id_and_drops_the_text(sessio
     data = ParticipantData.objects.create(
         team=session.team, participant=session.participant, experiment=session.experiment
     )
-    data.record_consent()
+    data.record_consent(session.experiment.consent_form_id)
 
     assert consent_block(session.experiment, data) == {
         "required": False,
         "form_version_id": session.experiment.consent_form_id,
         "text": None,
     }
+
+
+@pytest.mark.django_db()
+def test_consent_block_is_required_again_once_the_form_is_republished(session):
+    data = ParticipantData.objects.create(
+        team=session.team, participant=session.participant, experiment=session.experiment
+    )
+    data.record_consent(session.experiment.consent_form_id)
+    session.experiment.consent_form.consent_text = "Please agree to the **new** terms"
+    session.experiment.consent_form.save()
+    republished = session.experiment.create_new_version(make_default=True)
+
+    assert consent_block(republished, data) == {
+        "required": True,
+        "form_version_id": republished.consent_form_id,
+        "text": "<p>Please agree to the <strong>new</strong> terms</p>",
+    }
+
+
+@pytest.mark.django_db()
+def test_consent_block_does_not_treat_consent_from_another_channel_as_accepting_the_form(session):
+    data = ParticipantData.objects.create(
+        team=session.team, participant=session.participant, experiment=session.experiment
+    )
+    data.update_consent(True)
+
+    assert consent_block(session.experiment, data)["required"] is True
 
 
 @pytest.mark.django_db()
@@ -143,7 +170,7 @@ def test_poll_reports_consent_required_before_acceptance(api_client, session):
 def test_poll_reports_consent_satisfied_after_acceptance(api_client, session):
     ParticipantData.objects.create(
         team=session.team, participant=session.participant, experiment=session.experiment
-    ).record_consent()
+    ).record_consent(session.experiment.consent_form_id)
 
     response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
 
@@ -164,7 +191,35 @@ def test_recording_consent_marks_the_participant_and_returns_no_content(api_clie
     response = _consent(api_client, session, session.experiment.consent_form_id)
 
     assert response.status_code == 204
-    assert participant_data_for(session).has_consented()
+    assert participant_data_for(session).has_consented_to(session.experiment.consent_form_id)
+
+
+@pytest.mark.django_db()
+def test_consent_carries_over_to_the_participants_later_sessions(api_client, session):
+    _consent(api_client, session, session.experiment.consent_form_id)
+    later_session = ExperimentSessionFactory.create(
+        experiment=session.experiment, participant=session.participant, session_token_required=False
+    )
+
+    response = _poll(api_client, later_session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.json()["consent"]["required"] is False
+
+
+@pytest.mark.django_db()
+def test_a_republished_form_prompts_the_participant_again(api_client, session):
+    _consent(api_client, session, session.experiment.consent_form_id)
+    session.experiment.consent_form.consent_text = "New terms"
+    session.experiment.consent_form.save()
+    republished = session.experiment.create_new_version(make_default=True)
+
+    response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
+
+    assert response.json()["consent"] == {
+        "required": True,
+        "form_version_id": republished.consent_form_id,
+        "text": "<p>New terms</p>",
+    }
 
 
 @pytest.mark.django_db()
@@ -280,6 +335,8 @@ def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget
 
 @pytest.mark.django_db()
 def test_poll_is_never_gated(api_client, session):
+    assert _send(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0").status_code == 403
+
     response = _poll(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.12.0")
 
     assert response.status_code == 200

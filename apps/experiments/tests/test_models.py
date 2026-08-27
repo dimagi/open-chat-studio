@@ -793,6 +793,14 @@ class TestExperimentModel:
         assert persisted_version.consent_form_id != experiment.consent_form_id
         assert persisted_version.consent_form.working_version_id == experiment.consent_form_id
 
+    def test_publishing_a_consent_form_chatbot_leaves_no_unreleased_changes(self):
+        experiment = self._setup_original_experiment()
+
+        experiment.create_new_version(make_default=True)
+
+        experiment.refresh_from_db()
+        assert experiment.compare_with_latest() is False
+
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
         assert new_version.pipeline.version_number == 1

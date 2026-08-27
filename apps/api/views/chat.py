@@ -923,15 +923,16 @@ def chat_record_consent(request, session_id):
     """
     serializer = ChatConsentRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
+    form_version_id = serializer.validated_data["form_version_id"]
 
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
     version = session.experiment_version
-    if version.consent_form_id != serializer.validated_data["form_version_id"]:
+    if version.consent_form_id != form_version_id:
         return Response(
             {
                 "error": "The consent form has changed",
@@ -942,9 +943,12 @@ def chat_record_consent(request, session_id):
         )
 
     participant_data, _ = ParticipantData.objects.get_or_create(
-        participant=session.participant, experiment=session.experiment, team=session.team, defaults={"data": {}}
+        participant=session.participant,
+        experiment=session.experiment.get_working_version(),
+        team=session.team,
+        defaults={"data": {}},
     )
-    participant_data.record_consent()
+    participant_data.record_consent(form_version_id)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

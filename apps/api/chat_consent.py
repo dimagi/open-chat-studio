@@ -1,8 +1,9 @@
 """Consent as the Chat API reports and enforces it (public channel design, D7).
 
 The store is ``ParticipantData.system_metadata["consent"]``, shared with CommCare Connect and read
-by ``ConsentCheckStage``. The text is the frozen ``ConsentForm`` on the version the session runs
-against, so a republished form re-prompts through a new ``form_version_id``.
+by ``ConsentCheckStage``, plus the accepted ``consent_form_version_id``. The text is the frozen
+``ConsentForm`` on the version the session runs against; a republished form has a new id, so the
+participant is prompted again until they accept it.
 """
 
 from rest_framework import status
@@ -13,14 +14,14 @@ from apps.experiments.models import Experiment, ExperimentSession, ParticipantDa
 
 
 def participant_data_for(session: ExperimentSession) -> ParticipantData | None:
-    return ParticipantData.objects.filter(participant=session.participant, experiment=session.experiment).first()
+    return ParticipantData.objects.for_experiment(session.experiment).filter(participant=session.participant).first()
 
 
 def consent_block(version: Experiment, participant_data: ParticipantData | None) -> dict:
     form = version.consent_form
     if form is None:
         return {"required": False, "form_version_id": None, "text": None}
-    consented = participant_data is not None and participant_data.has_consented()
+    consented = participant_data is not None and participant_data.has_consented_to(form.id)
     return {
         "required": not consented,
         "form_version_id": form.id,

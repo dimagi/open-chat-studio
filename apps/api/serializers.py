@@ -358,8 +358,8 @@ class ChatConsentSerializer(serializers.Serializer):
     form_version_id = serializers.IntegerField(
         label="Consent form version ID",
         allow_null=True,
-        help_text="Identifies the frozen consent form text. Post it back to `/consent/`; a changed form"
-        " gets a new id and re-prompts.",
+        help_text="Identifies the frozen consent form text. Post it back to `/consent/`. A changed form"
+        " gets a new id, and consent is required again until the participant accepts it.",
     )
     text = serializers.CharField(
         label="Consent text",

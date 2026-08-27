@@ -1181,8 +1181,9 @@ components:
           type: integer
           nullable: true
           title: Consent form version ID
-          description: Identifies the frozen consent form text. Post it back to `/consent/`;
-            a changed form gets a new id and re-prompts.
+          description: Identifies the frozen consent form text. Post it back to `/consent/`.
+            A changed form gets a new id, and consent is required again until the
+            participant accepts it.
         text:
           type: string
           nullable: true
