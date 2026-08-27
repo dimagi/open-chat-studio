@@ -368,6 +368,13 @@ class ChatConsentSerializer(serializers.Serializer):
     )
 
 
+class ChatConsentRequest(serializers.Serializer):
+    form_version_id = serializers.IntegerField(
+        label="Consent form version ID",
+        help_text="The `form_version_id` from the start or poll response being accepted.",
+    )
+
+
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
     session_token = serializers.CharField(

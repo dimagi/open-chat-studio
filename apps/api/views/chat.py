@@ -30,6 +30,8 @@ from apps.api.chat_consent import consent_block, participant_data_for
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
+    ChatConsentRequest,
+    ChatConsentSerializer,
     ChatPollResponse,
     ChatSendMessageRequest,
     ChatSendMessageResponse,
@@ -861,6 +863,70 @@ def chat_poll_response(request, session_id):
         "consent": consent_block(session.experiment_version, participant_data_for(session)),
     }
     return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    operation_id="chat_record_consent",
+    summary="Record that the participant accepted the chatbot's consent form",
+    tags=["Chat"],
+    request=ChatConsentRequest,
+    responses={
+        204: None,
+        409: inline_serializer(
+            "ChatConsentStale",
+            {
+                "error": serializers.CharField(),
+                "code": serializers.CharField(help_text="Always `consent_stale`."),
+                "consent": ChatConsentSerializer(),
+            },
+        ),
+    },
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+    ],
+)
+@widget_sunset_headers
+@api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes(SESSION_PERMISSION_CLASSES)
+def chat_record_consent(request, session_id):
+    """Record consent for the form version the participant was shown.
+
+    A `form_version_id` that is not the session version's current form is refused with `409`
+    and the current block, so the widget re-renders rather than recording consent to text the
+    participant never saw.
+    """
+    serializer = ChatConsentRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        return NotFound()
+    if session.ended_at is not None:
+        return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    version = session.experiment_version
+    if version.consent_form_id != serializer.validated_data["form_version_id"]:
+        return Response(
+            {
+                "error": "The consent form has changed",
+                "code": "consent_stale",
+                "consent": consent_block(version, participant_data_for(session)),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    participant_data, _ = ParticipantData.objects.get_or_create(
+        participant=session.participant, experiment=session.experiment, team=session.team, defaults={"data": {}}
+    )
+    participant_data.record_consent()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:

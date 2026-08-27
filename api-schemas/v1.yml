@@ -51,6 +51,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatTaskPollError'
           description: ''
+  /api/chat/{session_id}/consent/:
+    post:
+      operationId: chat_record_consent
+      description: |-
+        Record consent for the form version the participant was shown.
+
+        A `form_version_id` that is not the session version's current form is refused with `409`
+        and the current block, so the widget re-renders rather than recording consent to text the
+        participant never saw.
+      summary: Record that the participant accepted the chatbot's consent form
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatConsentRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - embedKeyAuth: []
+      responses:
+        '204':
+          description: No response body
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentStale'
+          description: ''
   /api/chat/{session_id}/message/:
     post:
       operationId: chat_send_message
@@ -1138,6 +1175,30 @@ components:
       - form_version_id
       - required
       - text
+    ChatConsentRequest:
+      type: object
+      properties:
+        form_version_id:
+          type: integer
+          title: Consent form version ID
+          description: The `form_version_id` from the start or poll response being
+            accepted.
+      required:
+      - form_version_id
+    ChatConsentStale:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `consent_stale`.
+        consent:
+          $ref: '#/components/schemas/ChatConsent'
+      required:
+      - code
+      - consent
+      - error
     ChatPollResponse:
       type: object
       properties:
