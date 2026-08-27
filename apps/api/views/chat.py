@@ -948,7 +948,8 @@ def chat_record_consent(request, session_id):
         team=session.team,
         defaults={"data": {}},
     )
-    participant_data.record_consent(form_version_id)
+    if not participant_data.has_consented_to(form_version_id):
+        participant_data.record_consent(form_version_id)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 

@@ -223,11 +223,15 @@ def test_a_republished_form_prompts_the_participant_again(api_client, session):
 
 
 @pytest.mark.django_db()
-def test_recording_consent_twice_is_a_no_op(api_client, session):
+def test_recording_consent_twice_keeps_the_first_acceptance_time(api_client, session):
     _consent(api_client, session, session.experiment.consent_form_id)
+    first_consent_at = participant_data_for(session).system_metadata["consent_at"]
+
     response = _consent(api_client, session, session.experiment.consent_form_id)
 
     assert response.status_code == 204
+    assert participant_data_for(session).system_metadata["consent_at"] == first_consent_at
+    assert ParticipantData.objects.filter(participant=session.participant).count() == 1
 
 
 @pytest.mark.django_db()
