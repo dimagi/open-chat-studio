@@ -26,7 +26,7 @@ from apps.api.authentication import (
     get_embed_key_channel,
     oauth_resolved_channel,
 )
-from apps.api.chat_consent import consent_block, consent_refusal, participant_data_for
+from apps.api.chat_consent import consent_refusal, session_consent_block
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
@@ -574,7 +574,7 @@ def chat_start_session(request):
         "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
-        "consent": consent_block(experiment_version or session.experiment_version, participant_data_for(session)),
+        "consent": session_consent_block(session, experiment_version or session.experiment_version),
     }
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
@@ -875,7 +875,7 @@ def chat_poll_response(request, session_id):
         "messages": messages,
         "has_more": has_more,
         "session_status": session_status,
-        "consent": consent_block(session.experiment_version, participant_data_for(session)),
+        "consent": session_consent_block(session, session.experiment_version),
     }
     return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
 
@@ -887,6 +887,10 @@ def chat_poll_response(request, session_id):
     request=ChatConsentRequest,
     responses={
         204: None,
+        400: inline_serializer(
+            "ChatConsentSessionEnded",
+            {"error": serializers.CharField()},
+        ),
         409: inline_serializer(
             "ChatConsentStale",
             {
@@ -932,7 +936,7 @@ def chat_record_consent(request, session_id):
             {
                 "error": "The consent form has changed",
                 "code": "consent_stale",
-                "consent": consent_block(version, participant_data_for(session)),
+                "consent": session_consent_block(session, version),
             },
             status=status.HTTP_409_CONFLICT,
         )

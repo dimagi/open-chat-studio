@@ -28,6 +28,13 @@ def consent_block(version: Experiment, participant_data: ParticipantData | None)
     }
 
 
+def session_consent_block(session: ExperimentSession, version: Experiment) -> dict:
+    """The consent block for `session` on `version`, without a participant-data query when there is no form."""
+    if version.consent_form_id is None:
+        return consent_block(version, None)
+    return consent_block(version, participant_data_for(session))
+
+
 def consent_refusal(request, session: ExperimentSession, version: Experiment) -> Response | None:
     """The 403 that holds a message until consent is recorded, or None.
 
@@ -36,7 +43,7 @@ def consent_refusal(request, session: ExperimentSession, version: Experiment) ->
     """
     if not widget_enforces_consent(request.headers.get(WIDGET_VERSION_HEADER)):
         return None
-    block = consent_block(version, participant_data_for(session))
+    block = session_consent_block(session, version)
     if not block["required"]:
         return None
     return Response(

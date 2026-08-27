@@ -82,6 +82,12 @@ paths:
       responses:
         '204':
           description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentSessionEnded'
+          description: ''
         '409':
           content:
             application/json:
@@ -1210,6 +1216,13 @@ components:
       required:
       - code
       - consent
+      - error
+    ChatConsentSessionEnded:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
       - error
     ChatConsentStale:
       type: object
