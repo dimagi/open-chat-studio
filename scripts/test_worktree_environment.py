@@ -574,6 +574,74 @@ def test_psql_recovers_from_a_stale_container_override(
     assert "psql:-h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c SELECT 1" in command_output
 
 
+@pytest.mark.parametrize(
+    ("env_line", "expected_container"),
+    [
+        pytest.param("OCS_POSTGRES_CONTAINER=ocs_env_postgres", "ocs_env_postgres", id="bare"),
+        pytest.param("OCS_POSTGRES_CONTAINER='ocs_env_postgres'", "ocs_env_postgres", id="quoted"),
+    ],
+)
+def test_psql_reads_its_container_from_the_worktree_env_file(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    env_line: str,
+    expected_container: str,
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    # Nothing sources `.env` before these scripts run, so a knob set there only works if
+    # they read the file themselves — the way OCS_WORKTREE_ID always has.
+    with (worktree / ".env").open("a") as env_file:
+        env_file.write(f"{env_line}\n")
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    assert f"docker-exec:{expected_container}" in command_log.read_text()
+
+
+def test_an_environment_variable_beats_the_worktree_env_file(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    with (worktree / ".env").open("a") as env_file:
+        env_file.write("OCS_POSTGRES_CONTAINER=ocs_env_postgres\n")
+    env["OCS_POSTGRES_CONTAINER"] = "ocs_exported_postgres"
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    command_output = command_log.read_text()
+    assert "docker-exec:ocs_exported_postgres" in command_output
+    assert "ocs_env_postgres" not in command_output
+
+
+def test_a_container_override_that_is_not_a_container_name_is_ignored(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    # The value is interpolated into `docker exec`, and `.env` is a file anything can
+    # write, so a name-shaped check is what keeps the rest of a line out of the command.
+    env["OCS_POSTGRES_CONTAINER"] = "nope; rm -rf /"
+
+    result = _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    assert "is not a container name" in result.stderr
+    assert "docker-exec:ocs_test_postgres" in command_log.read_text()
+
+
+def test_psql_tries_each_container_source_once_when_none_can_run_a_client(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    # Both an override and a discoverable container, neither able to start a client. The
+    # rejection list is what has to end this: an override that stayed eligible after
+    # being rejected would be handed back on the next resolve, forever.
+    env["OCS_POSTGRES_CONTAINER"] = "ocs_stale_postgres"
+    env["OCS_TEST_DOCKER_EXEC_FAILURE"] = "127"
+
+    _run_worktree_helper(worktree, "ocs_psql", "postgres", "-c", "SELECT 1", env=env)
+
+    attempts = [line for line in command_log.read_text().splitlines() if line.startswith("docker-exec:")]
+    assert attempts == ["docker-exec:ocs_stale_postgres", "docker-exec:ocs_test_postgres"]
+
+
 def test_psql_does_not_retry_a_client_that_ran_and_failed(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
