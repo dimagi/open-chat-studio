@@ -85,13 +85,23 @@ statuses are returned newest-first, and every superseded deployment ends up
 `inactive,success,pending`, so reading only the newest status hides exactly the
 soaked commits you are looking for.
 
-    gh api "repos/dimagi/open-chat-studio/deployments?environment=aws-prod&per_page=10" \
+    gh api "repos/dimagi/open-chat-studio/deployments?environment=aws-prod&per_page=100" \
       --jq '.[] | "\(.id) \(.created_at) \(.sha)"' |
     while read -r id created sha; do
       states=$(gh api "repos/dimagi/open-chat-studio/deployments/$id/statuses" \
         --jq '[.[].state] | join(",")')
-      case ",$states," in *,success,*) echo "$created ${sha:0:9}  [$states]" ;; esac
+      case ",$states," in
+        *,success,*)
+          age=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 3600 ))
+          [ "$age" -ge 24 ] && soaked="soaked" || soaked="too new"
+          printf '%s  %3sh  %-8s %s\n' "$created" "$age" "$soaked" "${sha:0:9}" ;;
+      esac
     done
+
+`per_page=100` is not arbitrary: prod takes roughly 5 deploys per 48 hours, so a
+single page covers about a month. A smaller page can push the commit you want
+off the end during a busy spell, and since failed and in-flight deploys are
+filtered out afterwards, the page holds fewer candidates than it looks.
 
 `inactive` on an older deployment is normal — it means a later deploy superseded
 it, not that anything went wrong. A deployment with no `success` in its history
@@ -102,30 +112,58 @@ restart its soak clock.
 
 ## Release steps
 
-1. Identify the candidate commit per "Cut criteria".
-2. Move `CHANGELOG.md` `[Unreleased]` entries into a new version section. Verify
+The tag must contain the changelog section describing its own release —
+[releases.md](docs/hosting/releases.md#what-changed-in-a-release) sends operators
+to `CHANGELOG.md` *at that tag*. Since the changelog is written after the
+candidate commit is chosen, the tag goes on a short release branch, not on the
+soaked commit itself.
+
+1. Identify the candidate commit per "Cut criteria". Call it `<sha>`.
+2. Branch from it, so `main` moving on doesn't drag the release forward:
+
+       git fetch origin main
+       git switch -c release/vX.Y.Z <sha>
+
+3. Move `CHANGELOG.md` `[Unreleased]` entries into a new version section. Verify
    them against the actual diff since the last tag — in particular, that every
    migration in the range has a line, and every changed setting is listed:
 
        git log --oneline <last-tag>..<sha>
        git diff --stat <last-tag>..<sha> -- '*/migrations/*' 'config/settings*.py' .env.example
 
-3. Record the bundled widget version (`LATEST_VERSION` in
-   `apps/channels/widget_versions.py`).
-4. Link the docs-repo release notes covering the same commit range.
+4. Record the bundled widget version (`LATEST_VERSION` in
+   `apps/channels/widget_versions.py`) and link the docs-repo release notes
+   covering the same commit range.
 5. Confirm the bump matches the highest-impact change in the batch (see
    "Choosing the version").
 6. If anything in the range is breaking, confirm it completed the
    [feature deprecation](docs/developer_guides/feature_deprecation.md)
    lifecycle. If not, hold it and ship the deprecation notice instead.
-7. Tag and push: `git tag vX.Y.Z <sha> && git push origin vX.Y.Z`.
-8. Publish a GitHub Release in **this** repo with the changelog section as the
-   body. Title it `vX.Y.Z` so it is not confused with the docs-repo release
-   feed.
-9. Post to
-   [Discussions → Announcements](https://github.com/dimagi/open-chat-studio/discussions/categories/announcements)
-   and link it from the Release body — see
-   [Announcing a release](#announcing-a-release).
+7. Commit, and check the commit is documentation only — this is what lets it
+   skip the soak. If anything outside `CHANGELOG.md` appears here, stop: code on
+   a release branch has not been through production and must not be tagged.
+
+       git commit -m "docs: changelog for vX.Y.Z" CHANGELOG.md
+       git diff --name-only <sha>..HEAD    # must print CHANGELOG.md and nothing else
+
+8. Tag the release branch, not `<sha>`:
+
+       git push origin release/vX.Y.Z
+       git tag vX.Y.Z && git push origin vX.Y.Z
+
+   The tagged tree is now soaked code plus a changelog-only delta.
+9. Open a PR merging the same changelog change back to `main`, so `[Unreleased]`
+   is emptied there too. Without this the next release re-ships these entries.
+10. Publish a GitHub Release in **this** repo with the changelog section as the
+    body. Title it `vX.Y.Z` so it is not confused with the docs-repo release
+    feed.
+11. Post to
+    [Discussions → Announcements](https://github.com/dimagi/open-chat-studio/discussions/categories/announcements)
+    and link it from the Release body — see
+    [Announcing a release](#announcing-a-release).
+
+A patch release for an older supported minor branches from that minor's tag
+instead of from `main`, and cherry-picks the fix; everything else is unchanged.
 
 ## Writing migration notes
 
@@ -193,7 +231,7 @@ against category `Announcements` — there is no supported REST create endpoint.
 2. **amd64 only.** `publish_image.yml` builds a single architecture. Operators
    on arm64 still build their own. Needs a native arm runner; QEMU would mean
    compiling C extensions and the node asset build under emulation.
-3. **Announcement posts are manual.** Step 9 is a hand-written Discussions post.
+3. **Announcement posts are manual.** The Announcements post is written by hand.
    Worth automating off the tag push once the cadence has settled.
 4. **Publishing a public image is an ongoing commitment.** Base-image CVEs are
    now ours to patch on a schedule rather than whenever we happen to rebuild,
@@ -202,4 +240,4 @@ against category `Announcements` — there is no supported REST create endpoint.
 ## Ownership
 
 Release manager: **[define rotation]**. The release manager for a cycle owns
-steps 1-9.
+every step above.
