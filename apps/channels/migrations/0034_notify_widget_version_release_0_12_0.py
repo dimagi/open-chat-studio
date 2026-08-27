@@ -19,6 +19,7 @@ class Migration(migrations.Migration):
             command_options={
                 "force": True,
                 "widget_version": "0.12.0",
+                "changelog_url": "https://docs.openchatstudio.com/chat_widget/changelog/#v0120-2026-08-27",
                 "notes": (
                     'New: persistent-session="tab" keeps a conversation across reloads but clears it '
                     "when the tab closes. "
