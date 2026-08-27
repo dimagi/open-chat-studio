@@ -200,6 +200,9 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         if new_node is None:
             raise ValueError("new_node must be provided")
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
+        # ``assistant`` is copied off the source row, so clear it: the check constraint allows
+        # either holder and a version must have exactly the node.
+        new_instance.assistant = None
         new_instance.node = new_node
         if not is_copy:
             new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)
