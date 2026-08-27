@@ -237,6 +237,24 @@ describe('hold and release', () => {
     expect(consentPanel(page)).not.toBeNull();
   });
 
+  it('does not send the message when an upload refusal names consent but carries no block', async () => {
+    const page = await mountWidget('allow-attachments="true"');
+    const sendMessage = jest.fn().mockResolvedValue({ task_id: 't', status: 'processing' });
+    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    page.rootInstance['selectedFiles'] = [{ file: new File(['hello'], 'a.txt', { type: 'text/plain' }) }];
+    // The real attachment manager, driven by a refusal whose body has no consent block.
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required' }),
+    } as Response);
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it('welcome messages and starter questions render before consent', async () => {
     const page = await mountWidget(`welcome-messages='["Hi there"]' starter-questions='["What can you do?"]'`);
     stubService(page);

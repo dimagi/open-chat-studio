@@ -74,6 +74,26 @@ describe('FileAttachmentManager request headers', () => {
     expect(result.selectedFiles[0].error).toBeUndefined();
   });
 
+  it('treats a consent refusal with no block as an ordinary upload failure', async () => {
+    const manager = makeManager();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required' }),
+    } as Response);
+
+    const result = await manager.uploadPendingFiles([{ file: makeFile() }], {
+      apiBaseUrl: 'https://example.com',
+      sessionId: 's1',
+      participantId: 'p1',
+      headers: { 'X-Session-Token': 'tok-123' },
+    });
+
+    expect(result.consent).toBeUndefined();
+    expect(result.tokenRejected).toBe(true);
+    expect(result.selectedFiles[0].error).toBe('Consent is required');
+  });
+
   it('sends no auth headers when none are provided', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({

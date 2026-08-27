@@ -125,8 +125,11 @@ export class FileAttachmentManager {
         const errorData = await this.safeJson(response);
         const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; consent?: ChatConsent };
         const errorMessage = body.error || 'Failed to upload files';
-        // Files are left unmarked on a consent refusal: they are re-uploaded once consent is recorded.
-        const consentRefused = response.status === 403 && body.code === 'consent_required';
+        // Files are left unmarked on a consent refusal: they are re-uploaded once consent is
+        // recorded. A refusal that names consent but carries no block cannot be shown to the
+        // participant, so it takes the ordinary failure path rather than passing as a success
+        // with no attachments.
+        const consentRefused = response.status === 403 && body.code === 'consent_required' && !!body.consent;
         return {
           selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
