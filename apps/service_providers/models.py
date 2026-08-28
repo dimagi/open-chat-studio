@@ -614,6 +614,33 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
     def whatsapp_numbers(self) -> list[dict]:
         return self.whatsapp_numbers_info.get("numbers", [])
 
+    def resolve_number(self, number: str) -> dict | None:
+        """Confirm `number` belongs to this provider and return the channel config it implies.
+
+        Returns None when the provider does not have the number. The dict is merged into the
+        channel's ``extra_data``, so it carries whatever that platform needs to address the
+        number -- for Meta Cloud API that is the ``phone_number_id`` sends are addressed to.
+
+        Resolving lives here rather than on the service because the Meta numbers are cached on
+        the provider row, and the service is built from config alone.
+        """
+        if self.type_enum == MessagingProviderType.meta_cloud_api:
+            return self._resolve_meta_number(number)
+        return {"number": number} if self.get_messaging_service().resolve_number(number) else None
+
+    def _resolve_meta_number(self, number: str) -> dict | None:
+        """Match `number` against the cached numbers, syncing first if nothing is cached.
+
+        The check an operator makes when adding a number is what fills the cache for providers
+        that predate it.
+        """
+        if not self.whatsapp_numbers:
+            self.sync_whatsapp_numbers()
+        match = next((entry for entry in self.whatsapp_numbers if entry["number"] == number), None)
+        if not match:
+            return None
+        return {"number": number, "phone_number_id": match["phone_number_id"]}
+
     def _update_extra_data(self, key: str, value) -> None:
         """Set one key in ``extra_data`` without disturbing the others.
 

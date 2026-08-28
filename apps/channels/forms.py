@@ -359,41 +359,19 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         if not number or not provider:
             return cleaned_data
 
-        if provider.type == MessagingProviderType.meta_cloud_api:
-            self._clean_meta_number(cleaned_data, provider, number)
-            return cleaned_data
-
-        service = provider.get_messaging_service()
         try:
-            resolved_number = service.resolve_number(number)
-            if not resolved_number:
-                self.add_error("number", NUMBER_NOT_FOUND.format(number=number))
-                return cleaned_data
+            resolved = provider.resolve_number(number)
         except Exception:
+            logger.exception("Could not resolve number at messaging provider %s", provider.id)
             self.add_error("number", "Could not validate this number right now. Please try again.")
             return cleaned_data
 
-        return cleaned_data
-
-    def _clean_meta_number(self, cleaned_data: dict, provider: MessagingProvider, number: str) -> None:
-        """Match the number against the provider's cached numbers.
-
-        A provider that has never been synced is synced here: the check an operator makes when
-        adding a number is what fills the cache for providers that predate it.
-        """
-        if not provider.whatsapp_numbers:
-            try:
-                provider.sync_whatsapp_numbers()
-            except Exception:
-                logger.exception("Could not fetch the WhatsApp numbers for provider %s", provider.id)
-                self.add_error("number", "Could not validate this number right now. Please try again.")
-                return
-
-        match = next((entry for entry in provider.whatsapp_numbers if entry["number"] == number), None)
-        if not match:
+        if resolved is None:
             self.add_error("number", NUMBER_NOT_FOUND.format(number=number))
-            return
-        cleaned_data["phone_number_id"] = match["phone_number_id"]
+            return cleaned_data
+
+        cleaned_data.update(resolved)
+        return cleaned_data
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
