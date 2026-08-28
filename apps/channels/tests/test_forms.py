@@ -46,6 +46,9 @@ def test_channel_form_reveals_provider_types(experiment, platform, expected_widg
         ("+27_81_234_5678", False),
         ("0800 100 030", False),
         ("+32 (0)27888484", True),
+        # Parses cleanly but is not a number anyone can be reached on
+        ("+1234", False),
+        ("+10000000000", False),
     ],
 )
 @patch("apps.channels.forms.WhatsappChannelForm.messaging_provider")

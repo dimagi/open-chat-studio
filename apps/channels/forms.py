@@ -335,9 +335,13 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def clean_number(self):
         try:
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
-            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        # Parsing only checks the shape, so reject numbers that cannot be dialled before we
+        # go looking for them at the provider.
+        if not phonenumbers.is_valid_number(number_obj):
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
+        return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
 
     def post_save(self, channel: ExperimentChannel):
         self.configure_webhook(channel)

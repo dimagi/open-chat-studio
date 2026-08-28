@@ -3,6 +3,7 @@ from unittest import mock
 import httpx
 import pytest
 
+from apps.service_providers.forms import WhatsappTestMessageForm
 from apps.service_providers.messaging_service import TemplateCheck
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.tasks import sync_whatsapp_provider_task
@@ -211,6 +212,44 @@ class TestPostCreateHook:
             provider.run_post_create_hook()
 
         delay.assert_not_called()
+
+
+class TestWhatsappTestMessageForm:
+    """The recipient number is checked here so a bad one is a form error, not a Meta error."""
+
+    def _form(self, to_number: str) -> WhatsappTestMessageForm:
+        return WhatsappTestMessageForm(
+            [NUMBER_A],
+            data={"from_number_id": NUMBER_A["phone_number_id"], "to_number": to_number, "message": "hello"},
+        )
+
+    @pytest.mark.parametrize(
+        ("to_number", "expected"),
+        [
+            pytest.param("+12125552368", "+12125552368", id="e164"),
+            pytest.param("+27 81 234 5678", "+27812345678", id="spaces-are-normalised"),
+        ],
+    )
+    def test_a_valid_number_is_normalised(self, to_number, expected):
+        form = self._form(to_number)
+
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["to_number"] == expected
+
+    @pytest.mark.parametrize(
+        "to_number",
+        [
+            pytest.param("0812345678", id="no-country-code"),
+            pytest.param("not a number", id="not-a-number"),
+            pytest.param("+1234", id="parses-but-too-short"),
+            pytest.param("+10000000000", id="parses-but-unassigned-range"),
+        ],
+    )
+    def test_a_number_meta_would_reject_is_a_form_error(self, to_number):
+        form = self._form(to_number)
+
+        assert not form.is_valid()
+        assert form.errors["to_number"] == ["Enter a valid phone number (e.g. +12125552368)."]
 
 
 @pytest.mark.django_db()

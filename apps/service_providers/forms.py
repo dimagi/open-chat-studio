@@ -405,6 +405,10 @@ class WhatsappTestMessageForm(forms.Form):
             number = phonenumbers.parse(self.cleaned_data["to_number"])
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        # Parsing only checks the shape. Without this, an unreachable number reaches Meta and
+        # comes back as a send failure rather than a field error.
+        if not phonenumbers.is_valid_number(number):
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
         return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
 
 
