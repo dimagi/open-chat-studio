@@ -606,13 +606,13 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         )
 
     @property
-    def whatsapp_numbers_status(self) -> dict:
+    def whatsapp_numbers_info(self) -> dict:
         """The cached WhatsApp number sync: ``state``, ``synced_at``, ``error`` and ``numbers``."""
         return (self.extra_data or {}).get(WHATSAPP_NUMBERS_KEY, {})
 
     @property
     def whatsapp_numbers(self) -> list[dict]:
-        return self.whatsapp_numbers_status.get("numbers", [])
+        return self.whatsapp_numbers_info.get("numbers", [])
 
     def _update_extra_data(self, key: str, value) -> None:
         """Set one key in ``extra_data`` without disturbing the others.
@@ -630,7 +630,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def mark_whatsapp_numbers_syncing(self) -> None:
         """Flag a sync as in flight. The cached numbers stay put so the page can keep showing them."""
-        status = self.whatsapp_numbers_status | {
+        status = self.whatsapp_numbers_info | {
             "state": "pending",
             "started_at": timezone.now().isoformat(),
             "error": None,
@@ -638,7 +638,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         self._update_extra_data(WHATSAPP_NUMBERS_KEY, status)
 
     def mark_whatsapp_numbers_failed(self, error: str) -> None:
-        self._update_extra_data(WHATSAPP_NUMBERS_KEY, self.whatsapp_numbers_status | {"state": "error", "error": error})
+        self._update_extra_data(WHATSAPP_NUMBERS_KEY, self.whatsapp_numbers_info | {"state": "error", "error": error})
 
     def sync_whatsapp_numbers(self) -> tuple[int, int]:
         """Cache this account's WhatsApp numbers and their phone number IDs.
@@ -647,7 +647,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         """
         numbers = self.get_messaging_service().get_phone_numbers()
         previous = {number["phone_number_id"] for number in self.whatsapp_numbers}
-        status = self.whatsapp_numbers_status | {
+        status = self.whatsapp_numbers_info | {
             "state": "ok",
             "synced_at": timezone.now().isoformat(),
             "error": None,
@@ -658,7 +658,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         return len(current - previous), len(previous - current)
 
     @property
-    def whatsapp_template_status(self) -> dict:
+    def whatsapp_template_info(self) -> dict:
         """The cached message template check: ``ok``, ``checked_at``, ``problems``, ``error``, ``template``.
 
         Empty while the template has never been checked. Nothing backfills it, so a provider
@@ -673,7 +673,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         The three states are all distinct to callers: a template known to be broken and one
         nobody has looked at yet warrant different warnings.
         """
-        return self.whatsapp_template_status.get("ok")
+        return self.whatsapp_template_info.get("ok")
 
     def record_whatsapp_template_check(self, check: "messaging_service.TemplateCheck") -> None:
         self._update_extra_data(

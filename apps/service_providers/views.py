@@ -587,10 +587,10 @@ def _get_meta_provider(request, pk: int) -> MessagingProvider:
 
 def _sync_in_flight(provider: MessagingProvider) -> bool:
     """Is a number sync running, and started recently enough to still be worth waiting for?"""
-    status = provider.whatsapp_numbers_status
-    if status.get("state") != "pending":
+    info = provider.whatsapp_numbers_info
+    if info.get("state") != "pending":
         return False
-    started_at = parse_datetime(status.get("started_at") or "")
+    started_at = parse_datetime(info.get("started_at") or "")
     if not started_at:
         return False
     # A sync that has been running for a minute is not coming back; let the page start another.
@@ -603,8 +603,8 @@ def _whatsapp_status_context(provider: MessagingProvider) -> dict:
     Nothing here calls Meta. The refresh button is the only thing that does, by way of
     ``sync_whatsapp_provider_task``, and the panel polls itself until that lands.
     """
-    numbers_status = provider.whatsapp_numbers_status
-    template_status = provider.whatsapp_template_status
+    numbers_info = provider.whatsapp_numbers_info
+    template_info = provider.whatsapp_template_info
     numbers = provider.whatsapp_numbers
     syncing = _sync_in_flight(provider)
     initial_message = f"Test message from Open Chat Studio for {provider.name}."
@@ -612,18 +612,18 @@ def _whatsapp_status_context(provider: MessagingProvider) -> dict:
         "provider": provider,
         "numbers": numbers,
         "syncing": syncing,
-        "stalled": numbers_status.get("state") == "pending" and not syncing,
-        "sync_error": numbers_status.get("error") if numbers_status.get("state") == "error" else None,
-        "synced_at": parse_datetime(numbers_status.get("synced_at") or ""),
+        "stalled": numbers_info.get("state") == "pending" and not syncing,
+        "sync_error": numbers_info.get("error") if numbers_info.get("state") == "error" else None,
+        "synced_at": parse_datetime(numbers_info.get("synced_at") or ""),
         "form": WhatsappTestMessageForm(numbers, initial={"message": initial_message}),
         "message_length": len(initial_message),
         "message_limit": MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT,
         # The cached TemplateCheck, as a plain dict -- the template reads the same attributes
         # either way. Empty means nobody has checked yet, which is not the same as a failure.
-        "template_check": template_status,
-        "template_checked": bool(template_status),
-        "template_ok": template_status.get("ok") is True,
-        "template_checked_at": parse_datetime(template_status.get("checked_at") or ""),
+        "template_check": template_info,
+        "template_checked": bool(template_info),
+        "template_ok": template_info.get("ok") is True,
+        "template_checked_at": parse_datetime(template_info.get("checked_at") or ""),
         "template_name": MetaCloudAPIService.TEMPLATE_NAME,
         "template_parameter": MetaCloudAPIService.TEMPLATE_PARAMETER,
     }

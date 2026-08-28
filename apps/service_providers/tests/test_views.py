@@ -336,7 +336,7 @@ class TestWhatsappRefresh:
         assert response.status_code == 200
         delay.assert_called_once_with(meta_provider.pk)
         meta_provider.refresh_from_db()
-        assert meta_provider.whatsapp_numbers_status["state"] == "pending"
+        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
 
     def test_does_not_queue_a_second_refresh_while_one_is_running(
         self, meta_provider, authed_client, django_capture_on_commit_callbacks

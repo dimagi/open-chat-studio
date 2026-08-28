@@ -66,8 +66,8 @@ class TestSyncWhatsappNumbers:
         assert (added, removed) == (1, 0)
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers == [NUMBER_A]
-        assert meta_provider.whatsapp_numbers_status["state"] == "ok"
-        assert meta_provider.whatsapp_numbers_status["synced_at"]
+        assert meta_provider.whatsapp_numbers_info["state"] == "ok"
+        assert meta_provider.whatsapp_numbers_info["synced_at"]
 
     def test_reports_numbers_added_and_removed(self, meta_provider):
         with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
@@ -95,15 +95,15 @@ class TestSyncWhatsappNumbers:
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers == [NUMBER_A]
-        assert meta_provider.whatsapp_numbers_status["state"] == "pending"
-        assert meta_provider.whatsapp_numbers_status["started_at"]
+        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
+        assert meta_provider.whatsapp_numbers_info["started_at"]
 
 
 @pytest.mark.django_db()
 class TestWhatsappTemplateCache:
     def test_unchecked_until_someone_checks_it(self, meta_provider):
         """No backfill: a provider that predates the cache has no answer, not a wrong one."""
-        assert meta_provider.whatsapp_template_status == {}
+        assert meta_provider.whatsapp_template_info == {}
         assert meta_provider.whatsapp_template_ok is None
 
     def test_records_a_usable_template(self, meta_provider):
@@ -114,8 +114,8 @@ class TestWhatsappTemplateCache:
         assert check.ok is True
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_template_ok is True
-        assert meta_provider.whatsapp_template_status["template"] == APPROVED_TEMPLATE
-        assert meta_provider.whatsapp_template_status["checked_at"]
+        assert meta_provider.whatsapp_template_info["template"] == APPROVED_TEMPLATE
+        assert meta_provider.whatsapp_template_info["checked_at"]
 
     def test_records_the_problems_when_the_template_cannot_be_sent(self, meta_provider):
         check = TemplateCheck(ok=False, problems=["No template named 'new_bot_message' exists."])
@@ -124,7 +124,7 @@ class TestWhatsappTemplateCache:
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_template_ok is False
-        assert meta_provider.whatsapp_template_status["problems"] == ["No template named 'new_bot_message' exists."]
+        assert meta_provider.whatsapp_template_info["problems"] == ["No template named 'new_bot_message' exists."]
 
     def test_records_the_error_when_the_check_could_not_run(self, meta_provider):
         check = TemplateCheck(ok=False, error="(#190) Error validating access token")
@@ -133,7 +133,7 @@ class TestWhatsappTemplateCache:
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_template_ok is False
-        assert meta_provider.whatsapp_template_status["error"] == "(#190) Error validating access token"
+        assert meta_provider.whatsapp_template_info["error"] == "(#190) Error validating access token"
 
     def test_leaves_the_cached_numbers_and_token_hash_alone(self, meta_provider):
         with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
@@ -164,8 +164,8 @@ class TestSyncWhatsappProviderTask:
             sync_whatsapp_provider_task(meta_provider.pk)
 
         meta_provider.refresh_from_db()
-        assert meta_provider.whatsapp_numbers_status["state"] == "error"
-        assert "Error validating access token" in meta_provider.whatsapp_numbers_status["error"]
+        assert meta_provider.whatsapp_numbers_info["state"] == "error"
+        assert "Error validating access token" in meta_provider.whatsapp_numbers_info["error"]
         assert meta_provider.whatsapp_template_ok is True, "the template check must still have run"
 
     def test_records_the_numbers_when_the_template_check_blows_up(self, meta_provider):
@@ -177,7 +177,7 @@ class TestSyncWhatsappProviderTask:
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers == [NUMBER_A]
         assert meta_provider.whatsapp_template_ok is False
-        assert "Error validating access token" in meta_provider.whatsapp_template_status["error"]
+        assert "Error validating access token" in meta_provider.whatsapp_template_info["error"]
 
     def test_ignores_providers_that_are_not_meta(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
@@ -202,7 +202,7 @@ class TestPostCreateHook:
 
         delay.assert_called_once_with(meta_provider.pk)
         meta_provider.refresh_from_db()
-        assert meta_provider.whatsapp_numbers_status["state"] == "pending"
+        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
 
     def test_does_nothing_for_other_provider_types(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
