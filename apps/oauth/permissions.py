@@ -101,13 +101,9 @@ def token_allows_chatbot(token, experiment) -> bool:
 
 
 def applications_allowing_chatbot(experiment):
-    """The team's machine applications whose allowlist names `experiment` -- `token_allows_chatbot`
-    read backwards, from the chatbot to the applications that may reach it.
+    """The team's machine applications whose allowlist names `experiment` -- inverse of `token_allows_chatbot`.
 
-    Only client-credentials applications are listed, for the same reason only they are gated: no
-    other grant is pinned to a set of chatbots. Scope is not a filter here -- `chat:start` is a
-    property of the token, not of the application -- so this answers "which applications *could*
-    mint an admissible token", which is what an admin setting up a channel needs to know.
+    Only client-credentials applications are listed.
     """
     return OAuth2Application.objects.filter(
         team_id=experiment.team_id,

@@ -145,9 +145,7 @@ AUTH_LEVEL_SESSION_TOKEN = 2
 EMBED_KEY_INTRODUCED = Version("0.5.1")
 SESSION_TOKEN_INTRODUCED = Version("0.9.0")
 
-# The release that ships the `authTokenProvider` prop, the only way a browser embed can
-# present a bearer token. Advisory: an older widget simply cannot send one and so fails
-# admission on its own, and nothing rejects a request on this version. It exists so the
+# The release that ships the `authTokenProvider` prop. It exists so the
 # channel dialog and the docs can name the release an `oauth`-mode embed needs.
 MIN_OAUTH_WIDGET_VERSION = "0.12.0"
 

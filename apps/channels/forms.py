@@ -636,19 +636,7 @@ class WidgetParams(forms.Widget):
 
 
 class CredentialModeSelect(forms.Select):
-    """The credential mode select, with the state of the *other* half of the setup under it.
-
-    `oauth` mode admits only a token from an application whose allowlist names this chatbot, and
-    that allowlist belongs to a Team Admin on the other side of the team. An admin choosing the
-    mode here cannot see it, so the select carries it: the applications that can reach this
-    chatbot, or a warning that none can.
-
-    Answered against the mode *selected in the browser* rather than the one stored, so an admin
-    switching to `oauth` sees the state of that half before saving rather than after. That costs
-    one query on every render of this form, `embed_key` included -- the alternative is a round
-    trip on a select the admin has not committed to yet. The `credentialMode` the template shows
-    it against belongs to the form, not to this widget: the embed-token note is gated on the same
-    state from the other side of the form.
+    """The credential mode select along with the list of oauth applications which can be used with this chatbot. If there are none a warning is displayed.
     """
 
     template_name = "channels/widgets/credential_mode.html"
@@ -676,10 +664,8 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         choices=CredentialMode.choices,
         initial=CredentialMode.EMBED_KEY,
         # Not required, so a submission that omits it falls back to the mode already stored
-        # rather than resetting the channel to the public default. Omission must never relax
-        # the credential the channel demands.
+        # rather than resetting the channel to the public default.
         required=False,
-        help_text="What a caller must present to start a chat session on this channel.",
     )
     allow_all_domains = forms.BooleanField(
         label="Allow all domains", required=False, help_text="Allow access from any domain."
@@ -701,7 +687,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         help_text=(
             "Enter the domains where this widget is allowed to be embedded (one per line). "
             "Required for an embed key. With OAuth, leaving this blank makes the channel "
-            "server-only: any browser request is refused, whatever token it carries."
+            "server-only: any browser request is refused."
         ),
     )
 
@@ -770,19 +756,12 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
 
     def _credential_mode_help_text(self):
-        """Both modes in one place, since choosing `oauth` means work outside this form.
-
-        The application half of the setup belongs to a Team Admin (`oauth.*`) and the channel
-        half to a Chatbot Admin (`bot_channels.*`), so an admin here may not be able to finish
-        the job alone — naming the other half and linking to it is the least this can do.
-        """
         return format_html(
-            "What a caller must present to start a chat session. <strong>Embed key</strong> admits any "
+            "What kind of token the widget must use to start a chat session. <strong>Embed key</strong> admits any "
             "visitor on an allowed domain, as a public widget. <strong>OAuth token</strong> means your "
-            "backend mints a short-lived <code>{scope}</code> token and hands it to the page or sends it "
-            "itself; any embed key is then ignored. The token's application must list this chatbot "
-            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>), and a browser '
-            "embed needs widget {version} or newer.",
+            "backend creates a short-lived <code>{scope}</code> token and hands it to the widget;"
+            " any embed key is then ignored. The OAuth application be <strong>client-credentials</strong>' and must list this chatbot "
+            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>).",
             scope=settings.CHAT_API_SCOPE,
             url=reverse("oauth_apps:home", args=[self.experiment.team.slug]),
             version=widget_versions.MIN_OAUTH_WIDGET_VERSION,
@@ -847,9 +826,6 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             channel.session_token_lifetime = self._session_token_lifetime
             update_fields.append("session_token_lifetime")
         if update_fields:
-            # `ExperimentChannel.save` widens update_fields to carry the auth-level pin that
-            # `oauth` mode requires, so this cannot leave the row in the state the
-            # oauth_credential_mode_requires_session_token constraint forbids.
             channel.save(update_fields=update_fields)
         self.success_message = "Channel saved successfully"
         if warning := self._oauth_mode_warning(channel):
@@ -877,7 +853,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return (
             f"This channel now requires an OAuth token. Your site has {reported}, and only "
             f"{min_version} or newer can send one — upgrade the embed and install an "
-            "authTokenProvider on the element, or chats will stop starting."
+            "authTokenProvider on the element, or chats will fail."
         )
 
 
