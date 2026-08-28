@@ -19,11 +19,12 @@ export function postProcessMarkdownHTML(html: string): string {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
 
-    // Add target="_blank" and rel="noopener noreferrer" to external links
+    // Add target="_blank" and rel="noopener noreferrer" to external links.
+    // Normalised first: a padded, upper case or protocol-relative href is external too.
     const links = tempDiv.querySelectorAll('a[href]');
     links.forEach(link => {
-      const href = link.getAttribute('href');
-      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+      const href = link.getAttribute('href')?.trim().toLowerCase() ?? '';
+      if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//')) {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
       }
