@@ -1,5 +1,6 @@
 """Tests for the evaluation-scoped cost read path (`services/reporting.py`):
-`evaluation_run_cost`, `evaluation_run_costs`, `evaluation_config_cost_summary`.
+`evaluation_run_cost`, `evaluation_run_costs`, `evaluation_config_cost_summary`,
+`evaluation_message_tokens`.
 """
 
 from datetime import timedelta
@@ -11,6 +12,8 @@ from django.utils import timezone
 from apps.cost_tracking.models import Confidence
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
+    evaluation_message_cost,
+    evaluation_message_tokens,
     evaluation_run_cost,
     evaluation_run_costs,
 )
@@ -237,3 +240,115 @@ def test_evaluation_config_cost_summary_with_no_usage_is_zero():
     assert summary.all_time.total_cost == Decimal(0)
     assert summary.last_30_days.has_unpriced is False
     assert summary.all_time.has_unpriced is False
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_tokens_sums_judge_and_generation_per_message():
+    """A row's Tokens figure is judge + generation combined - whichever UsageRecord rows
+    carry that message's id, regardless of which half of the run wrote them."""
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+    message_one, message_two = 101, 102
+
+    # message_one: judge input + output, plus a generation call.
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        quantity=100,
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        quantity=50,
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        quantity=25,
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    # message_two: judge only.
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        quantity=40,
+        extra={"evaluation_run_id": run.id, "message_id": message_two},
+    )
+    # No message_id at all (an older row, or a run-level record) - excluded, not summed as 0.
+    UsageRecordFactory.create(
+        team=config.team, evaluation_config=config, quantity=999, extra={"evaluation_run_id": run.id}
+    )
+    # A different run in the same config must not leak into this run's per-message totals.
+    other_run = EvaluationRunFactory.create(team=config.team, config=config)
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        quantity=999,
+        extra={"evaluation_run_id": other_run.id, "message_id": message_one},
+    )
+
+    tokens = evaluation_message_tokens(config.id, run.id)
+
+    assert tokens == {message_one: 175, message_two: 40}
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_tokens_with_no_usage_is_empty():
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+
+    assert evaluation_message_tokens(config.id, run.id) == {}
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_cost_sums_judge_and_generation_per_message():
+    """Mirrors `evaluation_message_tokens`, summing `cost` instead of `quantity` - the
+    detail panel's per-result cost figure."""
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+    message_one, message_two = 101, 102
+
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.10"),
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.05"),
+        extra={"evaluation_run_id": run.id, "message_id": message_one},
+    )
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("0.02"),
+        extra={"evaluation_run_id": run.id, "message_id": message_two},
+    )
+    # No message_id - excluded, not summed as 0.
+    UsageRecordFactory.create(
+        team=config.team, evaluation_config=config, cost=Decimal("9"), extra={"evaluation_run_id": run.id}
+    )
+    # A different run in the same config must not leak into this run's per-message totals.
+    other_run = EvaluationRunFactory.create(team=config.team, config=config)
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        cost=Decimal("9"),
+        extra={"evaluation_run_id": other_run.id, "message_id": message_one},
+    )
+
+    cost = evaluation_message_cost(config.id, run.id)
+
+    assert cost == {message_one: Decimal("0.15"), message_two: Decimal("0.02")}
+
+
+@pytest.mark.django_db()
+def test_evaluation_message_cost_with_no_usage_is_empty():
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+
+    assert evaluation_message_cost(config.id, run.id) == {}
