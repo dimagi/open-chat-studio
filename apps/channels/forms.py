@@ -10,6 +10,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 from telebot import TeleBot, apihelper
 
 from apps.channels.const import SLACK_ALL_CHANNELS
@@ -23,6 +24,7 @@ from apps.channels.utils import (
     validate_platform_availability,
 )
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+from apps.service_providers.forms import whatsapp_number_label
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
 
@@ -151,6 +153,8 @@ class ExtraFormBase(forms.Form):
     warning_message = ""
     form_attrs = {}
     """Additional HTML attributes to be added to the form element"""
+    custom_template = None
+    """Template to render the form's fields with, when the default field rendering won't do"""
 
     def __init__(self, experiment, channel=None, **kwargs):
         self.experiment = experiment
@@ -252,7 +256,12 @@ class TelegramChannelForm(ExtraFormBase):
         return bot_token
 
 
+NUMBER_NOT_FOUND = "{number} was not found at the provider. Please make sure it is there before proceeding"
+
+
 class WhatsappChannelForm(WebhookUrlFormBase):
+    custom_template = "channels/partials/whatsapp_channel_fields.html"
+
     number = forms.CharField(
         label="Number",
         max_length=20,
@@ -261,6 +270,68 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             "+27812345678, +27-81-234-5678, +27 81 234 5678"
         ),
     )
+
+    @property
+    def form_attrs(self) -> dict:
+        """Hand the modal every Meta provider's cached numbers up front.
+
+        Switching provider then swaps the number control client-side, with no request. This is
+        evaluated at render time so numbers a sync fetched during validation are already here.
+        """
+        return {
+            "x-data": json.dumps(
+                {
+                    "numbersByProvider": self._numbers_by_provider(),
+                    "providerId": self._selected_provider_id(),
+                    "number": self._submitted_number() or "",
+                }
+            ),
+            "x-on:change.document": (
+                "if ($event.target.name === 'messaging_provider') providerId = $event.target.value"
+            ),
+        }
+
+    @property
+    def has_cached_numbers(self) -> bool:
+        """Whether the provider selected right now has numbers, for the pre-Alpine render."""
+        provider_id = self._selected_provider_id()
+        return bool(self._numbers_by_provider().get(provider_id, {}).get("numbers"))
+
+    def _selected_provider_id(self) -> str:
+        if provider_id := self.data.get("messaging_provider"):
+            return str(provider_id)
+        if self.channel and self.channel.messaging_provider_id:
+            return str(self.channel.messaging_provider_id)
+        return ""
+
+    def _submitted_number(self) -> str | None:
+        if self.is_bound:
+            return self.data.get("number")
+        return (self.channel.extra_data or {}).get("number") if self.channel else None
+
+    def _numbers_by_provider(self) -> dict:
+        """The number options and provider page URL for each of the team's Meta providers."""
+        team = self.experiment.team
+        saved_number = (self.channel.extra_data or {}).get("number") if self.channel else None
+        options = {}
+        for provider in MessagingProvider.objects.filter(team=team, type=MessagingProviderType.meta_cloud_api):
+            numbers = [
+                {"value": number["number"], "label": whatsapp_number_label(number)}
+                for number in provider.whatsapp_numbers
+                if number.get("number")
+            ]
+            # Keep a number the channel already uses selectable, even if Meta no longer lists it.
+            is_channels_provider = bool(self.channel) and self.channel.messaging_provider_id == provider.id
+            if saved_number and is_channels_provider and saved_number not in {n["value"] for n in numbers}:
+                numbers.append({"value": saved_number, "label": saved_number})
+            options[str(provider.id)] = {
+                "numbers": numbers,
+                "provider_url": reverse(
+                    "service_providers:edit",
+                    kwargs={"team_slug": team.slug, "provider_type": "messaging", "pk": provider.id},
+                ),
+            }
+        return options
 
     def clean_number(self):
         try:
@@ -275,24 +346,45 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def clean(self):
         cleaned_data = super().clean()
         number = cleaned_data.get("number")
-        if not number or not self.messaging_provider:
+        provider = self.messaging_provider
+        if not number or not provider:
             return cleaned_data
 
-        service = self.messaging_provider.get_messaging_service()
+        if provider.type == MessagingProviderType.meta_cloud_api:
+            self._clean_meta_number(cleaned_data, provider, number)
+            return cleaned_data
+
+        service = provider.get_messaging_service()
         try:
             resolved_number = service.resolve_number(number)
             if not resolved_number:
-                self.add_error(
-                    "number", f"{number} was not found at the provider. Please make sure it is there before proceeding"
-                )
+                self.add_error("number", NUMBER_NOT_FOUND.format(number=number))
                 return cleaned_data
-            elif self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
-                cleaned_data["phone_number_id"] = resolved_number
         except Exception:
             self.add_error("number", "Could not validate this number right now. Please try again.")
             return cleaned_data
 
         return cleaned_data
+
+    def _clean_meta_number(self, cleaned_data: dict, provider: MessagingProvider, number: str) -> None:
+        """Match the number against the provider's cached numbers.
+
+        A provider that has never been synced is synced here: the check an operator makes when
+        adding a number is what fills the cache for providers that predate it.
+        """
+        if not provider.whatsapp_numbers:
+            try:
+                provider.sync_whatsapp_numbers()
+            except Exception:
+                logger.exception("Could not fetch the WhatsApp numbers for provider %s", provider.id)
+                self.add_error("number", "Could not validate this number right now. Please try again.")
+                return
+
+        match = next((entry for entry in provider.whatsapp_numbers if entry["number"] == number), None)
+        if not match:
+            self.add_error("number", NUMBER_NOT_FOUND.format(number=number))
+            return
+        cleaned_data["phone_number_id"] = match["phone_number_id"]
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):

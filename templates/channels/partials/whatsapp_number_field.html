@@ -1,0 +1,50 @@
+{% comment %}
+  The WhatsApp number field, as two controls sharing one value: a picker of the selected
+  provider's cached numbers, and the free-text box used when that provider has none.
+
+  Every provider's numbers are already in the surrounding x-data, so switching provider swaps
+  the control with no request. Whichever control is hidden is also disabled, so exactly one
+  `number` value is ever submitted. Server-side validation re-checks the value either way.
+{% endcomment %}
+<div class="fieldset w-full">
+  <label class="label font-bold" for="id_number">
+    <div>
+      {{ form.fields.number.label }}
+      <small class="form-text text-muted">{% include "generic/help.html" with help_content=form.fields.number.help_text %}</small>
+    </div>
+  </label>
+
+  <select class="select w-full"
+          name="number"
+          id="id_number"
+          x-model="number"
+          x-show="numbersByProvider[providerId]?.numbers?.length"
+          :disabled="!numbersByProvider[providerId]?.numbers?.length"
+          {% if not form.has_cached_numbers %}style="display: none" disabled{% endif %}>
+    <template x-for="option in numbersByProvider[providerId]?.numbers || []" :key="option.value">
+      <option :value="option.value" x-text="option.label"></option>
+    </template>
+  </select>
+
+  <input class="input w-full"
+         type="text"
+         name="number"
+         id="id_number_free"
+         maxlength="{{ form.fields.number.max_length }}"
+         placeholder="+27812345678"
+         value="{{ form.number.value|default:'' }}"
+         x-model="number"
+         x-show="!numbersByProvider[providerId]?.numbers?.length"
+         :disabled="!!numbersByProvider[providerId]?.numbers?.length"
+         {% if form.has_cached_numbers %}style="display: none" disabled{% endif %}>
+
+  <p class="help" x-show="numbersByProvider[providerId]?.numbers?.length" x-cloak>
+    Don't see your number?
+    <a class="link"
+       :href="numbersByProvider[providerId]?.provider_url"
+       target="_blank"
+       rel="noopener noreferrer">Refresh the numbers on the provider page</a>.
+  </p>
+
+  {{ form.number.errors }}
+</div>

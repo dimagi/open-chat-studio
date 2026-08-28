@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock, PropertyMock, patch
 
 import httpx
@@ -424,3 +425,139 @@ class TestChannelEnabledToggle:
         channel = ExperimentChannelFactory.create(experiment=experiment, team=experiment.team, enabled=False)
         form = ChannelForm(experiment=experiment, instance=channel)
         assert '"channelEnabled": false' in form.form_attrs["x-data"]
+
+
+NUMBER_A = {
+    "phone_number_id": "1020671484465717",
+    "number": "+27647084804",
+    "display": "+27 64 708 4804",
+    "verified_name": "TenantHive",
+}
+NUMBER_B = {
+    "phone_number_id": "9938471029384",
+    "number": "+27825550134",
+    "display": "+27 82 555 0134",
+    "verified_name": "TenantHive Support",
+}
+
+
+def _meta_provider(team, numbers=None):
+    extra_data = {"verify_token_hash": "abc"}
+    if numbers is not None:
+        extra_data["whatsapp_numbers"] = {"state": "ok", "numbers": numbers}
+    return MessagingProviderFactory.create(
+        team=team,
+        type=MessagingProviderType.meta_cloud_api,
+        config={"access_token": "token", "business_id": "biz_123"},
+        extra_data=extra_data,
+    )
+
+
+def _numbers_by_provider(form):
+    return json.loads(form.form_attrs["x-data"])["numbersByProvider"]
+
+
+@pytest.mark.django_db()
+class TestWhatsappNumberOptions:
+    """Every provider's cached numbers are rendered up front, so switching provider needs no request."""
+
+    def test_cached_numbers_are_rendered_for_every_provider(self, experiment):
+        synced = _meta_provider(experiment.team, [NUMBER_A, NUMBER_B])
+        never_synced = _meta_provider(experiment.team)
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment))
+
+        assert options[str(synced.id)]["numbers"] == [
+            {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"},
+            {"value": "+27825550134", "label": "+27 82 555 0134 - TenantHive Support"},
+        ]
+        assert options[str(never_synced.id)]["numbers"] == []
+        assert options[str(synced.id)]["provider_url"].endswith(f"/messaging/{synced.id}/")
+
+    def test_a_saved_number_that_is_not_cached_is_still_offered(self, experiment):
+        """Editing a channel must not force a number change just because Meta no longer lists it."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=provider,
+            extra_data={"number": "+27821110000", "phone_number_id": "555"},
+        )
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment, channel=channel))
+
+        assert [option["value"] for option in options[str(provider.id)]["numbers"]] == [
+            "+27647084804",
+            "+27821110000",
+        ]
+
+    def test_providers_of_other_types_are_not_listed(self, experiment):
+        twilio = MessagingProviderFactory.create(team=experiment.team, type=MessagingProviderType.twilio)
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment))
+
+        assert str(twilio.id) not in options
+
+
+@pytest.mark.django_db()
+class TestWhatsappNumberValidation:
+    def _form(self, experiment, provider, number="+27647084804"):
+        return WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
+
+    def test_a_cached_number_resolves_its_id_without_calling_meta(self, experiment):
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        with patch.object(MessagingProvider, "get_messaging_service") as get_service:
+            form = self._form(experiment, provider)
+            assert form.is_valid(), form.errors
+
+        get_service.assert_not_called()
+        assert form.cleaned_data["phone_number_id"] == "1020671484465717"
+
+    def test_a_number_missing_from_a_cached_provider_is_rejected(self, experiment):
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._form(experiment, provider, number="+27829990000")
+
+        assert not form.is_valid()
+        assert "was not found at the provider" in form.errors["number"][0]
+
+    def test_an_empty_cache_is_populated_on_save(self, experiment):
+        """The number check doubles as the trigger that fills a provider's number cache."""
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.return_value = [NUMBER_A, NUMBER_B]
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider)
+            assert form.is_valid(), form.errors
+
+        assert form.cleaned_data["phone_number_id"] == "1020671484465717"
+        provider.refresh_from_db()
+        assert provider.whatsapp_numbers == [NUMBER_A, NUMBER_B]
+
+    def test_an_unknown_number_leaves_the_cache_populated_for_the_re_render(self, experiment):
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.return_value = [NUMBER_A]
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider, number="+27829990000")
+            assert not form.is_valid()
+
+            assert "was not found at the provider" in form.errors["number"][0]
+            # the re-rendered form offers what the sync found
+            assert _numbers_by_provider(form)[str(provider.id)]["numbers"] == [
+                {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"}
+            ]
+
+    def test_a_failed_sync_asks_the_user_to_try_again(self, experiment):
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.side_effect = httpx.HTTPError("boom")
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider)
+
+        assert not form.is_valid()
+        assert form.errors["number"] == ["Could not validate this number right now. Please try again."]

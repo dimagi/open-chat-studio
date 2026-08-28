@@ -1,0 +1,7 @@
+{% comment %}
+  Fields for a WhatsApp channel. Only the number field needs custom markup (see the partial);
+  the rest render as usual.
+{% endcomment %}
+{% load form_tags %}
+{% render_field form.webook_url %}
+{% include "channels/partials/whatsapp_number_field.html" %}
