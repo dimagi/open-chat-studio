@@ -362,7 +362,13 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:
-        if self.platform_enum not in ChannelPlatform.widget_platforms():
+        """The update badge for an embedded widget, or None for every other platform.
+
+        Only the embedded widget is loaded by the host site, so only its team can act on the
+        badge. A public link serves the widget bundled with the platform, whose version moves
+        with the deploy.
+        """
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         return widget_versions.get_widget_update_status(self.widget_version)
 
@@ -400,9 +406,9 @@ class ExperimentChannel(BaseTeamModel):
     def min_widget_version(self) -> str | None:
         """Minimum widget version required by this channel's current auth level.
 
-        None for non-widget channels or a NONE-level widget channel (no floor).
+        None for anything but an embedded widget, and for a NONE-level one (no floor).
         """
-        if self.platform_enum not in ChannelPlatform.widget_platforms():
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         level = self.widget_auth_level
         if level is None:
@@ -412,7 +418,7 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def pending_min_widget_version(self) -> str | None:
         """Minimum widget version the pending auth level will require, if a bump is pending."""
-        if self.platform_enum not in ChannelPlatform.widget_platforms():
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         if self.pending_auth_level is None:
             return None
