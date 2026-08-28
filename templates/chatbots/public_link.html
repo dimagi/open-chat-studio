@@ -23,13 +23,12 @@
         </div>
       {% endif %}
       <div class="w-full max-w-3xl flex-1 relative">
-        {# "tab" once widget 0.12.0 is LATEST_VERSION: the 0.11.0 widget coerces any string to true #}
         <open-chat-studio-widget
           mode="kiosk"
           chatbot-id="{{ public_id }}"
           embed-key="{{ token }}"
           api-base-url="{{ api_base_url }}"
-          persistent-session="false"
+          persistent-session="tab"
           welcome-messages="{{ welcome_json }}"
           starter-questions="{{ starters_json }}"
           {% if not widget_enabled %}disabled="true"{% endif %}

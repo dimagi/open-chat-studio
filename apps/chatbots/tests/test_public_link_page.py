@@ -54,8 +54,7 @@ def test_live_page_renders_the_kiosk_widget(client, team_with_users):
     html = response.content.decode()
     assert 'mode="kiosk"' in html
     assert f'embed-key="{TOKEN}"' in html
-    assert 'persistent-session="false"' in html
-    assert 'persistent-session="tab"' not in html
+    assert 'persistent-session="tab"' in html
     assert f'api-base-url="https://{CANONICAL}"' in html or f'api-base-url="http://{CANONICAL}"' in html
     assert "Hi there" in html
     assert "Hours?" in html
