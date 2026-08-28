@@ -486,6 +486,7 @@ class EvaluationResultDataMixin:
             data = [row for row in data if str(row.get(field)) == value]
         for row in data:
             row["Tokens"] = self.tokens_by_message.get(row.get("id"))
+            row["Cost"] = self.cost_by_message.get(row.get("id"))
         return data
 
     def get_table_data(self):
@@ -548,7 +549,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
 
     def get_table_class(self):
         """Build a Table subclass with one Column per curated field: #, Dataset Input,
-        Generated Response, one per evaluator output field, and Tokens — not the full
+        Generated Response, one per evaluator output field, and Cost — not the full
         grab-bag of keys `build_evaluation_table_data` produces (message context, Applied
         Tags, session links aren't shown here).
         """
@@ -562,7 +563,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
 
         column_keys = ["#", "Dataset Input", "Generated Response"]
         column_keys += [key for key, _label in self.dynamic_columns]
-        column_keys.append("Tokens")
+        column_keys.append("Cost")
         attrs = {key: self.get_column(key) for key in column_keys}
 
         # Define row class factory to add highlighting
@@ -665,13 +666,11 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     template_name="evaluations/components/truncated_text_column.html",
                     verbose_name=key,
                 )
-            case "Tokens":
-                # Column key/accessor stay "Tokens" (tied to row["Tokens"] from
-                # tokens_by_message) - only the header label reads "Cost" per product ask,
-                # while the cell itself still shows the token count, not a dollar amount.
+            case "Cost":
                 return columns.TemplateColumn(
                     template_code=(
-                        "{% load humanize %}{% if value is not None %}{{ value|intcomma }}{% else %}—{% endif %}"
+                        "{% load cost_tracking %}"
+                        "{% if value is not None %}${{ value|cost_display }}{% else %}—{% endif %}"
                     ),
                     verbose_name="Cost",
                     orderable=False,

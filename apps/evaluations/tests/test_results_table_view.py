@@ -3,6 +3,8 @@
 per-evaluator-field columns.
 """
 
+from decimal import Decimal
+
 import pytest
 from django.urls import reverse
 
@@ -212,7 +214,7 @@ class TestResultsTableFilteringAndBadges:
 @pytest.mark.django_db()
 class TestResultsTableCuratedColumns:
     """The results table shows a fixed set of columns - #, Dataset Input, Generated
-    Response, one per evaluator output field, and Tokens - not the full grab-bag of
+    Response, one per evaluator output field, and Cost - not the full grab-bag of
     context/tag/session-link columns build_evaluation_table_data also produces.
     """
 
@@ -236,7 +238,7 @@ class TestResultsTableCuratedColumns:
             "Generated Response",
             f"score ({evaluator.name})",
             f"sentiment ({evaluator.name})",
-            "Tokens",
+            "Cost",
         ]
 
     def test_long_free_text_fields_are_clamped_not_left_to_blow_out_row_height(self, client, team_with_users):
@@ -269,7 +271,7 @@ class TestResultsTableCuratedColumns:
         content = response.content.decode()
         assert content.count(f'line-clamp-2 max-w-md" title="{long_text}"') == 2
 
-    def test_tokens_column_always_present(self, client, team_with_users):
+    def test_cost_column_always_present(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
@@ -279,9 +281,9 @@ class TestResultsTableCuratedColumns:
 
         response = client.get(url)
 
-        assert "Tokens" in list(response.context["table"].columns.columns)
+        assert "Cost" in list(response.context["table"].columns.columns)
 
-    def test_tokens_column_sums_judge_and_generation_for_that_row(self, client, team_with_users):
+    def test_cost_column_sums_judge_and_generation_for_that_row(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
@@ -289,13 +291,13 @@ class TestResultsTableCuratedColumns:
         UsageRecordFactory.create(
             team=team_with_users,
             evaluation_config=config,
-            quantity=100,
+            cost=Decimal("1.00"),
             extra={"evaluation_run_id": run.id, "message_id": result.message_id},
         )
         UsageRecordFactory.create(
             team=team_with_users,
             evaluation_config=config,
-            quantity=50,
+            cost=Decimal("0.50"),
             extra={"evaluation_run_id": run.id, "message_id": result.message_id},
         )
         client.force_login(team_with_users.members.first())
@@ -304,4 +306,4 @@ class TestResultsTableCuratedColumns:
         response = client.get(url)
 
         assert response.status_code == 200
-        assert "150" in response.content.decode()
+        assert "$1.50" in response.content.decode()
