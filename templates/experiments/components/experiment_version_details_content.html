@@ -50,6 +50,18 @@
     {% include "experiments/components/versions/compare.html" %}
 </div>
 
+{% if experiment.is_archived %}
+    <div class="divider"></div>
+    <div class="modal-action">
+        {% url 'experiments:unarchive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as unarchive_url %}
+        <form method="post" action="{{ unarchive_url }}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-primary">
+                Unarchive Version
+            </button>
+        </form>
+    </div>
+{% endif %}
 {% if not experiment.is_archived %}
     <div class="divider"></div>
     <div class="modal-action">

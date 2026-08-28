@@ -888,6 +888,30 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
 @require_POST
 @transaction.atomic
 @login_and_team_required
+def unarchive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """
+    Restores an archived version of an experiment.
+    """
+    # get_all(), since the default manager filters archived rows out.
+    experiment = get_object_or_404(
+        Experiment.objects.get_all(),
+        working_version_id=experiment_id,
+        version_number=version_number,
+        team=request.team,
+    )
+    experiment.unarchive()
+    return redirect(
+        reverse(
+            "chatbots:single_chatbot_home",
+            kwargs={"team_slug": request.team.slug, "experiment_id": experiment_id},
+        )
+        + "#versions"
+    )
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
 def update_version_description(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
