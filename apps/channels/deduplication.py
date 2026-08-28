@@ -11,6 +11,8 @@ its meaning even if a platform enum value is renamed later.
 
 from itertools import chain
 
+from django.db.models import Q
+
 from apps.chat.models import ChatMessage
 
 
@@ -31,35 +33,43 @@ def external_ids_for(platform: str, *parts) -> list[str]:
     return [namespaced_id(platform, *parts)]
 
 
-def _unseen_message_ids(external_ids: list[str], team_id: int) -> set[str]:
-    """Return the ids with no ChatMessage in this team already recording them."""
+def chatbot_id_for(channel) -> int | None:
+    """The dedup scope for a delivery that is only known by its `ExperimentChannel`."""
+    return channel.experiment.get_working_version_id() if channel.experiment_id else None
+
+
+def _unseen_message_ids(external_ids: list[str], team_id: int, chatbot_id: int | None = None) -> set[str]:
+    """Return the ids with no ChatMessage in this scope already recording them."""
     candidates = set(external_ids)
     if not candidates:
         return candidates
 
-    seen = chain.from_iterable(
-        ChatMessage.objects.filter(chat__team_id=team_id, external_ids__overlap=list(candidates)).values_list(
-            "external_ids", flat=True
+    messages = ChatMessage.objects.filter(chat__team_id=team_id, external_ids__overlap=list(candidates))
+    if chatbot_id is not None:
+        # A session's experiment may be the working version or any of its published versions.
+        messages = messages.filter(
+            Q(chat__experiment_session__experiment_id=chatbot_id)
+            | Q(chat__experiment_session__experiment__working_version_id=chatbot_id)
         )
-    )
+    seen = chain.from_iterable(messages.values_list("external_ids", flat=True))
     return candidates - set(seen)
 
 
-def is_duplicate_delivery(external_ids: list[str], team_id: int) -> bool:
+def is_duplicate_delivery(external_ids: list[str], team_id: int, chatbot_id: int | None = None) -> bool:
     """Whether every id on this delivery has already been recorded.
 
     False for an empty list: a delivery the provider did not identify is processed, never dropped.
     That is why callers must use this rather than negating `_unseen_message_ids`, which would invert
     the intent with no visible symptom.
     """
-    return bool(external_ids) and not _unseen_message_ids(external_ids, team_id)
+    return bool(external_ids) and not _unseen_message_ids(external_ids, team_id, chatbot_id)
 
 
 def connect_external_ids(messages: list[dict]) -> list[str]:
     return [namespaced_id("connect", message["message_id"]) for message in messages]
 
 
-def unseen_connect_messages(messages: list[dict], team_id: int) -> list[dict]:
+def unseen_connect_messages(messages: list[dict], team_id: int, chatbot_id: int | None = None) -> list[dict]:
     """The messages in a Connect batch that have not been delivered before.
 
     Connect is the one channel that filters raw dicts before anything is parsed, because a batch of
@@ -67,7 +77,7 @@ def unseen_connect_messages(messages: list[dict], team_id: int) -> list[dict]:
     as a whole, so `DuplicateDeliveryStage` would let it through, and by the time the pipeline runs
     the batch has been joined into one `message_text` it could not drop part of anyway.
     """
-    unseen = _unseen_message_ids(connect_external_ids(messages), team_id)
+    unseen = _unseen_message_ids(connect_external_ids(messages), team_id, chatbot_id)
     fresh = []
     for message in messages:
         external_id = namespaced_id("connect", message["message_id"])

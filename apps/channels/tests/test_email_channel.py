@@ -1416,7 +1416,7 @@ class TestEmailInboundHandlerWithAttachments:
         inbound = _make_inbound_with_attachments(
             [pdf], to_email="bot@chat.openchatstudio.com", message_id="<replay@example.com>"
         )
-        record_delivery(channel.team, external_ids_for("email", "<replay@example.com>"))
+        record_delivery(channel.team, external_ids_for("email", "<replay@example.com>"), experiment=channel.experiment)
 
         with patch("apps.channels.tasks.handle_email_message") as task_mock:
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))

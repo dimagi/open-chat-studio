@@ -6,6 +6,7 @@ from apps.channels.deduplication import (
     is_duplicate_delivery,
     namespaced_id,
 )
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -56,3 +57,27 @@ def test_is_duplicate_delivery(record_delivery, candidate_ids, expected):
     record_delivery(team, ["connect:a"])
 
     assert is_duplicate_delivery(candidate_ids, team.id) is expected
+
+
+@pytest.mark.django_db()
+class TestChatbotScope:
+    """Telegram's `message_id` is unique only within a bot dialog, so team scoping alone drops real
+    messages: two of a team's bots see the same (chat.id, message_id) for the same participant, and
+    for every message in a group they are both in."""
+
+    def test_another_chatbot_in_the_team_does_not_suppress(self, record_delivery):
+        bot_a = ExperimentFactory()
+        bot_b = ExperimentFactory(team=bot_a.team)
+        record_delivery(bot_a.team, ["telegram:55501:1"], experiment=bot_a)
+
+        assert is_duplicate_delivery(["telegram:55501:1"], bot_b.team_id, bot_b.id) is False
+        assert is_duplicate_delivery(["telegram:55501:1"], bot_a.team_id, bot_a.id) is True
+
+    def test_a_published_version_shares_its_chatbot_scope(self, record_delivery):
+        """The delivery that recorded the id ran against a published version, so scoping to the
+        working version id has to cover the whole version family."""
+        chatbot = ExperimentFactory()
+        version = ExperimentFactory(team=chatbot.team, working_version=chatbot)
+        record_delivery(chatbot.team, ["telegram:55501:1"], experiment=version)
+
+        assert is_duplicate_delivery(["telegram:55501:1"], chatbot.team_id, chatbot.id) is True

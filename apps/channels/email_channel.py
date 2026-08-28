@@ -18,7 +18,7 @@ from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
-from apps.channels.deduplication import is_duplicate_delivery
+from apps.channels.deduplication import chatbot_id_for, is_duplicate_delivery
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.sender import ChannelSender
 from apps.channels.utils import is_email_domain_allowed
@@ -448,7 +448,7 @@ def email_inbound_handler(sender, event, **kwargs):
     # Checked here rather than left to `DuplicateDeliveryStage`: attachments are persisted below,
     # before the message is handed to the pipeline, so by the time the stage runs a replay has
     # already written its files.
-    if is_duplicate_delivery(email_msg.external_ids, channel.team_id):
+    if is_duplicate_delivery(email_msg.external_ids, channel.team_id, chatbot_id_for(channel)):
         logger.info(
             "Ignoring replayed inbound email %s on channel %s",
             email_msg.message_id,

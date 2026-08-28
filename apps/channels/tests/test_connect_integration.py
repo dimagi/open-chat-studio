@@ -228,7 +228,7 @@ class TestApiEndpoint:
     ):
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
-        record_delivery(experiment.team, connect_external_ids(payload["messages"]))
+        record_delivery(experiment.team, connect_external_ids(payload["messages"]), experiment=experiment)
 
         response = self._post(client, payload)
 
@@ -245,7 +245,7 @@ class TestApiEndpoint:
         payload = _build_user_message(
             encryption_key, commcare_connect_channel_id, message_spec={1: "A", 2: "B", 3: "C"}
         )
-        record_delivery(experiment.team, connect_external_ids(payload["messages"][:2]))
+        record_delivery(experiment.team, connect_external_ids(payload["messages"][:2]), experiment=experiment)
 
         self._post(client, payload)
 

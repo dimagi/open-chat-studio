@@ -31,7 +31,7 @@ class TestDuplicateDeliveryStage:
     )
     def test_aborts_only_for_a_recorded_delivery(self, record_delivery, candidate_ids, aborts):
         experiment = ExperimentFactory()
-        record_delivery(experiment.team, ["whatsapp:wamid.abc"])
+        record_delivery(experiment.team, ["whatsapp:wamid.abc"], experiment=experiment)
         ctx = self._context(experiment, candidate_ids)
 
         if aborts:
