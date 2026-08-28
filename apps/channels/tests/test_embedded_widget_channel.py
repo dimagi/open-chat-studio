@@ -8,11 +8,13 @@ from django.urls import reverse
 from apps.channels.forms import (
     ChannelFormWrapper,
     EmbeddedWidgetChannelForm,
+    WidgetParams,
 )
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import match_domain_pattern
 from apps.channels.widget_versions import MIN_OAUTH_WIDGET_VERSION
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+from apps.oauth.models import OAuth2Application, manage_applications_url
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
@@ -251,6 +253,43 @@ class TestEmbeddedWidgetChannelForm:
         )
         assert "authTokenProvider" not in public
         assert "embed-key" in public
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("listed", [True, False], ids=["listed", "not-listed"])
+    def test_the_dialog_names_the_applications_that_can_reach_this_chatbot(self, listed):
+        """The two-person setup is only half visible from here: the mode is a Chatbot Admin's to
+        set, but whether any application will actually mint an admissible token is a Team Admin's.
+        Naming the applications -- or saying plainly that there are none -- is what closes the gap.
+        """
+        channel = _widget_channel(credential_mode=CredentialMode.OAUTH)
+        experiment = channel.experiment
+        application = OAuth2Application.objects.create(
+            name="machine-app",
+            team=experiment.team,
+            client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        )
+        if listed:
+            application.allowed_chatbots.add(experiment)
+
+        widget = WidgetParams(experiment=experiment, widget_token="tok_1234", channel=channel)
+        rendered = widget.render("widget", None, {})
+
+        assert ("machine-app" in rendered) is listed
+        assert ("No OAuth application lists this chatbot" in rendered) is not listed
+        assert (manage_applications_url(experiment.team.slug) in rendered) is not listed
+
+    @pytest.mark.django_db()
+    def test_the_dialog_says_nothing_about_applications_outside_oauth_mode(self):
+        """An embed-key channel admits no OAuth token, so the allowlist is not its question -- and
+        the query it would take is pure cost on a dialog that opens for every channel."""
+        channel = _widget_channel(credential_mode=CredentialMode.EMBED_KEY)
+        widget = WidgetParams(experiment=channel.experiment, widget_token="tok_1234", channel=channel)
+
+        rendered = widget.render("widget", None, {})
+
+        assert "No OAuth application lists this chatbot" not in rendered
+        assert "can start a session here" not in rendered
 
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""

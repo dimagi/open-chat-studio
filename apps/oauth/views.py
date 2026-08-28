@@ -19,7 +19,7 @@ from apps.teams.models import Team
 from apps.teams.utils import set_current_team
 
 from .forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApplicationForm
-from .models import OAuth2Application
+from .models import OAuth2Application, manage_applications_url
 from .tables import GlobalOAuth2ApplicationTable, OAuth2ApplicationTable
 
 
@@ -118,14 +118,6 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         return super().form_valid(form)
 
 
-def _manage_team_url(team_slug: str) -> str:
-    """The team admin page, anchored on the OAuth applications section it is managed from.
-
-    The anchor is the slugified section title rendered by `generic/object_home_content.html`.
-    """
-    return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
-
-
 class ApplicationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """Home view for the team's OAuth applications."""
 
@@ -179,7 +171,7 @@ class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
         return super().get_form_kwargs() | {"team": self.request.team}
 
     def get_success_url(self):
-        return _manage_team_url(self.request.team.slug)
+        return manage_applications_url(self.request.team.slug)
 
     def form_valid(self, form):
         form.instance.user = self.request.user
@@ -209,7 +201,7 @@ class EditApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Update
         return super().get_form_kwargs() | {"team": self.request.team}
 
     def get_success_url(self):
-        return _manage_team_url(self.request.team.slug)
+        return manage_applications_url(self.request.team.slug)
 
 
 class DeleteApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
