@@ -1,14 +1,53 @@
 {% comment %}
   WhatsApp diagnostics for a Meta Cloud API messaging provider: whether the bot's message
-  template can actually be sent, and a place to try it. Loaded into the provider page by HTMX,
-  so a slow or failing call to Meta never holds up the form.
+  template can actually be sent, this account's numbers, and a place to try a real send.
+  Loaded into the provider page by HTMX, so it never holds up the form.
 
-  `template_check` is a TemplateCheck from MetaCloudAPIService.check_message_template().
+  Everything here is read from the provider's `extra_data` cache. Refreshing is the only thing
+  that talks to Meta -- it queues sync_whatsapp_provider_task, which re-fetches the numbers and
+  re-checks the template -- and this panel polls itself until that task lands.
+
+  `template_check` is a cached TemplateCheck as a dict; `template_checked` is false while nobody
+  has checked yet, which is not the same as a check that failed.
 {% endcomment %}
-<div class="flex flex-col gap-8 mt-8">
+<div id="wa-status" class="flex flex-col gap-8 mt-8"
+     {% if syncing %}
+       hx-get="{% url 'service_providers:whatsapp_status' request.team.slug provider.id %}"
+       hx-trigger="every 2s"
+       hx-swap="outerHTML"
+     {% endif %}>
   <div class="flex flex-col gap-2 text-sm">
-    <h2 class="pg-subtitle">Message template</h2>
-    {% if template_check.error %}
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <h2 class="pg-subtitle">Message template</h2>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-base-content/50">
+          {% if syncing %}
+            Checking with Meta…
+          {% elif template_checked_at %}
+            Last checked {{ template_checked_at|timesince }} ago
+          {% else %}
+            Never checked
+          {% endif %}
+        </span>
+        <button class="btn btn-outline btn-sm"
+                hx-post="{% url 'service_providers:whatsapp_refresh' request.team.slug provider.id %}"
+                hx-target="#wa-status"
+                hx-swap="outerHTML"
+                {% if syncing %}disabled{% endif %}>
+          <i class="fa-solid fa-rotate {% if syncing %}fa-spin{% endif %}"></i>
+          {% if syncing %}Refreshing{% else %}Refresh{% endif %}
+        </button>
+      </div>
+    </div>
+    {% if not template_checked %}
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-circle-info text-base-content/60 mt-1"></i>
+        <span>
+          The <code class="text-xs">{{ template_name }}</code> template has not been checked with Meta yet.
+          Refresh to check it.
+        </span>
+      </div>
+    {% elif template_check.error %}
       <div class="flex items-start gap-2">
         <i class="fa-solid fa-circle-exclamation text-error mt-1"></i>
         <div class="flex flex-col gap-1">
@@ -38,7 +77,7 @@
             {% for problem in template_check.problems %}<li>{{ problem }}</li>{% endfor %}
           </ul>
           <span class="text-base-content/60">
-            Fix the template in Meta Business Manager, then reload this page.
+            Fix the template in Meta Business Manager, then refresh.
           </span>
         </div>
       </div>

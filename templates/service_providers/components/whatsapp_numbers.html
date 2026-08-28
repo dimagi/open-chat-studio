@@ -1,39 +1,24 @@
 {% comment %}
   The WhatsApp numbers cached on a Meta Cloud API provider, and a form for sending one test
-  template message through them. Swapped in whole: while a sync is running it polls itself
-  until the numbers come back, keeping the last known numbers on screen in the meantime.
+  template message through them.
 
-  `template_ok` rides along in the query string so a poll can render the form's enabled state
-  without calling Meta again -- see _template_ok_from_request().
+  Included inside the status panel, which owns the polling and the refresh button -- one
+  refresh covers the numbers and the template together, so they are never shown out of step
+  with each other.
 {% endcomment %}
 {% load form_tags %}
-<div id="wa-numbers" class="flex flex-col gap-3 text-sm"
-     {% if syncing %}
-       hx-get="{% url 'service_providers:whatsapp_numbers' request.team.slug provider.id %}?template_ok={{ template_ok|yesno:'1,0' }}"
-       hx-trigger="every 2s"
-       hx-swap="outerHTML"
-     {% endif %}>
+<div class="flex flex-col gap-3 text-sm">
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <h2 class="pg-subtitle">Test your template</h2>
-    <div class="flex items-center gap-3">
-      <span class="text-xs text-base-content/50">
-        {% if syncing %}
-          Fetching numbers from Meta…
-        {% elif synced_at %}
-          Numbers synced {{ synced_at|timesince }} ago
-        {% else %}
-          Never synced
-        {% endif %}
-      </span>
-      <button class="btn btn-outline btn-sm"
-              hx-post="{% url 'service_providers:whatsapp_numbers_refresh' request.team.slug provider.id %}?template_ok={{ template_ok|yesno:'1,0' }}"
-              hx-target="#wa-numbers"
-              hx-swap="outerHTML"
-              {% if syncing %}disabled{% endif %}>
-        <i class="fa-solid fa-rotate {% if syncing %}fa-spin{% endif %}"></i>
-        {% if syncing %}Refreshing{% else %}Refresh{% endif %}
-      </button>
-    </div>
+    <span class="text-xs text-base-content/50">
+      {% if syncing %}
+        Fetching numbers from Meta…
+      {% elif synced_at %}
+        Numbers synced {{ synced_at|timesince }} ago
+      {% else %}
+        Never synced
+      {% endif %}
+    </span>
   </div>
 
   <div class="text-xs text-base-content/60">
@@ -45,7 +30,7 @@
   {% if stalled %}
     <div class="flex items-center gap-2 text-base-content/70">
       <i class="fa-solid fa-circle-info"></i>
-      This sync is taking longer than expected. Refresh to start it again.
+      This refresh is taking longer than expected. Refresh to start it again.
     </div>
   {% elif sync_error %}
     <div class="flex items-start gap-2 text-error">

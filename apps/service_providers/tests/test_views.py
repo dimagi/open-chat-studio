@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import ServiceWindowExpiredException
-from apps.service_providers.messaging_service import MetaCloudAPIService, TemplateCheck
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     AuthProvider,
     LlmProvider,
@@ -241,24 +241,69 @@ def _whatsapp_url(name, provider):
     return reverse("service_providers:" + name, kwargs={"team_slug": provider.team.slug, "pk": provider.pk})
 
 
+def _cache_template(provider, **status):
+    provider.extra_data["whatsapp_template"] = {
+        "ok": False,
+        "checked_at": "2026-08-28T08:00:00+00:00",
+        "problems": [],
+        "error": None,
+        "template": None,
+        **status,
+    }
+    provider.save()
+    return provider
+
+
 @pytest.mark.django_db()
 class TestWhatsappStatusView:
-    def test_renders_the_template_check(self, meta_provider, authed_client):
-        check = TemplateCheck(ok=True, template={"status": "APPROVED", "language": "en"})
-        with mock.patch.object(MetaCloudAPIService, "check_message_template", return_value=check):
+    """The panel renders from the cache. Only a refresh talks to Meta."""
+
+    def test_never_calls_meta(self, meta_provider, authed_client):
+        with mock.patch.object(MetaCloudAPIService, "check_message_template") as check:
             response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
 
         assert response.status_code == 200
-        assert response.context["template_check"].ok is True
+        check.assert_not_called()
+
+    def test_renders_the_cached_check(self, meta_provider, authed_client):
+        _cache_template(meta_provider, ok=True, template={"status": "APPROVED", "language": "en"})
+
+        response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
+
+        assert response.context["template_ok"] is True
+        assert response.context["template_checked"] is True
         assert "new_bot_message" in response.content.decode()
 
-    def test_renders_a_failed_check_without_erroring(self, meta_provider, authed_client):
-        check = TemplateCheck(ok=False, error="(#190) Error validating access token")
-        with mock.patch.object(MetaCloudAPIService, "check_message_template", return_value=check):
-            response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
+    def test_renders_a_cached_error(self, meta_provider, authed_client):
+        _cache_template(meta_provider, error="(#190) Error validating access token")
 
-        assert response.status_code == 200
+        response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
+
         assert "Error validating access token" in response.content.decode()
+
+    def test_says_so_when_the_template_has_never_been_checked(self, meta_provider, authed_client):
+        response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
+
+        assert response.context["template_checked"] is False
+        assert response.context["template_ok"] is False
+        assert "has not been checked with Meta yet" in response.content.decode()
+
+    def test_the_refresh_button_targets_the_whole_panel(self, meta_provider, authed_client):
+        """One refresh redraws the template block and the numbers together, so they never disagree."""
+        content = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider)).content.decode()
+
+        assert 'id="wa-status"' in content
+        assert _whatsapp_url("whatsapp_refresh", meta_provider) in content
+        assert 'hx-target="#wa-status"' in content
+
+    def test_polls_itself_while_a_refresh_is_running(self, meta_provider, authed_client):
+        meta_provider.mark_whatsapp_numbers_syncing()
+
+        content = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider)).content.decode()
+
+        assert _whatsapp_url("whatsapp_status", meta_provider) in content
+        assert 'hx-trigger="every 2s"' in content
+        assert "Checking with Meta" in content
 
     def test_404_for_a_provider_of_another_type(self, team_with_users, authed_client):
         provider = MessagingProviderFactory(team=team_with_users, type=MessagingProviderType.twilio)
@@ -278,33 +323,35 @@ class TestWhatsappStatusView:
 
 
 @pytest.mark.django_db()
-class TestWhatsappNumberRefresh:
-    def test_queues_a_sync(self, meta_provider, authed_client, django_capture_on_commit_callbacks):
+class TestWhatsappRefresh:
+    """One button, one task: the numbers and the template are re-fetched together."""
+
+    def test_queues_a_refresh(self, meta_provider, authed_client, django_capture_on_commit_callbacks):
         with (
-            mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay") as delay,
+            mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay,
             django_capture_on_commit_callbacks(execute=True),
         ):
-            response = authed_client.post(_whatsapp_url("whatsapp_numbers_refresh", meta_provider))
+            response = authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         assert response.status_code == 200
         delay.assert_called_once_with(meta_provider.pk)
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers_status["state"] == "pending"
 
-    def test_does_not_queue_a_second_sync_while_one_is_running(
+    def test_does_not_queue_a_second_refresh_while_one_is_running(
         self, meta_provider, authed_client, django_capture_on_commit_callbacks
     ):
         meta_provider.mark_whatsapp_numbers_syncing()
 
         with (
-            mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay") as delay,
+            mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay,
             django_capture_on_commit_callbacks(execute=True),
         ):
-            authed_client.post(_whatsapp_url("whatsapp_numbers_refresh", meta_provider))
+            authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         delay.assert_not_called()
 
-    def test_queues_a_sync_when_the_running_one_has_stalled(
+    def test_queues_a_refresh_when_the_running_one_has_stalled(
         self, meta_provider, authed_client, django_capture_on_commit_callbacks
     ):
         stalled = timezone.now() - timedelta(minutes=5)
@@ -312,10 +359,10 @@ class TestWhatsappNumberRefresh:
         meta_provider.save()
 
         with (
-            mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay") as delay,
+            mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay,
             django_capture_on_commit_callbacks(execute=True),
         ):
-            authed_client.post(_whatsapp_url("whatsapp_numbers_refresh", meta_provider))
+            authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         delay.assert_called_once_with(meta_provider.pk)
 
@@ -383,44 +430,40 @@ class TestWhatsappTestSend:
 
 @pytest.mark.django_db()
 class TestWhatsappTestFormAvailability:
-    """The test send needs a usable template, so the form follows the template check."""
-
-    def _status(self, client, provider, check):
-        with mock.patch.object(MetaCloudAPIService, "check_message_template", return_value=check):
-            return client.get(_whatsapp_url("whatsapp_status", provider))
+    """The test send needs a usable template, so the form follows the cached check."""
 
     def test_form_is_enabled_when_the_template_is_usable(self, meta_provider, authed_client):
-        response = self._status(authed_client, meta_provider, TemplateCheck(ok=True, template={"status": "APPROVED"}))
+        _cache_template(meta_provider, ok=True, template={"status": "APPROVED"})
+
+        response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
 
         assert response.context["template_ok"] is True
         assert "Send test message" in response.content.decode()
 
     @pytest.mark.parametrize(
-        "check",
+        "status",
         [
-            pytest.param(TemplateCheck(ok=False, problems=["No template named 'new_bot_message'"]), id="problems"),
-            pytest.param(TemplateCheck(ok=False, error="(#190) Error validating access token"), id="api_error"),
+            pytest.param({"problems": ["No template named 'new_bot_message'"]}, id="problems"),
+            pytest.param({"error": "(#190) Error validating access token"}, id="api_error"),
+            pytest.param(None, id="never_checked"),
         ],
     )
-    def test_form_is_disabled_when_the_template_is_not_usable(self, meta_provider, authed_client, check):
-        response = self._status(authed_client, meta_provider, check)
+    def test_form_is_disabled_when_the_template_is_not_usable(self, meta_provider, authed_client, status):
+        if status is not None:
+            _cache_template(meta_provider, **status)
+
+        response = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider))
 
         content = response.content.decode()
         assert response.context["template_ok"] is False
         assert re.search(r"<fieldset[^>]*\sdisabled", content)
         assert "Test messages can only be sent once the template above is available." in content
 
-    def test_a_poll_keeps_the_form_enabled(self, meta_provider, authed_client):
-        """Polling and refreshing must not re-check the template, so the page tells them its state."""
-        url = _whatsapp_url("whatsapp_numbers", meta_provider)
-
-        assert authed_client.get(url, {"template_ok": "1"}).context["template_ok"] is True
-        assert authed_client.get(url).context["template_ok"] is False
-
     def test_a_refresh_keeps_the_form_enabled(self, meta_provider, authed_client):
-        url = _whatsapp_url("whatsapp_numbers_refresh", meta_provider)
+        """The refresh re-renders from the cache, so the form does not flicker back to disabled."""
+        _cache_template(meta_provider, ok=True, template={"status": "APPROVED"})
 
-        with mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay"):
-            response = authed_client.post(url + "?template_ok=1")
+        with mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay"):
+            response = authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         assert response.context["template_ok"] is True

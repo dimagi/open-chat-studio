@@ -34,7 +34,7 @@ from apps.service_providers.forms import (
     WhatsappTestMessageForm,
     whatsapp_number_label,
 )
-from apps.service_providers.messaging_service import MetaCloudAPIService, TemplateCheck
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
@@ -597,8 +597,14 @@ def _sync_in_flight(provider: MessagingProvider) -> bool:
     return timezone.now() - started_at < timedelta(minutes=1)
 
 
-def _whatsapp_numbers_context(provider: MessagingProvider, template_ok: bool) -> dict:
-    status = provider.whatsapp_numbers_status
+def _whatsapp_status_context(provider: MessagingProvider) -> dict:
+    """Everything the WhatsApp panel renders, all of it read from the provider's cache.
+
+    Nothing here calls Meta. The refresh button is the only thing that does, by way of
+    ``sync_whatsapp_provider_task``, and the panel polls itself until that lands.
+    """
+    numbers_status = provider.whatsapp_numbers_status
+    template_status = provider.whatsapp_template_status
     numbers = provider.whatsapp_numbers
     syncing = _sync_in_flight(provider)
     initial_message = f"Test message from Open Chat Studio for {provider.name}."
@@ -606,62 +612,46 @@ def _whatsapp_numbers_context(provider: MessagingProvider, template_ok: bool) ->
         "provider": provider,
         "numbers": numbers,
         "syncing": syncing,
-        "stalled": status.get("state") == "pending" and not syncing,
-        "sync_error": status.get("error") if status.get("state") == "error" else None,
-        "synced_at": parse_datetime(status.get("synced_at") or ""),
+        "stalled": numbers_status.get("state") == "pending" and not syncing,
+        "sync_error": numbers_status.get("error") if numbers_status.get("state") == "error" else None,
+        "synced_at": parse_datetime(numbers_status.get("synced_at") or ""),
         "form": WhatsappTestMessageForm(numbers, initial={"message": initial_message}),
         "message_length": len(initial_message),
         "message_limit": MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT,
-        "template_ok": template_ok,
+        # The cached TemplateCheck, as a plain dict -- the template reads the same attributes
+        # either way. Empty means nobody has checked yet, which is not the same as a failure.
+        "template_check": template_status,
+        "template_checked": bool(template_status),
+        "template_ok": template_status.get("ok") is True,
+        "template_checked_at": parse_datetime(template_status.get("checked_at") or ""),
         "template_name": MetaCloudAPIService.TEMPLATE_NAME,
         "template_parameter": MetaCloudAPIService.TEMPLATE_PARAMETER,
     }
 
 
-def _template_ok_from_request(request) -> bool:
-    """Polling and refreshing re-render the test form without re-checking the template.
-
-    Re-checking would mean a call to Meta every two seconds, so the page carries the
-    answer it already has. It only decides whether the form is greyed out.
-    """
-    return request.GET.get("template_ok") == "1"
-
-
 @login_and_team_required
 @permission_required("service_providers.change_messagingprovider", raise_exception=True)
 def whatsapp_status(request, team_slug: str, pk: int):
-    """The template check and test-send panel, loaded into the provider page by HTMX."""
+    """The template check and test-send panel, loaded into the provider page by HTMX.
+
+    Renders from the cache and polls itself while a refresh is running, so opening the
+    provider page never waits on Meta.
+    """
     provider = _get_meta_provider(request, pk)
-    try:
-        template_check = provider.get_messaging_service().check_message_template()
-    except Exception:  # noqa: BLE001 - the panel must render whatever the provider config does
-        log.exception("Could not check the WhatsApp template for provider %s", pk)
-        template_check = TemplateCheck(ok=False, error="This provider's configuration is incomplete.")
-    context = {
-        "template_check": template_check,
-        **_whatsapp_numbers_context(provider, template_ok=template_check.ok),
-    }
+    context = _whatsapp_status_context(provider)
     return render(request, "service_providers/components/whatsapp_provider_status.html", context)
-
-
-@login_and_team_required
-@permission_required("service_providers.change_messagingprovider", raise_exception=True)
-def whatsapp_numbers(request, team_slug: str, pk: int):
-    """The cached numbers and test-send form. Polled while a sync is running; reads no remote API."""
-    provider = _get_meta_provider(request, pk)
-    context = _whatsapp_numbers_context(provider, template_ok=_template_ok_from_request(request))
-    return render(request, "service_providers/components/whatsapp_numbers.html", context)
 
 
 @require_POST
 @login_and_team_required
 @permission_required("service_providers.change_messagingprovider", raise_exception=True)
-def whatsapp_numbers_refresh(request, team_slug: str, pk: int):
+def whatsapp_refresh(request, team_slug: str, pk: int):
+    """Re-fetch this provider's numbers and re-check its message template."""
     provider = _get_meta_provider(request, pk)
     if not _sync_in_flight(provider):
-        provider.queue_whatsapp_number_sync()
-    context = _whatsapp_numbers_context(provider, template_ok=_template_ok_from_request(request))
-    return render(request, "service_providers/components/whatsapp_numbers.html", context)
+        provider.queue_whatsapp_provider_sync()
+    context = _whatsapp_status_context(provider)
+    return render(request, "service_providers/components/whatsapp_provider_status.html", context)
 
 
 @require_POST

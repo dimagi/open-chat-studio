@@ -6,8 +6,7 @@ app_name = "service_providers"
 
 whatsapp_urls = [
     path("status/", views.whatsapp_status, name="whatsapp_status"),
-    path("numbers/", views.whatsapp_numbers, name="whatsapp_numbers"),
-    path("numbers/refresh/", views.whatsapp_numbers_refresh, name="whatsapp_numbers_refresh"),
+    path("refresh/", views.whatsapp_refresh, name="whatsapp_refresh"),
     path("send-test/", views.whatsapp_send_test, name="whatsapp_send_test"),
 ]
 

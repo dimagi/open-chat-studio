@@ -3,8 +3,9 @@ from unittest import mock
 import httpx
 import pytest
 
+from apps.service_providers.messaging_service import TemplateCheck
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
-from apps.service_providers.tasks import sync_whatsapp_numbers_task
+from apps.service_providers.tasks import sync_whatsapp_provider_task
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 NUMBER_A = {
@@ -35,9 +36,24 @@ def meta_provider(db):
     )
 
 
-def _service_returning(numbers):
+def _meta_401():
+    request = httpx.Request("GET", "https://test")
+    return httpx.HTTPStatusError(
+        "unauthorized",
+        request=request,
+        response=httpx.Response(
+            401, json={"error": {"message": "(#190) Error validating access token"}}, request=request
+        ),
+    )
+
+
+APPROVED_TEMPLATE = {"name": "new_bot_message", "status": "APPROVED", "language": "en"}
+
+
+def _service_returning(numbers, template_check=None):
     service = mock.MagicMock()
     service.get_phone_numbers.return_value = numbers
+    service.check_message_template.return_value = template_check or TemplateCheck(ok=True, template=APPROVED_TEMPLATE)
     return service
 
 
@@ -84,49 +100,102 @@ class TestSyncWhatsappNumbers:
 
 
 @pytest.mark.django_db()
-class TestSyncWhatsappNumbersTask:
-    def test_syncs_the_provider(self, meta_provider):
+class TestWhatsappTemplateCache:
+    def test_unchecked_until_someone_checks_it(self, meta_provider):
+        """No backfill: a provider that predates the cache has no answer, not a wrong one."""
+        assert meta_provider.whatsapp_template_status == {}
+        assert meta_provider.whatsapp_template_ok is None
+
+    def test_records_a_usable_template(self, meta_provider):
+        service = _service_returning([], TemplateCheck(ok=True, template=APPROVED_TEMPLATE))
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            check = meta_provider.check_whatsapp_template()
+
+        assert check.ok is True
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_template_ok is True
+        assert meta_provider.whatsapp_template_status["template"] == APPROVED_TEMPLATE
+        assert meta_provider.whatsapp_template_status["checked_at"]
+
+    def test_records_the_problems_when_the_template_cannot_be_sent(self, meta_provider):
+        check = TemplateCheck(ok=False, problems=["No template named 'new_bot_message' exists."])
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([], check)):
+            meta_provider.check_whatsapp_template()
+
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_template_ok is False
+        assert meta_provider.whatsapp_template_status["problems"] == ["No template named 'new_bot_message' exists."]
+
+    def test_records_the_error_when_the_check_could_not_run(self, meta_provider):
+        check = TemplateCheck(ok=False, error="(#190) Error validating access token")
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([], check)):
+            meta_provider.check_whatsapp_template()
+
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_template_ok is False
+        assert meta_provider.whatsapp_template_status["error"] == "(#190) Error validating access token"
+
+    def test_leaves_the_cached_numbers_and_token_hash_alone(self, meta_provider):
         with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
-            sync_whatsapp_numbers_task(meta_provider.pk)
+            meta_provider.sync_whatsapp_numbers()
+            meta_provider.check_whatsapp_template()
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers == [NUMBER_A]
+        assert meta_provider.extra_data["verify_token_hash"] == "abc123"
 
-    def test_records_the_error_when_meta_rejects_the_call(self, meta_provider):
-        service = mock.MagicMock()
-        service.get_phone_numbers.side_effect = httpx.HTTPStatusError(
-            "unauthorized",
-            request=httpx.Request("GET", "https://test"),
-            response=httpx.Response(
-                401,
-                json={"error": {"message": "(#190) Error validating access token"}},
-                request=httpx.Request("GET", "https://test"),
-            ),
-        )
+
+@pytest.mark.django_db()
+class TestSyncWhatsappProviderTask:
+    """One refresh covers both the numbers and the template, and neither can lose the other."""
+
+    def test_syncs_the_numbers_and_the_template(self, meta_provider):
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
+            sync_whatsapp_provider_task(meta_provider.pk)
+
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_numbers == [NUMBER_A]
+        assert meta_provider.whatsapp_template_ok is True
+
+    def test_records_the_error_when_meta_rejects_the_numbers_call(self, meta_provider):
+        service = _service_returning([])
+        service.get_phone_numbers.side_effect = _meta_401()
         with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=service):
-            sync_whatsapp_numbers_task(meta_provider.pk)
+            sync_whatsapp_provider_task(meta_provider.pk)
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers_status["state"] == "error"
         assert "Error validating access token" in meta_provider.whatsapp_numbers_status["error"]
+        assert meta_provider.whatsapp_template_ok is True, "the template check must still have run"
+
+    def test_records_the_numbers_when_the_template_check_blows_up(self, meta_provider):
+        service = _service_returning([NUMBER_A])
+        service.check_message_template.side_effect = _meta_401()
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            sync_whatsapp_provider_task(meta_provider.pk)
+
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_numbers == [NUMBER_A]
+        assert meta_provider.whatsapp_template_ok is False
+        assert "Error validating access token" in meta_provider.whatsapp_template_status["error"]
 
     def test_ignores_providers_that_are_not_meta(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
 
         with mock.patch.object(MessagingProvider, "get_messaging_service") as get_service:
-            sync_whatsapp_numbers_task(provider.pk)
+            sync_whatsapp_provider_task(provider.pk)
 
         get_service.assert_not_called()
 
     def test_ignores_a_deleted_provider(self, db):
-        sync_whatsapp_numbers_task(9999)
+        sync_whatsapp_provider_task(9999)
 
 
 @pytest.mark.django_db()
 class TestPostCreateHook:
-    def test_queues_a_number_sync_for_meta_providers(self, meta_provider, django_capture_on_commit_callbacks):
+    def test_queues_a_refresh_for_meta_providers(self, meta_provider, django_capture_on_commit_callbacks):
         with (
-            mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay") as delay,
+            mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay,
             django_capture_on_commit_callbacks(execute=True),
         ):
             meta_provider.run_post_create_hook()
@@ -138,7 +207,7 @@ class TestPostCreateHook:
     def test_does_nothing_for_other_provider_types(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
 
-        with mock.patch("apps.service_providers.tasks.sync_whatsapp_numbers_task.delay") as delay:
+        with mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay:
             provider.run_post_create_hook()
 
         delay.assert_not_called()

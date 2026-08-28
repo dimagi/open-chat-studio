@@ -572,6 +572,8 @@ class MessagingProviderType(models.TextChoices):
 
 #: Key under ``MessagingProvider.extra_data`` holding the cached WhatsApp numbers.
 WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
+#: Key under ``MessagingProvider.extra_data`` holding the cached message template check.
+WHATSAPP_TEMPLATE_KEY = "whatsapp_template"
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -594,6 +596,16 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
+
+    def get_absolute_url(self) -> str:
+        return reverse(
+            "service_providers:edit",
+            kwargs={
+                "team_slug": get_slug_for_team(self.team_id),
+                "provider_type": const.MESSAGING,
+                "pk": self.id,
+            },
+        )
 
     @property
     def whatsapp_numbers_status(self) -> dict:
@@ -647,18 +659,54 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         current = {number["phone_number_id"] for number in numbers}
         return len(current - previous), len(previous - current)
 
-    def queue_whatsapp_number_sync(self) -> None:
-        """Flag a sync as pending and enqueue it once the current transaction commits."""
+    @property
+    def whatsapp_template_status(self) -> dict:
+        """The cached message template check: ``ok``, ``checked_at``, ``problems``, ``error``, ``template``.
+
+        Empty while the template has never been checked. Nothing backfills it, so a provider
+        created before the cache existed stays empty until someone refreshes it.
+        """
+        return (self.extra_data or {}).get(WHATSAPP_TEMPLATE_KEY, {})
+
+    @property
+    def whatsapp_template_ok(self) -> bool | None:
+        """Whether the template can be sent, or ``None`` if it has never been checked.
+
+        The three states are all distinct to callers: a template known to be broken and one
+        nobody has looked at yet warrant different warnings.
+        """
+        return self.whatsapp_template_status.get("ok")
+
+    def record_whatsapp_template_check(self, check: "messaging_service.TemplateCheck") -> None:
+        self._update_extra_data(
+            WHATSAPP_TEMPLATE_KEY,
+            {
+                "ok": check.ok,
+                "checked_at": timezone.now().isoformat(),
+                "problems": check.problems,
+                "error": check.error,
+                "template": check.template,
+            },
+        )
+
+    def check_whatsapp_template(self) -> "messaging_service.TemplateCheck":
+        """Ask Meta whether this account can send the bot's message template, and cache the answer."""
+        check = self.get_messaging_service().check_message_template()
+        self.record_whatsapp_template_check(check)
+        return check
+
+    def queue_whatsapp_provider_sync(self) -> None:
+        """Flag a refresh as pending and enqueue it once the current transaction commits."""
         # circular: tasks imports models
-        from apps.service_providers.tasks import sync_whatsapp_numbers_task  # noqa: PLC0415
+        from apps.service_providers.tasks import sync_whatsapp_provider_task  # noqa: PLC0415
 
         self.mark_whatsapp_numbers_syncing()
-        transaction.on_commit(lambda: sync_whatsapp_numbers_task.delay(self.pk))
+        transaction.on_commit(lambda: sync_whatsapp_provider_task.delay(self.pk))
 
     def run_post_create_hook(self) -> None:
         """Type-specific work to run once, after the provider is first created."""
         if self.type == MessagingProviderType.meta_cloud_api.value:
-            self.queue_whatsapp_number_sync()
+            self.queue_whatsapp_provider_sync()
 
 
 class AuthProviderType(models.TextChoices):
