@@ -224,11 +224,13 @@ def test_no_results_message():
 
 
 @pytest.mark.django_db()
-def test_public_link_channels_are_reported_too():
+def test_public_link_channels_are_left_out():
+    """A public link serves the widget bundled with the platform, so its version moves with
+    the deploy rather than with anything the team can upgrade."""
     channel = _widget_channel("0.7.0", platform=ChannelPlatform.PUBLIC)
     _add_session(channel)
 
     output = _run()
 
-    assert channel.experiment.name in output
-    assert "0.7.0" in output
+    assert channel.experiment.name not in output
+    assert "No active chatbots are running an outdated widget version." in output
