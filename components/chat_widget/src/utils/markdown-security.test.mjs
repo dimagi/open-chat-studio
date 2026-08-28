@@ -35,12 +35,14 @@ const { window } = new JSDOM('');
 const DOMPurify = createDOMPurify(window);
 
 // Mirror of postProcessMarkdownHTML from markdown.ts — keep in sync!
+const EXTERNAL_HREF = /^(https?:)?\/\//;
+
 function postProcessMarkdownHTML(html) {
   const div = window.document.createElement('div');
   div.innerHTML = html;
   div.querySelectorAll('a[href]').forEach(link => {
     const href = link.getAttribute('href')?.trim().toLowerCase() ?? '';
-    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//')) {
+    if (EXTERNAL_HREF.test(href)) {
       link.setAttribute('target', '_blank');
       link.setAttribute('rel', 'noopener noreferrer');
     }

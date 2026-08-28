@@ -6,6 +6,9 @@ marked.setOptions({
   gfm: true,
 });
 
+/** `http://`, `https://` or protocol-relative `//`, against a trimmed lower-cased href. */
+const EXTERNAL_HREF = /^(https?:)?\/\//;
+
 /**
  * Post-processes rendered HTML to add additional attributes
  * This is called after DOMPurify to ensure external links open in new tabs
@@ -24,7 +27,7 @@ export function postProcessMarkdownHTML(html: string): string {
     const links = tempDiv.querySelectorAll('a[href]');
     links.forEach(link => {
       const href = link.getAttribute('href')?.trim().toLowerCase() ?? '';
-      if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//')) {
+      if (EXTERNAL_HREF.test(href)) {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
       }
