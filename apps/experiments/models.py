@@ -954,6 +954,15 @@ class Experiment(BaseTeamModel, VersionsMixin):
             if self.pipeline:
                 self.pipeline.archive()
 
+    @transaction.atomic()
+    def unarchive(self):
+        """Reverse of archive(): the version, its static triggers and its pipeline."""
+        super().unarchive()
+        # The related manager excludes archived rows; get_all() reaches them.
+        self.static_triggers.get_all().update(is_archived=False)
+        if self.pipeline:
+            self.pipeline.unarchive()
+
     def delete_experiment_channels(self):
         from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
             ExperimentChannel,

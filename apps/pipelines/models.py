@@ -382,6 +382,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         return True
 
+    def unarchive(self):
+        """Restores every node, and the versions too when this is a working version."""
+        super().unarchive()
+        for node in self.node_set.get_all().filter(is_archived=True):
+            node.unarchive()
+
+        if self.is_working_version:
+            for version in self.versions.get_all().filter(is_archived=True):
+                version.unarchive()
+
     def get_node_param_values(self, node_cls, param_name: str) -> list:
         return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
 
