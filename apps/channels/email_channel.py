@@ -445,6 +445,9 @@ def email_inbound_handler(sender, event, **kwargs):
 
     set_current_team(channel.team)
 
+    # Checked here rather than left to `DuplicateDeliveryStage`: attachments are persisted below,
+    # before the message is handed to the pipeline, so by the time the stage runs a replay has
+    # already written its files.
     if is_duplicate_delivery(email_msg.external_ids, channel.team_id):
         logger.info(
             "Ignoring replayed inbound email %s on channel %s",
