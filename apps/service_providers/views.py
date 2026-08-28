@@ -581,10 +581,6 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
 
 
-def _get_meta_provider(request, pk: int) -> MessagingProvider:
-    return get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
-
-
 def _sync_in_flight(provider: MessagingProvider) -> bool:
     """Is a number sync running, and started recently enough to still be worth waiting for?"""
     info = provider.whatsapp_numbers_info
@@ -637,7 +633,7 @@ def whatsapp_status(request, team_slug: str, pk: int):
     Renders from the cache and polls itself while a refresh is running, so opening the
     provider page never waits on Meta.
     """
-    provider = _get_meta_provider(request, pk)
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
     context = _whatsapp_status_context(provider)
     return render(request, "service_providers/components/whatsapp_provider_status.html", context)
 
@@ -647,7 +643,7 @@ def whatsapp_status(request, team_slug: str, pk: int):
 @permission_required("service_providers.change_messagingprovider", raise_exception=True)
 def whatsapp_refresh(request, team_slug: str, pk: int):
     """Re-fetch this provider's numbers and re-check its message template."""
-    provider = _get_meta_provider(request, pk)
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
     if not _sync_in_flight(provider):
         provider.queue_whatsapp_provider_sync()
     context = _whatsapp_status_context(provider)
@@ -659,7 +655,7 @@ def whatsapp_refresh(request, team_slug: str, pk: int):
 @permission_required("service_providers.change_messagingprovider", raise_exception=True)
 def whatsapp_send_test(request, team_slug: str, pk: int):
     """Send one template message through the provider and report exactly what Meta said."""
-    provider = _get_meta_provider(request, pk)
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
     numbers = provider.whatsapp_numbers
     form = WhatsappTestMessageForm(numbers, data=request.POST)
     if not form.is_valid():
