@@ -165,8 +165,14 @@ class ExtraFormBase(forms.Form):
 
     @cached_property
     def messaging_provider(self) -> MessagingProvider | None:
+        """The submitted provider, scoped to the experiment's team.
+
+        ChannelForm rejects a provider from another team on its own, but both forms are
+        validated before either is checked, so an unscoped lookup here would let a submitted
+        ID reach another team's provider and its service.
+        """
         if provider_id := self.data.get("messaging_provider"):
-            return MessagingProvider.objects.filter(id=provider_id).first()
+            return MessagingProvider.objects.filter(id=provider_id, team=self.experiment.team).first()
         return None
 
     def clean(self):

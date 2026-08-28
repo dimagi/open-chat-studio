@@ -5,7 +5,13 @@ import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, SlackChannelForm, TelegramChannelForm, WhatsappChannelForm
+from apps.channels.forms import (
+    ChannelForm,
+    ChannelFormWrapper,
+    SlackChannelForm,
+    TelegramChannelForm,
+    WhatsappChannelForm,
+)
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -553,6 +559,27 @@ class TestWhatsappNumberValidation:
             assert _numbers_by_provider(form)[str(provider.id)]["numbers"] == [
                 {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"}
             ]
+
+    def test_another_teams_provider_is_never_reached(self, experiment):
+        """ChannelForm rejects a provider from another team, but the extra form is validated
+        alongside it, so the extra form's own lookup has to be team-scoped too. Otherwise
+        validating the number syncs -- and writes to -- a provider the submitter cannot see.
+        """
+        foreign = _meta_provider(TeamWithUsersFactory())
+
+        with patch.object(MessagingProvider, "sync_whatsapp_numbers") as sync:
+            wrapper = ChannelFormWrapper(
+                experiment=experiment,
+                platform=ChannelPlatform.WHATSAPP,
+                data={
+                    "platform": ChannelPlatform.WHATSAPP.value,
+                    "number": "+27647084804",
+                    "messaging_provider": foreign.id,
+                },
+            )
+            assert not wrapper.is_valid()
+
+        sync.assert_not_called()
 
     def test_a_failed_sync_asks_the_user_to_try_again(self, experiment):
         provider = _meta_provider(experiment.team)
