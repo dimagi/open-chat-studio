@@ -131,7 +131,7 @@ def test_run_with_aggregates_renders_them_and_stops_polling(client_with_user, me
 
 
 @pytest.mark.django_db()
-def test_binary_aggregate_renders_a_count_for_each_label(client_with_user, membership):
+def test_binary_aggregate_renders_a_bar_for_each_label(client_with_user, membership):
     run = _completed_run(membership.team, finalized=True)
     EvaluationRunAggregateFactory.create(
         run=run,
@@ -142,9 +142,11 @@ def test_binary_aggregate_renders_a_count_for_each_label(client_with_user, membe
     response = client_with_user.get(_aggregates_url(run))
 
     content = response.content.decode()
-    assert "3/4" in content
-    assert "Incorrect:" in content
-    assert "1/4" in content
+    # true_count=3/4 -> 75%, derived false_count=1/4 -> 25% (merge_binary_labels).
+    assert "Correct" in content
+    assert "Incorrect" in content
+    assert "width: 75%" in content
+    assert "width: 25%" in content
 
 
 @pytest.mark.django_db()
