@@ -31,7 +31,7 @@ def external_ids_for(platform: str, *parts) -> list[str]:
     return [namespaced_id(platform, *parts)]
 
 
-def unseen_message_ids(external_ids: list[str], team_id: int) -> set[str]:
+def _unseen_message_ids(external_ids: list[str], team_id: int) -> set[str]:
     """Return the ids with no ChatMessage in this team already recording them."""
     candidates = set(external_ids)
     if not candidates:
@@ -49,10 +49,10 @@ def is_duplicate_delivery(external_ids: list[str], team_id: int) -> bool:
     """Whether every id on this delivery has already been recorded.
 
     False for an empty list: a delivery the provider did not identify is processed, never dropped.
-    That is why callers must use this rather than negating `unseen_message_ids`, which would invert
+    That is why callers must use this rather than negating `_unseen_message_ids`, which would invert
     the intent with no visible symptom.
     """
-    return bool(external_ids) and not unseen_message_ids(external_ids, team_id)
+    return bool(external_ids) and not _unseen_message_ids(external_ids, team_id)
 
 
 def connect_external_ids(messages: list[dict]) -> list[str]:
@@ -67,7 +67,7 @@ def unseen_connect_messages(messages: list[dict], team_id: int) -> list[dict]:
     as a whole, so `DuplicateDeliveryStage` would let it through, and by the time the pipeline runs
     the batch has been joined into one `message_text` it could not drop part of anyway.
     """
-    unseen = unseen_message_ids(connect_external_ids(messages), team_id)
+    unseen = _unseen_message_ids(connect_external_ids(messages), team_id)
     fresh = []
     for message in messages:
         external_id = namespaced_id("connect", message["message_id"])

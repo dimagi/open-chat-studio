@@ -1,10 +1,10 @@
 import pytest
 
 from apps.channels.deduplication import (
+    _unseen_message_ids,
     external_ids_for,
     is_duplicate_delivery,
     namespaced_id,
-    unseen_message_ids,
 )
 from apps.utils.factories.team import TeamFactory
 
@@ -36,7 +36,7 @@ def test_returns_only_ids_not_already_recorded_in_this_team(record_delivery):
     record_delivery(team, ["connect:c"])
     record_delivery(TeamFactory(), ["email:<forged@example.com>"])
 
-    unseen = unseen_message_ids(["connect:a", "connect:c", "connect:d", "email:<forged@example.com>"], team.id)
+    unseen = _unseen_message_ids(["connect:a", "connect:c", "connect:d", "email:<forged@example.com>"], team.id)
 
     assert unseen == {"connect:d", "email:<forged@example.com>"}
 
