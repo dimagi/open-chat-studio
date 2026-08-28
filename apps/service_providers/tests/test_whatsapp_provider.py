@@ -273,3 +273,31 @@ def test_saving_the_config_form_keeps_the_cached_numbers(meta_provider):
 
     assert meta_provider.whatsapp_numbers == [NUMBER_A]
     assert meta_provider.extra_data["verify_token_hash"]
+
+
+@pytest.mark.django_db()
+def test_saving_the_config_form_keeps_numbers_synced_while_the_form_was_open(meta_provider):
+    """A sync that commits after the form was loaded must survive the save."""
+    # What the view is holding: read before the sync, so its extra_data has no numbers.
+    stale = MessagingProvider.objects.get(pk=meta_provider.pk)
+
+    with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
+        MessagingProvider.objects.get(pk=meta_provider.pk).sync_whatsapp_numbers()
+
+    form = MessagingProviderType.meta_cloud_api.form_cls(
+        team=meta_provider.team,
+        data={
+            "business_id": "1285815180126064",
+            "access_token": "token",
+            "app_secret": "secret",
+            "verify_token": "verify",
+            "template_language_code": "en",
+        },
+    )
+    assert form.is_valid(), form.errors
+    form.save(stale)
+    stale.save()
+
+    stale.refresh_from_db()
+    assert stale.whatsapp_numbers == [NUMBER_A]
+    assert stale.extra_data["verify_token_hash"]

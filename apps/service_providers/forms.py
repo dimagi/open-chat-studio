@@ -5,13 +5,14 @@ from decimal import Decimal
 import phonenumbers
 from django import forms
 from django.core.validators import URLValidator
+from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProviderModel, MessagingProvider
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -363,8 +364,19 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     def save(self, instance):
         instance = super().save(instance)
         verify_token = self.cleaned_data["verify_token"]
-        # Merge: extra_data also holds this provider's cached WhatsApp numbers.
-        extra_data = instance.extra_data or {}
+        # extra_data also holds the number and template caches, which a background sync writes.
+        # Re-read the row under a lock rather than trusting the copy the form was built from,
+        # so a sync that commits while the form is open is not rolled back by saving it. The
+        # caller saves the instance inside this same transaction, so the lock covers the write.
+        extra_data = {}
+        if instance.pk:
+            with transaction.atomic():
+                extra_data = (
+                    MessagingProvider.objects.select_for_update()
+                    .filter(pk=instance.pk)
+                    .values_list("extra_data", flat=True)
+                    .first()
+                ) or {}
         extra_data["verify_token_hash"] = hashlib.sha256(verify_token.encode()).hexdigest()
         instance.extra_data = extra_data
         return instance
