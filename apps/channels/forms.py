@@ -622,13 +622,8 @@ class WidgetParams(forms.Widget):
         context["widget"]["experiment"] = self.experiment
         context["widget"]["token"] = self.widget_token
         if self.channel:
-            oauth = self.channel.credential_mode == CredentialMode.OAUTH
-            context["widget"]["oauth"] = oauth
-            if oauth:
-                # Only queried in oauth mode: for every other channel the answer is irrelevant
-                # and the query is pure cost on a dialog that renders on every channel open.
-                context["widget"]["oauth_applications"] = list(applications_allowing_chatbot(self.experiment))
-                context["widget"]["manage_applications_url"] = manage_applications_url(self.experiment.team.slug)
+            context["widget"]["oauth"] = self.channel.credential_mode == CredentialMode.OAUTH
+            context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
@@ -637,6 +632,36 @@ class WidgetParams(forms.Widget):
             context["widget"]["pending_effective_at"] = self.channel.pending_auth_level_effective_at
         context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
         context["docs_links"] = settings.DOCUMENTATION_LINKS
+        return context
+
+
+class CredentialModeSelect(forms.Select):
+    """The credential mode select, with the state of the *other* half of the setup under it.
+
+    `oauth` mode admits only a token from an application whose allowlist names this chatbot, and
+    that allowlist belongs to a Team Admin on the other side of the team. An admin choosing the
+    mode here cannot see it, so the select carries it: the applications that can reach this
+    chatbot, or a warning that none can.
+
+    Answered against the mode *selected in the browser* rather than the one stored, so an admin
+    switching to `oauth` sees the state of that half before saving rather than after. That costs
+    one query on every render of this form, `embed_key` included -- the alternative is a round
+    trip on a select the admin has not committed to yet. The `credentialMode` the template shows
+    it against belongs to the form, not to this widget: the embed-token note is gated on the same
+    state from the other side of the form.
+    """
+
+    template_name = "channels/widgets/credential_mode.html"
+
+    def __init__(self, experiment, attrs=None, choices=()):
+        super().__init__(attrs, choices)
+        self.experiment = experiment
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
+        context["widget"]["oauth_applications"] = list(applications_allowing_chatbot(self.experiment))
+        context["widget"]["manage_applications_url"] = manage_applications_url(self.experiment.team.slug)
         return context
 
 
@@ -710,6 +735,9 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self._session_token_lifetime = self.channel.session_token_lifetime if self.channel else None
         self._credential_mode = self.channel.credential_mode if self.channel else CredentialMode.EMBED_KEY
         self.fields["credential_mode"].help_text = self._credential_mode_help_text()
+        self.fields["credential_mode"].widget = CredentialModeSelect(
+            experiment=self.experiment, choices=CredentialMode.choices
+        )
         if self.channel:
             self.initial["credential_mode"] = self.channel.credential_mode
             self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
@@ -730,9 +758,14 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             "x-data": json.dumps(
                 {
                     "allowAllDomains": self.initial.get("allow_all_domains", False),
+                    # Seeded from the same value the select renders as chosen -- `BoundField.value()`
+                    # is what `Select.get_context` is handed -- so `x-model` binding to it on init is
+                    # a no-op rather than a silent change of the admin's selection.
+                    "credentialMode": str(self["credential_mode"].value() or self._credential_mode),
                 }
             )
         }
+        self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
 

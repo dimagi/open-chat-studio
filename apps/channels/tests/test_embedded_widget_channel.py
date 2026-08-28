@@ -8,7 +8,6 @@ from django.urls import reverse
 from apps.channels.forms import (
     ChannelFormWrapper,
     EmbeddedWidgetChannelForm,
-    WidgetParams,
 )
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import match_domain_pattern
@@ -256,12 +255,13 @@ class TestEmbeddedWidgetChannelForm:
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("listed", [True, False], ids=["listed", "not-listed"])
-    def test_the_dialog_names_the_applications_that_can_reach_this_chatbot(self, listed):
+    def test_the_mode_select_names_the_applications_that_can_reach_this_chatbot(self, listed):
         """The two-person setup is only half visible from here: the mode is a Chatbot Admin's to
         set, but whether any application will actually mint an admissible token is a Team Admin's.
-        Naming the applications -- or saying plainly that there are none -- is what closes the gap.
+        Naming the applications -- or saying plainly that there are none -- is what closes the gap,
+        and it belongs under the select it qualifies.
         """
-        channel = _widget_channel(credential_mode=CredentialMode.OAUTH)
+        channel = _widget_channel()
         experiment = channel.experiment
         application = OAuth2Application.objects.create(
             name="machine-app",
@@ -272,24 +272,50 @@ class TestEmbeddedWidgetChannelForm:
         if listed:
             application.allowed_chatbots.add(experiment)
 
-        widget = WidgetParams(experiment=experiment, widget_token="tok_1234", channel=channel)
-        rendered = widget.render("widget", None, {})
+        form = EmbeddedWidgetChannelForm(channel=channel, experiment=experiment)
+        rendered = str(form["credential_mode"])
 
         assert ("machine-app" in rendered) is listed
         assert ("No OAuth application lists this chatbot" in rendered) is not listed
         assert (manage_applications_url(experiment.team.slug) in rendered) is not listed
 
     @pytest.mark.django_db()
-    def test_the_dialog_says_nothing_about_applications_outside_oauth_mode(self):
-        """An embed-key channel admits no OAuth token, so the allowlist is not its question -- and
-        the query it would take is pure cost on a dialog that opens for every channel."""
+    @pytest.mark.parametrize("mode", [CredentialMode.EMBED_KEY, CredentialMode.OAUTH], ids=["embed-key", "oauth"])
+    def test_everything_the_mode_qualifies_is_gated_in_the_browser(self, mode):
+        """Both the applications block and the embed-token note answer a question only `oauth`
+        asks, and both are gated on the selected mode rather than the stored one: an admin
+        switching the select needs the answer before saving, not after.
+        """
+        channel = _widget_channel(credential_mode=mode)
+        form = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
+        gate = f"x-show=\"credentialMode === '{CredentialMode.OAUTH.value}'\""
+
+        assert gate in str(form["credential_mode"])
+        assert gate in str(form["widget_token"])
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("mode", [CredentialMode.EMBED_KEY, CredentialMode.OAUTH], ids=["embed-key", "oauth"])
+    def test_the_alpine_seed_matches_the_option_the_select_renders_as_chosen(self, mode):
+        """`x-model` writes the seed back to the select on init, so a seed that disagreed with the
+        rendered selection would silently change the admin's mode."""
+        channel = _widget_channel(credential_mode=mode)
+        form = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
+
+        assert f'"credentialMode": "{mode.value}"' in form.form_attrs["x-data"]
+        assert f'<option value="{mode.value}" selected>' in str(form["credential_mode"])
+
+    @pytest.mark.django_db()
+    def test_the_alpine_seed_follows_a_bound_form_rather_than_the_stored_mode(self):
+        """A redisplay after a validation error renders the submitted mode as chosen, so the seed
+        has to come from the submitted data too."""
         channel = _widget_channel(credential_mode=CredentialMode.EMBED_KEY)
-        widget = WidgetParams(experiment=channel.experiment, widget_token="tok_1234", channel=channel)
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "", "credential_mode": CredentialMode.OAUTH},
+            channel=channel,
+            experiment=channel.experiment,
+        )
 
-        rendered = widget.render("widget", None, {})
-
-        assert "No OAuth application lists this chatbot" not in rendered
-        assert "can start a session here" not in rendered
+        assert f'"credentialMode": "{CredentialMode.OAUTH.value}"' in form.form_attrs["x-data"]
 
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""

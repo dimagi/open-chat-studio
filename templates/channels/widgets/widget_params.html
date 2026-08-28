@@ -30,32 +30,13 @@
           <i class="fa-solid fa-copy"></i> Copy
       </button>
     </div>
-    {% if widget.oauth %}
-      <div class="text-sm opacity-70 mt-2">
-        <i class="fa-solid fa-key me-1"></i>
-        This channel requires an OAuth token, so the embed token is ignored — a snippet that still
-        sends it keeps working, but it admits nobody on its own.
-      </div>
-      {% if widget.oauth_applications %}
-        <div class="text-sm mt-2">
-          <i class="fa-solid fa-shield-halved me-1 opacity-70"></i>
-          Tokens from
-          {% for application in widget.oauth_applications %}
-            <a href="{{ application.get_absolute_url }}" class="link">{{ application.name }}</a>{% if not forloop.last %},{% endif %}
-          {% endfor %}
-          can start a session here.
-        </div>
-      {% else %}
-        <div role="alert" class="alert alert-warning mt-2">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <span>
-            No OAuth application lists this chatbot, so no token can start a session here yet — add it
-            to an application's allowed chatbots under
-            <a href="{{ widget.manage_applications_url }}" class="link">OAuth Applications</a>.
-          </span>
-        </div>
-      {% endif %}
-    {% endif %}
+    {# Gated on the selected mode rather than the stored one, so switching the select above says #}
+    {# what that choice does to this token before the admin commits to it. #}
+    <div class="text-sm opacity-70 mt-2" x-show="credentialMode === '{{ widget.oauth_mode }}'" x-cloak>
+      <i class="fa-solid fa-key me-1"></i>
+      This channel requires an OAuth token, so the embed token is ignored — a snippet that still
+      sends it keeps working, but it admits nobody on its own.
+    </div>
     {% if widget.version_status %}
       <div role="alert" class="alert alert-{{ widget.version_status.level }} mt-3">
         <i class="fa-solid fa-circle-exclamation"></i>
