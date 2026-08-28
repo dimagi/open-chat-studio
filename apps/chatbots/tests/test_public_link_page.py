@@ -96,6 +96,32 @@ def test_non_canonical_host_is_404(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_non_canonical_host_names_both_hosts_for_a_signed_in_user(client, team_with_users):
+    """A link tried on the wrong host looks the same as a typo without this. Signing in is
+    what separates someone debugging the deployment from a passing visitor."""
+    _channel(team_with_users)
+    client.force_login(team_with_users.members.first())
+
+    response = _get(client, host="other.example.com")
+
+    assert response.status_code == 404
+    html = response.content.decode()
+    assert "Public links are served from" in html
+    assert "other.example.com" in html
+    assert CANONICAL in html
+
+
+@pytest.mark.django_db()
+def test_non_canonical_host_tells_an_anonymous_visitor_nothing(client, team_with_users):
+    _channel(team_with_users)
+
+    response = _get(client, host="other.example.com")
+
+    assert response.status_code == 404
+    assert "Public links are served from" not in response.content.decode()
+
+
+@pytest.mark.django_db()
 def test_deleted_channel_is_404(client, team_with_users):
     channel = _channel(team_with_users)
     channel.soft_delete()

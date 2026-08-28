@@ -30,6 +30,14 @@ CSP = (
 )
 
 
+class PublicLinkWrongHost(Http404):
+    """'Tagged' 404 that lets 404.html name the host public links are served from.
+
+    A link tried on the wrong host is indistinguishable from a mistyped token without it.
+    Only a signed-in viewer is told the difference. See 404.html.
+    """
+
+
 @dataclass(frozen=True)
 class PageState:
     code: str
@@ -57,7 +65,7 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
 @public_chat_rate_limited
 def public_link_page(request, token: str):
     if hostname_of(request.get_host()) != canonical_hostname():
-        raise Http404()
+        raise PublicLinkWrongHost() if request.user.is_authenticated else Http404()
     channel = (
         ExperimentChannel.objects.select_related("experiment", "team")
         .filter(platform=ChannelPlatform.PUBLIC, extra_data__widget_token=token)
