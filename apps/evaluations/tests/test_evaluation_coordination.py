@@ -850,3 +850,32 @@ def test_result_home_sets_celery_job_id_while_processing(client):
     assert response.status_code == 200
     assert response.context["celery_job_id"] == "progress-key-123"
     assert "group_job_id" not in response.context
+    # No count yet, not a zero count — the template must render "—", not "0".
+    assert response.context["total_results"] is None
+
+
+@pytest.mark.django_db()
+def test_result_home_total_results_is_zero_not_none_for_a_terminal_run_with_no_results(client):
+    """A completed run with no EvaluationResult rows (empty dataset, or every evaluator
+    failed before producing one) is a real zero, not "no count yet" - the template must
+    render "0", not the pending/processing state's "—" placeholder."""
+    view_perm = Permission.objects.get(
+        content_type=ContentType.objects.get_for_model(EvaluationRun),
+        codename="view_evaluationrun",
+    )
+    view_group = GroupFactory.create(name="evaluations-view-only")
+    view_group.permissions.add(view_perm)
+    membership = MembershipFactory.create(groups=[view_group])
+    team = membership.team
+    user = membership.user
+    config = EvaluationConfigFactory.create(team=team)
+    run = EvaluationRunFactory.create(config=config, team=team, status=EvaluationRunStatus.COMPLETED)
+    client.force_login(user)
+
+    url = reverse("evaluations:evaluation_results_home", args=[team.slug, config.id, run.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context["total_results"] == 0
+    content = response.content.decode()
+    assert '<div class="text-2xl font-bold">0</div>' in content
