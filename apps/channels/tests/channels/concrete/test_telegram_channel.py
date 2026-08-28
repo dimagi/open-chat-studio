@@ -1,12 +1,18 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from telebot import types
 from telebot.apihelper import ApiTelegramException
 
+from apps.channels.datamodels import TelegramMessage
+from apps.channels.models import ChannelPlatform
 from apps.channels.stages.terminal import MessageDeliveryFailure
 from apps.channels.telegram_channel import TelegramChannel, handle_telegram_block
 from apps.channels.tests.channels.conftest import make_context
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 
 
@@ -141,3 +147,41 @@ class TestHandleTelegramBlock:
 
         assert handle_telegram_block(ctx, _telegram_blocked_failure()) is True
         assert any("Participant data not found" in e for e in ctx.processing_errors)
+
+
+def _raw_update(chat_id: int = 123, message_id: int = 576) -> str:
+    return json.dumps(
+        {
+            "update_id": 432101234,
+            "message": {
+                "message_id": message_id,
+                "from": {"id": chat_id, "is_bot": False, "first_name": "John"},
+                "chat": {"id": chat_id, "first_name": "John", "type": "private"},
+                "date": 1690376696,
+                "text": "Hi there",
+            },
+        }
+    )
+
+
+@pytest.mark.django_db()
+class TestReplayedDelivery:
+    """Telegram retrying a delivery must not produce a second reply.
+
+    Asserted per channel rather than left to `DuplicateDeliveryStage`: Telegram runs the shared
+    `ChannelBase` pipeline today, but nothing stops it growing a `_build_pipeline` of its own that
+    omits the stage, and the stage tests would stay green if it did.
+    """
+
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_replayed_delivery_does_not_reply_twice(self, bot_process_input, _patched_telebot):
+        experiment_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.TELEGRAM)
+        experiment = experiment_channel.experiment
+        bot_process_input.return_value = ChatMessage(content="Hi human", chat=Chat.objects.create(team=experiment.team))
+        message = TelegramMessage.parse(types.Update.de_json(_raw_update()))
+
+        for _ in range(2):
+            TelegramChannel(experiment=experiment, experiment_channel=experiment_channel).new_user_message(message)
+
+        assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
+        assert _patched_telebot.return_value.send_message.call_count == 1

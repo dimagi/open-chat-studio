@@ -7,10 +7,10 @@ from django.urls import reverse
 
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
 from apps.channels.whatsapp_channel import WhatsappChannel
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
@@ -192,6 +192,27 @@ class TestTwilio:
         sessions = ExperimentSession.objects.filter(participant=legacy, experiment=experiment)
         assert sessions.count() == 1
         assert sessions.get().id == existing_session.id
+
+    @pytest.mark.django_db()
+    @pytest.mark.usefixtures("_twilio_whatsapp_channel")
+    @patch("apps.channels.tasks.validate_twillio_request", Mock())
+    @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_replayed_delivery_does_not_reply_twice(self, bot_process_input, send_text_message):
+        """Twilio retrying a delivery must not produce a second reply.
+
+        Asserted on the Twilio route rather than left to `DuplicateDeliveryStage`, because the ids
+        come from `TwilioMessage.parse` and the route picks its channel class at runtime -- neither
+        is covered by the stage tests or by the Turn.io replay test.
+        """
+        team = ExperimentChannel.objects.get(platform=ChannelPlatform.WHATSAPP).team
+        bot_process_input.return_value = ChatMessage(content="Hi human", chat=Chat.objects.create(team=team))
+
+        for _ in range(2):
+            handle_twilio_message(message_data=twilio_messages.Whatsapp.text_message())
+
+        assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
+        assert send_text_message.call_count == 1
 
 
 class TestTurnio:
