@@ -147,6 +147,15 @@ export interface MessagePollingHandle {
   stop: () => void;
 }
 
+/** Refusal codes that carry a consent block and leave the session usable. */
+const CONSENT_REFUSAL_CODES = ['consent_required', 'consent_stale'];
+
+interface ErrorBody {
+  message: string;
+  code?: string;
+  consent?: ChatConsent;
+}
+
 export class ChatSessionService {
   private readonly apiBaseUrl: string;
   private readonly embedKey?: string;
@@ -445,21 +454,9 @@ export class ChatSessionService {
   }
 
   private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
-    let message = `${fallbackPrefix}: ${response.statusText}`;
-    let code: string | undefined;
-    let consent: ChatConsent | undefined;
-    try {
-      const data = (await response.json()) as { error?: string; code?: string; consent?: ChatConsent };
-      if (data?.error) {
-        message = data.error;
-      }
-      code = data?.code;
-      consent = data?.consent;
-    } catch {
-      // non-JSON body; keep statusText fallback
-    }
+    const { message, code, consent } = await this.readErrorBody(response, fallbackPrefix);
     // Before the generic 403: a consent refusal keeps the session, a token refusal discards it.
-    if (consent && (code === 'consent_required' || code === 'consent_stale')) {
+    if (consent && CONSENT_REFUSAL_CODES.includes(code)) {
       throw new ConsentRequiredError(consent, message);
     }
     if (response.status === 403) {
@@ -469,6 +466,20 @@ export class ChatSessionService {
       throw new ChatAuthError(response.status, code, message);
     }
     throw new Error(message);
+  }
+
+  /** The server's error wording and codes, falling back to the status text on a non-JSON body. */
+  private async readErrorBody(response: Response, fallbackPrefix: string): Promise<ErrorBody> {
+    try {
+      const data = (await response.json()) as { error?: string; code?: string; consent?: ChatConsent };
+      return {
+        message: data?.error || `${fallbackPrefix}: ${response.statusText}`,
+        code: data?.code,
+        consent: data?.consent,
+      };
+    } catch {
+      return { message: `${fallbackPrefix}: ${response.statusText}` };
+    }
   }
 
   /** Headers for multipart requests (no Content-Type — fetch sets the boundary). */

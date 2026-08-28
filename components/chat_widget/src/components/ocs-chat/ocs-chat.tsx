@@ -882,35 +882,9 @@ export class OcsChat {
         }
       }
 
-      // If this is the first user message and there are welcome messages,
-      // add them to chat history as assistant messages
-      const welcomeMessagesToAdd = this.getWelcomeMessages();
-      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
-        const now = new Date();
-        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
-          role: 'assistant' as const,
-          content: welcomeMsg,
-          attachments: [],
-        }));
-        this.messages = [...this.messages, ...welcomeMessages];
-      }
+      this.appendWelcomeMessagesIfFirst();
 
-      // Add user message immediately with attachments info
-      const userMessage: ChatMessage = {
-        created_at: new Date().toISOString(),
-        role: 'user',
-        content: message.trim(),
-        attachments: this.allowAttachments
-          ? this.selectedFiles
-              .filter(sf => !sf.error && sf.uploaded)
-              .map(sf => ({
-                name: sf.file.name,
-                content_type: sf.file.type,
-                size: sf.file.size,
-              }))
-          : [],
-      };
+      const userMessage = this.buildOptimisticUserMessage(message);
       optimisticMessage = userMessage;
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
@@ -928,18 +902,7 @@ export class OcsChat {
         sessionId: this.activeSessionId ?? '',
       });
 
-      const requestBody: any = { message: message.trim() };
-      if (this.allowAttachments && attachmentIds.length > 0) {
-        requestBody.attachment_ids = attachmentIds;
-      }
-      if (this.internalPageContext) {
-        requestBody.context = this.internalPageContext;
-      }
-      if (this.versionNumber != null) {
-        requestBody.version_number = this.versionNumber;
-      }
-
-      const data = await this.getChatService().sendMessage(this.activeSessionId, requestBody);
+      const data = await this.getChatService().sendMessage(this.activeSessionId, this.buildSendRequestBody(message, attachmentIds));
       if (epoch !== this.sessionEpoch) return;
 
       if (data.status === 'error') {
@@ -954,23 +917,77 @@ export class OcsChat {
       this.startTaskPolling(data.task_id);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
-      if (error instanceof ConsentRequiredError) {
-        this.consent = error.consent;
-        this.forgetConsent();
-        this.dropOptimisticUserMessage(optimisticMessage);
-        if (this.allowAttachments && filesBeforeSend.length > 0) {
-          this.selectedFiles = filesBeforeSend;
-        }
-        this.holdForConsent(message);
-        return;
-      }
-      if (error instanceof SessionAccessError) {
-        this.handleSessionAccessError();
-        return;
-      }
-      const errorText = error instanceof Error ? error.message : 'Failed to send message';
-      this.handleError(errorText);
+      this.handleSendFailure(error, message, optimisticMessage, filesBeforeSend);
     }
+  }
+
+  /** Welcome messages join the history as assistant turns, once, ahead of the first user message. */
+  private appendWelcomeMessagesIfFirst(): void {
+    const welcomeMessagesToAdd = this.getWelcomeMessages();
+    if (this.messages.length > 0 || welcomeMessagesToAdd.length === 0) return;
+
+    const now = new Date();
+    const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+      created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
+      role: 'assistant' as const,
+      content: welcomeMsg,
+      attachments: [],
+    }));
+    this.messages = [...this.messages, ...welcomeMessages];
+  }
+
+  /** The user's bubble, shown before the server has accepted the message. */
+  private buildOptimisticUserMessage(message: string): ChatMessage {
+    return {
+      created_at: new Date().toISOString(),
+      role: 'user',
+      content: message.trim(),
+      attachments: this.allowAttachments
+        ? this.selectedFiles
+            .filter(sf => !sf.error && sf.uploaded)
+            .map(sf => ({
+              name: sf.file.name,
+              content_type: sf.file.type,
+              size: sf.file.size,
+            }))
+        : [],
+    };
+  }
+
+  private buildSendRequestBody(message: string, attachmentIds: number[]): Record<string, unknown> {
+    const requestBody: Record<string, unknown> = { message: message.trim() };
+    if (this.allowAttachments && attachmentIds.length > 0) {
+      requestBody.attachment_ids = attachmentIds;
+    }
+    if (this.internalPageContext) {
+      requestBody.context = this.internalPageContext;
+    }
+    if (this.versionNumber != null) {
+      requestBody.version_number = this.versionNumber;
+    }
+    return requestBody;
+  }
+
+  /**
+   * A consent refusal keeps the session and puts the send back the way it was, so accepting
+   * retries it whole. A token refusal ends the session. Anything else is reported as is.
+   */
+  private handleSendFailure(error: unknown, message: string, optimisticMessage: ChatMessage | undefined, filesBeforeSend: SelectedFile[]): void {
+    if (error instanceof ConsentRequiredError) {
+      this.consent = error.consent;
+      this.forgetConsent();
+      this.dropOptimisticUserMessage(optimisticMessage);
+      if (this.allowAttachments && filesBeforeSend.length > 0) {
+        this.selectedFiles = filesBeforeSend;
+      }
+      this.holdForConsent(message);
+      return;
+    }
+    if (error instanceof SessionAccessError) {
+      this.handleSessionAccessError();
+      return;
+    }
+    this.handleError(error instanceof Error ? error.message : 'Failed to send message');
   }
 
   private holdForConsent(message: string): void {
