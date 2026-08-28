@@ -1,8 +1,15 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
 app_name = "service_providers"
+
+whatsapp_urls = [
+    path("status/", views.whatsapp_status, name="whatsapp_status"),
+    path("numbers/", views.whatsapp_numbers, name="whatsapp_numbers"),
+    path("numbers/refresh/", views.whatsapp_numbers_refresh, name="whatsapp_numbers_refresh"),
+    path("send-test/", views.whatsapp_send_test, name="whatsapp_send_test"),
+]
 
 urlpatterns = [
     path("llm_provider_model/create/", views.create_llm_provider_model, name="llm_provider_model_new"),
@@ -26,6 +33,7 @@ urlpatterns = [
         views.pricing_revert,
         name="pricing_revert",
     ),
+    path("messaging/<int:pk>/whatsapp/", include(whatsapp_urls)),
     path("<slug:provider_type>/table/", views.ServiceProviderTableView.as_view(), name="table"),
     path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),
     path("<slug:provider_type>/<int:pk>/", views.CreateServiceProvider.as_view(), name="edit"),

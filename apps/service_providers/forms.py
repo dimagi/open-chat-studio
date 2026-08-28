@@ -2,12 +2,14 @@ import hashlib
 import logging
 from decimal import Decimal
 
+import phonenumbers
 from django import forms
 from django.core.validators import URLValidator
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
@@ -361,10 +363,49 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     def save(self, instance):
         instance = super().save(instance)
         verify_token = self.cleaned_data["verify_token"]
-        instance.extra_data = {
-            "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
-        }
+        # Merge: extra_data also holds this provider's cached WhatsApp numbers.
+        extra_data = instance.extra_data or {}
+        extra_data["verify_token_hash"] = hashlib.sha256(verify_token.encode()).hexdigest()
+        instance.extra_data = extra_data
         return instance
+
+
+def whatsapp_number_label(number: dict) -> str:
+    """How a cached WhatsApp number is shown in a picker."""
+    display = number.get("display") or number.get("number") or number["phone_number_id"]
+    verified_name = number.get("verified_name")
+    return f"{display} - {verified_name}" if verified_name else display
+
+
+class WhatsappTestMessageForm(forms.Form):
+    """Sends one template message through a Meta Cloud API provider to see if Meta accepts it."""
+
+    from_number_id = forms.ChoiceField(label=_("From"))
+    to_number = forms.CharField(
+        label=_("To"),
+        # A placeholder rather than help text: the help icon makes this label taller than the
+        # "From" label beside it, which knocks the two fields out of alignment.
+        widget=forms.TextInput(attrs={"placeholder": "+27812345678"}),
+    )
+    message = forms.CharField(
+        label=_("Message"),
+        widget=forms.Textarea(attrs={"rows": 3}),
+        max_length=MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT,
+        help_text=_("Sent to Meta as the template's bot_message parameter, not as a plain message."),
+    )
+
+    def __init__(self, numbers: list[dict], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["from_number_id"].choices = [
+            (number["phone_number_id"], whatsapp_number_label(number)) for number in numbers
+        ]
+
+    def clean_to_number(self):
+        try:
+            number = phonenumbers.parse(self.cleaned_data["to_number"])
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

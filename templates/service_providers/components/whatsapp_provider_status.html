@@ -1,0 +1,49 @@
+{% comment %}
+  WhatsApp diagnostics for a Meta Cloud API messaging provider: whether the bot's message
+  template can actually be sent, and a place to try it. Loaded into the provider page by HTMX,
+  so a slow or failing call to Meta never holds up the form.
+
+  `template_check` is a TemplateCheck from MetaCloudAPIService.check_message_template().
+{% endcomment %}
+<div class="flex flex-col gap-8 mt-8">
+  <div class="flex flex-col gap-2 text-sm">
+    <h2 class="pg-subtitle">Message template</h2>
+    {% if template_check.error %}
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-circle-exclamation text-error mt-1"></i>
+        <div class="flex flex-col gap-1">
+          <span>Could not check the <code class="text-xs">{{ template_name }}</code> template with Meta.</span>
+          <span class="font-mono text-xs text-error">{{ template_check.error }}</span>
+        </div>
+      </div>
+    {% elif template_check.ok %}
+      <div class="flex items-center gap-2 flex-wrap">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <code class="text-xs">{{ template_name }}</code>
+        <span class="badge badge-success">{{ template_check.template.status }}</span>
+        <span class="text-base-content/60">language {{ template_check.template.language }}</span>
+      </div>
+    {% else %}
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-warning mt-1"></i>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <code class="text-xs">{{ template_name }}</code>
+            {% if template_check.template.status %}
+              <span class="badge badge-warning">{{ template_check.template.status }}</span>
+            {% endif %}
+            <span class="text-base-content/60">cannot be sent as configured</span>
+          </div>
+          <ul class="list-disc list-inside flex flex-col gap-1">
+            {% for problem in template_check.problems %}<li>{{ problem }}</li>{% endfor %}
+          </ul>
+          <span class="text-base-content/60">
+            Fix the template in Meta Business Manager, then reload this page.
+          </span>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% include "service_providers/components/whatsapp_numbers.html" %}
+</div>

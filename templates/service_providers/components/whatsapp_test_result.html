@@ -1,0 +1,27 @@
+{% comment %}
+  The outcome of one test template message: what was sent, or exactly what Meta said when it
+  refused. Meta's response body is shown verbatim -- its error codes are what an operator needs.
+{% endcomment %}
+{% if errors %}
+  <div class="mt-2 flex flex-col gap-1 text-error">
+    {% for error in errors %}<span>{{ error }}</span>{% endfor %}
+  </div>
+{% elif sent_to %}
+  <div class="mt-2 rounded-box border border-success/30 bg-success/10 px-3 py-2 flex items-center gap-2 text-success">
+    <i class="fa-solid fa-circle-check"></i>
+    <span>Sent to {{ sent_to }} from {{ sent_from }}.</span>
+  </div>
+{% elif error_status %}
+  <div class="mt-2 rounded-box border border-error/30 bg-error/10 px-3 py-2 flex flex-col gap-2">
+    <div class="flex items-center gap-2 font-semibold text-error">
+      <i class="fa-solid fa-circle-xmark"></i>
+      <span>Meta rejected the message ({{ error_status }})</span>
+    </div>
+    <pre class="font-mono text-xs text-error overflow-x-auto rounded-field bg-base-100/60 p-3">{{ error_body }}</pre>
+  </div>
+{% elif error_message %}
+  <div class="mt-2 rounded-box border border-error/30 bg-error/10 px-3 py-2 flex items-start gap-2 text-error">
+    <i class="fa-solid fa-circle-xmark mt-1"></i>
+    <span>{{ error_message }}</span>
+  </div>
+{% endif %}

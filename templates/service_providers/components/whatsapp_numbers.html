@@ -1,0 +1,101 @@
+{% comment %}
+  The WhatsApp numbers cached on a Meta Cloud API provider, and a form for sending one test
+  template message through them. Swapped in whole: while a sync is running it polls itself
+  until the numbers come back, keeping the last known numbers on screen in the meantime.
+
+  `template_ok` rides along in the query string so a poll can render the form's enabled state
+  without calling Meta again -- see _template_ok_from_request().
+{% endcomment %}
+{% load form_tags %}
+<div id="wa-numbers" class="flex flex-col gap-3 text-sm"
+     {% if syncing %}
+       hx-get="{% url 'service_providers:whatsapp_numbers' request.team.slug provider.id %}?template_ok={{ template_ok|yesno:'1,0' }}"
+       hx-trigger="every 2s"
+       hx-swap="outerHTML"
+     {% endif %}>
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <h2 class="pg-subtitle">Test your template</h2>
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-base-content/50">
+        {% if syncing %}
+          Fetching numbers from Meta…
+        {% elif synced_at %}
+          Numbers synced {{ synced_at|timesince }} ago
+        {% else %}
+          Never synced
+        {% endif %}
+      </span>
+      <button class="btn btn-outline btn-sm"
+              hx-post="{% url 'service_providers:whatsapp_numbers_refresh' request.team.slug provider.id %}?template_ok={{ template_ok|yesno:'1,0' }}"
+              hx-target="#wa-numbers"
+              hx-swap="outerHTML"
+              {% if syncing %}disabled{% endif %}>
+        <i class="fa-solid fa-rotate {% if syncing %}fa-spin{% endif %}"></i>
+        {% if syncing %}Refreshing{% else %}Refresh{% endif %}
+      </button>
+    </div>
+  </div>
+
+  <div class="text-xs text-base-content/60">
+    Sends the <code>{{ template_name }}</code> template through this provider, with your message as its
+    <code>{{ template_parameter }}</code> parameter — the same call the bot makes once the 24-hour
+    window has closed.
+  </div>
+
+  {% if stalled %}
+    <div class="flex items-center gap-2 text-base-content/70">
+      <i class="fa-solid fa-circle-info"></i>
+      This sync is taking longer than expected. Refresh to start it again.
+    </div>
+  {% elif sync_error %}
+    <div class="flex items-start gap-2 text-error">
+      <i class="fa-solid fa-circle-exclamation mt-1"></i>
+      <span class="font-mono text-xs">{{ sync_error }}</span>
+    </div>
+  {% endif %}
+
+  {% if not template_ok %}
+    <div class="flex items-center gap-2 text-base-content/70">
+      <i class="fa-solid fa-circle-info"></i>
+      Test messages can only be sent once the template above is available.
+    </div>
+  {% endif %}
+
+  {% if numbers %}
+    <form hx-post="{% url 'service_providers:whatsapp_send_test' request.team.slug provider.id %}"
+          hx-target="#wa-test-result"
+          hx-swap="innerHTML"
+          hx-disabled-elt="find button[type=submit]">
+      {% csrf_token %}
+      <fieldset class="flex flex-col gap-2 min-w-0 {% if not template_ok %}opacity-50{% endif %}"
+                {% if not template_ok %}disabled{% endif %}>
+        <div class="grid md:grid-cols-2 gap-4">
+          {% render_field form.from_number_id %}
+          {% render_field form.to_number %}
+        </div>
+        <div x-data="{ count: {{ message_length }} }" x-on:input="count = $event.target.value.length">
+          {% render_field form.message %}
+          <div class="text-xs text-base-content/50 text-right mt-1">
+            <span x-text="count"></span> / {{ message_limit }} characters
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-paper-plane"></i>
+            Send test message
+          </button>
+        </div>
+      </fieldset>
+    </form>
+    <div id="wa-test-result"></div>
+  {% elif not sync_error and not stalled %}
+    <div class="flex items-center gap-2 text-base-content/70">
+      <i class="fa-solid fa-circle-info"></i>
+      {% if syncing %}
+        Fetching this account's WhatsApp numbers from Meta…
+      {% else %}
+        No numbers synced yet for this WhatsApp Business Account. Refresh to fetch them.
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

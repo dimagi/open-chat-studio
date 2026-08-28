@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.functional import classproperty
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
@@ -569,6 +570,10 @@ class MessagingProviderType(models.TextChoices):
         return provider_types
 
 
+#: Key under ``MessagingProvider.extra_data`` holding the cached WhatsApp numbers.
+WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
+
+
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class MessagingProvider(BaseTeamModel, ProviderMixin):
     objects = MessagingProviderObjectManager()
@@ -589,6 +594,71 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
+
+    @property
+    def whatsapp_numbers_status(self) -> dict:
+        """The cached WhatsApp number sync: ``state``, ``synced_at``, ``error`` and ``numbers``."""
+        return (self.extra_data or {}).get(WHATSAPP_NUMBERS_KEY, {})
+
+    @property
+    def whatsapp_numbers(self) -> list[dict]:
+        return self.whatsapp_numbers_status.get("numbers", [])
+
+    def _update_extra_data(self, key: str, value) -> None:
+        """Set one key in ``extra_data`` without disturbing the others.
+
+        ``extra_data`` also holds the webhook verify token hash, which the config form writes,
+        so the row is re-read under a lock and only ``key`` is replaced.
+        """
+        with transaction.atomic():
+            provider = MessagingProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = provider.extra_data or {}
+            extra_data[key] = value
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
+        self.extra_data = extra_data
+
+    def mark_whatsapp_numbers_syncing(self) -> None:
+        """Flag a sync as in flight. The cached numbers stay put so the page can keep showing them."""
+        status = self.whatsapp_numbers_status | {
+            "state": "pending",
+            "started_at": timezone.now().isoformat(),
+            "error": None,
+        }
+        self._update_extra_data(WHATSAPP_NUMBERS_KEY, status)
+
+    def mark_whatsapp_numbers_failed(self, error: str) -> None:
+        self._update_extra_data(WHATSAPP_NUMBERS_KEY, self.whatsapp_numbers_status | {"state": "error", "error": error})
+
+    def sync_whatsapp_numbers(self) -> tuple[int, int]:
+        """Cache this account's WhatsApp numbers and their phone number IDs.
+
+        Returns the number of entries added and removed relative to what was cached.
+        """
+        numbers = self.get_messaging_service().get_phone_numbers()
+        previous = {number["phone_number_id"] for number in self.whatsapp_numbers}
+        status = self.whatsapp_numbers_status | {
+            "state": "ok",
+            "synced_at": timezone.now().isoformat(),
+            "error": None,
+            "numbers": numbers,
+        }
+        self._update_extra_data(WHATSAPP_NUMBERS_KEY, status)
+        current = {number["phone_number_id"] for number in numbers}
+        return len(current - previous), len(previous - current)
+
+    def queue_whatsapp_number_sync(self) -> None:
+        """Flag a sync as pending and enqueue it once the current transaction commits."""
+        # circular: tasks imports models
+        from apps.service_providers.tasks import sync_whatsapp_numbers_task  # noqa: PLC0415
+
+        self.mark_whatsapp_numbers_syncing()
+        transaction.on_commit(lambda: sync_whatsapp_numbers_task.delay(self.pk))
+
+    def run_post_create_hook(self) -> None:
+        """Type-specific work to run once, after the provider is first created."""
+        if self.type == MessagingProviderType.meta_cloud_api.value:
+            self.queue_whatsapp_number_sync()
 
 
 class AuthProviderType(models.TextChoices):

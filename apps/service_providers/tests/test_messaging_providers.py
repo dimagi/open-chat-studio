@@ -970,3 +970,135 @@ class TestMetaCloudAPITemplateParameterText:
             last_activity_at=timezone.now() - timedelta(hours=1),
         )
         assert mock_post.call_args.kwargs["json"]["text"]["body"] == "Hello\r\n\r\nWorld"
+
+
+def _template(name="new_bot_message", status="APPROVED", language="en", param="bot_message"):
+    """Build a message_templates API entry shaped like Meta's response."""
+    component = {
+        "type": "BODY",
+        "text": 'Followup response from the bot:\n"{{' + param + '}}"',
+        "example": {"body_text_named_params": [{"param_name": param, "example": "How did it go?"}]},
+    }
+    return {
+        "name": name,
+        "parameter_format": "NAMED",
+        "components": [component],
+        "language": language,
+        "status": status,
+        "category": "UTILITY",
+        "id": "1285815180126064",
+    }
+
+
+def _template_without_named_param():
+    """A template whose body has no bot_message placeholder at all."""
+    template = _template()
+    template["parameter_format"] = "POSITIONAL"
+    template["components"] = [{"type": "BODY", "text": "Followup response from the bot:\n{{1}}"}]
+    return template
+
+
+def _mock_templates_response(templates):
+    return httpx.Response(200, json={"data": templates}, request=httpx.Request("GET", "https://test"))
+
+
+class TestMetaCloudAPITemplateCheck:
+    @pytest.mark.parametrize(
+        ("templates", "expected_problem_fragment"),
+        [
+            pytest.param([_template()], None, id="approved_and_matching"),
+            pytest.param([_template(status="PENDING")], "PENDING", id="not_approved"),
+            pytest.param([_template(language="es")], "es", id="wrong_language"),
+            pytest.param([_template_without_named_param()], "bot_message", id="missing_named_param"),
+            pytest.param([], "new_bot_message", id="no_templates_at_all"),
+            pytest.param([_template(name="other_template")], "new_bot_message", id="only_other_templates"),
+        ],
+    )
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_check_message_template(self, mock_get, meta_cloud_api_service, templates, expected_problem_fragment):
+        mock_get.return_value = _mock_templates_response(templates)
+
+        result = meta_cloud_api_service.check_message_template()
+
+        if expected_problem_fragment is None:
+            assert result.ok is True
+            assert result.problems == []
+            assert result.template is not None
+            assert result.template["status"] == "APPROVED"
+        else:
+            assert result.ok is False
+            assert any(expected_problem_fragment in problem for problem in result.problems), result.problems
+        assert result.error is None
+
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_check_message_template_uses_the_configured_language(self, mock_get):
+        """A provider set to 'es' should be checked against the Spanish translation."""
+        service = MetaCloudAPIService(access_token="t", business_id="123", template_language_code="es")
+        mock_get.return_value = _mock_templates_response([_template(language="en"), _template(language="es")])
+
+        result = service.check_message_template()
+
+        assert result.ok is True
+        assert result.template is not None
+        assert result.template["language"] == "es"
+
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_check_message_template_reports_meta_errors(self, mock_get, meta_cloud_api_service):
+        """An API failure is reported, not raised -- the page still has to render."""
+        mock_get.return_value = httpx.Response(
+            401,
+            json={"error": {"message": "(#190) Error validating access token", "code": 190}},
+            request=httpx.Request("GET", "https://test"),
+        )
+
+        result = meta_cloud_api_service.check_message_template()
+
+        assert result.ok is False
+        assert "Error validating access token" in result.error
+
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_check_message_template_filters_by_name(self, mock_get, meta_cloud_api_service):
+        mock_get.return_value = _mock_templates_response([_template()])
+
+        meta_cloud_api_service.check_message_template()
+
+        assert mock_get.call_args.kwargs["params"]["name"] == "new_bot_message"
+
+
+class TestMetaCloudAPIPhoneNumbers:
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_get_phone_numbers(self, mock_get, meta_cloud_api_service):
+        mock_get.return_value = _mock_phone_numbers_response(
+            [
+                {"id": "1020671484465717", "display_phone_number": "+27 64 708 4804", "verified_name": "TenantHive"},
+                {"id": "9938471029384", "display_phone_number": "+1 (212) 555-2368", "verified_name": "Support"},
+            ]
+        )
+
+        assert meta_cloud_api_service.get_phone_numbers() == [
+            {
+                "phone_number_id": "1020671484465717",
+                "number": "+27647084804",
+                "display": "+27 64 708 4804",
+                "verified_name": "TenantHive",
+            },
+            {
+                "phone_number_id": "9938471029384",
+                "number": "+12125552368",
+                "display": "+1 (212) 555-2368",
+                "verified_name": "Support",
+            },
+        ]
+
+    @patch("apps.service_providers.messaging_service.httpx.get")
+    def test_get_phone_numbers_keeps_unparseable_numbers(self, mock_get, meta_cloud_api_service):
+        """A number Meta reports in a format phonenumbers can't parse is still usable: it has an ID."""
+        mock_get.return_value = _mock_phone_numbers_response(
+            [{"id": "555", "display_phone_number": "not a number", "verified_name": "Odd"}]
+        )
+
+        numbers = meta_cloud_api_service.get_phone_numbers()
+
+        assert numbers == [
+            {"phone_number_id": "555", "number": None, "display": "not a number", "verified_name": "Odd"}
+        ]
