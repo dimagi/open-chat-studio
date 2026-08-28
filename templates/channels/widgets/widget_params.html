@@ -30,12 +30,9 @@
           <i class="fa-solid fa-copy"></i> Copy
       </button>
     </div>
-    {# Gated on the selected mode rather than the stored one, so switching the select above says #}
-    {# what that choice does to this token before the admin commits to it. #}
     <div class="text-sm opacity-70 mt-2" x-show="credentialMode === '{{ widget.oauth_mode }}'" x-cloak>
       <i class="fa-solid fa-key me-1"></i>
-      This channel requires an OAuth token, so the embed token is ignored — a snippet that still
-      sends it keeps working, but it admits nobody on its own.
+      This channel requires an OAuth token, so the embed token is ignored.
     </div>
     {% if widget.version_status %}
       <div role="alert" class="alert alert-{{ widget.version_status.level }} mt-3">
