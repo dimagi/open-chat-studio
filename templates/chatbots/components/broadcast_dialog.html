@@ -1,7 +1,26 @@
 {% load form_tags i18n %}
+{% comment %}
+  Both WhatsApp warnings read the ticked checkboxes, which the broadcast form tags with their
+  platform, their provider's cached template status and a link to that provider. Nothing here
+  calls Meta -- the provider page's Refresh button is what fills that cache in.
+{% endcomment %}
 <dialog id="broadcast_message_modal" class="modal">
-  <div class="modal-box" x-data="{ selectedChannels: [], message: '', whatsappSelected: false }"
-       x-on:change="whatsappSelected = !!$el.querySelectorAll('input[data-platform=whatsapp]:checked').length">
+  <div class="modal-box"
+       x-data="{
+         selectedChannels: [],
+         message: '',
+         whatsappSelected: false,
+         templateMissing: false,
+         providerUrl: '',
+         syncWhatsapp(root) {
+           const whatsapp = [...root.querySelectorAll('input[data-platform=whatsapp]:checked')];
+           const unusable = whatsapp.filter(input => input.dataset.templateStatus !== 'ok');
+           this.whatsappSelected = whatsapp.length > 0;
+           this.templateMissing = unusable.length > 0;
+           this.providerUrl = (unusable[0] || whatsapp[0])?.dataset.providerUrl || '';
+         },
+       }"
+       x-on:change="syncWhatsapp($el)">
     <h3 class="font-bold text-lg">{% translate "Broadcast message" %}</h3>
     <p class="text-sm pg-text-muted mt-1">
       {% translate "Send a message to the participants who have chatted to this bot recently on the channels you pick." %}
@@ -12,22 +31,44 @@
       {% csrf_token %}
       {% render_field broadcast_form.channels %}
 
-      <div role="alert" class="alert alert-warning text-sm my-2" x-show="whatsappSelected" x-cloak>
+      <div role="alert" class="alert alert-warning text-sm my-2" x-show="templateMissing" x-cloak>
         <i class="fa-solid fa-triangle-exclamation"></i>
         <span>
           {% blocktranslate trimmed %}
-            Broadcasts land outside WhatsApp's 24-hour service window, so they go out as a template
-            message. Make sure the messaging provider used by this channel has a
-            <code>new_bot_message</code> template configured.
+            Broadcasts land outside WhatsApp's 24-hour service window, so they go out as a
+            <code>new_bot_message</code> template message. We cannot confirm that the messaging
+            provider behind this channel has one, and without it these participants will not
+            receive the broadcast.
           {% endblocktranslate %}
-          {% blocktranslate trimmed %}
-            WhatsApp does not allow line breaks inside a template message, so your message is sent
-            to these participants as a single paragraph.
-          {% endblocktranslate %}
+          {% if perms.service_providers.change_messagingprovider %}
+            <a class="link" target="_blank" x-bind:href="providerUrl" x-show="providerUrl">
+              {% translate "Open the messaging provider" %}
+            </a>
+            <span x-show="providerUrl">{% translate "and click Refresh to check the template." %}</span>
+          {% endif %}
           <a class="link" target="_blank"
              href="https://docs.openchatstudio.com/how-to/whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager">
             {% translate "How to create the template" %}
           </a>
+        </span>
+      </div>
+
+      <div role="alert" class="alert alert-warning text-sm my-2" x-cloak
+           x-show="whatsappSelected && message.includes('\n')">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>
+          {% blocktranslate trimmed %}
+            WhatsApp does not allow line breaks inside a template message, so your message is sent
+            to these participants as a single paragraph.
+          {% endblocktranslate %}
+          {% if perms.service_providers.change_messagingprovider %}
+            <a class="link" target="_blank" x-bind:href="providerUrl" x-show="providerUrl">
+              {% translate "Open the messaging provider" %}
+            </a>
+            <span x-show="providerUrl">
+              {% translate "to send this text as a test message and see what Meta makes of it." %}
+            </span>
+          {% endif %}
         </span>
       </div>
 

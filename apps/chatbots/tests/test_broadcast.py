@@ -10,8 +10,10 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.forms import BroadcastMessageForm
 from apps.chatbots.tasks import send_broadcast_message
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -231,20 +233,163 @@ def test_broadcast_dialog_offers_the_activity_window(experiment, logged_in_clien
     assert f'max="{BroadcastMessageForm.MAX_ACTIVE_WITHIN_DAYS}"' in window.group()
 
 
+PROVIDER_LINK_TEXT = "Open the messaging provider"
+DISABLED_TOOLTIP = "This channel is disabled"
+
+
+def _meta_provider(team, template_status):
+    return MessagingProviderFactory(
+        team=team,
+        type=MessagingProviderType.meta_cloud_api,
+        config={"business_id": "123", "access_token": "token", "app_secret": "s", "verify_token": "v"},
+        extra_data={"whatsapp_template": template_status} if template_status is not None else {},
+    )
+
+
+def _home(client, experiment) -> str:
+    url = reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
+    return client.get(url).content.decode()
+
+
 @pytest.mark.django_db()
 def test_broadcast_modal_arms_the_whatsapp_template_warning(experiment, logged_in_client):
-    """Each checkbox carries its platform, which is what the warning keys off."""
+    """Each checkbox carries its platform, which is what both warnings key off."""
     telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
     whatsapp = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP)
 
-    content = logged_in_client.get(
-        reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
-    ).content.decode()
+    content = _home(logged_in_client, experiment)
 
     assert re.search(rf'value="{whatsapp.id}"[^>]*data-platform="whatsapp"', content)
     assert re.search(rf'value="{telegram.id}"[^>]*data-platform="telegram"', content)
     assert "new_bot_message" in content
     assert "whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager" in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("template_status", "expected"),
+    [
+        pytest.param({"ok": True, "checked_at": "2026-08-28T08:00:00+00:00"}, "ok", id="template_usable"),
+        pytest.param({"ok": False, "problems": ["No template named 'new_bot_message'"]}, "problem", id="unusable"),
+        pytest.param(None, "missing", id="never_checked"),
+    ],
+)
+def test_whatsapp_checkbox_carries_the_cached_template_status(experiment, logged_in_client, template_status, expected):
+    """The dialog warns from the cache -- opening it never calls Meta."""
+    channel = ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=_meta_provider(experiment.team, template_status),
+    )
+
+    content = _home(logged_in_client, experiment)
+
+    assert re.search(rf'value="{channel.id}"[^>]*data-template-status="{expected}"', content)
+
+
+@pytest.mark.django_db()
+def test_a_whatsapp_channel_without_a_meta_provider_counts_as_missing(experiment, logged_in_client):
+    """Twilio and Turn.io have no template we can check, so we cannot promise the broadcast lands."""
+    twilio = ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=MessagingProviderFactory(
+            team=experiment.team,
+            type=MessagingProviderType.twilio,
+            config={"account_sid": "sid", "auth_token": "token"},
+        ),
+    )
+
+    content = _home(logged_in_client, experiment)
+
+    assert re.search(rf'value="{twilio.id}"[^>]*data-template-status="missing"', content)
+
+
+@pytest.mark.django_db()
+def test_only_whatsapp_channels_carry_a_template_status(experiment, logged_in_client):
+    """The template is a WhatsApp concept; tagging a Telegram checkbox with one would be noise."""
+    telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+
+    content = _home(logged_in_client, experiment)
+
+    option = re.search(rf'<input[^>]*value="{telegram.id}"[^>]*>', content)
+    assert option, content
+    assert "data-template-status" not in option.group()
+
+
+@pytest.mark.django_db()
+def test_the_whatsapp_checkbox_links_to_its_provider(experiment, logged_in_client):
+    channel = ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=_meta_provider(experiment.team, None),
+    )
+
+    content = _home(logged_in_client, experiment)
+
+    provider_url = channel.messaging_provider.get_absolute_url()
+    assert re.search(rf'value="{channel.id}"[^>]*data-provider-url="{re.escape(provider_url)}"', content)
+
+
+@pytest.mark.django_db()
+def test_the_provider_link_is_hidden_from_users_who_cannot_open_it(experiment, client):
+    """A chatbot admin can broadcast but cannot open a messaging provider -- the link would 403."""
+    ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=_meta_provider(experiment.team, None),
+    )
+    client.force_login(experiment.team.members.last())
+
+    dialog = _dialog(_home(client, experiment))
+
+    assert "Broadcast message" in dialog
+    assert PROVIDER_LINK_TEXT not in dialog
+
+
+@pytest.mark.django_db()
+def test_the_provider_link_is_shown_to_users_who_can_open_it(experiment, logged_in_client):
+    ExperimentChannelFactory(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=_meta_provider(experiment.team, None),
+    )
+
+    dialog = _dialog(_home(logged_in_client, experiment))
+
+    assert PROVIDER_LINK_TEXT in dialog
+
+
+@pytest.mark.django_db()
+def test_a_disabled_channel_is_listed_but_cannot_be_picked(experiment, logged_in_client):
+    """Seeing the channel greyed out beats it vanishing -- otherwise the sender wonders where it went."""
+    live = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+    off = ExperimentChannelFactory(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP, enabled=False
+    )
+
+    dialog = _dialog(_home(logged_in_client, experiment))
+
+    assert re.search(rf'<input[^>]*value="{off.id}"[^>]*\sdisabled', dialog)
+    assert DISABLED_TOOLTIP in dialog
+    live_option = re.search(rf'<input[^>]*value="{live.id}"[^>]*>', dialog)
+    assert live_option, dialog
+    assert "disabled" not in live_option.group()
+
+
+@pytest.mark.django_db()
+def test_the_broadcast_button_is_hidden_when_every_channel_is_disabled(experiment, logged_in_client):
+    """A dialog where nothing can be ticked is a dead end, so do not offer one."""
+    ExperimentChannelFactory(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM, enabled=False
+    )
+
+    assert "Broadcast message" not in _home(logged_in_client, experiment)
 
 
 @pytest.mark.django_db()

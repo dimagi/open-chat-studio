@@ -1,0 +1,20 @@
+{% load i18n %}
+{% comment %}
+  One channel checkbox in the broadcast dialog.
+
+  A disabled channel is still listed -- vanishing from the list would just leave the sender
+  wondering where it went -- but it cannot be picked, and says why on hover. The `disabled`
+  attribute greys the box; the label beside it needs greying of its own.
+{% endcomment %}
+{% if widget.attrs.disabled %}
+  <span class="tooltip" data-tip="{% translate 'This channel is disabled' %}">
+    <label class="label opacity-50 cursor-not-allowed"
+           {% if widget.attrs.id %}for="{{ widget.attrs.id }}"{% endif %}>
+      {% include "django/forms/widgets/input.html" %} {{ widget.label }}
+    </label>
+  </span>
+{% else %}
+  <label class="label cursor-pointer" {% if widget.attrs.id %}for="{{ widget.attrs.id }}"{% endif %}>
+    {% include "django/forms/widgets/input.html" %} {{ widget.label }}
+  </label>
+{% endif %}

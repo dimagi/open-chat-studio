@@ -1,7 +1,8 @@
 from django import forms
 from django.db import transaction
+from django.utils.functional import cached_property
 
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
@@ -119,18 +120,28 @@ def get_broadcast_channels(experiment: Experiment):
     Nothing filters by platform. The API, web and evaluations channels belong to the team
     rather than a chatbot (`ExperimentChannel.objects.get_team_*_channel` leaves `experiment`
     null), so they are already absent from this set and their sessions are unreachable through
-    it. Disabled channels are excluded because `ad_hoc_bot_message` refuses to send on one --
-    offering it would only ever be a broadcast that silently goes nowhere.
+    it.
+
+    Disabled channels are included so the dialog can show them greyed out. `ad_hoc_bot_message`
+    refuses to send on one, so a broadcast there would go nowhere -- the widget makes them
+    unpickable and `clean_channels` turns away anyone who submits one regardless.
     """
-    return experiment.experimentchannel_set.exclude(enabled=False)
+    return experiment.experimentchannel_set.select_related("messaging_provider")
 
 
 class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
-    """Checkboxes tagged with their platform so the dialog can react to what is ticked.
+    """Checkboxes tagged with everything the dialog reacts to when they are ticked.
 
-    The `data-platform` attribute is what arms the WhatsApp template warning; `x-model` feeds
-    the same selection to the send button.
+    `data-platform` arms both WhatsApp warnings. `data-template-status` and `data-provider-url`
+    are what the template warning reads: which of the ticked channels cannot be vouched for, and
+    where to go to fix them. `x-model` feeds the same selection to the send button.
+
+    A disabled channel is rendered but not selectable. The custom option template greys its
+    label and explains why on hover -- `disabled` on its own only greys the box, leaving the
+    platform name beside it looking pickable.
     """
+
+    option_template_name = "chatbots/components/broadcast_channel_option.html"
 
     def __init__(self, attrs=None):
         super().__init__(attrs={"x-model": "selectedChannels", **(attrs or {})})
@@ -138,8 +149,37 @@ class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
     def create_option(self, name, value, *args, **kwargs):
         option = super().create_option(name, value, *args, **kwargs)
         # `value` is a ModelChoiceIteratorValue wrapping the channel's pk; the instance is on it.
-        option["attrs"]["data-platform"] = value.instance.platform
+        channel = value.instance
+        option["attrs"]["data-platform"] = channel.platform
+        if channel.is_disabled:
+            option["attrs"]["disabled"] = True
+        if channel.platform == ChannelPlatform.WHATSAPP:
+            provider = channel.messaging_provider
+            option["attrs"]["data-template-status"] = whatsapp_template_status(provider)
+            if provider:
+                option["attrs"]["data-provider-url"] = provider.get_absolute_url()
         return option
+
+
+def whatsapp_template_status(provider) -> str:
+    """How the broadcast dialog should treat a WhatsApp channel's message template.
+
+    Read straight off the provider's cache, so opening the dialog never calls Meta -- the
+    provider page's refresh button is what fills it in.
+
+    Only Meta Cloud API providers have a template Open Chat Studio can check, so a Twilio or
+    Turn.io channel lands on "missing" along with a Meta provider nobody has checked yet. Both
+    are the same thing to the sender: a broadcast we cannot promise will arrive.
+    """
+    if provider is None:
+        return "missing"
+    match provider.whatsapp_template_ok:
+        case True:
+            return "ok"
+        case False:
+            return "problem"
+        case _:
+            return "missing"
 
 
 class BroadcastChannelField(forms.ModelMultipleChoiceField):
@@ -189,7 +229,25 @@ class BroadcastMessageForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["channels"].queryset = get_broadcast_channels(experiment)
 
-    @property
+    def clean_channels(self):
+        """Turn away a disabled channel even though it is in the queryset.
+
+        The dialog renders it disabled, so a browser will not submit it -- but it is a valid
+        choice as far as `ModelMultipleChoiceField` is concerned, and a broadcast on it would
+        be dropped by `ad_hoc_bot_message` without the sender ever hearing about it.
+        """
+        channels = self.cleaned_data["channels"]
+        disabled = [channel.platform_enum.label for channel in channels if channel.is_disabled]
+        if disabled:
+            raise forms.ValidationError(f"Cannot broadcast on a disabled channel: {', '.join(disabled)}.")
+        return channels
+
+    @cached_property
     def eligible_channels(self):
-        """The channels on offer. Empty means there is nothing to broadcast on, so no dialog."""
-        return self.fields["channels"].queryset
+        """The channels a broadcast can actually go out on. Empty means no dialog.
+
+        Disabled channels are listed in the dialog but cannot be picked, so they do not count
+        towards whether the dialog is worth opening at all. Cached because the chatbot page asks
+        twice: once for the button, once for the dialog.
+        """
+        return list(self.fields["channels"].queryset.filter(enabled=True))
