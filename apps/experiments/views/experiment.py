@@ -888,17 +888,22 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
 @require_POST
 @transaction.atomic
 @login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
 def unarchive_experiment_version(request, team_slug: str, experiment_id: int, version_number: int):
     """
     Restores an archived version of an experiment.
     """
     # get_all(), since the default manager filters archived rows out.
     experiment = get_object_or_404(
-        Experiment.objects.get_all(),
+        Experiment.objects.get_all().select_related("working_version"),
         working_version_id=experiment_id,
         version_number=version_number,
         team=request.team,
     )
+    # Restoring a version of an archived chatbot would leave a live version hanging off an
+    # archived working version. Same rule as reverting (see `revert_chatbot_version`).
+    if experiment.working_version.is_archived:
+        raise PermissionDenied("Unable to unarchive a version of an archived chatbot.")
     experiment.unarchive()
     return redirect(
         reverse(

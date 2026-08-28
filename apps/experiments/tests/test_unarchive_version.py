@@ -3,6 +3,7 @@ from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.pipelines.models import Node
+from apps.teams.backends import get_team_owner_groups
 from apps.utils.factories.events import StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory, UserFactory
@@ -107,7 +108,8 @@ class TestUnarchiveVersion:
         experiment, version = archived_version
         outsider = UserFactory()
         other_team = TeamFactory()
-        MembershipFactory.create(user=outsider, team=other_team)
+        # An admin of their own team. What stops them here is team scoping, not permissions.
+        MembershipFactory.create(user=outsider, team=other_team, groups=get_team_owner_groups)
         client.force_login(outsider)
 
         response = client.post(_unarchive_url(other_team, experiment, version.version_number))
@@ -115,3 +117,41 @@ class TestUnarchiveVersion:
         assert response.status_code == 404
         version.refresh_from_db()
         assert version.is_archived is True
+
+    def test_requires_change_permission(self, client, team_with_users, archived_version):
+        """Being able to view a version is not licence to restore it."""
+        experiment, version = archived_version
+        viewer = UserFactory()
+        MembershipFactory.create(user=viewer, team=team_with_users)
+        viewer.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+        client.force_login(viewer)
+
+        response = client.post(_unarchive_url(team_with_users, experiment, version.version_number))
+
+        assert response.status_code == 403
+        version.refresh_from_db()
+        assert version.is_archived is True
+
+    def test_version_of_an_archived_chatbot_stays_archived(self, client, team_with_users, archived_version):
+        """Archiving a chatbot archives its versions; restoring one on its own would strand it."""
+        experiment, version = archived_version
+        experiment.archive()
+        client.force_login(team_with_users.members.first())
+
+        response = client.post(_unarchive_url(team_with_users, experiment, version.version_number))
+
+        assert response.status_code == 403
+        version.refresh_from_db()
+        assert version.is_archived is True
+
+    def test_details_modal_hides_the_action_for_an_archived_chatbot(self, client, team_with_users, archived_version):
+        experiment, version = archived_version
+        experiment.archive()
+        user = team_with_users.members.first()
+        user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+        client.force_login(user)
+        url = reverse("chatbots:version-details", args=[team_with_users.slug, experiment.id, version.version_number])
+
+        response = client.get(url)
+
+        assert _unarchive_url(team_with_users, experiment, version.version_number) not in response.content.decode()

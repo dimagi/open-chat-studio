@@ -50,7 +50,8 @@
     {% include "experiments/components/versions/compare.html" %}
 </div>
 
-{% if experiment.is_archived %}
+{# a version of an archived chatbot stays archived with it, so no restore is offered #}
+{% if experiment.is_archived and not experiment.working_version.is_archived %}
     <div class="divider"></div>
     <div class="modal-action">
         {% url 'experiments:unarchive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as unarchive_url %}

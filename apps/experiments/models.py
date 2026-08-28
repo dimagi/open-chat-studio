@@ -960,7 +960,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
-        if self.pipeline:
+        # Mirrors archive(), which leaves the working version's pipeline alone.
+        if not self.is_working_version and self.pipeline:
             self.pipeline.unarchive()
 
     def delete_experiment_channels(self):
