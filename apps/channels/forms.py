@@ -30,6 +30,8 @@ from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.channels")
 
+NUMBER_NOT_FOUND = "{number} was not found at the provider. Please make sure it is there before proceeding"
+
 
 class ChannelFormWrapper:
     """
@@ -254,9 +256,6 @@ class TelegramChannelForm(ExtraFormBase):
                 logger.exception(ex)
                 raise forms.ValidationError("Could not verify the bot token") from None
         return bot_token
-
-
-NUMBER_NOT_FOUND = "{number} was not found at the provider. Please make sure it is there before proceeding"
 
 
 class WhatsappChannelForm(WebhookUrlFormBase):
