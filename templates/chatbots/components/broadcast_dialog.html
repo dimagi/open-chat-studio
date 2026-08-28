@@ -1,9 +1,4 @@
 {% load form_tags i18n %}
-{% comment %}
-  Both WhatsApp warnings read the ticked checkboxes, which the broadcast form tags with their
-  platform, their provider's cached template status and a link to that provider. Nothing here
-  calls Meta -- the provider page's Refresh button is what fills that cache in.
-{% endcomment %}
 <dialog id="broadcast_message_modal" class="modal">
   <div class="modal-box"
        x-data="{

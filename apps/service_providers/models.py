@@ -570,9 +570,7 @@ class MessagingProviderType(models.TextChoices):
         return provider_types
 
 
-#: Key under ``MessagingProvider.extra_data`` holding the cached WhatsApp numbers.
 WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
-#: Key under ``MessagingProvider.extra_data`` holding the cached message template check.
 WHATSAPP_TEMPLATE_KEY = "whatsapp_template"
 
 
