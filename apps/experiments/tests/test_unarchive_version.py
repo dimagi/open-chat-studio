@@ -104,6 +104,21 @@ class TestUnarchiveVersion:
 
         assert _unarchive_url(team_with_users, experiment, version.version_number) in response.content.decode()
 
+    def test_active_version_is_left_alone(self, client, team_with_users):
+        """Unarchiving an active version would reactivate records archived for other reasons."""
+        owner = team_with_users.members.first()
+        experiment = ExperimentFactory.create(team=team_with_users, owner=owner)
+        version = experiment.create_new_version()
+        trigger = StaticTriggerFactory.create(experiment=version)
+        trigger.archive()
+        client.force_login(owner)
+
+        response = client.post(_unarchive_url(team_with_users, experiment, version.version_number))
+
+        assert response.status_code == 404
+        trigger.refresh_from_db()
+        assert trigger.is_archived is True
+
     def test_other_team_cannot_unarchive(self, client, team_with_users, archived_version):
         experiment, version = archived_version
         outsider = UserFactory()

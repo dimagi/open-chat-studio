@@ -899,6 +899,7 @@ def unarchive_experiment_version(request, team_slug: str, experiment_id: int, ve
         working_version_id=experiment_id,
         version_number=version_number,
         team=request.team,
+        is_archived=True,
     )
     # Restoring a version of an archived chatbot would leave a live version hanging off an
     # archived working version. Same rule as reverting (see `revert_chatbot_version`).
