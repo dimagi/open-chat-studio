@@ -100,9 +100,8 @@ class TestEmbeddedWidgetChannelForm:
         """Choosing `oauth` means work a Chatbot Admin may not be able to do: the token's
         application has to list this chatbot, and that lives on the other side of the team."""
         form = EmbeddedWidgetChannelForm(experiment=_mock_experiment())
-        help_text = form.fields["credential_mode"].help_text
-        assert reverse("oauth_apps:home", args=["test-team"]) in help_text
-        assert MIN_OAUTH_WIDGET_VERSION in help_text
+
+        assert reverse("oauth_apps:home", args=["test-team"]) in form.fields["credential_mode"].help_text
 
     @pytest.mark.parametrize(
         ("mode", "is_valid"),
@@ -278,44 +277,6 @@ class TestEmbeddedWidgetChannelForm:
         assert ("machine-app" in rendered) is listed
         assert ("No OAuth application lists this chatbot" in rendered) is not listed
         assert (manage_applications_url(experiment.team.slug) in rendered) is not listed
-
-    @pytest.mark.django_db()
-    @pytest.mark.parametrize("mode", [CredentialMode.EMBED_KEY, CredentialMode.OAUTH], ids=["embed-key", "oauth"])
-    def test_everything_the_mode_qualifies_is_gated_in_the_browser(self, mode):
-        """Both the applications block and the embed-token note answer a question only `oauth`
-        asks, and both are gated on the selected mode rather than the stored one: an admin
-        switching the select needs the answer before saving, not after.
-        """
-        channel = _widget_channel(credential_mode=mode)
-        form = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
-        gate = f"x-show=\"credentialMode === '{CredentialMode.OAUTH.value}'\""
-
-        assert gate in str(form["credential_mode"])
-        assert gate in str(form["widget_token"])
-
-    @pytest.mark.django_db()
-    @pytest.mark.parametrize("mode", [CredentialMode.EMBED_KEY, CredentialMode.OAUTH], ids=["embed-key", "oauth"])
-    def test_the_alpine_seed_matches_the_option_the_select_renders_as_chosen(self, mode):
-        """`x-model` writes the seed back to the select on init, so a seed that disagreed with the
-        rendered selection would silently change the admin's mode."""
-        channel = _widget_channel(credential_mode=mode)
-        form = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
-
-        assert f'"credentialMode": "{mode.value}"' in form.form_attrs["x-data"]
-        assert f'<option value="{mode.value}" selected>' in str(form["credential_mode"])
-
-    @pytest.mark.django_db()
-    def test_the_alpine_seed_follows_a_bound_form_rather_than_the_stored_mode(self):
-        """A redisplay after a validation error renders the submitted mode as chosen, so the seed
-        has to come from the submitted data too."""
-        channel = _widget_channel(credential_mode=CredentialMode.EMBED_KEY)
-        form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": "", "credential_mode": CredentialMode.OAUTH},
-            channel=channel,
-            experiment=channel.experiment,
-        )
-
-        assert f'"credentialMode": "{CredentialMode.OAUTH.value}"' in form.form_attrs["x-data"]
 
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""

@@ -636,7 +636,8 @@ class WidgetParams(forms.Widget):
 
 
 class CredentialModeSelect(forms.Select):
-    """The credential mode select along with the list of oauth applications which can be used with this chatbot. If there are none a warning is displayed.
+    """The credential mode select along with the list of oauth applications which can be used with
+    this chatbot. If there are none a warning is displayed.
     """
 
     template_name = "channels/widgets/credential_mode.html"
@@ -760,11 +761,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             "What kind of token the widget must use to start a chat session. <strong>Embed key</strong> admits any "
             "visitor on an allowed domain, as a public widget. <strong>OAuth token</strong> means your "
             "backend creates a short-lived <code>{scope}</code> token and hands it to the widget;"
-            " any embed key is then ignored. The OAuth application be <strong>client-credentials</strong>' and must list this chatbot "
-            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>).",
+            " any embed key is then ignored. The OAuth application must be <strong>client-credentials</strong> "
+            "and must list this chatbot "
+            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>).',
             scope=settings.CHAT_API_SCOPE,
             url=reverse("oauth_apps:home", args=[self.experiment.team.slug]),
-            version=widget_versions.MIN_OAUTH_WIDGET_VERSION,
         )
 
     def _pop_credential_mode(self, cleaned_data) -> str:
