@@ -560,6 +560,38 @@ class TestWhatsappNumberValidation:
                 {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"}
             ]
 
+    def _edit_form(self, experiment, provider, saved_number, submitted_number):
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=provider,
+            extra_data={"number": saved_number, "phone_number_id": "555"},
+        )
+        return WhatsappChannelForm(
+            experiment=experiment,
+            channel=channel,
+            data={"number": submitted_number, "messaging_provider": provider.id},
+        )
+
+    def test_an_unchanged_number_the_provider_no_longer_lists_still_saves(self, experiment):
+        """The picker keeps a stale saved number selectable, so validation has to accept it too --
+        otherwise the channel can never be edited again, not even to rename it."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._edit_form(experiment, provider, "+27821110000", "+27821110000")
+
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["phone_number_id"] == "555"
+
+    def test_changing_the_number_is_still_checked_against_the_provider(self, experiment):
+        """The allowance above is only for the number already saved."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._edit_form(experiment, provider, "+27821110000", "+27829990000")
+
+        assert not form.is_valid()
+        assert "was not found at the provider" in form.errors["number"][0]
+
     def test_another_teams_provider_is_never_reached(self, experiment):
         """ChannelForm rejects a provider from another team, but the extra form is validated
         alongside it, so the extra form's own lookup has to be team-scoped too. Otherwise

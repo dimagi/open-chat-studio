@@ -359,6 +359,10 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         if not number or not provider:
             return cleaned_data
 
+        if unchanged := self._unchanged_number_config(provider, number):
+            cleaned_data.update(unchanged)
+            return cleaned_data
+
         try:
             resolved = provider.resolve_number(number)
         except Exception:
@@ -372,6 +376,23 @@ class WhatsappChannelForm(WebhookUrlFormBase):
 
         cleaned_data.update(resolved)
         return cleaned_data
+
+    def _unchanged_number_config(self, provider: MessagingProvider, number: str) -> dict | None:
+        """The config already saved for this number, when an edit leaves it and the provider alone.
+
+        The picker keeps a saved number selectable after the provider stops listing it, so
+        re-checking one here would block every later edit to the channel -- a rename included --
+        on a number the operator cannot change from this form. It was resolved when it was saved.
+        """
+        if not self.channel or self.channel.messaging_provider_id != provider.id:
+            return None
+        saved = self.channel.extra_data or {}
+        if saved.get("number") != number:
+            return None
+        config = {"number": number}
+        if phone_number_id := saved.get("phone_number_id"):
+            config["phone_number_id"] = phone_number_id
+        return config
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
