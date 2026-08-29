@@ -2,176 +2,355 @@
 {% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
       opacity: 0;
       transition: opacity 1s ease-out;
     }
+
+    #team-settings-page {
+      font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    }
+    .xl\:container:has(#team-settings-page) {
+      max-width: none;
+      background: rgb(249, 250, 251);
+    }
+    #general.app-card, #integrations.app-card, #members.app-card,
+    #automation.app-card, #data.app-card,
+    #automation .app-card, #data .app-card,
+    #team-settings-nav .app-card {
+      border: 1px solid rgb(229, 231, 235);
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      background: rgb(255, 255, 255);
+    }
+    #team-settings-nav a.settings-nav-active {
+      background: rgb(242, 239, 255);
+      color: rgb(87, 13, 248);
+      font-weight: 600;
+    }
+    #team-settings-nav .nav-count {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgb(156, 163, 175);
+    }
+    #team-settings-nav a.settings-nav-active .nav-count {
+      color: rgb(87, 13, 248);
+    }
+    #team-settings-page .category-pill {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 9999px;
+      border: 1px solid rgb(229, 231, 235);
+      background: rgb(255, 255, 255);
+      color: rgb(75, 85, 99);
+      font-size: 12.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    #team-settings-page .category-pill:hover {
+      border-color: rgb(87, 13, 248);
+      background: rgb(242, 239, 255);
+      color: rgb(87, 13, 248);
+    }
+    #team-settings-page .category-pill-active {
+      border-color: rgb(87, 13, 248);
+      background: rgb(242, 239, 255);
+      color: rgb(87, 13, 248);
+    }
+    #team-settings-page #id_name {
+      font-size: 1.875rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      height: auto;
+      padding: 0.25rem 0.75rem;
+    }
+    #team-settings-page #id_groups > div {
+      margin-top: 0.5rem;
+    }
+    #team-settings-page #id_groups label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    #automation .app-card .text-neutral-500 {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    #team-settings-page .section-subtitle {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    #team-settings-page h2.pg-subtitle,
+    #team-settings-page h3.pg-subtitle {
+      margin-bottom: 0;
+      font-size: 17px;
+    }
+    #team-settings-page .section-subtitle,
+    #automation .app-card .text-neutral-500 {
+      margin-top: 0;
+      display: block;
+    }
+    #team-settings-page input[name="is_migrating"] {
+      border-radius: 4px;
+      width: 1.1rem;
+      height: 1.1rem;
+    }
+    #team-settings-page .app-card {
+      padding: 1rem;
+    }
+    #data label[for="id_public_key"] {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #data h3.pg-subtitle {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    #automation h1.pg-subtitle {
+      font-size: 14px;
+      font-weight: 700;
+    }
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var links = document.querySelectorAll('#team-settings-nav a[href^="#"]');
+      var sections = Array.from(links).map(function (link) {
+        return document.querySelector(link.getAttribute('href'));
+      }).filter(Boolean);
+      if (!sections.length) return;
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          links.forEach(function (link) {
+            link.classList.toggle('settings-nav-active', link.getAttribute('href') === '#' + entry.target.id);
+          });
+        });
+      }, { rootMargin: '-40% 0px -50% 0px' });
+      function resync() {
+        sections.forEach(function (section) {
+          observer.unobserve(section);
+          observer.observe(section);
+        });
+      }
+      resync();
+      // The Integrations/Members tables load async via htmx, which changes page height
+      // after the observer's initial read. Re-observe once they've settled so the highlight
+      // reflects the final layout instead of getting stuck on whatever was active at load.
+      document.body.addEventListener('htmx:afterSettle', resync);
+    });
+  </script>
 {% endblock page_head %}
 
-{% block app %}
-  <section class="app-card">
-    {% if not create %}
-      <div class="flex justify-between">
-        <h3 data-cy="title" class="pg-subtitle">{% translate "Team Details" %}</h3>
-        <div class="flex gap-2">
-          {% if request.user.is_staff %}
-            <a href="{% url "single_team:internal_metadata" request.team.slug %}"
-               class="btn btn-primary">{% translate "Internal Metadata" %}</a>
-          {% endif %}
-          <a href="{% url "single_team:feature_flags" request.team.slug %}"
-             class="btn btn-primary">{% translate "Manage Feature Flags" %}</a>
-        </div>
-      </div>
-    {% endif %}
-    <form method="post">
-      {% csrf_token %}
-      {% render_form_fields team_form %}
-      {% if create or request.team_membership.is_team_admin %}
-        <div class="pg-inline-buttons">
-          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
-        </div>
-      {% endif %}
-    </form>
-  </section>
+{% block breadcrumbs %}
   {% if not create %}
-    {% include "service_providers/service_provider_home.html" with provider_type="llm" subtitle="Large Language Model and Embedding model services" perm="add_llmprovider" %}
-    {% translate "Speech to text and visa versa" as speech_subtitle %}
-    {% include "service_providers/service_provider_home.html" with provider_type="voice" subtitle=speech_subtitle perm="add_voiceprovider" %}
-    {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
-    {% include "service_providers/service_provider_home.html" with provider_type="messaging" subtitle=messaging_subtitle perm="add_messagingprovider" %}
-    {% translate "Authentication credentials for integrations" as auth_subtitle %}
-    {% include "service_providers/service_provider_home.html" with provider_type="auth" subtitle=auth_subtitle perm="add_authprovider" %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" %}
-      {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
-      {% url "custom_actions:table" request.team.slug as actions_table_url %}
-      {% url "custom_actions:new" request.team.slug as actions_new_url %}
-      {% translate "Allow Chatbots to call external services" as actions_subtitle %}
-      {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" %}
-    {% endwith %}
-    {% flag "flag_mcp" %}
-    {% has_perm "mcp_integrations" "add_mcpserver" as allow_new_mcp %}
-    {% url "mcp_integrations:table" request.team.slug as mcp_table_url %}
-    {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
-    {% translate "Manage MCP Servers" as mcp_subtitle %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" %}
-      {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
-    {% endwith %}
-  {% endflag %}
-  {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
-  {% if can_view_oauth_apps %}
-    {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}
-    {% url "oauth_apps:table" request.team.slug as oauth_apps_table_url %}
-    {% url "oauth_apps:new" request.team.slug as oauth_apps_new_url %}
-    {% translate "Applications that access this team's data over the API" as oauth_apps_subtitle %}
-    {% with button_style="btn-outline" title_class="pg-subtitle" %}
-      {% include "generic/object_home_content.html" with new_object_url=oauth_apps_new_url title="OAuth Applications" table_url=oauth_apps_table_url allow_new=allow_new_oauth_app subtitle=oauth_apps_subtitle data_cy_title="title-oauth-apps" %}
-    {% endwith %}
-  {% endif %}
-  {% translate "Record trace details of bot activity" as trace_subtitle %}
-  {% include "service_providers/service_provider_home.html" with provider_type="tracing" subtitle=trace_subtitle perm="add_traceprovider" %}
-  <section class="app-card">
-    <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
-    <div class="table-responsive">
-      <table class="table pg-table">
-        <thead>
-          <tr>
-            <th>{% translate "Member" %}</th>
-            <th>{% translate "Roles" %}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for membership in team.sorted_memberships.all %}
-            <tr>
-              <td>
-                {% if request.team_membership.is_team_admin or request.team_membership == membership %}
-                  <a class="link"
-                     href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
-                {% else %}
-                  {{ membership.user }}
-                {% endif %}
-              </td>
-              <td>{{ membership.groups.all|join:", " }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+      <ul>
+        <li><a href="{% url 'dashboard:index' request.team.slug %}">{{ team.name }}</a></li>
+        <li class="pg-breadcrumb-active" aria-current="page">{% translate "Team settings" %}</li>
+      </ul>
     </div>
-  </section>
-  {% include "teams/components/team_invitations.html" %}
-  {% if request.team_membership.is_team_admin %}
-    <section class="app-card">
-      <h3 class="pg-subtitle">{% translate "Data Export" %}</h3>
-      <p class="my-2 text-muted">
-        {% translate "Register a public key to seal secret data exported from this team during a migration." %}
-      </p>
-      <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}">
+  {% endif %}
+{% endblock breadcrumbs %}
+
+{% block app %}
+  <div id="team-settings-page">
+  {% if create %}
+    <section class="app-card" id="general">
+      <h3 class="pg-subtitle">{% translate "Team Details" %}</h3>
+      <form method="post">
         {% csrf_token %}
-        {{ public_key_form.non_field_errors }}
-        {% render_form_fields public_key_form %}
+        {% render_form_fields team_form %}
         <div class="pg-inline-buttons">
           <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
         </div>
       </form>
-
-      <div class="divider"></div>
-
-      <p class="my-2 text-muted">{% translate "Download a zip archive of every file belonging to this team." %}</p>
-      <div id="team-files-download-wrapper">
-        {% if files_export_task_id %}
-          {% include "teams/partials/download_files_progress.html" with task_id=files_export_task_id %}
-        {% else %}
-          {% if files_export_file %}
-            <p class="my-2 text-muted">
-              {% blocktranslate with created=files_export_file.created_at %}Last export created {{ created }}.{% endblocktranslate %}
-            </p>
-          {% endif %}
-          <form hx-post="{% url 'single_team:download_team_files' request.team.slug %}"
-                hx-target="#team-files-download-wrapper"
-                hx-swap="innerHTML">
-            {% csrf_token %}
-            <div class="pg-inline-buttons">
-              {% if files_export_file %}
-                <a id="ocs-ready-download-link"
-                   class="btn btn-outline"
-                   href="{% url 'files:base' team.slug files_export_file.id %}?allow_s3">
-                  {% translate "Download Export" %}
-                </a>
-                <button type="submit" class="btn btn-outline">{% translate "Regenerate export" %}</button>
-              {% else %}
-                <button type="submit" class="btn btn-outline">{% translate "Download team files" %}</button>
-              {% endif %}
-            </div>
-          </form>
+    </section>
+  {% else %}
+    <div class="flex flex-wrap justify-between items-center gap-2 mb-1">
+      <input type="checkbox" id="edit-team-toggle" class="hidden peer">
+      <div class="flex items-center gap-2 peer-checked:hidden" id="team-title-view">
+        <h1 data-cy="title" class="pg-title">{{ team.name }}</h1>
+        <label for="edit-team-toggle" class="btn btn-outline btn-sm" data-cy="btn-edit-team">
+          <i class="fa-solid fa-pencil mr-1"></i>{% translate "Edit" %}
+        </label>
+      </div>
+      <form method="post" class="hidden peer-checked:flex items-center gap-2 flex-1 min-w-0" id="general">
+        {% csrf_token %}
+        {{ team_form.name }}
+        {% if request.team_membership.is_team_admin %}
+          <input class="btn btn-primary whitespace-nowrap" type="submit" value="{% translate "Save" %}">
+        {% endif %}
+        <label for="edit-team-toggle" class="btn btn-outline whitespace-nowrap">{% translate "Cancel" %}</label>
+      </form>
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url "single_team:feature_flags" request.team.slug %}"
+           class="btn btn-outline whitespace-nowrap">
+          <i class="fa-solid fa-flag mr-1 text-neutral-400"></i>{% translate "Feature flags" %}</a>
+        {% if request.user.is_staff %}
+          <a href="{% url "single_team:internal_metadata" request.team.slug %}"
+             class="btn btn-outline whitespace-nowrap">
+            <i class="fa-solid fa-database mr-1 text-neutral-400"></i>{% translate "Internal metadata" %}</a>
         {% endif %}
       </div>
-
-      <div class="divider"></div>
-
-      <form method="post" action="{% url 'single_team:set_migration_lock' request.team.slug %}">
-        {% csrf_token %}
-        <label class="label font-bold cursor-pointer justify-start gap-2">
-          <input type="checkbox" name="is_migrating" class="checkbox"
-                  {% if request.team.is_migrating %}checked{% endif %}>
-          <span>{% translate "Migration mode" %}</span>
-        </label>
-        <p class="my-2 text-muted">
-          {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
-        </p>
-        <div class="pg-inline-buttons">
-          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
-        </div>
-      </form>
-    </section>
-    <section class="app-card">
-      <h3 class="pg-subtitle">
-        {% translate "Danger Zone" %}
-      </h3>
-      <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
-    </section>
-    {% include "teams/components/delete_team_modal.html" %}
+    </div>
+    <p class="mb-4">
+      <span class="font-mono text-xs text-neutral-600 bg-base-200 rounded px-2 py-1">{{ team.slug }}</span>
+    </p>
+    {{ team_form.non_field_errors }}
   {% endif %}
-{% endif %}
+
+  {% if not create %}
+    <div class="flex gap-6 mt-6">
+      <aside class="w-56 shrink-0 hidden lg:block self-start sticky top-4" id="team-settings-nav">
+        {% include "teams/components/settings_nav.html" %}
+      </aside>
+      <div class="flex-1 flex flex-col gap-6 min-w-0">
+        <section class="app-card" id="integrations">
+          <div class="flex justify-between items-start">
+            <div>
+              <h2 class="pg-subtitle font-bold">{% translate "Integrations" %}</h2>
+              <span class="text-neutral-500 section-subtitle">{% translate "Every external service this team connects to: models, speech, messaging, auth, and tracing." %}</span>
+            </div>
+            {% if integration_new_choices %}
+              <details class="dropdown dropdown-end" data-cy="btn-new-integration-dropdown">
+                <summary data-cy="btn-new-integration" class="btn btn-sm btn-primary whitespace-nowrap">
+                  <i class="fa-solid fa-plus mr-1"></i>{% translate "Add integration" %}
+                  <i class="fa-solid fa-caret-down ml-1"></i>
+                </summary>
+                <ul class="menu dropdown-content rounded-box bg-base-100 z-1 w-64 p-2 shadow-sm">
+                  {% for label, url in integration_new_choices %}
+                    <li><a href="{{ url }}">{{ label }}</a></li>
+                  {% endfor %}
+                </ul>
+              </details>
+            {% endif %}
+          </div>
+          <hr class="my-2">
+          <div id="integrations-table-container" hx-get="{{ integrations_table_url }}" hx-trigger="load"></div>
+        </section>
+
+        <section class="app-card" id="members">
+          {% include "teams/components/members_section.html" %}
+        </section>
+
+        <section class="app-card" id="automation">
+          <h2 class="pg-subtitle font-bold">{% translate "Developer access" %}</h2>
+          <span class="text-neutral-500 section-subtitle">{% translate "Custom actions your chatbots can call, and applications authorised against this team's API." %}</span>
+          <div class="flex flex-col gap-4 mt-2">
+            <div class="overflow-x-auto">
+              {% with button_style="btn-outline" title_class="pg-subtitle" %}
+                {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
+                {% url "custom_actions:table" request.team.slug as actions_table_url %}
+                {% url "custom_actions:new" request.team.slug as actions_new_url %}
+                {% translate "Let chatbots call external services over HTTP during a session." as actions_subtitle %}
+                {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" new_button_label="Add action" %}
+              {% endwith %}
+            </div>
+            {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
+            {% if can_view_oauth_apps %}
+              <div class="overflow-x-auto">
+                {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}
+                {% url "oauth_apps:table" request.team.slug as oauth_apps_table_url %}
+                {% url "oauth_apps:new" request.team.slug as oauth_apps_new_url %}
+                {% translate "Applications that read or write this team's data through the API." as oauth_apps_subtitle %}
+                {% with button_style="btn-outline" title_class="pg-subtitle" %}
+                  {% include "generic/object_home_content.html" with new_object_url=oauth_apps_new_url title="OAuth applications" table_url=oauth_apps_table_url allow_new=allow_new_oauth_app subtitle=oauth_apps_subtitle data_cy_title="title-oauth-apps" new_button_label="Register app" %}
+                {% endwith %}
+              </div>
+            {% endif %}
+          </div>
+        </section>
+
+        {% if request.team_membership.is_team_admin %}
+          <section class="app-card" id="data">
+            <h2 class="pg-subtitle font-bold">{% translate "Data & migration" %}</h2>
+            <span class="text-neutral-500 section-subtitle">{% translate "Export this team's files, or seal secret data with a public key before moving it to another instance." %}</span>
+
+            <div class="flex flex-col gap-4 mt-2">
+              <div class="app-card">
+                <div class="flex flex-wrap justify-between items-center gap-4">
+                  <div>
+                    <h3 class="pg-subtitle">{% translate "Download team files" %}</h3>
+                    <span class="text-neutral-500 section-subtitle">{% translate "A zip archive of every file belonging to this team." %}</span>
+                  </div>
+                  <div id="team-files-download-wrapper">
+                    {% if files_export_task_id %}
+                      {% include "teams/partials/download_files_progress.html" with task_id=files_export_task_id %}
+                    {% else %}
+                      {% if files_export_file %}
+                        <p class="my-2 text-muted text-sm">
+                          {% blocktranslate with created=files_export_file.created_at %}Last export created {{ created }}.{% endblocktranslate %}
+                        </p>
+                      {% endif %}
+                      <form hx-post="{% url 'single_team:download_team_files' request.team.slug %}"
+                            hx-target="#team-files-download-wrapper"
+                            hx-swap="innerHTML">
+                        {% csrf_token %}
+                        <div class="pg-inline-buttons">
+                          {% if files_export_file %}
+                            <a id="ocs-ready-download-link"
+                               class="btn btn-outline"
+                               href="{% url 'files:base' team.slug files_export_file.id %}?allow_s3">
+                              <i class="fa-solid fa-download mr-1"></i>{% translate "Download Export" %}
+                            </a>
+                            <button type="submit" class="btn btn-outline">{% translate "Regenerate export" %}</button>
+                          {% else %}
+                            <button type="submit" class="btn btn-outline">
+                              <i class="fa-solid fa-download mr-1"></i>{% translate "Download" %}
+                            </button>
+                          {% endif %}
+                        </div>
+                      </form>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
+              <div class="app-card">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <h3 class="pg-subtitle">{% translate "Migration public key" %}</h3>
+                    <span class="text-neutral-500 section-subtitle">{% translate "Seals secret data exported from this team during a migration." %}</span>
+                  </div>
+                  {% if team.public_key %}
+                    <span class="badge badge-success">{% translate "Set" %}</span>
+                  {% else %}
+                    <span class="badge badge-warning">{% translate "Not set" %}</span>
+                  {% endif %}
+                </div>
+                <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}" class="mt-2">
+                  {% csrf_token %}
+                  {{ public_key_form.non_field_errors }}
+                  {% render_form_fields public_key_form %}
+                  <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+                    <label class="label cursor-pointer gap-2">
+                      <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
+                              {% if request.team.is_migrating %}checked{% endif %}>
+                      <span class="min-w-0 whitespace-normal section-subtitle">{% translate "Migration mode — freeze writes while data is transferred" %}</span>
+                    </label>
+                    <input class="btn btn-primary" type="submit" value="{% translate "Save key" %}">
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <h3 class="pg-subtitle">{% translate "Danger Zone" %}</h3>
+            <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
+          </section>
+          {% include "teams/components/delete_team_modal.html" %}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+  </div>
 {% endblock app %}

@@ -3,6 +3,19 @@
   <span>{% translate "Application" %}</span>
 </li>
 {% include "web/components/team_nav.html" %}
+{% if request.team %}
+  <li class="menu-title">
+    <span>{% translate "Team" %}</span>
+  </li>
+  <ul class="menu">
+    <li>
+      <a href="{% url 'single_team:manage_team' request.team.slug %}" {% if active_tab == 'manage-team' %}class="menu-active"{% endif %}>
+        <i class="fa-solid fa-gear"></i>
+        {% translate "Team settings" %}
+      </a>
+    </li>
+  </ul>
+{% endif %}
 <li class="menu-title">
   <span>{% translate "My Account" %}</span>
 </li>

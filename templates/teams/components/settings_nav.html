@@ -1,0 +1,21 @@
+{% load i18n %}
+<nav class="flex flex-col gap-1 mb-4">
+  <a href="#integrations" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+    <span><i class="fa-solid fa-plug mr-2"></i>{% translate "Integrations" %}</span><span class="nav-count">{{ stats.integrations }}</span>
+  </a>
+  <a href="#members" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+    <span><i class="fa-solid fa-users mr-2"></i>{% translate "Members" %}</span><span class="nav-count">{{ stats.members }}</span>
+  </a>
+  <a href="#automation" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+    <i class="fa-solid fa-code mr-2"></i>{% translate "Developer" %}
+  </a>
+  <a href="#data" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+    <i class="fa-solid fa-box-archive mr-2"></i>{% translate "Data" %}
+  </a>
+</nav>
+<div class="app-card p-4 text-sm">
+  <p class="uppercase text-xs text-neutral-500 mb-2">{% translate "Team" %}</p>
+  <p><span class="font-bold">{{ stats.members }}</span> {% translate "members" %}</p>
+  <p><span class="font-bold">{{ stats.integrations }}</span> {% translate "integrations" %}</p>
+  <p><span class="font-bold">{{ stats.pending_invites }}</span> {% translate "pending invite" %}{{ stats.pending_invites|pluralize }}</p>
+</div>

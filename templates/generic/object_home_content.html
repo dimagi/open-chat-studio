@@ -41,7 +41,8 @@
       <div class="justify-self-end join">
         {% if new_object_choices %}
           <details class="dropdown dropdown-end" data-cy="btn-new-dropdown">
-            <summary data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}">Add new
+            <summary data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}">
+              <i class="fa-solid fa-plus mr-1 text-neutral-400"></i>{{ new_button_label|default:"Add new" }}
               <i class="fa-solid fa-caret-down ml-1"></i>
             </summary>
             <ul class="menu dropdown-content rounded-box bg-base-100 z-1 w-64 p-2 shadow-sm">
@@ -52,7 +53,8 @@
           </details>
         {% elif new_object_url %}
           <a data-cy="btn-new" class="btn btn-sm {{ button_style|default:"btn-primary" }}"
-             href="{{ new_object_url }}">Add new
+             href="{{ new_object_url }}">
+            <i class="fa-solid fa-plus mr-1 text-neutral-400"></i>{{ new_button_label|default:"Add new" }}
           </a>
         {% endif %}
         {% if actions %}
