@@ -9,7 +9,12 @@ from django.utils import timezone
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
-from apps.pipelines.exceptions import CodeNodeRunError, NodeUserConfigRunError, PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import (
+    CodeNodeRunError,
+    NodeUserConfigRunError,
+    PipelineBuildError,
+    PipelineNodeBuildError,
+)
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
