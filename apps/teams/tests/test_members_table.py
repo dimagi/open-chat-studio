@@ -89,6 +89,9 @@ def test_send_invitation_returns_members_section_fragment_with_new_invite(client
     assert response.status_code == 200
     assert Invitation.objects.filter(team=team, email="newperson@example.org", is_accepted=False).exists()
     assert b"members-section" in response.content
+    # The response re-renders the whole #members-section root, so the form that
+    # triggered it must replace that element rather than nest a duplicate inside it.
+    assert b'hx-swap="outerHTML"' in response.content
 
 
 @pytest.mark.django_db()

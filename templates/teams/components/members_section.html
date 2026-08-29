@@ -11,7 +11,7 @@
           <i class="fa-solid fa-user-plus mr-1"></i>{% translate "Invite people" %}
         </summary>
         <div class="dropdown-content rounded-box bg-base-100 z-1 w-80 p-4 shadow-sm">
-          <form hx-post="{% url 'single_team:send_invitation' request.team.slug %}" hx-target="#members-section">
+          <form hx-post="{% url 'single_team:send_invitation' request.team.slug %}" hx-target="#members-section" hx-swap="outerHTML">
             {% csrf_token %}
             {% render_form_fields invitation_form %}
             {{ invitation_form.non_field_errors }}
