@@ -154,7 +154,7 @@ class TeamPublicKeyForm(forms.ModelForm):
             "public_key": _("Public key used to seal data exported from this team."),
         }
         widgets = {
-            "public_key": forms.Textarea(attrs={"rows": 4}),
+            "public_key": forms.Textarea(attrs={"rows": 4, "placeholder": "-----BEGIN PUBLIC KEY-----"}),
         }
 
     def clean_public_key(self):

@@ -72,6 +72,21 @@ class TestSetPublicKey:
         team.refresh_from_db()
         assert team.public_key == ""
 
+    def test_saving_public_key_also_saves_migration_mode(self, client, team, admin):
+        """The mockup shows one "Save key" button for the whole Migration public key
+        card, so set_public_key must save is_migrating too, not just the key."""
+        client.force_login(admin)
+        response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY, "is_migrating": "on"})
+        assert response.status_code == 200
+        team.refresh_from_db()
+        assert team.public_key == PUBLIC_KEY
+        assert team.is_migrating is True
+
+        # unchecking the box (i.e. omitting it from POST) and re-saving clears it
+        client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
+        team.refresh_from_db()
+        assert team.is_migrating is False
+
     def test_setting_invalid_public_key_shows_form_error(self, client, team, admin):
         client.force_login(admin)
         response = client.post(_set_public_key_url(team), {"public_key": "not-a-real-key"})
@@ -85,13 +100,13 @@ class TestSetPublicKey:
         client.force_login(admin)
         response = client.get(_manage_team_url(team))
         assert response.status_code == 200
-        assert "Data Export" in response.content.decode()
+        assert "Migration public key" in response.content.decode()
 
     def test_data_export_section_hidden_from_member(self, client, team, member):
         client.force_login(member)
         response = client.get(_manage_team_url(team))
         assert response.status_code == 200
-        assert "Data Export" not in response.content.decode()
+        assert "Migration public key" not in response.content.decode()
 
     def test_setting_public_key_is_audited(self, client, team, admin):
         client.force_login(admin)
