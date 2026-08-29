@@ -1,0 +1,48 @@
+{% load form_tags i18n %}
+<div id="members-section">
+  <div class="flex justify-between items-start">
+    <div>
+      <h2 class="pg-subtitle font-bold">{% translate "Members & access" %}</h2>
+      <span class="text-neutral-500 section-subtitle">{% translate "People who can sign in to this team, including invitations that haven't been accepted." %}</span>
+    </div>
+    {% if request.team_membership.is_team_admin %}
+      <details class="dropdown dropdown-end" data-cy="btn-invite-dropdown">
+        <summary data-cy="btn-invite" class="btn btn-sm btn-primary whitespace-nowrap">
+          <i class="fa-solid fa-user-plus mr-1"></i>{% translate "Invite people" %}
+        </summary>
+        <div class="dropdown-content rounded-box bg-base-100 z-1 w-80 p-4 shadow-sm">
+          <form hx-post="{% url 'single_team:send_invitation' request.team.slug %}" hx-target="#members-section">
+            {% csrf_token %}
+            {% render_form_fields invitation_form %}
+            {{ invitation_form.non_field_errors }}
+            <div class="pg-inline-buttons mt-2">
+              <input class="btn btn-outline" type="submit" value="{% translate "Send Invitation" %}">
+            </div>
+          </form>
+        </div>
+      </details>
+    {% endif %}
+  </div>
+  <hr class="my-2">
+  <section>
+    <form hx-get="{{ members_table_url }}" hx-target="#members-table-container" hx-trigger="change, keyup delay:500ms, submit">
+      <div class="my-2 flex flex-wrap gap-2 items-center">
+        <input class="input input-bordered flex-1" type="search" name="search"
+               placeholder="{% translate 'Search by name or email' %}"
+               hx-trigger="keyup[this.value.length === 0 || this.value.length > 2] changed delay:500ms, search">
+        <select class="select select-bordered" name="role">
+          <option value="">{% translate "All roles" %}</option>
+          {% for role in role_choices %}
+            <option value="{{ role }}">{{ role }}</option>
+          {% endfor %}
+        </select>
+        <select class="select select-bordered" name="status">
+          <option value="">{% translate "All statuses" %}</option>
+          <option value="active">{% translate "Active" %}</option>
+          <option value="invited">{% translate "Invited" %}</option>
+        </select>
+      </div>
+    </form>
+    <div id="members-table-container" hx-get="{{ members_table_url }}" hx-trigger="load"></div>
+  </section>
+</div>

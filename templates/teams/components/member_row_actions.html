@@ -1,0 +1,34 @@
+{% load i18n %}
+{% if record.kind == "member" %}
+  {% if request.team_membership.is_team_admin or request.team_membership.pk == record.membership_pk %}
+    <div class="flex gap-1 justify-end">
+      <a class="btn btn-square btn-sm btn-outline" title="{% translate "Edit roles" %}"
+         href="{% url 'single_team:team_membership_details' request.team.slug record.membership_pk %}">
+        <i class="fa-solid fa-pencil"></i>
+      </a>
+      {% translate 'Remove this member from the team?' as confirm_remove_message %}
+      <form method="post" action="{% url 'single_team:remove_team_membership' request.team.slug record.membership_pk %}"
+            onsubmit="return confirm('{{ confirm_remove_message }}');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-square btn-sm btn-outline" title="{% translate 'Remove' %}">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </form>
+    </div>
+  {% endif %}
+{% elif request.team_membership.is_team_admin %}
+  <div class="flex gap-1 justify-end">
+    <form hx-post="{% url 'single_team:resend_invitation' request.team.slug record.invitation_id %}" hx-target="this" hx-swap="outerHTML">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-square btn-sm btn-outline" title="{% translate 'Resend' %}">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+    </form>
+    <form hx-post="{% url 'single_team:cancel_invitation' request.team.slug record.invitation_id %}" hx-target="closest tr" hx-swap="outerHTML swap:1s">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-square btn-sm btn-outline" title="{% translate 'Cancel' %}">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </form>
+  </div>
+{% endif %}

@@ -1,0 +1,11 @@
+<div class="flex items-center gap-2">
+  {% if record.kind == "invitation" %}
+    <span class="w-8 h-8 rounded-full border border-dashed border-neutral-400 text-neutral-400 flex items-center justify-center text-xs font-bold shrink-0">{{ record.initials }}</span>
+  {% else %}
+    <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">{{ record.initials }}</span>
+  {% endif %}
+  <span class="min-w-0">
+    <span class="block font-semibold truncate">{{ record.name }}</span>
+    <span class="block text-neutral-500 text-xs truncate">{{ record.email }}</span>
+  </span>
+</div>
