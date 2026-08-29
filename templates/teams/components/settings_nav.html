@@ -9,9 +9,11 @@
   <a href="#automation" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
     <i class="fa-solid fa-code mr-2"></i>{% translate "Developer" %}
   </a>
-  <a href="#data" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-    <i class="fa-solid fa-box-archive mr-2"></i>{% translate "Data" %}
-  </a>
+  {% if request.team_membership.is_team_admin %}
+    <a href="#data" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+      <i class="fa-solid fa-box-archive mr-2"></i>{% translate "Data" %}
+    </a>
+  {% endif %}
 </nav>
 <div class="app-card p-4 text-sm">
   <p class="uppercase text-xs text-neutral-500 mb-2">{% translate "Team" %}</p>

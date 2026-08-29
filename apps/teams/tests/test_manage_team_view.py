@@ -27,6 +27,32 @@ def test_non_admin_team_form_is_disabled(client):
 
 
 @pytest.mark.django_db()
+def test_data_nav_link_hidden_for_non_admin(client):
+    team = TeamFactory()
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+    member = UserFactory(email="member@example.org")
+    add_user_to_team(team, member)
+
+    client.force_login(member)
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert b'href="#data"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_data_nav_link_shown_for_admin(client):
+    team = TeamFactory()
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+
+    client.force_login(admin)
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert b'href="#data"' in response.content
+
+
+@pytest.mark.django_db()
 def test_admin_team_form_is_not_disabled(client):
     team = TeamFactory()
     admin = UserFactory(email="admin@example.org")
