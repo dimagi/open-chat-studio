@@ -33,6 +33,7 @@ from apps.files.models import FilePurpose
 from apps.pipelines.exceptions import (
     AbortPipeline,
     CodeNodeRunError,
+    NodeUserConfigRunError,
     PipelineNodeBuildError,
     PipelineNodeRunError,
     WaitForNextInput,
@@ -201,11 +202,11 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
         try:
             template = env.from_string(self.template_string)
         except Exception as e:
-            raise PipelineNodeRunError(format_jinja_error(e, "template_string")) from e
+            raise NodeUserConfigRunError(format_jinja_error(e, "template_string")) from e
         try:
             output = template.render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(format_jinja_error(e, "template_string", context=jinja_context)) from e
+            raise NodeUserConfigRunError(format_jinja_error(e, "template_string", context=jinja_context)) from e
 
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
@@ -568,7 +569,7 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         try:
             subject = env.from_string(self.subject).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(format_jinja_error(e, "subject", context=jinja_context)) from e
+            raise NodeUserConfigRunError(format_jinja_error(e, "subject", context=jinja_context)) from e
 
         # Strip newlines to prevent email header injection
         subject = subject.replace("\r", "").replace("\n", " ")
@@ -576,20 +577,20 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
         try:
             rendered_recipients = env.from_string(self.recipient_list).render(jinja_context)
         except Exception as e:
-            raise PipelineNodeRunError(format_jinja_error(e, "recipient_list", context=jinja_context)) from e
+            raise NodeUserConfigRunError(format_jinja_error(e, "recipient_list", context=jinja_context)) from e
 
         recipients = [r.strip() for r in rendered_recipients.split(",") if r.strip()]
         for email in recipients:
             try:
                 validate_email(email)
             except ValidationError:
-                raise PipelineNodeRunError(f"Invalid email address after rendering: {email!r}") from None
+                raise NodeUserConfigRunError(f"Invalid email address after rendering: {email!r}") from None
 
         if self.body:
             try:
                 message = env.from_string(self.body).render(jinja_context)
             except Exception as e:
-                raise PipelineNodeRunError(format_jinja_error(e, "body", context=jinja_context)) from e
+                raise NodeUserConfigRunError(format_jinja_error(e, "body", context=jinja_context)) from e
         else:
             message = context.input
 

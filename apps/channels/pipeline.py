@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
-from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import CodeNodeRunError, NodeUserConfigRunError, PipelineBuildError, PipelineNodeBuildError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
@@ -235,12 +235,12 @@ class MessageProcessingPipeline:
             logger.warning("Pipeline build error (node=%s): %s", getattr(e, "node_id", None), e)
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
-        except CodeNodeRunError as e:
-            # User-authored code in a CodeNode raised an error (e.g. NameError,
-            # TypeError). This is a user configuration problem, not a system bug.
+        except (CodeNodeRunError, NodeUserConfigRunError) as e:
+            # User-authored code or user-configured template/email raised an error.
+            # This is a user configuration problem, not a system bug.
             # Log a warning and return a canned reply without re-raising so that
             # Sentry does not receive a spurious error report.
-            logger.warning("CodeNode user code error: %s", e)
+            logger.warning("Node user config error: %s", e)
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
         except Exception as e:
