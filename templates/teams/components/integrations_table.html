@@ -1,0 +1,17 @@
+{% load static %}
+{% load render_table from django_tables2 %}
+{% if filter_pills|length > 1 %}
+  <div class="flex flex-wrap gap-2 mb-4">
+    {% for pill in filter_pills %}
+      <button class="category-pill {% if pill.active %}category-pill-active{% endif %}"
+              hx-get="{{ table_url }}{% querystring category=pill.value %}"
+              hx-target="#integrations-table-container"
+              hx-swap="innerHTML">
+        {{ pill.label }} <span class="ml-1 opacity-60">{{ pill.count }}</span>
+      </button>
+    {% endfor %}
+  </div>
+{% endif %}
+<div class="overflow-x-auto">
+  {% render_table table "table/tailwind_js_pagination.html" %}
+</div>
