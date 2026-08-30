@@ -235,21 +235,21 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def run_connection_test_hook(self) -> list[str]:
         """Automatically verify credentials after every save (create and update).
 
-        The caller runs this after the save's own transaction has already committed (an
-        external LLM call can take several seconds; holding the save's DB connection open
-        for that long, or repeating the call if the save transaction were retried or rolled
-        back, would be worse than treating the save and the test as two separate steps).
-        Returns a list of user-facing warning messages the caller should surface (e.g. via
-        Django's messages framework); empty on success. Two failure cases stay silent here
-        specifically, since they're expected setup state rather than actionable problems: no
-        model configured yet, and a provider type (Voyage AI) that doesn't support this test
-        at all. A genuinely invalid configuration is not one of those two, and does produce a
-        warning. The manual "Test Connection" button reports all of these explicitly.
+        The caller runs this after the save's own transaction has already committed. No
+        transaction wraps this call: `test_connection()` makes a synchronous external LLM
+        request that can take several seconds, and holding a DB connection open for that
+        long (or letting it get repeated on a transaction retry/rollback) is exactly what
+        running this after commit, with no transaction of its own, avoids. Returns a list of
+        user-facing warning messages the caller should surface (e.g. via Django's messages
+        framework); empty on success. Two failure cases stay silent here specifically, since
+        they're expected setup state rather than actionable problems: no model configured
+        yet, and a provider type (Voyage AI) that doesn't support this test at all. A
+        genuinely invalid configuration is not one of those two, and does produce a warning.
+        The manual "Test Connection" button reports all of these explicitly.
         """
         warnings: list[str] = []
         try:
-            with transaction.atomic():
-                self.test_connection()
+            self.test_connection()
         except (NoTestableModelError, ConnectionTestNotSupportedError):
             pass
         except Exception:
