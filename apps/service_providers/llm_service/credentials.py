@@ -14,6 +14,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from apps.service_providers.forms import normalize_litellm_base_url
 from apps.service_providers.models import LlmProviderTypes
 
 
@@ -120,6 +121,18 @@ def _minimax() -> ProviderCredentials | None:
     return ProviderCredentials(LlmProviderTypes.minimax, "MiniMax", {"openai_api_key": api_key})
 
 
+def _litellm() -> ProviderCredentials | None:
+    api_key = os.environ.get("LITELLM_API_KEY")
+    api_base = os.environ.get("LITELLM_API_BASE")
+    if not (api_key and api_base):
+        return None
+    return ProviderCredentials(
+        LlmProviderTypes.litellm,
+        "LiteLLM",
+        {"openai_api_key": api_key, "openai_api_base": normalize_litellm_base_url(api_base)},
+    )
+
+
 _LOADERS: list[Callable[[], ProviderCredentials | None]] = [
     _openai,
     _anthropic,
@@ -130,6 +143,7 @@ _LOADERS: list[Callable[[], ProviderCredentials | None]] = [
     _groq,
     _perplexity,
     _minimax,
+    _litellm,
 ]
 
 

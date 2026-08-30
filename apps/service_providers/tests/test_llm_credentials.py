@@ -25,6 +25,8 @@ _PROVIDER_VARS = [
     "GROQ_API_KEY",
     "PERPLEXITY_API_KEY",
     "MINIMAX_API_KEY",
+    "LITELLM_API_KEY",
+    "LITELLM_API_BASE",
 ]
 
 
@@ -99,6 +101,24 @@ def test_minimax_minimal_config(clean_env):
     creds = get_provider_credentials_for_type(LlmProviderTypes.minimax)
     assert creds is not None
     assert creds.config == {"openai_api_key": "mm-test"}
+
+
+def test_litellm_requires_both_api_key_and_base(clean_env):
+    clean_env.setenv("LITELLM_API_KEY", "key")
+    assert get_provider_credentials_for_type(LlmProviderTypes.litellm) is None
+
+    clean_env.setenv("LITELLM_API_BASE", "https://proxy.example.com")
+    creds = get_provider_credentials_for_type(LlmProviderTypes.litellm)
+    assert creds is not None
+    assert creds.config["openai_api_key"] == "key"
+    assert creds.config["openai_api_base"] == "https://proxy.example.com/v1"
+
+
+def test_litellm_normalizes_base_url_with_trailing_slash_and_v1(clean_env):
+    clean_env.setenv("LITELLM_API_KEY", "key")
+    clean_env.setenv("LITELLM_API_BASE", "https://proxy.example.com/v1/")
+    creds = get_provider_credentials_for_type(LlmProviderTypes.litellm)
+    assert creds.config["openai_api_base"] == "https://proxy.example.com/v1"
 
 
 def test_returns_one_entry_per_configured_provider(clean_env):

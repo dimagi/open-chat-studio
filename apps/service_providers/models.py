@@ -78,6 +78,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
+    litellm = "litellm", _("LiteLLM")
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
@@ -116,6 +117,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AnthropicConfigForm
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return forms.OpenAIGenericConfigForm
+            case LlmProviderTypes.litellm:
+                return forms.LiteLLMConfigForm
             case LlmProviderTypes.deepseek:
                 return forms.DeepSeekConfigForm
             case LlmProviderTypes.google:
@@ -152,6 +155,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
             case LlmProviderTypes.anthropic:
                 return llm_service.AnthropicLlmService(**config)
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
+                return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.litellm:
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:
                 return llm_service.DeepSeekLlmService(**config)

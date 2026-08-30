@@ -259,6 +259,31 @@ class DeepSeekConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     deepseek_api_key = forms.CharField(label=_("API Key"))
 
 
+def normalize_litellm_base_url(url: str) -> str:
+    """Strip a trailing slash and append /v1 only if the URL doesn't already end with it.
+
+    Used by both LiteLLMConfigForm and the credentials.py env loader so a URL entered
+    with or without a trailing /v1 doesn't end up stored as .../v1/v1.
+    """
+    url = url.rstrip("/")
+    if not url.endswith("/v1"):
+        url = f"{url}/v1"
+    return url
+
+
+class LiteLLMConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["openai_api_key"]
+
+    openai_api_key = forms.CharField(label=_("API Key"))
+    openai_api_base = forms.URLField(
+        label="Base URL",
+        help_text="Base URL of your LiteLLM proxy, e.g. 'https://litellm.example.com'.",
+    )
+
+    def clean_openai_api_base(self):
+        return normalize_litellm_base_url(self.cleaned_data["openai_api_base"])
+
+
 def obfuscate_value(value):
     if value and isinstance(value, str):
         return value[:4] + "..." + value[-2:]
