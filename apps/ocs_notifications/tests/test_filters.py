@@ -3,7 +3,12 @@ from urllib.parse import parse_qs
 import pytest
 from django.test import RequestFactory
 
-from apps.ocs_notifications.filters import SeverityLevelFilter, build_toggle_options
+from apps.ocs_notifications.filters import (
+    EXPLICIT_FILTERS_PARAM,
+    SeverityLevelFilter,
+    build_toggle_options,
+    resolve_notification_filter_params,
+)
 
 
 @pytest.fixture()
@@ -68,3 +73,19 @@ class TestBuildToggleOptions:
         assert query["f_read"] == ["[true]"]
         assert query["op_read"] == ["any of"]
         assert query["page"] == ["2"]
+
+
+class TestResolveNotificationFilterParams:
+    """CodeRabbit flagged that an explicit_filters request could drop a legacy-format filter by
+    skipping FilterParams.from_request()'s translation step entirely. Verifies the fix: a
+    bookmarked legacy `filter_<n>_*` link survives a toggle-button click."""
+
+    def test_preserves_a_legacy_format_filter_alongside_the_explicit_marker(self):
+        request = RequestFactory().get(
+            "/notifications/table/?filter_0_column=read&filter_0_operator=equals"
+            f"&filter_0_value=false&{EXPLICIT_FILTERS_PARAM}=1"
+        )
+
+        filter_params = resolve_notification_filter_params(request)
+
+        assert [f.column for f in filter_params.filters] == ["read"]

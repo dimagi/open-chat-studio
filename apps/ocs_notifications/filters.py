@@ -4,7 +4,11 @@ from typing import Any, ClassVar
 from apps.ocs_notifications.models import LevelChoices
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
-from apps.web.dynamic_filters.datastructures import FilterParams, serialize_csv_tilde_values
+from apps.web.dynamic_filters.datastructures import (
+    FilterParams,
+    _translate_legacy_query_params,
+    serialize_csv_tilde_values,
+)
 
 
 class ReadFilter(ChoiceColumnFilter):
@@ -108,9 +112,13 @@ def resolve_notification_filter_params(request) -> FilterParams:
     `EXPLICIT_FILTERS_PARAM` -- consulting that header for them would be wrong, since it
     reflects the browser's address bar as of *before* this response's own `hx-push-url` takes
     effect, one click stale.
+
+    Still runs the same legacy `filter_<n>_*` translation `FilterParams.from_request` does
+    before trusting the query string, so a bookmarked legacy-format filter link isn't dropped
+    out from under a user who then clicks a toggle button.
     """
     if EXPLICIT_FILTERS_PARAM in request.GET:
-        return FilterParams(request.GET)
+        return FilterParams(_translate_legacy_query_params(request.GET))
     return FilterParams.from_request(request)
 
 
