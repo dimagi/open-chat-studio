@@ -1,7 +1,6 @@
 from unittest import mock
 
 import httpx
-import openai
 import pytest
 from django.contrib import messages as django_messages
 from django.contrib.messages import get_messages
@@ -236,6 +235,8 @@ def test_test_llm_connection_endpoint_timeout_is_temporary_not_credential_failur
     """A timeout isn't in RATE_LIMIT_EXCEPTIONS or carrying a 429/503 status code, so
     should_retry_exception alone misses it. It must still be reported as temporary, not
     mistaken for bad credentials."""
+    import openai  # noqa: PLC0415 - heavy lib, slow startup
+
     provider = LlmProviderFactory(team=team_with_users)
     url = _test_connection_url(team_with_users, provider)
     timeout_error = openai.APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))

@@ -596,6 +596,9 @@ def _is_timeout_exception(exc: Exception) -> bool:
 @login_and_team_required
 @permission_required("service_providers.change_llmprovider", raise_exception=True)
 def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
+    """Run a manual connection test for an LLM provider and redirect back to its edit page with the result."""
+    if provider_type != ServiceProvider.llm.slug:
+        raise Http404(f"Unsupported provider type: {provider_type}")
     provider = get_object_or_404(LlmProvider, team=request.team, pk=pk)
     try:
         provider.test_connection()
@@ -613,4 +616,4 @@ def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
             messages.error(request, "Test failed. Check your credentials and try again.")
     else:
         messages.success(request, "Connection test succeeded.")
-    return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
+    return redirect("service_providers:edit", team_slug=team_slug, provider_type=ServiceProvider.llm.slug, pk=pk)
