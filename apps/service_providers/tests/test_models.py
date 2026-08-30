@@ -4,7 +4,11 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.pipelines.tests.utils import content_flow_node
-from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
+from apps.service_providers.exceptions import (
+    ConnectionTestNotSupportedError,
+    NoTestableModelError,
+    ServiceProviderConfigError,
+)
 from apps.service_providers.models import (
     CONNECTION_TEST_TIMEOUT_SECONDS,
     LlmProvider,
@@ -166,20 +170,20 @@ def test_test_connection_raises_for_voyage_regardless_of_configured_models():
     provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
     LlmProviderModelFactory(team=provider.team, type=provider.type, name="voyage-3")
 
-    with pytest.raises(ServiceProviderConfigError):
+    with pytest.raises(ConnectionTestNotSupportedError):
         provider.test_connection()
 
 
 @pytest.mark.django_db()
-def test_test_connection_raises_config_error_for_voyage_with_no_models():
-    """Voyage AI with zero configured models must still raise ServiceProviderConfigError, not
-    NoTestableModelError. The two failure cases could otherwise be conflated silently: without
-    the type-based short-circuit, hitting the model-lookup check first (which also finds
-    nothing for Voyage) would raise the wrong exception and show the wrong message."""
+def test_test_connection_raises_not_supported_for_voyage_with_no_models():
+    """Voyage AI with zero configured models must still raise ConnectionTestNotSupportedError,
+    not NoTestableModelError. The two failure cases could otherwise be conflated silently:
+    without the type-based short-circuit, hitting the model-lookup check first (which also
+    finds nothing for Voyage) would raise the wrong exception and show the wrong message."""
     provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
     LlmProviderModel.objects.filter(type=provider.type).delete()
 
-    with pytest.raises(ServiceProviderConfigError):
+    with pytest.raises(ConnectionTestNotSupportedError):
         provider.test_connection()
 
 
@@ -217,8 +221,19 @@ def test_run_connection_test_hook_silent_when_no_model_configured():
 def test_run_connection_test_hook_silent_for_unsupported_provider():
     """Voyage AI's lack of chat support is inherent to the type, not an actionable problem."""
     provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
-    with mock.patch.object(
-        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "not supported")
-    ):
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=ConnectionTestNotSupportedError(provider.type)):
         warnings = provider.run_connection_test_hook()
     assert warnings == []
+
+
+@pytest.mark.django_db()
+def test_run_connection_test_hook_warns_on_invalid_configuration():
+    """A genuinely invalid configuration is not the same as an unsupported provider type or a
+    missing model: it's a real, actionable problem, and must produce a warning rather than
+    being silently swallowed alongside the two expected setup-state cases."""
+    provider = LlmProviderFactory()
+    with mock.patch.object(
+        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "bad config")
+    ):
+        warnings = provider.run_connection_test_hook()
+    assert len(warnings) == 1

@@ -22,7 +22,7 @@ from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
+from apps.service_providers.exceptions import ConnectionTestNotSupportedError, NoTestableModelError
 from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
 from apps.service_providers.llm_service.retry import should_retry_exception
 from apps.service_providers.models import (
@@ -285,9 +285,13 @@ class CreateServiceProvider(
             if isinstance(obj, VoiceProvider):
                 for warning in obj.run_post_save_hook():
                     messages.warning(request, warning)
-            if isinstance(obj, LlmProvider):
-                for warning in obj.run_connection_test_hook():
-                    messages.warning(request, warning)
+        # Runs after the save transaction commits, not inside it: an external LLM call can
+        # take several seconds, and holding the save's DB connection/locks open for that long
+        # (or repeating the call if the transaction were retried or rolled back) is worse than
+        # the save and the test being two separate steps.
+        if isinstance(obj, LlmProvider):
+            for warning in obj.run_connection_test_hook():
+                messages.warning(request, warning)
         for warning in config_form.warnings:
             messages.warning(request, warning)
 
@@ -574,6 +578,20 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
 
 
+def _is_timeout_exception(exc: Exception) -> bool:
+    """Recognizes provider-SDK timeout exceptions for classification purposes here.
+
+    Kept local rather than added to retry.py's RATE_LIMIT_EXCEPTIONS, since that list drives
+    retry behavior for all live LLM traffic, not just this connection test. Covers OpenAI
+    (and every OpenAI-compatible type built on it: Groq, Perplexity, DeepSeek, MiniMax,
+    Azure) and Google/Vertex; Anthropic's timeout is already in RATE_LIMIT_EXCEPTIONS.
+    """
+    import openai  # noqa: PLC0415 - heavy lib, slow startup
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
+
+    return isinstance(exc, (openai.APITimeoutError, google_exceptions.DeadlineExceeded))
+
+
 @require_POST
 @login_and_team_required
 @permission_required("service_providers.change_llmprovider", raise_exception=True)
@@ -583,11 +601,11 @@ def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
         provider.test_connection()
     except NoTestableModelError:
         messages.warning(request, "No models configured to test. Add a model first.")
-    except ServiceProviderConfigError:
+    except ConnectionTestNotSupportedError:
         messages.info(request, "Connection testing isn't supported for this provider type.")
     except Exception as exc:
         log.exception("LLM connection test failed for provider %s", pk)
-        if should_retry_exception(exc):
+        if should_retry_exception(exc) or _is_timeout_exception(exc):
             messages.warning(
                 request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
             )

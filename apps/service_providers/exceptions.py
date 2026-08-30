@@ -18,3 +18,11 @@ class NoTestableModelError(Exception):
     """Raised when a provider has no configured model to test a connection with."""
 
     pass
+
+
+class ConnectionTestNotSupportedError(Exception):
+    """Raised when a provider type doesn't support the connection test at all (e.g. Voyage
+    AI, which is embeddings-only). Deliberately distinct from ServiceProviderConfigError,
+    which represents an invalid configuration for a type that does support the test."""
+
+    pass

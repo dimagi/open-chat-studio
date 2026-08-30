@@ -1,11 +1,17 @@
 from unittest import mock
 
+import httpx
+import openai
 import pytest
 from django.contrib import messages as django_messages
 from django.contrib.messages import get_messages
 from django.urls import reverse
 
-from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
+from apps.service_providers.exceptions import (
+    ConnectionTestNotSupportedError,
+    NoTestableModelError,
+    ServiceProviderConfigError,
+)
 from apps.service_providers.models import (
     AuthProvider,
     LlmProvider,
@@ -186,14 +192,29 @@ def test_test_llm_connection_endpoint_unsupported_provider(team_with_users, auth
     provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.voyage))
     url = _test_connection_url(team_with_users, provider)
 
-    with mock.patch.object(
-        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "not supported")
-    ):
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=ConnectionTestNotSupportedError(provider.type)):
         response = authed_client.post(url)
 
     assert response.status_code == 302
     [msg] = list(get_messages(response.wsgi_request))
     assert msg.level == django_messages.INFO
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_invalid_configuration(team_with_users, authed_client):
+    """A genuinely invalid configuration is not the same as an unsupported provider type, and
+    must not be reported as one (it's a real, actionable problem)."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(
+        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "bad config")
+    ):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level != django_messages.INFO
 
 
 @pytest.mark.django_db()
@@ -203,6 +224,23 @@ def test_test_llm_connection_endpoint_transient_failure(team_with_users, authed_
     url = _test_connection_url(team_with_users, provider)
 
     with mock.patch.object(LlmProvider, "test_connection", side_effect=_FakeTransientError()):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_timeout_is_temporary_not_credential_failure(team_with_users, authed_client):
+    """A timeout isn't in RATE_LIMIT_EXCEPTIONS or carrying a 429/503 status code, so
+    should_retry_exception alone misses it. It must still be reported as temporary, not
+    mistaken for bad credentials."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+    timeout_error = openai.APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=timeout_error):
         response = authed_client.post(url)
 
     assert response.status_code == 302

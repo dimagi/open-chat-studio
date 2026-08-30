@@ -26,7 +26,7 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import NoTestableModelError, ServiceProviderConfigError
+from .exceptions import ConnectionTestNotSupportedError, NoTestableModelError, ServiceProviderConfigError
 
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
@@ -208,14 +208,15 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def test_connection(self) -> None:
         """Send one minimal chat request to verify the provider's credentials work.
 
-        Raises `ServiceProviderConfigError` for provider types, like Voyage AI, that don't
-        support chat completions at all, and `NoTestableModelError` if the team has no model
-        configured to test with. Callers classify and report both.
+        Raises `ConnectionTestNotSupportedError` for provider types, like Voyage AI, that
+        don't support chat completions at all; `NoTestableModelError` if the team has no
+        model configured to test with; `ServiceProviderConfigError` if the saved config is
+        invalid for a type that does support the test. Callers classify and report all three.
         """
         from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
 
         if self.type_enum == LlmProviderTypes.voyage:
-            raise ServiceProviderConfigError(self.type, "does not support chat completions")
+            raise ConnectionTestNotSupportedError(self.type)
 
         # A team-configured model wins over a global default, same priority as pricing-rule
         # resolution elsewhere in this app.
@@ -234,19 +235,22 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def run_connection_test_hook(self) -> list[str]:
         """Automatically verify credentials after every save (create and update).
 
-        Runs inside a nested savepoint, mirroring VoiceProvider.run_post_save_hook, so a
-        failed API call can't abort the outer save transaction. Returns a list of user-facing
-        warning messages the caller should surface (e.g. via Django's messages framework);
-        empty on success. Two failure cases stay silent here specifically, since they're
-        expected setup state rather than actionable problems: no model configured yet, and a
-        provider type (Voyage AI) that doesn't support this test at all. The manual "Test
-        Connection" button still reports both explicitly.
+        The caller runs this after the save's own transaction has already committed (an
+        external LLM call can take several seconds; holding the save's DB connection open
+        for that long, or repeating the call if the save transaction were retried or rolled
+        back, would be worse than treating the save and the test as two separate steps).
+        Returns a list of user-facing warning messages the caller should surface (e.g. via
+        Django's messages framework); empty on success. Two failure cases stay silent here
+        specifically, since they're expected setup state rather than actionable problems: no
+        model configured yet, and a provider type (Voyage AI) that doesn't support this test
+        at all. A genuinely invalid configuration is not one of those two, and does produce a
+        warning. The manual "Test Connection" button reports all of these explicitly.
         """
         warnings: list[str] = []
         try:
-            with transaction.atomic(savepoint=True):
+            with transaction.atomic():
                 self.test_connection()
-        except (NoTestableModelError, ServiceProviderConfigError):
+        except (NoTestableModelError, ConnectionTestNotSupportedError):
             pass
         except Exception:
             log.exception("Automatic connection test failed for LLM provider %s", self.pk)
