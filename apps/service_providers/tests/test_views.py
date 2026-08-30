@@ -225,6 +225,27 @@ def test_test_llm_connection_endpoint_credential_failure(team_with_users, authed
 
 
 @pytest.mark.django_db()
+def test_updating_llm_provider_runs_automatic_connection_test(team_with_users, authed_client):
+    """Saving an LlmProvider through the real edit view should trigger the automatic
+    post-save connection test and surface its warning on failure, without blocking the save."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=RuntimeError("boom")):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    messages_seen = [str(m) for m in response.context["messages"]]
+    assert any("connection test failed" in m.lower() for m in messages_seen)
+
+    provider.refresh_from_db()
+    assert provider.name == "New Name"
+
+
+@pytest.mark.django_db()
 def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_users, authed_client):
     """Deleting an LLM provider referenced by a pipeline node succeeds (SET_NULL): the node's
     llm_provider FK is nulled, while params (authoritative) is left untouched.

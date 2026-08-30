@@ -285,6 +285,9 @@ class CreateServiceProvider(
             if isinstance(obj, VoiceProvider):
                 for warning in obj.run_post_save_hook():
                     messages.warning(request, warning)
+            if isinstance(obj, LlmProvider):
+                for warning in obj.run_connection_test_hook():
+                    messages.warning(request, warning)
         for warning in config_form.warnings:
             messages.warning(request, warning)
 

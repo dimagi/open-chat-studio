@@ -181,3 +181,44 @@ def test_test_connection_raises_config_error_for_voyage_with_no_models():
 
     with pytest.raises(ServiceProviderConfigError):
         provider.test_connection()
+
+
+@pytest.mark.django_db()
+def test_run_connection_test_hook_success_returns_no_warnings():
+    """A successful automatic test stays silent, matching the rest of the save flow."""
+    provider = LlmProviderFactory()
+    with mock.patch.object(LlmProvider, "test_connection"):
+        warnings = provider.run_connection_test_hook()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
+def test_run_connection_test_hook_returns_warning_on_failure():
+    """A real failure produces one warning pointing at the manual retry button, without
+    raising, so it can never abort the save it runs alongside."""
+    provider = LlmProviderFactory()
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=RuntimeError("boom")):
+        warnings = provider.run_connection_test_hook()
+    assert len(warnings) == 1
+    assert "test connection" in warnings[0].lower()
+
+
+@pytest.mark.django_db()
+def test_run_connection_test_hook_silent_when_no_model_configured():
+    """No models configured yet is expected setup state right after creating a provider,
+    not a problem worth warning about on every save."""
+    provider = LlmProviderFactory()
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
+        warnings = provider.run_connection_test_hook()
+    assert warnings == []
+
+
+@pytest.mark.django_db()
+def test_run_connection_test_hook_silent_for_unsupported_provider():
+    """Voyage AI's lack of chat support is inherent to the type, not an actionable problem."""
+    provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
+    with mock.patch.object(
+        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "not supported")
+    ):
+        warnings = provider.run_connection_test_hook()
+    assert warnings == []

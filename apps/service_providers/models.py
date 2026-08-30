@@ -231,6 +231,28 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
         chat_model.invoke([HumanMessage(content="Hello")])
 
+    def run_connection_test_hook(self) -> list[str]:
+        """Automatically verify credentials after every save (create and update).
+
+        Runs inside a nested savepoint, mirroring VoiceProvider.run_post_save_hook, so a
+        failed API call can't abort the outer save transaction. Returns a list of user-facing
+        warning messages the caller should surface (e.g. via Django's messages framework);
+        empty on success. Two failure cases stay silent here specifically, since they're
+        expected setup state rather than actionable problems: no model configured yet, and a
+        provider type (Voyage AI) that doesn't support this test at all. The manual "Test
+        Connection" button still reports both explicitly.
+        """
+        warnings: list[str] = []
+        try:
+            with transaction.atomic(savepoint=True):
+                self.test_connection()
+        except (NoTestableModelError, ServiceProviderConfigError):
+            pass
+        except Exception:
+            log.exception("Automatic connection test failed for LLM provider %s", self.pk)
+            warnings.append("Provider saved, but the connection test failed. Use Test Connection below to retry.")
+        return warnings
+
 
 class LlmProviderModelManager(models.Manager):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
