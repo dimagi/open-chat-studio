@@ -103,10 +103,23 @@ def test_minimax_minimal_config(clean_env):
     assert creds.config == {"openai_api_key": "mm-test"}
 
 
-def test_litellm_requires_both_api_key_and_base(clean_env):
-    clean_env.setenv("LITELLM_API_KEY", "key")
+@pytest.mark.parametrize(
+    ("api_key", "api_base"),
+    [
+        pytest.param("key", None, id="missing-base"),
+        pytest.param(None, "https://proxy.example.com", id="missing-key"),
+    ],
+)
+def test_litellm_requires_both_api_key_and_base(clean_env, api_key, api_base):
+    if api_key:
+        clean_env.setenv("LITELLM_API_KEY", api_key)
+    if api_base:
+        clean_env.setenv("LITELLM_API_BASE", api_base)
     assert get_provider_credentials_for_type(LlmProviderTypes.litellm) is None
 
+
+def test_litellm_minimal_config(clean_env):
+    clean_env.setenv("LITELLM_API_KEY", "key")
     clean_env.setenv("LITELLM_API_BASE", "https://proxy.example.com")
     creds = get_provider_credentials_for_type(LlmProviderTypes.litellm)
     assert creds is not None
@@ -118,6 +131,7 @@ def test_litellm_normalizes_base_url_with_trailing_slash_and_v1(clean_env):
     clean_env.setenv("LITELLM_API_KEY", "key")
     clean_env.setenv("LITELLM_API_BASE", "https://proxy.example.com/v1/")
     creds = get_provider_credentials_for_type(LlmProviderTypes.litellm)
+    assert creds is not None
     assert creds.config["openai_api_base"] == "https://proxy.example.com/v1"
 
 
