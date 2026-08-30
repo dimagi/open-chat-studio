@@ -401,6 +401,49 @@ class TestUserNotificationTableView:
         row_ids = {obj.id for obj in response.context["table"].data}
         assert row_ids == {current_team_notification.id, other_team_notification.id}
 
+    def test_event_count_reflects_the_number_of_notification_events_for_the_event_type(self, client, team_with_users):
+        user = team_with_users.members.first()
+        event_user = EventUserFactory.create(user=user, team=team_with_users)
+        NotificationEventFactory.create_batch(3, team=team_with_users, event_type=event_user.event_type)
+        other_event_user = _create_notification(user=user, team=team_with_users)  # a single, unrelated event
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        counts_by_id = {obj.id: obj.event_count for obj in response.context["table"].data}
+        assert counts_by_id[event_user.id] == 3
+        assert counts_by_id[other_event_user.id] == 1
+
+    def test_explicit_filters_param_ignores_a_stale_hx_current_url_header(self, client, team_with_users):
+        """Regression test for the toggle buttons: htmx only updates the address bar from
+        hx-push-url *after* a response settles, so a request that clears the last active
+        filter arrives with an HX-Current-URL header that still names the pre-click state.
+        explicit_filters must make the (now-empty) query string authoritative instead of
+        falling back to that header, or a second click could never undo what the first did."""
+        user = team_with_users.members.first()
+        notification = _create_notification(user=user, team=team_with_users)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        stale_url = reverse("ocs_notifications:notifications_home") + "?f_read=%5Btrue%5D&op_read=any+of"
+        response = client.get(
+            reverse("ocs_notifications:notifications_table"),
+            {"explicit_filters": "1"},
+            headers={"HX-Current-URL": f"http://testserver{stale_url}"},
+        )
+
+        assert response.status_code == 200
+        row_ids = {obj.id for obj in response.context["table"].data}
+        assert row_ids == {notification.id}
+
 
 @pytest.mark.django_db()
 class TestNotificationEventHome:
@@ -504,6 +547,53 @@ class TestNotificationHome:
         )
         assert {t.id for t in dnd_action.extra_context["teams"]} == {team_with_users.id, other_team.id}
         assert [p.team_id for p in dnd_action.extra_context["silenced_preferences"]] == [team_with_users.id]
+
+    def test_level_toggle_options_cover_all_three_levels_and_reflect_the_active_filter(self, client, team_with_users):
+        user = team_with_users.members.first()
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_home"), {"f_level": "1", "op_level": "any of"})
+
+        assert response.status_code == 200
+        options = response.context["level_toggle_options"]
+        assert {opt["label"] for opt in options} == {"Info", "Warning", "Error"}
+        assert {opt["label"]: opt["is_active"] for opt in options}["Warning"] is True
+        assert {opt["label"]: opt["is_active"] for opt in options}["Info"] is False
+
+    def test_team_toggle_options_present_below_the_threshold(self, client, team_with_users):
+        """With just the user's one team, team toggle buttons render alongside the always-on
+        level toggle buttons."""
+        user = team_with_users.members.first()
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_home"))
+
+        assert response.status_code == 200
+        options = response.context["team_toggle_options"]
+        assert [opt["label"] for opt in options] == [team_with_users.name]
+
+    def test_team_toggle_options_absent_at_or_above_the_threshold(self, client, team_with_users):
+        """At 3+ teams, the issue calls for the existing dropdown multi-select instead of toggle
+        buttons -- so no team_toggle_options should be built at all."""
+        user = team_with_users.members.first()
+        MembershipFactory.create(user=user, team=TeamFactory.create())
+        MembershipFactory.create(user=user, team=TeamFactory.create())
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_home"))
+
+        assert response.status_code == 200
+        assert "team_toggle_options" not in response.context
 
 
 @pytest.mark.django_db()

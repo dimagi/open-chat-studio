@@ -109,6 +109,21 @@ class EventUserQuerySet(models.QuerySet):
             )
         )
 
+    def with_event_count(self) -> models.QuerySet:
+        """Annotate how many times this event's underlying error has recurred: the number of
+        `NotificationEvent` rows under the same `EventType`."""
+        count_subquery = (
+            NotificationEvent.objects.filter(
+                event_type=models.OuterRef("event_type"),
+                team=models.OuterRef("team"),
+            )
+            .order_by()
+            .values("event_type")
+            .annotate(count=models.Count("id"))
+            .values("count")
+        )
+        return self.annotate(event_count=models.Subquery(count_subquery, output_field=models.IntegerField()))
+
 
 class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
     pass

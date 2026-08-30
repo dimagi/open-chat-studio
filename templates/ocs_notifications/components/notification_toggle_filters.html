@@ -1,0 +1,28 @@
+{% if level_toggle_options %}
+  <div class="join" role="group" aria-label="Filter by level">
+    {% for option in level_toggle_options %}
+      <button
+        type="button"
+        class="join-item btn btn-xs {% if option.is_active %}btn-active{% endif %}"
+        hx-get="{{ table_url }}?{{ option.query_string }}"
+        hx-target="#data-table"
+        hx-swap="innerHTML"
+        hx-push-url="{{ notifications_home_url }}?{{ option.query_string }}"
+      >{{ option.label }}</button>
+    {% endfor %}
+  </div>
+{% endif %}
+{% if team_toggle_options %}
+  <div class="join" role="group" aria-label="Filter by team">
+    {% for option in team_toggle_options %}
+      <button
+        type="button"
+        class="join-item btn btn-xs {% if option.is_active %}btn-active{% endif %}"
+        hx-get="{{ table_url }}?{{ option.query_string }}"
+        hx-target="#data-table"
+        hx-swap="innerHTML"
+        hx-push-url="{{ notifications_home_url }}?{{ option.query_string }}"
+      >{{ option.label }}</button>
+    {% endfor %}
+  </div>
+{% endif %}

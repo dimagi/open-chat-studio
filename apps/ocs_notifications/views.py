@@ -12,7 +12,13 @@ from django_tables2 import SingleTableView
 from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
-from apps.ocs_notifications.filters import UserNotificationFilter
+from apps.ocs_notifications.filters import (
+    SeverityLevelFilter,
+    TeamFilter,
+    UserNotificationFilter,
+    build_toggle_options,
+    resolve_notification_filter_params,
+)
 from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent, UserNotificationPreferences
 from apps.ocs_notifications.tables import NotificationEventTable, UserNotificationTable
 from apps.ocs_notifications.utils import (
@@ -23,7 +29,33 @@ from apps.ocs_notifications.utils import (
     unmute_notification,
 )
 from apps.utils.tables import render_table_row
-from apps.web.dynamic_filters.datastructures import FilterParams
+
+# Below this many teams, the team filter renders as toggle buttons; at or above it, users rely
+# on the dropdown multi-select in the shared filter panel instead.
+TEAM_TOGGLE_BUTTON_THRESHOLD = 3
+
+
+def get_notification_toggle_context(request) -> dict:
+    """Build the level/team toggle-button options for the notifications list (see
+    build_toggle_options). Shared by the page's initial render and by the table endpoint's own
+    response, so every click re-renders the buttons with the query strings/active state that
+    match the filter it just applied -- htmx swaps this back in out-of-band alongside the table
+    (see notification_table_with_toggles.html), otherwise a button's own href would stay frozen
+    at whatever it was on the last full page load and a second click could never undo the first.
+    """
+    # Not request.path: this context is also built while rendering the table endpoint's own
+    # response (for the out-of-band button refresh), and the pushed URL must always be the
+    # notifications page, not wherever the request that built it happened to land.
+    context = {"notifications_home_url": reverse("ocs_notifications:notifications_home")}
+    level_filter = SeverityLevelFilter().model_copy(deep=True)
+    context["level_toggle_options"] = build_toggle_options(level_filter, request)
+
+    team_filter = TeamFilter().model_copy(deep=True)
+    team_filter.prepare(request.team, user=request.user)
+    if len(team_filter.options) < TEAM_TOGGLE_BUTTON_THRESHOLD:
+        context["team_toggle_options"] = build_toggle_options(team_filter, request)
+
+    return context
 
 
 def get_do_not_disturb_context(user) -> dict:
@@ -75,6 +107,7 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
             ],
         }
         context.update(do_not_disturb_context)
+        context.update(get_notification_toggle_context(self.request))
 
         # Add filter context
         columns = UserNotificationFilter.columns(team=self.request.team, user=self.request.user)
@@ -101,13 +134,14 @@ def get_filtered_user_notifications(request):
     queryset = (
         EventUser.objects.with_latest_event()
         .with_mute_status()
+        .with_event_count()
         .filter(user=request.user, team__in=request.user.teams.all())
         .select_related("event_type", "team")
         .filter(latest_event_created_at__isnull=False)
     )
 
     notification_filter = UserNotificationFilter()
-    filter_params = FilterParams.from_request(request)
+    filter_params = resolve_notification_filter_params(request)
     user_timezone = request.session.get("detected_tz")
 
     return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
@@ -116,10 +150,16 @@ def get_filtered_user_notifications(request):
 class UserNotificationTableView(LoginRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = EventUser
     table_class = UserNotificationTable
-    template_name = "table/single_table.html"
+    template_name = "ocs_notifications/components/notification_table_with_toggles.html"
 
     def get_queryset(self):
         return get_filtered_user_notifications(self.request).order_by("-latest_event_created_at")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["table_url"] = reverse("ocs_notifications:notifications_table")
+        context.update(get_notification_toggle_context(self.request))
+        return context
 
 
 class ToggleNotificationReadView(LoginRequiredMixin, View):
