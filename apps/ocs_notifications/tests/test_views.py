@@ -439,6 +439,26 @@ class TestNotificationEventHome:
 
         assert response.status_code == 404
 
+    def test_shows_the_events_team_in_context(self, client, team_with_users):
+        """The detail page is reachable from a cross-team list, so it needs its own team
+        indicator (see NotificationHome, which spans every team the user belongs to)."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        event_user = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        url = reverse("ocs_notifications:notification_event_home", args=[event_user.event_type_id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert response.context["team"] == other_team
+        assert other_team.name.encode() in response.content
+
 
 @pytest.mark.django_db()
 class TestMuteNotificationView:

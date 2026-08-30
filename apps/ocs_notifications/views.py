@@ -286,6 +286,9 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
             "subtitle": title or "",
             "table_url": table_url,
             "enable_search": False,
+            # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
+            # request.team), so the breadcrumb needs its own team indicator.
+            "team": self.event_type.team,
         }
 
         return context
