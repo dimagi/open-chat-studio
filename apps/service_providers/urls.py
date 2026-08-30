@@ -39,4 +39,5 @@ urlpatterns = [
     path("<slug:provider_type>/<int:pk>/remove-file/<int:file_id>", views.remove_file, name="delete_file"),
     path("<slug:provider_type>/<int:pk>/upload-file/", views.AddFileToProvider.as_view(), name="add_file"),
     path("<slug:provider_type>/<int:pk>/sync-voices/", views.sync_voices, name="sync_voices"),
+    path("<slug:provider_type>/<int:pk>/test-connection/", views.test_llm_connection, name="test_llm_connection"),
 ]

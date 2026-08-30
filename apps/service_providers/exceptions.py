@@ -12,3 +12,9 @@ class MessageMediaError(Exception):
     """Raised when fetching, resolving, or interpreting inbound message media fails."""
 
     pass
+
+
+class NoTestableModelError(Exception):
+    """Raised when a provider has no configured model to test a connection with."""
+
+    pass

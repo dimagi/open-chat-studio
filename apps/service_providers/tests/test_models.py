@@ -1,8 +1,16 @@
+from unittest import mock
+
 import pytest
 from django.core.exceptions import ValidationError
 
 from apps.pipelines.tests.utils import content_flow_node
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
+from apps.service_providers.models import (
+    CONNECTION_TEST_TIMEOUT_SECONDS,
+    LlmProvider,
+    LlmProviderModel,
+    LlmProviderTypes,
+)
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -100,3 +108,76 @@ class TestServiceProviderModel:
         # global provider models can be deleted
         global_llm_provider_model = LlmProviderModelFactory.create(team=None)
         global_llm_provider_model.delete()
+
+
+@pytest.mark.django_db()
+def test_test_connection_raises_when_no_model_configured():
+    """A provider with zero LlmProviderModel rows for its type has nothing to test against.
+
+    Deletes any migration-seeded global defaults for this type first: per this app's own
+    AGENTS.md, tests must not depend on how many global rows happen to exist.
+    """
+    provider = LlmProviderFactory()
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    with pytest.raises(NoTestableModelError):
+        provider.test_connection()
+
+
+@pytest.mark.django_db()
+def test_test_connection_invokes_chat_model_with_the_configured_model():
+    """The test call should use a model the provider already has configured, not a hardcoded one."""
+    provider = LlmProviderFactory()
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    provider_model = LlmProviderModelFactory(team=provider.team, type=provider.type, name="gpt-4o-mini")
+
+    mock_chat_model = mock.Mock()
+    mock_service = mock.Mock()
+    mock_service.get_chat_model.return_value = mock_chat_model
+
+    with mock.patch.object(LlmProvider, "get_llm_service", return_value=mock_service):
+        provider.test_connection()
+
+    mock_service.get_chat_model.assert_called_once_with(provider_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+    mock_chat_model.invoke.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_test_connection_prefers_team_model_over_global_default():
+    """When both a global default and a team-scoped model exist for the type, use the team's own."""
+    provider = LlmProviderFactory()
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    LlmProviderModelFactory(team=None, type=provider.type, name="global-default")
+    team_model = LlmProviderModelFactory(team=provider.team, type=provider.type, name="team-custom")
+
+    mock_chat_model = mock.Mock()
+    mock_service = mock.Mock()
+    mock_service.get_chat_model.return_value = mock_chat_model
+
+    with mock.patch.object(LlmProvider, "get_llm_service", return_value=mock_service):
+        provider.test_connection()
+
+    mock_service.get_chat_model.assert_called_once_with(team_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+
+
+@pytest.mark.django_db()
+def test_test_connection_raises_for_voyage_regardless_of_configured_models():
+    """Voyage AI can't do chat completions at all, so it should fail the same way whether or
+    not a model happens to be configured, not flip between error messages depending on that."""
+    provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
+    LlmProviderModelFactory(team=provider.team, type=provider.type, name="voyage-3")
+
+    with pytest.raises(ServiceProviderConfigError):
+        provider.test_connection()
+
+
+@pytest.mark.django_db()
+def test_test_connection_raises_config_error_for_voyage_with_no_models():
+    """Voyage AI with zero configured models must still raise ServiceProviderConfigError, not
+    NoTestableModelError. The two failure cases could otherwise be conflated silently: without
+    the type-based short-circuit, hitting the model-lookup check first (which also finds
+    nothing for Voyage) would raise the wrong exception and show the wrong message."""
+    provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+
+    with pytest.raises(ServiceProviderConfigError):
+        provider.test_connection()

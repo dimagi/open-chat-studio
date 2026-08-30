@@ -59,6 +59,12 @@
           <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
         </form>
       {% endif %}
+      {% if test_llm_connection_url %}
+        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline">Test Connection</button>
+        </form>
+      {% endif %}
     {% endblock post_form %}
   </div>
 {% endblock app %}

@@ -22,9 +22,12 @@ from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
+from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
 from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
+from apps.service_providers.llm_service.retry import should_retry_exception
 from apps.service_providers.models import (
     EmbeddingProviderModel,
+    LlmProvider,
     LlmProviderModel,
     VoiceProvider,
     VoiceProviderType,
@@ -308,6 +311,15 @@ class CreateServiceProvider(
                     "pk": instance.pk,
                 },
             )
+        if self.provider_type == ServiceProvider.llm and instance:
+            ctx["test_llm_connection_url"] = reverse(
+                "service_providers:test_llm_connection",
+                kwargs={
+                    "team_slug": self.request.team.slug,
+                    "provider_type": "llm",
+                    "pk": instance.pk,
+                },
+            )
         if self.provider_type == ServiceProvider.llm:
             default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
             embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
@@ -556,4 +568,28 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     except Exception:
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
+    return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_llmprovider", raise_exception=True)
+def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
+    provider = get_object_or_404(LlmProvider, team=request.team, pk=pk)
+    try:
+        provider.test_connection()
+    except NoTestableModelError:
+        messages.warning(request, "No models configured to test. Add a model first.")
+    except ServiceProviderConfigError:
+        messages.info(request, "Connection testing isn't supported for this provider type.")
+    except Exception as exc:
+        log.exception("LLM connection test failed for provider %s", pk)
+        if should_retry_exception(exc):
+            messages.warning(
+                request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
+            )
+        else:
+            messages.error(request, "Test failed. Check your credentials and try again.")
+    else:
+        messages.success(request, "Connection test succeeded.")
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)

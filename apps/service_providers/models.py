@@ -26,7 +26,7 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import ServiceProviderConfigError
+from .exceptions import NoTestableModelError, ServiceProviderConfigError
 
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
@@ -164,6 +164,9 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return None
 
 
+CONNECTION_TEST_TIMEOUT_SECONDS = 10
+
+
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class LlmProvider(BaseTeamModel, ProviderMixin):
     objects = LlmProviderObjectManagerObjectManager()
@@ -201,6 +204,32 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         If file_ids are provided, they will be linked to the index.
         """
         return self.get_llm_service().create_remote_index(name, file_ids)
+
+    def test_connection(self) -> None:
+        """Send one minimal chat request to verify the provider's credentials work.
+
+        Raises `ServiceProviderConfigError` for provider types, like Voyage AI, that don't
+        support chat completions at all, and `NoTestableModelError` if the team has no model
+        configured to test with. Callers classify and report both.
+        """
+        from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
+
+        if self.type_enum == LlmProviderTypes.voyage:
+            raise ServiceProviderConfigError(self.type, "does not support chat completions")
+
+        # A team-configured model wins over a global default, same priority as pricing-rule
+        # resolution elsewhere in this app.
+        model = (
+            LlmProviderModel.objects.for_team(self.team)
+            .filter(type=self.type)
+            .order_by(models.F("team_id").desc(nulls_last=True))
+            .first()
+        )
+        if model is None:
+            raise NoTestableModelError(self.type)
+
+        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+        chat_model.invoke([HumanMessage(content="Hello")])
 
 
 class LlmProviderModelManager(models.Manager):

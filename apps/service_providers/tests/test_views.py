@@ -1,11 +1,15 @@
 from unittest import mock
 
 import pytest
+from django.contrib import messages as django_messages
+from django.contrib.messages import get_messages
 from django.urls import reverse
 
+from apps.service_providers.exceptions import NoTestableModelError, ServiceProviderConfigError
 from apps.service_providers.models import (
     AuthProvider,
     LlmProvider,
+    LlmProviderTypes,
     MessagingProvider,
     TraceProvider,
     VoiceProvider,
@@ -127,6 +131,97 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
     assert response.status_code == 302
     mock_sync.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_success(team_with_users, authed_client):
+    """POST to the test-connection endpoint should call test_connection on the provider and report success."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = reverse(
+        "service_providers:test_llm_connection",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "provider_type": "llm",
+            "pk": provider.pk,
+        },
+    )
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    mock_test.assert_called_once()
+
+
+def _test_connection_url(team, provider):
+    return reverse(
+        "service_providers:test_llm_connection",
+        kwargs={"team_slug": team.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+
+class _FakeTransientError(Exception):
+    """Stands in for a provider SDK error carrying an HTTP status code, without needing
+    to construct a real openai/anthropic exception in the test."""
+
+    status_code = 429
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_no_models_configured(team_with_users, authed_client):
+    """No LlmProviderModel for the provider's type should produce a warning, not a crash."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_unsupported_provider(team_with_users, authed_client):
+    """A provider type that can't do chat completions (e.g. Voyage AI) should say so, not error out."""
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.voyage))
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(
+        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "not supported")
+    ):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.INFO
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_transient_failure(team_with_users, authed_client):
+    """A rate-limit/timeout style failure should be reported as temporary, not a credentials problem."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=_FakeTransientError()):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_credential_failure(team_with_users, authed_client):
+    """A non-retryable failure (bad API key, etc.) should be reported as an error, not a warning."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=ValueError("invalid api key")):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.ERROR
 
 
 @pytest.mark.django_db()
