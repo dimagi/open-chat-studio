@@ -12,16 +12,18 @@ from apps.chatbots.public_link import CSP
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 from apps.utils.factories.user import UserFactory
+from apps.web.meta import get_server_root
 
 TOKEN = "public_token_1234567890123456789012"
 CANONICAL = "ocs.example.com"
+OTHER_HOST = "other.example.com"
 
 
 @pytest.fixture(autouse=True)
 def _canonical_site(db, settings):
     Site.objects.filter(id=1).update(domain=CANONICAL)
     Site.objects.clear_cache()
-    settings.ALLOWED_HOSTS = [CANONICAL, "other.example.com", "testserver"]
+    settings.ALLOWED_HOSTS = [CANONICAL, OTHER_HOST, "testserver"]
     yield
     Site.objects.clear_cache()
 
@@ -113,7 +115,7 @@ def test_unknown_token_is_404(client, team_with_users):
 @pytest.mark.django_db()
 def test_non_canonical_host_is_404(client, team_with_users):
     _channel(team_with_users)
-    assert _get(client, host="other.example.com").status_code == 404
+    assert _get(client, host=OTHER_HOST).status_code == 404
 
 
 @pytest.mark.django_db()
@@ -123,20 +125,19 @@ def test_non_canonical_host_names_both_hosts_for_a_signed_in_user(client, team_w
     _channel(team_with_users)
     client.force_login(team_with_users.members.first())
 
-    response = _get(client, host="other.example.com")
+    response = _get(client, host=OTHER_HOST)
 
     assert response.status_code == 404
     html = response.content.decode()
-    assert "Public links are served from" in html
-    assert "other.example.com" in html
-    assert CANONICAL in html
+    assert f'You reached this one on <span class="font-bold">{OTHER_HOST}</span>' in html
+    assert f'Public links are served from <span class="font-bold">{get_server_root()}</span>' in html
 
 
 @pytest.mark.django_db()
 def test_non_canonical_host_tells_an_anonymous_visitor_nothing(client, team_with_users):
     _channel(team_with_users)
 
-    response = _get(client, host="other.example.com")
+    response = _get(client, host=OTHER_HOST)
 
     assert response.status_code == 404
     assert "Public links are served from" not in response.content.decode()
