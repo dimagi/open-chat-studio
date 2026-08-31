@@ -500,6 +500,16 @@ class TestWhatsappNumberOptions:
             "+27821110000",
         ]
 
+    def test_the_provider_numbers_are_fetched_once_per_form(self, experiment, django_assert_num_queries):
+        """One render reads them through `form_attrs` and again through `has_cached_numbers`."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+        form = WhatsappChannelForm(experiment=experiment, data={"messaging_provider": provider.id})
+
+        with django_assert_num_queries(1):
+            assert _numbers_by_provider(form)[str(provider.id)]["numbers"]
+            assert form.has_cached_numbers
+            assert form.has_cached_numbers
+
     def test_providers_of_other_types_are_not_listed(self, experiment):
         twilio = MessagingProviderFactory.create(team=experiment.team, type=MessagingProviderType.twilio)
 

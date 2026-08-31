@@ -286,7 +286,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         return {
             "x-data": json.dumps(
                 {
-                    "numbersByProvider": self._numbers_by_provider(),
+                    "numbersByProvider": self._numbers_by_provider,
                     "providerId": self._selected_provider_id(),
                     "number": self._submitted_number() or "",
                 }
@@ -300,7 +300,7 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def has_cached_numbers(self) -> bool:
         """Whether the provider selected right now has numbers, for the pre-Alpine render."""
         provider_id = self._selected_provider_id()
-        return bool(self._numbers_by_provider().get(provider_id, {}).get("numbers"))
+        return bool(self._numbers_by_provider.get(provider_id, {}).get("numbers"))
 
     def _selected_provider_id(self) -> str:
         if provider_id := self.data.get("messaging_provider"):
@@ -314,8 +314,14 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             return self.data.get("number")
         return (self.channel.extra_data or {}).get("number") if self.channel else None
 
+    @cached_property
     def _numbers_by_provider(self) -> dict:
-        """The number options and provider page URL for each of the team's Meta providers."""
+        """The number options and provider page URL for each of the team's Meta providers.
+
+        Cached because one render reads it through both `form_attrs` and `has_cached_numbers`,
+        and it is a query every time. Nothing reads it before validation, so a sync that runs
+        during `clean()` is still reflected here.
+        """
         team = self.experiment.team
         saved_number = (self.channel.extra_data or {}).get("number") if self.channel else None
         options = {}
