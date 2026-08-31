@@ -272,16 +272,35 @@ def normalize_litellm_base_url(url: str) -> str:
 
 
 class LiteLLMConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["openai_api_key"]
+    obfuscate_fields = ["api_key"]
 
-    openai_api_key = forms.CharField(label=_("API Key"))
-    openai_api_base = forms.URLField(
+    api_key = forms.CharField(label=_("API Key"))
+    api_base = forms.URLField(
         label="Base URL",
         help_text="Base URL of your LiteLLM proxy, e.g. 'https://litellm.example.com'.",
     )
 
-    def clean_openai_api_base(self):
-        return normalize_litellm_base_url(self.cleaned_data["openai_api_base"])
+    def __init__(self, *args, **kwargs):
+        # initial comes from LlmProvider.config (get_form_initial), stored in
+        # OpenAIGenericService's own field names - translate to this form's
+        # field names before ObfuscatingMixin reads `initial` for obfuscation.
+        initial = kwargs.get("initial")
+        if initial:
+            kwargs["initial"] = {
+                "api_key": initial.get("openai_api_key", ""),
+                "api_base": initial.get("openai_api_base", ""),
+            }
+        super().__init__(*args, **kwargs)
+
+    def clean_api_base(self):
+        return normalize_litellm_base_url(self.cleaned_data["api_base"])
+
+    def save(self, instance):
+        instance.config = {
+            "openai_api_key": self.cleaned_data["api_key"],
+            "openai_api_base": self.cleaned_data["api_base"],
+        }
+        return instance
 
 
 def obfuscate_value(value):
