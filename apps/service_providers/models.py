@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
 WHATSAPP_TEMPLATE_KEY = "whatsapp_template"
+WHATSAPP_REFRESH_KEY = "whatsapp_refresh"
 
 log = logging.getLogger("ocs.service_providers")
 
@@ -654,14 +655,23 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
             provider.save(update_fields=["extra_data"])
         self.extra_data = extra_data
 
-    def mark_whatsapp_numbers_syncing(self) -> None:
-        """Flag a sync as in flight. The cached numbers stay put so the page can keep showing them."""
-        status = self.whatsapp_numbers_info | {
-            "state": "pending",
-            "started_at": timezone.now().isoformat(),
-            "error": None,
-        }
-        self._update_extra_data(WHATSAPP_NUMBERS_KEY, status)
+    @property
+    def whatsapp_refresh_info(self) -> dict:
+        """The refresh running right now -- ``started_at`` -- or empty when none is.
+
+        One marker covers the whole refresh rather than one per leg. The numbers and the
+        template are fetched and committed separately, so watching either leg on its own would
+        report the refresh finished while the other was still talking to Meta.
+        """
+        return (self.extra_data or {}).get(WHATSAPP_REFRESH_KEY, {})
+
+    def mark_whatsapp_refresh_queued(self) -> None:
+        """Flag a refresh as in flight. Everything cached stays put so the page can keep showing it."""
+        self._update_extra_data(WHATSAPP_REFRESH_KEY, {"started_at": timezone.now().isoformat()})
+
+    def mark_whatsapp_refresh_done(self) -> None:
+        """Clear the in-flight marker, however the two legs went."""
+        self._update_extra_data(WHATSAPP_REFRESH_KEY, {})
 
     def mark_whatsapp_numbers_failed(self, error: str) -> None:
         self._update_extra_data(WHATSAPP_NUMBERS_KEY, self.whatsapp_numbers_info | {"state": "error", "error": error})
@@ -724,7 +734,7 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
         # circular: tasks imports models
         from apps.service_providers.tasks import sync_whatsapp_provider_task  # noqa: PLC0415
 
-        self.mark_whatsapp_numbers_syncing()
+        self.mark_whatsapp_refresh_queued()
         transaction.on_commit(lambda: sync_whatsapp_provider_task.delay(self.pk))
 
     def run_post_create_hook(self) -> None:

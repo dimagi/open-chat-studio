@@ -87,17 +87,16 @@ class TestSyncWhatsappNumbers:
         meta_provider.refresh_from_db()
         assert meta_provider.extra_data["verify_token_hash"] == "abc123"
 
-    def test_marking_a_sync_pending_leaves_the_cached_numbers_alone(self, meta_provider):
+    def test_marking_a_refresh_queued_leaves_the_cached_numbers_alone(self, meta_provider):
         """The panel keeps showing the last known numbers while a refresh runs."""
         with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=_service_returning([NUMBER_A])):
             meta_provider.sync_whatsapp_numbers()
 
-        meta_provider.mark_whatsapp_numbers_syncing()
+        meta_provider.mark_whatsapp_refresh_queued()
 
         meta_provider.refresh_from_db()
         assert meta_provider.whatsapp_numbers == [NUMBER_A]
-        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
-        assert meta_provider.whatsapp_numbers_info["started_at"]
+        assert meta_provider.whatsapp_refresh_info["started_at"]
 
 
 @pytest.mark.django_db()
@@ -180,6 +179,52 @@ class TestSyncWhatsappProviderTask:
         assert meta_provider.whatsapp_template_ok is False
         assert "Error validating access token" in meta_provider.whatsapp_template_info["error"]
 
+    def test_stays_in_flight_until_the_template_check_lands(self, meta_provider):
+        """The numbers commit before the second Meta call is even made.
+
+        The refresh marker has to outlive that gap. If it did not, a poll landing in it would
+        see a finished refresh, stop polling for good, and leave a healthy provider showing
+        "Never checked".
+        """
+        observed = {}
+
+        def check_message_template():
+            mid_refresh = MessagingProvider.objects.get(pk=meta_provider.pk)
+            observed["numbers_already_committed"] = mid_refresh.whatsapp_numbers == [NUMBER_A]
+            observed["refresh_still_in_flight"] = bool(mid_refresh.whatsapp_refresh_info)
+            return TemplateCheck(ok=True, template=APPROVED_TEMPLATE)
+
+        service = _service_returning([NUMBER_A])
+        service.check_message_template.side_effect = check_message_template
+        meta_provider.mark_whatsapp_refresh_queued()
+
+        with mock.patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            sync_whatsapp_provider_task(meta_provider.pk)
+
+        assert observed == {"numbers_already_committed": True, "refresh_still_in_flight": True}
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_refresh_info == {}
+
+    def test_the_refresh_marker_clears_even_when_a_leg_escapes(self, meta_provider):
+        """Both Meta calls are already guarded, so this is about everything else going wrong.
+
+        Whatever escapes, the marker has to come off: one left behind keeps the panel polling
+        a task that is never coming back, and blocks the refresh button until it times out.
+        """
+        service = _service_returning([])
+        service.get_phone_numbers.side_effect = _meta_401()
+        meta_provider.mark_whatsapp_refresh_queued()
+
+        with (
+            mock.patch.object(MessagingProvider, "get_messaging_service", return_value=service),
+            mock.patch.object(MessagingProvider, "mark_whatsapp_numbers_failed", side_effect=OSError("db is down")),
+            pytest.raises(OSError, match="db is down"),
+        ):
+            sync_whatsapp_provider_task(meta_provider.pk)
+
+        meta_provider.refresh_from_db()
+        assert meta_provider.whatsapp_refresh_info == {}
+
     def test_ignores_providers_that_are_not_meta(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)
 
@@ -203,7 +248,7 @@ class TestPostCreateHook:
 
         delay.assert_called_once_with(meta_provider.pk)
         meta_provider.refresh_from_db()
-        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
+        assert meta_provider.whatsapp_refresh_info["started_at"]
 
     def test_does_nothing_for_other_provider_types(self, db):
         provider = MessagingProviderFactory(type=MessagingProviderType.twilio)

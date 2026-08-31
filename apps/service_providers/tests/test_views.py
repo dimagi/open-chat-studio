@@ -297,13 +297,36 @@ class TestWhatsappStatusView:
         assert 'hx-target="#wa-status"' in content
 
     def test_polls_itself_while_a_refresh_is_running(self, meta_provider, authed_client):
-        meta_provider.mark_whatsapp_numbers_syncing()
+        meta_provider.mark_whatsapp_refresh_queued()
 
         content = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider)).content.decode()
 
         assert _whatsapp_url("whatsapp_status", meta_provider) in content
         assert 'hx-trigger="every 2s"' in content
         assert "Checking with Meta" in content
+
+    def test_keeps_polling_once_the_numbers_land_but_the_template_check_has_not(self, meta_provider, authed_client):
+        """The two legs commit separately, and the swap replaces the polling element itself.
+
+        A poll answered between them must still carry the trigger, or polling dies for good
+        and the panel is stuck on "Never checked" until someone hits Refresh.
+        """
+        meta_provider.mark_whatsapp_refresh_queued()
+        with mock.patch.object(MetaCloudAPIService, "get_phone_numbers", return_value=[]):
+            meta_provider.sync_whatsapp_numbers()
+
+        content = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider)).content.decode()
+
+        assert 'hx-trigger="every 2s"' in content
+        assert "Checking with Meta" in content
+
+    def test_stops_polling_once_the_whole_refresh_is_done(self, meta_provider, authed_client):
+        meta_provider.mark_whatsapp_refresh_queued()
+        meta_provider.mark_whatsapp_refresh_done()
+
+        content = authed_client.get(_whatsapp_url("whatsapp_status", meta_provider)).content.decode()
+
+        assert 'hx-trigger="every 2s"' not in content
 
     def test_404_for_a_provider_of_another_type(self, team_with_users, authed_client):
         provider = MessagingProviderFactory(team=team_with_users, type=MessagingProviderType.twilio)
@@ -336,12 +359,12 @@ class TestWhatsappRefresh:
         assert response.status_code == 200
         delay.assert_called_once_with(meta_provider.pk)
         meta_provider.refresh_from_db()
-        assert meta_provider.whatsapp_numbers_info["state"] == "pending"
+        assert meta_provider.whatsapp_refresh_info["started_at"]
 
     def test_does_not_queue_a_second_refresh_while_one_is_running(
         self, meta_provider, authed_client, django_capture_on_commit_callbacks
     ):
-        meta_provider.mark_whatsapp_numbers_syncing()
+        meta_provider.mark_whatsapp_refresh_queued()
 
         with (
             mock.patch("apps.service_providers.tasks.sync_whatsapp_provider_task.delay") as delay,
@@ -354,8 +377,8 @@ class TestWhatsappRefresh:
     def test_queues_a_refresh_when_the_running_one_has_stalled(
         self, meta_provider, authed_client, django_capture_on_commit_callbacks
     ):
-        stalled = timezone.now() - timedelta(minutes=5)
-        meta_provider.extra_data["whatsapp_numbers"] = {"state": "pending", "started_at": stalled.isoformat()}
+        stalled = timezone.now() - timedelta(minutes=30)
+        meta_provider.extra_data["whatsapp_refresh"] = {"started_at": stalled.isoformat()}
         meta_provider.save()
 
         with (

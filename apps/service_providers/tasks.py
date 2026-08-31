@@ -21,13 +21,23 @@ def sync_whatsapp_provider_task(provider_id: int):
         return
 
     try:
+        _sync_numbers(provider)
+        _check_template(provider)
+    finally:
+        provider.mark_whatsapp_refresh_done()
+
+
+def _sync_numbers(provider: MessagingProvider) -> None:
+    try:
         provider.sync_whatsapp_numbers()
     except Exception as exc:  # noqa: BLE001 - the reason is shown to the operator, whatever it is
-        log.exception("Failed to sync WhatsApp numbers for messaging provider %s", provider_id)
+        log.exception("Failed to sync WhatsApp numbers for messaging provider %s", provider.pk)
         provider.mark_whatsapp_numbers_failed(meta_error_message(exc))
 
+
+def _check_template(provider: MessagingProvider) -> None:
     try:
         provider.check_whatsapp_template()
     except Exception as exc:  # noqa: BLE001 - same: the panel reports it rather than staying blank
-        log.exception("Failed to check the WhatsApp message template for messaging provider %s", provider_id)
+        log.exception("Failed to check the WhatsApp message template for messaging provider %s", provider.pk)
         provider.record_whatsapp_template_check(TemplateCheck(ok=False, error=meta_error_message(exc)))

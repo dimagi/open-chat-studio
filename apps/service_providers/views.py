@@ -54,6 +54,7 @@ from .utils import ServiceProvider, get_available_subtypes, get_service_provider
 
 log = logging.getLogger("ocs.service_providers")
 
+REFRESH_TIMEOUT = timedelta(seconds=2 * MetaCloudAPIService.META_API_TIMEOUT + 60)
 _PRICE_PER_1K_FROM_MILLION = Decimal(1) / Decimal(1000)
 _FORM_FIELD_TO_KIND = {
     "input_price_per_million_tokens": ServiceKind.LLM_INPUT,
@@ -582,15 +583,11 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
 
 
 def _sync_in_flight(provider: MessagingProvider) -> bool:
-    """Is a number sync running, and started recently enough to still be worth waiting for?"""
-    info = provider.whatsapp_numbers_info
-    if info.get("state") != "pending":
-        return False
-    started_at = parse_datetime(info.get("started_at") or "")
+    """Is a refresh running, and started recently enough to still be worth waiting for?"""
+    started_at = parse_datetime(provider.whatsapp_refresh_info.get("started_at") or "")
     if not started_at:
         return False
-    # A sync that has been running for a minute is not coming back; let the page start another.
-    return timezone.now() - started_at < timedelta(minutes=1)
+    return timezone.now() - started_at < REFRESH_TIMEOUT
 
 
 def _whatsapp_status_context(provider: MessagingProvider) -> dict:
@@ -608,8 +605,8 @@ def _whatsapp_status_context(provider: MessagingProvider) -> dict:
         "provider": provider,
         "numbers": numbers,
         "syncing": syncing,
-        "stalled": numbers_info.get("state") == "pending" and not syncing,
-        "sync_error": numbers_info.get("error") if numbers_info.get("state") == "error" else None,
+        "stalled": bool(provider.whatsapp_refresh_info) and not syncing,
+        "sync_error": None if syncing else numbers_info.get("error"),
         "synced_at": parse_datetime(numbers_info.get("synced_at") or ""),
         "form": WhatsappTestMessageForm(numbers, initial={"message": initial_message}),
         "message_length": len(initial_message),
