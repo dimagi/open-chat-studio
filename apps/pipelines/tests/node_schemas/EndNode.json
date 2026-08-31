@@ -14,5 +14,6 @@
   "ui:can_delete": false,
   "ui:deprecated": false,
   "ui:flow_node_type": "endNode",
-  "ui:label": "End"
+  "ui:label": "End",
+  "ui:removed": false
 }

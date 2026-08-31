@@ -236,5 +236,6 @@
   "ui:documentation_link": "/concepts/pipelines/nodes/#llm-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-wand-magic-sparkles",
-  "ui:label": "LLM"
+  "ui:label": "LLM",
+  "ui:removed": false
 }

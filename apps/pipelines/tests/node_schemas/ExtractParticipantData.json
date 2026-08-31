@@ -61,5 +61,6 @@
   "ui:documentation_link": "/concepts/pipelines/nodes/#update-participant-data-node",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-user-pen",
-  "ui:label": "Update Participant Data"
+  "ui:label": "Update Participant Data",
+  "ui:removed": false
 }

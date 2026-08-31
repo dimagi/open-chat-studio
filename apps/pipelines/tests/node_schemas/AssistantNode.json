@@ -46,5 +46,6 @@
   "ui:documentation_link": "/concepts/pipelines/nodes/",
   "ui:flow_node_type": "pipelineNode",
   "ui:icon": "fa-solid fa-user-tie",
-  "ui:label": "OpenAI Assistant"
+  "ui:label": "OpenAI Assistant",
+  "ui:removed": false
 }
