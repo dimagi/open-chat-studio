@@ -7,7 +7,7 @@ from django.utils import timezone
 from field_audit.models import AuditAction, AuditEvent
 
 from apps.channels.forms import WidgetParams
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.channels.widget_versions import (
     LATEST_VERSION,
     UNKNOWN_WIDGET_VERSION,
@@ -258,6 +258,16 @@ class TestWidgetUpdateStatusProperty:
     def test_non_widget_channel(self):
         channel = ExperimentChannelFactory()  # telegram
         assert channel.widget_update_status is None
+
+    def test_public_link_channel(self):
+        """A public link serves the widget bundled with the platform. Its version follows the
+        deploy, so a badge, a minimum version and a pending minimum all name something the team
+        has no way to change."""
+        channel = ExperimentChannelFactory(platform=ChannelPlatform.PUBLIC, widget_version="0.1.0")
+        channel.pending_auth_level = WidgetAuthLevel.SESSION_TOKEN
+        assert channel.widget_update_status is None
+        assert channel.min_widget_version is None
+        assert channel.pending_min_widget_version is None
 
 
 @pytest.mark.django_db()

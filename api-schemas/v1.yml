@@ -297,6 +297,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatAccessDenied'
           description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStartSessionRefused'
+          description: ''
   /api/experiments/:
     get:
       operationId: experiment_list
@@ -1313,6 +1319,17 @@ components:
         * `processing` - Processing
         * `completed` - Completed
         * `error` - Error
+    ChatStartSessionRefused:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `no_published_version`.
+      required:
+      - code
+      - error
     ChatStartSessionRequest:
       type: object
       properties:
@@ -1962,6 +1979,7 @@ components:
       - evaluations
       - embedded_widget
       - email
+      - public
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1975,6 +1993,7 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+        * `public` - Public link
     SessionModelUsage:
       type: object
       properties:
