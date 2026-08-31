@@ -62,9 +62,6 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
         return PageState("disabled", channel.disabled_message or "This chatbot is temporarily unavailable."), published
     if published is None:
         return PageState("no_published_version", "This chatbot is not published yet."), None
-    if published.consent_form_id:
-        banner = "This chatbot needs your consent, which the public link cannot collect yet."
-        return PageState("consent_unavailable", banner), published
     return PageState("live", None), published
 
 

@@ -73,7 +73,6 @@ def test_live_page_renders_the_kiosk_widget(client, team_with_users):
     [
         pytest.param({"enabled": False}, "Back soon", id="disabled"),
         pytest.param({"publish": False}, "not published", id="no-published-version"),
-        pytest.param({"consent": True}, "consent", id="consent-unavailable"),
     ],
 )
 def test_refused_states_render_a_banner_and_a_disabled_widget(client, team_with_users, kwargs, banner):
@@ -83,6 +82,15 @@ def test_refused_states_render_a_banner_and_a_disabled_widget(client, team_with_
     html = response.content.decode()
     assert banner.lower() in html.lower()
     assert 'disabled="true"' in html
+
+
+@pytest.mark.django_db()
+def test_a_consent_form_chatbot_serves_the_kiosk_widget(client, team_with_users):
+    """A consent form does not gate the public link, so the page carries no banner for it."""
+    _channel(team_with_users, consent=True)
+    html = _get(client).content.decode()
+    assert 'mode="kiosk"' in html
+    assert 'disabled="true"' not in html
 
 
 @pytest.mark.django_db()

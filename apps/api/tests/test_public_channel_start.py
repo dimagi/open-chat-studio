@@ -1,7 +1,6 @@
 """Start-session guards for the public channel (spec D4).
 
-The embed key is in page source, so the API enforces: only a published version is served, and a
-consent-form chatbot has no live link until the consent work (step 3) ships.
+The embed key is in page source, so the API serves only the published version.
 """
 
 from unittest import mock
@@ -75,11 +74,14 @@ def test_unpublished_public_chatbot_refuses_with_409(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_consent_form_chatbot_refuses_with_409_until_step_3(team_with_users):
+def test_consent_form_chatbot_starts_like_any_other(team_with_users):
+    """A consent form does not gate the public link. No other channel collects consent through
+    the Chat API, and most chatbots carry their team's form, so gating here would leave them
+    with a link that never opens."""
     channel = _public_channel(team_with_users, consent=True)
     response = _start(APIClient(), channel.experiment)
-    assert response.status_code == 409
-    assert response.json()["code"] == "consent_unavailable"
+    assert response.status_code == 201, response.content
+    assert response.json()["session_token"]
 
 
 @pytest.mark.django_db()
@@ -192,8 +194,11 @@ def test_send_on_a_live_public_session_uses_the_published_version(team_with_user
 
 
 @pytest.mark.django_db()
-def test_send_refuses_once_a_consent_form_is_published(team_with_users):
+def test_send_continues_once_a_consent_form_is_published(team_with_users, monkeypatch):
     channel = _public_channel(team_with_users)
+    monkeypatch.setattr(
+        chat_views.get_response_for_webchat_task, "delay", lambda *a, **k: mock.Mock(task_id="consent-send-test")
+    )
     client = APIClient()
     started = _start(client, channel.experiment).json()
     working = channel.experiment
@@ -201,8 +206,7 @@ def test_send_refuses_once_a_consent_form_is_published(team_with_users):
     working.save()
     working.create_new_version(make_default=True)
     response = _send(client, started["session_id"], started["session_token"])
-    assert response.status_code == 409
-    assert response.json()["code"] == "consent_unavailable"
+    assert response.status_code == 202, response.content
 
 
 @pytest.mark.django_db()

@@ -360,10 +360,6 @@ def _channel_disabled_response(experiment_channel) -> Response | None:
 
 
 NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code": "no_published_version"}
-CONSENT_UNAVAILABLE = {
-    "error": "This chatbot requires consent, which the public link cannot collect yet",
-    "code": "consent_unavailable",
-}
 
 
 def _is_team_member(request, experiment) -> bool:
@@ -373,15 +369,12 @@ def _is_team_member(request, experiment) -> bool:
 def _published_public_version(experiment) -> tuple[Experiment | None, Response | None]:
     """The version a public visitor may chat with, or the 409 that refuses them.
 
-    Public visitors only ever reach the published version, and a consent-form chatbot has no
-    live link until consent moves into the widget.
+    Public visitors only ever reach the published version.
     """
     try:
         published = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_PUBLISHED)
     except NoPublishedVersion:
         return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
-    if published.consent_form_id:
-        return None, Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
     return published, None
 
 
@@ -402,9 +395,8 @@ def _public_channel_admission(public_visitor: bool, experiment) -> tuple[Experim
 
 def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
     """The version a request on `session` runs against, or a 409 for a public session whose
-    published version has gone or now carries a consent form. Other channels keep the
-    published-or-working fallback, and so do team members on a public channel so they can
-    preview an unpublished chatbot through its page."""
+    published version has gone. Other channels keep the published-or-working fallback, and so do
+    team members on a public channel so they can preview an unpublished chatbot through its page."""
     channel = session.experiment_channel
     if channel is None or channel.platform != ChannelPlatform.PUBLIC:
         return session.experiment_version, None
@@ -488,13 +480,12 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
                 "code": serializers.CharField(help_text="Always `chat_access_denied`."),
             },
         ),
-        # Public-channel admission: no published version yet, or the chatbot has a consent form
-        # the public link cannot collect (`no_published_version` / `consent_unavailable`).
+        # Public-channel admission: the chatbot has no published version yet.
         409: inline_serializer(
             "ChatStartSessionRefused",
             {
                 "error": serializers.CharField(),
-                "code": serializers.CharField(help_text="`no_published_version` or `consent_unavailable`."),
+                "code": serializers.CharField(help_text="Always `no_published_version`."),
             },
         ),
     },

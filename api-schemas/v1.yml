@@ -1187,7 +1187,7 @@ components:
           type: string
         code:
           type: string
-          description: '`no_published_version` or `consent_unavailable`.'
+          description: Always `no_published_version`.
       required:
       - code
       - error
