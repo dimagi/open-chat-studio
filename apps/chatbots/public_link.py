@@ -49,11 +49,18 @@ class PageState:
 
 
 def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | None]:
-    if channel.is_disabled:
-        return PageState("disabled", channel.disabled_message or "This chatbot is temporarily unavailable."), None
+    """The banner a visitor sees, and the version whose name and description the page shows.
+
+    The published version is resolved before any refusal so that every state names the chatbot
+    the visitor could have reached. A draft that has since been renamed stays internal.
+    """
     try:
         published = resolve_chatbot_version(channel.experiment, VersionSelectionRule.LATEST_PUBLISHED)
     except NoPublishedVersion:
+        published = None
+    if channel.is_disabled:
+        return PageState("disabled", channel.disabled_message or "This chatbot is temporarily unavailable."), published
+    if published is None:
         return PageState("no_published_version", "This chatbot is not published yet."), None
     if published.consent_form_id:
         banner = "This chatbot needs your consent, which the public link cannot collect yet."

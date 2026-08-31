@@ -84,6 +84,27 @@ def test_refused_states_render_a_banner_and_a_disabled_widget(client, team_with_
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "enabled",
+    [pytest.param(True, id="live"), pytest.param(False, id="disabled")],
+)
+def test_the_page_names_the_published_chatbot_not_the_draft(client, team_with_users, enabled):
+    """A draft moves on after publishing. Visitors only ever reach the published version, so a
+    later rename stays internal whether the channel is serving or switched off."""
+    channel = _channel(team_with_users, enabled=enabled)
+    working = channel.experiment
+    working.name = "Internal rename"
+    working.description = "Notes for the team"
+    working.save()
+
+    html = _get(client).content.decode()
+
+    assert "Internal rename" not in html
+    assert "Notes for the team" not in html
+    assert "Clinic bot" in html
+
+
+@pytest.mark.django_db()
 def test_unknown_token_is_404(client, team_with_users):
     _channel(team_with_users)
     assert _get(client, token="nope_nope_nope_nope_nope_nope_nop").status_code == 404
