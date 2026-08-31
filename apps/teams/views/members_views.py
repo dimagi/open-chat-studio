@@ -46,7 +46,6 @@ def _member_row(membership) -> dict:
         "email": membership.user.email,
         "initials": _initials(display_name),
         "role_list": [group.name for group in groups],
-        "role_names": {group.name for group in groups},
         "status": status_detail,
         "status_label": "Active" if last_login else "Never logged in",
         "status_detail": status_detail if last_login else "",
@@ -65,7 +64,6 @@ def _invitation_row(invitation) -> dict:
         "email": invitation.email,
         "initials": _initials(invitation.email),
         "role_list": [group.name for group in groups],
-        "role_names": {group.name for group in groups},
         "status": "Invited",
         "status_label": "Invited",
         "status_detail": f"Sent {invitation.created_at:%b %-d}",
@@ -89,7 +87,7 @@ def filter_member_rows(rows: list[dict], params) -> list[dict]:
     if search:
         rows = [row for row in rows if search in row["name"].lower() or search in row["email"].lower()]
     if role:
-        rows = [row for row in rows if role in row["role_names"]]
+        rows = [row for row in rows if role in row["role_list"]]
     if status == "active":
         rows = [row for row in rows if row["status_kind"] == "active"]
     elif status == "invited":
@@ -102,10 +100,10 @@ class MembersTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignor
     template_name = "teams/components/members_table.html"
 
     def get_queryset(self):
-        rows = get_member_rows(self.request.team)
-        return filter_member_rows(rows, self.request.GET)
+        self.all_rows = get_member_rows(self.request.team)
+        return filter_member_rows(self.all_rows, self.request.GET)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["total_count"] = len(get_member_rows(self.request.team))
+        context["total_count"] = len(self.all_rows)
         return context
