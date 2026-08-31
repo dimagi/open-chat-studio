@@ -76,8 +76,8 @@ def test_unpublished_public_chatbot_refuses_with_409(team_with_users):
 @pytest.mark.django_db()
 def test_consent_form_chatbot_starts_like_any_other(team_with_users):
     """A consent form does not gate the public link. No other channel collects consent through
-    the Chat API, and most chatbots carry their team's form, so gating here would leave them
-    with a link that never opens."""
+    the Chat API, so gating here would refuse any chatbot that carries a form, leaving it with
+    a link that never opens."""
     channel = _public_channel(team_with_users, consent=True)
     response = _start(APIClient(), channel.experiment)
     assert response.status_code == 201, response.content
