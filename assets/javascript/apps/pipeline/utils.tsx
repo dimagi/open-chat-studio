@@ -85,13 +85,18 @@ export function concatenate(value: string | string[] | null | undefined): string
  * If the schema has a `ui:optionsSource`, it fetches the options from the cached parameter values.
  * Otherwise, it constructs options from the schema's enum values and their labels.
  *
+ * A named source with nothing behind it yields no options rather than `undefined`: the backend
+ * stops serving a source as soon as the resource it lists is removed, while nodes already stored
+ * with that `ui:optionsSource` keep rendering. Callers map over the result, so returning
+ * `undefined` here throws and takes the whole editor down with it.
+ *
  * @param {PropertySchema} schema - The schema defining the options.
  * @returns {Option[]} - An array of options for the select input.
  */
 export function getSelectOptions(schema: PropertySchema): Option[] {
   const {parameterValues} = getCachedData();
   if (schema["ui:optionsSource"]) {
-    return parameterValues[schema["ui:optionsSource"]];
+    return parameterValues[schema["ui:optionsSource"]] ?? [];
   }
 
   const enums = schema.enum || [];
