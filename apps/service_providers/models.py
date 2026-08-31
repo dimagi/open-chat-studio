@@ -33,6 +33,9 @@ if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
     from apps.service_providers.forms import ProviderTypeConfigForm
 
+WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
+WHATSAPP_TEMPLATE_KEY = "whatsapp_template"
+
 log = logging.getLogger("ocs.service_providers")
 
 
@@ -568,10 +571,6 @@ class MessagingProviderType(models.TextChoices):
             if platform in service.supported_platforms:
                 provider_types.append(MessagingProviderType(service._type))
         return provider_types
-
-
-WHATSAPP_NUMBERS_KEY = "whatsapp_numbers"
-WHATSAPP_TEMPLATE_KEY = "whatsapp_template"
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
