@@ -288,13 +288,6 @@ def test_webhook_url_for_telegram_channel():
 class TestPublicChannelPlatform:
     """PUBLIC is a widget platform, one per chatbot, offered only behind flag_public_channel."""
 
-    @pytest.fixture()
-    def public_flag_enabled(self, experiment):
-        flag = Flag.objects.create(name="flag_public_channel")
-        flag.teams.add(experiment.team)
-        flag.flush()
-        return flag
-
     def test_widget_platforms_are_the_two_widget_served_platforms(self):
         assert ChannelPlatform.widget_platforms() == [ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC]
 
@@ -302,11 +295,11 @@ class TestPublicChannelPlatform:
         platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
         assert ChannelPlatform.PUBLIC not in platforms
 
-    def test_public_available_when_flag_on(self, experiment, public_flag_enabled):
+    def test_public_available_when_flag_on(self, experiment, public_flag):
         platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
         assert platforms[ChannelPlatform.PUBLIC] is True
 
-    def test_public_hidden_once_used(self, experiment, public_flag_enabled):
+    def test_public_hidden_once_used(self, experiment, public_flag):
         platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
         assert ChannelPlatform.PUBLIC not in platforms
 

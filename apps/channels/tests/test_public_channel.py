@@ -11,7 +11,6 @@ from django.urls import reverse
 from apps.channels.forms import PublicChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import ExperimentSession, SessionStatus
-from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -125,14 +124,6 @@ def _operator(client, team, codename):
     user.user_permissions.add(Permission.objects.get(codename=codename))
     client.force_login(user)
     return user
-
-
-@pytest.fixture()
-def public_flag(experiment):
-    flag = Flag.objects.create(name="flag_public_channel")
-    flag.teams.add(experiment.team)
-    flag.flush()
-    return flag
 
 
 @pytest.mark.django_db()
