@@ -675,6 +675,7 @@ paths:
           - commcare_connect
           - embedded_widget
           - email
+          - public
           type: string
           minLength: 1
         description: |-
@@ -690,6 +691,7 @@ paths:
           * `commcare_connect` - commcare_connect
           * `embedded_widget` - embedded_widget
           * `email` - email
+          * `public` - public
       - in: query
         name: start
         schema:
@@ -2406,6 +2408,7 @@ components:
       - evaluations
       - embedded_widget
       - email
+      - public
       type: string
       description: |-
         * `telegram` - Telegram
@@ -2419,6 +2422,7 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+        * `public` - Public link
     PromptVariable:
       type: object
       description: A template variable rather than a resource id -- there is no `value`

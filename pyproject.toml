@@ -1,5 +1,8 @@
 [project]
 name = "open-chat-studio"
+# Not the release version. Releases are git tags and the running version is
+# resolved at build time into OCS_VERSION; see RELEASING.md. This field only
+# exists because the packaging metadata requires it.
 version = "0.1.0"
 requires-python = ">=3.13"
 description = "A web application for building and deploying chatbots."

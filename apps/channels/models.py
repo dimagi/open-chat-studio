@@ -14,7 +14,7 @@ from field_audit.models import AuditAction, AuditingManager
 from apps.channels import widget_versions
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.teams.models import BaseTeamModel, Flag
 from apps.web.meta import absolute_url
 
@@ -40,11 +40,17 @@ class ChannelPlatform(models.TextChoices):
     EVALUATIONS = "evaluations", "Evaluations"
     EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"
     EMAIL = "email", "Email"
+    PUBLIC = "public", "Public link"
 
     @classmethod
     def team_global_platforms(cls):
         """These platforms should only ever have one channel per team"""
         return [cls.API, cls.WEB, cls.EVALUATIONS]
+
+    @classmethod
+    def widget_platforms(cls) -> list["ChannelPlatform"]:
+        """Platforms the chat widget serves through the Chat API with an embed key."""
+        return [cls.EMBEDDED_WIDGET, cls.PUBLIC]
 
     @classmethod
     def for_dropdown(cls, used_platforms, team) -> dict[Self, bool]:
@@ -72,18 +78,25 @@ class ChannelPlatform(models.TextChoices):
         elif settings.COMMCARE_CONNECT_ENABLED:
             platform_availability[cls.COMMCARE_CONNECT] = True
 
-        flag = Flag.get("flag_email_channel")
-        email_flag_enabled = flag.is_active_for_team(team)
-        if not email_flag_enabled or not settings.EMAIL_CHANNEL_ALLOWED_DOMAINS:
-            platform_availability.pop(cls.EMAIL, None)
-        else:
-            platform_availability[cls.EMAIL] = True
+        cls._gate_by_flag(platform_availability, team, cls.EMAIL, "flag_email_channel")
+        cls._gate_by_flag(platform_availability, team, cls.PUBLIC, "flag_public_channel")
 
         # Platforms already used should not be displayed
         for platform in used_platforms:
-            platform_availability.pop(platform)
+            platform_availability.pop(platform, None)
 
         return cast(dict[Self, bool], platform_availability)
+
+    @classmethod
+    def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:
+        """Offer `platform` only when its flag is on for the team (and, for email, domains are configured)."""
+        offered = Flag.get(flag_name).is_active_for_team(team)
+        if platform == cls.EMAIL:
+            offered = offered and bool(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS)
+        if offered:
+            platform_availability[platform] = True
+        else:
+            platform_availability.pop(platform, None)
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm  # noqa: PLC0415 - circular: channels.forms imports channels.models
@@ -110,6 +123,8 @@ class ChannelPlatform(models.TextChoices):
                 return forms.EmbeddedWidgetChannelForm(**kwargs)
             case self.EMAIL:
                 return forms.EmailChannelForm(**kwargs)
+            case self.PUBLIC:
+                return forms.PublicChannelForm(**kwargs)
         return None
 
     @property
@@ -134,6 +149,8 @@ class ChannelPlatform(models.TextChoices):
                 return "widget_token"
             case self.EMAIL:
                 return "email_address"
+            case self.PUBLIC:
+                return "widget_token"
         return None
 
     @staticmethod
@@ -345,31 +362,57 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:
+        """The update badge for an embedded widget, or None for every other platform.
+
+        Only the embedded widget is loaded by the host site, so only its team can act on the
+        badge. A public link serves the widget bundled with the platform, whose version moves
+        with the deploy.
+        """
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         return widget_versions.get_widget_update_status(self.widget_version)
 
     @property
     def widget_auth_level(self) -> "WidgetAuthLevel | None":
-        """The required auth level for embedded widget channels, or None for other platforms.
+        """The required auth level for widget channels (embedded widget and public link), or None for other platforms.
 
-        `required_auth_level` is only meaningful for EMBEDDED_WIDGET channels; every other
+        `required_auth_level` is only meaningful for widget platforms; every other
         platform returns None so callers fall back to their non-widget behaviour.
         """
-        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+        if self.platform_enum not in ChannelPlatform.widget_platforms():
             return None
         return WidgetAuthLevel(self.required_auth_level)
+
+    @property
+    def public_url(self) -> str:
+        """The shareable page for a public link channel, or "" when it has no token yet."""
+        token = self.extra_data.get("widget_token")
+        if not token:
+            return ""
+        return absolute_url(reverse("public_link", args=[token]))
+
+    def end_live_sessions(self) -> int:
+        """Mark every non-complete session on this channel COMPLETE. Returns how many."""
+        ended = 0
+        now = timezone.now()
+        for session in ExperimentSession.objects.filter(experiment_channel=self).exclude(status=SessionStatus.COMPLETE):
+            session.status = SessionStatus.COMPLETE
+            session.ended_at = now
+            session.save(update_fields=["status", "ended_at"])
+            ended += 1
+        return ended
 
     @property
     def min_widget_version(self) -> str | None:
         """Minimum widget version this channel needs from an embed.
 
-        None for non-widget channels or a NONE-level widget channel (no floor). In `oauth`
-        mode the floor is the release that ships `authTokenProvider`, which is higher than
-        the SESSION_TOKEN level the mode pins: only that release can present a bearer token
-        at all, so the level's own floor would understate what the embed needs. Advisory
-        either way — nothing rejects a request on it.
+        None for anything but an embedded widget, and for a NONE-level one (no floor).
+        In `oauth` mode the floor is the release that ships `authTokenProvider`, which is higher than
+        the SESSION_TOKEN level the mode pins.
+        
         """
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return None
         level = self.widget_auth_level
         if level is None:
             return None
@@ -380,6 +423,8 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def pending_min_widget_version(self) -> str | None:
         """Minimum widget version the pending auth level will require, if a bump is pending."""
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return None
         if self.pending_auth_level is None:
             return None
         return widget_versions.min_version_for_level(self.pending_auth_level)
@@ -497,5 +542,7 @@ class ExperimentChannel(BaseTeamModel):
         return None
 
     def soft_delete(self):
+        if self.platform == ChannelPlatform.PUBLIC:
+            self.end_live_sessions()
         self.deleted = True
         self.save()
