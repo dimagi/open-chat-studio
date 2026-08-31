@@ -69,11 +69,18 @@ def get_integration_rows(request, team) -> list[dict]:
     return rows
 
 
-def get_integration_new_choices(request, team) -> list[tuple[str, str]]:
-    """(label, url) pairs for the "Add integration" dropdown, across every provider type
-    the user can add, plus MCP once `flag_mcp` is on. Mirrors the permission check each
-    provider's own (now-retired) per-section "Add new" dropdown used to apply."""
-    choices = []
+@dataclass
+class IntegrationNewGroup:
+    category: str
+    icon_class: str
+    options: list[tuple[str, str]]
+
+
+def get_integration_new_choices(request, team) -> list[IntegrationNewGroup]:
+    """One group per category for the "Add integration" dropdown, across every provider
+    type the user can add, plus MCP once `flag_mcp` is on. Mirrors the permission check
+    each provider's own (now-retired) per-section "Add new" dropdown used to apply."""
+    options_by_category: dict[str, list[tuple[str, str]]] = {}
     for provider in ServiceProvider:
         if not request.user.has_perm(provider.get_permission("add")):
             continue
@@ -82,10 +89,16 @@ def get_integration_new_choices(request, team) -> list[tuple[str, str]]:
                 "service_providers:new",
                 kwargs={"team_slug": team.slug, "provider_type": provider.slug, "subtype": str(subtype)},
             )
-            choices.append((f"{provider.category}: {subtype.label}", url))
+            options_by_category.setdefault(provider.category, []).append((subtype.label, url))
     if flag_is_active(request, "flag_mcp") and request.user.has_perm("mcp_integrations.add_mcpserver"):
-        choices.append(("MCP: MCP Server", reverse("mcp_integrations:new", args=[team.slug])))
-    return choices
+        options_by_category.setdefault(MCP_CATEGORY, []).append(
+            ("MCP Server", reverse("mcp_integrations:new", args=[team.slug]))
+        )
+    return [
+        IntegrationNewGroup(category=category, icon_class=_CATEGORY_ICONS[category], options=options)
+        for category in _CATEGORY_ORDER
+        if (options := options_by_category.get(category))
+    ]
 
 
 @dataclass

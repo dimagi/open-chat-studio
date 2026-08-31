@@ -2,9 +2,6 @@
 {% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
@@ -12,34 +9,30 @@
       transition: opacity 1s ease-out;
     }
 
-    #team-settings-page {
-      font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-    }
     .xl\:container:has(#team-settings-page) {
       max-width: none;
-      background: rgb(249, 250, 251);
+      background: var(--color-base-200);
     }
     #general.app-card, #integrations.app-card, #members.app-card,
     #automation.app-card, #data.app-card,
     #automation .app-card, #data .app-card,
     #team-settings-nav .app-card {
-      border: 1px solid rgb(229, 231, 235);
+      border: 1px solid var(--color-base-300);
       border-radius: 16px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-      background: rgb(255, 255, 255);
+      background: var(--color-base-100);
     }
     #team-settings-nav a.settings-nav-active {
-      background: rgb(242, 239, 255);
-      color: rgb(87, 13, 248);
+      background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
+      color: var(--color-primary);
       font-weight: 600;
     }
     #team-settings-nav .nav-count {
       font-size: 13px;
       font-weight: 600;
-      color: rgb(156, 163, 175);
+      color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
     }
     #team-settings-nav a.settings-nav-active .nav-count {
-      color: rgb(87, 13, 248);
+      color: var(--color-primary);
     }
     #team-settings-page .category-pill {
       display: inline-flex;
@@ -47,23 +40,23 @@
       height: 30px;
       padding: 0 12px;
       border-radius: 9999px;
-      border: 1px solid rgb(229, 231, 235);
-      background: rgb(255, 255, 255);
-      color: rgb(75, 85, 99);
+      border: 1px solid var(--color-base-300);
+      background: var(--color-base-100);
+      color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
       font-size: 12.5px;
       font-weight: 600;
       white-space: nowrap;
       cursor: pointer;
     }
     #team-settings-page .category-pill:hover {
-      border-color: rgb(87, 13, 248);
-      background: rgb(242, 239, 255);
-      color: rgb(87, 13, 248);
+      border-color: var(--color-primary);
+      background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
+      color: var(--color-primary);
     }
     #team-settings-page .category-pill-active {
-      border-color: rgb(87, 13, 248);
-      background: rgb(242, 239, 255);
-      color: rgb(87, 13, 248);
+      border-color: var(--color-primary);
+      background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
+      color: var(--color-primary);
     }
     #team-settings-page #id_name {
       font-size: 1.875rem;
@@ -71,14 +64,6 @@
       letter-spacing: -0.02em;
       height: auto;
       padding: 0.25rem 0.75rem;
-    }
-    #team-settings-page #id_groups > div {
-      margin-top: 0.5rem;
-    }
-    #team-settings-page #id_groups label {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
     }
     #automation .app-card .text-neutral-500 {
       font-size: 12px;
@@ -126,25 +111,30 @@
         return document.querySelector(link.getAttribute('href'));
       }).filter(Boolean);
       if (!sections.length) return;
-      var observer = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          links.forEach(function (link) {
-            link.classList.toggle('settings-nav-active', link.getAttribute('href') === '#' + entry.target.id);
+
+      // Tracks scroll position instead of an IntersectionObserver band, which a short section
+      // could get skipped past entirely.
+      var offset = 96;
+      function setActive() {
+        // A short last section may never reach the offset, so force it active at the bottom.
+        var atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        var current = atBottom ? sections[sections.length - 1] : sections[0];
+        if (!atBottom) {
+          sections.forEach(function (section) {
+            if (section.getBoundingClientRect().top - offset <= 0) {
+              current = section;
+            }
           });
-        });
-      }, { rootMargin: '-40% 0px -50% 0px' });
-      function resync() {
-        sections.forEach(function (section) {
-          observer.unobserve(section);
-          observer.observe(section);
+        }
+        links.forEach(function (link) {
+          link.classList.toggle('settings-nav-active', link.getAttribute('href') === '#' + current.id);
         });
       }
-      resync();
-      // The Integrations/Members tables load async via htmx, which changes page height
-      // after the observer's initial read. Re-observe once they've settled so the highlight
-      // reflects the final layout instead of getting stuck on whatever was active at load.
-      document.body.addEventListener('htmx:afterSettle', resync);
+
+      setActive();
+      window.addEventListener('scroll', setActive, { passive: true });
+      // Recompute after the tables load via htmx, since that changes page height.
+      document.body.addEventListener('htmx:afterSettle', setActive);
     });
   </script>
 {% endblock page_head %}
@@ -226,8 +216,17 @@
                   <i class="fa-solid fa-caret-down ml-1"></i>
                 </summary>
                 <ul class="menu dropdown-content rounded-box bg-base-100 z-1 w-64 p-2 shadow-sm">
-                  {% for label, url in integration_new_choices %}
-                    <li><a href="{{ url }}">{{ label }}</a></li>
+                  {% for group in integration_new_choices %}
+                    <li>
+                      <details {% if forloop.first %}open{% endif %}>
+                        <summary><i class="fa-solid {{ group.icon_class }} w-4"></i>{{ group.category }}</summary>
+                        <ul>
+                          {% for label, url in group.options %}
+                            <li><a href="{{ url }}">{{ label }}</a></li>
+                          {% endfor %}
+                        </ul>
+                      </details>
+                    </li>
                   {% endfor %}
                 </ul>
               </details>
@@ -242,7 +241,7 @@
         </section>
 
         <section class="app-card" id="automation">
-          <h2 class="pg-subtitle font-bold">{% translate "Developer access" %}</h2>
+          <h2 class="pg-subtitle font-bold">{% translate "Developers" %}</h2>
           <span class="text-neutral-500 section-subtitle">{% translate "Custom actions your chatbots can call, and applications authorised against this team's API." %}</span>
           <div class="flex flex-col gap-4 mt-2">
             <div class="overflow-x-auto">

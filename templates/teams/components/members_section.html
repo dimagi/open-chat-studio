@@ -6,11 +6,13 @@
       <span class="text-neutral-500 section-subtitle">{% translate "People who can sign in to this team, including invitations that haven't been accepted." %}</span>
     </div>
     {% if request.team_membership.is_team_admin %}
-      <details class="dropdown dropdown-end" data-cy="btn-invite-dropdown">
-        <summary data-cy="btn-invite" class="btn btn-sm btn-primary whitespace-nowrap">
-          <i class="fa-solid fa-user-plus mr-1"></i>{% translate "Invite people" %}
-        </summary>
-        <div class="dropdown-content rounded-box bg-base-100 z-1 w-80 p-4 shadow-sm">
+      <button type="button" data-cy="btn-invite" class="btn btn-sm btn-primary whitespace-nowrap"
+              onclick="document.getElementById('invite-people-modal').showModal()">
+        <i class="fa-solid fa-user-plus mr-1"></i>{% translate "Invite people" %}
+      </button>
+      <dialog id="invite-people-modal" class="modal">
+        <div class="modal-box">
+          <h3 class="font-bold text-lg mb-2">{% translate "Invite people" %}</h3>
           <form hx-post="{% url 'single_team:send_invitation' request.team.slug %}" hx-target="#members-section" hx-swap="outerHTML">
             {% csrf_token %}
             {% render_form_fields invitation_form %}
@@ -20,7 +22,13 @@
             </div>
           </form>
         </div>
-      </details>
+        <form method="dialog" class="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
+      {% if invitation_form.errors %}
+        <script>document.getElementById('invite-people-modal').showModal();</script>
+      {% endif %}
     {% endif %}
   </div>
   <hr class="my-2">
