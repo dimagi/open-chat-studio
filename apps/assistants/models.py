@@ -1,7 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
-from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
@@ -11,7 +10,6 @@ from apps.experiments.models import Experiment, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.models import Node
 from apps.teams.models import BaseTeamModel
-from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 
@@ -78,9 +76,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def __str__(self):
         return self.name
-
-    def get_absolute_url(self):
-        return reverse("assistants:edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @property
     def formatted_tools(self):

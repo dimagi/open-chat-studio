@@ -437,10 +437,11 @@ def test_versions_past_the_inline_limit_collapse_behind_a_toggle(team_with_users
 
 @pytest.mark.django_db()
 def test_versions_of_models_without_version_urls_are_not_linked(team_with_users, client, anthropic_provider):
-    """Only chatbots deep-link to a version; other snapshots have no page to link to."""
+    """Only chatbots deep-link to a version. An assistant has no page at all since the feature
+    was removed (#4254), so its row is reported but rendered as plain text."""
     assistant = OpenAiAssistantFactory(team=team_with_users, llm_provider=anthropic_provider)
-    # Built directly rather than via ``create_new_version``, which would push to OpenAI.
-    version = OpenAiAssistantFactory(
+    # Built directly rather than via ``create_new_version``: assistants are no longer versionable.
+    OpenAiAssistantFactory(
         team=team_with_users,
         llm_provider=anthropic_provider,
         working_version=assistant,
@@ -458,8 +459,8 @@ def test_versions_of_models_without_version_urls_are_not_linked(team_with_users,
 
     body = response.content.decode()
     assert "v1" in body, "the version is still reported"
-    assert f'href="{version.get_absolute_url()}"' not in body, "a snapshot's own url is not a usable destination"
-    assert f'href="{assistant.get_absolute_url()}"' in body, "the row links to the working version"
+    assert assistant.name in body, "the row is still reported"
+    assert f'href="/a/{team_with_users.slug}/assistants/' not in body, "assistants have no page to link to"
 
 
 def _add_provider_usage(provider, count: int) -> None:

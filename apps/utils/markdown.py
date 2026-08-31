@@ -64,20 +64,16 @@ def _update_href(el):
         return el
 
     href = el.get(tag)
-    if not href or href.split(":", 1)[0] not in ("file", "assistant_file"):
+    if not href or href.split(":", 1)[0] != "file":
         return el
 
     parts = href.split(":")
     if len(parts) != 4:
         return el
     prefix, team_slug, owner_id, file_id = parts
-    url_name = {
-        "file": "experiments:download_file",
-        "assistant_file": "assistants:download_file",
-    }.get(prefix)
-    if url_name is None:
+    if prefix != "file":
         return el
-    relative_url = reverse(url_name, args=[team_slug, owner_id, file_id])
+    relative_url = reverse("experiments:download_file", args=[team_slug, owner_id, file_id])
     el.set(tag, relative_url)
     return el
 
