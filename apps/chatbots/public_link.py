@@ -17,6 +17,8 @@ from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.web.meta import canonical_hostname, get_server_root, hostname_of
 from apps.web.waf import WafRule, waf_allow
 
+PLACEHOLDER_NAME = "Chatbot"
+
 CSP = (
     "default-src 'self'; "
     "script-src 'self' https://unpkg.com; "
@@ -49,10 +51,11 @@ class PageState:
 
 
 def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | None]:
-    """The banner a visitor sees, and the version whose name and description the page shows.
+    """The banner a visitor sees, and the published version, or None when there is none.
 
-    The published version is resolved before any refusal so that every state names the chatbot
-    the visitor could have reached. A draft that has since been renamed stays internal.
+    The published version is resolved before any refusal so that a state which has one names it,
+    rather than the draft the team has moved on to. A draft that has since been renamed stays
+    internal, and so does one that has never been published at all.
     """
     try:
         published = resolve_chatbot_version(channel.experiment, VersionSelectionRule.LATEST_PUBLISHED)
@@ -79,16 +82,18 @@ def public_link_page(request, token: str):
         raise Http404()
 
     state, published = _page_state(channel)
-    shown = published or channel.experiment
     member = request.user.is_authenticated and channel.team.members.filter(id=request.user.id).exists()
+    # With no published version there is no name a visitor is entitled to. Members previewing the
+    # page before publishing keep the draft's, since the placeholder would hide what they came for.
+    shown = published or (channel.experiment if member else None)
     response = TemplateResponse(
         request,
         "chatbots/public_link.html",
         {
             "channel": channel,
             "state": state,
-            "chatbot_name": shown.name,
-            "chatbot_description": shown.description,
+            "chatbot_name": shown.name if shown else PLACEHOLDER_NAME,
+            "chatbot_description": shown.description if shown else "",
             "public_id": channel.experiment.public_id,
             "token": token,
             "api_base_url": get_server_root(),

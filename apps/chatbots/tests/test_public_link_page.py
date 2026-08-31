@@ -115,6 +115,43 @@ def test_the_page_names_the_published_chatbot_not_the_draft(client, team_with_us
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({"publish": False}, id="never-published"),
+        pytest.param({"publish": False, "enabled": False}, id="never-published-and-disabled"),
+    ],
+)
+def test_an_unpublished_draft_is_not_named_to_a_visitor(client, team_with_users, kwargs):
+    """With no published version there is no name a visitor is entitled to, so the page uses a
+    placeholder rather than falling back to the draft the builder is still working on."""
+    channel = _channel(team_with_users, **kwargs)
+    working = channel.experiment
+    working.name = "Internal rename"
+    working.description = "Notes for the team"
+    working.save()
+
+    html = _get(client).content.decode()
+
+    assert "Internal rename" not in html
+    assert "Notes for the team" not in html
+    assert '<h1 class="text-2xl font-bold">Chatbot</h1>' in html
+
+
+@pytest.mark.django_db()
+def test_a_team_member_still_sees_the_draft_name_before_publishing(client, team_with_users):
+    """Members preview the page before publishing, so the placeholder would hide what they came
+    to look at."""
+    channel = _channel(team_with_users, publish=False)
+    working = channel.experiment
+    working.name = "Internal rename"
+    working.save()
+    client.force_login(team_with_users.members.first())
+
+    assert "Internal rename" in _get(client).content.decode()
+
+
+@pytest.mark.django_db()
 def test_unknown_token_is_404(client, team_with_users):
     _channel(team_with_users)
     assert _get(client, token="nope_nope_nope_nope_nope_nope_nop").status_code == 404
