@@ -409,7 +409,7 @@ class ExperimentChannel(BaseTeamModel):
         None for anything but an embedded widget, and for a NONE-level one (no floor).
         In `oauth` mode the floor is the release that ships `authTokenProvider`, which is higher than
         the SESSION_TOKEN level the mode pins.
-        
+
         """
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
