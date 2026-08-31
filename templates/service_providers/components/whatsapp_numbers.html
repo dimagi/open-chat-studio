@@ -32,10 +32,10 @@
       <i class="fa-solid fa-circle-info"></i>
       This refresh is taking longer than expected. Refresh to start it again.
     </div>
-  {% elif sync_error %}
+  {% elif numbers_sync_error %}
     <div class="flex items-start gap-2 text-error">
       <i class="fa-solid fa-circle-exclamation mt-1"></i>
-      <span class="font-mono text-xs">{{ sync_error }}</span>
+      <span class="font-mono text-xs">{{ numbers_sync_error }}</span>
     </div>
   {% endif %}
 
@@ -73,7 +73,7 @@
       </fieldset>
     </form>
     <div id="wa-test-result"></div>
-  {% elif not sync_error and not stalled %}
+  {% elif not numbers_sync_error and not stalled %}
     <div class="flex items-center gap-2 text-base-content/70">
       <i class="fa-solid fa-circle-info"></i>
       {% if syncing %}

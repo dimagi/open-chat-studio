@@ -606,7 +606,7 @@ def _whatsapp_status_context(provider: MessagingProvider) -> dict:
         "numbers": numbers,
         "syncing": syncing,
         "stalled": bool(provider.whatsapp_refresh_info) and not syncing,
-        "sync_error": None if syncing else numbers_info.get("error"),
+        "numbers_sync_error": None if syncing else numbers_info.get("error"),
         "synced_at": parse_datetime(numbers_info.get("synced_at") or ""),
         "form": WhatsappTestMessageForm(numbers, initial={"message": initial_message}),
         "message_length": len(initial_message),
