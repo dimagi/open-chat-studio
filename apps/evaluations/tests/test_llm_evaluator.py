@@ -30,6 +30,16 @@ _VALID_PROMPTS = [
     # Unadvertised sub-keys stay valid: the validator matches on the root.
     "Role: {input.role}",
     "Role: {output.role}",
+    "Bracket access: {context[my param]}",
+]
+
+_INVALID_PROMPTS = [
+    pytest.param("Evaluate this conversation please.", id="no-variables"),
+    # A root that merely starts with an advertised one is not one.
+    pytest.param("Evaluate {contextual.value}", id="prefix-of-a-root"),
+    # Escaped literal braces are text, not a variable.
+    pytest.param("Evaluate {{context.my_param}}", id="escaped-braces"),
+    pytest.param("Evaluate {context.my_param", id="malformed-template"),
 ]
 
 _OUTPUT_SCHEMA = {"result": {"type": "string", "description": "result"}}
@@ -46,12 +56,13 @@ def test_llm_evaluator_prompt_valid_variables(prompt):
     assert evaluator.prompt == prompt
 
 
-def test_llm_evaluator_prompt_no_variables_raises():
+@pytest.mark.parametrize("prompt", _INVALID_PROMPTS)
+def test_llm_evaluator_prompt_no_variables_raises(prompt):
     with pytest.raises(ValidationError) as exc_info:
         LlmEvaluator(
             llm_provider_id=1,
             llm_provider_model_id=1,
-            prompt="Evaluate this conversation please.",
+            prompt=prompt,
             output_schema=_OUTPUT_SCHEMA,
         )
     error_message = str(exc_info.value)

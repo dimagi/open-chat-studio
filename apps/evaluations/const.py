@@ -1,4 +1,6 @@
+import re
 from datetime import timedelta
+from string import Formatter
 
 PREVIEW_SAMPLE_SIZE = 10
 
@@ -57,3 +59,16 @@ def evaluator_prompt_variable_hints(evaluation_mode: str) -> list[str]:
     """Display forms for `evaluation_mode`, e.g. ``{context.[key]}``, for the form's help text."""
     variables = EVALUATOR_PROMPT_VARIABLES.get(evaluation_mode, EVALUATOR_PROMPT_VARIABLES["message"])
     return [f"{{{name}.[key]}}" if dotted else f"{{{name}}}" for name, dotted in variables]
+
+
+def prompt_variable_roots(prompt: str) -> set[str]:
+    """Root names of the format fields in `prompt`, e.g. ``{context[key]}`` -> ``context``.
+
+    Escaped literal braces yield no field. A malformed template yields nothing, so callers
+    surface it as a missing variable rather than an unhandled ``ValueError``.
+    """
+    try:
+        fields = [field for _, field, _, _ in Formatter().parse(prompt) if field]
+    except ValueError:
+        return set()
+    return {re.split(r"[.\[]", field, maxsplit=1)[0] for field in fields}

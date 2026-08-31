@@ -6,6 +6,7 @@ from pydantic_core import ValidationError
 from apps.evaluations.const import (
     ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS,
     evaluator_prompt_variable_hints,
+    prompt_variable_roots,
 )
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
@@ -97,8 +98,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     @field_validator("prompt")
     @classmethod
     def prompt_must_contain_variable(cls, v: str) -> str:
-        # Not exhaustive: an unknown variable still surfaces as an error result at run time.
-        if not any(f"{{{name}" in v for name in ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS):
+        # Roots only: an unknown sub-key still surfaces as an error result at run time.
+        if not prompt_variable_roots(v) & ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS:
             raise ValueError(
                 "The prompt must include at least one variable so the evaluator has context to work with. "
                 f"Available variables: {', '.join(evaluator_prompt_variable_hints('message'))}"
