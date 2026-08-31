@@ -46,6 +46,24 @@
     </form>
 </div>
 <div class="divider"></div>
+{% if comparison_versions %}
+    <div class="flex items-center gap-2 mb-2">
+        <label for="compareTo" class="text-sm font-medium">Compare with</label>
+        <select id="compareTo"
+                name="compare_to"
+                class="select select-sm select-bordered"
+                hx-get="{% url 'chatbots:version-details' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number %}"
+                hx-target="#modal-content"
+                hx-swap="innerHTML">
+            {% for version in comparison_versions %}
+                <option value="{{ version.version_number }}"
+                        {% if compare_to.version_number == version.version_number %}selected{% endif %}>
+                    v{{ version.version_number }}{% if version.is_archived %} (archived){% endif %}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+{% endif %}
 <div class="modal-body" id="versionDetails">
     {% include "experiments/components/versions/compare.html" %}
 </div>
