@@ -12,7 +12,11 @@ from apps.evaluations.models import ConditionType
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
-from apps.utils.factories.evaluations import EvaluatorFactory, EvaluatorTagRuleFactory
+from apps.utils.factories.evaluations import (
+    EvaluationMessageFactory,
+    EvaluatorFactory,
+    EvaluatorTagRuleFactory,
+)
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -323,3 +327,52 @@ class TestEvaluatorLlmProviderSelection:
         evaluator.refresh_from_db()
         assert evaluator.llm_provider_id is None
         assert evaluator.llm_provider_model_id is None
+
+
+class TestPromptVariables:
+    """The form's autocomplete and help text are derived from the evaluators' actual kwargs."""
+
+    def test_both_modes_are_shipped_to_the_form(self, client_with_user, team):
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        by_mode = response.context_data["prompt_variables_by_mode"]
+        assert set(by_mode) == {"message", "session"}
+
+    @pytest.mark.parametrize("mode", ["message", "session"])
+    def test_participant_data_and_session_state_are_offered(self, client_with_user, team, mode):
+        """Both are captured on every message, so neither mode should hide them."""
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        variables = response.context_data["prompt_variables_by_mode"][mode]
+        assert {"participant_data", "session_state"} <= set(variables["autocomplete"])
+        assert "{session_state.[key]}" in variables["hints"]
+
+    def test_session_mode_omits_the_per_message_variables(self, client_with_user, team):
+        """A session-mode dataset holds a whole conversation, not one input/output pair."""
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        session_vars = response.context_data["prompt_variables_by_mode"]["session"]["autocomplete"]
+        assert not {"input.content", "output.content", "generated_response"} & set(session_vars)
+
+    def test_every_offered_variable_is_actually_interpolated(self, client_with_user, team):
+        """A variable the form offers but run() omits raises KeyError, which evaluate_message
+        buries in a per-message error result -- nothing else would catch the drift."""
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+        by_mode = response.context_data["prompt_variables_by_mode"]
+        offered = {name for mode in by_mode for name in by_mode[mode]["autocomplete"]}
+
+        message = EvaluationMessageFactory.create()
+        evaluator = evaluators.LlmEvaluator.model_construct(
+            prompt=" ".join(f"{{{name}}}" for name in sorted(offered)),
+            output_schema={},
+        )
+        with patch.object(evaluators.LlmEvaluator, "get_chat_model") as get_chat_model:
+            get_chat_model.return_value.with_structured_output.return_value.with_retry.return_value.invoke.return_value = (  # noqa: E501
+                _StubResult()
+            )
+            evaluator.run(message, "a response")  # no KeyError => every offered variable is supplied
+
+
+class _StubResult:
+    def model_dump(self):
+        return {}
