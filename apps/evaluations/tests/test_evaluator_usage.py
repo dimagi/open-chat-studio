@@ -149,8 +149,9 @@ def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_prov
     # 1000 tokens / 1000 * $0.00015
     assert input_row.cost == Decimal("0.00015000")
     # The run id lives in `extra` because runs get pruned; the config is the FK. The
-    # evaluator id lives there too, for the run detail page's per-evaluator breakdown.
-    assert input_row.extra == {"evaluation_run_id": run.id, "evaluator_id": evaluator.id}
+    # evaluator id and message id live there too, for the run detail page's
+    # per-evaluator breakdown and the results table's per-row Tokens column.
+    assert input_row.extra == {"evaluation_run_id": run.id, "evaluator_id": evaluator.id, "message_id": message.id}
     # 500 tokens / 1000 * $0.00060
     assert rows[ServiceKind.LLM_OUTPUT].cost == Decimal("0.00030000")
     # Judge calls never carry a trace, and with no generation experiment there's nothing

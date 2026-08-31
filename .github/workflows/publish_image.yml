@@ -28,6 +28,18 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@v7
+        with:
+          # Nothing here runs git against the remote after checkout, so the token
+          # does not need to sit in .git/config for the rest of the job.
+          persist-credentials: false
+          # git describe needs the tags, which a shallow clone omits.
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Resolve OCS version
+        id: ocs-version
+        # Matches `v*` only, so the chat widget's `w_v*` tags cannot win.
+        run: echo "version=$(git describe --tags --match 'v*' --always)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -58,6 +70,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OCS_VERSION=${{ steps.ocs-version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Deliberately NOT using deploy.yml's zstd-compressed output: zstd
