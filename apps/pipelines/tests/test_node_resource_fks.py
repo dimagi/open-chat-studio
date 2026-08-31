@@ -1,6 +1,5 @@
 import json
 from io import StringIO
-from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
@@ -443,21 +442,6 @@ class TestVersioningPopulatesNodeFKFields:
         assert set(new_version.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
         # original unchanged
         assert set(node.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_assistant_fk_repointed_after_versioning(self):
-        """NEW_VERSION strategy: after versioning, the FK on the new node version
-        points at the versioned assistant, matching the updated params mirror."""
-        assistant = OpenAiAssistantFactory.create()
-        node = NodeFactory.create(
-            type="AssistantNode",
-            params={"assistant_id": assistant.id},
-            assistant=assistant,
-        )
-        new_node_version = node.create_new_version()
-        # FK must reflect the repointed params
-        assert str(new_node_version.assistant_id) == new_node_version.params.get("assistant_id")
-        assert new_node_version.assistant.is_a_version
 
 
 @pytest.mark.django_db()

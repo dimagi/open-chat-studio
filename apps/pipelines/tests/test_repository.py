@@ -49,11 +49,6 @@ class TestSharedRepositoryContract:
         with pytest.raises(RepositoryLookupError, match="Collection"):
             repo.get_collection(999999)
 
-    def test_get_assistant_not_found(self, factory):
-        repo = factory()
-        with pytest.raises(RepositoryLookupError, match="Assistant"):
-            repo.get_assistant(999999)
-
     def test_get_llm_provider_model_not_found(self, factory):
         repo = factory()
         with pytest.raises(RepositoryLookupError, match="LLM provider model"):
