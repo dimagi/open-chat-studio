@@ -340,13 +340,14 @@ def test_run_connection_test_hook_warns_with_temporary_message_for_rate_limit():
 
 
 @pytest.mark.django_db()
-def test_run_connection_test_hook_silent_when_no_model_configured():
-    """No models configured yet is expected setup state right after creating a provider,
-    not a problem worth warning about on every save."""
+def test_run_connection_test_hook_warns_when_no_model_configured():
+    """No models configured yet means credentials genuinely haven't been verified - that's
+    an actionable, real state (add a model, then test), not something to swallow silently."""
     provider = LlmProviderFactory()
     with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
         warnings = provider.run_connection_test_hook()
-    assert warnings == []
+    assert len(warnings) == 1
+    assert "no models configured" in warnings[0].lower()
 
 
 @pytest.mark.django_db()

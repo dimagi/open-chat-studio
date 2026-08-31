@@ -297,19 +297,28 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         long (or letting it get repeated on a transaction retry/rollback) is exactly what
         running this after commit, with no transaction of its own, avoids. Returns a list of
         user-facing warning messages the caller should surface (e.g. via Django's messages
-        framework); empty on success. Two failure cases stay silent here specifically, since
-        they're expected setup state rather than actionable problems: no model configured
-        yet, and a provider type (Voyage AI) that doesn't support this test at all. A
-        genuinely invalid configuration is not one of those two, and does produce a warning.
-        The manual "Test Connection" button reports all of these explicitly. The warning
-        text also says why it failed (see classify_connection_test_failure), same as the
-        manual button's message.
+        framework); empty on success.
+
+        A provider type that doesn't support this test at all (Voyage AI) stays silent -
+        there's nothing actionable to tell the user, and no world in which they can make it
+        testable. A missing model, on the other hand, now produces its own warning rather
+        than staying silent: on a fresh provider (or one whose models were all removed),
+        credentials genuinely haven't been verified yet, and "add a model, then test" is a
+        real next step, not just expected setup noise. Everything else the underlying test
+        can raise (an invalid config, a real failure) also produces a warning, worded by
+        classify_connection_test_failure. The manual "Test Connection" button reports all
+        of these the same way.
         """
         warnings: list[str] = []
         try:
             self.test_connection()
-        except (NoTestableModelError, ConnectionTestNotSupportedError):
+        except ConnectionTestNotSupportedError:
             pass
+        except NoTestableModelError:
+            warnings.append(
+                "Provider saved, but there are no models configured to test with yet. Add "
+                "one, then use Test Connection below to verify your credentials."
+            )
         except Exception as exc:
             log.exception("Automatic connection test failed for LLM provider %s", self.pk)
             match classify_connection_test_failure(exc):

@@ -319,8 +319,9 @@ def test_updating_llm_provider_runs_automatic_connection_test(team_with_users, a
 @pytest.mark.django_db()
 def test_updating_llm_provider_with_passing_test_redirects_to_team_list(team_with_users, authed_client):
     """No connection-test warning means no reason to detour through the edit page - a
-    successful (or silently-skipped, e.g. no model configured) save behaves exactly like
-    every other provider save and returns to the team list."""
+    successful save behaves exactly like every other provider save and returns to the
+    team list. (Voyage AI, which skips the test entirely, behaves the same way; a missing
+    model does not - see test_updating_llm_provider_with_no_model_configured below.)"""
     provider = LlmProviderFactory(team=team_with_users, name="Old Name")
     url = reverse(
         "service_providers:edit",
@@ -333,6 +334,26 @@ def test_updating_llm_provider_with_passing_test_redirects_to_team_list(team_wit
 
     assert response.status_code == 200
     assert response.redirect_chain == [(team_list_url, 302)]
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_no_model_configured(team_with_users, authed_client):
+    """A provider with no configured model to test against is genuinely unverified, not
+    silently-fine setup state - it should warn (redirecting back to the edit page, same as
+    a real failure) instead of behaving like a passing test."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(url, 302)]
+    messages_seen = [str(m) for m in response.context["messages"]]
+    assert any("no models configured" in m.lower() for m in messages_seen)
 
 
 @pytest.mark.django_db()
