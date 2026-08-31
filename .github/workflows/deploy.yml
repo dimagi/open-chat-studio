@@ -53,6 +53,18 @@ jobs:
 
     - name: Checkout
       uses: actions/checkout@v7
+      with:
+        # Nothing here runs git against the remote after checkout, so the token
+        # does not need to sit in .git/config for the rest of the job.
+        persist-credentials: false
+        # git describe needs the tags, which a shallow clone omits.
+        fetch-tags: true
+        fetch-depth: 0
+
+    - name: Resolve OCS version
+      id: ocs-version
+      # Matches `v*` only, so the chat widget's `w_v*` tags cannot win.
+      run: echo "version=$(git describe --tags --match 'v*' --always)" >> "$GITHUB_OUTPUT"
 
     - name: Set Deploy Env
       # Set the deploy env based on the input from the event or else from the branch
@@ -143,6 +155,8 @@ jobs:
           ${{ steps.image-name.outputs.image }}
           ${{ steps.image-name.outputs.image_latest }}
         file: Dockerfile
+        build-args: |
+          OCS_VERSION=${{ steps.ocs-version.outputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3
@@ -389,6 +403,10 @@ jobs:
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
         SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
       with:
+        # Must match what the SDK sends as `release` (see config/settings.py).
+        # Left unset, the action proposes the HEAD SHA instead, so the release
+        # object and the events would land on two different identifiers.
+        version: ${{ steps.ocs-version.outputs.version }}
         environment: "${{ env.DEPLOY_ENV == 'prod' && 'production' || 'development' }}"
         ignore_empty: true
         ignore_missing: true
