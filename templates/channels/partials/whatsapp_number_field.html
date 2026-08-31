@@ -22,7 +22,7 @@
           :disabled="!numbersByProvider[providerId]?.numbers?.length"
           {% if not form.has_cached_numbers %}style="display: none" disabled{% endif %}>
     <template x-for="option in numbersByProvider[providerId]?.numbers || []" :key="option.value">
-      <option :value="option.value" x-text="option.label"></option>
+      <option :value="option.value" :selected="option.value == number" x-text="option.label"></option>
     </template>
   </select>
 
