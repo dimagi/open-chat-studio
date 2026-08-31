@@ -24,13 +24,13 @@ from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
 from apps.service_providers.exceptions import ConnectionTestNotSupportedError, NoTestableModelError
 from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
-from apps.service_providers.llm_service.retry import should_retry_exception
 from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
     VoiceProvider,
     VoiceProviderType,
+    classify_connection_test_failure,
 )
 from apps.utils.deletion import get_related_objects
 
@@ -266,14 +266,21 @@ class CreateServiceProvider(
         config_valid = config_form.is_valid()
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
-            self._save_provider(request, primary_form, config_form, file_formset)
-            return HttpResponseRedirect(self.get_success_url())
+            obj, had_connection_test_warning = self._save_provider(request, primary_form, config_form, file_formset)
+            return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
 
     def _save_provider(self, request, primary_form, config_form, file_formset):
+        """Saves the provider and returns (obj, had_connection_test_warning).
+
+        The second value tells get_success_url() whether the automatic connection test just
+        failed - if so, it should send the user back to this provider's own edit page (where
+        the "Test Connection" button the warning message points at actually lives) instead
+        of the team list every other save redirects to.
+        """
         with transaction.atomic():
             obj = primary_form.save(commit=False)
             obj.team = request.team
@@ -289,11 +296,14 @@ class CreateServiceProvider(
         # take several seconds, and holding the save's DB connection/locks open for that long
         # (or repeating the call if the transaction were retried or rolled back) is worse than
         # the save and the test being two separate steps.
+        had_connection_test_warning = False
         if isinstance(obj, LlmProvider):
             for warning in obj.run_connection_test_hook():
                 messages.warning(request, warning)
+                had_connection_test_warning = True
         for warning in config_form.warnings:
             messages.warning(request, warning)
+        return obj, had_connection_test_warning
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {
@@ -345,7 +355,19 @@ class CreateServiceProvider(
             )
         return ctx
 
-    def get_success_url(self):
+    def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
+        """Normally back to the team list, same as every save today. The one exception:
+        an automatic connection-test failure sends the user back to this provider's own
+        edit page instead, since that warning explicitly tells them to use the "Test
+        Connection" button, and that button only renders on the edit page itself.
+        """
+        if redirect_to_own_edit_page and obj is not None:
+            return resolve_url(
+                "service_providers:edit",
+                team_slug=self.request.team.slug,
+                provider_type=self.provider_type.slug,
+                pk=obj.pk,
+            )
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
@@ -578,20 +600,6 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
 
 
-def _is_timeout_exception(exc: Exception) -> bool:
-    """Recognizes provider-SDK timeout exceptions for classification purposes here.
-
-    Kept local rather than added to retry.py's RATE_LIMIT_EXCEPTIONS, since that list drives
-    retry behavior for all live LLM traffic, not just this connection test. Covers OpenAI
-    (and every OpenAI-compatible type built on it: Groq, Perplexity, DeepSeek, MiniMax,
-    Azure) and Google/Vertex; Anthropic's timeout is already in RATE_LIMIT_EXCEPTIONS.
-    """
-    import openai  # noqa: PLC0415 - heavy lib, slow startup
-    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
-
-    return isinstance(exc, (openai.APITimeoutError, google_exceptions.DeadlineExceeded))
-
-
 @require_POST
 @login_and_team_required
 @permission_required("service_providers.change_llmprovider", raise_exception=True)
@@ -608,12 +616,15 @@ def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
         messages.info(request, "Connection testing isn't supported for this provider type.")
     except Exception as exc:
         log.exception("LLM connection test failed for provider %s", pk)
-        if should_retry_exception(exc) or _is_timeout_exception(exc):
-            messages.warning(
-                request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
-            )
-        else:
-            messages.error(request, "Test failed. Check your credentials and try again.")
+        match classify_connection_test_failure(exc):
+            case "retryable":
+                messages.warning(
+                    request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
+                )
+            case "permission":
+                messages.error(request, "Test failed. Check your credentials and try again.")
+            case _:
+                messages.error(request, "Test failed due to a connection issue on the provider's side. Try again soon.")
     else:
         messages.success(request, "Connection test succeeded.")
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=ServiceProvider.llm.slug, pk=pk)

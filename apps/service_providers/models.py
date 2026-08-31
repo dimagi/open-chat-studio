@@ -2,7 +2,7 @@ import dataclasses
 import logging
 from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
@@ -167,6 +167,51 @@ class LlmProviderTypes(LlmProviderType, Enum):
 CONNECTION_TEST_TIMEOUT_SECONDS = 10
 
 
+def classify_connection_test_failure(exc: Exception) -> Literal["retryable", "permission", "connection"]:
+    """Categorize a test_connection() failure for a user-facing message.
+
+    Only called for failures that aren't already handled as NoTestableModelError or
+    ConnectionTestNotSupportedError (callers check those first, since they're expected
+    setup state, not a test failure) - everything else falls into one of three buckets:
+
+    "retryable": a rate limit or timeout. Checked first and deliberately not folded into
+    the status-code check below - a 429 is technically in the 4xx range, but "check your
+    credentials" would be the wrong thing to tell a user who just got rate-limited.
+
+    "permission": the request never got a valid answer because what we sent was wrong -
+    either the saved provider configuration itself is invalid (ServiceProviderConfigError,
+    raised before any network call is made) or the provider rejected it outright (an
+    HTTP 4xx-equivalent status).
+
+    "connection": everything else - a provider or network-side failure (HTTP 5xx-equivalent,
+    or no status code at all, e.g. a raw connection error).
+
+    Duck-types the status code so the permission/connection split works across every
+    provider without importing any SDK here: OpenAI (and every OpenAI-compatible type built
+    on it) and Anthropic expose `.status_code`; Google's exceptions expose `.code` with the
+    same HTTP-equivalent numbering instead. The retryable check does need the SDKs (to
+    reuse retry.py's `should_retry_exception`, and to recognize provider-SDK timeouts it
+    doesn't cover), so it's a local import here, same reasoning as elsewhere in this file:
+    avoids loading heavy langchain/provider deps at Django startup.
+    """
+    import openai  # noqa: PLC0415 - heavy lib, slow startup
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
+
+    from apps.service_providers.llm_service.retry import should_retry_exception  # noqa: PLC0415
+
+    if should_retry_exception(exc) or isinstance(exc, (openai.APITimeoutError, google_exceptions.DeadlineExceeded)):
+        return "retryable"
+
+    if isinstance(exc, ServiceProviderConfigError):
+        return "permission"
+
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if isinstance(status, int) and 400 <= status < 500:
+        return "permission"
+
+    return "connection"
+
+
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class LlmProvider(BaseTeamModel, ProviderMixin):
     objects = LlmProviderObjectManagerObjectManager()
@@ -215,17 +260,28 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
 
+        # Local import: default_models imports LlmProviderModel/LlmProviderTypes from this
+        # module, so importing it at module level here would be circular.
+        from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
+
         if self.type_enum == LlmProviderTypes.voyage:
             raise ConnectionTestNotSupportedError(self.type)
 
-        # A team-configured model wins over a global default, same priority as pricing-rule
-        # resolution elsewhere in this app.
-        model = (
+        # Prefer the provider type's registered default model (get_default_model, the same
+        # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
+        # model most likely to actually work; fall back to any other model the team has
+        # configured for this type if they don't have that one. A team-configured model
+        # wins over a global one, same priority as pricing-rule resolution elsewhere in
+        # this app.
+        team_models = (
             LlmProviderModel.objects.for_team(self.team)
             .filter(type=self.type)
             .order_by(models.F("team_id").desc(nulls_last=True))
-            .first()
         )
+        default_model = get_default_model(self.type)
+        model = team_models.filter(name=default_model.name).first() if default_model else None
+        if model is None:
+            model = team_models.first()
         if model is None:
             raise NoTestableModelError(self.type)
 
@@ -245,16 +301,27 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         they're expected setup state rather than actionable problems: no model configured
         yet, and a provider type (Voyage AI) that doesn't support this test at all. A
         genuinely invalid configuration is not one of those two, and does produce a warning.
-        The manual "Test Connection" button reports all of these explicitly.
+        The manual "Test Connection" button reports all of these explicitly. The warning
+        text also says why it failed (see classify_connection_test_failure), same as the
+        manual button's message.
         """
         warnings: list[str] = []
         try:
             self.test_connection()
         except (NoTestableModelError, ConnectionTestNotSupportedError):
             pass
-        except Exception:
+        except Exception as exc:
             log.exception("Automatic connection test failed for LLM provider %s", self.pk)
-            warnings.append("Provider saved, but the connection test failed. Use Test Connection below to retry.")
+            match classify_connection_test_failure(exc):
+                case "retryable":
+                    reason = "This looks like a temporary issue (rate limit or timeout)."
+                case "permission":
+                    reason = "Check your credentials."
+                case _:
+                    reason = "This looks like a connection issue on the provider's side."
+            warnings.append(
+                f"Provider saved, but the connection test failed. {reason} Use Test Connection below to retry."
+            )
         return warnings
 
 

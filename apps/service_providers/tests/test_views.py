@@ -202,7 +202,8 @@ def test_test_llm_connection_endpoint_unsupported_provider(team_with_users, auth
 @pytest.mark.django_db()
 def test_test_llm_connection_endpoint_invalid_configuration(team_with_users, authed_client):
     """A genuinely invalid configuration is not the same as an unsupported provider type, and
-    must not be reported as one (it's a real, actionable problem)."""
+    must not be reported as one (it's a real, actionable problem). It never reaches the
+    provider at all, so it's classified the same as a rejected credential."""
     provider = LlmProviderFactory(team=team_with_users)
     url = _test_connection_url(team_with_users, provider)
 
@@ -213,7 +214,8 @@ def test_test_llm_connection_endpoint_invalid_configuration(team_with_users, aut
 
     assert response.status_code == 302
     [msg] = list(get_messages(response.wsgi_request))
-    assert msg.level != django_messages.INFO
+    assert msg.level == django_messages.ERROR
+    assert "credentials" in msg.message.lower()
 
 
 @pytest.mark.django_db()
@@ -251,22 +253,51 @@ def test_test_llm_connection_endpoint_timeout_is_temporary_not_credential_failur
 
 @pytest.mark.django_db()
 def test_test_llm_connection_endpoint_credential_failure(team_with_users, authed_client):
-    """A non-retryable failure (bad API key, etc.) should be reported as an error, not a warning."""
+    """A rejected credential (a 4xx-range status code, same shape a real SDK exception has -
+    checked directly against openai.APIStatusError/anthropic.APIStatusError) should be
+    reported as an error, not a warning, and should point at credentials specifically."""
     provider = LlmProviderFactory(team=team_with_users)
     url = _test_connection_url(team_with_users, provider)
+    invalid_api_key_error = ValueError("invalid api key")
+    invalid_api_key_error.status_code = 401
 
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=ValueError("invalid api key")):
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=invalid_api_key_error):
         response = authed_client.post(url)
 
     assert response.status_code == 302
     [msg] = list(get_messages(response.wsgi_request))
     assert msg.level == django_messages.ERROR
+    assert "credentials" in msg.message.lower()
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_connection_issue_failure(team_with_users, authed_client):
+    """A provider-side failure (a 5xx-range status code, or a raw exception with no status
+    code at all - e.g. a network-level connection error) is a different, actionable problem
+    from a rejected credential, and must be reported as one, not lumped in with it."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+    server_error = ValueError("upstream is down")
+    server_error.status_code = 502
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=server_error):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.ERROR
+    assert "credentials" not in msg.message.lower()
+    assert "provider's side" in msg.message
 
 
 @pytest.mark.django_db()
 def test_updating_llm_provider_runs_automatic_connection_test(team_with_users, authed_client):
     """Saving an LlmProvider through the real edit view should trigger the automatic
-    post-save connection test and surface its warning on failure, without blocking the save."""
+    post-save connection test and surface its warning on failure, without blocking the save.
+
+    Regression: the save must redirect back to this same edit page, not the team list -
+    the warning explicitly says "Use Test Connection below to retry", and that button only
+    exists on the edit page. A save that lands anywhere else makes that instruction wrong."""
     provider = LlmProviderFactory(team=team_with_users, name="Old Name")
     url = reverse(
         "service_providers:edit",
@@ -277,11 +308,57 @@ def test_updating_llm_provider_runs_automatic_connection_test(team_with_users, a
         response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
 
     assert response.status_code == 200
+    assert response.redirect_chain == [(url, 302)]
     messages_seen = [str(m) for m in response.context["messages"]]
     assert any("connection test failed" in m.lower() for m in messages_seen)
 
     provider.refresh_from_db()
     assert provider.name == "New Name"
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_passing_test_redirects_to_team_list(team_with_users, authed_client):
+    """No connection-test warning means no reason to detour through the edit page - a
+    successful (or silently-skipped, e.g. no model configured) save behaves exactly like
+    every other provider save and returns to the team list."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    with mock.patch.object(LlmProvider, "test_connection"):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
+
+
+@pytest.mark.django_db()
+def test_updating_voice_provider_still_redirects_to_team_list(team_with_users, authed_client):
+    """Regression: the edit-page redirect only applies when an LLM connection-test warning
+    actually fired. Every other provider type must keep today's behavior unchanged."""
+    provider = VoiceProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    response = authed_client.post(
+        url,
+        data={
+            "name": "New Name",
+            "aws_access_key_id": "new-id",
+            "aws_secret_access_key": "new-secret",
+            "aws_region": "us-east-1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
 
 
 @pytest.mark.django_db()
