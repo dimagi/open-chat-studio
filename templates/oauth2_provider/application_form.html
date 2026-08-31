@@ -1,17 +1,6 @@
 {% extends "generic/object_form.html" %}
 {% load form_tags i18n %}
 
-{% block page_head %}
-  {{ block.super }}
-  <style>
-    /* CheckboxSelectMultiple falls through to the plain text-field template, which renders
-       each option as an unspaced div. Space them out for the "Allowed chatbots" list. */
-    #id_allowed_chatbots > div {
-      margin-top: 0.5rem;
-    }
-  </style>
-{% endblock page_head %}
-
 {% block form %}
     {{ form.non_field_errors }}
     {% render_form_fields form "name" "client_id" %}
