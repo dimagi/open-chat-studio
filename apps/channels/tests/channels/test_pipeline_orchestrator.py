@@ -8,7 +8,13 @@ from apps.channels.pipeline import (
     MessageProcessingPipeline,
 )
 from apps.chat.exceptions import ChatException
-from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import (
+    CodeNodeRunError,
+    NodeUserConfigRunError,
+    PipelineBuildError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+)
 
 from .conftest import make_context
 
@@ -190,6 +196,7 @@ class TestUserCausedErrors:
             pytest.param(PipelineBuildError("no nodes"), id="build-error"),
             pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
             pytest.param(CodeNodeRunError("name 'foo' is not defined"), id="code-node-run-error"),
+            pytest.param(NodeUserConfigRunError('UndefinedError in field "subject"'), id="node-user-config-run-error"),
         ],
     )
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
@@ -214,6 +221,40 @@ class TestUserCausedErrors:
         assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
         assert str(error) in ctx.processing_errors
         t1.assert_called_once()
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_plain_node_run_error_is_still_treated_as_a_system_bug(self, mock_gen):
+        """A bare PipelineNodeRunError must NOT be silenced.
+
+        It is the "the system failed" signal -- undecryptable provider credentials, a violated
+        graph invariant, a missing repository -- so it keeps the LLM-generated message and is
+        re-raised after terminal stages so it reaches Sentry. This is the invariant that stops
+        NodeUserConfigRunError from being a subclass.
+        """
+        mock_gen.return_value = "llm generated message"
+        error = PipelineNodeRunError("There was an issue configuring the LLM service provider")
+        s1 = _make_stage(side_effect=error)
+        t1 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1])
+
+        with pytest.raises(PipelineNodeRunError):
+            pipeline.process(ctx)
+
+        mock_gen.assert_called_once_with(ctx, error)
+        assert ctx.early_exit_response == "llm generated message"
+        t1.assert_called_once()
+
+    def test_node_user_config_run_error_does_not_inherit_from_node_run_error(self):
+        """NodeUserConfigRunError must stay off the PipelineNodeRunError hierarchy.
+
+        If it were a subclass, every ``except PipelineNodeRunError`` in the codebase would
+        silently swallow user-config errors, and every ``pytest.raises(PipelineNodeRunError)``
+        would pass for either class -- so the two behaviours above could be swapped without a
+        single test going red.
+        """
+        assert not issubclass(NodeUserConfigRunError, PipelineNodeRunError)
 
 
 class TestErrorMessageGeneration:
