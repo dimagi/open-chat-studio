@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import Client
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.human_annotations.aggregation import compute_aggregates_for_queue
@@ -21,7 +22,6 @@ from apps.human_annotations.models import (
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
 from apps.human_annotations.views.export_views import ExportAnnotations
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
-from apps.teams.models import Flag
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
@@ -1510,11 +1510,8 @@ def session(team_with_users):
 
 @pytest.fixture()
 def human_annotations_flag():
-    flag, _ = Flag.objects.get_or_create(name="flag_human_annotations")
-    flag.everyone = True
-    flag.save()
-    flag.flush()  # Clear waffle cache immediately; save() uses on_commit which doesn't run in tests
-    return flag
+    with override_flag("flag_human_annotations", active=True):
+        yield
 
 
 @pytest.mark.django_db()
