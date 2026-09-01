@@ -98,6 +98,67 @@ def test_update_view(provider, team_with_users, authed_client):
     assert response.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_llm_provider_create_view_shows_create_and_test_button(team_with_users, authed_client):
+    """The create-page button says up front that saving will also test credentials - static
+    text, no Alpine needed, since a fresh provider has no prior config to react to."""
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+        )
+    )
+    content = response.content.decode()
+    assert "Create and Test" in content
+    assert 'x-text="configChanged' not in content
+
+
+@pytest.mark.django_db()
+def test_voice_provider_create_view_shows_plain_create_button(team_with_users, authed_client):
+    """Regression: only LLM providers get the "and Test" wording - every other provider
+    type's create button must render exactly as it did before this feature existed."""
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "subtype": "aws"},
+        )
+    )
+    content = response.content.decode()
+    assert "Create and Test" not in content
+    assert "and Test" not in content
+
+
+@pytest.mark.django_db()
+def test_llm_provider_edit_view_shows_reactive_update_button(team_with_users, authed_client):
+    """The edit-page button must be the Alpine-reactive one (default text "Update", swaps
+    to "Update and Test" once a credential field changes), not the static create-page one."""
+    provider = LlmProviderFactory(team=team_with_users)
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    content = response.content.decode()
+    assert "x-text=\"configChanged ? 'Update and Test' : 'Update'\"" in content
+    assert ">Update</button>" in content
+
+
+@pytest.mark.django_db()
+def test_llm_provider_edit_view_test_connection_form_hides_on_config_change(team_with_users, authed_client):
+    """The manual Test Connection form must be wired to hide the moment credentials change -
+    otherwise it can be clicked against stale, unsaved data."""
+    provider = LlmProviderFactory(team=team_with_users)
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    content = response.content.decode()
+    assert 'x-show="!configChanged"' in content
+
+
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
 def test_delete_view(provider, team_with_users, authed_client):
@@ -354,6 +415,65 @@ def test_updating_llm_provider_with_no_model_configured(team_with_users, authed_
     assert response.redirect_chain == [(url, 302)]
     messages_seen = [str(m) for m in response.context["messages"]]
     assert any("no models configured" in m.lower() for m in messages_seen)
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_no_credential_change_skips_connection_test(team_with_users, authed_client):
+    """Editing an unrelated field (name) and re-submitting the same credentials must not
+    re-run the connection test - that's a real external call, not free, and nothing about
+    the credentials is actually in question."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        response = authed_client.post(
+            url,
+            # dict(...) here only works around a ty false positive on factory.Dict-declared
+            # fields; provider.config is a plain dict at runtime either way.
+            data={"name": "New Name", "openai_api_key": dict(provider.config)["openai_api_key"]},
+            follow=True,
+        )
+
+    mock_test.assert_not_called()
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
+    provider.refresh_from_db()
+    assert provider.name == "New Name"
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_credential_change_runs_connection_test(team_with_users, authed_client):
+    """The counterpart to the skip case above: an actual credential change must still
+    trigger the test - the gating is on whether config changed, not a blanket skip."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        authed_client.post(url, data={"name": "Old Name", "openai_api_key": "a-genuinely-new-key"}, follow=True)
+
+    mock_test.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_creating_llm_provider_runs_automatic_connection_test(team_with_users, authed_client):
+    """A brand-new provider has no "previous config" to compare against, so creation always
+    tests - there's nothing to gate on."""
+    url = reverse(
+        "service_providers:new",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        authed_client.post(url, data={"name": "New Provider", "openai_api_key": "brand-new-key"}, follow=True)
+
+    mock_test.assert_called_once()
 
 
 @pytest.mark.django_db()

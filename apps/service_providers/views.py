@@ -284,6 +284,15 @@ class CreateServiceProvider(
         with transaction.atomic():
             obj = primary_form.save(commit=False)
             obj.team = request.team
+            is_create = obj.pk is None
+            # Captured before config_form.save() overwrites obj.config, so the test below can
+            # tell whether credentials actually changed - re-testing on an unrelated edit
+            # (e.g. renaming the provider) wastes an external call for no reason. Dropping
+            # falsy values (same normalization models.py already applies to config elsewhere)
+            # matters here: cleaned_data fills every optional field in with "" even when the
+            # user never touched it, which would otherwise look like a change against an
+            # older, sparser saved config that predates that field being blank-filled.
+            old_config = None if is_create else {k: v for k, v in obj.config.items() if v}
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -297,13 +306,20 @@ class CreateServiceProvider(
         # (or repeating the call if the transaction were retried or rolled back) is worse than
         # the save and the test being two separate steps.
         had_connection_test_warning = False
-        if isinstance(obj, LlmProvider):
+        new_config = {k: v for k, v in obj.config.items() if v}
+        config_changed = is_create or old_config != new_config
+        if isinstance(obj, LlmProvider) and config_changed:
             for warning in obj.run_connection_test_hook():
                 messages.warning(request, warning)
                 had_connection_test_warning = True
         for warning in config_form.warnings:
             messages.warning(request, warning)
         return obj, had_connection_test_warning
+
+    def _button_text(self, instance) -> str:
+        if instance:
+            return "Update"
+        return "Create and Test" if self.provider_type == ServiceProvider.llm else "Create"
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {
@@ -313,7 +329,9 @@ class CreateServiceProvider(
             "subtype": subtype,
             "object": instance,
             "title": f"Edit {instance.name}" if instance else self.provider_type.label,
-            "button_text": "Update" if instance else "Create",
+            # For an existing LLM provider this is only the pre-Alpine-hydration default -
+            # the template overrides it reactively based on whether credentials changed.
+            "button_text": self._button_text(instance),
             "active_tab": "manage-team",
         }
         is_elevenlabs_voice = (

@@ -16,7 +16,12 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-  <div class="app-card max-w-5xl mx-auto">
+  {% comment %}
+  configChanged is shared by the whole card, not just the config fields below: the submit
+  button's label and the separate Test Connection form (in post_form) both read it too, so
+  they need to be in the same Alpine scope even though only the config fields set it.
+  {% endcomment %}
+  <div class="app-card max-w-5xl mx-auto" x-data="{ configChanged: false }">
     <div class="flex items-center justify-between gap-2">
       <h1 class="pg-title">{{ title }}</h1>
       {% if object.id %}
@@ -42,7 +47,7 @@
           Nudges toward re-testing after an edit, not a saved "untested" state: resets on
           reload by design, same as the manual Test Connection button it points at.
           {% endcomment %}
-          <div x-data="{ configChanged: false }" x-on:input="configChanged = true" x-on:change="configChanged = true">
+          <div x-on:input="configChanged = true" x-on:change="configChanged = true">
             {% render_form_fields config_form %}
             <div x-show="configChanged" x-cloak role="alert" class="alert alert-warning alert-soft text-sm py-2 mt-2">
               <i class="fa-solid fa-triangle-exclamation"></i>
@@ -64,7 +69,16 @@
           {% endif %}
         {% endif %}
       {% endif %}
-      <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+      {% if test_llm_connection_url %}
+        {% comment %}
+        Only on the edit page for an existing LLM provider: the label says up front whether
+        saving will also re-test credentials, driven by the same configChanged the banner
+        and the manual button below use.
+        {% endcomment %}
+        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Test' : 'Update'">{{ button_text }}</button>
+      {% else %}
+        <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+      {% endif %}
     </form>
     {% block post_form %}
       {% if sync_voices_url %}
@@ -74,7 +88,11 @@
         </form>
       {% endif %}
       {% if test_llm_connection_url %}
-        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4">
+        {% comment %}
+        Hidden while credentials are unsaved: without this, clicking it would test whatever
+        is still saved in the database, not what's currently typed - misleading either way.
+        {% endcomment %}
+        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4" x-show="!configChanged">
           {% csrf_token %}
           <button type="submit" class="btn btn-outline">Test Connection</button>
         </form>
