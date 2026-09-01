@@ -46,10 +46,41 @@
     </form>
 </div>
 <div class="divider"></div>
+{% if comparison_versions %}
+    <div class="flex items-center gap-2 mb-2">
+        <label for="compareTo" class="text-sm font-medium">Compare with</label>
+        <select id="compareTo"
+                name="compare_to"
+                class="select select-sm select-bordered"
+                hx-get="{% url 'chatbots:version-details' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number %}"
+                hx-target="#modal-content"
+                hx-swap="innerHTML">
+            {% for version in comparison_versions %}
+                <option value="{{ version.version_number }}"
+                        {% if compare_to.version_number == version.version_number %}selected{% endif %}>
+                    v{{ version.version_number }}{% if version.is_archived %} (archived){% endif %}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+{% endif %}
 <div class="modal-body" id="versionDetails">
     {% include "experiments/components/versions/compare.html" %}
 </div>
 
+{# a version of an archived chatbot stays archived with it, so no restore is offered #}
+{% if experiment.is_archived and not experiment.working_version.is_archived %}
+    <div class="divider"></div>
+    <div class="modal-action">
+        {% url 'experiments:unarchive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as unarchive_url %}
+        <form method="post" action="{{ unarchive_url }}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-primary">
+                Unarchive Version
+            </button>
+        </form>
+    </div>
+{% endif %}
 {% if not experiment.is_archived %}
     <div class="divider"></div>
     <div class="modal-action">
