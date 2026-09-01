@@ -14,7 +14,7 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import nodes_url
+from .conftest import add_edge, add_llm_node, nodes_url, stored_node_params
 
 
 @pytest.mark.django_db()
@@ -47,6 +47,48 @@ class TestNodeId:
         assert response.status_code == 400, response.content
         assert "server" in str(response.json()["node_id"]).lower()
         assert not Node.objects.filter(pipeline=chatbot.pipeline, flow_id="mine-1").exists()
+
+    def test_a_node_id_inside_params_is_dropped(self, client, chatbot):
+        """`node_id` and `django_node` are the node model's own internals rather than params, so a
+        client naming one is dropped the same way any other non-param is.
+
+        The body-level rule cannot reach them: it guards the top-level keys, and `params` is a
+        free-form object. Sent on a node that parses they are dumped back out again, so the spelling
+        that matters is one that fails to parse -- `route_key` is missing here -- because that path
+        stores what the client sent.
+        """
+        response = client.post(
+            nodes_url(chatbot),
+            {"type": "StaticRouterNode", "params": {"node_id": "hijack", "django_node": "x", "keywords": ["A", "B"]}},
+            format="json",
+        )
+
+        assert response.status_code == 201, response.content
+        stored = stored_node_params(chatbot, response.json()["node"]["node_id"])
+        assert "node_id" not in stored
+        assert "django_node" not in stored
+
+    def test_a_node_id_inside_params_cannot_wedge_the_pipeline(self, client, chatbot, llm):
+        """Why dropping them matters: stored, they collide with the keyword arguments
+        `Node.pipeline_node_instance` passes, and `_output_map_for` catches only the two ways a node
+        declines its params -- so the `TypeError` escapes `Pipeline.validate` itself.
+
+        Asking a router for its output map is what reaches that call, so the router needs an
+        outgoing edge to be asked. From there every read *and* every façade write of the pipeline
+        raises, leaving nothing that could undo it.
+        """
+        created = client.post(
+            nodes_url(chatbot),
+            {"type": "StaticRouterNode", "params": {"node_id": "hijack", "keywords": ["A", "B"]}},
+            format="json",
+        )
+        router = created.json()["node"]["node_id"]
+        add_edge(chatbot.pipeline, chatbot.pipeline.node_set.get(type="StartNode").flow_id, router)
+        add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_0")
+
+        response = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/")
+
+        assert response.status_code == 200, response.content
 
     def test_a_colliding_node_id_is_redrawn(self, client, chatbot):
         """``apply_pipeline_patch`` treats an add whose id already exists as a no-op, so a clash would

@@ -59,6 +59,11 @@ def _is_writable(node_class: type[BasePipelineNode], name: str) -> bool:
     field = node_class.model_fields.get(name)
     if field is None:
         return False
+    if field.exclude:
+        # `node_id` and `django_node`: the model's own internals rather than params. Never offered,
+        # and a client-supplied one collides with the keyword argument
+        # `Node.pipeline_node_instance` passes.
+        return False
     extra = field.json_schema_extra
     return not (isinstance(extra, UiSchema) and extra.api_exclude)
 
