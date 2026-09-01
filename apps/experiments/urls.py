@@ -46,6 +46,11 @@ urlpatterns = [
         name="archive-experiment",
     ),
     path(
+        "e/<int:experiment_id>/versions/unarchive/<int:version_number>/",
+        views.unarchive_experiment_version,
+        name="unarchive-experiment",
+    ),
+    path(
         "e/<int:experiment_id>/versions/set_default/<int:version_number>/",
         views.set_default_experiment,
         name="set-default-experiment",
