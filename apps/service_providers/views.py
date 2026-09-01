@@ -241,9 +241,9 @@ def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bo
     return isinstance(obj, LlmProvider) and _has_config_changed(is_create, old_config, obj)
 
 
-def _should_run_whatsapp_post_create_hook(obj, is_create: bool) -> bool:
-    """Whether this save just created a new Meta WhatsApp messaging provider - the one
-    moment its post-create hook needs to run."""
+def _should_run_post_create_hook(obj, is_create: bool) -> bool:
+    """Whether this save just created a new messaging provider - the one moment its
+    post-create hook needs to run."""
     return is_create and isinstance(obj, MessagingProvider)
 
 
@@ -337,7 +337,7 @@ class CreateServiceProvider(
             if isinstance(obj, VoiceProvider):
                 for warning in obj.run_post_save_hook():
                     messages.warning(request, warning)
-            if _should_run_whatsapp_post_create_hook(obj, is_create):
+            if _should_run_post_create_hook(obj, is_create):
                 obj.run_post_create_hook()
         # Runs after the save transaction commits, not inside it: an external LLM call can
         # take several seconds, and holding the save's DB connection/locks open for that long
