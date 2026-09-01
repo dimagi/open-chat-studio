@@ -13,6 +13,7 @@ from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     AuthProvider,
     LlmProvider,
+    LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
     TraceProvider,
@@ -25,6 +26,7 @@ from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
     LlmProviderFactory,
+    LlmProviderModelFactory,
     MessagingProviderFactory,
     TraceProviderFactory,
     VoiceProviderFactory,
@@ -189,6 +191,43 @@ def test_delete_llm_provider_blocked_by_an_evaluator(team_with_users, authed_cli
     assert LlmProvider.objects.filter(pk=provider.pk).exists()
     evaluator.refresh_from_db()
     assert evaluator.llm_provider_id == provider.id
+
+
+@pytest.mark.django_db()
+def test_create_view_shows_empty_state_for_provider_with_no_default_models(team_with_users, authed_client):
+    """LiteLLM ships no default models (every backend is install-specific, same as OpenRouter).
+
+    The default-models section must say so rather than rendering nothing, which is
+    indistinguishable from a broken page.
+    """
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "litellm"},
+        )
+    )
+    assert response.status_code == 200
+    assert b"No default models are available for this provider" in response.content
+
+
+@pytest.mark.django_db()
+def test_create_view_still_shows_default_models_for_openai(team_with_users, authed_client):
+    """Regression guard: the empty-state message must not appear for a provider that does
+    ship default models.
+
+    Creates its own global model row rather than relying on the migration-seeded ones -
+    see the "migration-seeded global rows" invariant in AGENTS.md.
+    """
+    LlmProviderModelFactory(team=None, type=str(LlmProviderTypes.openai), name="test-default-model")
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+        )
+    )
+    assert response.status_code == 200
+    assert b"No default models are available for this provider" not in response.content
+    assert b"test-default-model" in response.content
 
 
 @pytest.mark.django_db()
