@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
@@ -438,7 +439,7 @@ def _string_to_date(date_str: str) -> datetime.date:
 
 @is_superuser
 def flags_home(request):
-    flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
+    flags = Flag.objects.prefetch_related("teams").all().order_by("name")
     flag_info_map = get_all_flag_info()
 
     # Separate flags into active and legacy
@@ -486,9 +487,10 @@ def flag_history(request, flag_name):
         "-event_date"
     )[:50]  # Last 50 changes
 
-    # Collect all team and user IDs from audit event deltas
+    # Collect all team, user and group IDs from audit event deltas
     team_ids = set()
     user_ids = set()
+    group_ids = set()
 
     def _collect_ids(field, delta, id_set):
         if field in delta:
@@ -500,10 +502,12 @@ def flag_history(request, flag_name):
         if event.delta:
             _collect_ids("teams", event.delta, team_ids)
             _collect_ids("users", event.delta, user_ids)
+            _collect_ids("groups", event.delta, group_ids)
 
-    # Bulk load teams and users to avoid N+1 queries
+    # Bulk load teams, users and groups to avoid N+1 queries
     teams_map = {team.id: team.name for team in Team.objects.filter(id__in=team_ids)}
     users_map = {user.id: user.get_display_name() for user in User.objects.filter(id__in=user_ids)}
+    groups_map = {group.id: group.name for group in Group.objects.filter(id__in=group_ids)}
 
     # Transform audit event deltas to include names instead of IDs
     def _update_delta(field, delta, display_map, default_template):
@@ -518,6 +522,7 @@ def flag_history(request, flag_name):
         if event.delta:
             _update_delta("teams", event.delta, teams_map, "Team {}")
             _update_delta("users", event.delta, users_map, "User {}")
+            _update_delta("groups", event.delta, groups_map, "Group {}")
 
     return TemplateResponse(
         request,
@@ -635,6 +640,7 @@ def tracing_usage_api(request):
 @is_superuser
 @require_http_methods(["POST"])
 def update_flag(request, flag_name):
+    """Write the flag's `everyone` and `teams` settings, the only supported inputs."""
     flag = get_object_or_404(Flag, name=flag_name)
 
     form = FlagUpdateForm(request.POST)
@@ -644,14 +650,7 @@ def update_flag(request, flag_name):
     try:
         with transaction.atomic():
             flag.everyone = form.cleaned_data["everyone"]
-            flag.testing = form.cleaned_data["testing"]
-            flag.superusers = form.cleaned_data["superusers"]
-            flag.rollout = form.cleaned_data["rollout"]
-            flag.percent = form.cleaned_data["percent"]
-
             flag.teams.set(form.cleaned_data["teams"])
-            flag.users.set(form.cleaned_data["users"])
-
             flag.save()
 
         return JsonResponse({"success": True})

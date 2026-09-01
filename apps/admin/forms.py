@@ -1,7 +1,5 @@
 from dateutil.relativedelta import relativedelta
 from django import forms
-from django.contrib.auth import get_user_model
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import TextChoices
 from django.utils import timezone
 
@@ -9,9 +7,6 @@ from apps.admin.models import ChatWidgetConfig, OcsConfiguration, SiteConfig
 from apps.channels.utils import clear_widget_embed_key_cache, fetch_widget_embed_key
 from apps.service_providers.utils import ServiceProvider
 from apps.teams.models import Team
-
-User = get_user_model()
-
 
 PROVIDER_SEARCH_TYPES = (
     ServiceProvider.llm,
@@ -84,30 +79,13 @@ class DateRangeForm(forms.Form):
 
 
 class FlagUpdateForm(forms.Form):
+    """A flag decision is `everyone` or `teams`; the request-only waffle inputs
+    (`superusers`, `testing`, `rollout`, `percent`, `users`) are not accepted."""
+
     everyone = forms.BooleanField(required=False)
-    testing = forms.BooleanField(required=False)
-    superusers = forms.BooleanField(required=False)
-    rollout = forms.BooleanField(required=False)
-    percent = forms.IntegerField(
-        required=False,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Percentage for rollout (0-100)",
-    )
     teams = forms.ModelMultipleChoiceField(
         queryset=Team.objects.all(), required=False, widget=forms.MultipleHiddenInput()
     )
-    users = forms.ModelMultipleChoiceField(
-        queryset=User.objects.all(), required=False, widget=forms.MultipleHiddenInput()
-    )
-
-    def clean_percent(self):
-        percent = self.cleaned_data.get("percent")
-        rollout = self.cleaned_data.get("rollout")
-
-        if rollout and percent is None:
-            raise forms.ValidationError("Percentage is required when rollout is enabled")
-
-        return percent
 
 
 class OcsConfigurationForm(forms.Form):

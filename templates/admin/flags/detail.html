@@ -55,12 +55,7 @@
               flagName: '{{ flag.name }}',
               initialData: {
               everyone: {{ flag.everyone|yesno:'true,false' }},
-              testing: {{ flag.testing|yesno:'true,false' }},
-              superusers: {{ flag.superusers|yesno:'true,false' }},
-              rollout: {{ flag.rollout|yesno:'true,false' }},
-              percent: {{ flag.percent|default:'null' }},
-              teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}],
-              users: [{% for user in flag.users.all %}{{ user.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
+              teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
               }
               })"
     >
@@ -86,74 +81,6 @@
                   <span class="block text-xs text-base-content/70">{% translate "Enable for all users" %}</span>
                 </span>
               </label>
-
-              <label class="flex items-center">
-                <input
-                  type="checkbox"
-                  x-model="formData.testing"
-                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                />
-                <span class="ml-2 text-sm text-base-content">
-                  {% translate "Testing" %}
-                  <span class="block text-xs text-base-content/70">{% translate "Enable for testing" %}</span>
-                </span>
-              </label>
-
-              <label class="flex items-center">
-                <input
-                  type="checkbox"
-                  x-model="formData.superusers"
-                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                />
-                <span class="ml-2 text-sm text-base-content">
-                  {% translate "Superusers" %}
-                  <span class="block text-xs text-base-content/70">{% translate "Enable for superusers" %}</span>
-                </span>
-              </label>
-
-              <div class="space-y-3">
-                <label class="flex items-center">
-                  <input
-                    type="checkbox"
-                    x-model="formData.rollout"
-                    class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                  />
-                  <span class="ml-2 text-sm text-base-content">
-                    {% translate "Rollout" %}
-                    <span class="block text-xs text-base-content/70">{% translate "Enable rollout mode" %}</span>
-                  </span>
-                </label>
-
-                <div x-show="formData.rollout" class="ml-6 space-y-2 mt-2" x-cloak>
-                  <div class="flex items-center justify-between">
-                    <label class="block text-sm font-medium text-base-content">
-                      {% translate "Percentage" %}
-                    </label>
-                    <span class="text-sm font-medium text-base-content" x-text="(formData.percent || 0) + '%'"></span>
-                  </div>
-
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    x-model="formData.percent"
-                    class="range range-primary w-full"
-                    step="1"
-                  />
-
-                  <div class="flex justify-between text-xs text-base-content/70">
-                    <span>0%</span>
-                    <span>25%</span>
-                    <span>50%</span>
-                    <span>75%</span>
-                    <span>100%</span>
-                  </div>
-
-                  <p class="text-xs text-base-content/70">
-                    {% translate "Adjust the slider to set the percentage of users who will see this flag" %}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -173,26 +100,6 @@
             >
               {% for team in flag.teams.all %}
                 <option value="{{ team.id }}" selected>{{ team.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-      <!-- Users Section -->
-        <div class="bg-base-100 shadow sm:rounded-lg">
-          <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-base-content mb-4">
-              {% translate "Users" %}
-            </h3>
-
-            <select
-              id="users-select"
-              multiple
-              x-ref="usersSelect"
-              class="w-full"
-            >
-              {% for user in flag.users.all %}
-                <option value="{{ user.id }}" selected>{{ user.username }}</option>
               {% endfor %}
             </select>
           </div>
@@ -264,7 +171,6 @@
         error: null,
         success: false,
         teamsSelect: null,
-        usersSelect: null,
 
         init() {
           this.normalizeFormData();
@@ -272,15 +178,12 @@
         },
 
         normalizeFormData() {
-          ['teams', 'users'].forEach(field => {
-            this.formData[field] = this.formData[field].map(id => parseInt(id));
-            this.originalData[field] = this.originalData[field].map(id => parseInt(id));
-          });
+          this.formData.teams = this.formData.teams.map(id => parseInt(id));
+          this.originalData.teams = this.originalData.teams.map(id => parseInt(id));
         },
 
         initTomSelect() {
           this.teamsSelect = this.createTomSelect(this.$refs.teamsSelect, 'teams', '/admin/api/teams/');
-          this.usersSelect = this.createTomSelect(this.$refs.usersSelect, 'users', '/admin/api/users/');
         },
 
         createTomSelect(element, field, apiUrl) {
@@ -362,20 +265,8 @@
           }
           formData.append('csrfmiddlewaretoken', csrfToken.value);
 
-          // Add boolean flags
-          ['everyone', 'testing', 'superusers', 'rollout'].forEach(field => {
-            if (this.formData[field]) formData.append(field, 'on');
-          });
-
-          // Add percentage if set
-          if (this.formData.percent !== null && this.formData.percent !== '') {
-            formData.append('percent', this.formData.percent);
-          }
-
-          // Add arrays
-          ['teams', 'users'].forEach(field => {
-            this.formData[field].forEach(id => formData.append(field, id));
-          });
+          if (this.formData.everyone) formData.append('everyone', 'on');
+          this.formData.teams.forEach(id => formData.append('teams', id));
 
           return formData;
         },
