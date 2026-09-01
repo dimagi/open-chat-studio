@@ -12,11 +12,13 @@ from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresol
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.urls import reverse
+from django.utils.html import format_html
 from telebot import TeleBot, apihelper
 
+from apps.channels import widget_versions
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.utils import (
     ALL_DOMAINS,
     get_allowed_email_domains,
@@ -25,6 +27,8 @@ from apps.channels.utils import (
     validate_platform_availability,
 )
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+from apps.oauth.models import manage_applications_url
+from apps.oauth.permissions import applications_allowing_chatbot
 from apps.service_providers.forms import whatsapp_number_label
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
@@ -719,6 +723,8 @@ class WidgetParams(forms.Widget):
         context["widget"]["experiment"] = self.experiment
         context["widget"]["token"] = self.widget_token
         if self.channel:
+            context["widget"]["oauth"] = self.channel.credential_mode == CredentialMode.OAUTH
+            context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
@@ -730,12 +736,39 @@ class WidgetParams(forms.Widget):
         return context
 
 
+class CredentialModeSelect(forms.Select):
+    """The credential mode select along with the list of oauth applications which can be used with
+    this chatbot. If there are none a warning is displayed.
+    """
+
+    template_name = "channels/widgets/credential_mode.html"
+
+    def __init__(self, experiment, attrs=None, choices=()):
+        super().__init__(attrs, choices)
+        self.experiment = experiment
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
+        context["widget"]["oauth_applications"] = list(applications_allowing_chatbot(self.experiment))
+        context["widget"]["manage_applications_url"] = manage_applications_url(self.experiment.team.slug)
+        return context
+
+
 # Floor for the per-channel session lifetime override: anything shorter would make every
 # session on the channel dead on arrival.
 MIN_SESSION_TOKEN_LIFETIME = timedelta(minutes=5)
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
+    credential_mode = forms.ChoiceField(
+        label="Credential",
+        choices=CredentialMode.choices,
+        initial=CredentialMode.EMBED_KEY,
+        # Not required, so a submission that omits it falls back to the mode already stored
+        # rather than resetting the channel to the public default.
+        required=False,
+    )
     allow_all_domains = forms.BooleanField(
         label="Allow all domains", required=False, help_text="Allow access from any domain."
     )
@@ -753,7 +786,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             }
         ),
         required=False,
-        help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
+        help_text=(
+            "Enter the domains where this widget is allowed to be embedded (one per line). "
+            "Required for an embed key. With OAuth, leaving this blank makes the channel "
+            "server-only: any browser request is refused."
+        ),
     )
 
     session_token_lifetime = forms.DurationField(
@@ -784,7 +821,13 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         # rather than through the config dict the other fields on this form become. Seeded
         # from the channel so a post_save that runs without clean() cannot silently clear it.
         self._session_token_lifetime = self.channel.session_token_lifetime if self.channel else None
+        self._credential_mode = self.channel.credential_mode if self.channel else CredentialMode.EMBED_KEY
+        self.fields["credential_mode"].help_text = self._credential_mode_help_text()
+        self.fields["credential_mode"].widget = CredentialModeSelect(
+            experiment=self.experiment, choices=CredentialMode.choices
+        )
         if self.channel:
+            self.initial["credential_mode"] = self.channel.credential_mode
             self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
             allowed_domains = self.channel.extra_data.get("allowed_domains", [])
             self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
@@ -803,11 +846,36 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             "x-data": json.dumps(
                 {
                     "allowAllDomains": self.initial.get("allow_all_domains", False),
+                    # Seeded from the same value the select renders as chosen -- `BoundField.value()`
+                    # is what `Select.get_context` is handed -- so `x-model` binding to it on init is
+                    # a no-op rather than a silent change of the admin's selection.
+                    "credentialMode": str(self["credential_mode"].value() or self._credential_mode),
                 }
             )
         }
+        self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
+    def _credential_mode_help_text(self):
+        return format_html(
+            "What kind of token the widget must use to start a chat session. <strong>Embed key</strong> admits any "
+            "visitor on an allowed domain, as a public widget. <strong>OAuth token</strong> means your "
+            "backend creates a short-lived <code>{scope}</code> token and hands it to the widget;"
+            " any embed key is then ignored. The OAuth application must be <strong>client-credentials</strong> "
+            "and must list this chatbot "
+            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>).',
+            scope=settings.CHAT_API_SCOPE,
+            url=reverse("oauth_apps:home", args=[self.experiment.team.slug]),
+        )
+
+    def _pop_credential_mode(self, cleaned_data) -> str:
+        """Take the mode out of `cleaned_data`, which becomes the channel's extra_data.
+
+        A real column of its own, for the same reason `session_token_lifetime` is one: it must
+        not also land in the JSON blob. A missing value keeps the mode the channel already has.
+        """
+        return cleaned_data.pop("credential_mode", None) or self._credential_mode
 
     @staticmethod
     def _pop_session_token_lifetime(cleaned_data):
@@ -827,9 +895,14 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         cleaned_data = super().clean()
 
         self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
+        self._credential_mode = self._pop_credential_mode(cleaned_data)
 
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
-        if not allow_all_domains and not cleaned_data.get("allowed_domains"):
+        no_domains = not allow_all_domains and not cleaned_data.get("allowed_domains")
+        if no_domains and self._credential_mode == CredentialMode.EMBED_KEY:
+            # An embed key with no domain list would admit a stolen key from anywhere, so the
+            # list is mandatory there. Under `oauth` a blank list is a real configuration: it
+            # means server-only, and the token is what authorises the caller.
             raise ValidationError(
                 {"allowed_domains": "You must specify at least one domain or select 'Allow all domains'."}
             )
@@ -847,10 +920,43 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
+        update_fields = []
+        if channel.credential_mode != self._credential_mode:
+            channel.credential_mode = self._credential_mode
+            update_fields.append("credential_mode")
         if channel.session_token_lifetime != self._session_token_lifetime:
             channel.session_token_lifetime = self._session_token_lifetime
-            channel.save(update_fields=["session_token_lifetime"])
+            update_fields.append("session_token_lifetime")
+        if update_fields:
+            channel.save(update_fields=update_fields)
         self.success_message = "Channel saved successfully"
+        if warning := self._oauth_mode_warning(channel):
+            self.warning_message = warning
+
+    def _oauth_mode_warning(self, channel: ExperimentChannel) -> str:
+        """Whether this channel's embed can actually present a token yet.
+
+        MIN_OAUTH_WIDGET_VERSION is advisory — nothing rejects on it — so an embed too old to
+        send one just fails admission with the door's deliberately opaque 401. Saying so here is
+        the only place an admin finds out before their visitors do.
+        """
+        if self._credential_mode != CredentialMode.OAUTH:
+            return ""
+        if not self.cleaned_data.get("allowed_domains"):
+            # Server-only: a blank domain list refuses every browser request outright, so there
+            # is no embed for the floor to constrain and nothing for an admin to upgrade. Read
+            # from cleaned_data rather than the channel: this is the list being saved.
+            return ""
+        version = channel.widget_version
+        min_version = widget_versions.MIN_OAUTH_WIDGET_VERSION
+        if not widget_versions.is_older_than(version, min_version):
+            return ""
+        reported = f"reported widget version {version}" if version else "not reported a widget version"
+        return (
+            f"This channel now requires an OAuth token. Your site has {reported}, and only "
+            f"{min_version} or newer can send one — upgrade the embed and install an "
+            "authTokenProvider on the element, or chats will fail."
+        )
 
 
 class PublicLinkParams(forms.Widget):

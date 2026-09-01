@@ -6,7 +6,7 @@ from django.test import RequestFactory
 from django.urls import reverse
 from oauth2_provider.settings import oauth2_settings
 
-from apps.oauth.models import OAuth2Application
+from apps.oauth.models import OAuth2Application, manage_applications_url
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.teams.backends import TEAM_ADMIN_GROUP, get_groups
 from apps.teams.helpers import create_default_team_for_user
@@ -447,6 +447,24 @@ class TestTeamApplicationViews:
         assert response.status_code == 302, response.context["form"].errors
         assert list(application.allowed_chatbots.all()) == [now]
 
+    @pytest.mark.parametrize("editing", [True, False], ids=["edit", "register"])
+    def test_the_form_is_reachable_back_to_the_list_it_came_from(self, client, team, admin_user, editing):
+        """Both forms sit outside the team page they are managed from, so the trail back has to be
+        on the page itself."""
+        client.force_login(admin_user)
+        if editing:
+            application = _create_application(team=team, user=admin_user, name="Machine App")
+            url = reverse("oauth_apps:edit", args=[team.slug, application.pk])
+        else:
+            url = reverse("oauth_apps:new", args=[team.slug])
+
+        response = client.get(url)
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert manage_applications_url(team.slug) in content
+        assert ("Machine App" in content) is editing
+
     def test_edit_is_scoped_to_the_team_in_the_url(self, client, team, admin_user):
         """An application belonging to another team is not reachable, even by its own owner."""
         other_team = TeamWithUsersFactory.create()
@@ -579,6 +597,24 @@ class TestGlobalApplicationViews:
         assert response.status_code == 302
         application = OAuth2Application.objects.get(name="Global Machine App")
         assert application.authorization_grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE
+
+    @pytest.mark.parametrize("editing", [True, False], ids=["edit", "register"])
+    def test_the_global_form_leads_back_to_the_global_list(self, client, superuser, editing):
+        """Global applications live outside the team URL space, so their trail cannot be the team
+        page the team-scoped form points at."""
+        client.force_login(superuser)
+        if editing:
+            application = _create_application(name="Global App")
+            url = reverse("oauth2_provider:global_application_edit", args=[application.pk])
+        else:
+            url = reverse("oauth2_provider:global_application_new")
+
+        response = client.get(url)
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert reverse("oauth2_provider:global_application_home") in content
+        assert "Global OAuth Applications" in content
 
     def test_edit_rejects_a_team_scoped_application(self, client, superuser):
         application = _create_application(team=TeamWithUsersFactory.create())
