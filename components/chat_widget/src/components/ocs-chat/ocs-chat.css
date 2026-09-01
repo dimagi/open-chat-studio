@@ -670,6 +670,10 @@
     color: var(--send-button-text-disabled-color);
   }
 
+  .kiosk-restart {
+    @apply w-full mb-2;
+  }
+
   .confirmation-overlay {
     /* Confirmation dialog */
     @apply fixed inset-0 flex items-center justify-center;

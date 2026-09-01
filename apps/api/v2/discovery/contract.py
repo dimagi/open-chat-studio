@@ -34,10 +34,8 @@ def _resource_source(param: str) -> OptionsSource | None:
     return None
 
 
-#: The option lists a team could be denied a value from, so a param drawing from one is checked
-#: before it is written. Keyed on the list, not the param: the list is what decides the permitted
-#: values. Derived from the resource mirror so a new resource relation on ``Node`` needs no edit
-#: here; ``tools`` is named because nothing in the database backs it.
+# Option sources for which we need to check provided values against the available values for a team.
+# e.g. ``llm_provider``; ``tools`` is named because nothing in the database backs it.
 PARAMETER_OPTION_SOURCES: frozenset[OptionsSource] = frozenset(
     {source for param in Node.resource_param_names() if (source := _resource_source(param))} | {OptionsSource.tools}
 )

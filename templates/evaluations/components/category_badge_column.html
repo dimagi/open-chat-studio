@@ -1,0 +1,22 @@
+{% comment %}
+Badge for a choice/binary evaluator output value. `value` is django-tables2's
+TemplateColumn context var (the cell's raw value - a choice string, or a binary field's
+stored 0/1). `category_values` (passed via extra_context) maps it to its display label
+and polarity, since a binary field's raw 0/1 isn't shown as-is and only a two-choice
+field's values carry a positive/negative color (see CategoricalValue.polarity).
+{% endcomment %}
+{% if value is not None and value != "" %}
+  {% for category_value in category_values %}
+    {% if category_value.raw == value|stringformat:"s" %}
+      {% if category_value.polarity == "positive" %}
+        <span class="badge badge-success">{{ category_value.label }}</span>
+      {% elif category_value.polarity == "negative" %}
+        <span class="badge badge-error">{{ category_value.label }}</span>
+      {% else %}
+        <span class="badge badge-outline badge-sm">{{ category_value.label }}</span>
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+{% else %}
+  —
+{% endif %}

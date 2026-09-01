@@ -20,6 +20,10 @@
             message. Make sure the messaging provider used by this channel has a
             <code>new_bot_message</code> template configured.
           {% endblocktranslate %}
+          {% blocktranslate trimmed %}
+            WhatsApp does not allow line breaks inside a template message, so your message is sent
+            to these participants as a single paragraph.
+          {% endblocktranslate %}
           <a class="link" target="_blank"
              href="https://docs.openchatstudio.com/how-to/whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager">
             {% translate "How to create the template" %}

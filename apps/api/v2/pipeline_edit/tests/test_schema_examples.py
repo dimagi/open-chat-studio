@@ -10,7 +10,14 @@ each example names exactly the params its type declares, and each is a body the 
 import pytest
 
 from apps.api.v2.discovery.node_types import get_node_type_schema, get_node_types
-from apps.api.v2.pipeline_edit.examples import FULL_PARAMS, MINIMAL_CREATE, NOTES, create_examples, update_examples
+from apps.api.v2.pipeline_edit.examples import (
+    FULL_PARAMS,
+    MINIMAL_CREATE,
+    NOTES,
+    UPDATE_BODIES,
+    create_examples,
+    update_examples,
+)
 from apps.api.v2.pipeline_edit.serializers import EdgeCreateSerializer
 from apps.api.v2.pipeline_edit.views import WIRE_EXAMPLES
 
@@ -50,17 +57,18 @@ class TestExampleShape:
 
         assert set(FULL_PARAMS[node_type]) == declared
 
-    @pytest.mark.parametrize("build", [create_examples, update_examples], ids=["create", "update"])
-    def test_the_examples_are_request_only_and_named_after_their_type(self, build):
-        """drf-spectacular puts a `response_only` example under the response instead, where a request
-        body would read as something the endpoint returns.
-
-        A set, not a list: the examples are ordered simplest type first so the list reads as an
+    def test_the_create_examples_are_named_after_their_type(self):
+        """A set, not a list: the examples are ordered simplest type first so the list reads as an
         introduction, which is not the order the discovery endpoint serves them in.
         """
-        examples = [example for example in build() if example.name != MINIMAL_CREATE.name]
+        examples = [example for example in create_examples() if example.name != MINIMAL_CREATE.name]
 
         assert {example.name for example in examples} == set(SERVED_TYPES)
+
+    @pytest.mark.parametrize("build", [create_examples, update_examples], ids=["create", "update"])
+    def test_the_examples_are_request_only(self, build):
+        """drf-spectacular puts a `response_only` example under the response instead, where a request
+        body would read as something the endpoint returns."""
         assert all(example.request_only for example in build())
 
     def test_only_the_create_examples_carry_a_type(self):
@@ -68,6 +76,14 @@ class TestExampleShape:
         mean, so it is fixed once the node exists."""
         assert all("type" in example.value for example in create_examples())
         assert not any("type" in example.value for example in update_examples())
+
+    def test_the_update_examples_are_partial_bodies(self):
+        """The point of publishing them rather than the create payloads again: a PATCH merges key by
+        key, so a body naming every param says the opposite of what the endpoint does."""
+        for body in UPDATE_BODIES:
+            params = body.value.get("params", {})
+
+            assert set(params) < set(FULL_PARAMS[body.node_type]), body.name
 
 
 @pytest.mark.django_db()
@@ -107,18 +123,37 @@ class TestExamplesAreAccepted:
         assert response.status_code == 201, response.content
 
     @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
-    def test_a_documented_update_example_is_accepted(self, client, chatbot, node_type, reference_ids):
+    def test_a_types_full_param_set_is_accepted_by_patch(self, client, chatbot, node_type, reference_ids):
         """PATCHed onto a node created from its type alone, which is the state the minimal create
-        example leaves one in -- so this is the second half of the loop the two examples describe."""
+        example leaves one in -- so this is the second half of the loop the two examples describe.
+
+        Driven from `FULL_PARAMS` rather than from a documented PATCH body: the schema no longer
+        publishes one per type, but every param still has to be settable by the verb that exists to
+        set them.
+        """
         created = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
         assert created.status_code == 201, created.content
-        example = next(example for example in update_examples() if example.name == node_type)
-        body = {**example.value, "params": _with_real_ids(example.value["params"], reference_ids)}
+        body = {"params": _with_real_ids(FULL_PARAMS[node_type], reference_ids)}
 
         response = client.patch(node_url(chatbot, created.json()["node"]["node_id"]), body, format="json")
 
         assert response.status_code == 200, response.content
         assert response.json()["pipeline_errors"]["node"] == {}
+
+    @pytest.mark.parametrize("body", UPDATE_BODIES, ids=[body.name for body in UPDATE_BODIES])
+    def test_a_documented_update_example_is_accepted(self, client, chatbot, body):
+        """Sent to a node of the type it is written for, created from that type alone.
+
+        Node errors are not asserted away here the way they are for the create examples: a one-key
+        body onto a bare node leaves the type's other required params unset, which is the whole
+        point of a partial body.
+        """
+        created = client.post(nodes_url(chatbot), {"type": body.node_type}, format="json")
+        assert created.status_code == 201, created.content
+
+        response = client.patch(node_url(chatbot, created.json()["node"]["node_id"]), body.value, format="json")
+
+        assert response.status_code == 200, response.content
 
 
 def _with_real_ids(params: dict, reference_ids: dict) -> dict:

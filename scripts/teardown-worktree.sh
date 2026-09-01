@@ -26,7 +26,7 @@ resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
 ocs_drop_database "$resource_name"
 
 if redis_database=$(ocs_lookup_redis_database "$resource_name"); then
-    redis-cli -n "$redis_database" FLUSHDB
+    ocs_redis_cli -n "$redis_database" FLUSHDB
     ocs_release_redis_database "$resource_name" "$redis_database"
 else
     lookup_status=$?

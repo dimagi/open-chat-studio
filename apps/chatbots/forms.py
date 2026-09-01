@@ -3,8 +3,9 @@ from django.db import transaction
 
 from apps.channels.models import ExperimentChannel
 from apps.experiments.helpers import excluded_voice_services
-from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
+from apps.experiments.models import ConsentForm, Experiment
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.node_metadata import get_speakable_voices
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
@@ -83,7 +84,9 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
-        self.fields["synthetic_voice"].queryset = SyntheticVoice.get_for_team(team, exclude_services)
+        self.fields["synthetic_voice"].queryset = get_speakable_voices(
+            team, voice_providers=self.fields["voice_provider"].queryset, exclude_services=exclude_services
+        )
         self.fields["trace_provider"].queryset = team.traceprovider_set
         self.fields["consent_form"].queryset = ConsentForm.objects.filter(team=team, is_version=False)
         self.fields["synthetic_voice"].widget.template_name = "django/forms/widgets/select_dynamic.html"  # ty: ignore[invalid-assignment]

@@ -25,6 +25,8 @@ SENTRY_SECRET_VAR_DENYLIST = [
     "auth_token",
     "secret_key",
     "secret_key_bytes",
+    "access_token",
+    "verify_token",
 ]
 
 # Credential headers the app authenticates with, in the form they appear on a Sentry event.

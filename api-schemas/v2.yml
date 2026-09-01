@@ -4,6 +4,56 @@ info:
   version: v2
   description: Build, deploy and monitor chatbots.
 paths:
+  /api/v2/chatbot/options/:
+    get:
+      operationId: chatbot_options
+      description: |-
+        The values each chatbot setting accepts, scoped to the API key's team.
+
+        A key holds the values for the setting of the same name: write one of `consent_form`'s entries into a chatbot's `consent_form`, one of `voice_response_behaviour`'s into `voice_response_behaviour`.
+
+        Only the settings drawn from a fixed set of values appear. A free-text setting (`name`, `seed_message`) or a boolean one (`file_uploads_enabled`) constrains nothing and so has no entry here.
+
+        `voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that one provider. Only the voices a listed provider can speak are offered, so a team that has configured no voice provider is offered no voice either.
+      summary: List Chatbot Setting Options
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotOptions'
+              examples:
+                ChatbotOptions:
+                  value:
+                    voice_provider:
+                    - value: 2
+                      label: Prod Polly
+                      type: aws
+                    synthetic_voice:
+                    - value: 11
+                      label: Joanna (English)
+                      type: aws
+                      provider_id: 2
+                    voice_response_behaviour:
+                    - value: reciprocal
+                      label: Reciprocal
+                    trace_provider:
+                    - value: 4
+                      label: Prod Langfuse
+                      type: langfuse
+                    consent_form:
+                    - value: 7
+                      label: Returns consent
+                  summary: Every key the endpoint serves, for a team that has one
+                    of each resource.
+          description: ''
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -503,7 +553,7 @@ paths:
 
         Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. The node's edges follow their keyword: dropping a keyword deletes the edge that served it, and a keyword that merely moved keeps its target on whichever handle it moved to. A renamed keyword counts as one branch gone and another new, so its edge goes and the new branch comes back unwired. Handle names are not stable across a keyword edit, so re-read `output_handles` after one.
 
-        What `params` may hold depends on the node's type. The examples below name every param of each type for completeness, but a PATCH writes only the ones you send. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead, since a PATCH writes only the keys you send. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
       summary: Edit a Pipeline Node
       parameters:
       - in: path
@@ -528,144 +578,26 @@ paths:
             schema:
               $ref: '#/components/schemas/PatchedNodeUpdate'
             examples:
-              CodeNode:
+              OneParam:
                 value:
-                  label: My CodeNode
                   params:
-                    name: trim_answer
                     code: |
                       def main(input: str, **kwargs) -> str:
-                          return input.strip()
-                    tag: trimmed
-                summary: 'CodeNode: `code` must define `main(input, **kwargs)`.'
-              RenderTemplate:
+                          return input.upper()
+                summary: Params merge key by key, so a body can be one key wide.
+              LabelOnly:
                 value:
-                  label: My RenderTemplate
-                  params:
-                    name: format_reply
-                    template_string: Hi {{ participant_data.name }} -- {{ input }}
-                    tag: formatted
-                summary: 'RenderTemplate: Jinja2 template, using `{{ ... }}`.'
-              SendEmail:
+                  label: Trim the answer
+                summary: 'No `params` at all: the node''s configuration is left alone.'
+              RouterKeywords:
                 value:
-                  label: My SendEmail
                   params:
-                    name: email_transcript
-                    recipient_list: support@example.test, escalations@example.test
-                    subject: Transcript for {{ participant_details.identifier }}
-                    body: '{{ input }}'
-                    tag: emailed
-                summary: 'SendEmail: `recipient_list` is comma-separated; subject/body
-                  are Jinja2 templates.'
-              ExtractStructuredData:
-                value:
-                  label: My ExtractStructuredData
-                  params:
-                    name: extract_order
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.2
-                    data_schema: '{"order_number": "the order the participant is asking
-                      about"}'
-                    tag: extracted
-                summary: 'ExtractStructuredData: `data_schema` maps field name ->
-                  what to look for.'
-              ExtractParticipantData:
-                value:
-                  label: My ExtractParticipantData
-                  params:
-                    name: remember_order
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.2
-                    data_schema: '{"order_number": "the order the participant is asking
-                      about"}'
-                    key_name: orders
-                    tag: remembered
-                summary: 'ExtractParticipantData: As ExtractStructuredData, plus `key_name`
-                  to nest the result under.'
-              RouterNode:
-                value:
-                  label: My RouterNode
-                  params:
-                    name: triage
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.0
-                    prompt: Route on what {participant_data} is asking for.
                     keywords:
                     - schedule
                     - reschedule
                     - cancel
-                    default_keyword_index: 2
-                    tag_output_message: true
-                    history_type: named
-                    history_name: triage-history
-                    history_mode: max_history_length
-                    user_max_token_limit: 4000
-                    max_history_length: 25
-                summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
-                  are uppercased on save.'
-              StaticRouterNode:
-                value:
-                  label: My StaticRouterNode
-                  params:
-                    name: route_on_plan
-                    keywords:
-                    - free
-                    - pro
-                    default_keyword_index: 0
-                    tag_output_message: true
-                    data_source: session_state
-                    route_key: plan
-                summary: 'StaticRouterNode: Routes on stored data instead of an LLM;
-                  takes no LLM params.'
-              LLMResponseWithPrompt:
-                value:
-                  label: My LLMResponseWithPrompt
-                  params:
-                    name: answer
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.4
-                    prompt: You are a support agent. Answer from {source_material},
-                      the files in {media} and whichever of {collection_index_summaries}
-                      fits. You are talking to {participant_data} and it is now {current_datetime}.
-                    history_type: named
-                    history_name: support-history
-                    history_mode: summarize
-                    user_max_token_limit: 8000
-                    max_history_length: 30
-                    source_material_id: 7
-                    collection_id: 3
-                    collection_index_ids:
-                    - 8
-                    - 9
-                    max_results: 5
-                    generate_citations: false
-                    tools:
-                    - update-user-data
-                    - one-off-reminder
-                    - calculator
-                    custom_actions:
-                    - 5:weather_get
-                    built_in_tools:
-                    - web-search
-                    - code-execution
-                    tool_config:
-                      web-search:
-                        allowed_domains:
-                        - docs.example.test
-                        blocked_domains:
-                        - forum.example.test
-                    synthetic_voice_id: 21
-                    tag: answered
-                summary: 'LLMResponseWithPrompt: A normal LLM node, with every optional
-                  param set.'
+                summary: Regenerates the router's output handles, and takes its edges
+                  with them.
       security:
       - OAuth2:
         - chatbots:write
@@ -1248,6 +1180,7 @@ paths:
           - commcare_connect
           - embedded_widget
           - email
+          - public
           type: string
           minLength: 1
         description: |-
@@ -1263,6 +1196,7 @@ paths:
           * `commcare_connect` - commcare_connect
           * `embedded_widget` - embedded_widget
           * `email` - email
+          * `public` - public
       - in: query
         name: start
         schema:
@@ -1761,6 +1695,41 @@ components:
       - unwired_handles
       - version_description
       - voice
+    ChatbotOptions:
+      type: object
+      description: |-
+        The documented keys. Each holds the values for the chatbot setting of the same name.
+
+        The keys are derived from the settings form rather than listed by hand, so a response may carry
+        keys not documented here as new settings are added.
+      properties:
+        voice_provider:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderOption'
+          description: The voice providers the team has configured.
+        synthetic_voice:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyntheticVoiceOption'
+          description: Every voice one of the team's `voice_provider` entries can
+            speak. A voice is only speakable by a provider of the same `type`, so
+            pick the pair together.
+        voice_response_behaviour:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChoiceOption'
+          description: When the chatbot answers with voice.
+        trace_provider:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderOption'
+          description: Where the chatbot's traces are sent.
+        consent_form:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceOption'
+          description: The consent forms the team has written.
     ChatbotVersion:
       type: object
       properties:
@@ -1777,6 +1746,22 @@ components:
           type: string
       required:
       - name
+    ChoiceOption:
+      type: object
+      description: |-
+        One value of a param or setting drawn from a fixed list rather than from the team's resources.
+
+        `value` is the string the field stores, not a resource id.
+      properties:
+        value:
+          type: string
+          description: Write this into the param or setting of the same name.
+        label:
+          type: string
+          description: How the value reads in the UI.
+      required:
+      - label
+      - value
     CodeNodeParams:
       type: object
       properties:
@@ -2663,9 +2648,11 @@ components:
       properties:
         value:
           type: integer
-          description: The model's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
+          description: What the resource is called.
         type:
           type: string
           description: The provider type that serves the model. Must equal the `type`
@@ -3035,6 +3022,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProviderOption'
+          description: The LLM providers the team has configured. `type` is the join
+            key for `must_match`.
         llm_provider_model_id:
           type: array
           items:
@@ -3043,6 +3032,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SyntheticVoiceOption'
+          description: The voices a node can speak in. The chatbot's own provider
+            is its `voice.provider_id` -- see the chatbot detail endpoint.
         source_material:
           type: array
           items:
@@ -3149,6 +3140,7 @@ components:
       - evaluations
       - embedded_widget
       - email
+      - public
       type: string
       description: |-
         * `telegram` - Telegram
@@ -3162,6 +3154,7 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+        * `public` - Public link
     PromptVariable:
       type: object
       description: A template variable rather than a resource id -- there is no `value`
@@ -3197,18 +3190,20 @@ components:
       - type
     ProviderOption:
       type: object
-      description: One of the team's configured service providers.
+      description: One of the team's configured service providers. `label` is the
+        name the team gave it.
       properties:
         value:
           type: integer
-          description: The provider's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
-          description: The name the team gave the provider.
+          description: What the resource is called.
         type:
           type: string
-          description: What the provider talks to -- `openai`, `anthropic`, `aws`.
-            The join key for `must_match`.
+          description: What the provider talks to -- `openai`, `anthropic`, `aws`,
+            `langfuse`.
       required:
       - label
       - type
@@ -3225,12 +3220,13 @@ components:
     ResourceOption:
       type: object
       description: |-
-        One of the team's stored resources. Write `value` into the param; `label` is for humans
-        reading a diff.
+        One of the team's stored resources. Write `value` into the param or setting of the same name;
+        `label` is for humans reading a diff.
       properties:
         value:
           type: integer
-          description: The resource's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
           description: What the resource is called.
@@ -3350,18 +3346,21 @@ components:
       properties:
         value:
           type: integer
-          description: The voice's id. Write this into the node param.
+          description: The resource's id. Write this into the param or setting of
+            the same name.
         label:
           type: string
+          description: What the resource is called.
         type:
           type: string
           description: The service the voice comes from -- `aws`, `azure`, `openai`.
+            A voice is only speakable by a voice provider of the same `type`.
         provider_id:
           type: integer
           nullable: true
           description: The voice provider that owns this voice, or null for a shared
-            voice any provider of the same `type` can speak. The chatbot's own provider
-            is its `voice.provider_id` -- see the chatbot detail endpoint.
+            voice any provider of the same `type` can speak. A voice that names a
+            provider can only be paired with that one.
       required:
       - label
       - provider_id

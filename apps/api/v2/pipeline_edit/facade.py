@@ -65,10 +65,14 @@ def edit_pipeline(
     ``respond`` runs inside the lock too, so that a body that cannot be built takes the write down
     with it: building it after the commit is how a node the server could not parse used to persist
     and then 500 every later read of the pipeline.
+
+    The chatbot lookup and the permission check sit outside the transaction: neither writes, and a
+    404 or a 403 has no reason to open one. Nothing is lost by moving them out -- the lock is on the
+    ``Pipeline`` row, and ``_locked_pipeline`` restates the team boundary under it.
     """
+    chatbot = get_working_chatbot(request.team, public_id)
+    enforce_application_chatbot_write(request, chatbot)
     with transaction.atomic():
-        chatbot = get_working_chatbot(request.team, public_id)
-        enforce_application_chatbot_write(request, chatbot)
         pipeline = _locked_pipeline(chatbot)
         flow = pipeline.flow_data
         edit = plan(flow)

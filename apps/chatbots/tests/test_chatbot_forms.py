@@ -4,8 +4,10 @@ from django.test import RequestFactory
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
+from apps.service_providers.models import VoiceProviderType
 from apps.teams.utils import set_current_team
-from apps.utils.factories.experiment import ConsentFormFactory
+from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, SyntheticVoiceFactory
+from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -100,3 +102,53 @@ def test_settings_form_has_no_allowlist_field(rf, experiment):
     request.user = experiment.team.members.first()
 
     assert "participant_allowlist" not in ChatbotSettingsForm(request=request, instance=experiment).fields
+
+
+@pytest.mark.django_db()
+def test_chatbot_settings_form_offers_only_voices_a_provider_can_speak(team_with_users):
+    """A voice is only speakable by a voice provider of its own type, so a voice whose service the
+    team holds no provider for is not a choice the form may accept -- picking it gets a chatbot that
+    falls silent when it tries to speak."""
+    team = team_with_users
+    aws = VoiceProviderFactory.create(team=team, type=VoiceProviderType.aws)
+    speakable = SyntheticVoiceFactory.create(name="Joanna", service="AWS", voice_provider=aws)
+    shared = SyntheticVoiceFactory.create(name="Matthew", service="AWS")
+    unspeakable = SyntheticVoiceFactory.create(name="Amber", service="Azure")
+    request = RequestFactory().get("/")
+    request.team = team
+    request.user = team.members.first()
+
+    form = ChatbotSettingsForm(request)
+
+    voice_ids = set(form.fields["synthetic_voice"].queryset.values_list("id", flat=True))
+    assert {speakable.id, shared.id} <= voice_ids
+    assert unspeakable.id not in voice_ids
+
+
+@pytest.mark.django_db()
+def test_chatbot_settings_form_accepts_a_voice_the_settings_page_offers(team_with_users):
+    """The settings page builds its voice dropdown from every voice of the chosen provider's type,
+    including the shared ones. Narrowing the form's own list must not turn one of those into a
+    "select a valid choice" error on save."""
+    team = team_with_users
+    provider = VoiceProviderFactory.create(team=team, type=VoiceProviderType.aws)
+    shared_voice = SyntheticVoiceFactory.create(name="Matthew", service="AWS")
+    experiment = ExperimentFactory.create(team=team)
+    request = RequestFactory().get("/")
+    request.team = team
+    request.user = team.members.first()
+    set_current_team(team)
+
+    form = ChatbotSettingsForm(
+        request,
+        data={
+            "name": experiment.name,
+            "voice_provider": provider.id,
+            "synthetic_voice": shared_voice.id,
+            "voice_response_behaviour": experiment.voice_response_behaviour,
+        },
+        instance=experiment,
+    )
+
+    assert form.is_valid(), form.errors
+    assert form.save().synthetic_voice_id == shared_voice.id

@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bullseye AS build-python
+FROM python:3.13-slim-bookworm AS build-python
 RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential libpq-dev
@@ -50,7 +50,7 @@ COPY assets /code/assets/
 
 RUN corepack pnpm run build
 
-FROM python:3.13-slim-bullseye
+FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1
 ENV DEBUG=0
 
@@ -93,6 +93,13 @@ RUN SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost python manage.py collec
 RUN chown django:django -R static_root
 
 USER django
+
+# Supplied by CI as `git describe --tags --match 'v*' --always`. `.git` is not
+# in the build context (see .dockerignore), so this cannot be derived here.
+# Deliberately last: the version changes on every build, so an earlier ENV
+# would invalidate the apt, dependency and collectstatic layers every time.
+ARG OCS_VERSION=unknown
+ENV OCS_VERSION=${OCS_VERSION}
 
 ENV PORT=8000
 
