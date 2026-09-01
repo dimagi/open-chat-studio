@@ -207,6 +207,19 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
     return HttpResponse()
 
 
+def _normalize_config(config: dict) -> dict:
+    """Drops blank optional fields cleaned_data fills in even when the user never touched
+    them, so an untouched field doesn't look like a change against an older, sparser saved
+    config."""
+    return {k: v for k, v in config.items() if v}
+
+
+def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
+    """Whether obj's current config differs from old_config. Always True for a create -
+    there's nothing to compare against yet."""
+    return is_create or old_config != _normalize_config(obj.config)
+
+
 class CreateServiceProvider(
     LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
 ):
@@ -285,14 +298,10 @@ class CreateServiceProvider(
             obj = primary_form.save(commit=False)
             obj.team = request.team
             is_create = obj.pk is None
-            # Captured before config_form.save() overwrites obj.config, so the test below can
-            # tell whether credentials actually changed - re-testing on an unrelated edit
-            # (e.g. renaming the provider) wastes an external call for no reason. Dropping
-            # falsy values (same normalization models.py already applies to config elsewhere)
-            # matters here: cleaned_data fills every optional field in with "" even when the
-            # user never touched it, which would otherwise look like a change against an
-            # older, sparser saved config that predates that field being blank-filled.
-            old_config = None if is_create else {k: v for k, v in obj.config.items() if v}
+            # Captured before config_form.save() overwrites obj.config, so the check below
+            # can tell whether credentials actually changed - re-testing on an unrelated
+            # edit (e.g. renaming the provider) wastes an external call for no reason.
+            old_config = None if is_create else _normalize_config(obj.config)
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -306,9 +315,7 @@ class CreateServiceProvider(
         # (or repeating the call if the transaction were retried or rolled back) is worse than
         # the save and the test being two separate steps.
         had_connection_test_warning = False
-        new_config = {k: v for k, v in obj.config.items() if v}
-        config_changed = is_create or old_config != new_config
-        if isinstance(obj, LlmProvider) and config_changed:
+        if isinstance(obj, LlmProvider) and _has_config_changed(is_create, old_config, obj):
             for warning in obj.run_connection_test_hook():
                 messages.warning(request, warning)
                 had_connection_test_warning = True
