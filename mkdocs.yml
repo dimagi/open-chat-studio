@@ -164,6 +164,7 @@ nav:
       - Help Agent Evals: developer_guides/testing/help_agent_evals.md
   - Self-Hosting:
     - Overview: hosting/index.md
+    - Releases and Upgrades: hosting/releases.md
     - Configuration: hosting/configuration.md
     - Rate Limiting: hosting/rate_limiting.md
     - Docker Compose: hosting/docker.md
@@ -178,3 +179,4 @@ nav:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md
     - Feature Flags: admin_guides/feature_flags.md
+    - OAuth Applications: admin_guides/oauth_applications.md

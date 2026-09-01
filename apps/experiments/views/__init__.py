@@ -29,6 +29,7 @@ from .experiment import (  # noqa: F401
     start_session_public,
     translate_messages_view,
     trends_data,
+    unarchive_experiment_version,
     update_version_description,
     verify_public_chat_token,
 )

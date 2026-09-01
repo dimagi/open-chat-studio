@@ -94,6 +94,13 @@ RUN chown django:django -R static_root
 
 USER django
 
+# Supplied by CI as `git describe --tags --match 'v*' --always`. `.git` is not
+# in the build context (see .dockerignore), so this cannot be derived here.
+# Deliberately last: the version changes on every build, so an earlier ENV
+# would invalidate the apt, dependency and collectstatic layers every time.
+ARG OCS_VERSION=unknown
+ENV OCS_VERSION=${OCS_VERSION}
+
 ENV PORT=8000
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 0 --no-control-socket config.wsgi:application"]
