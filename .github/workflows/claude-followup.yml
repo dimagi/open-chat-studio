@@ -169,7 +169,7 @@ jobs:
       - name: Run Claude Code
         if: steps.check.outputs.skip != 'true'
         id: claude
-        uses: anthropics/claude-code-action@v1.0.183
+        uses: anthropics/claude-code-action@v1.0.206
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
