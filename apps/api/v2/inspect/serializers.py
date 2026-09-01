@@ -452,7 +452,11 @@ class GraphEdgeSerializer(serializers.Serializer):
     )
     target_handle = serializers.CharField(
         allow_null=True,
-        help_text="Input handle on the target node; currently always null (nodes have one implicit input).",
+        help_text=(
+            "Input handle on the target node. Every node has just the one implicit ``input`` handle, so "
+            "this is either ``input`` or null: null on an edge the pipeline builder drew, since it "
+            "renders no id on its target handles."
+        ),
     )
 
 
