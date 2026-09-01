@@ -1,4 +1,4 @@
-import {Edge, Node} from "@reactflow/core/dist/esm/types";
+import {Edge, Node} from "@reactflow/core";
 
 export type ReactFlowJsonObject<NodeData = any, EdgeData = any> = {
     nodes: Node<NodeData>[];

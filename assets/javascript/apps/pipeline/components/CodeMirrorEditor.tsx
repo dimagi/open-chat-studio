@@ -1,5 +1,5 @@
 import {githubDarkInit, githubLightInit} from "@uiw/codemirror-theme-github";
-import {ReactCodeMirrorProps} from "@uiw/react-codemirror/src";
+import {ReactCodeMirrorProps} from "@uiw/react-codemirror";
 import React, {useEffect, useMemo, useState} from "react";
 import CodeMirror, {EditorState} from "@uiw/react-codemirror";
 import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
