@@ -86,31 +86,14 @@ class ServiceProviderUsagesMixin(LoginAndTeamRequiredMixin, ServiceProviderMixin
         return get_object_or_404(self.provider_type.model, team=self.request.team, pk=self.kwargs["pk"])
 
 
-class ServiceProviderUsagesView(ServiceProviderUsagesMixin, django_views.View):
-    """Page shell only.
+class ServiceProviderUsagesContentView(ServiceProviderUsagesMixin, django_views.View):
+    """The Usages tab's contents.
 
-    Resolving usages fans out over many tables and can take several seconds,
-    so the list itself is fetched by ``ServiceProviderUsagesContentView`` via
-    HTMX and the shell shows a spinner in the meantime.
+    Resolving usages fans out over many tables and can take several seconds, so
+    the provider edit page renders the tab empty and fetches this over HTMX when
+    the tab is first opened.
     """
 
-    template_name = "service_providers/usages.html"
-
-    def get(self, request, *args, **kwargs):
-        provider = self.get_provider()
-        return render(
-            request,
-            self.template_name,
-            {
-                "provider": provider,
-                "provider_type": self.provider_type,
-                "title": f"Usages of {provider.name}",
-                "active_tab": "manage-team",
-            },
-        )
-
-
-class ServiceProviderUsagesContentView(ServiceProviderUsagesMixin, django_views.View):
     template_name = "service_providers/components/usages_content.html"
 
     def get(self, request, *args, **kwargs):
@@ -313,6 +296,8 @@ class CreateServiceProvider(
             "title": f"Edit {instance.name}" if instance else self.provider_type.label,
             "button_text": "Update" if instance else "Create",
             "active_tab": "manage-team",
+            "active_provider_tab": "usages" if self.request.GET.get("tab") == "usages" else "configuration",
+            "can_view_usages": self.request.user.has_perm(self.provider_type.get_permission("view")),
         }
         is_elevenlabs_voice = (
             isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value
