@@ -22,16 +22,21 @@
   they need to be in the same Alpine scope even though only the config fields set it.
   {% endcomment %}
   <div class="app-card max-w-5xl mx-auto" x-data="{ configChanged: false }">
-    <div class="flex items-center justify-between gap-2">
-      <h1 class="pg-title">{{ title }}</h1>
-      {% if object.id %}
-        <a class="btn btn-outline btn-sm"
-           href="{% url 'service_providers:usages' request.team.slug provider.slug object.id %}">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          Show usages
-        </a>
-      {% endif %}
-    </div>
+    <h1 class="pg-title">{{ title }}</h1>
+
+    {% comment %}
+      On edit the page splits into Configuration and Usages tabs; on create there is
+      nothing to show usages for, so the configuration content stands alone. The two
+      halves of the tab wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written
+      once here and stays reachable by the blocks that llm_provider_form.html overrides.
+    {% endcomment %}
+    {% if object.id %}
+      <div role="tablist" class="tabs tabs-border mt-4">
+        <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Configuration"
+               {% if active_provider_tab != 'usages' %}checked{% endif %}>
+        <div role="tabpanel" class="tab-content pt-4">
+    {% endif %}
+
     {% if object.id and provider.slug == 'tracing' %}
       {% include "service_providers/components/trace_project.html" %}
     {% endif %}
@@ -107,5 +112,29 @@
         </form>
       {% endif %}
     {% endblock post_form %}
+
+    {% if object.id %}
+        </div>
+        {% if can_view_usages %}
+          <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Usages"
+                 {% if active_provider_tab == 'usages' %}checked{% endif %}>
+          <div role="tabpanel" class="tab-content pt-4">
+            {% comment %}
+              Resolving usages fans out over many tables and can take several seconds.
+              An unselected daisyUI tab panel is display:none, so "intersect once" holds
+              the request back until someone actually opens the tab.
+            {% endcomment %}
+            <div id="provider-usages"
+                 hx-get="{% url 'service_providers:usages_content' request.team.slug provider.slug object.id %}"
+                 hx-trigger="intersect once">
+              <div class="flex items-center gap-2 text-base-content/60">
+                <span class="loading loading-spinner loading-md"></span>
+                <span>Searching for usages…</span>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 {% endblock app %}

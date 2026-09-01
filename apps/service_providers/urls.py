@@ -36,7 +36,6 @@ urlpatterns = [
     path("<slug:provider_type>/table/", views.ServiceProviderTableView.as_view(), name="table"),
     path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),
     path("<slug:provider_type>/<int:pk>/", views.CreateServiceProvider.as_view(), name="edit"),
-    path("<slug:provider_type>/<int:pk>/usages/", views.ServiceProviderUsagesView.as_view(), name="usages"),
     path(
         "<slug:provider_type>/<int:pk>/usages/content/",
         views.ServiceProviderUsagesContentView.as_view(),

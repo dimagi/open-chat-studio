@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.db import connection
 from django.template.loader import render_to_string
@@ -33,6 +35,24 @@ def anthropic_provider(team_with_users):
         type=str(LlmProviderTypes.anthropic),
         config={"anthropic_api_key": "sk-ant-secret-AbCdEf", "anthropic_api_base": "https://api.anthropic.com"},
     )
+
+
+def _edit_url(team, provider):
+    return reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+
+def _checked_tab(body: str) -> str:
+    """Return the aria-label of the tab radio the page rendered as checked."""
+    checked = [
+        re.search(r'aria-label="([^"]+)"', tag).group(1)
+        for tag in re.findall(r"<input[^>]*\brole=\"tab\"[^>]*>", body)
+        if "checked" in tag
+    ]
+    assert len(checked) == 1, f"expected exactly one checked tab, got {checked}"
+    return checked[0]
 
 
 @pytest.mark.django_db()
@@ -552,24 +572,61 @@ def test_rendering_usages_does_not_scale_with_version_count(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_usages_view_renders_shell_with_loading_state(team_with_users, client, anthropic_provider):
-    """The shell must not resolve usages itself; it defers to the content view."""
+def test_provider_edit_page_defers_usages_to_the_tab(team_with_users, client, anthropic_provider):
+    """The edit page renders the Usages tab empty; the content view fills it when the tab opens."""
     user = team_with_users.members.first()
     client.force_login(user)
-    url = reverse(
-        "service_providers:usages",
-        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
-    )
-    response = client.get(url)
+    response = client.get(_edit_url(team_with_users, anthropic_provider))
     assert response.status_code == 200
     body = response.content.decode()
-    assert "Where is" in body
-    assert "loading-spinner" in body
+
+    assert 'aria-label="Configuration"' in body
+    assert 'aria-label="Usages"' in body
     content_url = reverse(
         "service_providers:usages_content",
         kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
     )
     assert f'hx-get="{content_url}"' in body
+    assert 'hx-trigger="intersect once"' in body
+    # Resolving usages fans out over many tables, so a plain page load must not do it.
+    assert "not currently referenced" not in body
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("query", "expected_tab"),
+    [
+        pytest.param("", "Configuration", id="no-param-opens-configuration"),
+        pytest.param("?tab=usages", "Usages", id="tab-usages-opens-usages"),
+        pytest.param("?tab=nonsense", "Configuration", id="unknown-tab-falls-back-to-configuration"),
+    ],
+)
+def test_provider_edit_page_tab_query_param(team_with_users, client, anthropic_provider, query, expected_tab):
+    user = team_with_users.members.first()
+    client.force_login(user)
+    response = client.get(_edit_url(team_with_users, anthropic_provider) + query)
+    body = response.content.decode()
+    assert _checked_tab(body) == expected_tab
+
+
+@pytest.mark.django_db()
+def test_provider_create_page_has_no_tabs(team_with_users, client):
+    """There is nothing to show usages for before the provider exists."""
+    user = team_with_users.members.first()
+    client.force_login(user)
+    url = reverse(
+        "service_providers:new",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "provider_type": "llm",
+            "subtype": str(LlmProviderTypes.anthropic),
+        },
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'aria-label="Usages"' not in body
+    assert 'role="tablist"' not in body
 
 
 @pytest.mark.django_db()
