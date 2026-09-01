@@ -9,7 +9,7 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import add_edge, add_llm_node, node_url, nodes_url, outgoing_handles
+from .conftest import add_edge, add_llm_node, add_router_node, boundary_node, node_url, nodes_url, outgoing_handles
 
 
 @pytest.fixture()
@@ -96,7 +96,7 @@ class TestRefusals:
 
         409 rather than 404, and the same answer DELETE gives: the node is there and the address is
         right, so the refusal is about what the node is, not about where it was looked for."""
-        node_id = chatbot.pipeline.node_set.get(type=node_type).flow_id
+        node_id = boundary_node(chatbot, node_type)
         before = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
 
         response = client.patch(node_url(chatbot, node_id), body, format="json")
@@ -154,21 +154,7 @@ class TestEdgesAnEditCanStrand:
 
     @pytest.fixture()
     def router(self, client, chatbot, llm):
-        provider, model = llm
-        response = client.post(
-            nodes_url(chatbot),
-            {
-                "type": "RouterNode",
-                "params": {
-                    "llm_provider_id": provider.id,
-                    "llm_provider_model_id": model.id,
-                    "keywords": ["schedule", "reschedule"],
-                },
-            },
-            format="json",
-        )
-        assert response.status_code == 201, response.content
-        return response.json()["node"]["node_id"]
+        return add_router_node(client, chatbot, llm)
 
     def test_editing_router_keywords_regenerates_the_output_handles(self, client, chatbot, router):
         """Handles are positional (`output_i` serves `keywords[i]`) and the model upper-cases the
@@ -254,7 +240,7 @@ class TestEdgesAnEditCanStrand:
     def test_an_edge_already_stranded_before_the_edit_is_left_alone(self, client, chatbot, llm, router):
         """Only the handles this edit removed are followed. An edge on a handle the node never offered is
         still reported and still the agent's to deal with."""
-        start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
+        start = boundary_node(chatbot, "StartNode")
         add_edge(chatbot.pipeline, start, router)
         stranded = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_7")
 
@@ -283,7 +269,7 @@ class TestEdgesAnEditCanStrand:
         """Only a node whose handles depend on its params can lose one. A plain node offers the single
         standard output whatever is edited, so nothing about its wiring is this endpoint's business."""
         llm_node = add_llm_node(client, chatbot, llm)
-        end = chatbot.pipeline.node_set.get(type="EndNode").flow_id
+        end = boundary_node(chatbot, "EndNode")
         edge = add_edge(chatbot.pipeline, llm_node, end)
 
         response = client.patch(node_url(chatbot, llm_node), {"params": {"prompt": "Be terse."}}, format="json")

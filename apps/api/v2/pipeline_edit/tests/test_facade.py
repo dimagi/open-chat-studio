@@ -7,7 +7,17 @@ from django.test.utils import CaptureQueriesContext
 from apps.pipelines.models import Node
 from apps.utils.factories.documents import CollectionFactory
 
-from .conftest import add_llm_node, boundary_node, edge_url, edges_url, node_url, nodes_url
+from .conftest import (
+    add_bare_node,
+    add_llm_node,
+    boundary_node,
+    edge_url,
+    edges_url,
+    inspect_url,
+    node_url,
+    nodes_url,
+    wire,
+)
 
 
 @pytest.mark.django_db()
@@ -72,13 +82,10 @@ def _url(client, chatbot, route: str) -> str:
         return nodes_url(chatbot)
     if route == "edges":
         return edges_url(chatbot)
-    node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+    node_id = add_bare_node(client, chatbot, "CodeNode")
     if route == "node":
         return node_url(chatbot, node_id)
-    end = boundary_node(chatbot, "EndNode")
-    edge = client.post(edges_url(chatbot), {"source": node_id, "target": end}, format="json")
-    assert edge.status_code == 201, edge.content
-    return edge_url(chatbot, edge.json()["edge"]["id"])
+    return edge_url(chatbot, wire(client, chatbot, node_id, boundary_node(chatbot, "EndNode")))
 
 
 @pytest.mark.django_db()
@@ -190,7 +197,7 @@ class TestTheResponseEnvelope:
         assert "mcp_tools" in stored
         assert "mcp_tools" not in created["params"]
 
-        inspected = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/").json()
+        inspected = client.get(inspect_url(chatbot)).json()
         node = next(node for node in inspected["pipeline"]["nodes"] if node["node_id"] == created["node_id"])
 
         # Inspect keeps resource ids and `name` out of params, renders the resources separately, and
@@ -214,12 +221,17 @@ class TestTheResponseEnvelope:
 QUERIES_UNDER_THE_LOCK = 29
 
 
-#: How many statements a wire may run while it holds the pipeline row, on a graph of one LLM node.
+#: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
 #: Pinned to a number for the same reason :data:`QUERIES_UNDER_THE_LOCK` is: the thing worth catching
-#: is work creeping back *in*, and a comparison against the node path cannot see that -- wiring is
-#: far enough below it that restoring the node reconcile this endpoint does not need (7 statements,
-#: all under the lock) would still compare favourably. Raising it is a decision about how long the
-#: row is held, so say in the commit what the extra statements buy.
+#: is work creeping back *in*, and a comparison against the node path cannot see that -- wiring sits
+#: far enough below it to compare favourably either way, because the node path moves by the same
+#: amount per node.
+#:
+#: Two rules, so that a failure says which of the two unrelated causes it is. Restoring the node
+#: reconcile this endpoint does not need costs a flat 7 statements at any graph size, so a failure at
+#: 17 is that revert. Every extra node on the fixture graph costs 2 (``pipeline_state`` validates each
+#: one), so a failure at 12 is someone having changed the fixture. Raising it deliberately is a
+#: decision about how long the row is held: say in the commit what the extra statements buy.
 WIRE_QUERIES_UNDER_THE_LOCK = 10
 
 

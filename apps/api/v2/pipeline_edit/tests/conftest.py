@@ -160,6 +160,10 @@ def edge_url(chatbot, edge_id: str) -> str:
     return f"/api/v2/chatbots/{chatbot.public_id}/pipeline/edges/{edge_id}/"
 
 
+def inspect_url(chatbot) -> str:
+    return f"/api/v2/chatbots/{chatbot.public_id}/inspect/"
+
+
 def stored_node_params(chatbot, node_id: str) -> dict:
     """The params on the node's row, which is the thing a later read serves."""
     return Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params

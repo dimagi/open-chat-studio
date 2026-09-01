@@ -5,16 +5,34 @@ wire returns. Nothing about an edge is editable in place -- to move one end, del
 one -- so this endpoint is half of every rewiring an agent does.
 """
 
+from typing import NamedTuple
+
 import pytest
 
-from apps.pipelines.models import Node
 from apps.utils.factories.experiment import ChatbotFactory
 
-from .conftest import add_edge, add_llm_node, add_router_node, boundary_node, edge_url, stored_edges, wire
+from .conftest import (
+    add_edge,
+    add_llm_node,
+    add_router_node,
+    boundary_node,
+    edge_url,
+    inspect_url,
+    stored_edges,
+    wire,
+)
+
+
+class Spliced(NamedTuple):
+    """An LLM node and the two edges that splice it between Start and End."""
+
+    node_id: str
+    incoming: str
+    outgoing: str
 
 
 @pytest.fixture()
-def spliced(client, chatbot, llm, start, end):
+def spliced(client, chatbot, llm, start, end) -> Spliced:
     """An LLM node wired between Start and End, with the direct Start -> End edge gone.
 
     Spliced rather than added alongside: with the direct edge still there, unwiring this node would
@@ -23,43 +41,30 @@ def spliced(client, chatbot, llm, start, end):
     node_id = add_llm_node(client, chatbot, llm)
     chatbot.pipeline.data["edges"] = []
     chatbot.pipeline.save(update_fields=["data"])
-    return node_id, wire(client, chatbot, start, node_id), wire(client, chatbot, node_id, end)
+    return Spliced(node_id, wire(client, chatbot, start, node_id), wire(client, chatbot, node_id, end))
 
 
 @pytest.mark.django_db()
 def test_delete_removes_only_the_edge_addressed(client, chatbot, spliced):
-    _node_id, incoming, outgoing = spliced
-
-    response = client.delete(edge_url(chatbot, outgoing))
+    response = client.delete(edge_url(chatbot, spliced.outgoing))
 
     assert response.status_code == 200, response.content
-    assert [edge["id"] for edge in stored_edges(chatbot.pipeline)] == [incoming]
+    assert [edge["id"] for edge in stored_edges(chatbot.pipeline)] == [spliced.incoming]
 
 
 @pytest.mark.django_db()
-def test_delete_leaves_the_nodes_the_edge_joined_in_place(client, chatbot, spliced):
-    """Unwiring is not deleting: both nodes stay, and stay where they were on the canvas."""
-    node_id, _incoming, outgoing = spliced
-    before = {node.flow_id: (node.position_x, node.position_y) for node in chatbot.pipeline.node_set.all()}
+def test_delete_leaves_every_node_row_exactly_as_it_was(client, chatbot, spliced):
+    """Unwiring is not deleting: both nodes stay, and stay where they were on the canvas.
 
-    client.delete(edge_url(chatbot, outgoing))
+    Every row rather than just the edge's two, because ``update_nodes_from_data`` reads its mapping as
+    the whole graph membership -- an edge-only diff has to hand it every node, and naming none would
+    reconcile them all away.
+    """
+    before = _node_rows(chatbot)
 
-    chatbot.pipeline.refresh_from_db()
-    assert Node.objects.filter(pipeline=chatbot.pipeline, flow_id=node_id).exists()
-    assert {node.flow_id: (node.position_x, node.position_y) for node in chatbot.pipeline.node_set.all()} == before
+    client.delete(edge_url(chatbot, spliced.outgoing))
 
-
-@pytest.mark.django_db()
-def test_delete_leaves_the_other_node_rows_alone(client, chatbot, spliced):
-    """``update_nodes_from_data`` reads its mapping as the whole graph membership, so an edge-only
-    diff has to hand it every node -- naming none would reconcile them all away."""
-    _node_id, _incoming, outgoing = spliced
-    before = set(chatbot.pipeline.node_set.values_list("flow_id", "type", "label"))
-
-    client.delete(edge_url(chatbot, outgoing))
-
-    chatbot.pipeline.refresh_from_db()
-    assert set(chatbot.pipeline.node_set.values_list("flow_id", "type", "label")) == before
+    assert _node_rows(chatbot) == before
 
 
 @pytest.mark.django_db()
@@ -67,9 +72,8 @@ def test_delete_reports_the_hole_it_leaves(client, chatbot, spliced, end):
     """Lenient on structure: unwiring usually breaks the path to End, which is reported rather than
     refused so the agent can wire a replacement in. No ``edge`` key -- there is no edge left to
     describe, the same as a node delete carries no ``node``."""
-    _node_id, _incoming, outgoing = spliced
 
-    body = client.delete(edge_url(chatbot, outgoing)).json()
+    body = client.delete(edge_url(chatbot, spliced.outgoing)).json()
 
     assert body["pipeline_valid"] is False
     assert "not reachable" in body["pipeline_errors"]["node"][end]["root"]
@@ -80,22 +84,20 @@ def test_delete_reports_the_hole_it_leaves(client, chatbot, spliced, end):
 def test_delete_puts_the_handles_back_on_the_unwired_list(client, chatbot, spliced, end):
     """The mirror of what a wire does: both ends of the edge come back onto the map an agent works
     down to finish a graph."""
-    node_id, _incoming, outgoing = spliced
 
-    body = client.delete(edge_url(chatbot, outgoing)).json()
+    body = client.delete(edge_url(chatbot, spliced.outgoing)).json()
 
-    assert body["unwired_handles"][node_id] == [{"handle": "output", "label": None}]
+    assert body["unwired_handles"][spliced.node_id] == [{"handle": "output", "label": None}]
     assert body["unwired_handles"][end] == [{"handle": "input", "label": None}]
 
 
 @pytest.mark.django_db()
 def test_delete_bumps_the_edit_revision(client, chatbot, spliced):
     """An open UI builder session has to see this as a conflict rather than overwrite it."""
-    _node_id, _incoming, outgoing = spliced
     chatbot.pipeline.refresh_from_db()
     before = chatbot.pipeline.edit_revision
 
-    client.delete(edge_url(chatbot, outgoing))
+    client.delete(edge_url(chatbot, spliced.outgoing))
 
     chatbot.pipeline.refresh_from_db()
     assert chatbot.pipeline.edit_revision == before + 1
@@ -113,13 +115,12 @@ def test_delete_of_an_unknown_edge_is_a_404(client, chatbot):
 def test_a_repeated_delete_is_a_404_and_changes_nothing(client, chatbot, spliced):
     """What a retry of an unwire looks like: the second call reports the edge already gone rather than
     disturbing the graph the first call left."""
-    _node_id, incoming, outgoing = spliced
-    assert client.delete(edge_url(chatbot, outgoing)).status_code == 200
+    assert client.delete(edge_url(chatbot, spliced.outgoing)).status_code == 200
 
-    response = client.delete(edge_url(chatbot, outgoing))
+    response = client.delete(edge_url(chatbot, spliced.outgoing))
 
     assert response.status_code == 404, response.content
-    assert [edge["id"] for edge in stored_edges(chatbot.pipeline)] == [incoming]
+    assert [edge["id"] for edge in stored_edges(chatbot.pipeline)] == [spliced.incoming]
 
 
 @pytest.mark.django_db()
@@ -142,7 +143,7 @@ def test_a_stranded_edge_can_be_deleted(client, chatbot, llm, start, end):
     node_id = add_llm_node(client, chatbot, llm)
     add_edge(chatbot.pipeline, start, node_id)
     stranded = add_edge(chatbot.pipeline, node_id, end, source_handle="output_7")
-    inspected = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/").json()
+    inspected = client.get(inspect_url(chatbot)).json()
     assert inspected["pipeline_errors"]["edge"] == [stranded]
 
     body = client.delete(edge_url(chatbot, stranded)).json()
@@ -155,10 +156,9 @@ def test_a_stranded_edge_can_be_deleted(client, chatbot, llm, start, end):
 def test_an_edge_deleted_and_wired_again_comes_back_with_the_same_id(client, chatbot, spliced, end):
     """The id is derived from the endpoints, so re-wiring the same pair reuses it. Worth pinning: it
     is what lets a client that lost track of an unwire recognise the edge it re-created."""
-    node_id, _incoming, outgoing = spliced
-    client.delete(edge_url(chatbot, outgoing))
+    client.delete(edge_url(chatbot, spliced.outgoing))
 
-    assert wire(client, chatbot, node_id, end) == outgoing
+    assert wire(client, chatbot, spliced.node_id, end) == spliced.outgoing
 
 
 @pytest.mark.django_db()
@@ -175,3 +175,9 @@ def test_a_router_branch_is_repointed_by_unwiring_and_wiring_again(client, chatb
     assert [(edge["id"], edge["target"]) for edge in stored_edges(chatbot.pipeline) if edge["source"] == router] == [
         (second, other)
     ]
+
+
+def _node_rows(chatbot) -> set[tuple]:
+    """Every node row's identity, type, label and canvas position -- what an edge write must not touch."""
+    chatbot.pipeline.refresh_from_db()
+    return set(chatbot.pipeline.node_set.values_list("flow_id", "type", "label", "position_x", "position_y"))

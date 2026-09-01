@@ -16,7 +16,9 @@ from .conftest import (
     add_edge,
     add_llm_node,
     add_router_node,
+    edge_url,
     edges_url,
+    inspect_url,
     node_url,
     nodes_url,
     stored_edges,
@@ -121,12 +123,6 @@ class TestWhatAWireStores:
 @pytest.mark.django_db()
 class TestHandleDefaults:
     """Which handle a wire lands on when the body does not say."""
-
-    def test_a_source_offering_one_output_handle_needs_no_source_handle(self, client, chatbot, llm_node, end):
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": end}, format="json")
-
-        assert response.status_code == 201, response.content
-        assert response.json()["edge"]["source_handle"] == "output"
 
     def test_a_router_source_must_name_the_branch_to_wire(self, client, chatbot, router, end):
         """A router's handles are its branches, so guessing one would wire a branch nobody chose. The
@@ -302,7 +298,7 @@ class TestRefusedWires:
         assert response.status_code == 400, response.content
         assert "keywords" in str(response.json()["source"])
 
-    def test_a_router_can_be_wired_once_its_keywords_are_set(self, client, chatbot, end, llm):
+    def test_a_router_can_be_wired_once_its_keywords_are_set(self, client, chatbot, end):
         """The other half of the test above: the refusal names a step that actually works."""
         node_id = add_bare_node(client, chatbot, "RouterNode")
         client.patch(node_url(chatbot, node_id), {"params": {"keywords": ["yes", "no"]}}, format="json")
@@ -443,7 +439,7 @@ class TestTheReadWriteLoop:
     def test_the_id_a_wire_returns_is_the_one_inspect_reports_and_delete_takes(self, client, chatbot, llm_node, end):
         edge_id = wire(client, chatbot, llm_node, end)
 
-        graph = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/").json()["pipeline"]["graph"]
+        graph = client.get(inspect_url(chatbot)).json()["pipeline"]["graph"]
 
         assert {
             "id": edge_id,
@@ -452,7 +448,7 @@ class TestTheReadWriteLoop:
             "source_handle": "output",
             "target_handle": "input",
         } in graph["edges"]
-        assert client.delete(f"/api/v2/chatbots/{chatbot.public_id}/pipeline/edges/{edge_id}/").status_code == 200
+        assert client.delete(edge_url(chatbot, edge_id)).status_code == 200
 
 
 @pytest.mark.django_db()

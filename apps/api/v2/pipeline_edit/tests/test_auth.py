@@ -41,23 +41,20 @@ def _call(client, chatbot, verb="post"):
     whatever the caller's role, so it could not tell a permission failure from the endpoint's own
     answer.
     """
-    if verb == "post":
-        return client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
     node = Node.objects.create(
         pipeline=chatbot.pipeline, flow_id="LLMResponseWithPrompt-auth1", type="LLMResponseWithPrompt", params={}
     )
-    if verb == "patch":
-        return client.patch(node_url(chatbot, node.flow_id), {"label": "Renamed"}, format="json")
-    if verb == "delete":
-        return client.delete(node_url(chatbot, node.flow_id))
     end = boundary_node(chatbot, "EndNode")
-    if verb == "post_edge":
-        return client.post(edges_url(chatbot), {"source": node.flow_id, "target": end}, format="json")
-    if verb == "delete_edge":
-        return client.delete(edge_url(chatbot, add_edge(chatbot.pipeline, node.flow_id, end)))
-    # Named rather than fallen through to: a typo in a parametrize would otherwise silently exercise
-    # whichever verb happened to be last, and pass.
-    raise ValueError(f"no such verb: {verb!r}")
+    # A table rather than a chain of ifs: a verb this does not serve raises `KeyError` naming the
+    # typo, where a fall-through would silently exercise whichever verb happened to be last.
+    calls = {
+        "post": lambda: client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json"),
+        "patch": lambda: client.patch(node_url(chatbot, node.flow_id), {"label": "Renamed"}, format="json"),
+        "delete": lambda: client.delete(node_url(chatbot, node.flow_id)),
+        "post_edge": lambda: client.post(edges_url(chatbot), {"source": node.flow_id, "target": end}, format="json"),
+        "delete_edge": lambda: client.delete(edge_url(chatbot, add_edge(chatbot.pipeline, node.flow_id, end))),
+    }
+    return calls[verb]()
 
 
 ALLOWED_STATUS = {"post": 201, "patch": 200, "delete": 200, "post_edge": 201, "delete_edge": 200}

@@ -14,7 +14,7 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import add_edge, add_llm_node, nodes_url, stored_node_params
+from .conftest import add_edge, add_llm_node, boundary_node, inspect_url, nodes_url, stored_node_params
 
 
 @pytest.mark.django_db()
@@ -83,10 +83,10 @@ class TestNodeId:
             format="json",
         )
         router = created.json()["node"]["node_id"]
-        add_edge(chatbot.pipeline, chatbot.pipeline.node_set.get(type="StartNode").flow_id, router)
+        add_edge(chatbot.pipeline, boundary_node(chatbot, "StartNode"), router)
         add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_0")
 
-        response = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/")
+        response = client.get(inspect_url(chatbot))
 
         assert response.status_code == 200, response.content
 
