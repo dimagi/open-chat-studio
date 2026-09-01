@@ -205,10 +205,6 @@ class TestEmbeddedWidgetChannelForm:
 
     @pytest.mark.django_db()
     def test_creating_a_server_only_oauth_channel_through_the_wrapper(self):
-        """The whole point of row 3, end to end: a channel an admin can actually create in
-        `oauth` mode with no domain list, landing in the state the OAuth door needs — the mode
-        set, the auth level pinned, and no lingering ratchet.
-        """
         experiment = ExperimentFactory.create()
         wrapper = ChannelFormWrapper(
             experiment=experiment,
