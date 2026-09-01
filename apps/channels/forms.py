@@ -165,8 +165,7 @@ class ExtraFormBase(forms.Form):
 
     @cached_property
     def messaging_provider(self) -> MessagingProvider | None:
-        """The submitted provider, scoped to the experiment's team.
-        """
+        """The submitted provider, scoped to the experiment's team."""
         if provider_id := self.data.get("messaging_provider"):
             return MessagingProvider.objects.filter(id=provider_id, team=self.experiment.team).first()
         return None
