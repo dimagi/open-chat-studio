@@ -12,6 +12,7 @@ from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.oauth.permissions import (
     OAuth2AccessTokenAuthentication,
     application_allows_chatbot,
+    applications_allowing_chatbot,
     is_client_credentials_request,
     is_client_credentials_token,
     token_allows_chatbot,
@@ -142,6 +143,57 @@ def test_token_shaped_helpers_match_their_request_wrappers(client_credentials_to
     assert is_client_credentials_token(None) is False
     assert token_allows_chatbot(client_credentials_token, chatbot) is True
     assert token_allows_chatbot(client_credentials_token, ExperimentFactory.create(team=team)) is False
+
+
+@pytest.mark.django_db()
+def test_applications_allowing_chatbot_is_the_allowlist_read_backwards(client_credentials_token, team):
+    """The channel dialog asks the question from the chatbot's side: which applications could mint
+    a token that this channel would admit?"""
+    chatbot = ExperimentFactory.create(team=team)
+    application = client_credentials_token.application
+
+    assert list(applications_allowing_chatbot(chatbot)) == []
+
+    application.allowed_chatbots.add(chatbot)
+    assert list(applications_allowing_chatbot(chatbot)) == [application]
+    assert list(applications_allowing_chatbot(ExperimentFactory.create(team=team))) == []
+
+
+@pytest.mark.django_db()
+def test_applications_allowing_chatbot_normalises_a_version_to_its_working_copy(client_credentials_token, team):
+    """The allowlist holds working versions, but a channel can hang off a released version."""
+    chatbot = ExperimentFactory.create(team=team)
+    client_credentials_token.application.allowed_chatbots.add(chatbot)
+    version = chatbot.create_new_version()
+
+    assert list(applications_allowing_chatbot(version)) == [client_credentials_token.application]
+
+
+@pytest.mark.django_db()
+def test_applications_allowing_chatbot_excludes_other_grants_and_other_teams(client_credentials_token, team):
+    """Only client-credentials applications are pinned to a set of chatbots, and an application in
+    another team could not reach this chatbot whatever its allowlist says."""
+    chatbot = ExperimentFactory.create(team=team)
+    client_credentials_token.application.allowed_chatbots.add(chatbot)
+
+    authorization_code_app = OAuth2Application.objects.create(
+        name="human-app",
+        team=team,
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+        redirect_uris="https://example.com/callback",
+    )
+    authorization_code_app.allowed_chatbots.add(chatbot)
+
+    other_team_app = OAuth2Application.objects.create(
+        name="other-team-app",
+        team=TeamWithUsersFactory.create(),
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+    )
+    other_team_app.allowed_chatbots.add(chatbot)
+
+    assert list(applications_allowing_chatbot(chatbot)) == [client_credentials_token.application]
 
 
 def _chat_request(rf, token, experiment):
