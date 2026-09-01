@@ -69,5 +69,6 @@
     "data_source",
     "route_key",
     "keywords"
-  ]
+  ],
+  "ui:removed": false
 }
