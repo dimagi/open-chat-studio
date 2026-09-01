@@ -2,6 +2,7 @@ import pytest
 from waffle.testutils import override_flag
 
 from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 from apps.teams.views.feature_flags import FeatureFlagForm
 from apps.utils.factories.team import TeamFactory
 
@@ -83,3 +84,15 @@ class TestFeatureFlagFormSave:
         assert form.is_valid()
         form.save()
         assert not flag.teams.filter(pk=team_with_users.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_flag_is_active_for_team_utility(request, team_flag):
+    """`flag_is_active_for_team(team, name)` is the team-scoped counterpart of
+    `waffle.flag_is_active(request, name)`: same precedence, addressed by team."""
+    team = TeamFactory.create()
+    other_team = TeamFactory.create()
+    flag = team_flag("flag_utility_check", team)
+    request.addfinalizer(flag.flush)
+    assert flag_is_active_for_team(team, "flag_utility_check") is True
+    assert flag_is_active_for_team(other_team, "flag_utility_check") is False

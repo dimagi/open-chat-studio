@@ -19,8 +19,8 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.flags import Flags
-from apps.teams.models import BaseTeamModel, Flag
-from apps.teams.utils import get_slug_for_team
+from apps.teams.models import BaseTeamModel
+from apps.teams.utils import flag_is_active_for_team, get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
@@ -518,7 +518,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 },
             )
             return None
-        if not Flag.get(Flags.CONTEXTUAL_RETRIEVAL.slug).is_active_for_team(self.team):
+        if not flag_is_active_for_team(self.team, Flags.CONTEXTUAL_RETRIEVAL.slug):
             return None
         try:
             service = self.contextualizer_llm_provider.get_llm_service()
@@ -540,7 +540,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         if self.is_remote_index:
             return False
-        return Flag.get(Flags.HYBRID_SEARCH.slug).is_active_for_team(self.team)
+        return flag_is_active_for_team(self.team, Flags.HYBRID_SEARCH.slug)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
