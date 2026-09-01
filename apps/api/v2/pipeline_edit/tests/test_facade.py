@@ -4,13 +4,10 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from apps.api.v2.pipeline_edit.facade import PipelineEdit, graph_diff
-from apps.api.v2.pipeline_edit.serializers import RejectsServerAssignedKeys
-from apps.pipelines.flow import FlowEdge
 from apps.pipelines.models import Node
 from apps.utils.factories.documents import CollectionFactory
 
-from .conftest import boundary_node, edge_url, edges_url, node_url, nodes_url
+from .conftest import add_llm_node, boundary_node, edge_url, edges_url, node_url, nodes_url
 
 
 @pytest.mark.django_db()
@@ -82,23 +79,6 @@ def _url(client, chatbot, route: str) -> str:
     edge = client.post(edges_url(chatbot), {"source": node_id, "target": end}, format="json")
     assert edge.status_code == 201, edge.content
     return edge_url(chatbot, edge.json()["edge"]["id"])
-
-
-class TestTheInvariantsBehindTheEnvelope:
-    """Two rules the views rely on that nothing in a request would ever exercise, so they are held
-    here rather than left to the next person who adds a resource to the façade."""
-
-    def test_an_edit_cannot_describe_both_a_node_and_an_edge(self):
-        """Each view's ``_write_response`` reads only its own field, so an edit that set both would
-        report one resource and silently drop the other."""
-        with pytest.raises(ValueError, match="never both"):
-            PipelineEdit(diff=graph_diff(), node_id="CodeNode-1", edge=FlowEdge(id="e1", source="a", target="b"))
-
-    def test_every_body_that_guards_server_assigned_keys_declares_which(self):
-        """The guard's whole job is to refuse a key the client must not set, so a serializer that
-        mixes it in and declares nothing would quietly accept the very keys it exists to reject."""
-        for serializer in RejectsServerAssignedKeys.__subclasses__():
-            assert getattr(serializer, "server_assigned_keys", None), serializer.__name__
 
 
 @pytest.mark.django_db()
@@ -232,6 +212,37 @@ class TestTheResponseEnvelope:
 #: from those rows rather than from the copy in params, and the count does not move with the number
 #: of nodes -- without them each node would read the table itself.
 QUERIES_UNDER_THE_LOCK = 29
+
+
+#: How many statements a wire may run while it holds the pipeline row, on a graph of one LLM node.
+#: Pinned to a number for the same reason :data:`QUERIES_UNDER_THE_LOCK` is: the thing worth catching
+#: is work creeping back *in*, and a comparison against the node path cannot see that -- wiring is
+#: far enough below it that restoring the node reconcile this endpoint does not need (7 statements,
+#: all under the lock) would still compare favourably. Raising it is a decision about how long the
+#: row is held, so say in the commit what the extra statements buy.
+WIRE_QUERIES_UNDER_THE_LOCK = 10
+
+
+@pytest.mark.django_db()
+def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, end):
+    """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with it
+    the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for,
+    leaving the build state to re-read every row.
+
+    The count is what pins that: reverting the skip takes it from 10 to 17. A comparison against the
+    node path would not, since wiring is far enough below it to stay cheaper either way.
+    """
+    node_id = add_llm_node(client, chatbot, llm)
+    client.post(edges_url(chatbot), {"source": boundary_node(chatbot, "StartNode"), "target": node_id}, format="json")
+
+    with CaptureQueriesContext(connection) as captured:
+        response = client.post(edges_url(chatbot), {"source": node_id, "target": end}, format="json")
+
+    assert response.status_code == 201, response.content
+    sql = [query["sql"] for query in captured.captured_queries]
+    locks = [index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query]
+    assert locks, "the pipeline row was never locked"
+    assert len(sql) - min(locks) == WIRE_QUERIES_UNDER_THE_LOCK, "see the constant"
 
 
 @pytest.mark.django_db()

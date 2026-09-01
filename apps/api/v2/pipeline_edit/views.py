@@ -25,13 +25,14 @@ from apps.pipelines.models import Pipeline
 
 from . import edge_editor
 from .examples import create_examples, update_examples
-from .facade import PipelineEdit, edit_pipeline
+from .facade import edit_pipeline
 from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
 from .references import check_references
 from .serializers import (
     EdgeCreateSerializer,
     EdgeWriteSerializer,
+    LeadsWithWhatWasWritten,
     NodeCreateSerializer,
     NodeUpdateSerializer,
     NodeWriteSerializer,
@@ -102,24 +103,64 @@ WIRE_EXAMPLES = [
 ]
 
 
-class PipelineNodeEditView(GenericAPIView):
+class PipelineFacadeView(GenericAPIView):
+    """What every pipeline façade endpoint shares: the gates, and the shape of the response.
+
+    Declared once because these are the *same* gates, not merely similar ones — an auth surface split
+    across two copies is one a change can be applied to half of. Editing a chatbot's composition is a
+    *change* to the chatbot whatever the verb, so the stock ``DjangoModelPermissions`` verb map is
+    replaced rather than extended: deleting a pipeline node is not deleting the chatbot.
+    """
+
+    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    required_scopes = ["chatbots"]
+    # Only here so the generic view has a queryset; permissions are not derived from it.
+    queryset = Pipeline.objects.none()
+
+    #: The response serializer for this resource. Its ``written_field`` names the key the written
+    #: resource goes under, so the body and the published schema cannot disagree about it.
+    write_response_serializer: type[LeadsWithWhatWasWritten]
+
+    def _edit(self, request, chatbot_id: str, plan) -> dict:
+        """Run one façade edit and build its response. The ``respond`` half is the same for every
+        resource; ``plan`` is the only thing that differs per endpoint."""
+        return edit_pipeline(request, chatbot_id, plan, self._write_response)
+
+    def _write_response(self, pipeline: Pipeline, written_id: str | None) -> dict:
+        """The pipeline's build state, and in front of it whatever this write created or changed.
+
+        ``written_id`` is ``None`` for a delete — there is nothing left to describe — so the response
+        is the pipeline's state alone.
+        """
+        body = pipeline_state(pipeline)
+        if written_id is None:
+            return body
+        key = self.write_response_serializer.written_field
+        written = self._written(pipeline, written_id)
+        if written is None:
+            # Always a bug in this package rather than anything the client did -- the patch engine
+            # applied the diff, so the thing is there. *Which* bug differs per resource, and each
+            # `_written` says which one it is guarding against.
+            raise APIException(f"{key.capitalize()} '{written_id}' was written but could not be read back.")
+        return {key: written, **body}
+
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """This resource as the response reports it, or ``None`` if the write cannot be read back."""
+        raise NotImplementedError
+
+
+class PipelineNodeEditView(PipelineFacadeView):
     """The façade's node endpoints: add a node, edit one, remove one.
 
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers --
     otherwise a PATCH to the collection route would reach ``patch`` with no ``node_id`` and raise
     instead of answering 405.
-
-    Deleting a node is a *change* to the chatbot, not a deletion of it, so the stock
-    ``DjangoModelPermissions`` verb map is replaced rather than extended.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
-    required_scopes = ["chatbots"]
+    write_response_serializer = NodeWriteSerializer
     # So that OPTIONS on the detail route describes its PATCH body, which stock DRF metadata leaves
     # out entirely.
     metadata_class = DescribesPatch
-    # Only here so the generic view has a queryset; permissions are not derived from it.
-    queryset = Pipeline.objects.none()
 
     def get_serializer_class(self) -> type[serializers.Serializer]:
         """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
@@ -173,7 +214,7 @@ class PipelineNodeEditView(GenericAPIView):
         params = writable_params(node_class, body.validated_data["params"])
         check_references(team=request.team, node_class=node_class, params=params)
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
+            self._edit(request, id, lambda flow: plan_create(flow, node_type, label, params)),
             status=status.HTTP_201_CREATED,
         )
 
@@ -220,13 +261,12 @@ class PipelineNodeEditView(GenericAPIView):
         params = body.validated_data["params"]
         label = body.validated_data.get("label")
         return Response(
-            edit_pipeline(
+            self._edit(
                 request,
                 id,
                 # The node's type comes from the graph, so its params can only be checked under the
                 # lock; the team goes in so the check can look its references up there.
                 lambda flow: plan_update(flow, request.team, node_id, label, params),
-                self._write_response,
             )
         )
 
@@ -253,24 +293,15 @@ class PipelineNodeEditView(GenericAPIView):
     )
     def delete(self, request, id: str, node_id: str) -> Response:
         # `plan_delete` names no node, so the response reports the pipeline alone.
-        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._write_response))
+        return Response(self._edit(request, id, lambda flow: plan_delete(flow, node_id)))
 
-    @staticmethod
-    def _write_response(pipeline: Pipeline, edit: PipelineEdit) -> dict:
-        """The pipeline's build state, and in front of it the node this write created or changed
-        (absent when the write deleted one)."""
-        body = pipeline_state(pipeline)
-        if edit.node_id is None:
-            return body
-        node = next((node for node in pipeline.node_set.all() if node.flow_id == edit.node_id), None)
-        if node is None:
-            # The patch engine applied the diff, so the row is there; not finding it means the
-            # graph and the rows disagree, which is a bug here rather than anything the client did.
-            raise APIException(f"Node '{edit.node_id}' was written but could not be read back.")
-        return {"node": WrittenNodeSerializer(node).data, **body}
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """Read from the reconciled rows: a miss means the graph and the rows disagree."""
+        node = next((node for node in pipeline.node_set.all() if node.flow_id == written_id), None)
+        return None if node is None else WrittenNodeSerializer(node).data
 
 
-class PipelineEdgeEditView(GenericAPIView):
+class PipelineEdgeEditView(PipelineFacadeView):
     """The façade's edge endpoints: wire two nodes, unwire them.
 
     An edge is not editable in place -- there is nothing to change but its two ends, and moving one is
@@ -279,11 +310,8 @@ class PipelineEdgeEditView(GenericAPIView):
     routes need ``DescribesPatch``.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
-    required_scopes = ["chatbots"]
+    write_response_serializer = EdgeWriteSerializer
     serializer_class = EdgeCreateSerializer
-    # Only here so the generic view has a queryset; permissions are not derived from it.
-    queryset = Pipeline.objects.none()
 
     @extend_schema(
         operation_id="pipeline_edge_create",
@@ -340,7 +368,7 @@ class PipelineEdgeEditView(GenericAPIView):
         body.is_valid(raise_exception=True)
         wire = body.validated_data
         return Response(
-            edit_pipeline(
+            self._edit(
                 request,
                 id,
                 # The handles a node offers depend on its params, so the whole body can only be
@@ -352,7 +380,6 @@ class PipelineEdgeEditView(GenericAPIView):
                     source_handle=wire.get("source_handle"),
                     target_handle=wire.get("target_handle"),
                 ),
-                self._write_response,
             ),
             status=status.HTTP_201_CREATED,
         )
@@ -379,26 +406,14 @@ class PipelineEdgeEditView(GenericAPIView):
     )
     def delete(self, request, id: str, edge_id: str) -> Response:
         # `plan_delete` names no edge, so the response reports the pipeline alone.
-        return Response(
-            edit_pipeline(request, id, lambda flow: edge_editor.plan_delete(flow, edge_id), self._write_response)
-        )
+        return Response(self._edit(request, id, lambda flow: edge_editor.plan_delete(flow, edge_id)))
 
-    @staticmethod
-    def _write_response(pipeline: Pipeline, edit: PipelineEdit) -> dict:
-        """The pipeline's build state, and in front of it the edge this write created (absent when the
-        write deleted one).
-
-        Read back out of the saved graph rather than reported from the plan: the patch engine skips an
-        add whose id is already in the graph, so reporting the plan's edge would answer 201 for a wire
-        that was silently dropped.
-        """
-        body = pipeline_state(pipeline)
-        if edit.edge is None:
-            return body
-        stored = next((edge for edge in (pipeline.data or {}).get("edges", []) if edge["id"] == edit.edge.id), None)
-        if stored is None:
-            raise APIException(f"Edge '{edit.edge.id}' was written but could not be read back.")
-        return {"edge": WrittenEdgeSerializer(FlowEdge(**stored)).data, **body}
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """Read from the saved graph rather than reported from the plan: the patch engine skips an add
+        whose id is already there, so reporting the planned edge would answer 201 for a wire that was
+        silently dropped."""
+        stored = next((edge for edge in (pipeline.data or {}).get("edges", []) if edge["id"] == written_id), None)
+        return None if stored is None else WrittenEdgeSerializer(FlowEdge(**stored)).data
 
 
 def pipeline_state(pipeline: Pipeline) -> dict:

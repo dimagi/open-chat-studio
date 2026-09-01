@@ -51,7 +51,7 @@ def plan_create(
         sourceHandle=from_handle,
         targetHandle=to_handle,
     )
-    return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=[edge])), edge=edge)
+    return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=[edge])), written_id=edge.id)
 
 
 def plan_delete(flow: dict, edge_id: str) -> PipelineEdit:

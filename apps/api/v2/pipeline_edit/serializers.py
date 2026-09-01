@@ -12,14 +12,6 @@ from apps.pipelines.models import Node
 
 from .graph_editor import settable_params
 
-#: Where the ids on a wire body come from -- the one thing an agent cannot guess, since both a node id
-#: and a handle name are the server's to assign.
-NODE_IDS = "Node ids are the ones a node write returns and `GET /api/v2/chatbots/{id}/inspect/` reports."
-HANDLE_NAMES = (
-    "Handle names are the source node's own `output_handles`, which every node write returns; "
-    "`unwired_handles` lists the ones still free."
-)
-
 #: Where a param's name comes from -- the one thing a free-form ``params`` object cannot say for
 #: itself. Spelled out on both write bodies, since a client reads one or the other.
 PARAM_NAMES = (
@@ -49,10 +41,8 @@ SERVER_ASSIGNED_EDGE_KEYS = {
 class RejectsServerAssignedKeys:
     """Answer a client-supplied server-owned key with the rule, not with 'no such field'."""
 
-    #: ``key -> why the server owns it``, declared by each serializer that mixes this in. A bare
-    #: annotation rather than an empty default, matching ``LeadsWithWhatWasWritten.written_field``:
-    #: of the two ways to get this wrong, silently checking nothing is the one that ships a hole,
-    #: since the guard's whole job is to refuse a key the client must not set.
+    #: ``key -> why the server owns it``. A bare annotation, so a serializer that mixes this in and
+    #: declares nothing raises rather than quietly checking nothing.
     server_assigned_keys: dict[str, str]
 
     def to_internal_value(self, data: Any) -> Any:
@@ -184,7 +174,12 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
     server_assigned_keys = SERVER_ASSIGNED_EDGE_KEYS
 
-    source = serializers.CharField(help_text="``node_id`` the edge leaves from. " + NODE_IDS)
+    source = serializers.CharField(
+        help_text=(
+            "``node_id`` the edge leaves from. Node ids are the ones a node write returns and "
+            "`GET /api/v2/chatbots/{id}/inspect/` reports."
+        )
+    )
     target = serializers.CharField(help_text="``node_id`` the edge points to.")
     source_handle = serializers.CharField(
         required=False,
@@ -192,7 +187,9 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
         help_text=(
             "Output handle on the source node. Required only when the node offers more than one: a "
             "router exposes one handle per branch (``output_0``, ``output_1``, …, mapping by index "
-            "to its ``keywords``), while every other node has a single ``output``. " + HANDLE_NAMES
+            "to its ``keywords``), while every other node has a single ``output``. Handle names are "
+            "the source node's own `output_handles`, which every node write returns; "
+            "`unwired_handles` lists the ones still free."
         ),
     )
     target_handle = serializers.CharField(

@@ -6,6 +6,7 @@ builder's save does. Reusing ``apply_pipeline_patch`` keeps the API off a second
 and inherits its rule that removing a node removes that node's edges with it.
 """
 
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -16,7 +17,7 @@ from rest_framework.generics import get_object_or_404
 from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_write
-from apps.pipelines.flow import EdgeDiff, FlowEdge, NodeDiff, PipelineDiffPayload
+from apps.pipelines.flow import EdgeDiff, NodeDiff, PipelineDiffPayload
 from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.patching import apply_pipeline_patch
 
@@ -27,22 +28,15 @@ UNUSED_BASE_REVISION = 0
 
 @dataclass
 class PipelineEdit:
-    """One façade edit: the diff to apply, and which node or edge the response should describe.
+    """One façade edit: the diff to apply, and the id of the thing the response should describe.
 
-    Both are optional and at most one is ever set: a delete names neither, and the response then
-    reports the pipeline's state alone.
+    One id rather than one field per resource kind: each view already knows which kind it serves, so
+    the only thing it needs back is *which* one, and a delete names none -- the response then reports
+    the pipeline's state alone.
     """
 
     diff: PipelineDiffPayload
-    node_id: str | None = None
-    edge: FlowEdge | None = None
-
-    def __post_init__(self) -> None:
-        # Checked rather than merely documented: each view's `_write_response` reads only its own
-        # field, so a plan that set both would answer with one resource's envelope and drop the
-        # other, with nothing anywhere saying so.
-        if self.node_id is not None and self.edge is not None:
-            raise ValueError("A pipeline edit describes a node or an edge, never both.")
+    written_id: str | None = None
 
 
 def graph_diff(nodes: NodeDiff | None = None, edges: EdgeDiff | None = None) -> PipelineDiffPayload:
@@ -54,7 +48,7 @@ def edit_pipeline(
     request,
     public_id: str,
     plan: Callable[[dict], PipelineEdit],
-    respond: Callable[[Pipeline, PipelineEdit], dict],
+    respond: Callable[[Pipeline, str | None], dict],
 ) -> dict:
     """Apply one façade edit to the chatbot's working pipeline, under a row lock.
 
@@ -77,7 +71,7 @@ def edit_pipeline(
         flow = pipeline.flow_data
         edit = plan(flow)
         _persist(pipeline, flow, edit.diff)
-        return respond(pipeline, edit)
+        return respond(pipeline, edit.written_id)
 
 
 def _locked_pipeline(chatbot: Experiment) -> Pipeline:
@@ -111,7 +105,27 @@ def _persist(pipeline: Pipeline, flow: dict, diff: PipelineDiffPayload) -> None:
     pipeline.data = edge_data.model_dump()
     pipeline.edit_revision += 1
     pipeline.save(update_fields=["data", "edit_revision"])
-    pipeline.update_nodes_from_data(node_data)
-    # The rows were written behind the back of the prefetched node_set the graph above was built
-    # from, so drop it before anything reads the pipeline back.
-    pipeline.clear_node_caches()
+    if _changes_node_rows(diff.nodes):
+        pipeline.update_nodes_from_data(node_data)
+        # The rows were written behind the back of the prefetched node_set the graph above was built
+        # from, so drop it before anything reads the pipeline back.
+        pipeline.clear_node_caches()
+    else:
+        # An edge-only diff cannot touch a node row: ``_collect_node_data`` maps every node to
+        # membership-only, and ``update_nodes_from_data`` writes nothing for those. Skipping it keeps
+        # its savepoint and membership SELECT out of the lock, and -- the larger saving -- leaves the
+        # prefetched ``node_set`` intact for the build state that follows, where ``clear_node_caches``
+        # would have thrown away the prefetch the locked read just paid for and made it re-read every
+        # row. Dropping ``flow_data`` is insurance: it is stale from here, and nothing reads it.
+        with contextlib.suppress(AttributeError):  # nothing cached if it was never read
+            del pipeline.flow_data
+
+
+def _changes_node_rows(nodes: NodeDiff) -> bool:
+    """Whether this diff can touch a ``Node`` row at all.
+
+    Only the edge endpoints ever produce a diff that cannot -- every node plan carries an add, an
+    update or a delete. Compared against an empty diff rather than testing the three lists, so a
+    fourth kind of node change added to ``NodeDiff`` is covered without editing this.
+    """
+    return nodes != NodeDiff()

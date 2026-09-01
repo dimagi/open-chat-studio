@@ -71,7 +71,7 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
         ),
     )
     end_nodes = _reparked_end_nodes(flow, position["x"])
-    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(add=[node], update=end_nodes)), written_id=node_id)
 
 
 def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
@@ -100,7 +100,7 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     if label is not None:
         content.label = label
     edges = _rewired_edges(flow, node_id, before, _output_handles(content))
-    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node]), edges=edges), node_id=node_id)
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node]), edges=edges), written_id=node_id)
 
 
 def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
