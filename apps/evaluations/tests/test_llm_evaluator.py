@@ -23,8 +23,23 @@ _VALID_PROMPTS = [
     "Evaluate this: {input.content}",
     "Check the output: {output.content}",
     "Context value: {context.my_param}",
+    "Participant: {participant_data.name}",
+    "State: {session_state.current_step}",
     "Full history: {full_history}",
     "Generated: {generated_response}",
+    # Unadvertised sub-keys stay valid: the validator matches on the root.
+    "Role: {input.role}",
+    "Role: {output.role}",
+    "Bracket access: {context[my param]}",
+]
+
+_INVALID_PROMPTS = [
+    pytest.param("Evaluate this conversation please.", id="no-variables"),
+    # A root that merely starts with an advertised one is not one.
+    pytest.param("Evaluate {contextual.value}", id="prefix-of-a-root"),
+    # Escaped literal braces are text, not a variable.
+    pytest.param("Evaluate {{context.my_param}}", id="escaped-braces"),
+    pytest.param("Evaluate {context.my_param", id="malformed-template"),
 ]
 
 _OUTPUT_SCHEMA = {"result": {"type": "string", "description": "result"}}
@@ -41,12 +56,13 @@ def test_llm_evaluator_prompt_valid_variables(prompt):
     assert evaluator.prompt == prompt
 
 
-def test_llm_evaluator_prompt_no_variables_raises():
+@pytest.mark.parametrize("prompt", _INVALID_PROMPTS)
+def test_llm_evaluator_prompt_no_variables_raises(prompt):
     with pytest.raises(ValidationError) as exc_info:
         LlmEvaluator(
             llm_provider_id=1,
             llm_provider_model_id=1,
-            prompt="Evaluate this conversation please.",
+            prompt=prompt,
             output_schema=_OUTPUT_SCHEMA,
         )
     error_message = str(exc_info.value)
@@ -350,3 +366,46 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
     # Should raise validation error for invalid enum value
     with pytest.raises(ValueError, match="invalid_choice"):
         invalid_structured_llm.invoke("test prompt")
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_evaluator_interpolates_participant_data_and_session_state(get_llm_service, llm_provider, llm_provider_model):
+    """Both are captured on the message, so the prompt can read them."""
+    response = AIMessage(
+        content="",
+        tool_calls=[{"name": "DynamicModel", "args": {"evaluation": "ok"}, "id": "call_1"}],
+    )
+    service = build_fake_llm_service(responses=[response])
+    get_llm_service.return_value = service
+
+    evaluation_message = EvaluationMessageFactory.create(
+        input={"content": "Am I on track?", "role": "human"},
+        output={"content": "Yes", "role": "ai"},
+        participant_data={"name": "Ada"},
+        session_state={"current_step": "onboarding", "missing": None},
+        create_chat_messages=True,
+    )
+
+    llm_evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt=(
+            "Participant {participant_data.name} is at step {session_state.current_step}. "
+            "Absent: [{session_state.not_a_key}]"
+        ),
+        output_schema={"evaluation": {"type": "string", "description": "the evaluation result"}},
+    )
+    evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
+    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
+
+    evaluate_message(evaluation_run.id, [evaluator.id], evaluation_message.id)
+
+    result = evaluation_run.results.get()
+    assert "error" not in result.output, result.output
+    prompt_sent = service.llm.get_call_messages()[0]
+    assert "Participant Ada is at step onboarding." in str(prompt_sent)
+    # An unknown key resolves to "" rather than raising, as for {context.*}
+    assert "Absent: []" in str(prompt_sent)
