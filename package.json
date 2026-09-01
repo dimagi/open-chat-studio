@@ -37,7 +37,7 @@
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "mini-css-extract-plugin": "^2.10.2",
-    "postcss": "^8.5.25",
+    "postcss": "^8.5.26",
     "postcss-loader": "^8.2.0",
     "style-loader": "^4.0.0",
     "terser-webpack-plugin": "^5.3.14",
