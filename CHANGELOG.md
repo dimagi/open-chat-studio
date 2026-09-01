@@ -56,6 +56,13 @@ version section when a release is cut.
      removal may land, and links its deprecation tracking issue. -->
 
 ### Removed
+- **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
+  key on a node, and the `AssistantNodeParams` component is gone from the node
+  params union. The key was already conditional — omitted for nodes not
+  declaring `assistant_id` — so only clients inspecting assistant-bearing
+  pipelines are affected; those nodes still render through the generic node
+  shape. `assistant_id` is suppressed rather than falling through to the
+  generic params, so no internal id is exposed. (#4357, #4254)
 - The OpenAI Assistants UI is gone: `/a/<team>/assistants/` and everything under
   it now 404s, the nav entry is removed, and `assistant_file:` links in
   historical chat messages render as plain text instead of downloads. OpenAI
