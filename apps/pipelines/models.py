@@ -382,6 +382,21 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         return True
 
+    @transaction.atomic()
+    def unarchive(self):
+        """Reverse of archive(): this pipeline and its archived nodes.
+
+        For version pipelines only — those are archived as a unit with their experiment version
+        (see ``Experiment.archive``), so every archived node belongs to that unit. The working
+        pipeline is never archived that way: its archived nodes are the ones the user deleted from
+        the canvas (``update_nodes_from_data`` keeps a versioned node as an archived row), and its
+        archived versions belong to experiment versions archived in their own right. Neither may
+        be restored wholesale.
+        """
+        super().unarchive()
+        for node in self.node_set.get_all().filter(is_archived=True):
+            node.unarchive()
+
     def get_node_param_values(self, node_cls, param_name: str) -> list:
         return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
 
