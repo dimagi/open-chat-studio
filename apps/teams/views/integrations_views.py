@@ -138,17 +138,16 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     template_name = "teams/components/integrations_table.html"
 
     def get_queryset(self):
-        rows = get_integration_rows(self.request, self.request.team)
+        self.all_rows = get_integration_rows(self.request, self.request.team)
         category = self.request.GET.get("category")
         if category:
-            rows = [row for row in rows if row["category"] == category]
-        return rows
+            return [row for row in self.all_rows if row["category"] == category]
+        return self.all_rows
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        all_rows = get_integration_rows(self.request, self.request.team)
         context["filter_pills"] = build_integration_filter_pills(
-            all_rows, self.request.GET.get("category"), show_mcp=flag_is_active(self.request, "flag_mcp")
+            self.all_rows, self.request.GET.get("category"), show_mcp=flag_is_active(self.request, "flag_mcp")
         )
         context["table_url"] = self.request.path
         return context
