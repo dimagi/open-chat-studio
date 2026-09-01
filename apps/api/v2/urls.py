@@ -4,6 +4,7 @@ from rest_framework import routers
 from apps.api.v2 import views
 from apps.api.v2.channels import TriggerBotMessageView
 from apps.api.v2.discovery import (
+    ChatbotOptionsView,
     PipelineNodeOptionsView,
     PipelineNodesView,
     PipelineNodeView,
@@ -23,6 +24,7 @@ urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
     path("usage/", UsageView.as_view(), name="usage"),
     path("trigger_bot/", TriggerBotMessageView.as_view(), name="trigger_bot"),
+    path("chatbot/options/", ChatbotOptionsView.as_view(), name="chatbot-options"),
     path("pipeline/nodes/", PipelineNodesView.as_view(), name="pipeline-nodes"),
     path("pipeline/nodes/<str:node_type>/", PipelineNodeView.as_view(), name="pipeline-node"),
     path("pipeline/options/", PipelineOptionsView.as_view(), name="pipeline-options"),

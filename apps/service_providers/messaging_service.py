@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -34,6 +35,20 @@ from apps.service_providers.speech_service import SynthesizedAudio
 logger = logging.getLogger("ocs.messaging")
 
 MEDIA_DOWNLOAD_TIMEOUT = 30
+
+
+_TEMPLATE_PARAM_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _flatten_template_parameter(text: str) -> str:
+    """Collapse every run of whitespace in a template variable down to a single space.
+
+    Meta refuses a template parameter that contains a newline, a tab, or more than four
+    consecutive spaces, so an operator's multi-line message has to go out as one flowing
+    paragraph. Only the substituted variable is flattened -- the template body keeps the
+    line breaks it was approved with.
+    """
+    return _TEMPLATE_PARAM_WHITESPACE_RE.sub(" ", text).strip()
 
 
 def _recipient_kwarg(recipient: str) -> dict:
@@ -582,8 +597,15 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
 
     def _split_template_message(self, message: str) -> list[str]:
         """Split a message into chunks that fit within the template parameter limit,
-        splitting at word boundaries to avoid cutting words."""
-        return [chunk for chunk in smart_split(message, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
+        splitting at word boundaries to avoid cutting words.
+
+        The message is flattened before it is measured, because that is the text Meta
+        actually receives; flattening only ever shrinks it.
+        """
+        flattened = _flatten_template_parameter(message)
+        if not flattened:
+            return []
+        return [chunk for chunk in smart_split(flattened, chars_per_string=self.TEMPLATE_MESSAGE_CHAR_LIMIT) if chunk]
 
     def send_template_message(self, message: str, from_: str, to: str, platform: ChannelPlatform, **kwargs):
         """Send a WhatsApp template message using the TEMPLATE_NAME template.

@@ -8,10 +8,21 @@
 # simpler single-server setups.
 
 x-app: &app
+  # Published images: `docker compose pull` fetches the tag in OCS_IMAGE_TAG
+  # (see https://github.com/dimagi/open-chat-studio/pkgs/container/open-chat-studio).
+  # Building from source instead: `docker compose build` tags the local build
+  # under this same name, so both paths work. Pin OCS_IMAGE_TAG in .env rather
+  # than tracking `latest`, so an upgrade is a deliberate change.
+  #
+  # This selects which image to run. What the running image actually reports as
+  # its version is OCS_VERSION, baked in at build time from the git tag — see
+  # config/settings.py. Kept as separate names on purpose: `.env` is an env_file
+  # for every service below, so a variable named OCS_VERSION here would override
+  # the built-in value and make the app misreport itself.
   build:
     context: .
     dockerfile: Dockerfile
-  image: open-chat-studio:latest
+  image: ghcr.io/dimagi/open-chat-studio:${OCS_IMAGE_TAG:-latest}
   restart: unless-stopped
   env_file:
     # .env is read first so .env.prod values (if present) win on conflicts.

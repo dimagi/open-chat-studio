@@ -40,7 +40,7 @@ from apps.api.session_tokens import issue_session_token
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
-from apps.channels.models import CredentialMode, ExperimentChannel, WidgetAuthLevel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.channels.widget_versions import (
     WIDGET_VERSION_HEADER,
@@ -50,6 +50,7 @@ from apps.channels.widget_versions import (
 )
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.chat.utils import safe_link_url
+from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -162,6 +163,10 @@ def chat_upload_file(request, session_id):
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    _, refusal = _public_session_version(request, session)
+    if refusal:
+        return refusal
     files = request.FILES.getlist("files")
     if not files:
         return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
@@ -312,22 +317,31 @@ def _check_start_session_access(
     return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
 
 
-def _record_participant_name(participant, experiment, team, name: str) -> None:
-    """Store the caller-supplied display name on the participant and their experiment data.
+def _record_participant_details(
+    participant, experiment, team, *, name: str | None = None, participant_timezone: str | None = None
+) -> None:
+    """Store caller-supplied details on the participant's data for this chatbot.
 
-    Written in both places because they are read in different contexts: the participant record
-    labels them across the team, while the ParticipantData copy is what a pipeline sees as
-    ``{participant_data.name}``. Both writes are conditional so a repeat session start with an
-    unchanged name is a no-op rather than a pair of UPDATEs.
+    The name is also written to the participant record, because the two are read in different
+    contexts: the participant record labels them across the team, while the ParticipantData copy
+    is what a pipeline sees as ``{participant_data.name}``. The time zone is scoped to one
+    experiment because a participant may talk to several chatbots from different devices, and
+    each chat's data is read on its own.
+
+    One ParticipantData row is fetched for both fields, and every write is conditional so a
+    repeat session start with unchanged values is a no-op rather than a run of UPDATEs.
     """
-    if participant.name != name:
+    if name and participant.name != name:
         participant.name = name
         participant.save(update_fields=["name"])
+
     participant_data, _ = ParticipantData.objects.get_or_create(
         participant=participant, experiment=experiment, team=team, defaults={"data": {}}
     )
-    if participant_data.data.get("name") != name:
-        participant_data.data["name"] = name
+    supplied = {"name": name, "timezone": participant_timezone}
+    changed = {key: value for key, value in supplied.items() if value and participant_data.data.get(key) != value}
+    if changed:
+        participant_data.data = {**participant_data.data, **changed}
         participant_data.save(update_fields=["data"])
 
 
@@ -343,6 +357,75 @@ def _channel_disabled_response(experiment_channel) -> Response | None:
         return None
     detail = experiment_channel.disabled_message or "This chatbot is currently unavailable."
     return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
+
+
+NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code": "no_published_version"}
+
+
+def _is_team_member(request, experiment) -> bool:
+    return request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+
+
+def _published_public_version(experiment) -> tuple[Experiment | None, Response | None]:
+    """The version a public visitor may chat with, or the 409 that refuses them.
+
+    Public visitors only ever reach the published version.
+    """
+    try:
+        published = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_PUBLISHED)
+    except NoPublishedVersion:
+        return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
+    return published, None
+
+
+def _is_public_visitor(request, experiment, experiment_channel) -> bool:
+    """A caller on the public channel who is not a team member. The public page withholds
+    user-id from them, so they chat as an anonymous visitor even when the browser carries an
+    OCS session cookie; team members keep their identity so they can preview before publishing."""
+    return experiment_channel.platform == ChannelPlatform.PUBLIC and not _is_team_member(request, experiment)
+
+
+def _public_channel_admission(public_visitor: bool, experiment) -> tuple[Experiment | None, Response | None]:
+    """The published version a public visitor is admitted to, or the 409 that refuses them.
+    (None, None) for other channels and for team members, who may try the page before publishing."""
+    if not public_visitor:
+        return None, None
+    return _published_public_version(experiment)
+
+
+def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
+    """The version a request on `session` runs against, or a 409 for a public session whose
+    published version has gone. Other channels keep the published-or-working fallback, and so do
+    team members on a public channel so they can preview an unpublished chatbot through its page."""
+    channel = session.experiment_channel
+    if channel is None or channel.platform != ChannelPlatform.PUBLIC:
+        return session.experiment_version, None
+    if _is_team_member(request, session.experiment):
+        return session.experiment_version, None
+    return _published_public_version(session.experiment)
+
+
+def _send_version(request, session, version_number) -> tuple[Experiment | None, Response | None]:
+    """The version a send runs against: an explicitly requested one for team members, else the
+    session's own (subject to the public-link rule)."""
+    if version_number is None:
+        return _public_session_version(request, session)
+    if refusal := _version_number_refusal(request, session):
+        return None, refusal
+    if version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return _public_session_version(request, session)
+    try:
+        return session.experiment.get_version(version_number), None
+    except Experiment.DoesNotExist:
+        raise NotFound(f"Experiment with version {version_number} not found") from None
+
+
+def _version_number_refusal(request, session) -> Response | None:
+    if not request.user.is_authenticated:
+        return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
+    if not session.experiment.team.members.filter(id=request.user.id).exists():
+        return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
+    return None
 
 
 def _get_requested_version(experiment, version_number):
@@ -395,6 +478,14 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
             {
                 "error": serializers.CharField(),
                 "code": serializers.CharField(help_text="Always `chat_access_denied`."),
+            },
+        ),
+        # Public-channel admission: the chatbot has no published version yet.
+        409: inline_serializer(
+            "ChatStartSessionRefused",
+            {
+                "error": serializers.CharField(),
+                "code": serializers.CharField(help_text="Always `no_published_version`."),
             },
         ),
     },
@@ -472,6 +563,7 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
+    participant_timezone = data.get("timezone")
 
     # Pre-0.5.1 widgets send no version header; flag them (via session_data.source)
     # so deprecated old widgets still receive RFC 8594 sunset headers.
@@ -498,7 +590,13 @@ def chat_start_session(request):
     if disabled := _channel_disabled_response(experiment_channel):
         return disabled
 
-    if request.user.is_authenticated:
+    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
+    published, refusal = _public_channel_admission(public_visitor, experiment)
+    if refusal:
+        return refusal
+    experiment_version = experiment_version or published
+
+    if request.user.is_authenticated and not public_visitor:
         user = request.user
         participant_id = user.email
         # Enforce this for authenticated users
@@ -521,8 +619,8 @@ def chat_start_session(request):
     else:
         participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
 
-    if name:
-        _record_participant_name(participant, experiment, team, name)
+    if name or participant_timezone:
+        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 
@@ -618,26 +716,9 @@ def chat_send_message(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if version_number is not None:
-        if not request.user.is_authenticated:
-            return Response(
-                {"error": "Version number requires authentication"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if not session.experiment.team.members.filter(id=request.user.id).exists():
-            return Response(
-                {"error": "You do not have access to this chatbot"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            try:
-                experiment_version = session.experiment.get_version(version_number)
-            except Experiment.DoesNotExist:
-                raise NotFound(f"Experiment with version {version_number} not found") from None
-        else:
-            experiment_version = session.experiment_version
-    else:
-        experiment_version = session.experiment_version
+    experiment_version, refusal = _send_version(request, session, version_number)
+    if refusal:
+        return refusal
 
     attachment_data = []
     if attachment_ids:

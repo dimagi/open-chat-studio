@@ -110,3 +110,11 @@ python manage.py createsuperuser
 ```
 
 You will then need to create a Team in the Django admin before the app is usable.
+
+## Staying Current
+
+Deploy a tagged release rather than `main`, and watch
+[Announcements](https://github.com/dimagi/open-chat-studio/discussions/categories/announcements)
+so you hear about security releases. See
+[Releases and Upgrades](./releases.md) for what version numbers mean, how long
+each release is supported, and how to upgrade.

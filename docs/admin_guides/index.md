@@ -6,6 +6,7 @@ This section contains documentation for features that are typically used by syst
 
 - [Banners System](banners.md) - Create and manage system-wide notification banners
 - [Feature Flags](feature_flags.md) - Manage access to [feature flags](../developer_guides/code_systems/feature_flags.md)
+- [OAuth Applications](oauth_applications.md) - Register global (team-less) OAuth applications
 
 ## Overview
 

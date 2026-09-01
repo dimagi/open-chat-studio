@@ -1,3 +1,15 @@
-from .views import PipelineNodeOptionsView, PipelineNodesView, PipelineNodeView, PipelineOptionsView
+from .views import (
+    ChatbotOptionsView,
+    PipelineNodeOptionsView,
+    PipelineNodesView,
+    PipelineNodeView,
+    PipelineOptionsView,
+)
 
-__all__ = ["PipelineNodeOptionsView", "PipelineNodeView", "PipelineNodesView", "PipelineOptionsView"]
+__all__ = [
+    "ChatbotOptionsView",
+    "PipelineNodeOptionsView",
+    "PipelineNodeView",
+    "PipelineNodesView",
+    "PipelineOptionsView",
+]

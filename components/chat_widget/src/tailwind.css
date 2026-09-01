@@ -1,4 +1,4 @@
-/* This file is used by the stencil-tailwind-plugin and should only contain global tailwind configuration */
+/* Tailwind entry for the component stylesheets (see stencil.config.ts); global configuration only. */
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 

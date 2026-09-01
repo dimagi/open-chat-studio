@@ -1,8 +1,10 @@
 """Team-level discovery endpoints for the chatbot write API: what a client can build
-(`/pipeline/nodes/`) and which resource ids it may reference (`/pipeline/options/`).
+(`/pipeline/nodes/`), which resource ids it may reference (`/pipeline/options/`) and what a chatbot's
+own settings accept (`/chatbot/options/`).
 
-Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which the builder consumes
-raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
+The pipeline endpoints reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which the
+builder consumes raw. The reshaping rules live in ``contract.py`` and ``node_types.py``. The settings
+options are read off the settings form instead -- see ``chatbot_settings.py``.
 """
 
 from django.http import HttpResponseNotModified
@@ -12,9 +14,12 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
+from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.base import OptionsSource
 
+from .chatbot_settings import chatbot_setting_options
 from .node_types import (
     etag,
     get_node_type_schema,
@@ -24,7 +29,19 @@ from .node_types import (
     unknown_node_type,
 )
 from .options import options_for_team
-from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
+from .serializers import (
+    ChatbotOptionsSerializer,
+    NodeTypeNotFoundSerializer,
+    NodeTypeSerializer,
+    PipelineOptionsSerializer,
+)
+
+# The option lists holding prompt variables rather than referenceable resource ids.
+PROMPT_VAR_OPTION_SOURCES = (
+    OptionsSource.template_variables,
+    OptionsSource.llm_prompt_variables,
+    OptionsSource.router_prompt_variables,
+)
 
 
 class DiscoveryView(GenericAPIView):
@@ -262,3 +279,56 @@ class PipelineNodeOptionsView(TeamOptionsView):
         options = options_for_team(request.team)
         filtered = {key: value for key, value in options.items() if key in wanted}
         return Response(self.get_serializer(filtered).data)
+
+
+# The documented response sample. Kept whole rather than inline so a test can hold it to the
+# serializer -- a key the endpoint serves but the sample omits reads as a key that doesn't exist.
+CHATBOT_OPTIONS_EXAMPLE = {
+    "voice_provider": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
+    "synthetic_voice": [{"value": 11, "label": "Joanna (English)", "type": "aws", "provider_id": 2}],
+    "voice_response_behaviour": [{"value": "reciprocal", "label": "Reciprocal"}],
+    "trace_provider": [{"value": 4, "label": "Prod Langfuse", "type": "langfuse"}],
+    "consent_form": [{"value": 7, "label": "Returns consent"}],
+}
+
+
+class ChatbotOptionsView(DiscoveryView):
+    """The values a chatbot's settings accept, for the team the credential is scoped to."""
+
+    serializer_class = ChatbotOptionsSerializer
+    # Only here so DjangoModelPermissions can derive `experiments.view_experiment` from a model.
+    queryset = Experiment.objects.none()
+
+    @extend_schema(
+        operation_id="chatbot_options",
+        summary="List Chatbot Setting Options",
+        description=(
+            "The values each chatbot setting accepts, scoped to the API key's team.\n\n"
+            "A key holds the values for the setting of the same name: write one of "
+            "`consent_form`'s entries into a chatbot's `consent_form`, one of "
+            "`voice_response_behaviour`'s into `voice_response_behaviour`.\n\n"
+            "Only the settings drawn from a fixed set of values appear. A free-text setting "
+            "(`name`, `seed_message`) or a boolean one (`file_uploads_enabled`) constrains nothing "
+            "and so has no entry here.\n\n"
+            "`voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable "
+            "by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that "
+            "one provider. Only the voices a listed provider can speak are offered, so a team that "
+            "has configured no voice provider is offered no voice either."
+        ),
+        tags=["Chatbots"],
+        responses={200: ChatbotOptionsSerializer},
+        examples=[
+            OpenApiExample(
+                name="ChatbotOptions",
+                summary="Every key the endpoint serves, for a team that has one of each resource.",
+                value=CHATBOT_OPTIONS_EXAMPLE,
+                response_only=True,
+            )
+        ],
+    )
+    def get(self, request):
+        options = chatbot_setting_options(request)
+        # Declared keys are served through the serializer, so the documented types hold. A key it
+        # does not declare is served as built rather than dropped: a settings field that gains a
+        # choice list has to reach clients without an edit here.
+        return Response({**options, **self.get_serializer(options).data})
