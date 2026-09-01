@@ -2,13 +2,18 @@
 
 ``params`` is a free-form object in the schema -- what it may hold depends on the ``type``, and one
 endpoint serves every type -- so the schema alone cannot say what a body for a given type looks
-like. These examples do, one per served type, each naming *every* param that type declares. Two
+like. The POST examples do, one per served type, each naming *every* param that type declares. Two
 things they say that it cannot: a param's name is the node type's own rather than the
 ``/pipeline/options/`` list it draws from (``source_material_id`` is the param, ``source_material``
 the list), and every id here is a placeholder for one that endpoint serves.
 
+The PATCH examples are partial bodies instead. Its params are the POST ones, so a full payload per
+type there would only repeat the same eight payloads under a second verb.
+
 Held to the node schemas by ``tests/test_schema_examples.py``.
 """
+
+from typing import NamedTuple
 
 from drf_spectacular.utils import OpenApiExample
 
@@ -140,19 +145,53 @@ def create_examples() -> list[OpenApiExample]:
     ]
 
 
-def update_examples() -> list[OpenApiExample]:
-    """The same bodies without ``type``, which a PATCH may not send.
+class UpdateBody(NamedTuple):
+    """One documented PATCH body, and the node type it is a body for.
 
-    Every param is shown for completeness, but a PATCH merges key by key.
+    The type is carried so ``tests/test_schema_examples.py`` can create a node to send it to; the
+    schema itself has no use for it, since PATCH takes the type from the node.
+    """
+
+    name: str
+    node_type: str
+    summary: str
+    value: dict
+
+
+#: Partial bodies, one per thing a PATCH does. Deliberately not a full payload per node type the way
+#: :data:`FULL_PARAMS` gives POST: the params mean the same either way, so repeating all eight would
+#: only say a second time what the create examples already say.
+UPDATE_BODIES: list[UpdateBody] = [
+    UpdateBody(
+        name="One param",
+        node_type="CodeNode",
+        summary="Params merge key by key, so a body can be one key wide.",
+        value={"params": {"code": "def main(input: str, **kwargs) -> str:\n    return input.upper()\n"}},
+    ),
+    UpdateBody(
+        name="Label only",
+        node_type="CodeNode",
+        summary="No `params` at all: the node's configuration is left alone.",
+        value={"label": "Trim the answer"},
+    ),
+    UpdateBody(
+        name="Router keywords",
+        node_type="RouterNode",
+        summary="Regenerates the router's output handles, and takes its edges with them.",
+        value={"params": {"keywords": ["schedule", "reschedule", "cancel"]}},
+    ),
+]
+
+
+def update_examples() -> list[OpenApiExample]:
+    """One partial PATCH body per thing a PATCH does.
+
+    The full param set per type is what the POST examples document; a reader after one type's
+    vocabulary goes to ``GET /pipeline/nodes/{node_type}/`` either way.
     """
     return [
-        OpenApiExample(
-            name=node_type,
-            summary=f"{node_type}: {NOTES[node_type]}",
-            value={"label": _label(node_type), "params": params},
-            request_only=True,
-        )
-        for node_type, params in FULL_PARAMS.items()
+        OpenApiExample(name=body.name, summary=body.summary, value=body.value, request_only=True)
+        for body in UPDATE_BODIES
     ]
 
 

@@ -433,7 +433,7 @@ paths:
 
         Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. The node's edges follow their keyword: dropping a keyword deletes the edge that served it, and a keyword that merely moved keeps its target on whichever handle it moved to. A renamed keyword counts as one branch gone and another new, so its edge goes and the new branch comes back unwired. Handle names are not stable across a keyword edit, so re-read `output_handles` after one.
 
-        What `params` may hold depends on the node's type. The examples below name every param of each type for completeness, but a PATCH writes only the ones you send. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead, since a PATCH writes only the keys you send. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
       summary: Edit a Pipeline Node
       parameters:
       - in: path
@@ -458,144 +458,26 @@ paths:
             schema:
               $ref: '#/components/schemas/PatchedNodeUpdate'
             examples:
-              CodeNode:
+              OneParam:
                 value:
-                  label: My CodeNode
                   params:
-                    name: trim_answer
                     code: |
                       def main(input: str, **kwargs) -> str:
-                          return input.strip()
-                    tag: trimmed
-                summary: 'CodeNode: `code` must define `main(input, **kwargs)`.'
-              RenderTemplate:
+                          return input.upper()
+                summary: Params merge key by key, so a body can be one key wide.
+              LabelOnly:
                 value:
-                  label: My RenderTemplate
-                  params:
-                    name: format_reply
-                    template_string: Hi {{ participant_data.name }} -- {{ input }}
-                    tag: formatted
-                summary: 'RenderTemplate: Jinja2 template, using `{{ ... }}`.'
-              SendEmail:
+                  label: Trim the answer
+                summary: 'No `params` at all: the node''s configuration is left alone.'
+              RouterKeywords:
                 value:
-                  label: My SendEmail
                   params:
-                    name: email_transcript
-                    recipient_list: support@example.test, escalations@example.test
-                    subject: Transcript for {{ participant_details.identifier }}
-                    body: '{{ input }}'
-                    tag: emailed
-                summary: 'SendEmail: `recipient_list` is comma-separated; subject/body
-                  are Jinja2 templates.'
-              ExtractStructuredData:
-                value:
-                  label: My ExtractStructuredData
-                  params:
-                    name: extract_order
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.2
-                    data_schema: '{"order_number": "the order the participant is asking
-                      about"}'
-                    tag: extracted
-                summary: 'ExtractStructuredData: `data_schema` maps field name ->
-                  what to look for.'
-              ExtractParticipantData:
-                value:
-                  label: My ExtractParticipantData
-                  params:
-                    name: remember_order
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.2
-                    data_schema: '{"order_number": "the order the participant is asking
-                      about"}'
-                    key_name: orders
-                    tag: remembered
-                summary: 'ExtractParticipantData: As ExtractStructuredData, plus `key_name`
-                  to nest the result under.'
-              RouterNode:
-                value:
-                  label: My RouterNode
-                  params:
-                    name: triage
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.0
-                    prompt: Route on what {participant_data} is asking for.
                     keywords:
                     - schedule
                     - reschedule
                     - cancel
-                    default_keyword_index: 2
-                    tag_output_message: true
-                    history_type: named
-                    history_name: triage-history
-                    history_mode: max_history_length
-                    user_max_token_limit: 4000
-                    max_history_length: 25
-                summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
-                  are uppercased on save.'
-              StaticRouterNode:
-                value:
-                  label: My StaticRouterNode
-                  params:
-                    name: route_on_plan
-                    keywords:
-                    - free
-                    - pro
-                    default_keyword_index: 0
-                    tag_output_message: true
-                    data_source: session_state
-                    route_key: plan
-                summary: 'StaticRouterNode: Routes on stored data instead of an LLM;
-                  takes no LLM params.'
-              LLMResponseWithPrompt:
-                value:
-                  label: My LLMResponseWithPrompt
-                  params:
-                    name: answer
-                    llm_provider_id: 4
-                    llm_provider_model_id: 12
-                    llm_model_parameters:
-                      temperature: 0.4
-                    prompt: You are a support agent. Answer from {source_material},
-                      the files in {media} and whichever of {collection_index_summaries}
-                      fits. You are talking to {participant_data} and it is now {current_datetime}.
-                    history_type: named
-                    history_name: support-history
-                    history_mode: summarize
-                    user_max_token_limit: 8000
-                    max_history_length: 30
-                    source_material_id: 7
-                    collection_id: 3
-                    collection_index_ids:
-                    - 8
-                    - 9
-                    max_results: 5
-                    generate_citations: false
-                    tools:
-                    - update-user-data
-                    - one-off-reminder
-                    - calculator
-                    custom_actions:
-                    - 5:weather_get
-                    built_in_tools:
-                    - web-search
-                    - code-execution
-                    tool_config:
-                      web-search:
-                        allowed_domains:
-                        - docs.example.test
-                        blocked_domains:
-                        - forum.example.test
-                    synthetic_voice_id: 21
-                    tag: answered
-                summary: 'LLMResponseWithPrompt: A normal LLM node, with every optional
-                  param set.'
+                summary: Regenerates the router's output handles, and takes its edges
+                  with them.
       security:
       - OAuth2:
         - chatbots:write
