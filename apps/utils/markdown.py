@@ -15,6 +15,9 @@ from markdown.inlinepatterns import (
     ShortReferenceInlineProcessor,
 )
 
+# Prefix used by the OpenAI assistants file downloads that this codebase no longer serves.
+LEGACY_ASSISTANT_FILE_PREFIX = "assistant_file"
+
 
 class LinkProcessorMixin:
     def handleMatch(self, m, data):
@@ -51,6 +54,12 @@ class OcsShortImageReferenceInlineProcessor(LinkProcessorMixin, ShortImageRefere
 
 
 def _update_href(el):
+    """Rewrite `file:` hrefs to their download URL, returning the updated element.
+
+    Legacy `assistant_file:` hrefs are returned as their plain link/alt text instead: the
+    assistants UI and its download view were removed (#4254), so there is nothing left to
+    link to and the raw href would otherwise survive sanitisation as a dead-scheme link.
+    """
     if el is None:
         return el
 
@@ -63,16 +72,17 @@ def _update_href(el):
     else:
         return el
 
-    href = el.get(tag)
-    if not href or href.split(":", 1)[0] != "file":
+    href = el.get(tag) or ""
+    prefix = href.split(":", 1)[0]
+    if prefix == LEGACY_ASSISTANT_FILE_PREFIX:
+        return el.text or el.get("alt") or ""
+    if prefix != "file":
         return el
 
     parts = href.split(":")
     if len(parts) != 4:
         return el
-    prefix, team_slug, owner_id, file_id = parts
-    if prefix != "file":
-        return el
+    _, team_slug, owner_id, file_id = parts
     relative_url = reverse("experiments:download_file", args=[team_slug, owner_id, file_id])
     el.set(tag, relative_url)
     return el
