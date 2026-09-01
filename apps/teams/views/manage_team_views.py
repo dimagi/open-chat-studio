@@ -188,10 +188,8 @@ def set_public_key(request, team_slug):
     """Saves the public key and the migration-mode toggle together, matching the mockup's
     single "Save key" action for the whole Migration public key card."""
     form = TeamPublicKeyForm(request.POST, instance=request.team)
-    migration_form = TeamMigrationForm(request.POST, instance=request.team)
-    if form.is_valid() and migration_form.is_valid():
+    if form.is_valid():
         form.save()
-        migration_form.save()
         messages.success(request, _("Public key saved!"))
     else:
         messages.error(request, _("Could not save the public key."))
