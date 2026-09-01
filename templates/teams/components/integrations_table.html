@@ -3,7 +3,7 @@
 {% if filter_pills|length > 1 %}
   <div class="flex flex-wrap gap-2 mb-4">
     {% for pill in filter_pills %}
-      <button class="category-pill {% if pill.active %}category-pill-active{% endif %}"
+      <button class="btn btn-xs btn-soft btn-primary rounded-full {% if pill.active %}btn-active{% endif %}"
               hx-get="{{ table_url }}{% querystring category=pill.value %}"
               hx-target="#integrations-table-container"
               hx-swap="innerHTML">

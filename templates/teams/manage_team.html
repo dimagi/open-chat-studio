@@ -9,18 +9,6 @@
       transition: opacity 1s ease-out;
     }
 
-    .xl\:container:has(#team-settings-page) {
-      max-width: none;
-      background: var(--color-base-200);
-    }
-    #general.app-card, #integrations.app-card, #members.app-card,
-    #automation.app-card, #data.app-card,
-    #automation .app-card, #data .app-card,
-    #team-settings-nav .app-card {
-      border: 1px solid var(--color-base-300);
-      border-radius: 16px;
-      background: var(--color-base-100);
-    }
     #team-settings-nav a.settings-nav-active {
       background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
       color: var(--color-primary);
@@ -34,30 +22,7 @@
     #team-settings-nav a.settings-nav-active .nav-count {
       color: var(--color-primary);
     }
-    #team-settings-page .category-pill {
-      display: inline-flex;
-      align-items: center;
-      height: 30px;
-      padding: 0 12px;
-      border-radius: 9999px;
-      border: 1px solid var(--color-base-300);
-      background: var(--color-base-100);
-      color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
-      font-size: 12.5px;
-      font-weight: 600;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-    #team-settings-page .category-pill:hover {
-      border-color: var(--color-primary);
-      background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
-      color: var(--color-primary);
-    }
-    #team-settings-page .category-pill-active {
-      border-color: var(--color-primary);
-      background: color-mix(in oklch, var(--color-primary) 12%, var(--color-base-100));
-      color: var(--color-primary);
-    }
+    /* Keeps the inline-edit input's text styling matching the non-edit heading it replaces. */
     #team-settings-page #id_name {
       font-size: 1.875rem;
       font-weight: 700;
@@ -65,40 +30,23 @@
       height: auto;
       padding: 0.25rem 0.75rem;
     }
-    #automation .app-card .text-neutral-500 {
-      font-size: 12px;
-      white-space: nowrap;
-    }
     #team-settings-page .section-subtitle {
       font-size: 12px;
       white-space: nowrap;
+      margin-top: 0;
+      display: block;
     }
     #team-settings-page h2.pg-subtitle,
     #team-settings-page h3.pg-subtitle {
       margin-bottom: 0;
       font-size: 17px;
     }
-    #team-settings-page .section-subtitle,
-    #automation .app-card .text-neutral-500 {
-      margin-top: 0;
-      display: block;
-    }
-    #team-settings-page input[name="is_migrating"] {
-      border-radius: 4px;
-      width: 1.1rem;
-      height: 1.1rem;
-    }
     #team-settings-page .app-card {
+      /* Compact padding for better fit in the smaller card area on this page. */
       padding: 1rem;
     }
-    #data label[for="id_public_key"] {
-      font-size: 12px;
-      font-weight: 600;
-    }
-    #data h3.pg-subtitle {
-      font-size: 14px;
-      font-weight: 700;
-    }
+    /* h1.pg-subtitle comes from the shared object_home_content.html title, reused here for
+       the Developer access cards. */
     #automation h1.pg-subtitle {
       font-size: 14px;
       font-weight: 700;
@@ -277,7 +225,7 @@
               <div class="app-card">
                 <div class="flex flex-wrap justify-between items-center gap-4">
                   <div>
-                    <h3 class="pg-subtitle">{% translate "Download team files" %}</h3>
+                    <h3 class="pg-subtitle font-bold text-sm">{% translate "Download team files" %}</h3>
                     <span class="text-neutral-500 section-subtitle">{% translate "A zip archive of every file belonging to this team." %}</span>
                   </div>
                   <div id="team-files-download-wrapper">
@@ -316,7 +264,7 @@
               <div class="app-card">
                 <div class="flex justify-between items-start">
                   <div>
-                    <h3 class="pg-subtitle">{% translate "Migration public key" %}</h3>
+                    <h3 class="pg-subtitle font-bold text-sm">{% translate "Migration public key" %}</h3>
                     <span class="text-neutral-500 section-subtitle">{% translate "Seals secret data exported from this team during a migration." %}</span>
                   </div>
                   {% if team.public_key %}
@@ -333,7 +281,7 @@
                     <label class="label cursor-pointer gap-2">
                       <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
                               {% if request.team.is_migrating %}checked{% endif %}>
-                      <span class="min-w-0 whitespace-normal section-subtitle">{% translate "Migration mode — freeze writes while data is transferred" %}</span>
+                      <span class="min-w-0 whitespace-normal section-subtitle">{% translate "Migration mode: freeze writes while data is transferred" %}</span>
                     </label>
                     <input class="btn btn-primary" type="submit" value="{% translate "Save key" %}">
                   </div>
@@ -343,7 +291,7 @@
 
             <div class="divider"></div>
 
-            <h3 class="pg-subtitle">{% translate "Danger Zone" %}</h3>
+            <h3 class="pg-subtitle font-bold text-sm">{% translate "Danger Zone" %}</h3>
             <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
           </section>
           {% include "teams/components/delete_team_modal.html" %}

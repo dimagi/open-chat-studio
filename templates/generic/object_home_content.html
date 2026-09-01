@@ -35,7 +35,7 @@
           {% include "generic/help.html" with help_content=title_help_content %}
         {% endif %}
       </div>
-      <span class="text-neutral-500">{{ subtitle }}</span>
+      <span class="text-neutral-500 section-subtitle">{{ subtitle }}</span>
     </div>
     {% if allow_new|default_if_none:True or actions %}
       <div class="justify-self-end join">
