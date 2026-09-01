@@ -46,7 +46,7 @@ repos:
         additional_dependencies:
           - eslint@10.8.0
           - '@eslint/js@10.0.1'
-          - typescript-eslint@8.65.0
+          - typescript-eslint@8.68.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
