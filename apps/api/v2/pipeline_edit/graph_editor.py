@@ -7,7 +7,6 @@ from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
 from apps.pipelines.build_state import output_handles
-from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.flow import (
     REACT_FLOW_END_TYPE,
     EdgeDiff,
@@ -273,7 +272,7 @@ def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: Outpu
     delete: list[str] = []
     for stored in flow.get("edges", []):
         edge = FlowEdge(**stored)
-        handle = edge.sourceHandle or STANDARD_OUTPUT_NAME
+        handle = edge.source_handle_name
         if edge.source != node_id or handle not in before:
             continue
         destination = moved_to.get(handle)

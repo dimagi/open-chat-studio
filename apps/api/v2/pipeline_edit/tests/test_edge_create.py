@@ -283,7 +283,7 @@ class TestRefusedWires:
         response = client.post(edges_url(chatbot), {"source": node.flow_id, "target": end}, format="json")
 
         assert response.status_code == 400, response.content
-        assert "does not publish" in str(response.json()["source"])
+        assert "names no node type this server knows" in str(response.json()["source"])
 
     @pytest.mark.parametrize("node_type", ["RouterNode", "StaticRouterNode"])
     def test_a_router_with_no_keywords_yet_is_told_to_set_them(self, client, chatbot, end, node_type):

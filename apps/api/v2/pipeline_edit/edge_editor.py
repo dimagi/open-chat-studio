@@ -12,16 +12,14 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
-from apps.pipelines.build_state import input_handles, output_handles
-from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
-from apps.pipelines.flow import EdgeDiff, FlowEdge, FlowNode, FlowNodeData
-from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
+from apps.pipelines.build_state import NoOutputHandles, input_handles, output_handles, why_no_output_handles
+from apps.pipelines.flow import EdgeDiff, FlowEdge, FlowNode, FlowNodeData, react_flow_edge_id
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
 
-#: The four values that identify an edge: ``(source, source handle, target, target handle)``. Two
-#: edges sharing all four are the same wire, whatever ids they carry.
+#: The four values that identify an edge: ``(source, source handle, target, target handle)``, as
+#: :attr:`~apps.pipelines.flow.FlowEdge.wiring` reads them off a stored edge.
 Wiring = tuple[str, str, str, str]
 
 
@@ -33,7 +31,8 @@ def plan_create(
     The id is the server's to assign (W5), built with react-flow's own ``getEdgeId`` formula so that
     an API-wired edge reads like a hand-wired one. Not byte-identical to one, though: the UI builder
     renders its target handles without ids, so its edges carry ``targetHandle: null`` and their ids end
-    at the target's node id, where these end in ``input`` (see :func:`_wiring_of`). Ids are opaque --
+    at the target's node id, where these end in ``input`` (see
+    :attr:`~apps.pipelines.flow.FlowEdge.target_handle_name`). Ids are opaque --
     nothing parses one -- and the duplicate check compares the wiring rather than the id, so the two
     conventions sit side by side in one graph.
 
@@ -78,7 +77,7 @@ def _refuse_duplicate(flow: dict, wiring: Wiring) -> None:
     """
     for stored in flow.get("edges", []):
         edge = FlowEdge(**stored)
-        if _wiring_of(edge) == wiring:
+        if edge.wiring == wiring:
             raise serializers.ValidationError(
                 {
                     api_settings.NON_FIELD_ERRORS_KEY: [
@@ -124,7 +123,7 @@ def _source_handle(content: FlowNodeData, requested: str | None) -> str:
     """
     offered = [handle["handle"] for handle in output_handles(content.type, content.params, content.id)]
     if not offered:
-        raise serializers.ValidationError({"source": _why_no_output_handles(content)})
+        raise serializers.ValidationError({"source": _no_output_handles_message(content)})
     if requested is None:
         if len(offered) > 1:
             raise serializers.ValidationError(
@@ -147,30 +146,41 @@ def _source_handle(content: FlowNodeData, requested: str | None) -> str:
     return requested
 
 
-def _why_no_output_handles(content: FlowNodeData) -> str:
-    """Why this node offers no output handle. Three different situations, three different answers.
+def _no_output_handles_message(content: FlowNodeData) -> str:
+    """What to tell a caller that tried to wire from a node offering no output handle.
 
-    Only one of them is the caller's to fix, and it is the one reached down the documented happy path:
-    ``POST /pipeline/nodes/ {"type": "RouterNode"}`` stores ``keywords: []``, and a router's handles
-    *are* its keywords, so the one node type ``source_handle`` exists for arrives unwirable. Handed the
-    End node's answer, an agent reads "no edge can leave it" as "this node can never be a source" and
-    deletes it, when the fix is one PATCH away -- so the message has to name that PATCH.
+    Only one of the cases is the caller's to fix, and it is the one reached straight down the
+    documented happy path: ``POST /pipeline/nodes/ {"type": "RouterNode"}`` stores ``keywords: []``,
+    and a router's handles *are* its keywords, so the one node type ``source_handle`` exists for
+    arrives unwirable. Handed the End node's answer, an agent reads "no edge can leave it" as "this
+    node can never be a source" and deletes it, when the fix is one PATCH away.
+
+    Which case it is comes from :func:`~apps.pipelines.build_state.why_no_output_handles`, so this
+    holds only the wording -- and holds it as a lookup, so a case added there raises ``KeyError`` here
+    instead of quietly inheriting the End node's answer.
     """
-    node_class = resolve_node_class(content.type)
-    if node_class is None:
-        # A type naming no node class -- removed since, or never one. Nothing the caller sends makes
-        # this node wirable; moving the pipeline off the type is the only way forward.
-        return (
-            f"'{content.id}' is of type '{content.type}', which this API does not publish, so its "
-            f"output handles cannot be determined and no edge can leave it."
-        )
-    if issubclass(node_class, PipelineRouterNode):
-        return (
-            f"'{content.id}' has no output handles yet: a router's handles are its branches. Set its "
-            f"`keywords` (PATCH the node), then wire the branch you want."
-        )
-    # The End node, the one type that genuinely offers none: nothing runs after the end of the pipeline.
-    return f"'{content.id}' offers no output handles, so no edge can leave it."
+    return _NO_OUTPUT_HANDLES_MESSAGES[why_no_output_handles(content.type)].format(id=content.id, type=content.type)
+
+
+#: Wording per :class:`~apps.pipelines.build_state.NoOutputHandles` case. A mapping rather than a
+#: chain of branches: every member has to be named, so adding one to the enum fails loudly here.
+_NO_OUTPUT_HANDLES_MESSAGES = {
+    # Not the same as a type the API merely withholds: `BooleanNode` resolves and offers two handles,
+    # so it never lands here. Nothing the caller sends makes such a node wirable.
+    NoOutputHandles.UNKNOWN_TYPE: (
+        "'{id}' is of type '{type}', which names no node type this server knows, so its output "
+        "handles cannot be determined and no edge can leave it."
+    ),
+    NoOutputHandles.NO_BRANCHES: (
+        "'{id}' has no output handles yet: a router's handles are its branches. Set its `keywords` "
+        "(PATCH the node), then wire the branch you want."
+    ),
+    NoOutputHandles.TERMINAL: "'{id}' offers no output handles, so no edge can leave it.",
+    NoOutputHandles.UNDETERMINED: (
+        "'{id}' offers no output handles, so no edge can leave it. Why is not something this server "
+        "can say for a '{type}' node."
+    ),
+}
 
 
 def _target_handle(content: FlowNodeData, requested: str | None) -> str:
@@ -198,33 +208,11 @@ def _target_handle(content: FlowNodeData, requested: str | None) -> str:
     return requested
 
 
-def _wiring_of(edge: FlowEdge) -> Wiring:
-    """An edge's four identifying values, with an absent handle read as the node's only one.
-
-    The two sides go absent for different reasons, and both have to normalise or a duplicate slips in
-    beside the edge it duplicates:
-
-    * ``targetHandle`` because the UI builder renders its target handles with no id at all
-      (``NodeInput.tsx``, ``BoundaryNode.tsx``), so *every* edge it draws stores a null one.
-    * ``sourceHandle`` because it is optional in the stored shape rather than unnamed in the builder --
-      which does name its source handles (``output``, or ``output_N`` on a router). An omitted or null
-      one means the standard output, exactly as ``FlowEdge``'s own default declares and as
-      ``graph.Edge.is_conditional`` and ``unwired_handles`` both read it; the pipeline factory's own
-      seed edge and any imported graph are where they turn up.
-    """
-    return (
-        edge.source,
-        edge.sourceHandle or STANDARD_OUTPUT_NAME,
-        edge.target,
-        edge.targetHandle or STANDARD_INPUT_NAME,
-    )
-
-
 def _unused_edge_id(flow: dict, wiring: Wiring) -> str:
     """An edge id no edge in this graph already has.
 
-    The base is what react-flow's own ``getEdgeId`` formula draws from these four values, which keeps
-    an API-wired edge legible beside a hand-wired one (though not identical to it -- see
+    The base is :func:`~apps.pipelines.flow.react_flow_edge_id` over these four values, which keeps an
+    API-wired edge legible beside a hand-wired one (though not identical to it -- see
     :func:`plan_create`). It is not unique on its own, though: an edit that moves a router's keywords
     leaves an edge holding the id of a wiring it no longer has
     (see :func:`~apps.api.v2.pipeline_edit.graph_editor._rewired_edges`), and the patch engine treats
@@ -232,7 +220,6 @@ def _unused_edge_id(flow: dict, wiring: Wiring) -> str:
     taken id gets a suffix. Trying the bare base first is the whole of what differs from how a node id
     is drawn; the draw itself, and the bound on it, are :func:`.ids.with_free_suffix`.
     """
-    source, source_handle, target, target_handle = wiring
-    base = f"reactflow__edge-{source}{source_handle}-{target}{target_handle}"
+    base = react_flow_edge_id(*wiring)
     taken = {edge["id"] for edge in flow.get("edges", [])}
     return base if base not in taken else with_free_suffix(base, taken)

@@ -12,6 +12,8 @@ Validation never flags an unwired node or branch (the build only checks reachabl
 never blocks anything.
 """
 
+from enum import StrEnum
+
 import pydantic
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
@@ -44,7 +46,7 @@ def unwired_handles(pipeline: Pipeline) -> dict:
     # Wiredness is judged purely from the stored edges: an edge pointing at a handle its source no
     # longer offers still marks that (source, handle) pair "wired" here — the stranded edge itself
     # is the errors.edge bucket's concern (and, like validation, only surfaces for reachable nodes).
-    wired_outputs = {(edge.source, edge.sourceHandle or STANDARD_OUTPUT_NAME) for edge in edges}
+    wired_outputs = {(edge.source, edge.source_handle_name) for edge in edges}
     wired_inputs = {edge.target for edge in edges}
 
     unwired = {}
@@ -56,9 +58,8 @@ def unwired_handles(pipeline: Pipeline) -> dict:
 
 def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tuple[str, str]]) -> list[dict]:
     """One node's unwired handles: the implicit input plus any output with no edge."""
-    dangling = [
-        {"handle": handle, "label": None} for handle in input_handles(node.type) if node.flow_id not in wired_inputs
-    ]
+    unwired_inputs = [] if node.flow_id in wired_inputs else input_handles(node.type)
+    dangling = [{"handle": handle, "label": None} for handle in unwired_inputs]
     for handle in node_output_handles(node):
         if (node.flow_id, handle["handle"]) not in wired_outputs:
             dangling.append(handle)
@@ -78,6 +79,40 @@ def input_handles(node_type: str) -> list[str]:
 def node_output_handles(node: Node) -> list[dict]:
     """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``."""
     return output_handles(node.type, node.params or {}, node.flow_id, django_node=node)
+
+
+class NoOutputHandles(StrEnum):
+    """Why a node offers none, for a caller that has to explain an empty :func:`output_handles`.
+
+    Beside ``output_handles`` because it is that function's own branch structure read a second way:
+    kept apart, the two drift, and a new handle-less case silently gets whichever answer happens to
+    fall through. Which is why ``UNDETERMINED`` exists rather than a fall-through to ``TERMINAL``.
+    """
+
+    #: The End node. Nothing runs after the end of the pipeline, so nothing can be wired from it.
+    TERMINAL = "terminal"
+    #: A type naming no node class -- removed since, or never one. Its handles are unknowable.
+    UNKNOWN_TYPE = "unknown_type"
+    #: A router with no keywords yet: its handles *are* its branches, so it has none until they are set.
+    NO_BRANCHES = "no_branches"
+    #: Offers none for a reason this function does not recognise -- unreachable today.
+    UNDETERMINED = "undetermined"
+
+
+def why_no_output_handles(node_type: str) -> NoOutputHandles:
+    """Which of the empty cases applies. Only meaningful once :func:`output_handles` returned ``[]``.
+
+    Mirrors that function's branches in the same order, so the two are read together when a case is
+    added to either.
+    """
+    if node_type == EndNode.__name__:
+        return NoOutputHandles.TERMINAL
+    node_class = resolve_node_class(node_type)
+    if node_class is None:
+        return NoOutputHandles.UNKNOWN_TYPE
+    if issubclass(node_class, PipelineRouterNode):
+        return NoOutputHandles.NO_BRANCHES
+    return NoOutputHandles.UNDETERMINED
 
 
 def output_handles(node_type: str, params: dict, node_id: str, django_node: Node | None = None) -> list[dict]:
