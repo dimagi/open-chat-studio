@@ -27,6 +27,7 @@ from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
 from .exceptions import ServiceProviderConfigError
+from .whatsapp import WhatsAppProviderMixin
 
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
@@ -575,7 +576,7 @@ class MessagingProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class MessagingProvider(BaseTeamModel, ProviderMixin):
+class MessagingProvider(BaseTeamModel, ProviderMixin, WhatsAppProviderMixin):
     objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
@@ -594,6 +595,49 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
+
+    def get_absolute_url(self) -> str:
+        return reverse(
+            "service_providers:edit",
+            kwargs={
+                "team_slug": get_slug_for_team(self.team_id),
+                "provider_type": const.MESSAGING,
+                "pk": self.id,
+            },
+        )
+
+    def resolve_number(self, number: str) -> dict | None:
+        """Confirm `number` belongs to this provider and return the channel config it implies.
+
+        Returns None when the provider does not have the number. The dict is merged into the
+        channel's ``extra_data``, so it carries whatever that platform needs to address the
+        number -- for Meta Cloud API that is the ``phone_number_id`` sends are addressed to.
+
+        Resolving lives here rather than on the service because the Meta numbers are cached on
+        the provider row, and the service is built from config alone.
+        """
+        if self.type_enum == MessagingProviderType.meta_cloud_api:
+            return self.resolve_whatsapp_number(number)
+        return {"number": number} if self.get_messaging_service().resolve_number(number) else None
+
+    def _update_extra_data(self, key: str, value) -> None:
+        """Set one key in ``extra_data`` without disturbing the others.
+
+        ``extra_data`` also holds the webhook verify token hash, which the config form writes,
+        so the row is re-read under a lock and only ``key`` is replaced.
+        """
+        with transaction.atomic():
+            provider = MessagingProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = provider.extra_data or {}
+            extra_data[key] = value
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
+        self.extra_data = extra_data
+
+    def run_post_create_hook(self) -> None:
+        """Type-specific work to run once, after the provider is first created."""
+        if self.type == MessagingProviderType.meta_cloud_api.value:
+            self.queue_whatsapp_provider_sync()
 
 
 class AuthProviderType(models.TextChoices):

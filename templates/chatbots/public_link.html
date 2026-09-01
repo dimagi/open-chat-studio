@@ -1,0 +1,41 @@
+{% load chat_widget_tags static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ chatbot_name }}</title>
+    <link rel="stylesheet" href="{% static 'css/site-base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/site-tailwind.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" integrity="sha512-xh6O/CkQoPOWDdYTDqeRdPCVd1SpvCA9XXcUnZS2FmJNp1coAFzvtCN9BmamE+4aHK8yyUHUSCcJHgXloTyT2A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/v4-shims.min.css" integrity="sha512-ARfx5eajdcCAuWvuJrgUuJ6D25ON3KZRTCghNXXKeJldCQJ5bXS+6CvG2EhcFWITF95uwZydzpufSKvhmSpTxA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  </head>
+  <body>
+    <main class="min-h-screen flex flex-col items-center bg-base-200 p-4">
+      <header class="w-full max-w-3xl mb-4">
+        <h1 class="text-2xl font-bold">{{ chatbot_name }}</h1>
+        {% if chatbot_description %}<p class="opacity-80">{{ chatbot_description }}</p>{% endif %}
+      </header>
+      {% if not state.live %}
+        <div role="alert" class="alert alert-warning w-full max-w-3xl mb-4" data-state="{{ state.code }}">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>{{ state.banner }}</span>
+        </div>
+      {% endif %}
+      <div class="w-full max-w-3xl flex-1 relative">
+        <open-chat-studio-widget
+          mode="kiosk"
+          chatbot-id="{{ public_id }}"
+          embed-key="{{ token }}"
+          api-base-url="{{ api_base_url }}"
+          persistent-session="tab"
+          welcome-messages="{{ welcome_json }}"
+          starter-questions="{{ starters_json }}"
+          {% if not widget_enabled %}disabled="true"{% endif %}
+          {% if user %}user-id="{{ user.email }}" user-name="{{ user.get_full_name }}"{% endif %}
+        ></open-chat-studio-widget>
+      </div>
+    </main>
+    <script type="module" src="{% widget_script_url %}"></script>
+  </body>
+</html>

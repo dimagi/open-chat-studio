@@ -10,6 +10,7 @@ from apps.channels.utils import extract_domain_from_headers, get_experiment_sess
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import validated_machine_token
 from apps.teams.utils import set_current_team
+from apps.web.meta import canonical_hostname
 
 
 def chatbot_id_from_body(request) -> str | None:
@@ -66,7 +67,7 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         try:
             experiment_channel = ExperimentChannel.objects.select_related("experiment", "team").get(
                 experiment__public_id=experiment_id,
-                platform=ChannelPlatform.EMBEDDED_WIDGET,
+                platform__in=ChannelPlatform.widget_platforms(),
                 extra_data__widget_token=embed_key,
                 deleted=False,
             )
@@ -101,6 +102,21 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         return "X-Embed-Key"
 
 
+def channel_origin_allowed(request, channel: ExperimentChannel) -> bool:
+    """Whether the request's Origin (or Referer) may use `channel`.
+
+    An embedded widget lists the domains it may be embedded on. A public link runs on the OCS
+    host only, so its rule is the canonical Site hostname; hostname to hostname, so ports do
+    not matter. Same-origin GETs carry no Origin header, which is why Referer is the fallback.
+    """
+    origin_domain = extract_domain_from_headers(request)
+    if not origin_domain:
+        return False
+    if channel.platform == ChannelPlatform.PUBLIC:
+        return origin_domain.lower() == canonical_hostname()
+    return validate_domain(origin_domain, channel.extra_data.get("allowed_domains", []))
+
+
 def embed_key_authorizes_channel(request, channel: ExperimentChannel | None) -> bool:
     """Whether this request's X-Embed-Key proves access to `channel`.
 
@@ -117,7 +133,7 @@ def embed_key_authorizes_channel(request, channel: ExperimentChannel | None) -> 
     embed_key = request.headers.get("X-Embed-Key")
     if not embed_key or channel is None:
         return False
-    if channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
+    if channel.platform not in ChannelPlatform.widget_platforms():
         return False
     # Callers that reach a channel by FK traversal (`session.experiment_channel`) bypass the
     # default manager's `deleted=False`, so deleting a widget would otherwise not revoke its key.
@@ -126,10 +142,7 @@ def embed_key_authorizes_channel(request, channel: ExperimentChannel | None) -> 
     if embed_key != channel.extra_data.get("widget_token"):
         return False
 
-    origin_domain = extract_domain_from_headers(request)
-    if not origin_domain:
-        return False
-    return validate_domain(origin_domain, channel.extra_data.get("allowed_domains", []))
+    return channel_origin_allowed(request, channel)
 
 
 def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
@@ -145,7 +158,7 @@ def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
         ExperimentChannel.objects.select_related("experiment", "team")
         .filter(
             experiment=experiment,
-            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            platform__in=ChannelPlatform.widget_platforms(),
             extra_data__widget_token=embed_key,
         )
         .first()

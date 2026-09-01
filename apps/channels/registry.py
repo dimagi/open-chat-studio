@@ -28,6 +28,7 @@ PLATFORM_CHANNEL_CLASSES = {
     ChannelPlatform.SLACK: SlackChannel,
     ChannelPlatform.COMMCARE_CONNECT: CommCareConnectChannel,
     ChannelPlatform.EMBEDDED_WIDGET: ApiChannel,
+    ChannelPlatform.PUBLIC: ApiChannel,
     ChannelPlatform.EMAIL: EmailChannel,
 }
 

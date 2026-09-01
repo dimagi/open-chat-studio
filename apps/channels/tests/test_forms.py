@@ -1,10 +1,17 @@
+import json
 from unittest.mock import Mock, PropertyMock, patch
 
 import httpx
 import pytest
 from django.forms.widgets import HiddenInput, Select
 
-from apps.channels.forms import ChannelForm, SlackChannelForm, TelegramChannelForm, WhatsappChannelForm
+from apps.channels.forms import (
+    ChannelForm,
+    ChannelFormWrapper,
+    SlackChannelForm,
+    TelegramChannelForm,
+    WhatsappChannelForm,
+)
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -45,6 +52,9 @@ def test_channel_form_reveals_provider_types(experiment, platform, expected_widg
         ("+27_81_234_5678", False),
         ("0800 100 030", False),
         ("+32 (0)27888484", True),
+        # Parses cleanly but is not a number anyone can be reached on
+        ("+1234", False),
+        ("+10000000000", False),
     ],
 )
 @patch("apps.channels.forms.WhatsappChannelForm.messaging_provider")
@@ -424,3 +434,202 @@ class TestChannelEnabledToggle:
         channel = ExperimentChannelFactory.create(experiment=experiment, team=experiment.team, enabled=False)
         form = ChannelForm(experiment=experiment, instance=channel)
         assert '"channelEnabled": false' in form.form_attrs["x-data"]
+
+
+NUMBER_A = {
+    "phone_number_id": "1020671484465717",
+    "number": "+27647084804",
+    "display": "+27 64 708 4804",
+    "verified_name": "TenantHive",
+}
+NUMBER_B = {
+    "phone_number_id": "9938471029384",
+    "number": "+27825550134",
+    "display": "+27 82 555 0134",
+    "verified_name": "TenantHive Support",
+}
+
+
+def _meta_provider(team, numbers=None):
+    extra_data = {"verify_token_hash": "abc"}
+    if numbers is not None:
+        extra_data["whatsapp_numbers"] = {"state": "ok", "numbers": numbers}
+    return MessagingProviderFactory.create(
+        team=team,
+        type=MessagingProviderType.meta_cloud_api,
+        config={"access_token": "token", "business_id": "biz_123"},
+        extra_data=extra_data,
+    )
+
+
+def _numbers_by_provider(form):
+    return json.loads(form.form_attrs["x-data"])["numbersByProvider"]
+
+
+@pytest.mark.django_db()
+class TestWhatsappNumberOptions:
+    """Every provider's cached numbers are rendered up front, so switching provider needs no request."""
+
+    def test_cached_numbers_are_rendered_for_every_provider(self, experiment):
+        synced = _meta_provider(experiment.team, [NUMBER_A, NUMBER_B])
+        never_synced = _meta_provider(experiment.team)
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment))
+
+        assert options[str(synced.id)]["numbers"] == [
+            {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"},
+            {"value": "+27825550134", "label": "+27 82 555 0134 - TenantHive Support"},
+        ]
+        assert options[str(never_synced.id)]["numbers"] == []
+        assert options[str(synced.id)]["provider_url"].endswith(f"/messaging/{synced.id}/")
+
+    def test_a_saved_number_that_is_not_cached_is_still_offered(self, experiment):
+        """Editing a channel must not force a number change just because Meta no longer lists it."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=provider,
+            extra_data={"number": "+27821110000", "phone_number_id": "555"},
+        )
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment, channel=channel))
+
+        assert [option["value"] for option in options[str(provider.id)]["numbers"]] == [
+            "+27647084804",
+            "+27821110000",
+        ]
+
+    def test_the_provider_numbers_are_fetched_once_per_form(self, experiment, django_assert_num_queries):
+        """One render reads them through `form_attrs` and again through `has_cached_numbers`."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+        form = WhatsappChannelForm(experiment=experiment, data={"messaging_provider": provider.id})
+
+        with django_assert_num_queries(1):
+            assert _numbers_by_provider(form)[str(provider.id)]["numbers"]
+            assert form.has_cached_numbers
+            assert form.has_cached_numbers
+
+    def test_providers_of_other_types_are_not_listed(self, experiment):
+        twilio = MessagingProviderFactory.create(team=experiment.team, type=MessagingProviderType.twilio)
+
+        options = _numbers_by_provider(WhatsappChannelForm(experiment=experiment))
+
+        assert str(twilio.id) not in options
+
+
+@pytest.mark.django_db()
+class TestWhatsappNumberValidation:
+    def _form(self, experiment, provider, number="+27647084804"):
+        return WhatsappChannelForm(experiment=experiment, data={"number": number, "messaging_provider": provider.id})
+
+    def test_a_cached_number_resolves_its_id_without_calling_meta(self, experiment):
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        with patch.object(MessagingProvider, "get_messaging_service") as get_service:
+            form = self._form(experiment, provider)
+            assert form.is_valid(), form.errors
+
+        get_service.assert_not_called()
+        assert form.cleaned_data["phone_number_id"] == "1020671484465717"
+
+    def test_a_number_missing_from_a_cached_provider_is_rejected(self, experiment):
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._form(experiment, provider, number="+27829990000")
+
+        assert not form.is_valid()
+        assert "was not found at the provider" in form.errors["number"][0]
+
+    def test_an_empty_cache_is_populated_on_save(self, experiment):
+        """The number check doubles as the trigger that fills a provider's number cache."""
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.return_value = [NUMBER_A, NUMBER_B]
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider)
+            assert form.is_valid(), form.errors
+
+        assert form.cleaned_data["phone_number_id"] == "1020671484465717"
+        provider.refresh_from_db()
+        assert provider.whatsapp_numbers == [NUMBER_A, NUMBER_B]
+
+    def test_an_unknown_number_leaves_the_cache_populated_for_the_re_render(self, experiment):
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.return_value = [NUMBER_A]
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider, number="+27829990000")
+            assert not form.is_valid()
+
+            assert "was not found at the provider" in form.errors["number"][0]
+            # the re-rendered form offers what the sync found
+            assert _numbers_by_provider(form)[str(provider.id)]["numbers"] == [
+                {"value": "+27647084804", "label": "+27 64 708 4804 - TenantHive"}
+            ]
+
+    def _edit_form(self, experiment, provider, saved_number, submitted_number):
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=provider,
+            extra_data={"number": saved_number, "phone_number_id": "555"},
+        )
+        return WhatsappChannelForm(
+            experiment=experiment,
+            channel=channel,
+            data={"number": submitted_number, "messaging_provider": provider.id},
+        )
+
+    def test_an_unchanged_number_the_provider_no_longer_lists_still_saves(self, experiment):
+        """The picker keeps a stale saved number selectable, so validation has to accept it too --
+        otherwise the channel can never be edited again, not even to rename it."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._edit_form(experiment, provider, "+27821110000", "+27821110000")
+
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["phone_number_id"] == "555"
+
+    def test_changing_the_number_is_still_checked_against_the_provider(self, experiment):
+        """The allowance above is only for the number already saved."""
+        provider = _meta_provider(experiment.team, [NUMBER_A])
+
+        form = self._edit_form(experiment, provider, "+27821110000", "+27829990000")
+
+        assert not form.is_valid()
+        assert "was not found at the provider" in form.errors["number"][0]
+
+    def test_another_teams_provider_is_never_reached(self, experiment):
+        """ChannelForm rejects a provider from another team, but the extra form is validated
+        alongside it, so the extra form's own lookup has to be team-scoped too. Otherwise
+        validating the number syncs -- and writes to -- a provider the submitter cannot see.
+        """
+        foreign = _meta_provider(TeamWithUsersFactory())
+
+        with patch.object(MessagingProvider, "sync_whatsapp_numbers") as sync:
+            wrapper = ChannelFormWrapper(
+                experiment=experiment,
+                platform=ChannelPlatform.WHATSAPP,
+                data={
+                    "platform": ChannelPlatform.WHATSAPP.value,
+                    "number": "+27647084804",
+                    "messaging_provider": foreign.id,
+                },
+            )
+            assert not wrapper.is_valid()
+
+        sync.assert_not_called()
+
+    def test_a_failed_sync_asks_the_user_to_try_again(self, experiment):
+        provider = _meta_provider(experiment.team)
+        service = Mock()
+        service.get_phone_numbers.side_effect = httpx.HTTPError("boom")
+
+        with patch.object(MessagingProvider, "get_messaging_service", return_value=service):
+            form = self._form(experiment, provider)
+
+        assert not form.is_valid()
+        assert form.errors["number"] == ["Could not validate this number right now. Please try again."]
