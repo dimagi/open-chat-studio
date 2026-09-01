@@ -28,6 +28,7 @@ from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
+from apps.service_providers.exceptions import ConnectionTestNotSupportedError, NoTestableModelError
 from apps.service_providers.forms import (
     LlmProviderModelForm,
     PricingOverrideForm,
@@ -37,11 +38,13 @@ from apps.service_providers.forms import (
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     EmbeddingProviderModel,
+    LlmProvider,
     LlmProviderModel,
     MessagingProvider,
     MessagingProviderType,
     VoiceProvider,
     VoiceProviderType,
+    classify_connection_test_failure,
 )
 from apps.utils.deletion import get_related_objects
 
@@ -219,6 +222,31 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
     return HttpResponse()
 
 
+def _normalize_config(config: dict) -> dict:
+    """Drops blank optional fields cleaned_data fills in even when the user never touched
+    them, so an untouched field doesn't look like a change against an older, sparser saved
+    config."""
+    return {k: v for k, v in config.items() if v}
+
+
+def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
+    """Whether obj's current config differs from old_config. Always True for a create -
+    there's nothing to compare against yet."""
+    return is_create or old_config != _normalize_config(obj.config)
+
+
+def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bool:
+    """Whether the automatic connection test should run for this save: only LLM providers,
+    and only when credentials actually changed (or it's a new create)."""
+    return isinstance(obj, LlmProvider) and _has_config_changed(is_create, old_config, obj)
+
+
+def _should_run_post_create_hook(obj, is_create: bool) -> bool:
+    """Whether this save just created a new messaging provider - the one moment its
+    post-create hook needs to run."""
+    return is_create and isinstance(obj, MessagingProvider)
+
+
 class CreateServiceProvider(
     LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
 ):
@@ -278,18 +306,29 @@ class CreateServiceProvider(
         config_valid = config_form.is_valid()
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
-            self._save_provider(request, primary_form, config_form, file_formset)
-            return HttpResponseRedirect(self.get_success_url())
+            obj, had_connection_test_warning = self._save_provider(request, primary_form, config_form, file_formset)
+            return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
 
     def _save_provider(self, request, primary_form, config_form, file_formset):
+        """Saves the provider and returns (obj, had_connection_test_warning).
+
+        The second value tells get_success_url() whether the automatic connection test just
+        failed - if so, it should send the user back to this provider's own edit page (where
+        the "Test Connection" button the warning message points at actually lives) instead
+        of the team list every other save redirects to.
+        """
         with transaction.atomic():
             obj = primary_form.save(commit=False)
             obj.team = request.team
-            is_new = obj.pk is None
+            is_create = obj.pk is None
+            # Captured before config_form.save() overwrites obj.config, so the check below
+            # can tell whether credentials actually changed - re-testing on an unrelated
+            # edit (e.g. renaming the provider) wastes an external call for no reason.
+            old_config = None if is_create else _normalize_config(obj.config)
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -298,10 +337,25 @@ class CreateServiceProvider(
             if isinstance(obj, VoiceProvider):
                 for warning in obj.run_post_save_hook():
                     messages.warning(request, warning)
-            if is_new and isinstance(obj, MessagingProvider):
+            if _should_run_post_create_hook(obj, is_create):
                 obj.run_post_create_hook()
+        # Runs after the save transaction commits, not inside it: an external LLM call can
+        # take several seconds, and holding the save's DB connection/locks open for that long
+        # (or repeating the call if the transaction were retried or rolled back) is worse than
+        # the save and the test being two separate steps.
+        had_connection_test_warning = False
+        if _should_test_connection(obj, is_create, old_config):
+            for warning in obj.run_connection_test_hook():
+                messages.warning(request, warning)
+                had_connection_test_warning = True
         for warning in config_form.warnings:
             messages.warning(request, warning)
+        return obj, had_connection_test_warning
+
+    def _button_text(self, instance) -> str:
+        if instance:
+            return "Update"
+        return "Create and Test" if self.provider_type == ServiceProvider.llm else "Create"
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {
@@ -311,7 +365,9 @@ class CreateServiceProvider(
             "subtype": subtype,
             "object": instance,
             "title": f"Edit {instance.name}" if instance else self.provider_type.label,
-            "button_text": "Update" if instance else "Create",
+            # For an existing LLM provider this is only the pre-Alpine-hydration default -
+            # the template overrides it reactively based on whether credentials changed.
+            "button_text": self._button_text(instance),
             "active_tab": "manage-team",
         }
         is_elevenlabs_voice = (
@@ -323,6 +379,15 @@ class CreateServiceProvider(
                 kwargs={
                     "team_slug": self.request.team.slug,
                     "provider_type": "voice",
+                    "pk": instance.pk,
+                },
+            )
+        if self.provider_type == ServiceProvider.llm and instance:
+            ctx["test_llm_connection_url"] = reverse(
+                "service_providers:test_llm_connection",
+                kwargs={
+                    "team_slug": self.request.team.slug,
+                    "provider_type": "llm",
                     "pk": instance.pk,
                 },
             )
@@ -349,7 +414,19 @@ class CreateServiceProvider(
             )
         return ctx
 
-    def get_success_url(self):
+    def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
+        """Normally back to the team list, same as every save today. The one exception:
+        an automatic connection-test failure sends the user back to this provider's own
+        edit page instead, since that warning explicitly tells them to use the "Test
+        Connection" button, and that button only renders on the edit page itself.
+        """
+        if redirect_to_own_edit_page and obj is not None:
+            return resolve_url(
+                "service_providers:edit",
+                team_slug=self.request.team.slug,
+                provider_type=self.provider_type.slug,
+                pk=obj.pk,
+            )
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
@@ -580,6 +657,36 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_llmprovider", raise_exception=True)
+def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
+    """Run a manual connection test for an LLM provider and redirect back to its edit page with the result."""
+    if provider_type != ServiceProvider.llm.slug:
+        raise Http404(f"Unsupported provider type: {provider_type}")
+    provider = get_object_or_404(LlmProvider, team=request.team, pk=pk)
+    try:
+        provider.test_connection()
+    except NoTestableModelError:
+        messages.warning(request, "No models configured to test. Add a model first.")
+    except ConnectionTestNotSupportedError:
+        messages.info(request, "Connection testing isn't supported for this provider type.")
+    except Exception as exc:
+        log.exception("LLM connection test failed for provider %s", pk)
+        match classify_connection_test_failure(exc):
+            case "retryable":
+                messages.warning(
+                    request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
+                )
+            case "permission":
+                messages.error(request, "Test failed. Check your credentials and try again.")
+            case _:
+                messages.error(request, "Test failed due to a connection issue on the provider's side. Try again soon.")
+    else:
+        messages.success(request, "Connection test succeeded.")
+    return redirect("service_providers:edit", team_slug=team_slug, provider_type=ServiceProvider.llm.slug, pk=pk)
 
 
 def _sync_in_flight(provider: MessagingProvider) -> bool:
