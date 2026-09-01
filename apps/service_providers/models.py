@@ -189,10 +189,14 @@ def classify_connection_test_failure(exc: Exception) -> Literal["retryable", "pe
     Duck-types the status code so the permission/connection split works across every
     provider without importing any SDK here: OpenAI (and every OpenAI-compatible type built
     on it) and Anthropic expose `.status_code`; Google's exceptions expose `.code` with the
-    same HTTP-equivalent numbering instead. The retryable check does need the SDKs (to
-    reuse retry.py's `should_retry_exception`, and to recognize provider-SDK timeouts it
-    doesn't cover), so it's a local import here, same reasoning as elsewhere in this file:
-    avoids loading heavy langchain/provider deps at Django startup.
+    same HTTP-equivalent numbering instead. Checks `exc.__cause__`/`__context__` too, since
+    at least one integration (Gemini, via langchain_google_genai) catches the real,
+    status-bearing SDK exception and re-raises its own wrapper around it with `from e` -
+    the wrapper itself carries no status, only the exception it chained still does. The
+    retryable check does need the SDKs (to reuse retry.py's `should_retry_exception`, and
+    to recognize provider-SDK timeouts it doesn't cover), so it's a local import here, same
+    reasoning as elsewhere in this file: avoids loading heavy langchain/provider deps at
+    Django startup.
     """
     import openai  # noqa: PLC0415 - heavy lib, slow startup
     from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
@@ -205,11 +209,30 @@ def classify_connection_test_failure(exc: Exception) -> Literal["retryable", "pe
     if isinstance(exc, ServiceProviderConfigError):
         return "permission"
 
-    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    status = _extract_status_code(exc)
     if isinstance(status, int) and 400 <= status < 500:
         return "permission"
 
     return "connection"
+
+
+def _extract_status_code(exc: Exception) -> int | None:
+    """Duck-types a status code off exc, falling back to its __cause__/__context__.
+
+    Verified against the actual installed packages, not assumed: OpenAI, Azure, Groq,
+    Perplexity, DeepSeek, MiniMax (all via langchain_openai), Anthropic, and Google Vertex
+    AI all let the original, status-bearing SDK exception propagate unwrapped. Gemini (via
+    langchain_google_genai) is the one that doesn't - it catches
+    google.api_core.exceptions.InvalidArgument and re-raises
+    `ChatGoogleGenerativeAIError(msg) from e`, so the status only survives on `__cause__`.
+    """
+    for candidate in (exc, exc.__cause__, exc.__context__):
+        if candidate is None:
+            continue
+        status = getattr(candidate, "status_code", None) or getattr(candidate, "code", None)
+        if isinstance(status, int):
+            return status
+    return None
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)

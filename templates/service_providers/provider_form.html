@@ -38,8 +38,10 @@
         {% include config_form.custom_template with object=object form=config_form %}
       {% else %}
         {% if test_llm_connection_url %}
-          {# Nudges toward re-testing after an edit, not a saved "untested" state: resets on
-          reload by design, same as the manual Test Connection button it points at. #}
+          {% comment %}
+          Nudges toward re-testing after an edit, not a saved "untested" state: resets on
+          reload by design, same as the manual Test Connection button it points at.
+          {% endcomment %}
           <div x-data="{ configChanged: false }" x-on:input="configChanged = true" x-on:change="configChanged = true">
             {% render_form_fields config_form %}
             <div x-show="configChanged" x-cloak role="alert" class="alert alert-warning alert-soft text-sm py-2 mt-2">

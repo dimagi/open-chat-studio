@@ -42,6 +42,17 @@ def _code_exception(code: int) -> Exception:
     return exc
 
 
+def _wrapped_exception(cause: Exception) -> Exception:
+    """A wrapper exception with no status of its own, chained to `cause` via `__cause__` -
+    standing in for langchain_google_genai's actual pattern for an invalid Gemini API key:
+    it catches google.api_core.exceptions.InvalidArgument (which does carry `.code`) and
+    does `raise ChatGoogleGenerativeAIError(msg) from e`, and the wrapper itself has no
+    status attribute of its own."""
+    wrapper = Exception("wrapped, no status of its own")
+    wrapper.__cause__ = cause
+    return wrapper
+
+
 @pytest.fixture()
 def llm_provider():
     return LlmProviderFactory.create()
@@ -147,6 +158,17 @@ class TestServiceProviderModel:
         pytest.param(_status_code_exception(500), "connection", id="openai-anthropic-style-500"),
         pytest.param(_code_exception(500), "connection", id="google-style-500"),
         pytest.param(RuntimeError("boom"), "connection", id="no-status-code-at-all"),
+        pytest.param(
+            _wrapped_exception(_code_exception(400)),
+            "permission",
+            id="gemini-style-wrapped-cause-400",
+        ),
+        pytest.param(
+            _wrapped_exception(_status_code_exception(500)),
+            "connection",
+            id="wrapped-cause-5xx-still-connection",
+        ),
+        pytest.param(_wrapped_exception(RuntimeError("also no status")), "connection", id="wrapped-cause-no-status"),
     ],
 )
 def test_classify_connection_test_failure(exc, expected):
@@ -156,8 +178,59 @@ def test_classify_connection_test_failure(exc, expected):
     provider) as a permission issue; 500-599 or no status code at all (a raw connection
     failure) as a connection issue. 503 is deliberately in the retryable case, not the
     connection case: should_retry_exception treats 429/503 as the same "try again" bucket.
+
+    The wrapped-cause cases reproduce the actual bug reported against a live Gemini
+    provider: langchain_google_genai catches the real, status-bearing SDK exception and
+    re-raises its own wrapper with no status of its own, `from e`. Without checking
+    `__cause__`, a rejected Gemini credential was misclassified as a connection issue.
     """
     assert classify_connection_test_failure(exc) == expected
+
+
+def test_classify_connection_test_failure_handles_real_gemini_invalid_key_error():
+    """Reproduces the actual bug report, using the real classes involved (not stand-ins)
+    and the real chaining mechanism (`raise ... from e`, not a manually assigned
+    `__cause__`): an invalid Gemini API key raises google.api_core.exceptions.InvalidArgument
+    (which does carry `.code`), and langchain_google_genai re-raises it as
+    ChatGoogleGenerativeAIError (which doesn't) via `raise ChatGoogleGenerativeAIError(msg)
+    from e` - the exact line in the installed package. Confirmed by hand against the real
+    classes that the wrapper has neither `.status_code` nor `.code`, only `__cause__` does.
+    """
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
+    from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError  # noqa: PLC0415
+
+    def _raise_like_langchain_google_genai_does():
+        try:
+            raise google_exceptions.InvalidArgument("API key not valid. Please pass a valid API key.")
+        except google_exceptions.InvalidArgument as e:
+            msg = f"Invalid argument provided to Gemini: {e}"
+            raise ChatGoogleGenerativeAIError(msg) from e
+
+    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
+        _raise_like_langchain_google_genai_does()
+
+    wrapper = exc_info.value
+    assert not hasattr(wrapper, "status_code")
+    assert not hasattr(wrapper, "code")
+    assert classify_connection_test_failure(wrapper) == "permission"
+
+
+def test_classify_connection_test_failure_checks_context_not_just_explicit_cause():
+    """__context__ (set automatically when a new exception is raised inside an except
+    block, even without `from e`) must also be checked, not just __cause__ - a provider
+    integration doesn't have to use explicit chaining for the original status to still be
+    recoverable."""
+
+    def _raise_wrapped_without_explicit_chaining():
+        try:
+            raise _code_exception(403)
+        except Exception:
+            raise ValueError("wrapped without explicit chaining")  # noqa: B904 - deliberate, testing __context__
+
+    with pytest.raises(ValueError, match="wrapped without explicit chaining") as exc_info:
+        _raise_wrapped_without_explicit_chaining()
+
+    assert classify_connection_test_failure(exc_info.value) == "permission"
 
 
 def test_classify_connection_test_failure_recognizes_openai_timeout():
