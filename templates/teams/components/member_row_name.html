@@ -1,8 +1,16 @@
 <div class="flex items-center gap-2">
   {% if record.kind == "invitation" %}
-    <span class="w-8 h-8 rounded-full border border-dashed border-neutral-400 text-neutral-400 flex items-center justify-center text-xs font-bold shrink-0">{{ record.initials }}</span>
+    <div class="avatar avatar-placeholder shrink-0">
+      <div class="w-8 rounded-full border border-dashed border-neutral-400 text-neutral-400">
+        <span class="text-xs font-bold">{{ record.initials }}</span>
+      </div>
+    </div>
   {% else %}
-    <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">{{ record.initials }}</span>
+    <div class="avatar avatar-placeholder shrink-0">
+      <div class="w-8 rounded-full bg-primary/10 text-primary">
+        <span class="text-xs font-bold">{{ record.initials }}</span>
+      </div>
+    </div>
   {% endif %}
   <span class="min-w-0">
     <span class="block font-semibold truncate">{{ record.name }}</span>
