@@ -53,6 +53,15 @@
       <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
     </form>
     {% block post_form %}
+      {% if whatsapp_status_url %}
+        {# The sections talk to Meta, so they load after the page rather than holding up the form. #}
+        <div hx-get="{{ whatsapp_status_url }}" hx-trigger="load" hx-swap="outerHTML">
+          <div class="flex items-center gap-2 mt-8 text-sm text-base-content/60">
+            <span class="loading loading-spinner loading-xs"></span>
+            Checking this account's WhatsApp template with Meta…
+          </div>
+        </div>
+      {% endif %}
       {% if sync_voices_url %}
         <form method="post" action="{{ sync_voices_url }}" class="mt-4">
           {% csrf_token %}

@@ -1,7 +1,10 @@
+import json
 import logging
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal
 
+import httpx
 from django import views as django_views
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -13,18 +16,29 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 
+from apps.channels.models import ChannelPlatform
+from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
+from apps.service_providers.forms import (
+    LlmProviderModelForm,
+    PricingOverrideForm,
+    WhatsappTestMessageForm,
+    whatsapp_number_label,
+)
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
+    MessagingProvider,
+    MessagingProviderType,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -39,6 +53,7 @@ from .utils import ServiceProvider, get_available_subtypes, get_service_provider
 
 log = logging.getLogger("ocs.service_providers")
 
+REFRESH_TIMEOUT = timedelta(seconds=2 * MetaCloudAPIService.META_API_TIMEOUT + 60)
 _PRICE_PER_1K_FROM_MILLION = Decimal(1) / Decimal(1000)
 _FORM_FIELD_TO_KIND = {
     "input_price_per_million_tokens": ServiceKind.LLM_INPUT,
@@ -268,6 +283,7 @@ class CreateServiceProvider(
         with transaction.atomic():
             obj = primary_form.save(commit=False)
             obj.team = request.team
+            is_new = obj.pk is None
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -276,6 +292,8 @@ class CreateServiceProvider(
             if isinstance(obj, VoiceProvider):
                 for warning in obj.run_post_save_hook():
                     messages.warning(request, warning)
+            if is_new and isinstance(obj, MessagingProvider):
+                obj.run_post_create_hook()
         for warning in config_form.warnings:
             messages.warning(request, warning)
 
@@ -301,6 +319,11 @@ class CreateServiceProvider(
                     "provider_type": "voice",
                     "pk": instance.pk,
                 },
+            )
+        if isinstance(instance, MessagingProvider) and instance.type == MessagingProviderType.meta_cloud_api:
+            ctx["whatsapp_status_url"] = reverse(
+                "service_providers:whatsapp_status",
+                kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
         if self.provider_type == ServiceProvider.llm:
             default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
@@ -551,3 +574,113 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
+
+
+def _sync_in_flight(provider: MessagingProvider) -> bool:
+    """Is a refresh running, and started recently enough to still be worth waiting for?"""
+    started_at = parse_datetime(provider.whatsapp_refresh_info.get("started_at") or "")
+    if not started_at:
+        return False
+    return timezone.now() - started_at < REFRESH_TIMEOUT
+
+
+def _whatsapp_status_context(provider: MessagingProvider) -> dict:
+    """Everything the WhatsApp panel renders, all of it read from the provider's cache.
+
+    Nothing here calls Meta. The refresh button is the only thing that does, by way of
+    ``sync_whatsapp_provider_task``, and the panel polls itself until that lands.
+    """
+    numbers_info = provider.whatsapp_numbers_info
+    template_info = provider.whatsapp_template_info
+    numbers = provider.whatsapp_numbers
+    syncing = _sync_in_flight(provider)
+    initial_message = f"Test message from Open Chat Studio for {provider.name}."
+    return {
+        "provider": provider,
+        "numbers": numbers,
+        "syncing": syncing,
+        "stalled": bool(provider.whatsapp_refresh_info) and not syncing,
+        "numbers_sync_error": None if syncing else numbers_info.get("error"),
+        "synced_at": parse_datetime(numbers_info.get("synced_at") or ""),
+        "form": WhatsappTestMessageForm(numbers, initial={"message": initial_message}),
+        "message_length": len(initial_message),
+        "message_limit": MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT,
+        # The cached TemplateCheck, as a plain dict -- the template reads the same attributes
+        # either way. Empty means nobody has checked yet, which is not the same as a failure.
+        "template_check": template_info,
+        "template_checked": bool(template_info),
+        "template_ok": template_info.get("ok") is True,
+        "template_checked_at": parse_datetime(template_info.get("checked_at") or ""),
+        "template_name": MetaCloudAPIService.TEMPLATE_NAME,
+        "template_parameter": MetaCloudAPIService.TEMPLATE_PARAMETER,
+    }
+
+
+@login_and_team_required
+@permission_required("service_providers.change_messagingprovider", raise_exception=True)
+def whatsapp_status(request, team_slug: str, pk: int):
+    """The template check and test-send panel, loaded into the provider page by HTMX.
+
+    Renders from the cache and polls itself while a refresh is running, so opening the
+    provider page never waits on Meta.
+    """
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
+    context = _whatsapp_status_context(provider)
+    return render(request, "service_providers/components/whatsapp_provider_status.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_messagingprovider", raise_exception=True)
+def whatsapp_refresh(request, team_slug: str, pk: int):
+    """Re-fetch this provider's numbers and re-check its message template."""
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
+    if not _sync_in_flight(provider):
+        provider.queue_whatsapp_provider_sync()
+    context = _whatsapp_status_context(provider)
+    return render(request, "service_providers/components/whatsapp_provider_status.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_messagingprovider", raise_exception=True)
+def whatsapp_send_test(request, team_slug: str, pk: int):
+    """Send one template message through the provider and report exactly what Meta said."""
+    provider = get_object_or_404(MessagingProvider, team=request.team, pk=pk, type=MessagingProviderType.meta_cloud_api)
+    numbers = provider.whatsapp_numbers
+    form = WhatsappTestMessageForm(numbers, data=request.POST)
+    if not form.is_valid():
+        errors = [message for field_errors in form.errors.values() for message in field_errors]
+        return render(request, "service_providers/components/whatsapp_test_result.html", {"errors": errors})
+
+    from_number_id = form.cleaned_data["from_number_id"]
+    to_number = form.cleaned_data["to_number"]
+    context = {}
+    try:
+        provider.get_messaging_service().send_template_message(
+            message=form.cleaned_data["message"],
+            from_=from_number_id,
+            to=to_number,
+            platform=ChannelPlatform.WHATSAPP,
+        )
+    except ServiceWindowExpiredException as exc:
+        context["error_message"] = str(exc)
+    except httpx.HTTPStatusError as exc:
+        context["error_status"] = exc.response.status_code
+        context["error_body"] = _format_meta_error_body(exc.response.text)
+    except Exception as exc:  # noqa: BLE001 - whatever went wrong, the operator needs to see it
+        log.exception("Test WhatsApp message failed for provider %s", pk)
+        context["error_message"] = str(exc) or exc.__class__.__name__
+    else:
+        selected = next((number for number in numbers if number["phone_number_id"] == from_number_id), None)
+        context["sent_to"] = to_number
+        context["sent_from"] = whatsapp_number_label(selected) if selected else from_number_id
+    return render(request, "service_providers/components/whatsapp_test_result.html", context)
+
+
+def _format_meta_error_body(body: str) -> str:
+    """Pretty-print Meta's error response so it is readable in the panel."""
+    try:
+        return json.dumps(json.loads(body), indent=2)
+    except ValueError:
+        return body[:2000]
