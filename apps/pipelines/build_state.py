@@ -56,13 +56,23 @@ def unwired_handles(pipeline: Pipeline) -> dict:
 
 def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tuple[str, str]]) -> list[dict]:
     """One node's unwired handles: the implicit input plus any output with no edge."""
-    dangling = []
-    if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
-        dangling.append({"handle": STANDARD_INPUT_NAME, "label": None})
+    dangling = [
+        {"handle": handle, "label": None} for handle in input_handles(node.type) if node.flow_id not in wired_inputs
+    ]
     for handle in node_output_handles(node):
         if (node.flow_id, handle["handle"]) not in wired_outputs:
             dangling.append(handle)
     return dangling
+
+
+def input_handles(node_type: str) -> list[str]:
+    """The input handles a node of this type accepts an edge on.
+
+    Every type has exactly one, implicit, ``input`` handle -- bar Start, which has none: nothing runs
+    before the beginning of the pipeline, and the UI builder draws no target handle on it. A list
+    rather than a flag so a caller reads inputs and outputs the same way.
+    """
+    return [] if node_type == StartNode.__name__ else [STANDARD_INPUT_NAME]
 
 
 def node_output_handles(node: Node) -> list[dict]:
