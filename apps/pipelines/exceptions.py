@@ -82,21 +82,18 @@ class PipelineNodeRunError(Exception):
     pass
 
 
-class NodeUserConfigRunError(PipelineNodeRunError):
-    """Raised when a pipeline node fails due to a user configuration error at runtime.
+class CodeNodeRunError(Exception):
+    pass
+
+
+class NodeUserConfigRunError(Exception):
+    """Raised when a pipeline node fails at runtime because of how the user configured it.
 
     Examples: Jinja2 template rendering errors (UndefinedError, TemplateSyntaxError)
     or invalid rendered email addresses in SendEmail / RenderTemplate nodes.
 
-    Inherits from PipelineNodeRunError so existing task-level exception handling
-    continues to work, but is caught separately in the pipeline error handler so
-    these user-configuration mistakes are not reported to Sentry as system bugs.
     """
 
-    pass
-
-
-class CodeNodeRunError(Exception):
     pass
 
 
