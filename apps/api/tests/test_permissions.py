@@ -114,8 +114,7 @@ class TestRequiresTeamPermission:
 
     def test_requires_team_permission_refuses_a_subclass_that_declares_nothing(self):
         """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone. It
-        fires when the class is defined rather than when its endpoint is first called: an open door that
-        only shows itself under traffic is one that ships.
+        fires when the class is defined rather than when its endpoint is first called.
         """
         with pytest.raises(ImproperlyConfigured):
 

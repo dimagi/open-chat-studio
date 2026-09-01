@@ -63,11 +63,7 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def parameter_option_mapping(node_type: str) -> dict[str, OptionsSource]:
-    """One node type's reference params, each mapped to the option list it draws from.
-
-    Worth carrying around because a param is not always named for its list --
-    ``source_material_id`` draws from ``OptionsSource.source_material``.
-    """
+    """One node type's reference params, each mapped to the option list it draws from."""
     return {
         param: option_key
         for param, option_key in _sources_by_type().get(node_type, {}).items()
