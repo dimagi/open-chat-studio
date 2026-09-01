@@ -169,6 +169,126 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/chatbots/{id}/pipeline/edges/:
+    post:
+      operationId: pipeline_edge_create
+      description: |-
+        Add an edge to the chatbot's working (draft) pipeline, wiring one node's output handle to another node's input.
+
+        `source` and `target` are enough for most nodes: a handle you leave out means the only one the node has. A router is the exception — it exposes one handle per branch, so name the branch to wire in `source_handle`. Both nodes keep the position they were parked at; nothing is moved on the canvas.
+
+        The edge's `id` is assigned by the server and cannot be chosen. It is the address `DELETE .../pipeline/edges/{edge_id}/` takes, and the same id `GET /api/v2/chatbots/{id}/inspect/` reports.
+
+        Wiring a pair that is already wired the same way is refused rather than stored twice, so retrying a wire whose response you never saw is safe — the 400 names the edge that already wires the pair.
+
+        A wire that leaves the *graph* wrong is not refused: it lands, and comes back in `pipeline_errors` for you to repair. Note the two graph-level problems land in different buckets — a cycle in `pipeline_errors.pipeline`, while an End node nothing reaches is reported against the End node itself, under `pipeline_errors.node[<end node id>].root`.
+      summary: Wire two Pipeline Nodes
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Pipelines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EdgeCreate'
+            examples:
+              PlainNode:
+                value:
+                  source: CodeNode-a1b2c
+                  target: LLMResponseWithPrompt-d3e4f
+                summary: 'A source with one output handle: neither handle need be
+                  named.'
+              RouterBranch:
+                value:
+                  source: RouterNode-9f8e7
+                  target: LLMResponseWithPrompt-d3e4f
+                  source_handle: output_1
+                summary: A router exposes one handle per keyword, so the branch to
+                  wire has to be named.
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeWrite'
+          description: ''
+        '400':
+          description: |-
+            The body is not one this endpoint can act on, keyed by the field at fault: a `source` or `target` that is not a node in this pipeline, a `source_handle` the source node does not offer (or a missing one where the node offers a choice), a `target_handle` that is not the target's input, a server-assigned key the client tried to set (`id`), or an unrecognised body key.
+
+            A duplicate edge is reported under `non_field_errors`, with this exact wording:
+
+            > These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was changed.
+
+            So a client whose first attempt's response it never saw can recover the edge id from between the single quotes rather than re-reading the pipeline. The quotes are safe delimiters: an edge id is built from node ids and handle names, none of which can contain one.
+
+            A `source` that offers no output handles at all is refused under `source`, and the message says whether that is fixable: a router with no `keywords` set yet needs a PATCH first, whereas the End node can never be a source.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot.
+  /api/v2/chatbots/{id}/pipeline/edges/{edge_id}/:
+    delete:
+      operationId: pipeline_edge_delete
+      description: |-
+        Remove an edge from the chatbot's working (draft) pipeline. Both nodes stay, and stay where they are on the canvas — this unwires them, it does not delete anything else.
+
+        The hole this leaves is reported rather than refused: unwiring usually breaks the path to the End node, which comes back under `pipeline_errors.node[<end node id>].root` for you to repair, and both ends of the edge reappear in `unwired_handles`.
+
+        Repeating a delete answers 404, so a retry cannot disturb the graph the first call left.
+      summary: Unwire two Pipeline Nodes
+      parameters:
+      - in: path
+        name: edge_id
+        schema:
+          type: string
+        description: The edge's server-assigned id, as returned by a wire or by GET
+          /api/v2/chatbots/{id}/inspect/.
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineWrite'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot, or no such edge in this chatbot's pipeline.
   /api/v2/chatbots/{id}/pipeline/nodes/:
     post:
       operationId: pipeline_node_create
@@ -1754,6 +1874,69 @@ components:
       required:
       - llm_provider_id
       - llm_provider_model_id
+    EdgeCreate:
+      type: object
+      description: |-
+        The POST body: which two nodes to wire, and from which handle.
+
+        ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
+        ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
+        named only when the node offers a choice -- which today is a router, and only on the source side.
+      properties:
+        source:
+          type: string
+          description: '``node_id`` the edge leaves from. Node ids are the ones a
+            node write returns and `GET /api/v2/chatbots/{id}/inspect/` reports.'
+        target:
+          type: string
+          description: '``node_id`` the edge points to.'
+        source_handle:
+          type: string
+          nullable: true
+          description: 'Output handle on the source node. Required only when the node
+            offers more than one: a router exposes one handle per branch (``output_0``,
+            ``output_1``, …, mapping by index to its ``keywords``), while every other
+            node has a single ``output``. Handle names are the source node''s own
+            `output_handles`, which every node write returns; `unwired_handles` lists
+            the ones still free.'
+        target_handle:
+          type: string
+          nullable: true
+          description: 'Input handle on the target node. Never required, and the only
+            accepted value is ``input``: every node type has exactly that one implicit
+            input handle, bar the Start node, which has none at all and so cannot
+            be a `target`.'
+      required:
+      - source
+      - target
+      additionalProperties: false
+    EdgeWrite:
+      type: object
+      description: 'An edge write''s response: the edge as written, then the pipeline''s
+        state after the write.'
+      properties:
+        edge:
+          $ref: '#/components/schemas/WrittenEdge'
+        pipeline_valid:
+          type: boolean
+          description: 'Whether the pipeline validates cleanly: all three error buckets
+            empty, and nothing more.'
+        pipeline_errors:
+          $ref: '#/components/schemas/PipelineBuildErrors'
+        unwired_handles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InspectOutputHandle'
+          description: 'Advisory ''what still needs wiring'' map, keyed by ``node_id``:
+            every output handle with no outgoing edge and every implicit ``input``
+            handle with no incoming edge. Never an error and never blocks a publish.'
+      required:
+      - edge
+      - pipeline_errors
+      - pipeline_valid
+      - unwired_handles
     ExtractParticipantDataParams:
       type: object
       properties:
@@ -3417,6 +3600,36 @@ components:
         * `always` - Always
         * `reciprocal` - Reciprocal
         * `never` - Never
+    WrittenEdge:
+      type: object
+      description: |-
+        An edge as a write returns it: the same field names ``GET /chatbots/{id}/inspect/`` reports under
+        ``pipeline.graph.edges``, so one reader parses both.
+
+        Not the identical schema, though — inspect's handles are nullable because the pipeline builder's
+        own edges store a null ``targetHandle``, while a handle on this side is always resolved to a name.
+      properties:
+        id:
+          type: string
+          description: 'The edge''s server-assigned identity: the address DELETE takes.'
+        source:
+          type: string
+          description: '``node_id`` the edge leaves from.'
+        target:
+          type: string
+          description: '``node_id`` the edge points to.'
+        source_handle:
+          type: string
+          description: Output handle on the source node.
+        target_handle:
+          type: string
+          description: Input handle on the target node.
+      required:
+      - id
+      - source
+      - source_handle
+      - target
+      - target_handle
     WrittenNode:
       type: object
       description: |-

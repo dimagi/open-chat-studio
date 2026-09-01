@@ -1,4 +1,4 @@
-"""The one locked read-modify-write every pipeline façade endpoint runs (#4140, W2/W7).
+"""The one locked read-modify-write every pipeline façade endpoint runs (#4140, #4141, W2/W7).
 
 Every façade edit is the same three steps around a different diff: lock the ``Pipeline`` row, hand
 the UI builder's own patch engine a one-item ``PipelineDiffPayload``, then persist the way the UI
@@ -16,24 +16,45 @@ from rest_framework.generics import get_object_or_404
 from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_write
-from apps.pipelines.flow import PipelineDiffPayload
+from apps.pipelines.flow import EdgeDiff, FlowEdge, NodeDiff, PipelineDiffPayload
 from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.patching import apply_pipeline_patch
+
+#: ``PipelineDiffPayload`` requires this, but ``apply_pipeline_patch`` never reads it: it is the UI
+#: builder's optimistic-concurrency token, and the façade holds a row lock instead (W7).
+UNUSED_BASE_REVISION = 0
 
 
 @dataclass
 class PipelineEdit:
-    """One façade edit: the diff to apply, and which node the response should describe."""
+    """One façade edit: the diff to apply, and which node or edge the response should describe.
+
+    Both are optional and at most one is ever set: a delete names neither, and the response then
+    reports the pipeline's state alone.
+    """
 
     diff: PipelineDiffPayload
     node_id: str | None = None
+    edge: FlowEdge | None = None
+
+    def __post_init__(self) -> None:
+        # Checked rather than merely documented: each view's `_write_response` reads only its own
+        # field, so a plan that set both would answer with one resource's envelope and drop the
+        # other, with nothing anywhere saying so.
+        if self.node_id is not None and self.edge is not None:
+            raise ValueError("A pipeline edit describes a node or an edge, never both.")
+
+
+def graph_diff(nodes: NodeDiff | None = None, edges: EdgeDiff | None = None) -> PipelineDiffPayload:
+    """One graph change -- to nodes, to edges, or to both -- in the shape the patch engine takes."""
+    return PipelineDiffPayload(base_revision=UNUSED_BASE_REVISION, nodes=nodes or NodeDiff(), edges=edges or EdgeDiff())
 
 
 def edit_pipeline(
     request,
     public_id: str,
     plan: Callable[[dict], PipelineEdit],
-    respond: Callable[[Pipeline, str | None], dict],
+    respond: Callable[[Pipeline, PipelineEdit], dict],
 ) -> dict:
     """Apply one façade edit to the chatbot's working pipeline, under a row lock.
 
@@ -52,7 +73,7 @@ def edit_pipeline(
         flow = pipeline.flow_data
         edit = plan(flow)
         _persist(pipeline, flow, edit.diff)
-        return respond(pipeline, edit.node_id)
+        return respond(pipeline, edit)
 
 
 def _locked_pipeline(chatbot: Experiment) -> Pipeline:

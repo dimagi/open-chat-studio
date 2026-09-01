@@ -1,48 +1,104 @@
-"""What every façade endpoint shares: the routes, and the write cycle behind them (#4140, W2/W7)."""
+"""What every façade endpoint shares: the routes, and the write cycle behind them (#4140, #4141, W2/W7)."""
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from apps.api.v2.pipeline_edit.facade import PipelineEdit, graph_diff
+from apps.api.v2.pipeline_edit.serializers import RejectsServerAssignedKeys
+from apps.pipelines.flow import FlowEdge
 from apps.pipelines.models import Node
 from apps.utils.factories.documents import CollectionFactory
 
-from .conftest import node_url, nodes_url
+from .conftest import boundary_node, edge_url, edges_url, node_url, nodes_url
 
 
 @pytest.mark.django_db()
 class TestRoutes:
-    """One view class serves the collection and the detail route, so what each offers is resolved
-    per route rather than per class."""
+    """One view class per resource serves both its collection and its detail route, so what each
+    offers is resolved per route rather than per class."""
 
     @pytest.mark.parametrize(
         ("route", "verb", "fields"),
         [
-            pytest.param("collection", "POST", {"type", "label", "params"}, id="collection-post"),
-            pytest.param("detail", "PATCH", {"label", "params"}, id="detail-patch"),
+            pytest.param("nodes", "POST", {"type", "label", "params"}, id="node-collection-post"),
+            pytest.param("node", "PATCH", {"label", "params"}, id="node-detail-patch"),
+            pytest.param(
+                "edges", "POST", {"source", "target", "source_handle", "target_handle"}, id="edge-collection-post"
+            ),
         ],
     )
     def test_options_describes_the_body_the_route_takes(self, client, chatbot, route, verb, fields):
         """The body described has to be resolved per verb rather than per class -- and since PATCH is
-        the detail route's only writable verb, stock DRF metadata (PUT and POST alone) would answer it
-        with no body at all."""
-        node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
-        url = nodes_url(chatbot) if route == "collection" else node_url(chatbot, node_id)
-
-        response = client.options(url)
+        the node detail route's only writable verb, stock DRF metadata (PUT and POST alone) would
+        answer it with no body at all."""
+        response = client.options(_url(client, chatbot, route))
 
         assert response.status_code == 200, response.content
         assert set(response.json()["actions"][verb]) == fields
 
-    def test_a_verb_the_route_does_not_offer_is_a_405(self, client, chatbot):
+    def test_options_on_a_route_with_no_writable_verb_describes_no_body(self, client, chatbot):
+        """The edge detail route offers DELETE alone, which takes no body -- so OPTIONS has to answer
+        without inventing one."""
+        response = client.options(_url(client, chatbot, "edge"))
+
+        assert response.status_code == 200, response.content
+        assert "actions" not in response.json()
+
+    @pytest.mark.parametrize(
+        ("route", "verb"),
+        [
+            pytest.param("nodes", "patch", id="node-collection-patch"),
+            pytest.param("nodes", "delete", id="node-collection-delete"),
+            pytest.param("node", "post", id="node-detail-post"),
+            pytest.param("edges", "patch", id="edge-collection-patch"),
+            pytest.param("edges", "delete", id="edge-collection-delete"),
+            pytest.param("edge", "post", id="edge-detail-post"),
+            pytest.param("edge", "patch", id="edge-detail-patch"),
+        ],
+    )
+    def test_a_verb_the_route_does_not_offer_is_a_405(self, client, chatbot, route, verb):
         """Each `path()` narrows `http_method_names` to the verbs its own route offers -- without
         that, a verb from the other route reaches its handler with the wrong path kwargs and raises
         a 500."""
-        node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+        url = _url(client, chatbot, route)
+        call = getattr(client, verb)
 
-        assert client.patch(nodes_url(chatbot), {"params": {}}, format="json").status_code == 405
-        assert client.delete(nodes_url(chatbot)).status_code == 405
-        assert client.post(node_url(chatbot, node_id), {"type": "CodeNode"}, format="json").status_code == 405
+        response = call(url) if verb == "delete" else call(url, {}, format="json")
+
+        assert response.status_code == 405, response.content
+
+
+def _url(client, chatbot, route: str) -> str:
+    """One of the four façade routes, with a node and an edge created for the detail ones."""
+    if route == "nodes":
+        return nodes_url(chatbot)
+    if route == "edges":
+        return edges_url(chatbot)
+    node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+    if route == "node":
+        return node_url(chatbot, node_id)
+    end = boundary_node(chatbot, "EndNode")
+    edge = client.post(edges_url(chatbot), {"source": node_id, "target": end}, format="json")
+    assert edge.status_code == 201, edge.content
+    return edge_url(chatbot, edge.json()["edge"]["id"])
+
+
+class TestTheInvariantsBehindTheEnvelope:
+    """Two rules the views rely on that nothing in a request would ever exercise, so they are held
+    here rather than left to the next person who adds a resource to the façade."""
+
+    def test_an_edit_cannot_describe_both_a_node_and_an_edge(self):
+        """Each view's ``_write_response`` reads only its own field, so an edit that set both would
+        report one resource and silently drop the other."""
+        with pytest.raises(ValueError, match="never both"):
+            PipelineEdit(diff=graph_diff(), node_id="CodeNode-1", edge=FlowEdge(id="e1", source="a", target="b"))
+
+    def test_every_body_that_guards_server_assigned_keys_declares_which(self):
+        """The guard's whole job is to refuse a key the client must not set, so a serializer that
+        mixes it in and declares nothing would quietly accept the very keys it exists to reject."""
+        for serializer in RejectsServerAssignedKeys.__subclasses__():
+            assert getattr(serializer, "server_assigned_keys", None), serializer.__name__
 
 
 @pytest.mark.django_db()

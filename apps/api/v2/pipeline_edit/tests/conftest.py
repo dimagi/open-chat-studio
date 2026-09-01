@@ -125,6 +125,25 @@ def client(chatbot):
     return ApiTestClient(chatbot.team.members.first(), chatbot.team)
 
 
+@pytest.fixture()
+def start(chatbot) -> str:
+    return boundary_node(chatbot, "StartNode")
+
+
+@pytest.fixture()
+def end(chatbot) -> str:
+    return boundary_node(chatbot, "EndNode")
+
+
+def boundary_node(chatbot, node_type: str) -> str:
+    """The flow id of the chatbot's Start or End node.
+
+    A function as well as the two fixtures above, because a test that needs a *second* chatbot's
+    boundary node cannot get it from a fixture bound to the first.
+    """
+    return chatbot.pipeline.node_set.get(type=node_type).flow_id
+
+
 def nodes_url(chatbot) -> str:
     return f"/api/v2/chatbots/{chatbot.public_id}/pipeline/nodes/"
 
@@ -133,16 +152,29 @@ def node_url(chatbot, node_id: str) -> str:
     return f"/api/v2/chatbots/{chatbot.public_id}/pipeline/nodes/{node_id}/"
 
 
+def edges_url(chatbot) -> str:
+    return f"/api/v2/chatbots/{chatbot.public_id}/pipeline/edges/"
+
+
+def edge_url(chatbot, edge_id: str) -> str:
+    return f"/api/v2/chatbots/{chatbot.public_id}/pipeline/edges/{edge_id}/"
+
+
 def stored_node_params(chatbot, node_id: str) -> dict:
     """The params on the node's row, which is the thing a later read serves."""
     return Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params
 
 
-def add_edge(pipeline, source: str, target: str, source_handle: str = "output") -> str:
-    """Wire two nodes by writing the edge straight into ``Pipeline.data``.
+def add_edge(
+    pipeline, source: str, target: str, source_handle: str | None = "output", target_handle: str | None = "input"
+) -> str:
+    """Wire two nodes by writing the edge straight into ``Pipeline.data``, as the UI builder's save
+    does: ``Pipeline.data`` holds the edges and nothing else (ADR-0049).
 
-    The edge endpoints are a separate ticket, so a test needing a wired graph builds one the way the
-    UI builder's save does: ``Pipeline.data`` holds the edges and nothing else (ADR-0049).
+    Still a direct write now that ``POST .../pipeline/edges/`` exists, because it can build edges
+    that endpoint refuses -- one stranded on a handle its source does not offer, or one carrying the
+    null ``targetHandle`` the UI builder writes -- and because a test about *nodes* should not fail
+    when the edge endpoint changes.
     """
     edge_id = f"edge-{source}-{source_handle}-{target}"
     pipeline.data["edges"].append(
@@ -151,11 +183,24 @@ def add_edge(pipeline, source: str, target: str, source_handle: str = "output") 
             "source": source,
             "target": target,
             "sourceHandle": source_handle,
-            "targetHandle": "input",
+            "targetHandle": target_handle,
         }
     )
     pipeline.save(update_fields=["data"])
     return edge_id
+
+
+def stored_edges(pipeline) -> list[dict]:
+    """The edges the pipeline row actually holds, which is what a later read serves."""
+    pipeline.refresh_from_db()
+    return pipeline.data["edges"]
+
+
+def wire(client, chatbot, source: str, target: str, **body) -> str:
+    """Wire two nodes through the endpoint, and return the id the server assigned the edge."""
+    response = client.post(edges_url(chatbot), {"source": source, "target": target, **body}, format="json")
+    assert response.status_code == 201, response.content
+    return response.json()["edge"]["id"]
 
 
 def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:
@@ -190,5 +235,26 @@ def add_llm_node(client, chatbot, llm) -> str:
 def add_bare_node(client, chatbot, node_type: str) -> str:
     """A node created from its type alone, so a PATCH of it has only defaults to overwrite."""
     response = client.post(nodes_url(chatbot), {"type": node_type}, format="json")
+    assert response.status_code == 201, response.content
+    return response.json()["node"]["node_id"]
+
+
+def add_router_node(client, chatbot, llm, keywords=("schedule", "reschedule")) -> str:
+    """A ``RouterNode``, whose output handles are its keywords, so a test has a source offering more
+    than one. Not the only such type -- ``StaticRouterNode`` and the unpublished ``BooleanNode`` also
+    offer several -- but the one an agent reaches for."""
+    provider, model = llm
+    response = client.post(
+        nodes_url(chatbot),
+        {
+            "type": "RouterNode",
+            "params": {
+                "llm_provider_id": provider.id,
+                "llm_provider_model_id": model.id,
+                "keywords": list(keywords),
+            },
+        },
+        format="json",
+    )
     assert response.status_code == 201, response.content
     return response.json()["node"]["node_id"]

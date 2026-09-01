@@ -1,7 +1,6 @@
 """Turning a node request body into the graph edit that carries it out (#4140)."""
 
 from typing import Any, cast
-from uuid import uuid4
 
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
@@ -16,14 +15,14 @@ from apps.pipelines.flow import (
     FlowNode,
     FlowNodeData,
     NodeDiff,
-    PipelineDiffPayload,
     react_flow_node_type,
 )
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
 from apps.teams.models import Team
 
-from .facade import PipelineEdit
+from .facade import PipelineEdit, graph_diff
+from .ids import with_free_suffix
 from .node_params import node_params, writable_params
 from .references import check_references
 
@@ -35,15 +34,6 @@ OutputHandles = dict[str, str | None]
 #: about a node's width, so a parked node clears the one before it rather than half covering it.
 PARKING_STEP_X = 400
 PARKING_Y = 200
-
-#: The id suffix the UI builder's own ``getNodeId`` produces, and how many draws are spent looking
-#: for a free one before falling back to a full-length uuid.
-SHORT_ID_LENGTH = 5
-ID_ATTEMPTS = 5
-
-#: ``PipelineDiffPayload`` requires this, but ``apply_pipeline_patch`` never reads it: it is the UI
-#: builder's optimistic-concurrency token, and the façade holds a row lock instead (W7).
-UNUSED_BASE_REVISION = 0
 
 
 class NodeIsServerManaged(APIException):
@@ -82,7 +72,7 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
         ),
     )
     end_nodes = _reparked_end_nodes(flow, position["x"])
-    return PipelineEdit(diff=_diff(NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
 
 
 def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
@@ -111,7 +101,7 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     if label is not None:
         content.label = label
     edges = _rewired_edges(flow, node_id, before, _output_handles(content))
-    return PipelineEdit(diff=_diff(NodeDiff(update=[node]), edges), node_id=node_id)
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node]), edges=edges), node_id=node_id)
 
 
 def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
@@ -124,7 +114,7 @@ def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
     """
     _node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
-    return PipelineEdit(diff=_diff(NodeDiff(delete=[node_id])))
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(delete=[node_id])))
 
 
 def refuse_if_server_managed(node_type: str) -> None:
@@ -225,17 +215,10 @@ def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
 def _unused_node_id(flow: dict, node_type: str) -> str:
     """A node id no node in this graph already has.
 
-    Five hex characters is about a million ids -- plenty per pipeline, but not so many that a
-    collision can be waved away: ``apply_pipeline_patch`` treats an add whose id already exists as a
-    no-op, so a clash would answer 201 while describing the node that was already there. Bounded
-    rather than looping, so an exhausted or degenerate id source cannot hang the request.
+    A node always takes a suffix -- the type alone is not an id -- so this is :func:`.ids.with_free_suffix`
+    straight, which is also where the bound on the draw and the reason for it live.
     """
-    taken = {node["id"] for node in flow.get("nodes", [])}
-    for _attempt in range(ID_ATTEMPTS):
-        candidate = f"{node_type}-{uuid4().hex[:SHORT_ID_LENGTH]}"
-        if candidate not in taken:
-            return candidate
-    return f"{node_type}-{uuid4().hex}"
+    return with_free_suffix(node_type, {node["id"] for node in flow.get("nodes", [])})
 
 
 def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
@@ -319,8 +302,3 @@ def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]
 def _labels_are_distinct(handles: OutputHandles) -> bool:
     """Whether every handle in the map carries a different branch label."""
     return len(set(handles.values())) == len(handles)
-
-
-def _diff(nodes: NodeDiff, edges: EdgeDiff | None = None) -> PipelineDiffPayload:
-    """One node change, and whatever it does to that node's edges, in the shape the patch engine takes."""
-    return PipelineDiffPayload(base_revision=UNUSED_BASE_REVISION, nodes=nodes, edges=edges or EdgeDiff())

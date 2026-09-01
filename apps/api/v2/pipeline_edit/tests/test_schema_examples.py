@@ -1,4 +1,4 @@
-"""The documented request examples are real request bodies (#4140).
+"""The documented request examples are real request bodies (#4140, #4141).
 
 ``params`` is a free-form object in the schema, so these examples are the only place the API says
 what a body for a given node type looks like -- documentation nothing would otherwise check.
@@ -11,6 +11,8 @@ import pytest
 
 from apps.api.v2.discovery.node_types import get_node_type_schema, get_node_types
 from apps.api.v2.pipeline_edit.examples import FULL_PARAMS, MINIMAL_CREATE, NOTES, create_examples, update_examples
+from apps.api.v2.pipeline_edit.serializers import EdgeCreateSerializer
+from apps.api.v2.pipeline_edit.views import WIRE_EXAMPLES
 
 from .conftest import node_url, nodes_url
 
@@ -129,3 +131,21 @@ def _with_real_ids(params: dict, reference_ids: dict) -> dict:
     unknown = PLACEHOLDER_ID_PARAMS.symmetric_difference(reference_ids)
     assert not unknown, f"no id to substitute for {sorted(unknown)}"
     return {name: reference_ids.get(name, value) for name, value in params.items()}
+
+
+class TestWireExamples:
+    """The wire examples carry placeholder node ids, so unlike the node ones they cannot be sent to the
+    endpoint. What can still go stale is the set of keys they use."""
+
+    def test_every_wire_example_uses_only_keys_the_body_declares(self):
+        declared = set(EdgeCreateSerializer().fields)
+        for example in WIRE_EXAMPLES:
+            assert set(example.value) <= declared, example.name
+
+    def test_the_wire_examples_cover_both_sides_of_the_source_handle_rule(self):
+        """One body that omits the handle and one that names it -- the whole of what the examples are
+        there to show. A rename that collapsed them to one shape would go unnoticed otherwise."""
+        assert [set(example.value) for example in WIRE_EXAMPLES] == [
+            {"source", "target"},
+            {"source", "target", "source_handle"},
+        ]
