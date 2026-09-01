@@ -2,14 +2,17 @@ import hashlib
 import logging
 from decimal import Decimal
 
+import phonenumbers
 from django import forms
 from django.core.validators import URLValidator
+from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProviderModel, MessagingProvider
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -361,10 +364,64 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     def save(self, instance):
         instance = super().save(instance)
         verify_token = self.cleaned_data["verify_token"]
-        instance.extra_data = {
-            "verify_token_hash": hashlib.sha256(verify_token.encode()).hexdigest(),
-        }
+        # extra_data also holds the number and template caches, which a background sync writes.
+        # Re-read the row under a lock rather than trusting the copy the form was built from,
+        # so a sync that commits while the form is open is not rolled back by saving it. The
+        # caller saves the instance inside this same transaction, so the lock covers the write.
+        extra_data = {}
+        if instance.pk:
+            with transaction.atomic():
+                extra_data = (
+                    MessagingProvider.objects.select_for_update()
+                    .filter(pk=instance.pk)
+                    .values_list("extra_data", flat=True)
+                    .first()
+                ) or {}
+        extra_data["verify_token_hash"] = hashlib.sha256(verify_token.encode()).hexdigest()
+        instance.extra_data = extra_data
         return instance
+
+
+def whatsapp_number_label(number: dict) -> str:
+    """How a cached WhatsApp number is shown in a picker."""
+    display = number.get("display") or number.get("number") or number["phone_number_id"]
+    verified_name = number.get("verified_name")
+    return f"{display} - {verified_name}" if verified_name else display
+
+
+class WhatsappTestMessageForm(forms.Form):
+    """Sends one template message through a Meta Cloud API provider to see if Meta accepts it."""
+
+    from_number_id = forms.ChoiceField(label=_("From"))
+    to_number = forms.CharField(
+        label=_("To"),
+        # A placeholder rather than help text: the help icon makes this label taller than the
+        # "From" label beside it, which knocks the two fields out of alignment.
+        widget=forms.TextInput(attrs={"placeholder": "+27812345678"}),
+    )
+    message = forms.CharField(
+        label=_("Message"),
+        widget=forms.Textarea(attrs={"rows": 3}),
+        max_length=MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT,
+        help_text=_("Sent to Meta as the template's bot_message parameter, not as a plain message."),
+    )
+
+    def __init__(self, numbers: list[dict], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["from_number_id"].choices = [
+            (number["phone_number_id"], whatsapp_number_label(number)) for number in numbers
+        ]
+
+    def clean_to_number(self):
+        try:
+            number = phonenumbers.parse(self.cleaned_data["to_number"])
+        except phonenumbers.NumberParseException:
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        # Parsing only checks the shape. Without this, an unreachable number reaches Meta and
+        # comes back as a send failure rather than a field error.
+        if not phonenumbers.is_valid_number(number):
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
+        return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
 
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
