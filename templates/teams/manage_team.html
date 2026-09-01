@@ -278,11 +278,16 @@
                   {{ public_key_form.non_field_errors }}
                   {% render_form_fields public_key_form "public_key" %}
                   <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
-                    <label class="label cursor-pointer gap-2">
-                      <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
-                              {% if request.team.is_migrating %}checked{% endif %}>
-                      <span class="min-w-0 whitespace-normal section-subtitle">{% translate "Migration mode: freeze writes while data is transferred" %}</span>
-                    </label>
+                    <div class="min-w-0">
+                      <label class="label cursor-pointer gap-2">
+                        <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
+                                {% if request.team.is_migrating %}checked{% endif %}>
+                        <span class="section-subtitle">{% translate "Migration mode" %}</span>
+                      </label>
+                      <p class="text-neutral-500 section-subtitle whitespace-normal">
+                        {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
+                      </p>
+                    </div>
                     <input class="btn btn-primary" type="submit" value="{% translate "Save key" %}">
                   </div>
                 </form>
