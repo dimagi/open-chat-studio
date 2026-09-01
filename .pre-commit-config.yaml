@@ -39,7 +39,7 @@ repos:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.8.0'
+    rev: 'v10.9.1'
     hooks:
       - id: eslint
         # Keep these in sync with the matching devDependencies in package.json.
