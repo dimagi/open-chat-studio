@@ -1,16 +1,32 @@
 {% if perms.experiments.change_participantdata %}
-    <form hx-post="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
+    <form id="participant-data-form"
+          hx-post="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}"
+          hx-disabled-elt="#submit-{{ experiment.id }}{% if external_disable_selector %}, {{ external_disable_selector }}{% endif %}">
         {% csrf_token %}
+        {% if hide_submit_button %}
+            <input type="hidden" name="hide_submit_button" value="1">
+        {% endif %}
+        {% if show_validation_hint %}
+            <input type="hidden" name="show_validation_hint" value="1">
+        {% endif %}
         <div class="mb-4">
             <textarea name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
         </div>
-        <div class="json-editor w-full mb-4" data-target-field="textarea[name='participant-data']" data-disable-elt="#submit-{{ experiment.id }}"></div>
+        <div class="json-editor w-full mb-4"
+             data-target-field="textarea[name='participant-data']"
+             data-disable-elt="{% if external_json_disable_elt %}{{ external_json_disable_elt }}{% else %}#submit-{{ experiment.id }}{% endif %}"></div>
         {% if error %}
             <p class="text-error text-sm mt-1">{{ error }}</p>
+        {% elif just_saved %}
+            <p class="text-success text-sm mt-1">Saved. Valid JSON — 0 errors.</p>
+        {% elif show_validation_hint %}
+            <p class="pg-help mt-1">Validated on save.</p>
         {% endif %}
-        <div class="flex items-center justify-between">
-            <button class="btn btn-primary" id="submit-{{ experiment.id }}" type="submit">Update</button>
-        </div>
+        {% if not hide_submit_button %}
+            <div class="flex items-center justify-between">
+                <button class="btn btn-primary" id="submit-{{ experiment.id }}" type="submit">Save changes</button>
+            </div>
+        {% endif %}
     </form>
 {% else %}
     <div class="mt-3 p-3 border rounded-lg border-neutral-500">
