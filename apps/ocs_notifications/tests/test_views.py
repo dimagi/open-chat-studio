@@ -423,9 +423,9 @@ class TestUserNotificationTableView:
         assert counts_by_id[event_user.id] == 3
         assert counts_by_id[other_event_user.id] == 1
 
-    def test_event_count_is_none_for_a_recurring_non_error_event(self, client, team_with_users):
-        """The recurrence badge is scoped to errors -- a recurring Info/Warning event doesn't
-        get a count, even though it recurs just as often."""
+    def test_event_count_reflects_recurrence_regardless_of_level(self, client, team_with_users):
+        """The recurrence badge isn't limited to errors -- a repeating Info or Warning event is
+        just as much a signal worth surfacing as a repeating error."""
         user = team_with_users.members.first()
         info_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.INFO)
         event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=info_type)
@@ -440,7 +440,7 @@ class TestUserNotificationTableView:
 
         assert response.status_code == 200
         counts_by_id = {obj.id: obj.event_count for obj in response.context["table"].data}
-        assert counts_by_id[event_user.id] is None
+        assert counts_by_id[event_user.id] == 3
 
     def test_explicit_filters_param_ignores_a_stale_hx_current_url_header(self, client, team_with_users):
         """Regression test for the toggle buttons: htmx only updates the address bar from

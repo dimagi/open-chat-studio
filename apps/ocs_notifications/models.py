@@ -110,17 +110,13 @@ class EventUserQuerySet(models.QuerySet):
         )
 
     def with_event_count(self) -> models.QuerySet:
-        """Annotate how many times this event's underlying error has recurred: the number of
-        `NotificationEvent` rows under the same `EventType`.
-
-        Error-only: a non-error `EventType` never matches its own `event_type__level=ERROR`
-        filter, so the subquery returns no rows and the annotation is `None` -- recurring Info
-        or Warning events don't get a count."""
+        """Annotate how many times this event has recurred: the number of `NotificationEvent`
+        rows under the same `EventType`, at any level -- a repeating Info or Warning is as
+        much a signal worth surfacing as a repeating error."""
         count_subquery = (
             NotificationEvent.objects.filter(
                 event_type=models.OuterRef("event_type"),
                 team=models.OuterRef("team"),
-                event_type__level=LevelChoices.ERROR,
             )
             .order_by()
             .values("event_type")
