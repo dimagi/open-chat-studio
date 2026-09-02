@@ -78,7 +78,7 @@ jobs:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.
       - name: Harden the runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
       - name: Find PR and check for followup label
@@ -152,7 +152,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.0.10
         if: steps.check.outputs.skip != 'true'
 
       - name: Set up Node.js
@@ -169,7 +169,7 @@ jobs:
       - name: Run Claude Code
         if: steps.check.outputs.skip != 'true'
         id: claude
-        uses: anthropics/claude-code-action@v1.0.183
+        uses: anthropics/claude-code-action@v1.0.206
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |

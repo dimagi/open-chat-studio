@@ -4,11 +4,18 @@ from unittest import mock
 
 import httpx
 import pytest
+from django.contrib import messages as django_messages
+from django.contrib.messages import get_messages
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import ServiceWindowExpiredException
+from apps.service_providers.exceptions import (
+    ConnectionTestNotSupportedError,
+    NoTestableModelError,
+    ServiceProviderConfigError,
+)
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     AuthProvider,
@@ -99,6 +106,67 @@ def test_update_view(provider, team_with_users, authed_client):
     assert response.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_llm_provider_create_view_shows_create_and_test_button(team_with_users, authed_client):
+    """The create-page button says up front that saving will also test credentials - static
+    text, no Alpine needed, since a fresh provider has no prior config to react to."""
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+        )
+    )
+    content = response.content.decode()
+    assert "Create and Test" in content
+    assert 'x-text="configChanged' not in content
+
+
+@pytest.mark.django_db()
+def test_voice_provider_create_view_shows_plain_create_button(team_with_users, authed_client):
+    """Regression: only LLM providers get the "and Test" wording - every other provider
+    type's create button must render exactly as it did before this feature existed."""
+    response = authed_client.get(
+        reverse(
+            "service_providers:new",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "subtype": "aws"},
+        )
+    )
+    content = response.content.decode()
+    assert "Create and Test" not in content
+    assert "and Test" not in content
+
+
+@pytest.mark.django_db()
+def test_llm_provider_edit_view_shows_reactive_update_button(team_with_users, authed_client):
+    """The edit-page button must be the Alpine-reactive one (default text "Update", swaps
+    to "Update and Test" once a credential field changes), not the static create-page one."""
+    provider = LlmProviderFactory(team=team_with_users)
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    content = response.content.decode()
+    assert "x-text=\"configChanged ? 'Update and Test' : 'Update'\"" in content
+    assert ">Update</button>" in content
+
+
+@pytest.mark.django_db()
+def test_llm_provider_edit_view_test_connection_form_hides_on_config_change(team_with_users, authed_client):
+    """The manual Test Connection form must be wired to hide the moment credentials change -
+    otherwise it can be clicked against stale, unsaved data."""
+    provider = LlmProviderFactory(team=team_with_users)
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    content = response.content.decode()
+    assert 'x-show="!configChanged"' in content
+
+
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
 def test_delete_view(provider, team_with_users, authed_client):
@@ -137,6 +205,309 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
     assert response.status_code == 302
     mock_sync.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_success(team_with_users, authed_client):
+    """POST to the test-connection endpoint should call test_connection on the provider and report success."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = reverse(
+        "service_providers:test_llm_connection",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "provider_type": "llm",
+            "pk": provider.pk,
+        },
+    )
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    mock_test.assert_called_once()
+
+
+def _test_connection_url(team, provider):
+    return reverse(
+        "service_providers:test_llm_connection",
+        kwargs={"team_slug": team.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+
+class _FakeTransientError(Exception):
+    """Stands in for a provider SDK error carrying an HTTP status code, without needing
+    to construct a real openai/anthropic exception in the test."""
+
+    status_code = 429
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_no_models_configured(team_with_users, authed_client):
+    """No LlmProviderModel for the provider's type should produce a warning, not a crash."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_unsupported_provider(team_with_users, authed_client):
+    """A provider type that can't do chat completions (e.g. Voyage AI) should say so, not error out."""
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.voyage))
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=ConnectionTestNotSupportedError(provider.type)):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.INFO
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_invalid_configuration(team_with_users, authed_client):
+    """A genuinely invalid configuration is not the same as an unsupported provider type, and
+    must not be reported as one (it's a real, actionable problem). It never reaches the
+    provider at all, so it's classified the same as a rejected credential."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(
+        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "bad config")
+    ):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.ERROR
+    assert "credentials" in msg.message.lower()
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_transient_failure(team_with_users, authed_client):
+    """A rate-limit/timeout style failure should be reported as temporary, not a credentials problem."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=_FakeTransientError()):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_timeout_is_temporary_not_credential_failure(team_with_users, authed_client):
+    """A timeout isn't in RATE_LIMIT_EXCEPTIONS or carrying a 429/503 status code, so
+    should_retry_exception alone misses it. It must still be reported as temporary, not
+    mistaken for bad credentials."""
+    import openai  # noqa: PLC0415 - heavy lib, slow startup
+
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+    timeout_error = openai.APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=timeout_error):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.WARNING
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_credential_failure(team_with_users, authed_client):
+    """A rejected credential (a 4xx-range status code, same shape a real SDK exception has -
+    checked directly against openai.APIStatusError/anthropic.APIStatusError) should be
+    reported as an error, not a warning, and should point at credentials specifically."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+    invalid_api_key_error = ValueError("invalid api key")
+    invalid_api_key_error.status_code = 401
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=invalid_api_key_error):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.ERROR
+    assert "credentials" in msg.message.lower()
+
+
+@pytest.mark.django_db()
+def test_test_llm_connection_endpoint_connection_issue_failure(team_with_users, authed_client):
+    """A provider-side failure (a 5xx-range status code, or a raw exception with no status
+    code at all - e.g. a network-level connection error) is a different, actionable problem
+    from a rejected credential, and must be reported as one, not lumped in with it."""
+    provider = LlmProviderFactory(team=team_with_users)
+    url = _test_connection_url(team_with_users, provider)
+    server_error = ValueError("upstream is down")
+    server_error.status_code = 502
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=server_error):
+        response = authed_client.post(url)
+
+    assert response.status_code == 302
+    [msg] = list(get_messages(response.wsgi_request))
+    assert msg.level == django_messages.ERROR
+    assert "credentials" not in msg.message.lower()
+    assert "provider's side" in msg.message
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_runs_automatic_connection_test(team_with_users, authed_client):
+    """Saving an LlmProvider through the real edit view should trigger the automatic
+    post-save connection test and surface its warning on failure, without blocking the save.
+
+    Regression: the save must redirect back to this same edit page, not the team list -
+    the warning explicitly says "Use Test Connection below to retry", and that button only
+    exists on the edit page. A save that lands anywhere else makes that instruction wrong."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=RuntimeError("boom")):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(url, 302)]
+    messages_seen = [str(m) for m in response.context["messages"]]
+    assert any("connection test failed" in m.lower() for m in messages_seen)
+
+    provider.refresh_from_db()
+    assert provider.name == "New Name"
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_passing_test_redirects_to_team_list(team_with_users, authed_client):
+    """No connection-test warning means no reason to detour through the edit page - a
+    successful save behaves exactly like every other provider save and returns to the
+    team list. (Voyage AI, which skips the test entirely, behaves the same way; a missing
+    model does not - see test_updating_llm_provider_with_no_model_configured below.)"""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    with mock.patch.object(LlmProvider, "test_connection"):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_no_model_configured(team_with_users, authed_client):
+    """A provider with no configured model to test against is genuinely unverified, not
+    silently-fine setup state - it should warn (redirecting back to the edit page, same as
+    a real failure) instead of behaving like a passing test."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
+        response = authed_client.post(url, data={"name": "New Name", "openai_api_key": "new-key"}, follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(url, 302)]
+    messages_seen = [str(m) for m in response.context["messages"]]
+    assert any("no models configured" in m.lower() for m in messages_seen)
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_no_credential_change_skips_connection_test(team_with_users, authed_client):
+    """Editing an unrelated field (name) and re-submitting the same credentials must not
+    re-run the connection test - that's a real external call, not free, and nothing about
+    the credentials is actually in question."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        response = authed_client.post(
+            url,
+            # dict(...) here only works around a ty false positive on factory.Dict-declared
+            # fields; provider.config is a plain dict at runtime either way.
+            data={"name": "New Name", "openai_api_key": dict(provider.config)["openai_api_key"]},
+            follow=True,
+        )
+
+    mock_test.assert_not_called()
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
+    provider.refresh_from_db()
+    assert provider.name == "New Name"
+
+
+@pytest.mark.django_db()
+def test_updating_llm_provider_with_credential_change_runs_connection_test(team_with_users, authed_client):
+    """The counterpart to the skip case above: an actual credential change must still
+    trigger the test - the gating is on whether config changed, not a blanket skip."""
+    provider = LlmProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        authed_client.post(url, data={"name": "Old Name", "openai_api_key": "a-genuinely-new-key"}, follow=True)
+
+    mock_test.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_creating_llm_provider_runs_automatic_connection_test(team_with_users, authed_client):
+    """A brand-new provider has no "previous config" to compare against, so creation always
+    tests - there's nothing to gate on."""
+    url = reverse(
+        "service_providers:new",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+    )
+
+    with mock.patch.object(LlmProvider, "test_connection") as mock_test:
+        authed_client.post(url, data={"name": "New Provider", "openai_api_key": "brand-new-key"}, follow=True)
+
+    mock_test.assert_called_once()
+
+
+@pytest.mark.django_db()
+def test_updating_voice_provider_still_redirects_to_team_list(team_with_users, authed_client):
+    """Regression: the edit-page redirect only applies when an LLM connection-test warning
+    actually fired. Every other provider type must keep today's behavior unchanged."""
+    provider = VoiceProviderFactory(team=team_with_users, name="Old Name")
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": provider.pk},
+    )
+    team_list_url = reverse("single_team:manage_team", kwargs={"team_slug": team_with_users.slug})
+
+    response = authed_client.post(
+        url,
+        data={
+            "name": "New Name",
+            "aws_access_key_id": "new-id",
+            "aws_secret_access_key": "new-secret",
+            "aws_region": "us-east-1",
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.redirect_chain == [(team_list_url, 302)]
 
 
 @pytest.mark.django_db()
