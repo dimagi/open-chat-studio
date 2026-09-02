@@ -34,22 +34,51 @@ ocs_sanitize_resource_name() {
     printf '%s\n' "$sanitized"
 }
 
-ocs_persisted_worktree_resource_name() {
-    local current_path="$1"
-    local env_file="$current_path/.env"
-    local persisted_name
+# The last assignment of a key in an env file, with the quotes `ocs_set_env_value` never
+# writes but a hand-edited file may carry stripped off. Nothing sources `.env` -- these
+# scripts run before any of it is loaded, and there is no `.envrc` in the repository to do
+# it -- so a value only reaches them by being read out of the file like this.
+ocs_env_file_value() {
+    local env_file="$1"
+    local key="$2"
 
     [[ -f "$env_file" ]] || return 1
-    persisted_name=$(awk '
-        index($0, "OCS_WORKTREE_ID=") == 1 {
-            value = substr($0, length("OCS_WORKTREE_ID=") + 1)
+    awk -v key="$key" '
+        index($0, key "=") == 1 {
+            value = substr($0, length(key) + 2)
+            if (value ~ /^".*"$/ || value ~ /^'"'"'.*'"'"'$/) {
+                value = substr(value, 2, length(value) - 2)
+            }
         }
         END {
             if (value != "") {
                 print value
             }
         }
-    ' "$env_file")
+    ' "$env_file"
+}
+
+# Where the container overrides come from: the environment first, so a one-off invocation
+# can override anything; then the worktree's own `.env`, which is where they are
+# documented and where a per-worktree choice belongs; then the default. The older knobs
+# are environment-only, as they have always been.
+ocs_setting() {
+    local key="$1"
+    local default_value="$2"
+    local value
+
+    value=$(printenv "$key") || value=""
+    if [[ -z "$value" ]]; then
+        value=$(ocs_env_file_value "$(ocs_current_worktree_path)/.env" "$key") || value=""
+    fi
+    printf '%s\n' "${value:-$default_value}"
+}
+
+ocs_persisted_worktree_resource_name() {
+    local current_path="$1"
+    local persisted_name
+
+    persisted_name=$(ocs_env_file_value "$current_path/.env" "OCS_WORKTREE_ID") || return 1
     [[ -n "$persisted_name" ]] || return 1
     if [[ ! "$persisted_name" =~ ^[a-z0-9_]{1,63}$ ]]; then
         echo "Invalid persisted worktree resource name: $persisted_name" >&2
@@ -87,6 +116,138 @@ ocs_worktree_resource_name() {
     fi
 
     ocs_sanitize_resource_name "$raw_name"
+}
+
+# Postgres and Redis run in the containers `docker-compose-dev.yml` defines, and neither
+# `psql` nor `redis-cli` is something we can count on being installed on the host, so the
+# clients we reach for are the ones inside those containers. A service is identified by
+# the host port it publishes -- only one container can hold a given port at a time, which
+# makes that unambiguous -- and named directly by `OCS_POSTGRES_CONTAINER` or
+# `OCS_REDIS_CONTAINER` when discovery needs overriding. The ports stay literal, matching
+# the ones `setup-worktree.sh` writes into DATABASE_URL and REDIS_URL: a port knob here
+# and a hardcoded port there would only half-move a service, and the half left behind
+# would be a FLUSHDB against whatever else answers on 6379.
+ocs_container_publishing_port() {
+    local port="$1"
+    local container
+
+    command -v docker >/dev/null 2>&1 || return 1
+    # The mapping is read out of `docker ps` rather than asked for with `--filter
+    # publish=`, which podman's docker CLI shim rejects as an invalid filter. awk keeps
+    # reading after the match instead of exiting: closing the pipe early would fail
+    # `docker ps` under `pipefail` and turn a found container into a lookup failure.
+    container=$(
+        docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null \
+            | awk -v mapping=":$port->" '
+                !found && index($0, mapping) { container = $1; found = 1 }
+                END { if (found) print container }
+            '
+    )
+    [[ -n "$container" ]] || return 1
+    printf '%s\n' "$container"
+}
+
+# `docker exec` reports its own inability to start anything -- no such container, the
+# container not running, no such executable inside it -- as 125, 126 or 127, and every
+# other status is the client's own. Only the first kind is worth retrying elsewhere:
+# retrying a client that did run would send the same statement to a second server.
+ocs_docker_exec_could_not_start() {
+    case "$1" in
+        125 | 126 | 127) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Left to the caller to turn into a failure, so that the message costs nothing under
+# `set -e`: reporting it with a non-zero status would abort the caller here rather than
+# where it decides what a missing client means.
+ocs_report_missing_client() {
+    local client="$1"
+    local port="$2"
+
+    echo "No container serving port $port can run $client, and none is installed on the host." >&2
+    echo "Start the development services with: docker compose -f docker-compose-dev.yml up -d" >&2
+}
+
+# The resolved container is handed back in `_ocs_resolved_container` rather than on stdout
+# so that the answer can be kept: resolving through a command substitution would cache it
+# in a subshell that exits immediately, and `ocs_psql` alone runs dozens of times per
+# setup -- a `docker ps` apiece. The lower case is the distinction the shell already draws
+# and this file follows for locals: an upper-case `OCS_*` name is read from the
+# environment and documented as a knob, a lower-case `_ocs_*` one is private to this file
+# and setting it from outside does nothing. It holds a container only in the moment after
+# a successful resolve; the resolve functions are what to call, never it directly.
+#
+# `_ocs_*_discovered` keeps what `docker ps` reported: a container name, or `none` once a
+# lookup has come up empty, so the lookup happens once either way. `_ocs_*_rejected`
+# lists containers that turned out unable to run a client, which is what stops a source
+# from offering the same one twice and a retry from looping. Rejection is recorded here
+# rather than by clearing `OCS_*_CONTAINER`, because that variable belongs to whoever
+# exported it and every child process inherits what we would have blanked.
+_ocs_resolved_container=""
+_ocs_redis_discovered=""
+_ocs_redis_rejected=""
+
+# A container name cannot contain a space, so a space-delimited list needs no more care.
+ocs_container_is_rejected() {
+    local candidate="$1"
+    local rejected="$2"
+
+    [[ " $rejected " == *" $candidate "* ]]
+}
+
+ocs_resolve_redis_container() {
+    local override
+    override=$(ocs_setting "OCS_REDIS_CONTAINER" "")
+    if [[ -n "$override" && ! "$override" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
+        echo "Ignoring OCS_REDIS_CONTAINER: $override is not a container name." >&2
+        override=""
+    fi
+
+    _ocs_resolved_container=""
+    if [[ -n "$override" ]] \
+        && ! ocs_container_is_rejected "$override" "$_ocs_redis_rejected"; then
+        _ocs_resolved_container=$override
+        return 0
+    fi
+    if [[ -z "$_ocs_redis_discovered" ]]; then
+        _ocs_redis_discovered=$(ocs_container_publishing_port 6379 || true)
+        _ocs_redis_discovered=${_ocs_redis_discovered:-none}
+    fi
+    if [[ "$_ocs_redis_discovered" == none ]] \
+        || ocs_container_is_rejected "$_ocs_redis_discovered" "$_ocs_redis_rejected"; then
+        return 1
+    fi
+    _ocs_resolved_container=$_ocs_redis_discovered
+}
+
+ocs_disqualify_redis_container() {
+    _ocs_redis_rejected="$_ocs_redis_rejected $_ocs_resolved_container"
+}
+
+ocs_redis_cli() {
+    local status
+
+    if ocs_resolve_redis_container; then
+        status=0
+        docker exec "$_ocs_resolved_container" redis-cli "$@" || status=$?
+        if [[ "$status" -eq 0 ]] || ! ocs_docker_exec_could_not_start "$status"; then
+            return "$status"
+        fi
+        echo "[ocs] $_ocs_resolved_container could not run redis-cli; trying elsewhere." >&2
+        ocs_disqualify_redis_container
+        if ocs_resolve_redis_container; then
+            ocs_redis_cli "$@"
+            return
+        fi
+    fi
+    # A Redis reachable on the host port without a container of its own -- a service
+    # container in CI, or a locally installed server -- still answers a host client.
+    if ! command -v redis-cli >/dev/null 2>&1; then
+        ocs_report_missing_client redis-cli 6379
+        return 1
+    fi
+    redis-cli "$@"
 }
 
 ocs_redis_registry_command() {
@@ -152,7 +313,7 @@ end
 
 return redis.error_reply("Unknown worktree Redis registry operation")'
 
-    redis-cli \
+    ocs_redis_cli \
         -e \
         -n "$registry_database" \
         --raw \
@@ -298,16 +459,73 @@ ocs_templates_are_enabled() {
     [[ "${OCS_DISABLE_DATABASE_TEMPLATES:-false}" != "true" ]]
 }
 
+_ocs_postgres_discovered=""
+_ocs_postgres_rejected=""
+
+ocs_resolve_postgres_container() {
+    local override
+    override=$(ocs_setting "OCS_POSTGRES_CONTAINER" "")
+    if [[ -n "$override" && ! "$override" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
+        echo "Ignoring OCS_POSTGRES_CONTAINER: $override is not a container name." >&2
+        override=""
+    fi
+
+    _ocs_resolved_container=""
+    if [[ -n "$override" ]] \
+        && ! ocs_container_is_rejected "$override" "$_ocs_postgres_rejected"; then
+        _ocs_resolved_container=$override
+        return 0
+    fi
+    if [[ -z "$_ocs_postgres_discovered" ]]; then
+        _ocs_postgres_discovered=$(ocs_container_publishing_port 5432 || true)
+        _ocs_postgres_discovered=${_ocs_postgres_discovered:-none}
+    fi
+    if [[ "$_ocs_postgres_discovered" == none ]] \
+        || ocs_container_is_rejected "$_ocs_postgres_discovered" "$_ocs_postgres_rejected"; then
+        return 1
+    fi
+    _ocs_resolved_container=$_ocs_postgres_discovered
+}
+
+ocs_disqualify_postgres_container() {
+    _ocs_postgres_rejected="$_ocs_postgres_rejected $_ocs_resolved_container"
+}
+
+# Every caller passes its statement inline with -c/-tAc, so nothing here depends on the
+# client sharing a filesystem with the worktree; `localhost` names the server either way,
+# the container's own or the one its published port leads to.
 ocs_psql() {
     local database="$1"
     shift
-
-    PGPASSWORD=postgres psql \
-        -h localhost \
-        -U postgres \
-        -d "$database" \
-        -v ON_ERROR_STOP=1 \
+    local status
+    local psql_command=(
+        psql
+        -h localhost
+        -U postgres
+        -d "$database"
+        -v ON_ERROR_STOP=1
         "$@"
+    )
+
+    if ocs_resolve_postgres_container; then
+        status=0
+        docker exec -e PGPASSWORD=postgres "$_ocs_resolved_container" \
+            "${psql_command[@]}" || status=$?
+        if [[ "$status" -eq 0 ]] || ! ocs_docker_exec_could_not_start "$status"; then
+            return "$status"
+        fi
+        echo "[ocs] $_ocs_resolved_container could not run psql; trying elsewhere." >&2
+        ocs_disqualify_postgres_container
+        if ocs_resolve_postgres_container; then
+            ocs_psql "$database" "$@"
+            return
+        fi
+    fi
+    if ! command -v psql >/dev/null 2>&1; then
+        ocs_report_missing_client psql 5432
+        return 1
+    fi
+    PGPASSWORD=postgres "${psql_command[@]}"
 }
 
 ocs_database_exists() {

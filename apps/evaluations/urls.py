@@ -53,6 +53,11 @@ urlpatterns = [
         name="evaluation_results_table",
     ),
     path(
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/results/<int:message_id>/detail",
+        evaluation_config_views.EvaluationResultDetailView.as_view(),
+        name="evaluation_result_detail",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/aggregates",
         evaluation_config_views.EvaluationRunAggregatesView.as_view(),
         name="evaluation_run_aggregates",

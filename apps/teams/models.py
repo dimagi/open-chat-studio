@@ -244,6 +244,9 @@ class Flag(AbstractUserFlag):
         return self.is_active_for_team(team)
 
     def is_active_for_team(self, team):
+        if self.everyone:
+            return True
+
         if not team:
             return False
 

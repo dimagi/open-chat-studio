@@ -122,3 +122,9 @@ def meta_cloud_api_whatsapp_channel(meta_cloud_api_provider):
         experiment__team=meta_cloud_api_provider.team,
         extra_data={"number": "+15551234567", "phone_number_id": "12345"},
     )
+
+
+@pytest.fixture()
+def public_flag(experiment, team_flag):
+    """Turns on `flag_public_channel` for the experiment's team."""
+    return team_flag("flag_public_channel", experiment.team)

@@ -16,7 +16,7 @@ from rest_framework.test import APIClient
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 WIDGET_TOKEN = "test_widget_token_123456789012"
@@ -152,6 +152,54 @@ def test_start_chat_session_with_name(authed_user, authed_client, experiment):
 
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])
     assert session.state == session_state
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_records_name_and_timezone_together(authed_user, authed_client, experiment):
+    """A request carrying both fields writes them to the same ParticipantData row in one pass."""
+    url = reverse("api:chat:start-session")
+    data = {
+        "chatbot_id": experiment.public_id,
+        "participant_remote_id": authed_user.email,
+        "participant_name": "John Doe",
+        "timezone": "Africa/Johannesburg",
+    }
+
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    participant = Participant.objects.get(identifier=authed_user.email)
+    participant_data = ParticipantData.objects.get(participant=participant, experiment=experiment)
+    assert participant_data.data == {"name": "John Doe", "timezone": "Africa/Johannesburg"}
+    assert ParticipantData.objects.filter(participant=participant).count() == 1
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_records_the_timezone_for_the_started_chatbot_only(authed_user, authed_client, experiment):
+    """Participant data is per chatbot, so the time zone lands on the chatbot whose session started."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
+
+    first_response = authed_client.post(url, data=data, format="json")
+    assert first_response.status_code == 201
+    participant = ExperimentSession.objects.get(external_id=first_response.json()["session_id"]).participant
+
+    other_experiment = ExperimentFactory.create(team=experiment.team)
+    other_chatbot_data = ParticipantData.objects.create(
+        participant=participant,
+        experiment=other_experiment,
+        team=experiment.team,
+        data={"timezone": "Europe/London", "tier": "gold"},
+    )
+
+    response = authed_client.post(url, data=data | {"timezone": "Pacific/Kiritimati"}, format="json")
+    assert response.status_code == 201
+
+    started_chatbot_data = ParticipantData.objects.get(participant=participant, experiment=experiment)
+    assert started_chatbot_data.data["timezone"] == "Pacific/Kiritimati"
+
+    other_chatbot_data.refresh_from_db()
+    assert other_chatbot_data.data == {"timezone": "Europe/London", "tier": "gold"}
 
 
 @pytest.mark.django_db()

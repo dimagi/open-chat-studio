@@ -37,6 +37,21 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
+# The release this deployment was built from, baked in at image build time as
+# `git describe --tags --match 'v*' --always` (see RELEASING.md). Reads as
+# `v1.2.0` for a tagged release, `v1.2.0-37-gabc1234` for a build off main, and
+# `unknown` when built outside CI. Deliberately not exposed to unauthenticated
+# users.
+#
+# This is a fact about the image, not a request: the image tag an operator pulls
+# is a separate OCS_IMAGE_TAG in docker-compose.prod.yml. They agree for a pinned
+# pull, but the tag lies for `latest`, for a build from source, and for our own
+# ECS deploys where no tag exists — so the reported version comes from here.
+# Operators must not set OCS_VERSION in `.env`: it is an env_file for every
+# service, which would override this and make the app misreport itself.
+OCS_VERSION = env("OCS_VERSION", default="unknown")
+
+
 # Shared bearer token for the cross-team provider usage/key reporting admin
 # endpoints, so headless consumers (e.g. a reporting script) can call them
 # without a superuser browser session. Unset disables token auth.
@@ -734,6 +749,9 @@ if SENTRY_DSN:
         send_default_pii=True,  # include user details in events
         attach_stacktrace=True,  # include stack trace in all events
         environment=env("SENTRY_ENVIRONMENT", default="development"),
+        # `None` lets the SDK fall back to its own detection rather than
+        # attributing every local build to a release literally named "unknown".
+        release=OCS_VERSION if OCS_VERSION != "unknown" else None,
         # `attach_stacktrace=True` sends stack-frame locals with every event; the scrubber redacts
         # secrets (e.g. the CommCare Connect encryption key) from them. See config/sentry.py.
         event_scrubber=get_event_scrubber(),

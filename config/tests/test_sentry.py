@@ -59,6 +59,8 @@ def _scrubbed_headers(headers: dict) -> dict:
         pytest.param("auth_token", id="auth_token"),
         pytest.param("secret_key", id="secret_key"),
         pytest.param("secret_key_bytes", id="secret_key_bytes"),
+        pytest.param("access_token", id="access_token"),
+        pytest.param("verify_token", id="verify_token"),
         pytest.param("password", id="default-denylist-still-applies"),
     ],
 )

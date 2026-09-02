@@ -65,6 +65,12 @@ automatically on create:
   repository's migrations and says nothing about those shipped by packages in `uv.lock`. Set
   `OCS_DISABLE_DATABASE_TEMPLATES=true` to always build from scratch, and
   `OCS_TEMPLATE_RETENTION` to keep more or fewer than three templates around.
+- Runs `psql` and `redis-cli` inside the containers `docker-compose-dev.yml` defines, located by
+  the host port each publishes, so neither client has to be installed locally. If nothing publishes
+  the port — a Redis on the host, a service container in CI — a host client is used instead, and if
+  neither is available setup says which client is missing rather than failing with
+  `command not found`. `OCS_POSTGRES_CONTAINER` and `OCS_REDIS_CONTAINER` in `.env` pin a container
+  when discovery finds the wrong one.
 - Builds the frontend assets.
 
 On `wt remove` the branch database is dropped, its Redis DB is flushed, and its allocation is

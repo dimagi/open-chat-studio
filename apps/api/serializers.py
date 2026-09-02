@@ -1,4 +1,5 @@
 import textwrap
+from zoneinfo import available_timezones
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
@@ -334,6 +335,18 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    timezone = serializers.CharField(
+        label="Time zone",
+        required=False,
+        allow_blank=True,
+        help_text="Optional IANA time zone name of the participant's device (e.g. 'Africa/Johannesburg'), "
+        "recorded in the participant's data for this chatbot only. "
+        "Unrecognised time zone names are ignored.",
+    )
+
+    def validate_timezone(self, value):
+        # An unrecognised zone must not block the session start; drop it instead.
+        return value if value and value in available_timezones() else None
 
 
 class ChatStartSessionResponse(serializers.Serializer):

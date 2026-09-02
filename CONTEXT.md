@@ -118,9 +118,10 @@ A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. P
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
-A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents).
+A registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents).
 A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0056) — with chat-session admission as one more consumer.
-_Avoid_: "API key" (a separate, user-scoped credential), and "the OAuth app's user" for a machine application — it has none.
+Usually **Team-scoped**: the Team is pinned at registration and every token the application issues is scoped to it. A **global** application is instead registered with no Team — superusers only, from the site admin area, and authorization-code only, since deriving a Team needs a User to ask. Any User may authorize one, in any of *their* Teams. The application spans Teams; **a token never does** — each is scoped to the one Team chosen at authorization time and carries it through code → access token → refresh. See [oauth_applications.md](docs/admin_guides/oauth_applications.md).
+_Avoid_: "API key" (a separate, user-scoped credential), "the OAuth app's user" for a machine application — it has none — and "a global token": global is a property of the *application*, never of a token.
 
 **Custom Action**:
 A Team-scoped HTTP API that a Chatbot can call, described by an OpenAPI schema. Provides one or more **Custom Action Operations**.
