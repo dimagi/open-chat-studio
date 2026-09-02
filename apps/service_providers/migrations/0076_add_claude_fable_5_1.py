@@ -11,7 +11,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() moved to 0077_deprecate_gpt5_family
         # Seed pricing for claude-fable-5-1. load_ai_pricing is idempotent and supersedes on
         # change, so this is safe to leave in place alongside earlier calls.
         load_pricing_data(),
