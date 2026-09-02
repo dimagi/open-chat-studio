@@ -193,6 +193,13 @@ def set_public_key(request, team_slug):
         messages.success(request, _("Public key saved!"))
     else:
         messages.error(request, _("Could not save the public key."))
+        # ModelForm.is_valid() has already written the submitted (rejected) values onto
+        # request.team in memory via _post_clean(), even though nothing was saved. The
+        # migration-mode checkbox below reads request.team.is_migrating directly, so
+        # refresh the instance from the database to undo that in-memory mutation -- this
+        # doesn't touch form.errors, which is what still surfaces the "public_key" field
+        # error to the user.
+        request.team.refresh_from_db()
     return render(
         request,
         "teams/manage_team.html",

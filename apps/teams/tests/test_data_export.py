@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.urls import reverse
 from field_audit import enable_audit
@@ -95,6 +97,23 @@ class TestSetPublicKey:
         assert "public_key" in form.errors
         team.refresh_from_db()
         assert team.public_key == ""
+
+    def test_invalid_public_key_does_not_falsely_tick_migration_mode(self, client, team, admin):
+        """A rejected public key must not leave the migration-mode checkbox showing as
+        checked when it was never actually saved -- an admin relying on that checkbox to
+        confirm outbound messages are frozen would otherwise be misled."""
+        assert team.is_migrating is False
+        client.force_login(admin)
+        response = client.post(_set_public_key_url(team), {"public_key": "not-a-real-key", "is_migrating": "on"})
+        assert response.status_code == 200
+        team.refresh_from_db()
+        assert team.is_migrating is False
+
+        form = response.context["public_key_form"]
+        assert form.initial["is_migrating"] is False
+        checkbox_markup = re.search(r"<input[^>]*name=\"is_migrating\"[^>]*>", response.content.decode())
+        assert checkbox_markup is not None
+        assert "checked" not in checkbox_markup.group()
 
     def test_data_export_section_visible_to_admin(self, client, team, admin):
         client.force_login(admin)
