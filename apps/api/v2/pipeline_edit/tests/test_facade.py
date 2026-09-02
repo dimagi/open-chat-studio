@@ -237,12 +237,10 @@ WIRE_QUERIES_UNDER_THE_LOCK = 10
 
 @pytest.mark.django_db()
 def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
-    """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with it
-    the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for,
-    leaving the build state to re-read every row.
-
-    The count is what pins that: reverting the skip takes it from 10 to 17. A comparison against the
-    node path would not, since wiring is far enough below it to stay cheaper either way.
+    """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with
+    it the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for.
+    The absolute count is what pins that: reverting the skip takes it from 10 to 17, while a
+    comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)
     client.post(edges_url(chatbot), {"source": start_node, "target": node_id}, format="json")
@@ -261,14 +259,13 @@ def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_nod
 def test_a_reference_check_reads_only_the_ids_it_was_sent(client, chatbot, llm, team):
     """A PATCH only learns the node's type from the locked graph, so its reference check runs inside
     the lock. What keeps that from serialising concurrent edits is that the check asks after the ids
-    it was sent rather than building the lists to pick them out of.
+    it was sent rather than building the lists to pick them out of. Two things have to hold, and
+    they fail on different axes:
 
-    Two things have to hold, and they fail on different axes:
-
-    * the count stays at :data:`QUERIES_UNDER_THE_LOCK` -- building the option lists in here is a
-      fixed dozen extra queries, which only an absolute number catches.
-    * it does not move with the number of ids sent, the axis a resolver querying per value instead
-      of per param would grow on.
+    * the count stays at :data:`QUERIES_UNDER_THE_LOCK`, which only an absolute number catches --
+      building the option lists in here is a fixed dozen extra queries.
+    * it does not move with the number of ids sent, the axis a resolver querying per value would
+      grow on.
 
     Query counting rather than threads: a real concurrency test would be slow and flaky.
     """

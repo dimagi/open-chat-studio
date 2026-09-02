@@ -1,9 +1,8 @@
 """POST /api/v2/chatbots/{id}/pipeline/edges/ (#4141, spec §6.2).
 
-The same rule the node endpoints encode, applied to wiring: a request naming something the pipeline
-does not have is refused, while a graph that is merely *wrong* -- a cycle, an End node nothing
-reaches -- persists and is reported. What separates the two is whether the server could act on the
-request at all.
+The node endpoints' rule applied to wiring: a request naming something the pipeline does not have is
+refused, while a graph that is merely *wrong* -- a cycle, an End node nothing reaches -- persists and
+is reported.
 """
 
 import pytest
@@ -65,12 +64,9 @@ class TestWhatAWireStores:
 
     @pytest.mark.parametrize("key", ["id", "edge_id"])
     def test_a_client_supplied_edge_id_is_refused(self, client, chatbot, llm_node, end_node, key):
-        """Honouring a client's id would let one edge overwrite another: the patch engine merges edges
-        by id.
-
-        Both spellings, because the response calls it ``id`` while the path that deletes it is
-        ``edge_id`` -- a client may reasonably reach for either, and each has to answer with the rule
-        rather than with "no such field".
+        """Honouring a client's id would let one edge overwrite another: the patch engine merges
+        edges by id. Both spellings, because the response calls it ``id`` while the path that deletes
+        it is ``edge_id``, so each has to answer with the rule rather than "no such field".
         """
         response = client.post(
             edges_url(chatbot), {"source": llm_node, "target": end_node, key: "mine-1"}, format="json"
@@ -81,12 +77,10 @@ class TestWhatAWireStores:
         assert edges_from(chatbot.pipeline, llm_node) == []
 
     def test_a_colliding_edge_id_is_made_unique(self, client, chatbot, router, end_node):
-        """The id form is derived from the endpoints, so a rewire can leave an old edge holding the id
-        the next wire would draw -- and the patch engine treats an add whose id already exists as a
-        no-op, which would answer 201 having stored nothing.
-
-        Renaming the router's first keyword is what strands the id: SCHEDULE moves to ``output_1``
-        and its edge follows, while the edge keeps the id it was created with.
+        """The id form is derived from the endpoints, so a rewire can leave an old edge holding the
+        id the next wire would draw -- and the patch engine treats an add whose id already exists as
+        a no-op, which would answer 201 having stored nothing. Renaming the router's first keyword is
+        what strands it: SCHEDULE moves to ``output_1`` and its edge follows, keeping its old id.
         """
         first = wire(client, chatbot, router, end_node, source_handle="output_0")
         client.patch(node_url(chatbot, router), {"params": {"keywords": ["book", "schedule"]}}, format="json")
@@ -270,11 +264,9 @@ class TestRefusedWires:
         assert missing in response.json()
 
     def test_a_wire_out_of_a_node_of_an_unpublished_type_is_refused(self, client, chatbot, end_node):
-        """A type naming no node class -- removed since, or never one -- has no handles the server can
-        determine, so it cannot be wired *from*: the edge would be reported stranded.
-
-        Named as its own cause rather than sharing the End node's answer: nothing the caller does will
-        make this node wirable, so "unwire and move off this type" is the only way forward.
+        """A type naming no node class -- removed since, or never one -- has no handles the server
+        can determine, so it cannot be wired *from*. Named as its own cause rather than sharing the
+        End node's answer: nothing the caller does will make this node wirable.
         """
         node = Node.objects.create(pipeline=chatbot.pipeline, flow_id="Gone-1", type="Gone", params={})
 
@@ -285,13 +277,10 @@ class TestRefusedWires:
 
     @pytest.mark.parametrize("node_type", ["RouterNode", "StaticRouterNode"])
     def test_a_router_with_no_keywords_yet_is_told_to_set_them(self, client, chatbot, end_node, node_type):
-        """A router's handles *are* its keywords, and `POST /pipeline/nodes/ {"type": "RouterNode"}` --
-        the minimal body that endpoint advertises -- stores none. So the one node type `source_handle`
-        exists for arrives unwirable, down the documented happy path.
-
-        It must not share the End node's answer. "No edge can leave it" reads as "this node can never
-        be a source", whose natural recovery is to delete the node; the truth is one PATCH away, and
-        the message has to say which one.
+        """A router's handles *are* its keywords, and the minimal body `POST /pipeline/nodes/`
+        advertises stores none -- so the one node type `source_handle` exists for arrives unwirable
+        down the documented happy path. It must not share the End node's answer: "no edge can leave
+        it" invites deleting the node, when the fix is one PATCH away.
         """
         node_id = add_bare_node(client, chatbot, node_type)
 
@@ -337,10 +326,9 @@ class TestDuplicateWires:
         assert len(edges_from(chatbot.pipeline, llm_node)) == 1
 
     def test_a_duplicate_of_an_edge_the_ui_builder_wrote_is_refused(self, client, chatbot, llm_node, end_node):
-        """Every edge the UI builder draws stores a null ``targetHandle`` -- it renders no id on its
-        target handles -- so a duplicate check comparing raw values would read its edge as a different
-        wire and store a second edge beside it. Null on both sides here, since a stored
-        ``sourceHandle`` is optional too."""
+        """Every edge the UI builder draws stores a null ``targetHandle``, so a duplicate check
+        comparing raw values would read it as a different wire and store a second edge beside it.
+        Null on both sides here, since a stored ``sourceHandle`` is optional too."""
         add_edge(chatbot.pipeline, llm_node, end_node, source_handle=None, target_handle=None)
 
         response = client.post(

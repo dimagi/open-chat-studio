@@ -1,8 +1,7 @@
 """DELETE /api/v2/chatbots/{id}/pipeline/edges/{edge_id}/ (#4141).
 
-Unwiring is addressed by the edge id ``GET /chatbots/{id}/inspect/`` emits, which is also the id a
-wire returns. Nothing about an edge is editable in place -- to move one end, delete it and wire a new
-one -- so this endpoint is half of every rewiring an agent does.
+Addressed by the edge id a wire returns, which is also the one ``GET /chatbots/{id}/inspect/`` emits.
+Nothing about an edge is editable in place, so this endpoint is half of every rewiring.
 """
 
 from typing import NamedTuple
@@ -56,9 +55,8 @@ def test_delete_removes_only_the_edge_addressed(client, chatbot, spliced):
 def test_delete_leaves_every_node_row_exactly_as_it_was(client, chatbot, spliced):
     """Unwiring is not deleting: both nodes stay, and stay where they were on the canvas.
 
-    Every row rather than just the edge's two, because ``update_nodes_from_data`` reads its mapping as
-    the whole graph membership -- an edge-only diff has to hand it every node, and naming none would
-    reconcile them all away.
+    Every row rather than just the edge's two, because ``update_nodes_from_data`` reads its mapping
+    as the whole graph membership -- naming none would reconcile them all away.
     """
     before = _node_rows(chatbot)
 

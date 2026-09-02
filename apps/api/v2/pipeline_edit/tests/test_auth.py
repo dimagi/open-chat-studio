@@ -1,10 +1,9 @@
 """Authorization for the pipeline façade (#4140, #4141).
 
-One view class serves the node endpoints and another the edge endpoints, and every gate on them
-turns on the *credential* rather than the verb: the read-only API-key gate and the OAuth resource
-scope treat POST, PATCH and DELETE alike as unsafe methods. So the model-permission gate -- the one
-place the verb could change the answer -- is exercised per verb, while the credential gates are
-checked once per view class.
+Every gate turns on the *credential* rather than the verb: the read-only API-key gate and the OAuth
+resource scope treat POST, PATCH and DELETE alike as unsafe. So the model-permission gate -- the one
+place the verb could change the answer -- is exercised per verb, and the credential gates once per
+view class.
 """
 
 import pytest

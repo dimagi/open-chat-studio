@@ -173,12 +173,12 @@ def add_edge(
     pipeline, source: str, target: str, source_handle: str | None = "output", target_handle: str | None = "input"
 ) -> str:
     """Wire two nodes by writing the edge straight into ``Pipeline.data``, as the UI builder's save
-    does: ``Pipeline.data`` holds the edges and nothing else (ADR-0049).
+    does (ADR-0049).
 
     Still a direct write now that ``POST .../pipeline/edges/`` exists, because it can build edges
     that endpoint refuses -- one stranded on a handle its source does not offer, or one carrying the
-    null ``targetHandle`` the UI builder writes -- and because a test about *nodes* should not fail
-    when the edge endpoint changes.
+    UI builder's null ``targetHandle`` -- and because a test about *nodes* should not fail when the
+    edge endpoint changes.
     """
     edge_id = f"edge-{source}-{source_handle}-{target}"
     pipeline.data["edges"].append(
@@ -210,7 +210,7 @@ def wire(client, chatbot, source: str, target: str, **body) -> str:
 def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:
     """``{edge_id: (sourceHandle, target)}`` for the stored edges leaving ``source``.
 
-    Handle and target together, so one assertion says which edges survived an edit, which handle
+    Handle and target together, so one assertion covers which edges survived an edit, which handle
     each ended up on, and that none changed where it points.
     """
     pipeline.refresh_from_db()
