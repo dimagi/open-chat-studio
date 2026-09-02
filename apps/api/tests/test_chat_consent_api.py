@@ -97,9 +97,26 @@ def test_participant_data_for_returns_the_row_for_the_working_chatbot(session):
     assert participant_data_for(session) == row
 
 
-def _start(api_client, experiment, **extra):
+@pytest.fixture()
+def team_member(team_with_users):
+    return team_with_users.members.first()
+
+
+@pytest.fixture()
+def team_member_client(team_member):
+    client = APIClient()
+    client.force_login(team_member)
+    return client
+
+
+def _start(api_client, experiment, version_number=None, remote_id=None, **extra):
     url = reverse("api:chat:start-session")
-    return api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json", **extra)
+    data = {"chatbot_id": experiment.public_id}
+    if version_number is not None:
+        data["version_number"] = version_number
+    if remote_id is not None:
+        data["participant_remote_id"] = remote_id
+    return api_client.post(url, data=data, format="json", **extra)
 
 
 @pytest.mark.django_db()
@@ -283,9 +300,12 @@ def test_recording_consent_does_not_touch_the_legacy_session_consent_date(api_cl
     assert session.consent_date is None
 
 
-def _send(api_client, session, **extra):
+def _send(api_client, session, version_number=None, **extra):
     url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
-    return api_client.post(url, data={"message": "hi"}, format="json", **extra)
+    data = {"message": "hi"}
+    if version_number is not None:
+        data["version_number"] = version_number
+    return api_client.post(url, data=data, format="json", **extra)
 
 
 def _upload(api_client, session, **extra):
@@ -339,6 +359,57 @@ def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget
         response = _send(api_client, session, **extra)
 
     assert response.status_code == 202
+
+
+@pytest.mark.django_db()
+def test_a_preview_send_is_gated_on_the_session_version_form(team_member_client, consent_experiment):
+    """A team member previewing another version is held on the session version's form.
+
+    The consent endpoint has no version to key on and participant data holds one accepted form
+    id, so gating a preview on the previewed version's form would leave it unsatisfiable.
+    """
+    published = consent_experiment.create_new_version(make_default=True)
+    preview_session = ExperimentSessionFactory.create(experiment=consent_experiment, session_token_required=False)
+
+    refusal = _send(
+        team_member_client,
+        preview_session,
+        version_number=consent_experiment.version_number,
+        HTTP_X_OCS_WIDGET_VERSION="0.13.0",
+    )
+
+    assert refusal.status_code == 403
+    assert refusal.json()["consent"]["form_version_id"] == published.consent_form_id
+
+    accepted = _consent(team_member_client, preview_session, published.consent_form_id)
+    assert accepted.status_code == 204
+
+    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+        response = _send(
+            team_member_client,
+            preview_session,
+            version_number=consent_experiment.version_number,
+            HTTP_X_OCS_WIDGET_VERSION="0.13.0",
+        )
+
+    assert response.status_code == 202
+
+
+@pytest.mark.django_db()
+def test_start_reports_the_session_version_form_when_previewing_another_version(
+    team_member_client, team_member, consent_experiment
+):
+    published = consent_experiment.create_new_version(make_default=True)
+
+    response = _start(
+        team_member_client,
+        consent_experiment,
+        version_number=consent_experiment.version_number,
+        remote_id=team_member.email,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["consent"]["form_version_id"] == published.consent_form_id
 
 
 @pytest.mark.django_db()

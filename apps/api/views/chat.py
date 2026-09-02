@@ -177,11 +177,11 @@ def chat_upload_file(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    experiment_version, refusal = _public_session_version(request, session)
+    _, refusal = _public_session_version(request, session)
     if refusal:
         return refusal
 
-    if refusal := consent_refusal(request, session, experiment_version):
+    if refusal := consent_refusal(request, session):
         return refusal
     files = request.FILES.getlist("files")
     if not files:
@@ -663,7 +663,7 @@ def chat_start_session(request):
         "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
-        "consent": session_consent_block(session, experiment_version or session.experiment_version),
+        "consent": session_consent_block(session),
     }
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
@@ -739,7 +739,7 @@ def chat_send_message(request, session_id):
     if refusal:
         return refusal
 
-    if refusal := consent_refusal(request, session, experiment_version):
+    if refusal := consent_refusal(request, session):
         return refusal
 
     attachment_data = []
@@ -947,7 +947,7 @@ def chat_poll_response(request, session_id):
         "messages": messages,
         "has_more": has_more,
         "session_status": session_status,
-        "consent": session_consent_block(session, session.experiment_version),
+        "consent": session_consent_block(session),
     }
     return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
 
@@ -1003,13 +1003,12 @@ def chat_record_consent(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    version = session.experiment_version
-    if version.consent_form_id != form_version_id:
+    if session.experiment_version.consent_form_id != form_version_id:
         return Response(
             {
                 "error": "The consent form has changed",
                 "code": "consent_stale",
-                "consent": session_consent_block(session, version),
+                "consent": session_consent_block(session),
             },
             status=status.HTTP_409_CONFLICT,
         )

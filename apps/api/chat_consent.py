@@ -29,14 +29,20 @@ def consent_block(version: Experiment, participant_data: ParticipantData | None)
     }
 
 
-def session_consent_block(session: ExperimentSession, version: Experiment) -> dict:
-    """The consent block for `session` on `version`, without a participant-data query when there is no form."""
+def session_consent_block(session: ExperimentSession) -> dict:
+    """The consent block for `session`, without a participant-data query when there is no form.
+
+    Always the session's own version, never a `version_number` the caller asked to preview:
+    participant data holds one accepted form id and the consent endpoint has no version to key
+    on, so a preview gated on the previewed version's form could never be satisfied.
+    """
+    version = session.experiment_version
     if version.consent_form_id is None:
         return consent_block(version, None)
     return consent_block(version, participant_data_for(session))
 
 
-def consent_refusal(request, session: ExperimentSession, version: Experiment) -> Response | None:
+def consent_refusal(request, session: ExperimentSession) -> Response | None:
     """The 403 that holds a message until consent is recorded, or None.
 
     Only widgets from ``CONSENT_INTRODUCED`` on are refused: older widgets treat every 403 as a
@@ -44,7 +50,7 @@ def consent_refusal(request, session: ExperimentSession, version: Experiment) ->
     """
     if not widget_enforces_consent(request.headers.get(WIDGET_VERSION_HEADER)):
         return None
-    block = session_consent_block(session, version)
+    block = session_consent_block(session)
     if not block["required"]:
         return None
     return Response(
