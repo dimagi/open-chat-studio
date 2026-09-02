@@ -2,8 +2,9 @@ from django.conf import settings
 from django.template.loader import get_template
 from django_tables2 import columns, tables
 
+from apps.generics import actions
 from apps.generics.tables import ISOTimeAgoColumn, TimeAgoColumn
-from apps.ocs_notifications.models import EventUser, NotificationEvent
+from apps.ocs_notifications.models import EventUser, NotificationChannel, NotificationEvent
 
 
 class UserNotificationTable(tables.Table):
@@ -79,3 +80,35 @@ class NotificationEventTable(tables.Table):
         orderable = False
         empty_text = "No notifications found."
         attrs = {"td": {"class": "overflow-visible"}}
+
+
+class NotificationChannelTable(tables.Table):
+    channel_name = tables.Column(
+        verbose_name="Channel",
+        orderable=True,
+    )
+    level = columns.TemplateColumn(
+        template_name="ocs_notifications/components/level_badge.html",
+        verbose_name="Level",
+        orderable=True,
+    )
+    enabled = columns.BooleanColumn(verbose_name="Enabled", orderable=True)
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.edit_action(
+                "ocs_notifications_channels:edit",
+                required_permissions=["ocs_notifications.change_notificationchannel"],
+            ),
+            actions.delete_action(
+                "ocs_notifications_channels:delete",
+                required_permissions=["ocs_notifications.delete_notificationchannel"],
+            ),
+        ]
+    )
+
+    class Meta:
+        model = NotificationChannel
+        fields = ("messaging_provider", "channel_name", "level", "enabled")
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No notification channels found."

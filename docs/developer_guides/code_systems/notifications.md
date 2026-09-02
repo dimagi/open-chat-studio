@@ -139,6 +139,34 @@ For better code organization and maintainability, **preferably add your notifica
   user’s in-app level preference (and can be disabled entirely).
 - **Email**: Email is sent synchronously when a notification is created and the user meets their email preferences.
 - **Do Not Disturb / Mute**: If a user has Do Not Disturb enabled or muted that event thread, they won’t be notified of new events.
+- **Slack**: If the team has configured a Slack **NotificationChannel**, matching events are also posted to a Slack channel (see below).
+
+## Slack Notifications
+
+Teams can deliver notifications to a Slack channel in addition to in-app/email. This is a **team-level** configuration (one channel per Slack provider), distinct from the per-user preferences above.
+
+### The Model
+
+- **`NotificationChannel`** is team-scoped (`BaseTeamModel`) and holds:
+  - `messaging_provider` — the team's Slack `MessagingProvider` (created via OAuth). One channel per provider per team (enforced by a unique constraint).
+  - `channel_name` — the Slack channel to post to (e.g. `#alerts`).
+  - `level` — only notifications at or above this severity are posted.
+  - `enabled` — whether the channel currently receives notifications.
+
+### Delivery Gate
+
+On every `create_notification()`, `get_slack_notification_channels()` (in `apps/ocs_notifications/utils.py`) selects the team's enabled, level-matching channels. Delivery is additionally gated by:
+
+- `settings.SLACK_ENABLED` (configured via `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`/`SLACK_SIGNING_SECRET`)
+- the `flag_slack_notifications` feature flag being active for the team
+
+Each matching channel is dispatched to a worker via `send_slack_notification_async()` (Celery, `Queues.BACKGROUND`), which renders the event with `build_slack_message()` and posts it through the provider's `SlackService`. Failures are logged and swallowed so they never break the notification pipeline.
+
+### Managing Channels
+
+Team admins configure Slack channels from the **Manage Team** page (flag-gated "Slack Notifications" panel). The CRUD lives under `ocs_notifications_channels` URLs and is scoped to the current team, mirroring the `mcp_integrations` pattern.
+
+
 
 ## When & Where to Call create_notification()
 

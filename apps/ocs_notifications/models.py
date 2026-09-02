@@ -114,6 +114,35 @@ class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
     pass
 
 
+class NotificationChannel(BaseTeamModel):
+    """A team-level Slack channel notifications are posted to."""
+
+    messaging_provider = models.ForeignKey(
+        "service_providers.MessagingProvider",
+        on_delete=models.CASCADE,
+        related_name="notification_channels",
+    )
+    channel_name = models.CharField(max_length=255)
+    level = models.PositiveSmallIntegerField(
+        choices=LevelChoices.choices,
+        default=LevelChoices.WARNING,
+    )
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "Notification channels"
+        ordering = ("channel_name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "messaging_provider"],
+                name="unique_notification_channel_per_team_and_provider",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Notifications to {self.channel_name}"
+
+
 class EventUser(BaseTeamModel):
     event_type = models.ForeignKey(EventType, on_delete=models.CASCADE)
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)

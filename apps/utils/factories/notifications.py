@@ -5,11 +5,30 @@ from apps.ocs_notifications.models import (
     EventType,
     EventUser,
     LevelChoices,
+    NotificationChannel,
     NotificationEvent,
     UserNotificationPreferences,
 )
+from apps.service_providers.models import MessagingProviderType
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+
+
+class SlackMessagingProviderFactory(MessagingProviderFactory):
+    type = MessagingProviderType.slack
+
+
+class NotificationChannelFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = NotificationChannel
+        skip_postgeneration_save = True
+
+    team = factory.SubFactory(TeamFactory)
+    messaging_provider = factory.SubFactory(SlackMessagingProviderFactory, team=factory.SelfAttribute("..team"))
+    channel_name = factory.Sequence(lambda n: f"#notifications-{n}")
+    level = LevelChoices.WARNING
+    enabled = True
 
 
 class EventTypeFactory(factory.django.DjangoModelFactory):

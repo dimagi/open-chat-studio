@@ -60,6 +60,18 @@
       {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
     {% endwith %}
   {% endflag %}
+  {% flag "flag_slack_notifications" %}
+    {% has_perm "ocs_notifications" "view_notificationchannel" as can_view_notification_channels %}
+    {% if can_view_notification_channels %}
+      {% has_perm "ocs_notifications" "add_notificationchannel" as allow_new_notification_channel %}
+      {% url "ocs_notifications_channels:table" request.team.slug as notification_channels_table_url %}
+      {% url "ocs_notifications_channels:new" request.team.slug as notification_channels_new_url %}
+      {% translate "Post this team's notifications to a Slack channel" as slack_notifications_subtitle %}
+      {% with button_style="btn-outline" title_class="pg-subtitle" %}
+        {% include "generic/object_home_content.html" with new_object_url=notification_channels_new_url title="Slack Notifications" table_url=notification_channels_table_url allow_new=allow_new_notification_channel subtitle=slack_notifications_subtitle data_cy_title="title-slack-notifications" %}
+      {% endwith %}
+    {% endif %}
+  {% endflag %}
   {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
   {% if can_view_oauth_apps %}
     {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}

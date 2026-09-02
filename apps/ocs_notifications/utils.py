@@ -3,6 +3,7 @@ import json
 import logging
 from enum import Enum
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Subquery
@@ -13,11 +14,12 @@ from apps.ocs_notifications.models import (
     EventType,
     EventUser,
     LevelChoices,
+    NotificationChannel,
     NotificationEvent,
     UserNotificationPreferences,
 )
-from apps.ocs_notifications.tasks import send_notification_email_async
-from apps.teams.models import Team
+from apps.ocs_notifications.tasks import send_notification_email_async, send_slack_notification_async
+from apps.teams.models import Flag, Team
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -135,7 +137,24 @@ def create_notification(
     transaction.on_commit(
         lambda: send_notification_email_async.delay(users_to_email, notification_event_id=notification_event.id)
     )
+    for notification_channel in get_slack_notification_channels(team, level):
+        transaction.on_commit(
+            lambda c=notification_channel: send_slack_notification_async.delay(
+                c.id, notification_event_id=notification_event.id
+            )
+        )
     return notification_event
+
+
+def get_slack_notification_channels(team: Team, event_level: LevelChoices):
+    """Return the enabled Slack notification channels for a team that meet the event's level.
+
+    Delivery is gated on both the feature flag and the Slack integration being configured, and
+    each channel posts only events at or above its configured severity threshold.
+    """
+    if not settings.SLACK_ENABLED or not Flag.get("flag_slack_notifications").is_active_for_team(team):
+        return NotificationChannel.objects.none()
+    return NotificationChannel.objects.filter(team=team, enabled=True, level__lte=event_level)
 
 
 def get_users_to_be_notified(team: Team, permissions: list[str]) -> dict:
