@@ -19,8 +19,8 @@ from apps.experiments.versioning import VersionDetails, VersionField, VersionsMi
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.flags import Flags
-from apps.teams.models import BaseTeamModel, Flag
-from apps.teams.utils import get_slug_for_team
+from apps.teams.models import BaseTeamModel
+from apps.teams.utils import flag_is_active_for_team, get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
     get_related_pipeline_experiments_queryset,
@@ -518,7 +518,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 },
             )
             return None
-        if not self._flag_active_for_team(Flags.CONTEXTUAL_RETRIEVAL):
+        if not flag_is_active_for_team(self.team, Flags.CONTEXTUAL_RETRIEVAL.slug):
             return None
         try:
             service = self.contextualizer_llm_provider.get_llm_service()
@@ -531,21 +531,6 @@ class Collection(BaseTeamModel, VersionsMixin):
             return None
         return LLMContextualizer(chat_model)
 
-    def _flag_active_for_team(self, flag_info: Flags) -> bool:
-        """Whether the given feature flag is active for this collection's team.
-
-        Indexing and retrieval both run without a request (Celery task / tool call), so this
-        mirrors Waffle's Flag.is_active precedence directly: an explicit `everyone` value
-        wins, otherwise fall back to team membership.
-        """
-
-        flag = Flag.objects.filter(name=flag_info.slug).first()
-        if not flag:
-            return False
-        if flag.everyone is not None:
-            return flag.everyone
-        return flag.is_active_for_team(self.team)
-
     @property
     def hybrid_search_enabled(self) -> bool:
         """Whether retrieval should fuse lexical results with dense results for this collection.
@@ -555,7 +540,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         if self.is_remote_index:
             return False
-        return self._flag_active_for_team(Flags.HYBRID_SEARCH)
+        return flag_is_active_for_team(self.team, Flags.HYBRID_SEARCH.slug)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

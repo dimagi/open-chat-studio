@@ -79,6 +79,7 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
+* A comment earns its place by carrying context the file cannot show — keep it when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 
 ## Ask first
@@ -91,6 +92,10 @@ Confirm with a human before these — they are hard to reverse or change a share
 ## Don't
 * Do not local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)
 * Do not commit implementation plans to the repo unless asked
+* Do not write comments that defend the code against an objection nobody raised: no pre-rebutting alternatives that were never proposed, no counterfactuals ("without this, X would..."). That argument belongs in the PR discussion, not in the file
+* Do not narrate the diff in the source. A comment describes the code as it stands, not what moved, what it replaced, or which PR changed it
+* Do not add explanatory comments to migrations, and keep implementation detail (internal class names, call paths) out of public API and schema descriptions
+* Do not spread a Django template comment `{# ... #}` over multiple lines — it is not supported. Use `{% comment %}{% endcomment %}`
 
 ## Additional notes
 
