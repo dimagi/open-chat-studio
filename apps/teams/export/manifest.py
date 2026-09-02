@@ -144,6 +144,14 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     "files.filechunkembedding": ["search_vector"],
 }
 
+# Excluded fields the importer must also reset to their model default. Leaving a field out of the
+# payload only stops it being copied; an existing target row keeps the value it already had. For
+# state that describes the row's own contents, that value outlives what it described once the
+# contents are overwritten, so it has to be cleared rather than merely skipped.
+RESET_REGISTRY: dict[str, list[str]] = {
+    "service_providers.llmprovider": ["extra_data"],
+}
+
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
 # Default is "team" (the direct FK on every BaseTeamModel); only models without one need an entry.
 TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {

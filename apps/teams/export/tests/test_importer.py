@@ -178,6 +178,40 @@ def test_import_resolves_fk_to_target_pk_and_unseals_secret(store, keypair):
     assert provider.config == {"api_key": "sk-x"}
 
 
+def test_import_resets_provider_verification_state(store, keypair):
+    """``extra_data`` holds credential verification state, which describes the credentials as they
+    were stored on the source. It is excluded from the export, so a re-import that overwrites
+    ``config`` would otherwise leave the target's own verification result standing over credentials
+    it no longer describes."""
+    public_key, private_key = keypair
+    importer = Importer(store, private_key=private_key)
+    importer.import_rows("teams.team", [_team_row()])
+
+    def provider_row(api_key):
+        return {
+            "id": 5,
+            "name": "OpenAI",
+            "type": "openai",
+            "config": seal_mod.seal({"api_key": api_key}, public_key),
+            "created_at": PAST,
+            "updated_at": PAST,
+        }
+
+    importer.import_rows("service_providers.llmprovider", [provider_row("sk-first")])
+    provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
+    assert provider.extra_data == {}  # a created row starts unverified
+
+    provider.extra_data = {"verified_credentials": True, "verification_error": "stale reason"}
+    provider.save(update_fields=["extra_data"])
+
+    importer.import_rows("service_providers.llmprovider", [provider_row("sk-second")])
+    provider.refresh_from_db()
+    assert provider.config == {"api_key": "sk-second"}
+    assert provider.extra_data == {}
+    assert not provider.credentials_verified
+    assert provider.verification_error == ""
+
+
 def test_rerun_does_not_duplicate(store):
     """Re-importing the same row maps to the existing target instead of creating a duplicate."""
     importer = Importer(store)

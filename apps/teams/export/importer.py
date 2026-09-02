@@ -22,6 +22,7 @@ from .client import FileContentNotFound
 from .manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
+    RESET_REGISTRY,
     SECRET_REGISTRY,
     TEAM_MODEL,
     GlobalSpec,
@@ -367,6 +368,7 @@ class Importer:
         self._resolve_generic_fks(gfk_pairs, row, field_values)
         self._remap_embedded_resource_ids(model_label, field_values)
         self._assign_team(model_label, model, field_values)
+        self._reset_excluded_state(model_label, model, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
         return field_values, m2m_values, timestamps
 
@@ -395,6 +397,13 @@ class Importer:
         if self.target_team is None:
             raise UnresolvedForeignKey(f"{model_label}.team: the team row must be imported before its data.")
         field_values["team_id"] = self.target_team.pk
+
+    def _reset_excluded_state(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
+        """Force each RESET_REGISTRY field back to its model default. Set explicitly rather than left
+        out: a created row would pick the default up anyway, but an updated one keeps the value the
+        target already held."""
+        for name in RESET_REGISTRY.get(model_label, []):
+            field_values[name] = model._meta.get_field(name).get_default()
 
     def _collect_concrete_field(self, field, row: dict, named: set, field_values: dict, timestamps: dict) -> None:
         """Route one concrete field into ``field_values`` or ``timestamps`` (or skip it). Source
