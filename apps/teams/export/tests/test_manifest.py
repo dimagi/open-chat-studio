@@ -88,7 +88,6 @@ def test_registry_keys_resolve_to_models():
     for label in (
         *manifest.SECRET_REGISTRY,
         *manifest.EXCLUDE_REGISTRY,
-        *manifest.RESET_REGISTRY,
         *manifest.TEAM_PATH_REGISTRY,
         *IGNORED_MODELS,
     ):
@@ -142,32 +141,10 @@ def test_membership_is_embedded_not_a_standalone_resource():
 
 
 def test_registry_fields_exist_on_their_model():
-    registries = (
-        *manifest.SECRET_REGISTRY.items(),
-        *manifest.EXCLUDE_REGISTRY.items(),
-        *manifest.RESET_REGISTRY.items(),
-    )
-    for label, fields in registries:
+    for label, fields in (*manifest.SECRET_REGISTRY.items(), *manifest.EXCLUDE_REGISTRY.items()):
         model_fields = {f.name for f in _model(label)._meta.get_fields()}
         for field in fields:
             assert field in model_fields, f"{label}.{field}"
-
-
-def test_reset_fields_are_excluded_from_the_export():
-    """A reset field is one the importer must clear because the payload never carries it. A field
-    still in the payload would be overwritten from the source, and resetting it would drop it."""
-    for label, fields in manifest.RESET_REGISTRY.items():
-        excluded = manifest.EXCLUDE_REGISTRY.get(label, [])
-        for field in fields:
-            assert field in excluded, f"{label}.{field}"
-
-
-def test_reset_fields_have_a_model_default():
-    """Resetting reads the field's default, so a field without one would be reset to None and fail
-    a not-null column."""
-    for label, fields in manifest.RESET_REGISTRY.items():
-        for field in fields:
-            assert _model(label)._meta.get_field(field).has_default(), f"{label}.{field}"
 
 
 def test_get_manifest_entry_returns_matching_entry():

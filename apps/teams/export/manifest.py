@@ -123,10 +123,6 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.
     "service_providers.authprovider": ["_auth_data"],
-    # Credential verification state describes the credentials as stored on this instance: the
-    # verified flag says nothing once they are re-sealed for another team, and the stored provider
-    # response is raw error text from an external service, which has no place in an export payload.
-    "service_providers.llmprovider": ["extra_data"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
     # them stops the serializer emitting a bare pk list the importer would .set() -- Django rejects
     # that for explicit through models. CollectionFile rows (their own entry) carry the link.
@@ -142,14 +138,6 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # re-indexing the collection on the target repopulates it, and until that happens imported
     # chunks are invisible to keyword search while dense retrieval works normally.
     "files.filechunkembedding": ["search_vector"],
-}
-
-# Excluded fields the importer must also reset to their model default. Leaving a field out of the
-# payload only stops it being copied; an existing target row keeps the value it already had. For
-# state that describes the row's own contents, that value outlives what it described once the
-# contents are overwritten, so it has to be cleared rather than merely skipped.
-RESET_REGISTRY: dict[str, list[str]] = {
-    "service_providers.llmprovider": ["extra_data"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).

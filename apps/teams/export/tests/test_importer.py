@@ -178,38 +178,36 @@ def test_import_resolves_fk_to_target_pk_and_unseals_secret(store, keypair):
     assert provider.config == {"api_key": "sk-x"}
 
 
-def test_import_resets_provider_verification_state(store, keypair):
-    """``extra_data`` holds credential verification state, which describes the credentials as they
-    were stored on the source. It is excluded from the export, so a re-import that overwrites
-    ``config`` would otherwise leave the target's own verification result standing over credentials
-    it no longer describes."""
+def test_import_carries_provider_verification_state(store, keypair):
+    """``extra_data`` holds credential verification state, which travels with the credentials it
+    describes: a key the provider accepted is still that key on the target. It has to be imported
+    rather than skipped, or an existing target row keeps its own verification result standing over
+    the credentials the import just overwrote."""
     public_key, private_key = keypair
     importer = Importer(store, private_key=private_key)
     importer.import_rows("teams.team", [_team_row()])
 
-    def provider_row(api_key):
+    def provider_row(api_key, extra_data):
         return {
             "id": 5,
             "name": "OpenAI",
             "type": "openai",
             "config": seal_mod.seal({"api_key": api_key}, public_key),
+            "extra_data": extra_data,
             "created_at": PAST,
             "updated_at": PAST,
         }
 
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-first")])
+    importer.import_rows("service_providers.llmprovider", [provider_row("sk-first", {"verified_credentials": True})])
     provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
-    assert provider.extra_data == {}  # a created row starts unverified
+    assert provider.credentials_verified
 
-    provider.extra_data = {"verified_credentials": True, "verification_error": "stale reason"}
-    provider.save(update_fields=["extra_data"])
-
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-second")])
+    rejected = {"verified_credentials": False, "verification_error": "AuthenticationError: bad key"}
+    importer.import_rows("service_providers.llmprovider", [provider_row("sk-second", rejected)])
     provider.refresh_from_db()
     assert provider.config == {"api_key": "sk-second"}
-    assert provider.extra_data == {}
-    assert not provider.credentials_verified
-    assert provider.verification_error == ""
+    assert not provider.credentials_verified  # not left over from the row this one replaced
+    assert provider.verification_error == "AuthenticationError: bad key"
 
 
 def test_rerun_does_not_duplicate(store):
