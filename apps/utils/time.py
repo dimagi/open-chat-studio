@@ -18,11 +18,19 @@ def seconds_to_human(value, compact: bool = False):
     minutes = (value % 3600) // 60
     seconds = value % 60
     if compact:
-        if days:
-            return f"{days}d {hours}h"
-        if hours:
-            return f"{hours}h {minutes}m"
-        return f"{minutes}m {seconds:02d}s"
+        return _compact_duration(days, hours, minutes, seconds)
+    return _verbose_duration(days, hours, minutes, seconds)
+
+
+def _compact_duration(days: int, hours: int, minutes: int, seconds: int) -> str:
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m {seconds:02d}s"
+
+
+def _verbose_duration(days: int, hours: int, minutes: int, seconds: int) -> str:
     human_readable = ""
     if days > 0:
         human_readable += f"{days} day{'s' if days > 1 else ''}, "
