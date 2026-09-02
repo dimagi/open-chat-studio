@@ -545,7 +545,7 @@ class TestOpenAIRemoteIndexManager:
             ("ext-id-123", True, False),
         ],
     )
-    @mock.patch("apps.assistants.sync.create_files_remote")
+    @mock.patch("apps.service_providers.llm_service.index_managers.create_files_remote")
     @mock.patch("apps.service_providers.llm_service.index_managers.OpenAIRemoteIndexManager.file_exists_at_remote")
     def test_ensure_remote_file_exists(
         self,

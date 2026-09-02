@@ -6,6 +6,7 @@ import pytest
 from django.db import connections
 
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
+from apps.teams.models import Flag
 from apps.teams.utils import unset_current_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
@@ -27,6 +28,33 @@ def requires_migrations(django_db_use_migrations):
 @pytest.fixture()
 def team():
     return TeamFactory.create()
+
+
+@pytest.fixture()
+def team_flag():
+    """Enable a feature flag for one specific team.
+
+    Writes the row the way the team settings screen does: `everyone=False` plus the team M2M.
+    For a flag that should simply be on, use `waffle.testutils.override_flag` instead. Flags are
+    flushed again on teardown because waffle's cache outlives the test transaction.
+    """
+    flags = []
+
+    def _enable(flag_name, team):
+        flag, _ = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
+        if flag.everyone:
+            raise RuntimeError(
+                f"{flag_name} is already on for everyone, so pinning it to a team would not scope "
+                "anything. Drop the override_flag / everyone=True setup or use a different flag."
+            )
+        flag.teams.add(team)
+        flag.flush()
+        flags.append(flag)
+        return flag
+
+    yield _enable
+    for flag in flags:
+        flag.flush()
 
 
 @pytest.fixture()
