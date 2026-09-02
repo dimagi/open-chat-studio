@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import JSONObject
 from django.urls import reverse
@@ -141,6 +142,18 @@ class NotificationChannel(BaseTeamModel):
 
     def __str__(self):
         return f"Notifications to {self.channel_name}"
+
+    def clean(self):
+        from apps.service_providers.models import MessagingProviderType  # noqa: PLC0415 - circular import avoided
+
+        super().clean()
+        if not self.messaging_provider_id:
+            return
+        provider = self.messaging_provider
+        if provider.team_id != self.team_id or provider.type != MessagingProviderType.slack:
+            raise ValidationError(
+                {"messaging_provider": "The Slack workspace must belong to this team and be a Slack provider."}
+            )
 
 
 class EventUser(BaseTeamModel):

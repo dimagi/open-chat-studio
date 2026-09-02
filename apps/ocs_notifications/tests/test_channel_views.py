@@ -1,19 +1,30 @@
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
 
 from apps.ocs_notifications.models import NotificationChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.backends import TEAM_ADMIN_GROUP, add_user_to_team, create_default_groups
+from apps.teams.models import Flag
 from apps.utils.factories.notifications import NotificationChannelFactory, SlackMessagingProviderFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
+def _activate_flag_for_team(flag_name, team):
+    flag, _ = Flag.objects.get_or_create(name=flag_name)
+    flag.teams.add(team)
+    for key in flag.get_flush_keys():
+        cache.delete(key)
+    return flag
+
+
 @pytest.fixture()
 def admin_client(client):
     create_default_groups()
     team = TeamFactory.create()
+    _activate_flag_for_team("flag_slack_notifications", team)
     user = UserFactory.create()
     add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
     client.force_login(user)
@@ -103,3 +114,55 @@ class TestNotificationChannelViews:
         response = client.get(reverse("ocs_notifications_channels:table", args=[team.slug]))
 
         assert response.status_code == 403
+
+    def test_create_rejects_duplicate_provider(self, admin_client):
+        client, team = admin_client
+        provider = SlackMessagingProviderFactory.create(team=team)
+        NotificationChannelFactory.create(team=team, messaging_provider=provider)
+
+        response = client.post(
+            reverse("ocs_notifications_channels:new", args=[team.slug]),
+            {
+                "messaging_provider": provider.pk,
+                "channel_name": "#other",
+                "level": "1",
+                "enabled": "on",
+            },
+        )
+
+        assert response.status_code == 200
+        assert any(
+            "already has a notification channel" in error
+            for error in response.context["form"].errors["messaging_provider"]
+        )
+        assert NotificationChannel.objects.filter(team=team).count() == 1
+
+    def test_create_allows_edit_keeping_same_provider(self, admin_client):
+        client, team = admin_client
+        provider = SlackMessagingProviderFactory.create(team=team)
+        channel = NotificationChannelFactory.create(team=team, messaging_provider=provider)
+
+        response = client.post(
+            reverse("ocs_notifications_channels:edit", args=[team.slug, channel.pk]),
+            {
+                "messaging_provider": provider.pk,
+                "channel_name": "#updated",
+                "level": "1",
+                "enabled": "on",
+            },
+        )
+
+        assert response.status_code == 302
+        channel.refresh_from_db()
+        assert channel.channel_name == "#updated"
+
+    def test_views_deny_access_when_flag_disabled(self, client):
+        create_default_groups()
+        team = TeamFactory.create()
+        user = UserFactory.create()
+        add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
+        client.force_login(user)
+
+        for name in ["home", "table", "new"]:
+            response = client.get(reverse(f"ocs_notifications_channels:{name}", args=[team.slug]))
+            assert response.status_code == 403

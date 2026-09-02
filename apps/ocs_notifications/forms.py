@@ -41,6 +41,20 @@ class NotificationChannelForm(forms.ModelForm):
 
     def __init__(self, request, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.request = request
         self.fields["messaging_provider"].queryset = MessagingProvider.objects.filter(
             team=request.team, type=MessagingProviderType.slack
         )
+        if self.instance and not self.instance.team_id:
+            self.instance.team_id = request.team.id
+
+    def clean_messaging_provider(self):
+        provider = self.cleaned_data.get("messaging_provider")
+        if provider is None:
+            return provider
+        existing = NotificationChannel.objects.filter(team=self.request.team, messaging_provider=provider)
+        if self.instance and self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise forms.ValidationError("This Slack workspace already has a notification channel configured.")
+        return provider

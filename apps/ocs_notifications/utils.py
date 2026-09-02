@@ -137,13 +137,18 @@ def create_notification(
     transaction.on_commit(
         lambda: send_notification_email_async.delay(users_to_email, notification_event_id=notification_event.id)
     )
+    _dispatch_slack_notifications(notification_event, team, level)
+    return notification_event
+
+
+def _dispatch_slack_notifications(notification_event: NotificationEvent, team: Team, level: LevelChoices) -> None:
+    """Schedule Slack delivery for every channel that should receive this event."""
     for notification_channel in get_slack_notification_channels(team, level):
         transaction.on_commit(
             lambda c=notification_channel: send_slack_notification_async.delay(
                 c.id, notification_event_id=notification_event.id
             )
         )
-    return notification_event
 
 
 def get_slack_notification_channels(team: Team, event_level: LevelChoices):
@@ -154,7 +159,15 @@ def get_slack_notification_channels(team: Team, event_level: LevelChoices):
     """
     if not settings.SLACK_ENABLED or not Flag.get("flag_slack_notifications").is_active_for_team(team):
         return NotificationChannel.objects.none()
-    return NotificationChannel.objects.filter(team=team, enabled=True, level__lte=event_level)
+    from apps.service_providers.models import MessagingProviderType  # noqa: PLC0415 - circular import avoided
+
+    return NotificationChannel.objects.filter(
+        team=team,
+        enabled=True,
+        level__lte=event_level,
+        messaging_provider__team=team,
+        messaging_provider__type=MessagingProviderType.slack,
+    )
 
 
 def get_users_to_be_notified(team: Team, permissions: list[str]) -> dict:

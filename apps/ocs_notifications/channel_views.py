@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -11,10 +12,21 @@ from apps.ocs_notifications.forms import NotificationChannelForm
 from apps.ocs_notifications.models import NotificationChannel
 from apps.ocs_notifications.tables import NotificationChannelTable
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Flag
 
 
-class NotificationChannelHome(LoginAndTeamRequiredMixin, TemplateView):
+class FlagRequiredMixin:
+    flag_name = "flag_slack_notifications"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not Flag.get(self.flag_name).is_active_for_team(request.team):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
+
+
+class NotificationChannelHome(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
+    permission_required = "ocs_notifications.view_notificationchannel"
 
     def get_context_data(self, **kwargs):
         return {
@@ -25,7 +37,9 @@ class NotificationChannelHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class NotificationChannelTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class NotificationChannelTableView(
+    LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, SingleTableView
+):  # ty: ignore[invalid-method-override]
     model = NotificationChannel
     table_class = NotificationChannelTable
     template_name = "table/single_table.html"
@@ -39,7 +53,7 @@ class NotificationChannelTableView(LoginAndTeamRequiredMixin, PermissionRequired
         )
 
 
-class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, CreateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
     template_name = "generic/object_form.html"
@@ -64,7 +78,7 @@ class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMix
         return super().form_valid(form)
 
 
-class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
     template_name = "generic/object_form.html"
@@ -87,7 +101,7 @@ class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
-class DeleteNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+class DeleteNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "ocs_notifications.delete_notificationchannel"
 
     def delete(self, request, team_slug: str, pk: int):
