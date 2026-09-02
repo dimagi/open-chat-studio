@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.cost_tracking.migration_utils import load_pricing_data
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -19,5 +17,4 @@ class Migration(migrations.Migration):
         # Seed pricing for deepseek-v4-flash-vision-exp and supersede the stale deepseek-v4-flash
         # and -v4-pro rates with DeepSeek's current card. load_ai_pricing is idempotent and
         # supersedes on change, so this is safe to leave in place alongside earlier calls.
-        load_pricing_data(),
     ]
