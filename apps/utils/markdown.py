@@ -1,4 +1,5 @@
 from copy import copy
+from xml.etree.ElementTree import Element
 
 import markdown
 from django.urls import reverse
@@ -72,7 +73,7 @@ def _update_href(el):
 
     href = el.get(attr) or ""
     if href.startswith(f"{LEGACY_ASSISTANT_FILE_PREFIX}:"):
-        return _link_text(el)
+        return _unlinked(el)
 
     download_url = _file_download_url(href)
     if download_url:
@@ -85,9 +86,19 @@ def _url_attr(el):
     return {"a": "href", "img": "src"}.get(el.tag)
 
 
-def _link_text(el):
-    """The text a link or image shows once it is stripped of its href."""
-    return el.text or el.get("alt") or ""
+def _unlinked(el):
+    """A `span` holding what `el` displayed, with the link itself dropped.
+
+    Must stay an element rather than a bare string: python-markdown only resolves nested
+    inline placeholders -- backtick code and backslash escapes, which outrank `link` and are
+    already stashed by the time we run -- inside an element's text. A returned string is
+    emitted verbatim, placeholders and all.
+    """
+    span = Element("span")
+    span.text = el.text or el.get("alt") or ""
+    span.extend(list(el))
+    span.tail = el.tail
+    return span
 
 
 def _file_download_url(href):

@@ -92,26 +92,48 @@ def test_render_markdown_special_characters():
             id="short_reference_image",
         ),
         # The assistants UI and its download view were removed (#4254), so legacy
-        # `assistant_file:` references in historical messages render as plain text.
+        # `assistant_file:` references in historical messages lose their link.
         pytest.param(
             "[Link Text](assistant_file:example-team:1234:5678)",
-            "<p>Link Text</p>",
+            "<p><span>Link Text</span></p>",
             id="legacy_assistant_file_link",
         ),
         pytest.param(
             "![Image](assistant_file:example-team:1234:5678)",
-            "<p>Image</p>",
+            "<p><span>Image</span></p>",
             id="legacy_assistant_file_image",
         ),
         pytest.param(
             "[Link Text][0]\n[0]: assistant_file:example-team:1234:5678",
-            "<p>Link Text</p>",
+            "<p><span>Link Text</span></p>",
             id="legacy_assistant_file_reference_link",
         ),
         pytest.param(
             "[0]\n[0]: assistant_file:example-team:1234:5678",
-            "<p>0</p>",
+            "<p><span>0</span></p>",
             id="legacy_assistant_file_short_reference_link",
+        ),
+        pytest.param(
+            "before [x.csv](assistant_file:example-team:1234:5678) after",
+            "<p>before <span>x.csv</span> after</p>",
+            id="legacy_assistant_file_keeps_surrounding_text",
+        ),
+        # The label may hold inline markup that outranks `link` and is already stashed as a
+        # placeholder by the time the href is inspected. Unwrapping has to keep resolving it.
+        pytest.param(
+            r"[under\_score.csv](assistant_file:example-team:1234:5678)",
+            "<p><span>under_score.csv</span></p>",
+            id="legacy_assistant_file_resolves_escapes_in_label",
+        ),
+        pytest.param(
+            "[`code.py`](assistant_file:example-team:1234:5678)",
+            "<p><span><code>code.py</code></span></p>",
+            id="legacy_assistant_file_resolves_code_in_label",
+        ),
+        pytest.param(
+            "[a **b**](assistant_file:example-team:1234:5678)",
+            "<p><span>a <strong>b</strong></span></p>",
+            id="legacy_assistant_file_resolves_emphasis_in_label",
         ),
     ],
 )
@@ -125,6 +147,14 @@ def test_footnote():
     assert (
         '<a href="/a/example-team/experiments/1234/file/5678/" target="_blank" rel="noopener noreferrer">file name</a>'
     ) in result
+
+
+def test_footnote_with_legacy_assistant_file():
+    """The citation shape the assistant runnable emits, with an escape in the file name."""
+    result = render_markdown(r"Files[^0]" + "\n" + r"[^0]: [rep\_ort.csv](assistant_file:example-team:1234:5678)")
+    assert "<span>rep_ort.csv</span>" in result
+    assert "assistant_file:" not in result
+    assert "klzzwxh" not in result
 
 
 def test_render_markdown_sanitizes_unsafe_html():
