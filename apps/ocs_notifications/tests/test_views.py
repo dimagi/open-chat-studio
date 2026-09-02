@@ -6,8 +6,8 @@ from django.urls import reverse
 from django.utils import timezone
 from time_machine import travel
 
-from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
-from apps.utils.factories.notifications import EventUserFactory, NotificationEventFactory
+from apps.ocs_notifications.models import EventUser, LevelChoices, UserNotificationPreferences
+from apps.utils.factories.notifications import EventTypeFactory, EventUserFactory, NotificationEventFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 
 
@@ -403,9 +403,13 @@ class TestUserNotificationTableView:
 
     def test_event_count_reflects_the_number_of_notification_events_for_the_event_type(self, client, team_with_users):
         user = team_with_users.members.first()
-        event_user = EventUserFactory.create(user=user, team=team_with_users)
-        NotificationEventFactory.create_batch(3, team=team_with_users, event_type=event_user.event_type)
-        other_event_user = _create_notification(user=user, team=team_with_users)  # a single, unrelated event
+        error_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
+        event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=error_type)
+        NotificationEventFactory.create_batch(3, team=team_with_users, event_type=error_type)
+
+        other_error_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
+        other_event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=other_error_type)
+        NotificationEventFactory.create(team=team_with_users, event_type=other_error_type)  # a single occurrence
 
         client.force_login(user)
         session = client.session
@@ -418,6 +422,25 @@ class TestUserNotificationTableView:
         counts_by_id = {obj.id: obj.event_count for obj in response.context["table"].data}
         assert counts_by_id[event_user.id] == 3
         assert counts_by_id[other_event_user.id] == 1
+
+    def test_event_count_is_none_for_a_recurring_non_error_event(self, client, team_with_users):
+        """The recurrence badge is scoped to errors -- a recurring Info/Warning event doesn't
+        get a count, even though it recurs just as often."""
+        user = team_with_users.members.first()
+        info_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.INFO)
+        event_user = EventUserFactory.create(user=user, team=team_with_users, event_type=info_type)
+        NotificationEventFactory.create_batch(3, team=team_with_users, event_type=info_type)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        counts_by_id = {obj.id: obj.event_count for obj in response.context["table"].data}
+        assert counts_by_id[event_user.id] is None
 
     def test_explicit_filters_param_ignores_a_stale_hx_current_url_header(self, client, team_with_users):
         """Regression test for the toggle buttons: htmx only updates the address bar from
