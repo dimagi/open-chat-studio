@@ -74,6 +74,20 @@ class TestBuildToggleOptions:
         assert query["op_read"] == ["any of"]
         assert query["page"] == ["2"]
 
+    def test_an_existing_excludes_filter_is_not_read_back_as_active(self, level_filter):
+        """`level` also supports "excludes" via the dynamic-filter panel (TYPE_EXCLUSIVE_CHOICE).
+        These buttons only model "any of", so an excludes filter's values must not be treated
+        as active toggle selections -- clicking a button must not silently turn "excludes
+        Warning" into "any of Warning, Error"."""
+        request = _request("f_level=1&op_level=excludes")
+        options = build_toggle_options(level_filter, request)
+
+        assert all(opt["is_active"] is False for opt in options)
+        error_option = next(opt for opt in options if opt["label"] == "Error")
+        query = parse_qs(error_option["query_string"])
+        assert query["op_level"] == ["any of"]
+        assert query["f_level"] == ["2"]
+
 
 class TestResolveNotificationFilterParams:
     """CodeRabbit flagged that an explicit_filters request could drop a legacy-format filter by

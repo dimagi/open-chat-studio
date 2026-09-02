@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from apps.ocs_notifications.models import LevelChoices
-from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
+from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter, Operators
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 from apps.web.dynamic_filters.datastructures import (
     FilterParams,
@@ -131,11 +131,17 @@ def build_toggle_options(filter_instance: ChoiceColumnFilter, request) -> list[d
     `FilterParams`) without touching the shared filter UI other pages depend on. Multiple active
     choices combine with "any of" (OR), same as the underlying filter already supports; toggling
     off the last one drops the column's params entirely so "all" is the default state.
+
+    Only an existing "any of" filter is read back as active selections. `level`/`team` also
+    support "excludes" via the dynamic-filter panel, which these buttons can't represent -- a
+    click on top of one replaces it with a fresh "any of" selection instead of reinterpreting
+    its values as if they meant the opposite.
     """
     filter_params = resolve_notification_filter_params(request)
     active_values: set[str] = set()
     for column_filter in filter_params.get_all(filter_instance.query_param):
-        active_values.update(str(v) for v in filter_instance.parse_query_value(column_filter.value) or [])
+        if column_filter.operator == Operators.ANY_OF:
+            active_values.update(str(v) for v in filter_instance.parse_query_value(column_filter.value) or [])
 
     f_key, op_key = f"f_{filter_instance.query_param}", f"op_{filter_instance.query_param}"
     base_query = request.GET.copy()
@@ -152,7 +158,7 @@ def build_toggle_options(filter_instance: ChoiceColumnFilter, request) -> list[d
         query = base_query.copy()
         if new_values:
             query[f_key] = serialize_csv_tilde_values(sorted(new_values))
-            query[op_key] = "any of"
+            query[op_key] = Operators.ANY_OF.value
         query[EXPLICIT_FILTERS_PARAM] = "1"
 
         options.append({"label": label, "is_active": is_active, "query_string": query.urlencode()})
