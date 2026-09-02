@@ -186,7 +186,7 @@ def _has_portless(c: Context):
 
 def _get_portless_name(c: Context) -> str:
     result = c.run("portless list", hide=True, warn=True)
-    used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
+    used_names = set(re.findall(r"https?://([\w-]+)\.localhost", result.stdout)) if result.ok else set()
     name = "ocs"
     counter = 1
     while name in used_names:
