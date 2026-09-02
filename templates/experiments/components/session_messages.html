@@ -134,7 +134,7 @@
                 {{ message.created_at|date:"DATETIME_FORMAT" }}
               </time>
             </span>
-            <div class="flex items-center gap-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div class="flex items-center gap-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
               {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
               {% if message.is_ai_message %}
                 {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
