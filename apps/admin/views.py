@@ -479,6 +479,25 @@ def flag_detail(request, flag_name):
     )
 
 
+def _collect_delta_ids(deltas, field):
+    """Row IDs referenced by the `field` entry of each audit delta."""
+    ids = set()
+    for delta in deltas:
+        change = delta.get(field, {})
+        ids.update(change.get("add", []))
+        ids.update(change.get("remove", []))
+    return ids
+
+
+def _apply_delta_names(deltas, field, names, fallback):
+    """Swap the row IDs in each `field` delta for display names."""
+    for delta in deltas:
+        change = delta.get(field, {})
+        for action in ("add", "remove"):
+            if action in change:
+                change[action] = [names.get(obj_id, fallback.format(obj_id)) for obj_id in change[action]]
+
+
 @is_superuser
 def flag_history(request, flag_name):
     flag = get_object_or_404(Flag, name=flag_name)
@@ -487,42 +506,17 @@ def flag_history(request, flag_name):
         "-event_date"
     )[:50]  # Last 50 changes
 
-    # Collect all team, user and group IDs from audit event deltas
-    team_ids = set()
-    user_ids = set()
-    group_ids = set()
-
-    def _collect_ids(field, delta, id_set):
-        if field in delta:
-            for action in ["add", "remove"]:
-                if action in delta[field]:
-                    id_set.update(delta[field][action])
-
-    for event in audit_events:
-        if event.delta:
-            _collect_ids("teams", event.delta, team_ids)
-            _collect_ids("users", event.delta, user_ids)
-            _collect_ids("groups", event.delta, group_ids)
-
-    # Bulk load teams, users and groups to avoid N+1 queries
-    teams_map = {team.id: team.name for team in Team.objects.filter(id__in=team_ids)}
-    users_map = {user.id: user.get_display_name() for user in User.objects.filter(id__in=user_ids)}
-    groups_map = {group.id: group.name for group in Group.objects.filter(id__in=group_ids)}
-
-    # Transform audit event deltas to include names instead of IDs
-    def _update_delta(field, delta, display_map, default_template):
-        if field in delta:
-            for action in ["add", "remove"]:
-                if action in delta[field]:
-                    delta[field][action] = [
-                        display_map.get(obj_id, default_template.format(obj_id)) for obj_id in delta[field][action]
-                    ]
-
-    for event in audit_events:
-        if event.delta:
-            _update_delta("teams", event.delta, teams_map, "Team {}")
-            _update_delta("users", event.delta, users_map, "User {}")
-            _update_delta("groups", event.delta, groups_map, "Group {}")
+    # Audited M2M fields store row IDs; render them as names, bulk loading each
+    # model once rather than per delta.
+    deltas = [event.delta for event in audit_events if event.delta]
+    team_names = {team.id: team.name for team in Team.objects.filter(id__in=_collect_delta_ids(deltas, "teams"))}
+    user_names = {
+        user.id: user.get_display_name() for user in User.objects.filter(id__in=_collect_delta_ids(deltas, "users"))
+    }
+    group_names = {group.id: group.name for group in Group.objects.filter(id__in=_collect_delta_ids(deltas, "groups"))}
+    _apply_delta_names(deltas, "teams", team_names, "Team {}")
+    _apply_delta_names(deltas, "users", user_names, "User {}")
+    _apply_delta_names(deltas, "groups", group_names, "Group {}")
 
     return TemplateResponse(
         request,

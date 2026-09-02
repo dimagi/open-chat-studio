@@ -100,15 +100,25 @@ class TestFlagPages:
         for dropped_badge in ("Testing", "Superusers", "Staff", "Authenticated", "Rollout"):
             assert dropped_badge not in list_item
 
-    def test_history_renders_group_names_not_ids(self, superuser_client):
-        """The audit log is the tripwire for writes to neutralised fields, so a `groups`
-        delta renders the group's name, as `teams` and `users` deltas already do."""
+    @pytest.mark.parametrize(
+        ("field", "make_target"),
+        [
+            pytest.param("teams", lambda: TeamFactory.create(name="history-probe-team"), id="teams"),
+            pytest.param("users", lambda: UserFactory.create(username="history-probe-user"), id="users"),
+            pytest.param("groups", lambda: Group.objects.create(name="history-probe-group"), id="groups"),
+        ],
+    )
+    def test_history_renders_names_not_ids(self, superuser_client, field, make_target):
+        """The audit log is the tripwire for writes to neutralised fields, so every
+        audited M2M delta renders its target by name rather than by row ID."""
         flag = Flag.objects.create(name="flag_history_probe")
-        group = Group.objects.create(name="history-probe-group")
+        target = make_target()
         with enable_audit():
-            flag.groups.add(group)
+            getattr(flag, field).add(target)
 
         response = superuser_client.get(reverse("ocs_admin:flag_history", args=[flag.name]))
 
         content = response.content.decode()
-        assert "history-probe-group" in content
+        expected = target.get_display_name() if field == "users" else target.name
+        assert expected in content
+        assert f"{field.rstrip('s').title()} {target.id}" not in content
