@@ -150,4 +150,15 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
             self.all_rows, self.request.GET.get("category"), show_mcp=flag_is_active(self.request, "flag_mcp")
         )
         context["table_url"] = self.request.path
+        self._table = context["table"]
         return context
+
+    def get_template_names(self):
+        table = self._table
+        if table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET:
+            # Pagination/sort links target `closest div.table-container` with an
+            # outerHTML swap (see table/tailwind_js_pagination.html), so the response
+            # must be exactly that container -- not the filter-pill bar and wrapper
+            # around it, or each click nests another copy of them inside the last one.
+            return ["table/single_table.html"]
+        return [self.template_name]

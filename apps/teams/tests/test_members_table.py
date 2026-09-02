@@ -105,3 +105,33 @@ def test_members_table_view_applies_search_filter(client, team):
     assert response.status_code == 200
     assert b"someoneelse@example.org" in response.content
     assert b"admin@example.org" not in response.content
+
+
+@pytest.mark.django_db()
+def test_members_table_initial_load_includes_count_and_wrapper(client, team):
+    """The initial `hx-trigger="load"` request (no page/sort param) needs the full
+    fragment -- the "N of M" count text and its wrapper -- not just the bare table."""
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:members_table", args=[team.slug]))
+    assert response.status_code == 200
+    assert b"of" in response.content
+    assert b'class="overflow-x-auto"' in response.content
+
+
+@pytest.mark.django_db()
+def test_members_table_pagination_request_returns_bare_table_only(client, team):
+    """A pagination click targets `closest div.table-container` with an outerHTML swap
+    (table/tailwind_js_pagination.html), so a `?page=` request must return exactly that
+    container -- not the count text and wrapper -- or each click nests another copy of
+    them inside the previous one."""
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "1"})
+    assert response.status_code == 200
+    assert b"overflow-x-auto" not in response.content
+    assert b'class="table-container"' in response.content

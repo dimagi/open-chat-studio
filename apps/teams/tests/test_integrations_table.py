@@ -96,6 +96,39 @@ def test_integrations_table_view_filters_by_category(client, team):
 
 
 @pytest.mark.django_db()
+def test_integrations_table_initial_load_includes_filter_pills_and_wrapper(client, team):
+    """The initial `hx-trigger="load"` request (no page/sort param) needs the full
+    fragment -- the filter-pill bar and its wrapper -- not just the bare table."""
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    LlmProviderFactory(team=team, name="OpenAI Prod")
+    VoiceProviderFactory(team=team, name="Azure Voice")
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+    assert response.status_code == 200
+    assert b'class="overflow-x-auto"' in response.content
+    assert b"LLM &amp; embedding" in response.content or b"LLM & embedding" in response.content
+
+
+@pytest.mark.django_db()
+def test_integrations_table_pagination_request_returns_bare_table_only(client, team):
+    """A pagination click targets `closest div.table-container` with an outerHTML swap
+    (table/tailwind_js_pagination.html), so a `?page=` request must return exactly that
+    container -- not the filter-pill bar and wrapper -- or each click nests another copy
+    of them (with stale counts/active pill) inside the previous one."""
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    LlmProviderFactory(team=team, name="OpenAI Prod")
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"page": "1"})
+    assert response.status_code == 200
+    assert b"overflow-x-auto" not in response.content
+    assert b'class="table-container"' in response.content
+
+
+@pytest.mark.django_db()
 def test_integrations_table_edit_action_hidden_without_permission(client, team):
     member = UserFactory()
     add_user_to_team(team, member)  # no provider change/delete permissions granted
