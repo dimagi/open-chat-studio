@@ -130,7 +130,9 @@
         </div>
         <div>
           <span class="font-semibold">Sample Rate:</span>
-          <span id="trace_sample_rate-content">{{ experiment.trace_sample_rate|default_if_none:"Provider default" }}</span>
+          <span id="trace_sample_rate-content">
+            {% if experiment.trace_provider %}{{ experiment.trace_sample_rate|default_if_none:"Provider default" }}{% else %}None{% endif %}
+          </span>
         </div>
         <div>
           <span class="font-semibold">Debug Mode:</span>
