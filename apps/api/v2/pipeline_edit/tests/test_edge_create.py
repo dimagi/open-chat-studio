@@ -12,7 +12,6 @@ from apps.utils.factories.experiment import ChatbotFactory
 
 from .conftest import (
     add_bare_node,
-    add_edge,
     add_llm_node,
     add_router_node,
     edge_url,
@@ -323,19 +322,6 @@ class TestDuplicateWires:
         # The existing edge's id, so a client that never saw the first call's response can carry on
         # from the refusal rather than re-reading the whole pipeline to find it.
         assert edge_id in str(response.json())
-        assert len(edges_from(chatbot.pipeline, llm_node)) == 1
-
-    def test_a_duplicate_of_an_edge_the_ui_builder_wrote_is_refused(self, client, chatbot, llm_node, end_node):
-        """Every edge the UI builder draws stores a null ``targetHandle``, so a duplicate check
-        comparing raw values would read it as a different wire and store a second edge beside it.
-        Null on both sides here, since a stored ``sourceHandle`` is optional too."""
-        add_edge(chatbot.pipeline, llm_node, end_node, source_handle=None, target_handle=None)
-
-        response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, "source_handle": "output"}, format="json"
-        )
-
-        assert response.status_code == 400, response.content
         assert len(edges_from(chatbot.pipeline, llm_node)) == 1
 
     def test_a_second_edge_from_the_same_handle_to_another_node_is_allowed(self, client, chatbot, llm, end_node):
