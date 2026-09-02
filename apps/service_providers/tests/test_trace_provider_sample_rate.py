@@ -39,13 +39,24 @@ class TestLangfuseTraceProviderFormSampleRate:
 
 @pytest.mark.django_db()
 class TestTraceProviderGetService:
-    def test_no_override_and_no_configured_sample_rate_omits_the_key(self, team):
+    def test_no_override_and_no_configured_sample_rate_normalizes_to_1_0(self, team):
+        """A blank rate must not fall through to `Langfuse(**config)` as `None`: the SDK's own
+        constructor treats `None` as "check the LANGFUSE_SAMPLE_RATE env var, else 1.0" -- an
+        operator-set env var could silently override "leave blank to send every trace".
+        """
         provider = TraceProviderFactory.create(team=team)
 
         service = provider.get_service()
 
         assert isinstance(service, LangFuseTracer)
-        assert "sample_rate" not in service.config
+        assert service.config["sample_rate"] == 1.0
+
+    def test_none_override_with_no_configured_sample_rate_also_normalizes_to_1_0(self, team):
+        provider = TraceProviderFactory.create(team=team)
+
+        service = provider.get_service(sample_rate=None)
+
+        assert service.config["sample_rate"] == 1.0
 
     def test_configured_provider_sample_rate_flows_through_unchanged(self, team):
         provider = TraceProviderFactory.create(team=team, config={"public_key": "pk", "secret_key": "sk"})
