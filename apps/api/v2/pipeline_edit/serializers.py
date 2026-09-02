@@ -20,11 +20,11 @@ PARAM_NAMES = (
     "`/pipeline/options/` list a param draws its values from -- `source_material_id` is the param, "
     "`source_material` is the list it chooses from -- so send the param name. A name the type does "
     "not declare is dropped rather than refused, and the response reports the params the node "
-    "actually ended up holding."
+    "ended up holding."
 )
 
 #: Keys a client might reasonably try to set on a *node* that the server owns (W5). Named
-#: individually because the generic "unrecognised field" answer reads as a typo rather than as a rule.
+#: individually because the generic "unrecognised field" answer reads as a typo, not as a rule.
 SERVER_ASSIGNED_NODE_KEYS = {
     "node_id": "Node ids are assigned by the server and returned in the response; they cannot be chosen.",
     "position": "Node positions are assigned by the server; move a node in the pipeline builder instead.",
@@ -169,7 +169,7 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
     ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
     ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
-    named only when the node offers a choice -- which today is a router, and only on the source side.
+    named only when the node offers a choice -- today a router, and only on the source side.
     """
 
     server_assigned_keys = SERVER_ASSIGNED_EDGE_KEYS
@@ -187,28 +187,27 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
         help_text=(
             "Output handle on the source node. Required only when the node offers more than one: a "
             "router exposes one handle per branch (``output_0``, ``output_1``, …, mapping by index "
-            "to its ``keywords``), while every other node has a single ``output``. Handle names are "
-            "the source node's own `output_handles`, which every node write returns; "
-            "`unwired_handles` lists the ones still free."
+            "to its ``keywords``), while every other node has a single ``output``. Every node write "
+            "returns the node's `output_handles`; `unwired_handles` lists the ones still free."
         ),
     )
     target_handle = serializers.CharField(
         required=False,
         allow_null=True,
         help_text=(
-            "Input handle on the target node. Never required, and the only accepted value is "
-            "``input``: every node type has exactly that one implicit input handle, bar the Start "
-            "node, which has none at all and so cannot be a `target`."
+            "Input handle on the target node. Never required, and ``input`` is the only accepted "
+            "value: every node type has that one implicit input handle, bar the Start node, which "
+            "has none and so cannot be a `target`."
         ),
     )
 
 
 class WrittenEdgeSerializer(serializers.Serializer):
-    """An edge as a write returns it: the same field names ``GET /chatbots/{id}/inspect/`` reports under
+    """An edge as a write returns it: the field names ``GET /chatbots/{id}/inspect/`` reports under
     ``pipeline.graph.edges``, so one reader parses both.
 
-    Not the identical schema, though — inspect's handles are nullable because the pipeline builder's
-    own edges store a null ``targetHandle``, while a handle on this side is always resolved to a name.
+    Not the identical schema: inspect's handles are nullable because the pipeline builder's own edges
+    store a null ``targetHandle``, while a handle on this side is always resolved to a name.
     """
 
     id = serializers.CharField(help_text="The edge's server-assigned identity: the address DELETE takes.")

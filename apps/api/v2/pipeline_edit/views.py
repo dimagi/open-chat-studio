@@ -1,11 +1,9 @@
 """The pipeline façade's node and edge endpoints (#4140, #4141).
 
 A chatbot's pipeline is edited one node or one edge at a time rather than replaced wholesale: the
-server holds the graph and applies the change, so a client never has to reproduce a whole document to
-alter one setting, and two edits to different parts of the graph cannot overwrite each other.
-
-Every write answers with the same envelope -- what it wrote, then the state of the pipeline it wrote
-into -- so an agent building a graph never has to re-read to find out where it has got to.
+server holds the graph and applies the change, so a client never has to reproduce a whole document
+to alter one setting. Every write answers with the same envelope -- what it wrote, then the state of
+the pipeline it wrote into -- so a client never has to re-read to find out where it has got to.
 """
 
 from drf_spectacular.types import OpenApiTypes
@@ -58,14 +56,13 @@ EDGE_ID = OpenApiParameter(
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
-        "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
-        "param-level errors are nested under `params`. This covers an unrecognised body key, a "
-        "server-assigned key the client tried to set (`node_id`, `position`), and a param naming a "
-        "resource this team cannot reach.\n\n"
-        "A param the type does not declare is *not* an error: it is dropped, and the response "
-        "reports the params the node actually holds. Nor is a param whose value the type cannot "
-        "parse — that is stored and reported in `pipeline_errors`, the same as a missing required "
-        "one, so a node can be built up over several calls."
+        "The body is not one this endpoint can act on. Errors are keyed by the field at fault, with "
+        "param-level errors nested under `params`: an unrecognised body key, a server-assigned key "
+        "the client tried to set (`node_id`, `position`), or a param naming a resource this team "
+        "cannot reach.\n\n"
+        "A param the type does not declare is dropped rather than refused, and a param whose value "
+        "the type cannot parse is stored and reported in `pipeline_errors` — so a node can be built "
+        "up over several calls."
     )
 )
 FORBIDDEN = OpenApiResponse(
@@ -81,8 +78,8 @@ SERVER_MANAGED = OpenApiResponse(
         "or deleted through the API."
     )
 )
-#: The two shapes a wire body comes in. Node ids here are placeholders for ones a node write or
-#: ``/inspect/`` returned; the point of showing both is that the handle is the *only* difference.
+#: The two shapes a wire body comes in. Node ids are placeholders for ones a node write or
+#: ``/inspect/`` returned; showing both makes the point that the handle is the only difference.
 WIRE_EXAMPLES = [
     OpenApiExample(
         name="Plain node",
@@ -106,10 +103,10 @@ WIRE_EXAMPLES = [
 class PipelineFacadeView(GenericAPIView):
     """What every pipeline façade endpoint shares: the gates, and the shape of the response.
 
-    Declared once because these are the *same* gates, not merely similar ones — an auth surface split
-    across two copies is one a change can be applied to half of. Editing a chatbot's composition is a
-    *change* to the chatbot whatever the verb, so the stock ``DjangoModelPermissions`` verb map is
-    replaced rather than extended: deleting a pipeline node is not deleting the chatbot.
+    Declared once because these are the *same* gates, not merely similar ones. Editing a chatbot's
+    composition is a *change* to the chatbot whatever the verb, so the stock
+    ``DjangoModelPermissions`` verb map is replaced rather than extended: deleting a pipeline node
+    is not deleting the chatbot.
     """
 
     permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
@@ -122,15 +119,14 @@ class PipelineFacadeView(GenericAPIView):
     write_response_serializer: type[LeadsWithWhatWasWritten]
 
     def _edit(self, request, chatbot_id: str, plan) -> dict:
-        """Run one façade edit and build its response. The ``respond`` half is the same for every
-        resource; ``plan`` is the only thing that differs per endpoint."""
+        """Run one façade edit and build its response. ``plan`` is all that differs per endpoint."""
         return edit_pipeline(request, chatbot_id, plan, self._write_response)
 
     def _write_response(self, pipeline: Pipeline, written_id: str | None) -> dict:
         """The pipeline's build state, and in front of it whatever this write created or changed.
 
-        ``written_id`` is ``None`` for a delete — there is nothing left to describe — so the response
-        is the pipeline's state alone.
+        ``written_id`` is ``None`` for a delete -- there is nothing left to describe -- so the
+        response is the pipeline's state alone.
         """
         body = pipeline_state(pipeline)
         if written_id is None:
@@ -176,13 +172,11 @@ class PipelineNodeEditView(PipelineFacadeView):
         description=(
             "Add a node to the chatbot's working (draft) pipeline.\n\n"
             "`type` alone is enough: the node is created with that type's defaults, which the "
-            "response reports and which you can then change with PATCH. The node is not wired to "
+            "response reports and which you can then change with PATCH. It is not wired to "
             "anything, so it appears in `unwired_handles` until you connect it — that is advisory, "
             "not an error.\n\n"
             "The node's `node_id` and its position on the canvas are assigned by the server and "
-            "cannot be chosen. It is parked clear to the right of the nodes already there, and the "
-            "End node is moved further right if the new node reaches it, so the End node stays the "
-            "rightmost node on the canvas.\n\n"
+            "cannot be chosen.\n\n"
             "What `params` may hold depends on `type`, so the examples below show a full body for "
             "each type. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
             "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
@@ -227,16 +221,13 @@ class PipelineNodeEditView(PipelineFacadeView):
             "Editing a router's `keywords` regenerates its output handles — they are positional, so "
             "`output_0` serves `keywords[0]` — and the response carries the new list. The node's "
             "edges follow their keyword: dropping a keyword deletes the edge that served it, and a "
-            "keyword that merely moved keeps its target on whichever handle it moved to. A renamed "
-            "keyword counts as one branch gone and another new, so its edge goes and the new branch "
-            "comes back unwired. Handle names are not stable across a keyword edit, so re-read "
-            "`output_handles` after one.\n\n"
+            "renamed keyword counts as one branch gone and another new. Handle names are not stable "
+            "across a keyword edit, so re-read `output_handles` after one.\n\n"
             "What `params` may hold depends on the node's type, not on the verb: the `POST` "
             "examples name every param of each type, and the examples here are partial bodies "
-            "instead, since a PATCH writes only the keys you send. "
-            "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
-            "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
-            "params may name."
+            "instead. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
+            "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
+            "resource params may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],
@@ -304,9 +295,9 @@ class PipelineNodeEditView(PipelineFacadeView):
 class PipelineEdgeEditView(PipelineFacadeView):
     """The façade's edge endpoints: wire two nodes, unwire them.
 
-    An edge is not editable in place -- there is nothing to change but its two ends, and moving one is
-    a different wire -- so repointing a branch is a delete followed by a wire. That also means the
-    detail route offers DELETE alone, which is why stock DRF metadata suffices here where the node
+    An edge is not editable in place -- there is nothing to change but its two ends, and moving one
+    is a different wire -- so repointing a branch is a delete followed by a wire. That is also why
+    the detail route offers DELETE alone, and why stock DRF metadata suffices here where the node
     routes need ``DescribesPatch``.
     """
 
@@ -321,18 +312,12 @@ class PipelineEdgeEditView(PipelineFacadeView):
             "to another node's input.\n\n"
             "`source` and `target` are enough for most nodes: a handle you leave out means the only "
             "one the node has. A router is the exception — it exposes one handle per branch, so name "
-            "the branch to wire in `source_handle`. Both nodes keep the position they were parked "
-            "at; nothing is moved on the canvas.\n\n"
+            "the branch to wire in `source_handle`. Neither node is moved on the canvas.\n\n"
             "The edge's `id` is assigned by the server and cannot be chosen. It is the address "
-            "`DELETE .../pipeline/edges/{edge_id}/` takes, and the same id "
-            "`GET /api/v2/chatbots/{id}/inspect/` reports.\n\n"
-            "Wiring a pair that is already wired the same way is refused rather than stored twice, so "
-            "retrying a wire whose response you never saw is safe — the 400 names the edge that "
-            "already wires the pair.\n\n"
-            "A wire that leaves the *graph* wrong is not refused: it lands, and comes back in "
-            "`pipeline_errors` for you to repair. Note the two graph-level problems land in different "
-            "buckets — a cycle in `pipeline_errors.pipeline`, while an End node nothing reaches is "
-            "reported against the End node itself, under `pipeline_errors.node[<end node id>].root`."
+            "`DELETE .../pipeline/edges/{edge_id}/` takes.\n\n"
+            "Wiring a pair that is already wired the same way is refused rather than stored twice, "
+            "so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it "
+            "lands, and comes back in `pipeline_errors` for you to repair."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
@@ -347,13 +332,12 @@ class PipelineEdgeEditView(PipelineFacadeView):
                     "source node does not offer (or a missing one where the node offers a choice), a "
                     "`target_handle` that is not the target's input, a server-assigned key the client "
                     "tried to set (`id`), or an unrecognised body key.\n\n"
-                    "A duplicate edge is reported under `non_field_errors`, with this exact wording:\n\n"
+                    "A duplicate edge is reported under `non_field_errors`, with the existing edge's "
+                    "id between single quotes:\n\n"
                     "> These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was "
                     "changed.\n\n"
                     "So a client whose first attempt's response it never saw can recover the edge id "
-                    "from between the single quotes rather than re-reading the pipeline. The quotes are "
-                    "safe delimiters: an edge id is built from node ids and handle names, none of which "
-                    "can contain one.\n\n"
+                    "rather than re-reading the pipeline.\n\n"
                     "A `source` that offers no output handles at all is refused under `source`, and "
                     "the message says whether that is fixable: a router with no `keywords` set yet "
                     "needs a PATCH first, whereas the End node can never be a source."
@@ -389,7 +373,7 @@ class PipelineEdgeEditView(PipelineFacadeView):
         summary="Unwire two Pipeline Nodes",
         description=(
             "Remove an edge from the chatbot's working (draft) pipeline. Both nodes stay, and stay "
-            "where they are on the canvas — this unwires them, it does not delete anything else.\n\n"
+            "where they are on the canvas.\n\n"
             "The hole this leaves is reported rather than refused: unwiring usually breaks the path "
             "to the End node, which comes back under `pipeline_errors.node[<end node id>].root` for "
             "you to repair, and both ends of the edge reappear in `unwired_handles`.\n\n"
@@ -409,9 +393,9 @@ class PipelineEdgeEditView(PipelineFacadeView):
         return Response(self._edit(request, id, lambda flow: edge_editor.plan_delete(flow, edge_id)))
 
     def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
-        """Read from the saved graph rather than reported from the plan: the patch engine skips an add
-        whose id is already there, so reporting the planned edge would answer 201 for a wire that was
-        silently dropped."""
+        """Read from the saved graph rather than reported from the plan: the patch engine skips an
+        add whose id is already there, so reporting the planned edge would answer 201 for a wire
+        that was silently dropped."""
         stored = next((edge for edge in (pipeline.data or {}).get("edges", []) if edge["id"] == written_id), None)
         return None if stored is None else WrittenEdgeSerializer(FlowEdge(**stored)).data
 

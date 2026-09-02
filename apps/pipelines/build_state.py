@@ -69,9 +69,8 @@ def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tup
 def input_handles(node_type: str) -> list[str]:
     """The input handles a node of this type accepts an edge on.
 
-    Every type has exactly one, implicit, ``input`` handle -- bar Start, which has none: nothing runs
-    before the beginning of the pipeline, and the UI builder draws no target handle on it. A list
-    rather than a flag so a caller reads inputs and outputs the same way.
+    Every type has one implicit ``input`` handle -- bar Start, which has none. A list rather than a
+    flag so a caller reads inputs and outputs the same way.
     """
     return [] if node_type == StartNode.__name__ else [STANDARD_INPUT_NAME]
 
@@ -84,9 +83,8 @@ def node_output_handles(node: Node) -> list[dict]:
 class NoOutputHandles(StrEnum):
     """Why a node offers none, for a caller that has to explain an empty :func:`output_handles`.
 
-    Beside ``output_handles`` because it is that function's own branch structure read a second way:
-    kept apart, the two drift, and a new handle-less case silently gets whichever answer happens to
-    fall through. Which is why ``UNDETERMINED`` exists rather than a fall-through to ``TERMINAL``.
+    Beside ``output_handles`` because it reads that function's branches a second way: kept apart,
+    the two drift. Hence ``UNDETERMINED`` rather than a fall-through to ``TERMINAL``.
     """
 
     #: The End node. Nothing runs after the end of the pipeline, so nothing can be wired from it.

@@ -35,11 +35,8 @@ class FlowEdge(pydantic.BaseModel):
     def source_handle_name(self) -> str:
         """The output handle this edge leaves from, with an absent one read as the standard output.
 
-        Optional in the stored shape rather than unnamed in the pipeline builder, which does name its
-        source handles (``output``, or ``output_N`` on a router): a null or omitted one turns up on a
-        seeded or imported graph, and means what this field's own default declares. ``unwired_handles``
-        and ``graph.Edge.is_conditional`` both read it that way -- the latter from its own copy, since
-        ``graph.Edge`` is a separate model this property cannot serve.
+        The pipeline builder does name its source handles, so a null or omitted one turns up only on
+        a seeded or imported graph, and means what this field's own default declares.
         """
         return self.sourceHandle or STANDARD_OUTPUT_NAME
 
@@ -47,15 +44,14 @@ class FlowEdge(pydantic.BaseModel):
     def target_handle_name(self) -> str:
         """The input handle this edge points at, with an absent one read as the standard input.
 
-        Absent on *every* edge the pipeline builder draws, which renders its target handles with no id
-        at all -- so anything comparing stored edges has to fill it in or read two spellings of one wire.
+        Absent on *every* edge the pipeline builder draws, which renders its target handles with no
+        id at all, so anything comparing stored edges has to fill it in.
         """
         return self.targetHandle or STANDARD_INPUT_NAME
 
     @property
     def wiring(self) -> tuple[str, str, str, str]:
-        """The four values that identify this edge. Two edges sharing all four are the same wire,
-        whatever ids they carry."""
+        """The four values that identify this edge: two edges sharing all four are the same wire."""
         return (self.source, self.source_handle_name, self.target, self.target_handle_name)
 
 
@@ -113,9 +109,6 @@ def react_flow_node_type(node_type: str) -> str:
 
 def react_flow_edge_id(source: str, source_handle: str | None, target: str, target_handle: str | None) -> str:
     """The id react-flow's own ``getEdgeId`` draws for an edge with these ends.
-
-    Borrowed formula, kept beside the other borrowed react-flow conventions rather than in whichever
-    caller needs it: an edge created server-side then carries the id the editor would have given it.
 
     Not unique on its own -- it is derived from the ends, so two edges can want the same one -- so a
     caller adding to an existing graph has to check it against the ids already there.

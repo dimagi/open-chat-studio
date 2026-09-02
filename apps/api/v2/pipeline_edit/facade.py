@@ -1,9 +1,9 @@
-"""The one locked read-modify-write every pipeline façade endpoint runs (#4140, #4141, W2/W7).
+"""The locked read-modify-write every pipeline façade endpoint runs (#4140, #4141).
 
-Every façade edit is the same three steps around a different diff: lock the ``Pipeline`` row, hand
-the UI builder's own patch engine a one-item ``PipelineDiffPayload``, then persist the way the UI
-builder's save does. Reusing ``apply_pipeline_patch`` keeps the API off a second persistence path,
-and inherits its rule that removing a node removes that node's edges with it.
+Every edit is the same three steps around a different diff: lock the ``Pipeline`` row, hand the diff
+to the UI builder's own patch engine, then persist the way its save does. Reusing
+``apply_pipeline_patch`` keeps the API off a second persistence path, and inherits its rule that
+removing a node removes that node's edges with it.
 """
 
 import contextlib
@@ -30,9 +30,8 @@ UNUSED_BASE_REVISION = 0
 class PipelineEdit:
     """One façade edit: the diff to apply, and the id of the thing the response should describe.
 
-    One id rather than one field per resource kind: each view already knows which kind it serves, so
-    the only thing it needs back is *which* one, and a delete names none -- the response then reports
-    the pipeline's state alone.
+    One id rather than one field per resource kind -- each view already knows which kind it serves.
+    A delete names none, and the response then reports the pipeline's state alone.
     """
 
     diff: PipelineDiffPayload
@@ -52,16 +51,14 @@ def edit_pipeline(
 ) -> dict:
     """Apply one façade edit to the chatbot's working pipeline, under a row lock.
 
-    ``plan`` is handed the current graph as a :class:`~apps.pipelines.flow.Flow` and returns the
-    edit to make. It runs inside the lock, so what it reads is what gets written.
-
-    ``respond`` runs inside the lock too, so that a body that cannot be built takes the write down
-    with it: building it after the commit is how a node the server could not parse used to persist
-    and then 500 every later read of the pipeline.
+    ``plan`` is handed the current graph and returns the edit to make. ``respond`` builds the
+    response body. Both run inside the lock: what ``plan`` reads is what gets written, and a body
+    that cannot be built takes the write down with it, rather than persisting a node the server
+    cannot parse and then 500ing on every later read of the pipeline.
 
     The chatbot lookup and the permission check sit outside the transaction: neither writes, and a
-    404 or a 403 has no reason to open one. Nothing is lost by moving them out -- the lock is on the
-    ``Pipeline`` row, and ``_locked_pipeline`` restates the team boundary under it.
+    404 or a 403 has no reason to open one. The lock is on the ``Pipeline`` row, and
+    ``_locked_pipeline`` restates the team boundary under it.
     """
     chatbot = get_working_chatbot(request.team, public_id)
     enforce_application_chatbot_write(request, chatbot)
@@ -114,10 +111,10 @@ def _persist(pipeline: Pipeline, graph: dict, diff: PipelineDiffPayload) -> None
     else:
         # An edge-only diff cannot touch a node row: ``_collect_node_data`` maps every node to
         # membership-only, and ``update_nodes_from_data`` writes nothing for those. Skipping it keeps
-        # its savepoint and membership SELECT out of the lock, and -- the larger saving -- leaves the
-        # prefetched ``node_set`` intact for the build state that follows, where ``clear_node_caches``
-        # would have thrown away the prefetch the locked read just paid for and made it re-read every
-        # row. Dropping ``flow_data`` is insurance: it is stale from here, and nothing reads it.
+        # its savepoint and membership SELECT out of the lock, and leaves the prefetched ``node_set``
+        # intact for the build state that follows, where ``clear_node_caches`` would have thrown away
+        # the prefetch the locked read just paid for. Dropping ``flow_data`` is insurance: it is
+        # stale from here, and nothing reads it.
         with contextlib.suppress(AttributeError):  # nothing cached if it was never read
             del pipeline.flow_data
 
@@ -125,8 +122,8 @@ def _persist(pipeline: Pipeline, graph: dict, diff: PipelineDiffPayload) -> None
 def _changes_node_rows(nodes: NodeDiff) -> bool:
     """Whether this diff can touch a ``Node`` row at all.
 
-    Only the edge endpoints ever produce a diff that cannot -- every node plan carries an add, an
-    update or a delete. Compared against an empty diff rather than testing the three lists, so a
-    fourth kind of node change added to ``NodeDiff`` is covered without editing this.
+    Only the edge endpoints ever produce a diff that cannot. Compared against an empty diff rather
+    than testing the three lists, so a fourth kind of node change added to ``NodeDiff`` is covered
+    without editing this.
     """
     return nodes != NodeDiff()

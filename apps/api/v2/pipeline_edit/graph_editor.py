@@ -31,7 +31,7 @@ from .references import check_references
 OutputHandles = dict[str, str | None]
 
 #: How far right of the rightmost node a new one is parked, and the row it is parked on. The step is
-#: about a node's width, so a parked node clears the one before it rather than half covering it.
+#: about a node's width, so a parked node clears the one before it.
 PARKING_STEP_X = 400
 PARKING_Y = 200
 
@@ -50,10 +50,8 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     """Add a node of ``node_type`` to ``flow``.
 
     The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the UI builder's own
-    ``getNodeId`` produces, so an API-built graph is indistinguishable from a hand-built one.
-
-    Params are already checked by the time this runs -- the type comes from the request body, so
-    nothing here has to wait on the graph.
+    ``getNodeId`` produces. Params are already checked by the time this runs -- the type comes from
+    the request body, so nothing here has to wait on the graph.
     """
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
     # `get_node_type_schema` has already refused any other name, so this cannot come back None.
@@ -79,10 +77,9 @@ def plan_update(flow: Flow, team: Team, node_id: str, label: str | None, params:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
-    changing one setting does not mean resending the whole node.
-
-    An edit that changes which output handles the node offers takes that node's edges with it -- see
-    :func:`_rewired_edges`. Start and End are refused outright, label-only edits included.
+    changing one setting does not mean resending the whole node. An edit that changes which output
+    handles the node offers takes that node's edges with it -- see :func:`_rewired_edges`. Start and
+    End are refused outright, label-only edits included.
     """
     node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
@@ -138,8 +135,7 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. A copy because an
     edit changes the node in place and hands it back as the diff, which must not also change the
     graph it was read from. The content comes back separately because ``FlowNode.data`` is optional
-    -- the stored blob is layout-only (ADR-0049) -- while a node from ``flow_data`` has had its
-    content rebuilt from its row.
+    -- the stored blob is layout-only (ADR-0049) -- while a ``flow_data`` node has its content.
     """
     for node in flow.nodes:
         if node.id == node_id:
@@ -152,8 +148,8 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
     """The params a node's row actually holds, out of the graph's copy of them.
 
     ``Node.to_flow_node`` merges the resource-id mirror into *every* node type's params, so the graph
-    shows a ``CodeNode`` carrying ``llm_provider_id`` and six others it does not declare. Merging
-    that back would write those keys to the row on any edit, label-only ones included.
+    shows a ``CodeNode`` carrying ``llm_provider_id`` and others it does not declare. Merging those
+    back would write them to the row on any edit, label-only ones included.
     """
     node_class = resolve_node_class(content.type)
     declared = set(node_class.model_fields) if node_class is not None else set()
@@ -181,10 +177,9 @@ def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: d
     """The params a new node starts life with: the type's defaults, then what the client sent.
 
     The defaults are written to the row rather than only reported -- ``update_nodes_from_data``
-    stores params verbatim, so anything not written here simply is not there on the next read.
-    ``name`` is required and has no default, so the server supplies the node id, as the UI builder
-    does. Run through the model on the way out, the same as an edit is, so a create and a later PATCH
-    of the same value store the same thing.
+    stores params verbatim, so anything not written here is not there on the next read. ``name`` is
+    required and has no default, so the server supplies the node id, as the UI builder does. Run
+    through the model on the way out, so a create and a later PATCH of one value store the same thing.
     """
     defaults = {
         field_name: field.get_default(call_default_factory=True)
@@ -198,9 +193,8 @@ def parking_position(flow: Flow) -> dict:
     """Where a node with no wiring goes: clear to the right of every node already placed, bar the
     End node, which is moved out of the way instead (see :func:`_reparked_end_nodes`).
 
-    Positions are cosmetic — they exist so a human opening the UI builder can read the graph.
-    Placing a node beside the source it is wired to is a later refinement (W11); until then this
-    only has to avoid stacking nodes.
+    Positions are cosmetic, so this only has to avoid stacking nodes; placing a node beside the
+    source it is wired to is a later refinement (W11).
     """
     placed = [node for node in flow.nodes if node.type != REACT_FLOW_END_TYPE]
     rightmost = max((node.position.get("x") or 0 for node in placed), default=0)
@@ -227,9 +221,8 @@ def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
     """The End nodes a node parked at ``new_node_x`` has caught up with, moved clear of it.
 
     The End node has to stay rightmost: a node level with it or past it reads as a step after the
-    end. One already clear to the right is left where someone put it, and only its x ever moves.
-
-    The move carries content because that is the only node diff ``apply_pipeline_patch`` writes
+    end. One already clear to the right is left where someone put it, and only its x ever moves. The
+    move carries content because an update is the only node diff ``apply_pipeline_patch`` writes
     position columns for, with params narrowed as an edit's are (see :func:`stored_params`).
     """
     moved = []
@@ -264,11 +257,11 @@ def _rewired_edges(flow: Flow, node_id: str, before: OutputHandles, after: Outpu
     """What an edit that changed a node's output handles does to the edges leaving it.
 
     Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
-    keywords renumbers the third rather than freeing a slot -- going by position alone would hand
-    the third branch's target to the second. So old handles are matched to new ones by branch label:
-    an edge follows its branch wherever it moved, and a branch that is gone takes its edge with it,
-    as the UI builder's ``deleteKeyword`` does. An edge already stranded when the edit arrived stays,
-    and stays reported in ``errors.edge``.
+    keywords renumbers the third rather than freeing a slot: going by position alone would hand the
+    third branch's target to the second. Old handles are matched to new ones by branch label instead
+    -- an edge follows its branch wherever it moved, and a branch that is gone takes its edge with
+    it, as the UI builder's ``deleteKeyword`` does. An edge already stranded when the edit arrived
+    stays, and stays reported in ``errors.edge``.
     """
     moved_to = _handle_remap(before, after)
     update: list[FlowEdge] = []
@@ -289,7 +282,7 @@ def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]
     """Where each handle the node used to offer has ended up, keyed by the handle it was.
 
     A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts as
-    a removal, since inheriting the old branch's target would wire the new one somewhere nobody chose.
+    a removal -- inheriting the old branch's target would wire the new one somewhere nobody chose.
     """
     if _labels_are_distinct(before) and _labels_are_distinct(after):
         destinations = {label: handle for handle, label in after.items()}
