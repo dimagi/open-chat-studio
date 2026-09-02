@@ -28,7 +28,7 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+    rev: v0.16.4
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
