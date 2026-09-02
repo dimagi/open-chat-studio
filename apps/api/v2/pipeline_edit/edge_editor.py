@@ -13,7 +13,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
 from apps.pipelines.build_state import NoOutputHandles, input_handles, output_handles, why_no_output_handles
-from apps.pipelines.flow import EdgeDiff, FlowEdge, FlowNode, FlowNodeData, react_flow_edge_id
+from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData, react_flow_edge_id
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
@@ -24,7 +24,7 @@ Wiring = tuple[str, str, str, str]
 
 
 def plan_create(
-    flow: dict, source: str, target: str, source_handle: str | None, target_handle: str | None
+    flow: Flow, source: str, target: str, source_handle: str | None, target_handle: str | None
 ) -> PipelineEdit:
     """Wire ``source`` to ``target``.
 
@@ -54,19 +54,19 @@ def plan_create(
     return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=[edge])), written_id=edge.id)
 
 
-def plan_delete(flow: dict, edge_id: str) -> PipelineEdit:
+def plan_delete(flow: Flow, edge_id: str) -> PipelineEdit:
     """Remove one edge, leaving both nodes it joined exactly where they are.
 
     Edge ids are addresses, so a wrong one is a wrong URL rather than a bad body -- and a *repeated*
     delete gets that same 404, which is what makes an unwire safe to retry: the second call reports the
     edge already gone rather than disturbing the graph the first call left.
     """
-    if edge_id not in {edge["id"] for edge in flow.get("edges", [])}:
+    if edge_id not in {edge.id for edge in flow.edges}:
         raise NotFound(f"This pipeline has no edge '{edge_id}'.")
     return PipelineEdit(diff=graph_diff(edges=EdgeDiff(delete=[edge_id])))
 
 
-def _refuse_duplicate(flow: dict, wiring: Wiring) -> None:
+def _refuse_duplicate(flow: Flow, wiring: Wiring) -> None:
     """Refuse a wire the graph already holds, naming the edge that holds it.
 
     Two edges wiring the same pair from the same handle are one edge said twice: the pipeline follows
@@ -75,8 +75,7 @@ def _refuse_duplicate(flow: dict, wiring: Wiring) -> None:
     repeat leaves the graph exactly as the first call left it -- and the existing edge's id is in the
     refusal so a client that never saw the first response can carry on without re-reading the graph.
     """
-    for stored in flow.get("edges", []):
-        edge = FlowEdge(**stored)
+    for edge in flow.edges:
         if edge.wiring == wiring:
             raise serializers.ValidationError(
                 {
@@ -87,7 +86,7 @@ def _refuse_duplicate(flow: dict, wiring: Wiring) -> None:
             )
 
 
-def _endpoints(flow: dict, source: str, target: str) -> tuple[FlowNodeData, FlowNodeData]:
+def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, FlowNodeData]:
     """The content of the two nodes the edge names, or a 400 naming every field at fault.
 
     400 rather than the 404 a wrong node id in a *path* gets: an endpoint is a field of the body, so
@@ -99,7 +98,7 @@ def _endpoints(flow: dict, source: str, target: str) -> tuple[FlowNodeData, Flow
     Both are reported at once rather than one per call, since a client working from a stale read of
     the graph is as likely to have both wrong as one.
     """
-    nodes = {node["id"]: node for node in flow.get("nodes", [])}
+    nodes = {node.id: node for node in flow.nodes}
     missing = {
         field: f"This pipeline has no node '{node_id}'."
         for field, node_id in (("source", source), ("target", target))
@@ -109,8 +108,8 @@ def _endpoints(flow: dict, source: str, target: str) -> tuple[FlowNodeData, Flow
         raise serializers.ValidationError(missing)
     # `flow_data` rebuilds every node's content from its row, so `data` is always populated.
     return (
-        cast(FlowNodeData, FlowNode(**nodes[source]).data),
-        cast(FlowNodeData, FlowNode(**nodes[target]).data),
+        cast(FlowNodeData, nodes[source].data),
+        cast(FlowNodeData, nodes[target].data),
     )
 
 
@@ -208,7 +207,7 @@ def _target_handle(content: FlowNodeData, requested: str | None) -> str:
     return requested
 
 
-def _unused_edge_id(flow: dict, wiring: Wiring) -> str:
+def _unused_edge_id(flow: Flow, wiring: Wiring) -> str:
     """An edge id no edge in this graph already has.
 
     The base is :func:`~apps.pipelines.flow.react_flow_edge_id` over these four values, which keeps an
@@ -221,5 +220,5 @@ def _unused_edge_id(flow: dict, wiring: Wiring) -> str:
     is drawn; the draw itself, and the bound on it, are :func:`.ids.with_free_suffix`.
     """
     base = react_flow_edge_id(*wiring)
-    taken = {edge["id"] for edge in flow.get("edges", [])}
+    taken = {edge.id for edge in flow.edges}
     return base if base not in taken else with_free_suffix(base, taken)

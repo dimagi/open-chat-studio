@@ -10,6 +10,7 @@ from apps.pipelines.build_state import output_handles
 from apps.pipelines.flow import (
     REACT_FLOW_END_TYPE,
     EdgeDiff,
+    Flow,
     FlowEdge,
     FlowNode,
     FlowNodeData,
@@ -45,7 +46,7 @@ class NodeIsServerManaged(APIException):
     status_code = status.HTTP_409_CONFLICT
 
 
-def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Add a node of ``node_type`` to ``flow``.
 
     The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the UI builder's own
@@ -74,7 +75,7 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
     return PipelineEdit(diff=graph_diff(nodes=NodeDiff(add=[node], update=end_nodes)), written_id=node_id)
 
 
-def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+def plan_update(flow: Flow, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
@@ -103,7 +104,7 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node]), edges=edges), written_id=node_id)
 
 
-def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
+def plan_delete(flow: Flow, node_id: str) -> PipelineEdit:
     """Remove a node, and with it every edge that named it.
 
     The edges go because the patch engine culls them: an edge pointing at a node that no longer
@@ -131,16 +132,18 @@ def refuse_if_server_managed(node_type: str) -> None:
         )
 
 
-def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
-    """The graph's node with this id, and its content, or a 404.
+def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
+    """A copy of the graph's node with this id, and its content, or a 404.
 
-    Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. The content comes
-    back separately because ``FlowNode.data`` is optional -- the stored blob is layout-only
-    (ADR-0049) -- while a node from ``flow_data`` has had its content rebuilt from its row.
+    Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. A copy because an
+    edit changes the node in place and hands it back as the diff, which must not also change the
+    graph it was read from. The content comes back separately because ``FlowNode.data`` is optional
+    -- the stored blob is layout-only (ADR-0049) -- while a node from ``flow_data`` has had its
+    content rebuilt from its row.
     """
-    for node in flow.get("nodes", []):
-        if node["id"] == node_id:
-            found = FlowNode(**node)
+    for node in flow.nodes:
+        if node.id == node_id:
+            found = node.model_copy(deep=True)
             return found, cast(FlowNodeData, found.data)
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
@@ -191,7 +194,7 @@ def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: d
     return node_params(node_class, node_id, {**defaults, "name": node_id, **supplied})
 
 
-def parking_position(flow: dict) -> dict:
+def parking_position(flow: Flow) -> dict:
     """Where a node with no wiring goes: clear to the right of every node already placed, bar the
     End node, which is moved out of the way instead (see :func:`_reparked_end_nodes`).
 
@@ -199,8 +202,8 @@ def parking_position(flow: dict) -> dict:
     Placing a node beside the source it is wired to is a later refinement (W11); until then this
     only has to avoid stacking nodes.
     """
-    placed = [node for node in flow.get("nodes", []) if node.get("type") != REACT_FLOW_END_TYPE]
-    rightmost = max((node.get("position", {}).get("x") or 0 for node in placed), default=0)
+    placed = [node for node in flow.nodes if node.type != REACT_FLOW_END_TYPE]
+    rightmost = max((node.position.get("x") or 0 for node in placed), default=0)
     return {"x": rightmost + PARKING_STEP_X, "y": PARKING_Y}
 
 
@@ -211,16 +214,16 @@ def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
     return cast(NodeSchema, node_class.model_config["json_schema_extra"])
 
 
-def _unused_node_id(flow: dict, node_type: str) -> str:
+def _unused_node_id(flow: Flow, node_type: str) -> str:
     """A node id no node in this graph already has.
 
     A node always takes a suffix -- the type alone is not an id -- so this is :func:`.ids.with_free_suffix`
     straight, which is also where the bound on the draw and the reason for it live.
     """
-    return with_free_suffix(node_type, {node["id"] for node in flow.get("nodes", [])})
+    return with_free_suffix(node_type, {node.id for node in flow.nodes})
 
 
-def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
+def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
     """The End nodes a node parked at ``new_node_x`` has caught up with, moved clear of it.
 
     The End node has to stay rightmost: a node level with it or past it reads as a step after the
@@ -230,14 +233,14 @@ def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
     position columns for, with params narrowed as an edit's are (see :func:`stored_params`).
     """
     moved = []
-    for stored in flow.get("nodes", []):
-        node = FlowNode(**stored)
+    for node in flow.nodes:
         if not _is_overtaken_end_node(node, new_node_x):
             continue
-        content = cast(FlowNodeData, node.data)
+        reparked = node.model_copy(deep=True)
+        reparked.position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
+        content = cast(FlowNodeData, reparked.data)
         content.params = stored_params(content)
-        position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
-        moved.append(node.model_copy(update={"position": position}))
+        moved.append(reparked)
     return moved
 
 
@@ -257,7 +260,7 @@ def _output_handles(content: FlowNodeData) -> OutputHandles:
     return {handle["handle"]: handle["label"] for handle in output_handles(content.type, content.params, content.id)}
 
 
-def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:
+def _rewired_edges(flow: Flow, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:
     """What an edit that changed a node's output handles does to the edges leaving it.
 
     Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
@@ -270,8 +273,7 @@ def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: Outpu
     moved_to = _handle_remap(before, after)
     update: list[FlowEdge] = []
     delete: list[str] = []
-    for stored in flow.get("edges", []):
-        edge = FlowEdge(**stored)
+    for edge in flow.edges:
         handle = edge.source_handle_name
         if edge.source != node_id or handle not in before:
             continue

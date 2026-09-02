@@ -17,7 +17,7 @@ from rest_framework.generics import get_object_or_404
 from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_write
-from apps.pipelines.flow import EdgeDiff, NodeDiff, PipelineDiffPayload
+from apps.pipelines.flow import EdgeDiff, Flow, NodeDiff, PipelineDiffPayload
 from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.patching import apply_pipeline_patch
 
@@ -47,14 +47,13 @@ def graph_diff(nodes: NodeDiff | None = None, edges: EdgeDiff | None = None) -> 
 def edit_pipeline(
     request,
     public_id: str,
-    plan: Callable[[dict], PipelineEdit],
+    plan: Callable[[Flow], PipelineEdit],
     respond: Callable[[Pipeline, str | None], dict],
 ) -> dict:
     """Apply one façade edit to the chatbot's working pipeline, under a row lock.
 
-    ``plan`` is handed the current graph (``Pipeline.flow_data`` — nodes rebuilt from their rows,
-    since ``Pipeline.data`` no longer lists them, ADR-0049) and returns the edit to make. It runs
-    inside the lock, so what it reads is what gets written.
+    ``plan`` is handed the current graph as a :class:`~apps.pipelines.flow.Flow` and returns the
+    edit to make. It runs inside the lock, so what it reads is what gets written.
 
     ``respond`` runs inside the lock too, so that a body that cannot be built takes the write down
     with it: building it after the commit is how a node the server could not parse used to persist
@@ -68,9 +67,11 @@ def edit_pipeline(
     enforce_application_chatbot_write(request, chatbot)
     with transaction.atomic():
         pipeline = _locked_pipeline(chatbot)
-        flow = pipeline.flow_data
-        edit = plan(flow)
-        _persist(pipeline, flow, edit.diff)
+        # Nodes are rebuilt from their rows, since ``Pipeline.data`` no longer lists them (ADR-0049).
+        # The patch engine takes the raw graph, so the planners get a parsed view of the same read.
+        graph = pipeline.flow_data
+        edit = plan(Flow(**graph))
+        _persist(pipeline, graph, edit.diff)
         return respond(pipeline, edit.written_id)
 
 
@@ -94,14 +95,14 @@ def _locked_pipeline(chatbot: Experiment) -> Pipeline:
     )
 
 
-def _persist(pipeline: Pipeline, flow: dict, diff: PipelineDiffPayload) -> None:
+def _persist(pipeline: Pipeline, graph: dict, diff: PipelineDiffPayload) -> None:
     """Merge ``diff`` into the graph and save it, exactly as ``_handle_pipeline_patch`` does.
 
     ``edit_revision`` is bumped for the UI builder's benefit: its own PATCH refuses a save whose
     ``base_revision`` has moved on, so leaving the revision alone would let an open UI builder
     session overwrite this edit without ever seeing a conflict.
     """
-    edge_data, node_data = apply_pipeline_patch(flow, diff)
+    edge_data, node_data = apply_pipeline_patch(graph, diff)
     pipeline.data = edge_data.model_dump()
     pipeline.edit_revision += 1
     pipeline.save(update_fields=["data", "edit_revision"])
