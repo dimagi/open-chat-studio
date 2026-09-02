@@ -26,7 +26,6 @@ from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.exceptions import ConnectionTestNotSupportedError, NoTestableModelError
 from apps.service_providers.forms import (
     LlmProviderModelForm,
     PricingOverrideForm,
@@ -42,7 +41,6 @@ from apps.service_providers.models import (
     MessagingProviderType,
     VoiceProvider,
     VoiceProviderType,
-    classify_connection_test_failure,
 )
 from apps.utils.deletion import get_related_objects
 
@@ -214,9 +212,21 @@ def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
 
 
 def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bool:
-    """Whether the automatic connection test should run for this save: only LLM providers,
-    and only when credentials actually changed (or it's a new create)."""
-    return isinstance(obj, LlmProvider) and _has_config_changed(is_create, old_config, obj)
+    """Whether the automatic connection test should run for this save.
+
+    Only LLM provider types that have a check to run, and then only when there is something
+    to find out: the credentials changed, or they have never passed a check. That second
+    clause is what keeps a failed check retryable - saving again re-runs it, with no need to
+    edit a credential to force it.
+    """
+    if not isinstance(obj, LlmProvider) or not obj.supports_connection_test:
+        return False
+    return _has_config_changed(is_create, old_config, obj) or not obj.credentials_verified
+
+
+def _can_verify_credentials(provider_type, subtype) -> bool:
+    """Whether credentials for this provider type can be verified at all."""
+    return provider_type == ServiceProvider.llm and subtype.supports_connection_test
 
 
 def _should_run_post_create_hook(obj, is_create: bool) -> bool:
@@ -295,9 +305,9 @@ class CreateServiceProvider(
         """Saves the provider and returns (obj, had_connection_test_warning).
 
         The second value tells get_success_url() whether the automatic connection test just
-        failed - if so, it should send the user back to this provider's own edit page (where
-        the "Test Connection" button the warning message points at actually lives) instead
-        of the team list every other save redirects to.
+        failed - if so, it sends the user to this provider's own edit page, where the banner
+        carrying the provider's own response is, instead of the team list every other save
+        redirects to.
         """
         with transaction.atomic():
             obj = primary_form.save(commit=False)
@@ -323,17 +333,26 @@ class CreateServiceProvider(
         # the save and the test being two separate steps.
         had_connection_test_warning = False
         if _should_test_connection(obj, is_create, old_config):
-            for warning in obj.run_connection_test_hook():
+            warnings, _detail = obj.run_connection_test_hook()
+            for warning in warnings:
                 messages.warning(request, warning)
                 had_connection_test_warning = True
         for warning in config_form.warnings:
             messages.warning(request, warning)
         return obj, had_connection_test_warning
 
-    def _button_text(self, instance) -> str:
-        if instance:
-            return "Update"
-        return "Create and Test" if self.provider_type == ServiceProvider.llm else "Create"
+    def _button_text(self, instance, subtype) -> str:
+        """Says up front whether saving will also verify credentials.
+
+        On an existing provider that is the stored flag; the template flips the label
+        reactively on top of this when the user edits a credential field.
+        """
+        verb = "Update" if instance else "Create"
+        if not _can_verify_credentials(self.provider_type, subtype):
+            return verb
+        if instance and instance.credentials_verified:
+            return verb
+        return f"{verb} and Verify"
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {
@@ -345,7 +364,7 @@ class CreateServiceProvider(
             "title": f"Edit {instance.name}" if instance else self.provider_type.label,
             # For an existing LLM provider this is only the pre-Alpine-hydration default -
             # the template overrides it reactively based on whether credentials changed.
-            "button_text": self._button_text(instance),
+            "button_text": self._button_text(instance, subtype),
             "active_tab": "manage-team",
             "active_provider_tab": _active_provider_tab(self.request),
             "can_view_usages": self.request.user.has_perm(self.provider_type.get_permission("view")),
@@ -362,22 +381,16 @@ class CreateServiceProvider(
                     "pk": instance.pk,
                 },
             )
-        if self.provider_type == ServiceProvider.llm and instance:
-            ctx["test_llm_connection_url"] = reverse(
-                "service_providers:test_llm_connection",
-                kwargs={
-                    "team_slug": self.request.team.slug,
-                    "provider_type": "llm",
-                    "pk": instance.pk,
-                },
-            )
         if isinstance(instance, MessagingProvider) and instance.type == MessagingProviderType.meta_cloud_api:
             ctx["whatsapp_status_url"] = reverse(
                 "service_providers:whatsapp_status",
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
         if self.provider_type == ServiceProvider.llm:
+            ctx["can_verify_credentials"] = bool(instance) and _can_verify_credentials(self.provider_type, subtype)
             ctx["new_model_form"] = LlmProviderModelForm(self.request.team)
+            if instance:
+                ctx["verification_error"] = instance.verification_error
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
 
@@ -662,36 +675,6 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
-
-
-@require_POST
-@login_and_team_required
-@permission_required("service_providers.change_llmprovider", raise_exception=True)
-def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
-    """Run a manual connection test for an LLM provider and redirect back to its edit page with the result."""
-    if provider_type != ServiceProvider.llm.slug:
-        raise Http404(f"Unsupported provider type: {provider_type}")
-    provider = get_object_or_404(LlmProvider, team=request.team, pk=pk)
-    try:
-        provider.test_connection()
-    except NoTestableModelError:
-        messages.warning(request, "No models configured to test. Add a model first.")
-    except ConnectionTestNotSupportedError:
-        messages.info(request, "Connection testing isn't supported for this provider type.")
-    except Exception as exc:
-        log.exception("LLM connection test failed for provider %s", pk)
-        match classify_connection_test_failure(exc):
-            case "retryable":
-                messages.warning(
-                    request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
-                )
-            case "permission":
-                messages.error(request, "Test failed. Check your credentials and try again.")
-            case _:
-                messages.error(request, "Test failed due to a connection issue on the provider's side. Try again soon.")
-    else:
-        messages.success(request, "Connection test succeeded.")
-    return redirect("service_providers:edit", team_slug=team_slug, provider_type=ServiceProvider.llm.slug, pk=pk)
 
 
 def _sync_in_flight(provider: MessagingProvider) -> bool:

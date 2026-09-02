@@ -2,7 +2,7 @@ import dataclasses
 import logging
 from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
@@ -106,6 +106,16 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return self.additional_config.get("max_vector_stores")
 
     @property
+    def supports_connection_test(self) -> bool:
+        """Whether this type has a chat endpoint a credential check could reach.
+
+        Voyage AI is embeddings-only, so there is no request to send, nothing the user could
+        do to make it testable, and no verification state worth keeping for it. Lives on the
+        type rather than the row because the create page has a type and no row yet.
+        """
+        return self != LlmProviderTypes.voyage
+
+    @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
         from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
 
@@ -171,74 +181,15 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
 
 CONNECTION_TEST_TIMEOUT_SECONDS = 10
+# A provider is free to return a response of any size, and this is rendered on the page.
+CONNECTION_ERROR_DETAIL_LIMIT = 2000
+VERIFIED_CREDENTIALS_KEY = "verified_credentials"
+VERIFICATION_ERROR_KEY = "verification_error"
 
 
-def classify_connection_test_failure(exc: Exception) -> Literal["retryable", "permission", "connection"]:
-    """Categorize a test_connection() failure for a user-facing message.
-
-    Only called for failures that aren't already handled as NoTestableModelError or
-    ConnectionTestNotSupportedError (callers check those first, since they're expected
-    setup state, not a test failure) - everything else falls into one of three buckets:
-
-    "retryable": a rate limit or timeout. Checked first and deliberately not folded into
-    the status-code check below - a 429 is technically in the 4xx range, but "check your
-    credentials" would be the wrong thing to tell a user who just got rate-limited.
-
-    "permission": the request never got a valid answer because what we sent was wrong -
-    either the saved provider configuration itself is invalid (ServiceProviderConfigError,
-    raised before any network call is made) or the provider rejected it outright (an
-    HTTP 4xx-equivalent status).
-
-    "connection": everything else - a provider or network-side failure (HTTP 5xx-equivalent,
-    or no status code at all, e.g. a raw connection error).
-
-    Duck-types the status code so the permission/connection split works across every
-    provider without importing any SDK here: OpenAI (and every OpenAI-compatible type built
-    on it) and Anthropic expose `.status_code`; Google's exceptions expose `.code` with the
-    same HTTP-equivalent numbering instead. Checks `exc.__cause__`/`__context__` too, since
-    at least one integration (Gemini, via langchain_google_genai) catches the real,
-    status-bearing SDK exception and re-raises its own wrapper around it with `from e` -
-    the wrapper itself carries no status, only the exception it chained still does. The
-    retryable check does need the SDKs (to reuse retry.py's `should_retry_exception`, and
-    to recognize provider-SDK timeouts it doesn't cover), so it's a local import here, same
-    reasoning as elsewhere in this file: avoids loading heavy langchain/provider deps at
-    Django startup.
-    """
-    import openai  # noqa: PLC0415 - heavy lib, slow startup
-    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
-
-    from apps.service_providers.llm_service.retry import should_retry_exception  # noqa: PLC0415
-
-    if should_retry_exception(exc) or isinstance(exc, (openai.APITimeoutError, google_exceptions.DeadlineExceeded)):
-        return "retryable"
-
-    if isinstance(exc, ServiceProviderConfigError):
-        return "permission"
-
-    status = _extract_status_code(exc)
-    if isinstance(status, int) and 400 <= status < 500:
-        return "permission"
-
-    return "connection"
-
-
-def _extract_status_code(exc: Exception) -> int | None:
-    """Duck-types a status code off exc, falling back to its __cause__/__context__.
-
-    Verified against the actual installed packages, not assumed: OpenAI, Azure, Groq,
-    Perplexity, DeepSeek, MiniMax (all via langchain_openai), Anthropic, and Google Vertex
-    AI all let the original, status-bearing SDK exception propagate unwrapped. Gemini (via
-    langchain_google_genai) is the one that doesn't - it catches
-    google.api_core.exceptions.InvalidArgument and re-raises
-    `ChatGoogleGenerativeAIError(msg) from e`, so the status only survives on `__cause__`.
-    """
-    for candidate in (exc, exc.__cause__, exc.__context__):
-        if candidate is None:
-            continue
-        status = getattr(candidate, "status_code", None) or getattr(candidate, "code", None)
-        if isinstance(status, int):
-            return status
-    return None
+def _error_detail(exc: Exception, limit: int = CONNECTION_ERROR_DETAIL_LIMIT) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -248,6 +199,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("type", "name")
@@ -258,6 +210,29 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     @property
     def type_enum(self):
         return LlmProviderTypes[str(self.type)]
+
+    @property
+    def supports_connection_test(self) -> bool:
+        return self.type_enum.supports_connection_test
+
+    @property
+    def credentials_verified(self) -> bool:
+        """Whether the credentials currently saved here have passed a check.
+
+        A missing key and a stored False both mean no - never checked, and checked-and-rejected
+        both need the next save to check again.
+        """
+        return (self.extra_data or {}).get(VERIFIED_CREDENTIALS_KEY) is True
+
+    @property
+    def verification_error(self) -> str:
+        """What the provider said when it last rejected these credentials, if anything.
+
+        Kept beside the flag rather than flashed through the session: it explains the
+        credentials that are still saved here, so it has to be there when the user comes
+        back to the page rather than only on the redirect after the save.
+        """
+        return (self.extra_data or {}).get(VERIFICATION_ERROR_KEY, "")
 
     def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
@@ -293,7 +268,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         # module, so importing it at module level here would be circular.
         from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
 
-        if self.type_enum == LlmProviderTypes.voyage:
+        if not self.supports_connection_test:
             raise ConnectionTestNotSupportedError(self.type)
 
         # Prefer the provider type's registered default model (get_default_model, the same
@@ -317,50 +292,66 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
         chat_model.invoke([HumanMessage(content="Hello")])
 
-    def run_connection_test_hook(self) -> list[str]:
-        """Automatically verify credentials after every save (create and update).
+    def run_connection_test_hook(self) -> tuple[list[str], str]:
+        """Verify the saved credentials, record the outcome, and report what happened.
 
         The caller runs this after the save's own transaction has already committed. No
         transaction wraps this call: `test_connection()` makes a synchronous external LLM
         request that can take several seconds, and holding a DB connection open for that
         long (or letting it get repeated on a transaction retry/rollback) is exactly what
-        running this after commit, with no transaction of its own, avoids. Returns a list of
-        user-facing warning messages the caller should surface (e.g. via Django's messages
-        framework); empty on success.
+        running this after commit, with no transaction of its own, avoids.
+
+        Returns (warnings, detail): short messages for Django's messages framework, and the
+        provider's own error text, which is too long for a flash message and belongs on the
+        page instead. Both empty on success.
 
         A provider type that doesn't support this test at all (Voyage AI) stays silent -
         there's nothing actionable to tell the user, and no world in which they can make it
-        testable. A missing model, on the other hand, now produces its own warning rather
-        than staying silent: on a fresh provider (or one whose models were all removed),
-        credentials genuinely haven't been verified yet, and "add a model, then test" is a
-        real next step, not just expected setup noise. Everything else the underlying test
-        can raise (an invalid config, a real failure) also produces a warning, worded by
-        classify_connection_test_failure. The manual "Test Connection" button reports all
-        of these the same way.
+        testable. A missing model, on the other hand, produces its own warning: on a fresh
+        provider (or one whose models were all removed), credentials genuinely haven't been
+        verified yet, and "add a model, then save" is a real next step.
+
+        Everything else hands back the provider's own error rather than a category, because
+        the provider says why far more precisely than we can infer from a status code.
         """
         warnings: list[str] = []
+        detail = ""
+        verified = False
         try:
             self.test_connection()
         except ConnectionTestNotSupportedError:
-            pass
+            # No state to keep: an empty bag is what "this question does not apply" looks like.
+            return warnings, detail
         except NoTestableModelError:
             warnings.append(
-                "Provider saved, but there are no models configured to test with yet. Add "
-                "one, then use Test Connection below to verify your credentials."
+                "Provider saved, but there are no models configured to verify against yet. "
+                "Add one on the Models tab, then save again."
             )
         except Exception as exc:
-            log.exception("Automatic connection test failed for LLM provider %s", self.pk)
-            match classify_connection_test_failure(exc):
-                case "retryable":
-                    reason = "This looks like a temporary issue (rate limit or timeout)."
-                case "permission":
-                    reason = "Check your credentials."
-                case _:
-                    reason = "This looks like a connection issue on the provider's side."
-            warnings.append(
-                f"Provider saved, but the connection test failed. {reason} Use Test Connection below to retry."
-            )
-        return warnings
+            log.exception("Could not verify credentials for LLM provider %s", self.pk)
+            warnings.append("Provider saved, but the credentials could not be verified.")
+            detail = _error_detail(exc)
+        else:
+            verified = True
+        self._record_connection_test(verified, detail)
+        return warnings, detail
+
+    def _record_connection_test(self, verified: bool, detail: str) -> None:
+        """Store the outcome so the next save knows whether it still has something to check,
+        and the page can say why the last check failed.
+
+        Merged into extra_data rather than assigned over it: the field is a general bag, and
+        the next thing stored beside these keys must not disappear on a retest. The stored
+        response describes the most recent check only, so a check that produced none - a pass,
+        or one that never reached the provider - clears it rather than leaving a stale reason.
+        """
+        extra_data = {**(self.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
+        if detail:
+            extra_data[VERIFICATION_ERROR_KEY] = detail
+        else:
+            extra_data.pop(VERIFICATION_ERROR_KEY, None)
+        self.extra_data = extra_data
+        self.save(update_fields=["extra_data"])
 
 
 class LlmProviderModelManager(models.Manager):

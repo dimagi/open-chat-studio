@@ -17,12 +17,28 @@
 
 {% block app %}
   {% comment %}
-  configChanged is shared by the whole card, not just the config fields below: the submit
-  button's label and the separate Test Connection form (in post_form) both read it too, so
-  they need to be in the same Alpine scope even though only the config fields set it.
+  configChanged is scoped to the card rather than to the config fields, because the submit
+  button reads it too and sits outside them. Only a provider whose credentials can be
+  verified has anything to re-verify, so nothing else carries the scope.
   {% endcomment %}
-  <div class="app-card max-w-5xl mx-auto" x-data="{ configChanged: false }">
+  <div class="app-card max-w-5xl mx-auto"{% if can_verify_credentials %} x-data="{ configChanged: false }"{% endif %}>
     <h1 class="pg-title">{{ title }}</h1>
+
+    {% comment %}
+      The provider's own words about the credentials saved here, from whenever they were
+      last checked. Above the tabs because it is about the provider, not about whichever tab
+      you happen to be on. Stays until a check passes, so the reason is still here after a
+      reload; saving successfully clears it.
+    {% endcomment %}
+    {% if verification_error %}
+      <div role="alert" class="alert alert-error alert-soft text-sm items-start mt-3">
+        <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+        <div>
+          <div class="font-semibold">The provider rejected these credentials</div>
+          <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
+        </div>
+      </div>
+    {% endif %}
 
     {% comment %}
       On edit the page splits into tabs; on create there is nothing to show models or
@@ -47,17 +63,14 @@
       {% if config_form.custom_template %}
         {% include config_form.custom_template with object=object form=config_form %}
       {% else %}
-        {% if test_llm_connection_url %}
+        {% if can_verify_credentials %}
           {% comment %}
-          Nudges toward re-testing after an edit, not a saved "untested" state: resets on
-          reload by design, same as the manual Test Connection button it points at.
+          Editing a credential means the next save has to verify it, which the submit button
+          says by itself - so this only has to notice the edit. Resets on reload by design:
+          it describes the unsaved edit, not stored state.
           {% endcomment %}
           <div x-on:input="configChanged = true" x-on:change="configChanged = true">
             {% render_form_fields config_form %}
-            <div x-show="configChanged" x-cloak role="alert" class="alert alert-warning alert-soft text-sm py-2 mt-2">
-              <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>You've changed the credentials above. Save and use Test Connection to confirm they still work.</span>
-            </div>
           </div>
         {% else %}
           {% render_form_fields config_form %}
@@ -74,13 +87,13 @@
           {% endif %}
         {% endif %}
       {% endif %}
-      {% if test_llm_connection_url %}
+      {% if can_verify_credentials %}
         {% comment %}
-        Only on the edit page for an existing LLM provider: the label says up front whether
-        saving will also re-test credentials, driven by the same configChanged the banner
-        and the manual button below use.
+        The label says up front whether saving will also verify credentials. button_text
+        already accounts for credentials that have never passed a check; editing a field
+        adds the cases only the browser knows about.
         {% endcomment %}
-        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Test' : 'Update'">{{ button_text }}</button>
+        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Verify' : '{{ button_text }}'">{{ button_text }}</button>
       {% else %}
         <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
       {% endif %}
@@ -99,16 +112,6 @@
         <form method="post" action="{{ sync_voices_url }}" class="mt-4">
           {% csrf_token %}
           <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
-        </form>
-      {% endif %}
-      {% if test_llm_connection_url %}
-        {% comment %}
-        Hidden while credentials are unsaved: without this, clicking it would test whatever
-        is still saved in the database, not what's currently typed - misleading either way.
-        {% endcomment %}
-        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4" x-show="!configChanged">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline">Test Connection</button>
         </form>
       {% endif %}
     {% endblock post_form %}

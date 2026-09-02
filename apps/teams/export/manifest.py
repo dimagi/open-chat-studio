@@ -123,6 +123,10 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.
     "service_providers.authprovider": ["_auth_data"],
+    # Credential verification state describes the credentials as stored on this instance: the
+    # verified flag says nothing once they are re-sealed for another team, and the stored provider
+    # response is raw error text from an external service, which has no place in an export payload.
+    "service_providers.llmprovider": ["extra_data"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
     # them stops the serializer emitting a bare pk list the importer would .set() -- Django rejects
     # that for explicit through models. CollectionFile rows (their own entry) carry the link.
