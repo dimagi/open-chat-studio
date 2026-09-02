@@ -125,6 +125,28 @@
   },
   {
     "provider_type": "anthropic",
+    "model_name": "claude-fable-5-1",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.05"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00025"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.0125"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
     "model_name": "claude-fable-5",
     "rules": [
       {

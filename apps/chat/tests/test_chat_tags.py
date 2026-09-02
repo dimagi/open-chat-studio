@@ -91,6 +91,28 @@ def test_render_markdown_special_characters():
             '<p><img alt="0" src="/a/example-team/experiments/1234/file/5678/"></p>',
             id="short_reference_image",
         ),
+        # The assistants UI and its download view were removed (#4254), so legacy
+        # `assistant_file:` references in historical messages render as plain text.
+        pytest.param(
+            "[Link Text](assistant_file:example-team:1234:5678)",
+            "<p>Link Text</p>",
+            id="legacy_assistant_file_link",
+        ),
+        pytest.param(
+            "![Image](assistant_file:example-team:1234:5678)",
+            "<p>Image</p>",
+            id="legacy_assistant_file_image",
+        ),
+        pytest.param(
+            "[Link Text][0]\n[0]: assistant_file:example-team:1234:5678",
+            "<p>Link Text</p>",
+            id="legacy_assistant_file_reference_link",
+        ),
+        pytest.param(
+            "[0]\n[0]: assistant_file:example-team:1234:5678",
+            "<p>0</p>",
+            id="legacy_assistant_file_short_reference_link",
+        ),
     ],
 )
 def test_render_links(markdown_text, expected_result):

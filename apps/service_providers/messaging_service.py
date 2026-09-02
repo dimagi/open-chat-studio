@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import re
 import uuid
@@ -541,6 +542,49 @@ class SureAdhereService(MessagingService):
         response.raise_for_status()
 
 
+def _has_template_parameter(template: dict, name: str) -> bool:
+    """Does the template's body carry a named parameter Meta will accept for ``name``?"""
+    placeholder = re.compile(r"{{\s*" + re.escape(name) + r"\s*}}")
+    for component in template.get("components", []):
+        if (component.get("type") or "").upper() != "BODY":
+            continue
+        named_params = component.get("example", {}).get("body_text_named_params", [])
+        if any(param.get("param_name") == name for param in named_params):
+            return True
+        if placeholder.search(component.get("text") or ""):
+            return True
+    return False
+
+
+@dataclasses.dataclass
+class TemplateCheck:
+    """The outcome of checking a WhatsApp Business Account for the bot's message template.
+
+    ``ok`` means the template is usable exactly as ``send_template_message`` needs it.
+    ``problems`` explains what is wrong when it isn't; ``error`` is set instead when the
+    check could not be run at all (bad credentials, Meta unreachable).
+    """
+
+    ok: bool
+    problems: list[str] = dataclasses.field(default_factory=list)
+    template: dict | None = None
+    error: str | None = None
+
+
+def meta_error_message(exc: Exception) -> str:
+    """Pull Meta's own error text out of a failed request, falling back to the exception."""
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            error = response.json().get("error", {})
+        except ValueError:
+            error = {}
+        if message := error.get("message"):
+            return message
+        return f"{response.status_code}: {response.text[:300]}"
+    return str(exc)
+
+
 class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
     _type: ClassVar[str] = "meta_cloud_api"
     supported_platforms: ClassVar[list] = [ChannelPlatform.WHATSAPP]
@@ -558,6 +602,7 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
     WHATSAPP_CHARACTER_LIMIT: ClassVar[int] = 4096
     SERVICE_WINDOW_HOURS: ClassVar[int] = 24
     TEMPLATE_NAME: ClassVar[str] = "new_bot_message"
+    TEMPLATE_PARAMETER: ClassVar[str] = "bot_message"
     # allow 50 characters for the template message without the bot message. 1024 - 100
     TEMPLATE_MESSAGE_CHAR_LIMIT: ClassVar[int] = 924
 
@@ -568,24 +613,99 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
             "Content-Type": "application/json",
         }
 
-    def resolve_number(self, number: str) -> str | None:
-        """Look up the phone number ID for the given E.164 phone number
-        using the WhatsApp Business Account Phone Number Management API."""
+    def get_phone_numbers(self) -> list[dict]:
+        """List the numbers on this WhatsApp Business Account, each with the phone number ID
+        that message sends are addressed to.
+
+        ``number`` is the E.164 form of Meta's display number, or None when it cannot be parsed.
+        """
         url = f"{self.META_API_BASE_URL}/{self.business_id}/phone_numbers"
         response = httpx.get(
-            url, headers=self._headers, params={"fields": "id,display_phone_number"}, timeout=self.META_API_TIMEOUT
+            url,
+            headers=self._headers,
+            params={"fields": "id,display_phone_number,verified_name"},
+            timeout=self.META_API_TIMEOUT,
         )
         response.raise_for_status()
+        numbers = []
         for entry in response.json().get("data", []):
             display = entry.get("display_phone_number", "")
             try:
                 parsed = phonenumbers.parse(display)
                 normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
             except phonenumbers.NumberParseException:
-                continue
-            if normalized == number:
-                return entry["id"]
+                normalized = None
+            numbers.append(
+                {
+                    "phone_number_id": entry["id"],
+                    "number": normalized,
+                    "display": display,
+                    "verified_name": entry.get("verified_name", ""),
+                }
+            )
+        return numbers
+
+    def resolve_number(self, number: str) -> str | None:
+        """Look up the phone number ID for the given E.164 phone number
+        using the WhatsApp Business Account Phone Number Management API."""
+        for entry in self.get_phone_numbers():
+            if entry["number"] == number:
+                return entry["phone_number_id"]
         return None
+
+    def get_message_templates(self) -> list[dict]:
+        """Fetch this account's templates named ``TEMPLATE_NAME`` (one entry per language)."""
+        url = f"{self.META_API_BASE_URL}/{self.business_id}/message_templates"
+        response = httpx.get(
+            url,
+            headers=self._headers,
+            params={"name": self.TEMPLATE_NAME, "limit": 50},
+            timeout=self.META_API_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json().get("data", [])
+
+    def check_message_template(self) -> TemplateCheck:
+        """Check that this account can actually send the bot's template message.
+
+        Never raises: a failed API call comes back as ``TemplateCheck.error`` so callers
+        can render the outcome either way.
+        """
+        try:
+            templates = self.get_message_templates()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Could not check the '%s' template: %s", self.TEMPLATE_NAME, exc)
+            return TemplateCheck(ok=False, error=meta_error_message(exc))
+
+        matches = [template for template in templates if template.get("name") == self.TEMPLATE_NAME]
+        if not matches:
+            return TemplateCheck(
+                ok=False,
+                problems=[
+                    f"No template named '{self.TEMPLATE_NAME}' exists on this WhatsApp Business Account.",
+                ],
+            )
+
+        # Prefer the translation this provider is configured to send; otherwise report on the
+        # first one found, so the language mismatch is what the operator is told about.
+        template = next(
+            (match for match in matches if match.get("language") == self.template_language_code),
+            matches[0],
+        )
+
+        problems = []
+        status = template.get("status")
+        if status != "APPROVED":
+            problems.append(f"Meta has not approved this template yet - its status is {status}.")
+        language = template.get("language")
+        if language != self.template_language_code:
+            problems.append(
+                f"The template exists in {language}, but this provider is configured to send "
+                f"{self.template_language_code}."
+            )
+        if not _has_template_parameter(template, self.TEMPLATE_PARAMETER):
+            problems.append(f"The template body has no '{self.TEMPLATE_PARAMETER}' parameter.")
+        return TemplateCheck(ok=not problems, problems=problems, template=template)
 
     def _is_within_service_window(self, last_activity_at: datetime | None) -> bool:
         """Check if the last user activity is within the WhatsApp 24-hour service window.
