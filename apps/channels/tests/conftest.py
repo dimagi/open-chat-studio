@@ -9,7 +9,6 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
@@ -32,16 +31,10 @@ def _isolate_rate_limit_counters():
 
 @pytest.fixture()
 def record_delivery(db):
-    """Records a delivery as already handled, the way ChatMessageCreationStage would have.
+    """Records a delivery as already handled, the way ChatMessageCreationStage would have."""
 
-    Pass `experiment` to put the recorded message inside that chatbot's scope, which is what the
-    dedup lookup narrows to; without it the message is only reachable by the team-wide scope.
-    """
-
-    def _record(team, external_ids, experiment=None):
+    def _record(team, external_ids):
         chat = Chat.objects.create(team=team, name="recorded chat")
-        if experiment is not None:
-            ExperimentSessionFactory.create(experiment=experiment, team=team, chat=chat)
         return ChatMessage.objects.create(
             chat=chat,
             message_type=ChatMessageType.HUMAN,

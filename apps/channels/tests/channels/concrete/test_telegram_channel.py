@@ -178,7 +178,7 @@ class TestReplayedDelivery:
         experiment_channel = ExperimentChannelFactory.create(platform=ChannelPlatform.TELEGRAM)
         experiment = experiment_channel.experiment
         bot_process_input.return_value = ChatMessage(content="Hi human", chat=Chat.objects.create(team=experiment.team))
-        message = TelegramMessage.parse(types.Update.de_json(_raw_update()))
+        message = TelegramMessage.parse(types.Update.de_json(_raw_update()), chatbot_id=experiment.id)
 
         for _ in range(2):
             TelegramChannel(experiment=experiment, experiment_channel=experiment_channel).new_user_message(message)
@@ -190,15 +190,16 @@ class TestReplayedDelivery:
     def test_second_bot_in_the_team_replies_to_the_same_ids(self, bot_process_input, _patched_telebot):
         """A Telegram `message_id` is unique only within a bot dialog, and `chat.id` for a private
         chat is the participant's user id, the same for every bot they talk to. Two of a team's bots
-        therefore see the identical (chat.id, message_id) for genuinely different messages, so dedup
-        scoped to the team alone would silence whichever one processed second."""
+        therefore see the identical (chat.id, message_id) for genuinely different messages, so a key
+        built from those alone would silence whichever one processed second. The chatbot id in the
+        key keeps them apart."""
         channel_a = ExperimentChannelFactory.create(platform=ChannelPlatform.TELEGRAM)
         team = channel_a.experiment.team
         channel_b = ExperimentChannelFactory.create(platform=ChannelPlatform.TELEGRAM, experiment__team=team)
         bot_process_input.return_value = ChatMessage(content="Hi human", chat=Chat.objects.create(team=team))
-        message = TelegramMessage.parse(types.Update.de_json(_raw_update()))
 
         for channel in (channel_a, channel_b):
+            message = TelegramMessage.parse(types.Update.de_json(_raw_update()), chatbot_id=channel.experiment_id)
             TelegramChannel(experiment=channel.experiment, experiment_channel=channel).new_user_message(message)
 
         assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 2

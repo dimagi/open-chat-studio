@@ -197,10 +197,13 @@ class TestExternalIds:
     @pytest.mark.parametrize(
         ("parse", "expected"),
         [
-            # Telegram message ids are unique only within a chat, so the chat id is part of the key.
+            # A Telegram message id is unique only within one bot's dialog with one peer, so both
+            # the chatbot and the chat are part of the key.
             pytest.param(
-                lambda: TelegramMessage.parse(types.Update.de_json(_raw_telegram_update(chat_id=123, message_id=576))),
-                ["telegram:123:576"],
+                lambda: TelegramMessage.parse(
+                    types.Update.de_json(_raw_telegram_update(chat_id=123, message_id=576)), chatbot_id=41
+                ),
+                ["telegram:41:123:576"],
                 id="telegram",
             ),
             pytest.param(

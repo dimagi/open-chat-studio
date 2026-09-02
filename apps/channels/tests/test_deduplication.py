@@ -61,23 +61,14 @@ def test_is_duplicate_delivery(record_delivery, candidate_ids, expected):
 
 @pytest.mark.django_db()
 class TestChatbotScope:
-    """Telegram's `message_id` is unique only within a bot dialog, so team scoping alone drops real
-    messages: two of a team's bots see the same (chat.id, message_id) for the same participant, and
-    for every message in a group they are both in."""
+    """A Telegram `message_id` is unique only within one bot's dialog with one peer, so both halves
+    are in the key: `chat.id` for a private chat is the participant's Telegram user id, identical
+    across every bot they talk to, and each dialog's `message_id` restarts near 1."""
 
     def test_another_chatbot_in_the_team_does_not_suppress(self, record_delivery):
         bot_a = ExperimentFactory()
         bot_b = ExperimentFactory(team=bot_a.team)
-        record_delivery(bot_a.team, ["telegram:55501:1"], experiment=bot_a)
+        record_delivery(bot_a.team, external_ids_for("telegram", bot_a.id, 55501, 1))
 
-        assert is_duplicate_delivery(["telegram:55501:1"], bot_b.team_id, bot_b.id) is False
-        assert is_duplicate_delivery(["telegram:55501:1"], bot_a.team_id, bot_a.id) is True
-
-    def test_a_published_version_shares_its_chatbot_scope(self, record_delivery):
-        """The delivery that recorded the id ran against a published version, so scoping to the
-        working version id has to cover the whole version family."""
-        chatbot = ExperimentFactory()
-        version = ExperimentFactory(team=chatbot.team, working_version=chatbot)
-        record_delivery(chatbot.team, ["telegram:55501:1"], experiment=version)
-
-        assert is_duplicate_delivery(["telegram:55501:1"], chatbot.team_id, chatbot.id) is True
+        assert is_duplicate_delivery(external_ids_for("telegram", bot_b.id, 55501, 1), bot_a.team_id) is False
+        assert is_duplicate_delivery(external_ids_for("telegram", bot_a.id, 55501, 1), bot_a.team_id) is True

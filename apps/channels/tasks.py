@@ -58,7 +58,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
         # Edited messages don't need to be processed.
         return
 
-    message = TelegramMessage.parse(update)
+    message = TelegramMessage.parse(update, chatbot_id=experiment_channel.experiment_id)
     message_handler = TelegramChannel(resolve_published_or_working(experiment_channel.experiment), experiment_channel)
     update_taskbadger_data(self, message_handler, message)
 

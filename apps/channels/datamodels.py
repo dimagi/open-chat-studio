@@ -135,14 +135,16 @@ class TelegramMessage(BaseMessage):
             return MESSAGE_TYPES(value)
 
     @staticmethod
-    def parse(update_obj) -> "TelegramMessage":
+    def parse(update_obj, chatbot_id: int) -> "TelegramMessage":
         return TelegramMessage(
             participant_id=str(update_obj.message.chat.id),
             message_text=update_obj.message.text or "",
             content_type=update_obj.message.content_type,
             media_id=update_obj.message.voice.file_id if update_obj.message.content_type == "voice" else None,
             message_id=update_obj.message.message_id,
-            external_ids=external_ids_for("telegram", update_obj.message.chat.id, update_obj.message.message_id),
+            external_ids=external_ids_for(
+                "telegram", chatbot_id, update_obj.message.chat.id, update_obj.message.message_id
+            ),
         )
 
 

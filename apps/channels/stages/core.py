@@ -126,9 +126,7 @@ class DuplicateDeliveryStage(ProcessingStage):
         return bool(ctx.message.external_ids)
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        if is_duplicate_delivery(
-            ctx.message.external_ids, ctx.experiment.team_id, ctx.experiment.get_working_version_id()
-        ):
+        if is_duplicate_delivery(ctx.message.external_ids, ctx.experiment.team_id):
             logger.info(
                 "Dropping replayed %s delivery %s",
                 ctx.experiment_channel.platform,
