@@ -404,15 +404,20 @@ class ExperimentChannel(BaseTeamModel):
 
     @property
     def min_widget_version(self) -> str | None:
-        """Minimum widget version required by this channel's current auth level.
+        """Minimum widget version this channel needs from an embed.
 
         None for anything but an embedded widget, and for a NONE-level one (no floor).
+        In `oauth` mode the floor is the release that ships `authTokenProvider`, which is higher than
+        the SESSION_TOKEN level the mode pins.
+
         """
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         level = self.widget_auth_level
         if level is None:
             return None
+        if self.credential_mode == CredentialMode.OAUTH:
+            return widget_versions.MIN_OAUTH_WIDGET_VERSION
         return widget_versions.min_version_for_level(level)
 
     @property

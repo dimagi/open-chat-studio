@@ -165,7 +165,6 @@ def _experiment_session_message(request, version_number: int):
         attachments=[att.model_dump() for att in attachments],
     )
     version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
         "experiment_version_number": experiment_version.version_number,
     }
     return TemplateResponse(
