@@ -152,7 +152,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v6.0.9
+      - uses: pnpm/action-setup@v6.0.10
         if: steps.check.outputs.skip != 'true'
 
       - name: Set up Node.js
