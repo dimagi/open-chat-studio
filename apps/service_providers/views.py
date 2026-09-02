@@ -1,6 +1,5 @@
 import json
 import logging
-from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
@@ -63,6 +62,8 @@ _FORM_FIELD_TO_KIND = {
     "output_price_per_million_tokens": ServiceKind.LLM_OUTPUT,
     "cached_input_price_per_million_tokens": ServiceKind.LLM_CACHED_INPUT,
 }
+VALID_PROVIDER_TABS = ("configuration", "models", "usages")
+ROLE_FILTERS = (("all", "All"), ("chat", "Chat"), ("embedding", "Embedding"), ("custom", "Custom"))
 
 
 def _lookup_subtype_by_slug(subtype_enum, slug):
@@ -346,7 +347,7 @@ class CreateServiceProvider(
             # the template overrides it reactively based on whether credentials changed.
             "button_text": self._button_text(instance),
             "active_tab": "manage-team",
-            "active_provider_tab": "usages" if self.request.GET.get("tab") == "usages" else "configuration",
+            "active_provider_tab": _active_provider_tab(self.request),
             "can_view_usages": self.request.user.has_perm(self.provider_type.get_permission("view")),
         }
         is_elevenlabs_voice = (
@@ -376,28 +377,14 @@ class CreateServiceProvider(
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
         if self.provider_type == ServiceProvider.llm:
-            default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
-            embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
-            custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
-            ctx.update(
-                {
-                    "default_llm_models_by_type": default_llm_models_by_type,
-                    "custom_llm_models_by_type": custom_llm_models_by_type,
-                    "embedding_models_by_type": embedding_models_by_type,
-                    "new_model_form": LlmProviderModelForm(self.request.team),
-                    "pricing_lookup": _pricing_lookup(
-                        self.request.team,
-                        [*_flatten(default_llm_models_by_type), *_flatten(custom_llm_models_by_type)],
-                    ),
-                }
-            )
+            ctx["new_model_form"] = LlmProviderModelForm(self.request.team)
+            ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
 
     def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
-        """Normally back to the team list, same as every save today. The one exception:
-        an automatic connection-test failure sends the user back to this provider's own
-        edit page instead, since that warning explicitly tells them to use the "Test
-        Connection" button, and that button only renders on the edit page itself.
+        """Normally back to the team list, same as every save today. The one exception: a
+        failed verification sends the user back to this provider's own edit page, where the
+        credentials the warning is about are the ones on screen.
         """
         if redirect_to_own_edit_page and obj is not None:
             return resolve_url(
@@ -409,19 +396,67 @@ class CreateServiceProvider(
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
-def _get_models_by_type(queryset):
-    models_by_type = defaultdict(list)
-    for model in queryset:
-        models_by_type[model.type].append(model)
-    # Deprecated models sink to the bottom; otherwise newest first.
+def _active_provider_tab(request) -> str:
+    tab = request.GET.get("tab")
+    return tab if tab in VALID_PROVIDER_TABS else "configuration"
+
+
+def _model_row(model, rates, is_embedding: bool) -> dict:
     return {
-        key: sorted(value, key=lambda x: (getattr(x, "deprecated", False), -x.created_at.timestamp()))
-        for key, value in models_by_type.items()
+        "id": model.id,
+        # LlmProviderModel and EmbeddingProviderModel are separate tables with separate
+        # sequences, so their ids collide - the row needs one that is unique per rendered
+        # list, or an hx-target resolves to whichever row querySelector reaches first.
+        "dom_id": f"{'embedding' if is_embedding else 'model'}_{model.id}",
+        "name": model.name,
+        "role": "embedding" if is_embedding else "chat",
+        "custom": model.team_id is not None,
+        "deprecated": getattr(model, "deprecated", False),
+        "context": None if is_embedding else _format_context(model.max_token_limit),
+        "rates": rates,
+        "is_llm": not is_embedding,
     }
 
 
-def _flatten(models_by_type: dict) -> list:
-    return [m for models in models_by_type.values() for m in models]
+def _format_context(max_token_limit: int) -> str:
+    """Token limits are read as magnitudes, not counted, so 409600 is noise next to 400K.
+
+    Zero is not a small limit - it's the value that disables compression entirely.
+    """
+    if not max_token_limit:
+        return "—"
+    if max_token_limit >= 1_000_000:
+        return f"{max_token_limit / 1_000_000:.1f}".removesuffix(".0") + "M"
+    if max_token_limit >= 1_000:
+        return f"{round(max_token_limit / 1_000)}K"
+    return str(max_token_limit)
+
+
+def llm_models_context(team, subtype) -> dict:
+    """The Models tab: every model this provider type can use, as one list.
+
+    Chat and embedding models, team-owned and global, are one list because they answer one
+    question - what can this provider run? - and the role badge carries the rest. The rows
+    are keyed on provider type plus team rather than on the provider, so every provider of
+    the same type shows the same list.
+    """
+    type_slug = str(subtype)
+    llm_models = list(LlmProviderModel.objects.for_team(team).filter(type=type_slug))
+    embedding_models = list(EmbeddingProviderModel.objects.for_team(team).filter(type=type_slug))
+    pricing_lookup = _pricing_lookup(team, llm_models)
+
+    rows = [
+        _model_row(model, rates=pricing_lookup.get(model.id), is_embedding=is_embedding)
+        for models_, is_embedding in ((llm_models, False), (embedding_models, True))
+        for model in models_
+    ]
+    # Deprecated models sink to the bottom; chat before embedding, then alphabetical.
+    rows.sort(key=lambda r: (r["deprecated"], r["role"] == "embedding", r["name"]))
+    return {
+        "model_rows": rows,
+        "role_filters": ROLE_FILTERS,
+        "deprecated_count": sum(1 for r in rows if r["deprecated"]),
+    }
 
 
 def _pricing_lookup(team, llm_models: list) -> dict:
@@ -482,16 +517,10 @@ def create_llm_provider_model(request, team_slug: str):
         model.team = request.team
         model.save()
         _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
-    custom_models = LlmProviderModel.objects.filter(team=request.team)
     return render(
         request,
-        "service_providers/components/custom_llm_models.html",
-        {
-            "llm_models_by_type": _get_models_by_type(custom_models),
-            "embedding_models_by_type": _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None)),
-            "for_type": form.cleaned_data["type"],
-            "pricing_lookup": _pricing_lookup(request.team, list(custom_models)),
-        },
+        "service_providers/components/llm_model_rows.html",
+        llm_models_context(request.team, form.cleaned_data["type"]),
     )
 
 
@@ -600,14 +629,11 @@ def _persist_team_pricing_rules(team, model: LlmProviderModel, cleaned: dict, us
 
 def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
     """Re-render a single row partial after an HTMX swap."""
+    rates = _pricing_lookup(request.team, [model]).get(model.id)
     return render(
         request,
         "service_providers/components/llm_model_row.html",
-        {
-            "model": model,
-            "show_delete": model.team_id == request.team.id,
-            "pricing_lookup": _pricing_lookup(request.team, [model]),
-        },
+        {"row": _model_row(model, rates=rates, is_embedding=False)},
     )
 
 

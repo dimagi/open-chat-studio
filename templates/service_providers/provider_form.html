@@ -25,15 +25,15 @@
     <h1 class="pg-title">{{ title }}</h1>
 
     {% comment %}
-      On edit the page splits into Configuration and Usages tabs; on create there is
-      nothing to show usages for, so the configuration content stands alone. The two
-      halves of the tab wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written
-      once here and stays reachable by the blocks that llm_provider_form.html overrides.
+      On edit the page splits into tabs; on create there is nothing to show models or
+      usages for, so the configuration content stands alone. The two halves of the tab
+      wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written once here
+      and stays reachable by the blocks that llm_provider_form.html overrides.
     {% endcomment %}
     {% if object.id %}
       <div role="tablist" class="tabs tabs-border mt-4">
         <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Configuration"
-               {% if active_provider_tab != 'usages' %}checked{% endif %}>
+               {% if active_provider_tab == 'configuration' %}checked{% endif %}>
         <div role="tabpanel" class="tab-content pt-4">
     {% endif %}
 
@@ -115,6 +115,7 @@
 
     {% if object.id %}
         </div>
+        {% block extra_tabs %}{% endblock %}
         {% if can_view_usages %}
           <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Usages"
                  {% if active_provider_tab == 'usages' %}checked{% endif %}>
@@ -137,4 +138,12 @@
       </div>
     {% endif %}
   </div>
+
+  {% comment %}
+    Outside the tab wrapper on purpose. An unselected daisyUI tab panel is display:none,
+    and a <dialog> under a hidden ancestor is promoted to the top layer but generates no
+    boxes - showModal() would open it with nothing on screen. Anything opened from one tab
+    whose markup would otherwise sit in another belongs here.
+  {% endcomment %}
+  {% block modals %}{% endblock %}
 {% endblock app %}

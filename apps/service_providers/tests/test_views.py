@@ -19,7 +19,9 @@ from apps.service_providers.exceptions import (
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     AuthProvider,
+    EmbeddingProviderModel,
     LlmProvider,
+    LlmProviderModel,
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
@@ -28,6 +30,7 @@ from apps.service_providers.models import (
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
+from apps.service_providers.views import _format_context
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
@@ -564,41 +567,154 @@ def test_delete_llm_provider_blocked_by_an_evaluator(team_with_users, authed_cli
     assert evaluator.llm_provider_id == provider.id
 
 
+@pytest.mark.parametrize(
+    ("limit", "expected"),
+    [
+        pytest.param(0, "—", id="zero-disables-compression-rather-than-being-a-small-limit"),
+        pytest.param(512, "512", id="under-1k-is-left-alone"),
+        pytest.param(8192, "8K", id="8192"),
+        pytest.param(128000, "128K", id="128k"),
+        pytest.param(409600, "410K", id="rounds-to-whole-k"),
+        pytest.param(1000000, "1M", id="1m-drops-the-decimal"),
+        pytest.param(1500000, "1.5M", id="keeps-a-meaningful-decimal"),
+    ],
+)
+def test_format_context(limit, expected):
+    """Token limits are read as magnitudes, not counted."""
+    assert _format_context(limit) == expected
+
+
 @pytest.mark.django_db()
-def test_create_view_shows_empty_state_for_provider_with_no_default_models(team_with_users, authed_client):
+def test_models_tab_modals_are_not_inside_a_tab_panel(team_with_users, authed_client):
+    """Regression: an unselected daisyUI tab panel is display:none, and a <dialog> under a
+    hidden ancestor opens into the top layer without generating any boxes. Both dialogs are
+    opened from the Models tab, so if they render inside the Configuration panel,
+    showModal() silently does nothing - which is what happened.
+
+    Asserted against the parsed tree rather than the HTML string: the string contains both
+    the dialog and the panel either way, so only the nesting distinguishes the bug.
+    """
+    from lxml import html as lxml_html  # noqa: PLC0415 - test-only parser
+
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.openai))
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    tree = lxml_html.fromstring(response.content)
+
+    dialogs = tree.xpath("//dialog[@id='new_custom_model'] | //dialog[@id='pricing_override_modal']")
+    assert len(dialogs) == 2, "both Models-tab dialogs should render on the edit page"
+    for dialog in dialogs:
+        assert not dialog.xpath("ancestor::*[contains(@class, 'tab-content')]"), (
+            f"<dialog id={dialog.get('id')}> is inside a tab panel and cannot be shown"
+        )
+
+
+@pytest.mark.django_db()
+def test_model_rows_have_unique_dom_ids(team_with_users, authed_client):
+    """LlmProviderModel and EmbeddingProviderModel are separate tables with separate
+    sequences, so their ids collide. The rows share one table, and each carries an
+    hx-target pointing at its own id - a duplicate resolves to the wrong row and the swap
+    lands on somebody else.
+    """
+    from lxml import html as lxml_html  # noqa: PLC0415 - test-only parser
+
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.openai))
+    # Cleared rather than worked around: the suite runs with --reuse-db, so a test that
+    # leans on the migration-seeded global rows is order-dependent.
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    EmbeddingProviderModel.objects.filter(type=provider.type).delete()
+    llm_model = LlmProviderModelFactory(team=team_with_users, type=provider.type, name="a-chat-model")
+    embedding = EmbeddingProviderModel.objects.create(team=None, type=provider.type, name="an-embedding-model")
+    # The collision this guards against is two rows sharing a PK value across the tables.
+    EmbeddingProviderModel.objects.filter(pk=embedding.pk).update(id=llm_model.pk)
+    assert EmbeddingProviderModel.objects.filter(pk=llm_model.pk).exists(), "collision not set up"
+
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+    tree = lxml_html.fromstring(response.content)
+
+    row_ids = tree.xpath("//tbody[@id='custom_model_list']/tr/@id")
+    assert len(row_ids) == 2
+    assert len(set(row_ids)) == len(row_ids), f"duplicate row ids: {row_ids}"
+    assert set(row_ids) == {f"model_{llm_model.pk}", f"embedding_{llm_model.pk}"}
+
+
+@pytest.mark.django_db()
+def test_embedding_models_have_no_delete_button(team_with_users, authed_client):
+    """A team-owned embedding model is "custom" too, but the delete endpoint only knows
+    LlmProviderModel - offering delete here would target the wrong table's row.
+    """
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.openai))
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    EmbeddingProviderModel.objects.filter(type=provider.type).delete()
+    embedding = EmbeddingProviderModel.objects.create(
+        team=team_with_users, type=provider.type, name="a-team-embedding-model"
+    )
+
+    response = authed_client.get(
+        reverse(
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
+        )
+    )
+
+    assert b"a-team-embedding-model" in response.content
+    assert f"delete-llm-model-{embedding.pk}".encode() not in response.content
+
+
+@pytest.mark.django_db()
+def test_models_tab_shows_empty_state_for_provider_with_no_models(team_with_users, authed_client):
     """LiteLLM ships no default models (every backend is install-specific, same as OpenRouter).
 
-    The default-models section must say so rather than rendering nothing, which is
+    The Models tab must say so rather than rendering an empty table, which is
     indistinguishable from a broken page.
     """
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.litellm))
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+
     response = authed_client.get(
         reverse(
-            "service_providers:new",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "litellm"},
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
         )
     )
+
     assert response.status_code == 200
-    assert b"No default models are available for this provider" in response.content
+    assert b"No models are configured for this provider type" in response.content
 
 
 @pytest.mark.django_db()
-def test_create_view_still_shows_default_models_for_openai(team_with_users, authed_client):
-    """Regression guard: the empty-state message must not appear for a provider that does
-    ship default models.
+def test_models_tab_lists_global_and_team_models_together(team_with_users, authed_client):
+    """One list, not three: a global chat model, a team-owned custom one and an embedding
+    model all belong to the same question - what can this provider run?
 
-    Creates its own global model row rather than relying on the migration-seeded ones -
-    see the "migration-seeded global rows" invariant in AGENTS.md.
+    Creates its own rows rather than relying on the migration-seeded ones - see the
+    "migration-seeded global rows" invariant in AGENTS.md.
     """
-    LlmProviderModelFactory(team=None, type=str(LlmProviderTypes.openai), name="test-default-model")
+    provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.openai))
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    LlmProviderModelFactory(team=None, type=provider.type, name="test-default-model")
+    LlmProviderModelFactory(team=team_with_users, type=provider.type, name="test-custom-model")
+
     response = authed_client.get(
         reverse(
-            "service_providers:new",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "subtype": "openai"},
+            "service_providers:edit",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": provider.pk},
         )
     )
-    assert response.status_code == 200
-    assert b"No default models are available for this provider" not in response.content
-    assert b"test-default-model" in response.content
+    content = response.content.decode()
+
+    assert "test-default-model" in content
+    assert "test-custom-model" in content
+    assert "No models are configured for this provider type" not in content
 
 
 @pytest.mark.django_db()
