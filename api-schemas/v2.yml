@@ -1202,6 +1202,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/Provider'
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         channels:
           type: array
           items:
@@ -3010,8 +3018,6 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             usage:read: Read usage and activity data
-            openid: OpenID Connect scope
-            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header

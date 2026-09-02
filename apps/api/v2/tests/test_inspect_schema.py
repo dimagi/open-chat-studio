@@ -32,6 +32,7 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
         "consent_form",
         "voice",
         "trace_provider",
+        "trace_sample_rate",
         "channels",
         "pipeline",
         "pipeline_valid",
