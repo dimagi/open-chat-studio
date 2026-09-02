@@ -4401,6 +4401,7 @@ components:
         name:
           type: string
           maxLength: 255
+        extra_data: {}
       required:
       - config
       - created_at
