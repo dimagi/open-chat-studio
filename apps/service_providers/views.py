@@ -1,6 +1,5 @@
 import json
 import logging
-from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
@@ -28,7 +27,6 @@ from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.exceptions import ConnectionTestNotSupportedError, NoTestableModelError
 from apps.service_providers.forms import (
     LlmProviderModelForm,
     PricingOverrideForm,
@@ -44,7 +42,6 @@ from apps.service_providers.models import (
     MessagingProviderType,
     VoiceProvider,
     VoiceProviderType,
-    classify_connection_test_failure,
 )
 from apps.utils.deletion import get_related_objects
 
@@ -64,6 +61,8 @@ _FORM_FIELD_TO_KIND = {
     "output_price_per_million_tokens": ServiceKind.LLM_OUTPUT,
     "cached_input_price_per_million_tokens": ServiceKind.LLM_CACHED_INPUT,
 }
+VALID_PROVIDER_TABS = ("configuration", "models", "usages")
+ROLE_FILTERS = (("all", "All"), ("chat", "Chat"), ("embedding", "Embedding"), ("custom", "Custom"))
 
 
 def _lookup_subtype_by_slug(subtype_enum, slug):
@@ -205,23 +204,10 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
     return HttpResponse()
 
 
-def _normalize_config(config: dict) -> dict:
-    """Drops blank optional fields cleaned_data fills in even when the user never touched
-    them, so an untouched field doesn't look like a change against an older, sparser saved
-    config."""
-    return {k: v for k, v in config.items() if v}
-
-
-def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
-    """Whether obj's current config differs from old_config. Always True for a create -
-    there's nothing to compare against yet."""
-    return is_create or old_config != _normalize_config(obj.config)
-
-
-def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bool:
+def _should_test_connection(obj, old_fingerprint: str | None) -> bool:
     """Whether the automatic connection test should run for this save: only LLM providers,
     and only when credentials actually changed (or it's a new create)."""
-    return isinstance(obj, LlmProvider) and _has_config_changed(is_create, old_config, obj)
+    return isinstance(obj, LlmProvider) and obj.config_fingerprint != old_fingerprint
 
 
 def _should_run_post_create_hook(obj, is_create: bool) -> bool:
@@ -289,19 +275,19 @@ class CreateServiceProvider(
         config_valid = config_form.is_valid()
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
-            obj, had_connection_test_warning = self._save_provider(request, primary_form, config_form, file_formset)
-            return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
+            obj, needs_attention = self._save_provider(request, primary_form, config_form, file_formset)
+            return HttpResponseRedirect(self.get_success_url(obj, needs_attention))
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
 
     def _save_provider(self, request, primary_form, config_form, file_formset):
-        """Saves the provider and returns (obj, had_connection_test_warning).
+        """Saves the provider and returns (obj, needs_attention).
 
         The second value tells get_success_url() whether the automatic connection test just
-        failed - if so, it should send the user back to this provider's own edit page (where
-        the "Test Connection" button the warning message points at actually lives) instead
+        came back with something the user should see - if so, it sends them to this
+        provider's own edit page, where the status badge and the failure panel are, instead
         of the team list every other save redirects to.
         """
         with transaction.atomic():
@@ -311,7 +297,8 @@ class CreateServiceProvider(
             # Captured before config_form.save() overwrites obj.config, so the check below
             # can tell whether credentials actually changed - re-testing on an unrelated
             # edit (e.g. renaming the provider) wastes an external call for no reason.
-            old_config = None if is_create else _normalize_config(obj.config)
+            # None on a create, and for the provider types that have no connection to test.
+            old_fingerprint = obj.config_fingerprint if isinstance(obj, LlmProvider) and not is_create else None
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -326,19 +313,17 @@ class CreateServiceProvider(
         # take several seconds, and holding the save's DB connection/locks open for that long
         # (or repeating the call if the transaction were retried or rolled back) is worse than
         # the save and the test being two separate steps.
-        had_connection_test_warning = False
-        if _should_test_connection(obj, is_create, old_config):
-            for warning in obj.run_connection_test_hook():
-                messages.warning(request, warning)
-                had_connection_test_warning = True
+        needs_attention = False
+        if _should_test_connection(obj, old_fingerprint):
+            needs_attention = obj.run_connection_test().needs_attention
         for warning in config_form.warnings:
             messages.warning(request, warning)
-        return obj, had_connection_test_warning
+        return obj, needs_attention
 
     def _button_text(self, instance) -> str:
         if instance:
             return "Update"
-        return "Create and Test" if self.provider_type == ServiceProvider.llm else "Create"
+        return "Create and Verify" if self.provider_type == ServiceProvider.llm else "Create"
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {
@@ -352,7 +337,7 @@ class CreateServiceProvider(
             # the template overrides it reactively based on whether credentials changed.
             "button_text": self._button_text(instance),
             "active_tab": "manage-team",
-            "active_provider_tab": "usages" if self.request.GET.get("tab") == "usages" else "configuration",
+            "active_provider_tab": _active_provider_tab(self.request),
             "can_view_usages": self.request.user.has_perm(self.provider_type.get_permission("view")),
         }
         is_elevenlabs_voice = (
@@ -367,43 +352,22 @@ class CreateServiceProvider(
                     "pk": instance.pk,
                 },
             )
-        if self.provider_type == ServiceProvider.llm and instance:
-            ctx["test_llm_connection_url"] = reverse(
-                "service_providers:test_llm_connection",
-                kwargs={
-                    "team_slug": self.request.team.slug,
-                    "provider_type": "llm",
-                    "pk": instance.pk,
-                },
-            )
         if isinstance(instance, MessagingProvider) and instance.type == MessagingProviderType.meta_cloud_api:
             ctx["whatsapp_status_url"] = reverse(
                 "service_providers:whatsapp_status",
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
         if self.provider_type == ServiceProvider.llm:
-            default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
-            embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
-            custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
-            ctx.update(
-                {
-                    "default_llm_models_by_type": default_llm_models_by_type,
-                    "custom_llm_models_by_type": custom_llm_models_by_type,
-                    "embedding_models_by_type": embedding_models_by_type,
-                    "new_model_form": LlmProviderModelForm(self.request.team),
-                    "pricing_lookup": _pricing_lookup(
-                        self.request.team,
-                        [*_flatten(default_llm_models_by_type), *_flatten(custom_llm_models_by_type)],
-                    ),
-                }
-            )
+            ctx["new_model_form"] = LlmProviderModelForm(self.request.team)
+            ctx.update(llm_models_context(self.request.team, subtype))
+            if instance:
+                ctx.update(_connection_status_context(instance))
         return ctx
 
     def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
-        """Normally back to the team list, same as every save today. The one exception:
-        an automatic connection-test failure sends the user back to this provider's own
-        edit page instead, since that warning explicitly tells them to use the "Test
-        Connection" button, and that button only renders on the edit page itself.
+        """Normally back to the team list, same as every save today. The one exception: an
+        automatic connection test that came back with something to act on sends the user to
+        this provider's own edit page, where the badge and the failure panel say what it was.
         """
         if redirect_to_own_edit_page and obj is not None:
             return resolve_url(
@@ -415,19 +379,67 @@ class CreateServiceProvider(
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
-def _get_models_by_type(queryset):
-    models_by_type = defaultdict(list)
-    for model in queryset:
-        models_by_type[model.type].append(model)
-    # Deprecated models sink to the bottom; otherwise newest first.
+def _active_provider_tab(request) -> str:
+    tab = request.GET.get("tab")
+    return tab if tab in VALID_PROVIDER_TABS else "configuration"
+
+
+def _model_row(model, rates, is_embedding: bool) -> dict:
     return {
-        key: sorted(value, key=lambda x: (getattr(x, "deprecated", False), -x.created_at.timestamp()))
-        for key, value in models_by_type.items()
+        "id": model.id,
+        # LlmProviderModel and EmbeddingProviderModel are separate tables with separate
+        # sequences, so their ids collide - the row needs one that is unique per rendered
+        # list, or an hx-target resolves to whichever row querySelector reaches first.
+        "dom_id": f"{'embedding' if is_embedding else 'model'}_{model.id}",
+        "name": model.name,
+        "role": "embedding" if is_embedding else "chat",
+        "custom": model.team_id is not None,
+        "deprecated": getattr(model, "deprecated", False),
+        "context": None if is_embedding else _format_context(model.max_token_limit),
+        "rates": rates,
+        "is_llm": not is_embedding,
     }
 
 
-def _flatten(models_by_type: dict) -> list:
-    return [m for models in models_by_type.values() for m in models]
+def _format_context(max_token_limit: int) -> str:
+    """Token limits are read as magnitudes, not counted, so 409600 is noise next to 400K.
+
+    Zero is not a small limit - it's the value that disables compression entirely.
+    """
+    if not max_token_limit:
+        return "—"
+    if max_token_limit >= 1_000_000:
+        return f"{max_token_limit / 1_000_000:.1f}".removesuffix(".0") + "M"
+    if max_token_limit >= 1_000:
+        return f"{round(max_token_limit / 1_000)}K"
+    return str(max_token_limit)
+
+
+def llm_models_context(team, subtype) -> dict:
+    """The Models tab: every model this provider type can use, as one list.
+
+    Chat and embedding models, team-owned and global, are one list because they answer one
+    question - what can this provider run? - and the role badge carries the rest. The rows
+    are keyed on provider type plus team rather than on the provider, so every provider of
+    the same type shows the same list.
+    """
+    type_slug = str(subtype)
+    llm_models = list(LlmProviderModel.objects.for_team(team).filter(type=type_slug))
+    embedding_models = list(EmbeddingProviderModel.objects.for_team(team).filter(type=type_slug))
+    pricing_lookup = _pricing_lookup(team, llm_models)
+
+    rows = [
+        _model_row(model, rates=pricing_lookup.get(model.id), is_embedding=is_embedding)
+        for models_, is_embedding in ((llm_models, False), (embedding_models, True))
+        for model in models_
+    ]
+    # Deprecated models sink to the bottom; chat before embedding, then alphabetical.
+    rows.sort(key=lambda r: (r["deprecated"], r["role"] == "embedding", r["name"]))
+    return {
+        "model_rows": rows,
+        "role_filters": ROLE_FILTERS,
+        "deprecated_count": sum(1 for r in rows if r["deprecated"]),
+    }
 
 
 def _pricing_lookup(team, llm_models: list) -> dict:
@@ -488,16 +500,10 @@ def create_llm_provider_model(request, team_slug: str):
         model.team = request.team
         model.save()
         _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
-    custom_models = LlmProviderModel.objects.filter(team=request.team)
     return render(
         request,
-        "service_providers/components/custom_llm_models.html",
-        {
-            "llm_models_by_type": _get_models_by_type(custom_models),
-            "embedding_models_by_type": _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None)),
-            "for_type": form.cleaned_data["type"],
-            "pricing_lookup": _pricing_lookup(request.team, list(custom_models)),
-        },
+        "service_providers/components/llm_model_rows.html",
+        llm_models_context(request.team, form.cleaned_data["type"]),
     )
 
 
@@ -606,14 +612,11 @@ def _persist_team_pricing_rules(team, model: LlmProviderModel, cleaned: dict, us
 
 def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
     """Re-render a single row partial after an HTMX swap."""
+    rates = _pricing_lookup(request.team, [model]).get(model.id)
     return render(
         request,
         "service_providers/components/llm_model_row.html",
-        {
-            "model": model,
-            "show_delete": model.team_id == request.team.id,
-            "pricing_lookup": _pricing_lookup(request.team, [model]),
-        },
+        {"row": _model_row(model, rates=rates, is_embedding=False)},
     )
 
 
@@ -644,34 +647,8 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
     return redirect("service_providers:edit", team_slug=team_slug, provider_type=provider_type, pk=pk)
 
 
-@require_POST
-@login_and_team_required
-@permission_required("service_providers.change_llmprovider", raise_exception=True)
-def test_llm_connection(request, team_slug: str, provider_type: str, pk: int):
-    """Run a manual connection test for an LLM provider and redirect back to its edit page with the result."""
-    if provider_type != ServiceProvider.llm.slug:
-        raise Http404(f"Unsupported provider type: {provider_type}")
-    provider = get_object_or_404(LlmProvider, team=request.team, pk=pk)
-    try:
-        provider.test_connection()
-    except NoTestableModelError:
-        messages.warning(request, "No models configured to test. Add a model first.")
-    except ConnectionTestNotSupportedError:
-        messages.info(request, "Connection testing isn't supported for this provider type.")
-    except Exception as exc:
-        log.exception("LLM connection test failed for provider %s", pk)
-        match classify_connection_test_failure(exc):
-            case "retryable":
-                messages.warning(
-                    request, "Test failed due to a temporary issue (rate limit or timeout). Try again shortly."
-                )
-            case "permission":
-                messages.error(request, "Test failed. Check your credentials and try again.")
-            case _:
-                messages.error(request, "Test failed due to a connection issue on the provider's side. Try again soon.")
-    else:
-        messages.success(request, "Connection test succeeded.")
-    return redirect("service_providers:edit", team_slug=team_slug, provider_type=ServiceProvider.llm.slug, pk=pk)
+def _connection_status_context(provider: LlmProvider) -> dict:
+    return {"object": provider, "status": provider.connection_status}
 
 
 def _sync_in_flight(provider: MessagingProvider) -> bool:

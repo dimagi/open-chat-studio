@@ -4,6 +4,7 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.pipelines.tests.utils import content_flow_node
+from apps.service_providers.connection_status import EXTRA_DATA_KEY
 from apps.service_providers.exceptions import (
     ConnectionTestNotSupportedError,
     NoTestableModelError,
@@ -15,7 +16,6 @@ from apps.service_providers.models import (
     LlmProvider,
     LlmProviderModel,
     LlmProviderTypes,
-    classify_connection_test_failure,
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.evaluations import EvaluatorFactory
@@ -146,105 +146,6 @@ class TestServiceProviderModel:
         global_llm_provider_model.delete()
 
 
-@pytest.mark.parametrize(
-    ("exc", "expected"),
-    [
-        pytest.param(_status_code_exception(429), "retryable", id="rate-limit-status-code-429"),
-        pytest.param(_status_code_exception(503), "retryable", id="rate-limit-status-code-503"),
-        pytest.param(ServiceProviderConfigError("openai", "bad config"), "permission", id="invalid-config"),
-        pytest.param(_status_code_exception(401), "permission", id="openai-anthropic-style-401"),
-        pytest.param(_status_code_exception(403), "permission", id="openai-anthropic-style-403"),
-        pytest.param(_code_exception(401), "permission", id="google-style-401"),
-        pytest.param(_status_code_exception(500), "connection", id="openai-anthropic-style-500"),
-        pytest.param(_code_exception(500), "connection", id="google-style-500"),
-        pytest.param(RuntimeError("boom"), "connection", id="no-status-code-at-all"),
-        pytest.param(
-            _wrapped_exception(_code_exception(400)),
-            "permission",
-            id="gemini-style-wrapped-cause-400",
-        ),
-        pytest.param(
-            _wrapped_exception(_status_code_exception(500)),
-            "connection",
-            id="wrapped-cause-5xx-still-connection",
-        ),
-        pytest.param(_wrapped_exception(RuntimeError("also no status")), "connection", id="wrapped-cause-no-status"),
-    ],
-)
-def test_classify_connection_test_failure(exc, expected):
-    """Retryable (rate limit/timeout) is checked first and wins even over a 4xx-looking status
-    code, e.g. 429 - "check your credentials" would be the wrong message for a rate limit.
-    Everything else is 400-499 (or an invalid saved config, which never even reaches the
-    provider) as a permission issue; 500-599 or no status code at all (a raw connection
-    failure) as a connection issue. 503 is deliberately in the retryable case, not the
-    connection case: should_retry_exception treats 429/503 as the same "try again" bucket.
-
-    The wrapped-cause cases reproduce the actual bug reported against a live Gemini
-    provider: langchain_google_genai catches the real, status-bearing SDK exception and
-    re-raises its own wrapper with no status of its own, `from e`. Without checking
-    `__cause__`, a rejected Gemini credential was misclassified as a connection issue.
-    """
-    assert classify_connection_test_failure(exc) == expected
-
-
-def test_classify_connection_test_failure_handles_real_gemini_invalid_key_error():
-    """Reproduces the actual bug report, using the real classes involved (not stand-ins)
-    and the real chaining mechanism (`raise ... from e`, not a manually assigned
-    `__cause__`): an invalid Gemini API key raises google.api_core.exceptions.InvalidArgument
-    (which does carry `.code`), and langchain_google_genai re-raises it as
-    ChatGoogleGenerativeAIError (which doesn't) via `raise ChatGoogleGenerativeAIError(msg)
-    from e` - the exact line in the installed package. Confirmed by hand against the real
-    classes that the wrapper has neither `.status_code` nor `.code`, only `__cause__` does.
-    """
-    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
-    from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError  # noqa: PLC0415
-
-    def _raise_like_langchain_google_genai_does():
-        try:
-            raise google_exceptions.InvalidArgument("API key not valid. Please pass a valid API key.")
-        except google_exceptions.InvalidArgument as e:
-            msg = f"Invalid argument provided to Gemini: {e}"
-            raise ChatGoogleGenerativeAIError(msg) from e
-
-    with pytest.raises(ChatGoogleGenerativeAIError) as exc_info:
-        _raise_like_langchain_google_genai_does()
-
-    wrapper = exc_info.value
-    assert not hasattr(wrapper, "status_code")
-    assert not hasattr(wrapper, "code")
-    assert classify_connection_test_failure(wrapper) == "permission"
-
-
-def test_classify_connection_test_failure_checks_context_not_just_explicit_cause():
-    """__context__ (set automatically when a new exception is raised inside an except
-    block, even without `from e`) must also be checked, not just __cause__ - a provider
-    integration doesn't have to use explicit chaining for the original status to still be
-    recoverable."""
-
-    def _raise_wrapped_without_explicit_chaining():
-        try:
-            raise _code_exception(403)
-        except Exception:
-            raise ValueError("wrapped without explicit chaining")  # noqa: B904 - deliberate, testing __context__
-
-    with pytest.raises(ValueError, match="wrapped without explicit chaining") as exc_info:
-        _raise_wrapped_without_explicit_chaining()
-
-    assert classify_connection_test_failure(exc_info.value) == "permission"
-
-
-def test_classify_connection_test_failure_recognizes_openai_timeout():
-    """A provider-SDK timeout isn't in RATE_LIMIT_EXCEPTIONS or carrying a 429/503 status
-    code, so should_retry_exception alone misses it - classify_connection_test_failure must
-    still catch it via the explicit timeout isinstance check, same as the view already relied
-    on before this classifier absorbed that check."""
-    import httpx  # noqa: PLC0415 - heavy lib, slow startup
-    import openai  # noqa: PLC0415 - heavy lib, slow startup
-
-    timeout_error = openai.APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
-    assert classify_connection_test_failure(timeout_error) == "retryable"
-
-
 @pytest.mark.django_db()
 def test_test_connection_raises_when_no_model_configured():
     """A provider with zero LlmProviderModel rows for its type has nothing to test against.
@@ -360,87 +261,117 @@ def test_test_connection_raises_not_supported_for_voyage_with_no_models():
 
 
 @pytest.mark.django_db()
-def test_run_connection_test_hook_success_returns_no_warnings():
-    """A successful automatic test stays silent, matching the rest of the save flow."""
-    provider = LlmProviderFactory()
-    with mock.patch.object(LlmProvider, "test_connection"):
-        warnings = provider.run_connection_test_hook()
-    assert warnings == []
+class TestRunConnectionTest:
+    """`run_connection_test` records what it found and never raises - a failed test is a
+    status to read, not an exception for the caller to handle."""
 
+    def _testable_provider(self):
+        """A provider with exactly one model of its own type to test against.
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_returns_warning_on_failure():
-    """A real failure produces one warning pointing at the manual retry button, without
-    raising, so it can never abort the save it runs alongside. A plain exception with no
-    status code classifies as a connection issue, so the warning should say so."""
-    provider = LlmProviderFactory()
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=RuntimeError("boom")):
-        warnings = provider.run_connection_test_hook()
-    assert len(warnings) == 1
-    assert "test connection" in warnings[0].lower()
-    assert "provider's side" in warnings[0]
+        The seeded global rows are cleared first: the suite runs with --reuse-db, so a test
+        that leans on them is order-dependent.
+        """
+        provider = LlmProviderFactory()
+        LlmProviderModel.objects.filter(type=provider.type).delete()
+        LlmProviderModelFactory(team=provider.team, type=provider.type, name="gpt-4o-mini")
+        return provider
 
+    def test_a_pass_is_recorded_against_the_config_it_tested(self):
+        provider = self._testable_provider()
+        with mock.patch.object(LlmProvider, "invoke_test_model"):
+            status = provider.run_connection_test()
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_warns_with_credentials_message_for_permission_failure():
-    """A rejected-credential-style failure (a status code in the 4xx range) should tell the
-    user to check their credentials, same wording the manual button uses for this case."""
-    provider = LlmProviderFactory()
-    exc = Exception("invalid api key")
-    exc.status_code = 401
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=exc):
-        warnings = provider.run_connection_test_hook()
-    assert len(warnings) == 1
-    assert "credentials" in warnings[0].lower()
+        provider.refresh_from_db()
+        assert status.state == "ok"
+        recorded = provider.extra_data[EXTRA_DATA_KEY]
+        assert recorded["outcome"] == "ok"
+        assert recorded["fingerprint"] == provider.config_fingerprint
+        assert recorded["tested_at"]
 
+    def test_recording_a_result_leaves_the_rest_of_the_bag_alone(self):
+        """extra_data is a general bag - whatever else is stored beside the test result has
+        to survive the next test."""
+        provider = self._testable_provider()
+        provider.extra_data = {"something_else": "keep me"}
+        provider.save()
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_warns_with_temporary_message_for_rate_limit():
-    """Regression: a rate-limited save-time test must not be reported as a credentials
-    problem. A 429 status code is technically in the 4xx range that the permission bucket
-    otherwise covers, but classify_connection_test_failure checks retryable failures first
-    specifically to avoid this - this test locks that ordering in at the hook level, not
-    just in the classifier's own unit tests, since the hook has no separate retry/timeout
-    guard of its own the way the manual view does."""
-    provider = LlmProviderFactory()
-    exc = Exception("rate limited")
-    exc.status_code = 429
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=exc):
-        warnings = provider.run_connection_test_hook()
-    assert len(warnings) == 1
-    assert "credentials" not in warnings[0].lower()
-    assert "temporary" in warnings[0].lower()
+        with mock.patch.object(LlmProvider, "invoke_test_model"):
+            provider.run_connection_test()
 
+        provider.refresh_from_db()
+        assert provider.extra_data["something_else"] == "keep me"
+        assert provider.extra_data[EXTRA_DATA_KEY]["outcome"] == "ok"
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_warns_when_no_model_configured():
-    """No models configured yet means credentials genuinely haven't been verified - that's
-    an actionable, real state (add a model, then test), not something to swallow silently."""
-    provider = LlmProviderFactory()
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=NoTestableModelError(provider.type)):
-        warnings = provider.run_connection_test_hook()
-    assert len(warnings) == 1
-    assert "no models configured" in warnings[0].lower()
+    def test_a_failure_is_recorded_rather_than_raised(self):
+        provider = self._testable_provider()
+        exc = Exception("invalid api key")
+        exc.status_code = 401
+        with mock.patch.object(LlmProvider, "invoke_test_model", side_effect=exc):
+            status = provider.run_connection_test()
 
+        assert status.label == "Verification failed"
+        assert status.title == "Authentication failed"
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_silent_for_unsupported_provider():
-    """Voyage AI's lack of chat support is inherent to the type, not an actionable problem."""
-    provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
-    with mock.patch.object(LlmProvider, "test_connection", side_effect=ConnectionTestNotSupportedError(provider.type)):
-        warnings = provider.run_connection_test_hook()
-    assert warnings == []
+    def test_a_rate_limit_is_not_reported_as_a_credentials_problem(self):
+        """Regression: a 429 is technically a 4xx, but "check your credentials" is the wrong
+        thing to tell someone who was just throttled."""
+        provider = self._testable_provider()
+        exc = Exception("rate limited")
+        exc.status_code = 429
+        with mock.patch.object(LlmProvider, "invoke_test_model", side_effect=exc):
+            status = provider.run_connection_test()
 
+        assert status.label == "Couldn't verify"
+        assert not status.is_failure
 
-@pytest.mark.django_db()
-def test_run_connection_test_hook_warns_on_invalid_configuration():
-    """A genuinely invalid configuration is not the same as an unsupported provider type or a
-    missing model: it's a real, actionable problem, and must produce a warning rather than
-    being silently swallowed alongside the two expected setup-state cases."""
-    provider = LlmProviderFactory()
-    with mock.patch.object(
-        LlmProvider, "test_connection", side_effect=ServiceProviderConfigError(provider.type, "bad config")
-    ):
-        warnings = provider.run_connection_test_hook()
-    assert len(warnings) == 1
-    assert "credentials" in warnings[0].lower()
+    def test_no_configured_model_is_its_own_state(self):
+        """Nothing was verified, but nothing is wrong either - the next step is to add a
+        model, not to check the credentials."""
+        provider = LlmProviderFactory()
+        LlmProviderModel.objects.filter(type=provider.type).delete()
+
+        status = provider.run_connection_test()
+
+        assert status.label == "Can't verify"
+        assert provider.extra_data[EXTRA_DATA_KEY]["outcome"] == "no_model"
+
+    def test_an_untestable_provider_type_says_so(self):
+        """Voyage AI's lack of chat support is inherent to the type, not a problem to fix."""
+        provider = LlmProviderFactory(type=str(LlmProviderTypes.voyage))
+
+        status = provider.run_connection_test()
+
+        assert status.label == "Not supported"
+
+    def test_an_invalid_configuration_is_a_failure_not_a_setup_state(self):
+        provider = self._testable_provider()
+        with mock.patch.object(
+            LlmProvider, "invoke_test_model", side_effect=ServiceProviderConfigError(provider.type, "bad config")
+        ):
+            status = provider.run_connection_test()
+
+        assert status.is_failure
+        assert status.title == "The saved configuration is incomplete"
+
+    def test_editing_credentials_moves_the_badge_back_to_unverified(self):
+        """The result was recorded against the old key, so it says nothing about the new one."""
+        provider = self._testable_provider()
+        with mock.patch.object(LlmProvider, "invoke_test_model"):
+            provider.run_connection_test()
+        assert provider.connection_status.state == "ok"
+
+        provider.config = {**provider.config, "openai_api_key": "sk-a-different-key"}
+
+        assert provider.connection_status.state == "changed"
+        assert provider.connection_status.label == "Not verified"
+
+    def test_renaming_leaves_a_passing_result_standing(self):
+        """The name is not a credential, so a pass is still true after a rename."""
+        provider = self._testable_provider()
+        with mock.patch.object(LlmProvider, "invoke_test_model"):
+            provider.run_connection_test()
+
+        provider.name = "Renamed provider"
+        provider.save()
+
+        assert provider.connection_status.state == "ok"

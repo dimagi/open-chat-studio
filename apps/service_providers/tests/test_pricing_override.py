@@ -1,7 +1,6 @@
 """Tests for the override / revert / create-with-pricing HTMX flow on
 the LLM provider model list."""
 
-from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -10,7 +9,7 @@ from django.urls import reverse
 
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.service_providers.models import LlmProviderModel
-from apps.service_providers.views import _get_models_by_type
+from apps.service_providers.views import llm_models_context
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -193,23 +192,20 @@ class TestCreateModelWithPricing:
 
 @pytest.mark.django_db()
 class TestModelOrdering:
-    """`_get_models_by_type` orders each type bucket newest-first with
-    deprecated models sunk to the bottom."""
+    """The Models tab sorts chat before embedding, alphabetically, deprecated sunk last."""
 
-    def _model(self, team, name, *, created, deprecated=False):
-        model = LlmProviderModel.objects.create(
+    def _model(self, team, name, *, deprecated=False):
+        return LlmProviderModel.objects.create(
             team=team, type="openai", name=name, max_token_limit=128000, deprecated=deprecated
         )
-        # created_at is auto_now_add, so override it after the fact.
-        LlmProviderModel.objects.filter(pk=model.pk).update(created_at=datetime(2026, 1, created, tzinfo=UTC))
-        return model
 
-    def test_orders_newest_first_with_deprecated_last(self):
+    def test_orders_alphabetically_with_deprecated_last(self):
         team = TeamWithUsersFactory.create()
-        newest = self._model(team, "c-newest", created=3)
-        oldest = self._model(team, "a-oldest", created=1)
-        deprecated_new = self._model(team, "b-deprecated", created=2, deprecated=True)
+        self._model(team, "c-third")
+        self._model(team, "a-first")
+        self._model(team, "b-deprecated", deprecated=True)
 
-        ordered = _get_models_by_type(LlmProviderModel.objects.filter(team=team))["openai"]
+        rows = llm_models_context(team, "openai")["model_rows"]
+        team_rows = [r["name"] for r in rows if r["custom"]]
 
-        assert ordered == [newest, oldest, deprecated_new]
+        assert team_rows == ["a-first", "c-third", "b-deprecated"]

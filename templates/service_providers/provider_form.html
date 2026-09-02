@@ -17,23 +17,30 @@
 
 {% block app %}
   {% comment %}
-  configChanged is shared by the whole card, not just the config fields below: the submit
-  button's label and the separate Test Connection form (in post_form) both read it too, so
-  they need to be in the same Alpine scope even though only the config fields set it.
+  configChanged is shared by the card rather than scoped to the config fields, because the
+  submit button reads it too and sits outside them.
   {% endcomment %}
   <div class="app-card max-w-5xl mx-auto" x-data="{ configChanged: false }">
-    <h1 class="pg-title">{{ title }}</h1>
+    {% comment %}
+      An LLM provider's title carries the status of its last credential check. Every other
+      provider just gets the title.
+    {% endcomment %}
+    {% if status %}
+      {% include "service_providers/components/connection_status.html" %}
+    {% else %}
+      <h1 class="pg-title">{{ title }}</h1>
+    {% endif %}
 
     {% comment %}
-      On edit the page splits into Configuration and Usages tabs; on create there is
-      nothing to show usages for, so the configuration content stands alone. The two
-      halves of the tab wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written
-      once here and stays reachable by the blocks that llm_provider_form.html overrides.
+      On edit the page splits into tabs; on create there is nothing to show models or
+      usages for, so the configuration content stands alone. The two halves of the tab
+      wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written once here
+      and stays reachable by the blocks that llm_provider_form.html overrides.
     {% endcomment %}
     {% if object.id %}
       <div role="tablist" class="tabs tabs-border mt-4">
         <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Configuration"
-               {% if active_provider_tab != 'usages' %}checked{% endif %}>
+               {% if active_provider_tab == 'configuration' %}checked{% endif %}>
         <div role="tabpanel" class="tab-content pt-4">
     {% endif %}
 
@@ -47,16 +54,16 @@
       {% if config_form.custom_template %}
         {% include config_form.custom_template with object=object form=config_form %}
       {% else %}
-        {% if test_llm_connection_url %}
+        {% if status %}
           {% comment %}
-          Nudges toward re-testing after an edit, not a saved "untested" state: resets on
-          reload by design, same as the manual Test Connection button it points at.
+          Saving is the only thing that verifies credentials, so the nudge is to save.
+          Resets on reload by design - it describes the unsaved edit, not stored state.
           {% endcomment %}
           <div x-on:input="configChanged = true" x-on:change="configChanged = true">
             {% render_form_fields config_form %}
             <div x-show="configChanged" x-cloak role="alert" class="alert alert-warning alert-soft text-sm py-2 mt-2">
               <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>You've changed the credentials above. Save and use Test Connection to confirm they still work.</span>
+              <span>You've changed the credentials above. Saving will verify them again.</span>
             </div>
           </div>
         {% else %}
@@ -74,13 +81,13 @@
           {% endif %}
         {% endif %}
       {% endif %}
-      {% if test_llm_connection_url %}
+      {% if status %}
         {% comment %}
         Only on the edit page for an existing LLM provider: the label says up front whether
-        saving will also re-test credentials, driven by the same configChanged the banner
-        and the manual button below use.
+        saving will also re-verify credentials, driven by the same configChanged the banner
+        above uses.
         {% endcomment %}
-        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Test' : 'Update'">{{ button_text }}</button>
+        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Verify' : 'Update'">{{ button_text }}</button>
       {% else %}
         <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
       {% endif %}
@@ -101,20 +108,11 @@
           <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
         </form>
       {% endif %}
-      {% if test_llm_connection_url %}
-        {% comment %}
-        Hidden while credentials are unsaved: without this, clicking it would test whatever
-        is still saved in the database, not what's currently typed - misleading either way.
-        {% endcomment %}
-        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4" x-show="!configChanged">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline">Test Connection</button>
-        </form>
-      {% endif %}
     {% endblock post_form %}
 
     {% if object.id %}
         </div>
+        {% block extra_tabs %}{% endblock %}
         {% if can_view_usages %}
           <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Usages"
                  {% if active_provider_tab == 'usages' %}checked{% endif %}>
@@ -137,4 +135,12 @@
       </div>
     {% endif %}
   </div>
+
+  {% comment %}
+    Outside the tab wrapper on purpose. An unselected daisyUI tab panel is display:none,
+    and a <dialog> under a hidden ancestor is promoted to the top layer but generates no
+    boxes - showModal() would open it with nothing on screen. Anything opened from one tab
+    whose markup would otherwise sit in another belongs here.
+  {% endcomment %}
+  {% block modals %}{% endblock %}
 {% endblock app %}

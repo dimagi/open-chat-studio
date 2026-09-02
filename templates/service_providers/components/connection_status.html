@@ -1,0 +1,34 @@
+{% comment %}
+  Header status for an LLM provider. Read-only: credentials are verified by saving them,
+  so there is nothing to click here.
+  Required context: `object`, `status`.
+{% endcomment %}
+<div>
+  <div class="flex items-center gap-3">
+    <h1 class="pg-title">Edit {{ object.name }}</h1>
+    <span class="badge {{ status.badge_class }}">{{ status.label }}</span>
+  </div>
+  <p class="text-xs text-base-content/60 mt-1">
+    {% if status.state == "ok" %}
+      Last verified {{ status.tested_at|timesince }} ago
+    {% else %}
+      {{ status.sub }}
+    {% endif %}
+  </p>
+
+  {% if status.show_detail %}
+    <div role="alert" class="alert {{ status.alert_class }} alert-soft text-sm items-start mt-3">
+      <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+      <div>
+        <div class="font-semibold">{{ status.title }}</div>
+        <p class="text-xs mt-0.5">{{ status.body }}</p>
+        {% if status.raw %}
+          <details class="mt-2">
+            <summary class="text-xs cursor-pointer">Show provider response</summary>
+            <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ status.raw }}</pre>
+          </details>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
