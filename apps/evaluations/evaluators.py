@@ -3,6 +3,11 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
 
+from apps.evaluations.const import (
+    ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS,
+    evaluator_prompt_variable_hints,
+    prompt_variable_roots,
+)
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
@@ -84,9 +89,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
 
     prompt: str = Field(
         description=(
-            "The prompt template to use for evaluation. "
-            "Available variables: {input.content}, {output.content}, {context.[context_parameter]}, {full_history} "
-            "{generated_response}"
+            "The prompt template to use for evaluation. Available variables: "
+            f"{', '.join(evaluator_prompt_variable_hints('message'))}"
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor),
     )
@@ -94,12 +98,11 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     @field_validator("prompt")
     @classmethod
     def prompt_must_contain_variable(cls, v: str) -> str:
-        required_prefixes = ["{input", "{output", "{context.", "{full_history}", "{generated_response}"]
-        if not any(prefix in v for prefix in required_prefixes):
+        # Roots only: an unknown sub-key still surfaces as an error result at run time.
+        if not prompt_variable_roots(v) & ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS:
             raise ValueError(
                 "The prompt must include at least one variable so the evaluator has context to work with. "
-                "Available variables: {input.content}, {output.content}, {context.[name]}, {full_history}, "
-                "{generated_response}"
+                f"Available variables: {', '.join(evaluator_prompt_variable_hints('message'))}"
             )
         return v
 
@@ -138,6 +141,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             input=SafeAccessWrapper(input),
             output=SafeAccessWrapper(output),
             context=SafeAccessWrapper(message.context),
+            participant_data=SafeAccessWrapper(message.participant_data or {}),
+            session_state=SafeAccessWrapper(message.session_state or {}),
             full_history=message.full_history,
             generated_response=generated_response,
         )
@@ -158,6 +163,8 @@ def main(input: dict, output: dict, context: dict, full_history: str, generated_
         context: Additional context of the message (e.g., {'current_datetime': '2025-06-02T18:51:55.334974+00:00'})
         full_history: Complete conversation history as a string (e.g., "user: hello!\nassistant: hello!\n")
         generated_response: The AI-generated response being evaluated, if enabled
+        **kwargs: Carries participant_data and session_state, both dicts captured at the time
+              of the message (e.g., kwargs['session_state'].get('current_step'))
 
     Returns:
         dict: Evaluation results where keys become columns in the output
@@ -214,6 +221,10 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
                 context=message.context,
                 full_history=message.full_history,
                 generated_response=generated_response,
+                # Via **kwargs: _validate_function_signature demands an exact positional match,
+                # so widening _get_function_args would invalidate every saved evaluator.
+                participant_data=message.participant_data or {},
+                session_state=message.session_state or {},
             )
             if not isinstance(result, dict):
                 raise EvaluationRunException("The python function did not return a dictionary")

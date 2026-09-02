@@ -2,7 +2,7 @@ import dataclasses
 import logging
 from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
@@ -26,7 +26,8 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import ServiceProviderConfigError
+from .exceptions import ConnectionTestNotSupportedError, NoTestableModelError, ServiceProviderConfigError
+from .whatsapp import WhatsAppProviderMixin
 
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
@@ -78,6 +79,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
+    litellm = "litellm", _("LiteLLM")
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
@@ -116,6 +118,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AnthropicConfigForm
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return forms.OpenAIGenericConfigForm
+            case LlmProviderTypes.litellm:
+                return forms.LiteLLMConfigForm
             case LlmProviderTypes.deepseek:
                 return forms.DeepSeekConfigForm
             case LlmProviderTypes.google:
@@ -153,6 +157,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AnthropicLlmService(**config)
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.litellm:
+                return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:
                 return llm_service.DeepSeekLlmService(**config)
             case LlmProviderTypes.google:
@@ -162,6 +168,77 @@ class LlmProviderTypes(LlmProviderType, Enum):
             case LlmProviderTypes.voyage:
                 return llm_service.VoyageAILlmService(**config)
         return None
+
+
+CONNECTION_TEST_TIMEOUT_SECONDS = 10
+
+
+def classify_connection_test_failure(exc: Exception) -> Literal["retryable", "permission", "connection"]:
+    """Categorize a test_connection() failure for a user-facing message.
+
+    Only called for failures that aren't already handled as NoTestableModelError or
+    ConnectionTestNotSupportedError (callers check those first, since they're expected
+    setup state, not a test failure) - everything else falls into one of three buckets:
+
+    "retryable": a rate limit or timeout. Checked first and deliberately not folded into
+    the status-code check below - a 429 is technically in the 4xx range, but "check your
+    credentials" would be the wrong thing to tell a user who just got rate-limited.
+
+    "permission": the request never got a valid answer because what we sent was wrong -
+    either the saved provider configuration itself is invalid (ServiceProviderConfigError,
+    raised before any network call is made) or the provider rejected it outright (an
+    HTTP 4xx-equivalent status).
+
+    "connection": everything else - a provider or network-side failure (HTTP 5xx-equivalent,
+    or no status code at all, e.g. a raw connection error).
+
+    Duck-types the status code so the permission/connection split works across every
+    provider without importing any SDK here: OpenAI (and every OpenAI-compatible type built
+    on it) and Anthropic expose `.status_code`; Google's exceptions expose `.code` with the
+    same HTTP-equivalent numbering instead. Checks `exc.__cause__`/`__context__` too, since
+    at least one integration (Gemini, via langchain_google_genai) catches the real,
+    status-bearing SDK exception and re-raises its own wrapper around it with `from e` -
+    the wrapper itself carries no status, only the exception it chained still does. The
+    retryable check does need the SDKs (to reuse retry.py's `should_retry_exception`, and
+    to recognize provider-SDK timeouts it doesn't cover), so it's a local import here, same
+    reasoning as elsewhere in this file: avoids loading heavy langchain/provider deps at
+    Django startup.
+    """
+    import openai  # noqa: PLC0415 - heavy lib, slow startup
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - heavy lib, slow startup
+
+    from apps.service_providers.llm_service.retry import should_retry_exception  # noqa: PLC0415
+
+    if should_retry_exception(exc) or isinstance(exc, (openai.APITimeoutError, google_exceptions.DeadlineExceeded)):
+        return "retryable"
+
+    if isinstance(exc, ServiceProviderConfigError):
+        return "permission"
+
+    status = _extract_status_code(exc)
+    if isinstance(status, int) and 400 <= status < 500:
+        return "permission"
+
+    return "connection"
+
+
+def _extract_status_code(exc: Exception) -> int | None:
+    """Duck-types a status code off exc, falling back to its __cause__/__context__.
+
+    Verified against the actual installed packages, not assumed: OpenAI, Azure, Groq,
+    Perplexity, DeepSeek, MiniMax (all via langchain_openai), Anthropic, and Google Vertex
+    AI all let the original, status-bearing SDK exception propagate unwrapped. Gemini (via
+    langchain_google_genai) is the one that doesn't - it catches
+    google.api_core.exceptions.InvalidArgument and re-raises
+    `ChatGoogleGenerativeAIError(msg) from e`, so the status only survives on `__cause__`.
+    """
+    for candidate in (exc, exc.__cause__, exc.__context__):
+        if candidate is None:
+            continue
+        status = getattr(candidate, "status_code", None) or getattr(candidate, "code", None)
+        if isinstance(status, int):
+            return status
+    return None
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -201,6 +278,89 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         If file_ids are provided, they will be linked to the index.
         """
         return self.get_llm_service().create_remote_index(name, file_ids)
+
+    def test_connection(self) -> None:
+        """Send one minimal chat request to verify the provider's credentials work.
+
+        Raises `ConnectionTestNotSupportedError` for provider types, like Voyage AI, that
+        don't support chat completions at all; `NoTestableModelError` if the team has no
+        model configured to test with; `ServiceProviderConfigError` if the saved config is
+        invalid for a type that does support the test. Callers classify and report all three.
+        """
+        from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
+
+        # Local import: default_models imports LlmProviderModel/LlmProviderTypes from this
+        # module, so importing it at module level here would be circular.
+        from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
+
+        if self.type_enum == LlmProviderTypes.voyage:
+            raise ConnectionTestNotSupportedError(self.type)
+
+        # Prefer the provider type's registered default model (get_default_model, the same
+        # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
+        # model most likely to actually work; fall back to any other model the team has
+        # configured for this type if they don't have that one. A team-configured model
+        # wins over a global one, same priority as pricing-rule resolution elsewhere in
+        # this app.
+        team_models = (
+            LlmProviderModel.objects.for_team(self.team)
+            .filter(type=self.type)
+            .order_by(models.F("team_id").desc(nulls_last=True))
+        )
+        default_model = get_default_model(self.type)
+        model = team_models.filter(name=default_model.name).first() if default_model else None
+        if model is None:
+            model = team_models.first()
+        if model is None:
+            raise NoTestableModelError(self.type)
+
+        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+        chat_model.invoke([HumanMessage(content="Hello")])
+
+    def run_connection_test_hook(self) -> list[str]:
+        """Automatically verify credentials after every save (create and update).
+
+        The caller runs this after the save's own transaction has already committed. No
+        transaction wraps this call: `test_connection()` makes a synchronous external LLM
+        request that can take several seconds, and holding a DB connection open for that
+        long (or letting it get repeated on a transaction retry/rollback) is exactly what
+        running this after commit, with no transaction of its own, avoids. Returns a list of
+        user-facing warning messages the caller should surface (e.g. via Django's messages
+        framework); empty on success.
+
+        A provider type that doesn't support this test at all (Voyage AI) stays silent -
+        there's nothing actionable to tell the user, and no world in which they can make it
+        testable. A missing model, on the other hand, now produces its own warning rather
+        than staying silent: on a fresh provider (or one whose models were all removed),
+        credentials genuinely haven't been verified yet, and "add a model, then test" is a
+        real next step, not just expected setup noise. Everything else the underlying test
+        can raise (an invalid config, a real failure) also produces a warning, worded by
+        classify_connection_test_failure. The manual "Test Connection" button reports all
+        of these the same way.
+        """
+        warnings: list[str] = []
+        try:
+            self.test_connection()
+        except ConnectionTestNotSupportedError:
+            pass
+        except NoTestableModelError:
+            warnings.append(
+                "Provider saved, but there are no models configured to test with yet. Add "
+                "one, then use Test Connection below to verify your credentials."
+            )
+        except Exception as exc:
+            log.exception("Automatic connection test failed for LLM provider %s", self.pk)
+            match classify_connection_test_failure(exc):
+                case "retryable":
+                    reason = "This looks like a temporary issue (rate limit or timeout)."
+                case "permission":
+                    reason = "Check your credentials."
+                case _:
+                    reason = "This looks like a connection issue on the provider's side."
+            warnings.append(
+                f"Provider saved, but the connection test failed. {reason} Use Test Connection below to retry."
+            )
+        return warnings
 
 
 class LlmProviderModelManager(models.Manager):
@@ -570,7 +730,7 @@ class MessagingProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class MessagingProvider(BaseTeamModel, ProviderMixin):
+class MessagingProvider(BaseTeamModel, ProviderMixin, WhatsAppProviderMixin):
     objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
@@ -589,6 +749,49 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
+
+    def get_absolute_url(self) -> str:
+        return reverse(
+            "service_providers:edit",
+            kwargs={
+                "team_slug": get_slug_for_team(self.team_id),
+                "provider_type": const.MESSAGING,
+                "pk": self.id,
+            },
+        )
+
+    def resolve_number(self, number: str) -> dict | None:
+        """Confirm `number` belongs to this provider and return the channel config it implies.
+
+        Returns None when the provider does not have the number. The dict is merged into the
+        channel's ``extra_data``, so it carries whatever that platform needs to address the
+        number -- for Meta Cloud API that is the ``phone_number_id`` sends are addressed to.
+
+        Resolving lives here rather than on the service because the Meta numbers are cached on
+        the provider row, and the service is built from config alone.
+        """
+        if self.type_enum == MessagingProviderType.meta_cloud_api:
+            return self.resolve_whatsapp_number(number)
+        return {"number": number} if self.get_messaging_service().resolve_number(number) else None
+
+    def _update_extra_data(self, key: str, value) -> None:
+        """Set one key in ``extra_data`` without disturbing the others.
+
+        ``extra_data`` also holds the webhook verify token hash, which the config form writes,
+        so the row is re-read under a lock and only ``key`` is replaced.
+        """
+        with transaction.atomic():
+            provider = MessagingProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = provider.extra_data or {}
+            extra_data[key] = value
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
+        self.extra_data = extra_data
+
+    def run_post_create_hook(self) -> None:
+        """Type-specific work to run once, after the provider is first created."""
+        if self.type == MessagingProviderType.meta_cloud_api.value:
+            self.queue_whatsapp_provider_sync()
 
 
 class AuthProviderType(models.TextChoices):

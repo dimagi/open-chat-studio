@@ -56,6 +56,14 @@ version section when a release is cut.
      removal may land, and links its deprecation tracking issue. -->
 
 ### Removed
+- The OpenAI Assistants UI is gone: `/a/<team>/assistants/` and everything under
+  it now 404s, the nav entry is removed, and `assistant_file:` links in
+  historical chat messages render as plain text instead of downloads. OpenAI
+  retired the Assistants API on 26 August 2026, so the feature had no working
+  backend to keep. No migration and no data loss — the `OpenAiAssistant` rows
+  and the Django admin for them survive this release; a later phase drops the
+  tables. Pipelines holding an assistant node are unaffected by this PR. (#4328,
+  #4254)
 
 ### Security
 <!-- Also list here anything requiring operator action, e.g. credential

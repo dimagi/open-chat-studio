@@ -1,8 +1,14 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
 app_name = "service_providers"
+
+whatsapp_urls = [
+    path("status/", views.whatsapp_status, name="whatsapp_status"),
+    path("refresh/", views.whatsapp_refresh, name="whatsapp_refresh"),
+    path("send-test/", views.whatsapp_send_test, name="whatsapp_send_test"),
+]
 
 urlpatterns = [
     path("llm_provider_model/create/", views.create_llm_provider_model, name="llm_provider_model_new"),
@@ -26,6 +32,7 @@ urlpatterns = [
         views.pricing_revert,
         name="pricing_revert",
     ),
+    path("messaging/<int:pk>/whatsapp/", include(whatsapp_urls)),
     path("<slug:provider_type>/table/", views.ServiceProviderTableView.as_view(), name="table"),
     path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),
     path("<slug:provider_type>/<int:pk>/", views.CreateServiceProvider.as_view(), name="edit"),
@@ -39,4 +46,5 @@ urlpatterns = [
     path("<slug:provider_type>/<int:pk>/remove-file/<int:file_id>", views.remove_file, name="delete_file"),
     path("<slug:provider_type>/<int:pk>/upload-file/", views.AddFileToProvider.as_view(), name="add_file"),
     path("<slug:provider_type>/<int:pk>/sync-voices/", views.sync_voices, name="sync_voices"),
+    path("<slug:provider_type>/<int:pk>/test-connection/", views.test_llm_connection, name="test_llm_connection"),
 ]
