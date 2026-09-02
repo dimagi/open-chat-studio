@@ -131,7 +131,7 @@ def start(chatbot) -> str:
 
 
 @pytest.fixture()
-def end(chatbot) -> str:
+def end_node(chatbot) -> str:
     return boundary_node(chatbot, "EndNode")
 
 
