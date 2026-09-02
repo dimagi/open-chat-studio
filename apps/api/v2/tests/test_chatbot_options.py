@@ -15,7 +15,6 @@ from apps.api.v2.discovery.serializers import ChatbotOptionsSerializer
 from apps.api.v2.discovery.views import CHATBOT_OPTIONS_EXAMPLE
 from apps.experiments.models import SyntheticVoice, VoiceResponseBehaviours
 from apps.service_providers.models import VoiceProviderType
-from apps.teams.models import Flag
 from apps.utils.factories.experiment import ConsentFormFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -44,12 +43,6 @@ def _options(team, **params) -> dict:
     response = client.get(reverse("api:v2:chatbot-options"), params)
     assert response.status_code == 200, response.content
     return response.json()
-
-
-def _enable_voice_engine_flag_for(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_open_ai_voice_engine")
-    flag.teams.add(team)
-    flag.flush()
 
 
 @pytest.mark.django_db()
@@ -119,7 +112,7 @@ def test_versioned_consent_forms_are_not_offered(team_with_every_resource):
 
 
 @pytest.mark.django_db()
-def test_a_flagged_off_voice_service_is_offered_to_neither_the_ui_nor_the_api(team):
+def test_a_flagged_off_voice_service_is_offered_to_neither_the_ui_nor_the_api(team, team_flag):
     """The form hides the OpenAI voice engine behind a team flag. The API reads its lists off that
     same form, so a team without the flag must not be told it can write those voices."""
     # A voice engine voice only ever belongs to a provider of that type -- `VoiceProvider.add_files`
@@ -132,7 +125,7 @@ def test_a_flagged_off_voice_service_is_offered_to_neither_the_ui_nor_the_api(te
     )
 
     without_flag = _options(team)
-    _enable_voice_engine_flag_for(team)
+    team_flag("flag_open_ai_voice_engine", team)
     with_flag = _options(team)
 
     assert not [entry for entry in without_flag["synthetic_voice"] if "Alloy" in entry["label"]]

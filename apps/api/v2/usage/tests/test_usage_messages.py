@@ -218,7 +218,7 @@ def test_unknown_participant_returns_zeroed_block():
 def test_repeated_metric_params_are_deduplicated():
     serializer = UsageQuerySerializer(data={"metric": ["messages", "messages"]})
     assert serializer.is_valid(), serializer.errors
-    assert serializer.validated_data["metric"] == {"messages"}
+    assert serializer.validated_data["metric"] == ["messages"]
 
 
 @pytest.mark.parametrize(
