@@ -6,14 +6,6 @@
          {% if active_provider_tab == 'models' %}checked{% endif %}>
   <div role="tabpanel" class="tab-content pt-4">
     {% include "service_providers/components/llm_models_tab.html" %}
-    <div role="alert" class="alert alert-info alert-soft text-sm py-2 mt-4">
-      <i class="fa-solid fa-circle-info"></i>
-      <span>
-        We use
-        <a href="https://llm-stats.com" target="_blank" rel="noopener noreferrer" class="link link-hover font-semibold">llm-stats.com</a>
-        to source new model releases as they become available.
-      </span>
-    </div>
   </div>
 {% endblock extra_tabs %}
 
