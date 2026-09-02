@@ -129,13 +129,10 @@ def _team_resource_options(team: Team, include_versions: bool) -> dict:
         OptionsSource.assistant: (
             [_option("", "Select an Assistant")]
             + [
-                _option(
-                    value=assistant["id"],
-                    label=assistant["name"],
-                    # Always link to the working version. If `working_version_id` is None, it means the
-                    # assistant is the working version.
-                    edit_url=reverse("assistants:edit", args=[team.slug, assistant["id"]]),
-                )
+                # No edit_url: the assistants UI is gone, so there is no page to link to. The
+                # list itself stays until AssistantNode does, because the node still declares this
+                # source and a declared source with no list breaks the builder.
+                _option(value=assistant["id"], label=assistant["name"])
                 for assistant in assistants
             ]
         ),
