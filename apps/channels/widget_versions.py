@@ -147,7 +147,7 @@ SESSION_TOKEN_INTRODUCED = Version("0.9.0")
 
 # The release that ships the `authTokenProvider` prop. It exists so the
 # channel dialog and the docs can name the release an `oauth`-mode embed needs.
-MIN_OAUTH_WIDGET_VERSION = Version("0.12.0")
+MIN_OAUTH_WIDGET_VERSION = "0.12.0"
 
 # Widget release that collects consent in the composer (public channel design, D7). Consent is
 # enforced on the Chat API only for widgets from this release on: older widgets, 0.12.0 included,
