@@ -56,6 +56,13 @@ version section when a release is cut.
      removal may land, and links its deprecation tracking issue. -->
 
 ### Removed
+- OpenAI Assistants are fully removed. A pipeline holding an assistant node
+  still opens in the editor — the node renders as a "Removed Node" — but the
+  pipeline no longer builds, so it cannot run. OpenAI retired the Assistants API
+  on 26 August 2026, so these pipelines were already failing at the provider.
+  No migration and no data loss: the `OpenAiAssistant` rows and their Django
+  admin survive this release, and a later phase drops the tables and the FK
+  columns. (#4372, #4254)
 - **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
   key on a node, and the `AssistantNodeParams` component is gone from the node
   params union. The key was already conditional — omitted for nodes not
