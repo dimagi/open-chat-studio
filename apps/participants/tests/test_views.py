@@ -47,6 +47,60 @@ def test_edit_participant_data(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_edit_participant_data_for_published_version_updates_working_version_row(client, team_with_users):
+    """ParticipantData is always keyed to the working version. Saving from a page scoped to a
+    published version (e.g. a session running on that version) must update the same working-version
+    row the live chat runtime reads, not create a second row orphaned under the version's id."""
+    participant = ParticipantFactory.create(team=team_with_users)
+    team = participant.team
+    working_experiment = ExperimentFactory.create(team=team)
+    published_version = working_experiment.create_new_version()
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse(
+        "participants:edit-participant-data",
+        kwargs={
+            "team_slug": team.slug,
+            "participant_id": participant.id,
+            "experiment_id": published_version.id,
+        },
+    )
+    query_data = QueryDict("", mutable=True)
+    query_data.update({"participant-data": json.dumps({"name": "B"})})
+    client.post(url, query_data)
+
+    assert ParticipantData.objects.get(participant=participant, experiment=working_experiment).data["name"] == "B"
+    assert not ParticipantData.objects.filter(participant=participant, experiment=published_version).exists()
+
+
+@pytest.mark.django_db()
+def test_edit_participant_data_with_missing_field_does_not_500(client, team_with_users):
+    """A double-submitted request (e.g. two rapid clicks racing past the disabled-elt
+    guard) can arrive with no `participant-data` field at all -- that must surface as
+    the same validation error as invalid JSON, not an unhandled 500."""
+    participant = ParticipantFactory.create(team=team_with_users)
+    team = participant.team
+    session = ExperimentSessionFactory.create(participant=participant, team=team, experiment__team=team)
+    user = team.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse(
+        "participants:edit-participant-data",
+        kwargs={
+            "team_slug": team.slug,
+            "participant_id": participant.id,
+            "experiment_id": session.experiment.id,
+        },
+    )
+
+    response = client.post(url, {})
+    assert response.status_code == 200
+    assert "Data must be a valid JSON object" in response.content.decode()
+    assert not ParticipantData.objects.filter(participant=participant, experiment=session.experiment).exists()
+
+
+@pytest.mark.django_db()
 def test_single_participant_home_with_experiment_renders_session_table(client, team_with_users):
     """Regression: this page builds ChatbotSessionsTable without RequestConfig, so render_chatbot
     must not assume self.request is set."""
