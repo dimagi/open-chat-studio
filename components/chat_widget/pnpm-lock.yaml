@@ -19,7 +19,7 @@ importers:
         version: 3.0.8
       marked:
         specifier: ^18.0.7
-        version: 18.0.7
+        version: 18.0.11
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.1.12
@@ -1219,8 +1219,8 @@ packages:
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
 
-  marked@18.0.7:
-    resolution: {integrity: sha512-iDVQ5ldaiKXn6b2JroX5kgRfmwgqolW7NpaEzTl1k/2Zh1njIEN9yniyLV/mOvWwtsE8OGgkjsCYvijuPk1dtA==}
+  marked@18.0.11:
+    resolution: {integrity: sha512-HnslJfsZkRPBDJRHvVtAaWlZHEpSu7u8LgQuJCELjRKuWR+hpq4A7sLq3p8HaI9ypVoXDXxV34CsQJEe1+J5Aw==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -3011,7 +3011,7 @@ snapshots:
     dependencies:
       tmpl: 1.0.5
 
-  marked@18.0.7: {}
+  marked@18.0.11: {}
 
   mdn-data@2.27.1: {}
 
