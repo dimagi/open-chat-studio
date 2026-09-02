@@ -126,7 +126,7 @@ def client(chatbot):
 
 
 @pytest.fixture()
-def start(chatbot) -> str:
+def start_node(chatbot) -> str:
     return boundary_node(chatbot, "StartNode")
 
 
