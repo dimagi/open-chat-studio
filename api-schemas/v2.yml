@@ -1093,6 +1093,13 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
           readOnly: true
@@ -1128,6 +1135,7 @@ components:
       - seed_message
       - synthetic_voice_id
       - trace_provider_id
+      - trace_sample_rate
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -2365,6 +2373,14 @@ components:
         trace_provider_id:
           type: integer
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
         conversational_consent_enabled:
@@ -2994,6 +3010,8 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             usage:read: Read usage and activity data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header

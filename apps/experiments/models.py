@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
     Case,
@@ -489,6 +489,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider",
+            "trace_sample_rate",
             "participant_allowlist",
             "debug_mode_enabled",
             "file_uploads_enabled",
@@ -574,6 +575,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    trace_sample_rate = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Overrides the trace provider's sample rate for this chatbot. Leave blank to use the "
+        "provider's own setting.",
     )
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
@@ -810,7 +818,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def trace_service(self):
         if self.trace_provider:
-            return self.trace_provider.get_service()
+            return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
 
     def get_api_url(self):
         if self.is_working_version:
@@ -1038,6 +1046,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+            VersionField(group_name="Tracing", name="trace_sample_rate", raw_value=self.trace_sample_rate),
             # Triggers
             VersionField(
                 group_name="Triggers",
