@@ -27,6 +27,9 @@ version section when a release is cut.
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
+- `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
+  get `NULL`, which means "inherit the trace provider's sample rate" — behavior is unchanged
+  until an operator or team sets one. (#XXXX) <!-- PLACEHOLDER: replace with the real PR number before merge -->
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
