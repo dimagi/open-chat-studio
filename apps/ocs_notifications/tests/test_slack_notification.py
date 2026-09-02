@@ -74,6 +74,7 @@ class TestSendSlackNotification:
         assert event.message in message
         assert "Error" in message
         assert notification_channel.team.name in message
+        assert "View in OCS" in message
 
     def test_send_slack_notification_posts_to_resolved_channel(self, team_with_users):
         notification_channel = NotificationChannelFactory.create(team=team_with_users, channel_name="#alerts")

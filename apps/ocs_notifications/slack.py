@@ -1,7 +1,10 @@
 import logging
 
+from django.urls import reverse
+
 from apps.channels.models import ChannelPlatform
 from apps.ocs_notifications.models import NotificationChannel, NotificationEvent
+from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -14,11 +17,14 @@ def build_slack_message(notification_event: NotificationEvent) -> str:
         notification_event.message,
         "",
         f"_Level: {notification_event.event_type.get_level_display()} · Team: {notification_event.team.name}_",
+        "",
+        "Links:",
     ]
-    if notification_event.links:
-        lines.append("")
-        lines.append("Links:")
-        lines.extend(f"- <{url}|{label}>" for label, url in notification_event.links.items())
+    links = dict(notification_event.links or {})
+    links["View in OCS"] = absolute_url(
+        reverse("ocs_notifications:notification_event_home", args=[notification_event.event_type_id])
+    )
+    lines.extend(f"- <{url}|{label}>" for label, url in links.items())
     return "\n".join(lines)
 
 
