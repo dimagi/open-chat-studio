@@ -54,7 +54,7 @@
               flagId: {{ flag.id }},
               flagName: '{{ flag.name }}',
               initialData: {
-              everyone: {{ flag.everyone|yesno:'true,false' }},
+              everyone: '{{ flag.everyone|yesno:'true,false,unknown' }}',
               teams: [{% for team in flag.teams.all %}{{ team.id }}{% if not forloop.last %},{% endif %}{% endfor %}]
               }
               })"
@@ -70,15 +70,15 @@
             </h3>
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label class="flex items-center">
-                <input
-                  type="checkbox"
-                  x-model="formData.everyone"
-                  class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                />
-                <span class="ml-2 text-sm text-base-content">
-                  {% translate "Everyone" %}
-                  <span class="block text-xs text-base-content/70">{% translate "Enable for all users" %}</span>
+              <label class="flex flex-col gap-1">
+                <span class="text-sm text-base-content">{% translate "Everyone" %}</span>
+                <select x-model="formData.everyone" class="select select-bordered w-full">
+                  <option value="unknown">{% translate "Use team list" %}</option>
+                  <option value="true">{% translate "On for everyone" %}</option>
+                  <option value="false">{% translate "Off for everyone" %}</option>
+                </select>
+                <span class="text-xs text-base-content/70">
+                  {% translate "A global on or off overrides the team list below" %}
                 </span>
               </label>
             </div>
@@ -265,7 +265,7 @@
           }
           formData.append('csrfmiddlewaretoken', csrfToken.value);
 
-          if (this.formData.everyone) formData.append('everyone', 'on');
+          formData.append('everyone', this.formData.everyone);
           this.formData.teams.forEach(id => formData.append('teams', id));
 
           return formData;

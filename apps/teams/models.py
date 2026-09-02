@@ -232,6 +232,11 @@ class Flag(AbstractUserFlag):
         return flush_keys
 
     def is_active(self, request, read_only=False):
+        """Minting happens before delegating: waffle's own missing-flag branch stores
+        `everyone=FLAG_DEFAULT` (`False`), which is a hard off under the tri-state."""
+        if not self.pk and get_setting("CREATE_MISSING_FLAGS"):
+            self._mint_missing_flag()
+
         is_active = super().is_active(request, read_only)
         if is_active:
             return is_active
@@ -244,26 +249,33 @@ class Flag(AbstractUserFlag):
         return self.is_active_for_team(team)
 
     def is_active_for_team(self, team):
-        if self.everyone:
-            return True
+        """Tri-state global override: `everyone` set means on or off for every team,
+        `None` defers to the team M2M."""
+        if self.everyone is not None:
+            return self.everyone
 
         if not team:
             return False
 
         if not self.pk:
             if get_setting("CREATE_MISSING_FLAGS"):
-                flag, _created = Flag.objects.get_or_create(
-                    name=self.name, defaults={"everyone": get_setting("FLAG_DEFAULT")}
-                )
-                self.id = flag.id
-                self.refresh_from_db()
-                cache = get_cache()
-                cache.set(self._cache_key(self.name), self)
+                self._mint_missing_flag()
 
             return get_setting("FLAG_DEFAULT")
 
         team_ids = self._get_team_ids()
         return team.pk in team_ids
+
+    def _mint_missing_flag(self):
+        """Create the missing row with no global decision and no superuser grant, and adopt it.
+
+        The model defaults would store `superusers=True`, handing superusers blanket
+        access on request paths; superuser-only surfaces gate on `is_superuser` instead.
+        """
+        flag, _created = Flag.objects.get_or_create(name=self.name, defaults={"everyone": None, "superusers": False})
+        self.id = flag.id
+        self.refresh_from_db()
+        get_cache().set(self._cache_key(self.name), self)
 
     def _get_team_ids(self):
         cache = get_cache()
