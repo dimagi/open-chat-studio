@@ -236,7 +236,7 @@ WIRE_QUERIES_UNDER_THE_LOCK = 10
 
 
 @pytest.mark.django_db()
-def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, end):
+def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
     """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with it
     the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for,
     leaving the build state to re-read every row.
@@ -245,10 +245,10 @@ def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, end):
     node path would not, since wiring is far enough below it to stay cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)
-    client.post(edges_url(chatbot), {"source": boundary_node(chatbot, "StartNode"), "target": node_id}, format="json")
+    client.post(edges_url(chatbot), {"source": start_node, "target": node_id}, format="json")
 
     with CaptureQueriesContext(connection) as captured:
-        response = client.post(edges_url(chatbot), {"source": node_id, "target": end}, format="json")
+        response = client.post(edges_url(chatbot), {"source": node_id, "target": end_node}, format="json")
 
     assert response.status_code == 201, response.content
     sql = [query["sql"] for query in captured.captured_queries]

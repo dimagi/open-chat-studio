@@ -237,11 +237,10 @@ class TestEdgesAnEditCanStrand:
         assert outgoing_handles(chatbot.pipeline, router) == {kept: ("output_0", scheduled)}
         assert {"handle": "output_1", "label": "CANCEL"} in response.json()["unwired_handles"][router]
 
-    def test_an_edge_already_stranded_before_the_edit_is_left_alone(self, client, chatbot, llm, router):
+    def test_an_edge_already_stranded_before_the_edit_is_left_alone(self, client, chatbot, llm, router, start_node):
         """Only the handles this edit removed are followed. An edge on a handle the node never offered is
         still reported and still the agent's to deal with."""
-        start = boundary_node(chatbot, "StartNode")
-        add_edge(chatbot.pipeline, start, router)
+        add_edge(chatbot.pipeline, start_node, router)
         stranded = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_7")
 
         response = client.patch(node_url(chatbot, router), {"label": "Triage"}, format="json")
@@ -265,14 +264,13 @@ class TestEdgesAnEditCanStrand:
         assert outgoing_handles(chatbot.pipeline, router) == {kept: ("output_0", scheduled)}
         assert dropped not in outgoing_handles(chatbot.pipeline, router)
 
-    def test_editing_a_plain_node_leaves_its_edge_alone(self, client, chatbot, llm):
+    def test_editing_a_plain_node_leaves_its_edge_alone(self, client, chatbot, llm, end_node):
         """Only a node whose handles depend on its params can lose one. A plain node offers the single
         standard output whatever is edited, so nothing about its wiring is this endpoint's business."""
         llm_node = add_llm_node(client, chatbot, llm)
-        end = boundary_node(chatbot, "EndNode")
-        edge = add_edge(chatbot.pipeline, llm_node, end)
+        edge = add_edge(chatbot.pipeline, llm_node, end_node)
 
         response = client.patch(node_url(chatbot, llm_node), {"params": {"prompt": "Be terse."}}, format="json")
 
         assert response.status_code == 200, response.content
-        assert outgoing_handles(chatbot.pipeline, llm_node) == {edge: ("output", end)}
+        assert outgoing_handles(chatbot.pipeline, llm_node) == {edge: ("output", end_node)}

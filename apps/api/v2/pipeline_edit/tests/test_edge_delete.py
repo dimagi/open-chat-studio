@@ -32,7 +32,7 @@ class Spliced(NamedTuple):
 
 
 @pytest.fixture()
-def spliced(client, chatbot, llm, start, end) -> Spliced:
+def spliced(client, chatbot, llm, start_node, end_node) -> Spliced:
     """An LLM node wired between Start and End, with the direct Start -> End edge gone.
 
     Spliced rather than added alongside: with the direct edge still there, unwiring this node would
@@ -41,7 +41,7 @@ def spliced(client, chatbot, llm, start, end) -> Spliced:
     node_id = add_llm_node(client, chatbot, llm)
     chatbot.pipeline.data["edges"] = []
     chatbot.pipeline.save(update_fields=["data"])
-    return Spliced(node_id, wire(client, chatbot, start, node_id), wire(client, chatbot, node_id, end))
+    return Spliced(node_id, wire(client, chatbot, start_node, node_id), wire(client, chatbot, node_id, end_node))
 
 
 @pytest.mark.django_db()
@@ -68,7 +68,7 @@ def test_delete_leaves_every_node_row_exactly_as_it_was(client, chatbot, spliced
 
 
 @pytest.mark.django_db()
-def test_delete_reports_the_hole_it_leaves(client, chatbot, spliced, end):
+def test_delete_reports_the_hole_it_leaves(client, chatbot, spliced, end_node):
     """Lenient on structure: unwiring usually breaks the path to End, which is reported rather than
     refused so the agent can wire a replacement in. No ``edge`` key -- there is no edge left to
     describe, the same as a node delete carries no ``node``."""
@@ -76,19 +76,19 @@ def test_delete_reports_the_hole_it_leaves(client, chatbot, spliced, end):
     body = client.delete(edge_url(chatbot, spliced.outgoing)).json()
 
     assert body["pipeline_valid"] is False
-    assert "not reachable" in body["pipeline_errors"]["node"][end]["root"]
+    assert "not reachable" in body["pipeline_errors"]["node"][end_node]["root"]
     assert "edge" not in body
 
 
 @pytest.mark.django_db()
-def test_delete_puts_the_handles_back_on_the_unwired_list(client, chatbot, spliced, end):
+def test_delete_puts_the_handles_back_on_the_unwired_list(client, chatbot, spliced, end_node):
     """The mirror of what a wire does: both ends of the edge come back onto the map an agent works
     down to finish a graph."""
 
     body = client.delete(edge_url(chatbot, spliced.outgoing)).json()
 
     assert body["unwired_handles"][spliced.node_id] == [{"handle": "output", "label": None}]
-    assert body["unwired_handles"][end] == [{"handle": "input", "label": None}]
+    assert body["unwired_handles"][end_node] == [{"handle": "input", "label": None}]
 
 
 @pytest.mark.django_db()
@@ -137,12 +137,12 @@ def test_an_edge_belonging_to_another_chatbot_is_a_404(client, chatbot, llm):
 
 
 @pytest.mark.django_db()
-def test_a_stranded_edge_can_be_deleted(client, chatbot, llm, start, end):
+def test_a_stranded_edge_can_be_deleted(client, chatbot, llm, start_node, end_node):
     """The only way to clear ``pipeline_errors.edge``: an edge on a handle its source does not offer
     cannot be created through this API, but a graph edited in the UI builder can hold one."""
     node_id = add_llm_node(client, chatbot, llm)
-    add_edge(chatbot.pipeline, start, node_id)
-    stranded = add_edge(chatbot.pipeline, node_id, end, source_handle="output_7")
+    add_edge(chatbot.pipeline, start_node, node_id)
+    stranded = add_edge(chatbot.pipeline, node_id, end_node, source_handle="output_7")
     inspected = client.get(inspect_url(chatbot)).json()
     assert inspected["pipeline_errors"]["edge"] == [stranded]
 
@@ -153,21 +153,21 @@ def test_a_stranded_edge_can_be_deleted(client, chatbot, llm, start, end):
 
 
 @pytest.mark.django_db()
-def test_an_edge_deleted_and_wired_again_comes_back_with_the_same_id(client, chatbot, spliced, end):
+def test_an_edge_deleted_and_wired_again_comes_back_with_the_same_id(client, chatbot, spliced, end_node):
     """The id is derived from the endpoints, so re-wiring the same pair reuses it. Worth pinning: it
     is what lets a client that lost track of an unwire recognise the edge it re-created."""
     client.delete(edge_url(chatbot, spliced.outgoing))
 
-    assert wire(client, chatbot, spliced.node_id, end) == spliced.outgoing
+    assert wire(client, chatbot, spliced.node_id, end_node) == spliced.outgoing
 
 
 @pytest.mark.django_db()
-def test_a_router_branch_is_repointed_by_unwiring_and_wiring_again(client, chatbot, llm, end):
+def test_a_router_branch_is_repointed_by_unwiring_and_wiring_again(client, chatbot, llm, end_node):
     """The route an agent takes to change where a branch goes, since an edge is not editable in
     place."""
     router = add_router_node(client, chatbot, llm)
     other = add_llm_node(client, chatbot, llm)
-    first = wire(client, chatbot, router, end, source_handle="output_0")
+    first = wire(client, chatbot, router, end_node, source_handle="output_0")
 
     client.delete(edge_url(chatbot, first))
     second = wire(client, chatbot, router, other, source_handle="output_0")

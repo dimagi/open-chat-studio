@@ -8,16 +8,14 @@ from .conftest import add_edge, add_llm_node, boundary_node, node_url
 
 
 @pytest.fixture()
-def wired_llm_node(client, chatbot, llm):
+def wired_llm_node(client, chatbot, llm, start_node, end_node):
     """An LLM node spliced between Start and End, so deleting it has edges to take with it."""
     node_id = add_llm_node(client, chatbot, llm)
-    start = boundary_node(chatbot, "StartNode")
-    end = boundary_node(chatbot, "EndNode")
     # Spliced, not added alongside: with the direct Start -> End edge still there, removing this
     # node would leave a perfectly valid graph and prove nothing.
     chatbot.pipeline.data["edges"] = []
-    add_edge(chatbot.pipeline, start, node_id)
-    add_edge(chatbot.pipeline, node_id, end)
+    add_edge(chatbot.pipeline, start_node, node_id)
+    add_edge(chatbot.pipeline, node_id, end_node)
     return node_id
 
 
