@@ -4,6 +4,7 @@
       <button
         type="button"
         class="join-item btn btn-xs {% if option.is_active %}btn-active{% endif %}"
+        aria-pressed="{{ option.is_active|yesno:'true,false' }}"
         hx-get="{{ table_url }}?{{ option.query_string }}"
         hx-target="#data-table"
         hx-swap="innerHTML"
@@ -18,6 +19,7 @@
       <button
         type="button"
         class="join-item btn btn-xs {% if option.is_active %}btn-active{% endif %}"
+        aria-pressed="{{ option.is_active|yesno:'true,false' }}"
         hx-get="{{ table_url }}?{{ option.query_string }}"
         hx-target="#data-table"
         hx-swap="innerHTML"
