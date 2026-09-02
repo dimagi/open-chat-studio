@@ -2003,9 +2003,7 @@ components:
       - created_at
       - id
       - item_type
-      - message
       - queue
-      - session
       - updated_at
     AnnotationItemDetailStatusEnum:
       enum:
@@ -2853,7 +2851,6 @@ components:
         custom_action:
           type: integer
       required:
-      - assistant
       - created_at
       - custom_action
       - id
@@ -4072,7 +4069,6 @@ components:
       - id
       - name
       - updated_at
-      - working_version
     ExperimentList:
       type: object
       properties:
@@ -5262,12 +5258,10 @@ components:
           type: integer
           nullable: true
       required:
-      - automated_result
       - created_at
       - data_type
       - id
       - name
-      - review
       - source
       - target_content_type
       - target_object_id
@@ -5631,7 +5625,6 @@ components:
           nullable: true
       required:
       - created_at
-      - external_id
       - gender
       - id
       - is_global
@@ -5640,7 +5633,6 @@ components:
       - name
       - service
       - updated_at
-      - voice_provider
     SyntheticVoiceList:
       type: object
       properties:
