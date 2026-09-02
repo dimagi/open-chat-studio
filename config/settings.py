@@ -491,10 +491,15 @@ SPECTACULAR_SETTINGS = {
     "PREPROCESSING_HOOKS": [
         "apps.api.schema.exclude_legacy_participants_path",
     ],
-    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
-    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    # Name every choice set that drf-spectacular can't name unambiguously on its own. Without an
+    # entry it either derives the name from a hash of the choices ("Status490Enum")
     "ENUM_NAME_OVERRIDES": {
         "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+        "LlmProviderTypeEnum": "apps.service_providers.models.LlmProviderTypes.choices",
+        "JobStatusEnum": "apps.evaluations.models.EvaluationRunStatus",
+        "EvaluationModeEnum": "apps.evaluations.models.EvaluationMode",
+        "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
+        "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
