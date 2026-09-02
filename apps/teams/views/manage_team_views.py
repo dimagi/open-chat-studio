@@ -56,7 +56,6 @@ def _manage_team_context(request, team, *, team_form=None, public_key_form=None)
         "team_form": team_form or TeamChangeForm(instance=team),
         "invitation_form": InvitationForm(team=team),
         "pending_invitations": pending_invitations,
-        "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
         "notify_recipients_form": NotifyRecipientsForm,
         "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
         "role_choices": ROLE_CHOICES,
