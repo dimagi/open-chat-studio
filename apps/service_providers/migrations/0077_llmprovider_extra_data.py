@@ -14,4 +14,8 @@ class Migration(migrations.Migration):
             name="extra_data",
             field=models.JSONField(blank=True, default=dict),
         ),
+        migrations.RunSQL(
+            sql="ALTER TABLE service_providers_llmprovider ALTER COLUMN extra_data SET DEFAULT '{}'::jsonb;",
+            reverse_sql="ALTER TABLE service_providers_llmprovider ALTER COLUMN extra_data DROP DEFAULT;",
+        ),
     ]
