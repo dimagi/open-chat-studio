@@ -29,11 +29,12 @@ version section when a release is cut.
 <!-- One line per migration. Omit the section if there are none. -->
 - `service_providers.0077_llmprovider_extra_data`: reversible, non-locking
   (metadata-only `ADD COLUMN` on PG 11+, no table rewrite), no manual steps.
-  Not backwards compatible: the column is `NOT NULL` and Django drops its
-  database default immediately after adding it, so code from the previous
-  release inserting an `LlmProvider` (creating one in team settings, or a
-  team-export import) fails until the new code is serving. Creating LLM
-  providers is unavailable for the length of the deploy window. (#4373)
+  Backwards compatible: the column is `NOT NULL`, and Django drops the database
+  default it adds the column with, so the migration puts one back. Code from the
+  previous release inserting an `LlmProvider` (creating one in team settings, or
+  a team-export import) omits the column and gets `{}` from that default instead
+  of a not-null violation, so provider creation keeps working for the length of
+  the deploy window. (#4373)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
