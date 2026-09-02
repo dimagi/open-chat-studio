@@ -107,15 +107,6 @@ def react_flow_node_type(node_type: str) -> str:
     return REACT_FLOW_NODE_TYPE
 
 
-def react_flow_edge_id(source: str, source_handle: str | None, target: str, target_handle: str | None) -> str:
-    """The id react-flow's own ``getEdgeId`` draws for an edge with these ends.
-
-    Not unique on its own -- it is derived from the ends, so two edges can want the same one -- so a
-    caller adding to an existing graph has to check it against the ids already there.
-    """
-    return f"reactflow__edge-{source}{source_handle or ''}-{target}{target_handle or ''}"
-
-
 def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
     """Split a graph into the part ``Pipeline.data`` stores — the edges, no ``nodes``
     (ADR-0049) — and the complete node membership: content-carrying nodes map to themselves,

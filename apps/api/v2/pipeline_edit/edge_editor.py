@@ -13,7 +13,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
 from apps.pipelines.build_state import NoOutputHandles, input_handles, output_handles, why_no_output_handles
-from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData, react_flow_edge_id
+from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
@@ -202,13 +202,14 @@ def _target_handle(content: FlowNodeData, requested: str | None) -> str:
 def _unused_edge_id(flow: Flow, wiring: Wiring) -> str:
     """An edge id no edge in this graph already has.
 
-    The base is :func:`~apps.pipelines.flow.react_flow_edge_id` over the wiring, which is not unique
-    on its own: a keyword edit can leave an edge holding the id of a wiring it no longer has (see
+    The base is the id react-flow's own ``getEdgeId`` draws for these ends, which is not unique on
+    its own: a keyword edit can leave an edge holding the id of a wiring it no longer has (see
     :func:`~apps.api.v2.pipeline_edit.graph_editor._rewired_edges`), and the patch engine treats an
     add whose id already exists as a no-op -- which would answer 201 having stored nothing. So a
     taken id gets a suffix, drawn by :func:`.ids.with_free_suffix`; trying the bare base first is the
     whole of what differs from how a node id is drawn.
     """
-    base = react_flow_edge_id(*wiring)
+    source, source_handle, target, target_handle = wiring
+    base = f"reactflow__edge-{source}{source_handle}-{target}{target_handle}"
     taken = {edge.id for edge in flow.edges}
     return base if base not in taken else with_free_suffix(base, taken)
