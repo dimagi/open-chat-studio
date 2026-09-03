@@ -19,6 +19,10 @@ that the reviewer should be made aware of.
 This should NOT be a summary of the every change. Focus on decisions and outcomes.
 -->
 
+### Issue Link
+<!--
+Link to the issue or doc that prompted this change, if any.
+-->
 
 ### Migrations
 <!--

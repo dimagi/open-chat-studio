@@ -1,3 +1,4 @@
+from django import forms as django_forms
 from django import template
 from django.template import engines
 from django.template.loader import get_template
@@ -23,6 +24,10 @@ def dict_lookup(dictionary, key):
 
 @register.simple_tag
 def render_field(form_field, **attrs):
+    # isinstance, not widget_type: a subclass like BroadcastChannelWidget has its own class
+    # name, so the string dispatch below would miss it.
+    if isinstance(form_field.field.widget, django_forms.CheckboxSelectMultiple):
+        return render_checkbox_multiple_input(form_field, **attrs)
     render_function = {
         "select": render_select_input,
         "checkbox": render_checkbox_input,
@@ -43,6 +48,16 @@ def render_select_input(form_field, **attrs):
 @register.simple_tag
 def render_checkbox_input(form_field, **attrs):
     return _render_field("web/form/checkbox.html", form_field, **attrs)
+
+
+@register.simple_tag
+def render_checkbox_multiple_input(form_field, **attrs):
+    # Django passes widget.attrs["class"] onto the div wrapping the options, so these utility
+    # classes land right where they're needed.
+    widget = form_field.field.widget
+    extra_classes = "space-y-2 [&_label]:flex [&_label]:items-center [&_label]:gap-2"
+    widget.attrs["class"] = f"{widget.attrs.get('class', '')} {extra_classes}".strip()
+    return _render_field("web/form/checkbox_multiple.html", form_field, **attrs)
 
 
 def _render_field(template_name, form_field, **attrs):

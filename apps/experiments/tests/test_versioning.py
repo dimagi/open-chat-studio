@@ -1,6 +1,6 @@
 import pytest
 
-from apps.experiments.models import Experiment
+from apps.experiments.models import Experiment, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
@@ -439,3 +439,55 @@ def test_allowlist_is_gone_from_the_version_diff_but_still_cloned():
     # Phase 1 of the two-phase drop: the column and its VERSIONED_CONTENT_FIELDS entry
     # survive to Phase 2 (#4278), so the dormant value is still cloned.
     assert version.participant_allowlist == ["+27123456789"]
+
+
+class TestVersionFieldPreservesFalsyValues:
+    """`current_value`/`previous_value`/`display_value` used to test `raw_value` for
+    truthiness, so a meaningful-but-falsy value (0, 0.0, False, "") was silently treated
+    as absent -- e.g. every boolean field showed blank instead of "No" once set to False,
+    and `trace_sample_rate=0.0` (disable tracing) displayed and compared as unset.
+    """
+
+    def test_zero_float_is_the_current_value_not_none(self):
+        field = VersionField(name="trace_sample_rate", raw_value=0.0)
+
+        assert field.current_value == 0.0
+
+    def test_false_boolean_is_the_current_value_not_none(self):
+        field = VersionField(name="echo_transcript", raw_value=False)
+
+        assert field.current_value is False
+
+    def test_zero_float_displays_as_itself_not_blank(self):
+        field = VersionField(name="trace_sample_rate", raw_value=0.0)
+
+        assert field.display_value() == 0.0
+
+    def test_false_boolean_reaches_its_display_formatter(self):
+        field = VersionField(name="echo_transcript", raw_value=False, to_display=VersionFieldDisplayFormatters.yes_no)
+
+        assert field.display_value() == "No"
+
+    def test_null_to_zero_is_detected_as_a_change(self):
+        previous = VersionField(name="trace_sample_rate", raw_value=None)
+        current = VersionField(name="trace_sample_rate", raw_value=0.0)
+
+        current.compare(previous)
+
+        assert current.changed is True
+
+    def test_zero_to_null_is_detected_as_a_change(self):
+        previous = VersionField(name="trace_sample_rate", raw_value=0.0)
+        current = VersionField(name="trace_sample_rate", raw_value=None)
+
+        current.compare(previous)
+
+        assert current.changed is True
+
+    def test_unchanged_zero_is_not_a_change(self):
+        previous = VersionField(name="trace_sample_rate", raw_value=0.0)
+        current = VersionField(name="trace_sample_rate", raw_value=0.0)
+
+        current.compare(previous)
+
+        assert current.changed is False
