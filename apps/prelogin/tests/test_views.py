@@ -72,6 +72,44 @@ def test_retired_marketing_paths_redirect_permanently(client, url_name, expected
     assert response.url == expected
 
 
+LEGAL_URLS = {
+    "PRIVACY_POLICY_URL": "https://dimagi.com/terms-privacy/",
+    "TERMS_URL": "https://dimagi.com/terms-of-service/",
+    "ACCEPTABLE_USE_POLICY_URL": "https://dimagi.com/terms-aup/",
+}
+
+
+def _footer(content):
+    return content[content.index("<footer") :]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("path", ["/", "/accounts/login/"])
+def test_footer_legal_links_follow_the_settings(client, settings, path):
+    """Set in PROJECT_METADATA, they render; unset, the whole <li> is omitted.
+
+    Omitted rather than emptied matters: the footer's separators are drawn by CSS on
+    `li:not(:last-child)`, so an empty <li> left behind would show as an orphan pipe.
+    """
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **LEGAL_URLS}
+    footer = _footer(client.get(path).content.decode())
+    for url in LEGAL_URLS.values():
+        assert url in footer
+
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **dict.fromkeys(LEGAL_URLS, "")}
+    footer = _footer(client.get(path).content.decode())
+    for url in LEGAL_URLS.values():
+        assert url not in footer
+    assert "Acceptable Use Policy" not in footer
+
+
+@pytest.mark.django_db()
+def test_footer_separators_are_not_in_the_markup(client, settings):
+    """CSS draws them. A typed-in pipe would orphan whenever an item is gated off."""
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **LEGAL_URLS}
+    assert "|" not in _footer(client.get("/").content.decode())
+
+
 @pytest.mark.django_db()
 def test_sitemap_lists_only_the_landing_page(client):
     response = client.get("/sitemap.xml")

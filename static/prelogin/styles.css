@@ -2411,22 +2411,28 @@ footer {
   margin: 0;
   padding: 0;
 }
-.footer-line-links li { display: flex; align-items: center; }
-/* Separators live here, not in the markup, so a suppressed Sign In or an unset
-   legal URL never leaves a dangling pipe. */
-.footer-line-links li + li::before {
+/* nowrap keeps a label and its trailing separator on the same line. */
+.footer-line-links li { display: flex; align-items: center; white-space: nowrap; }
+/* Separators live here rather than in the markup, so a suppressed Sign In (the
+   auth pages override that block) or an unset legal URL cannot leave an orphan.
+   :not(:last-child) works because the {% if %} gates omit the <li> entirely.
+   It is ::after, NOT `li + li::before`: CSS cannot ask whether an item begins a
+   line, so a leading separator lands at the START of a wrapped line as a dangling
+   pipe. Trailing it instead means a wrap ends a line with the separator, which
+   reads as a continuation. This bites at any width, since the item count changes
+   with the settings above — 4 links unset, 7 set — so it can't be fixed with a
+   breakpoint. */
+.footer-line-links li:not(:last-child)::after {
   content: "|";
   margin: 0 11px;
   color: rgba(255,255,255,0.30);
 }
 .footer-line-links a { color: rgba(255,255,255,0.80); text-decoration: none; transition: color 120ms; }
 .footer-line-links a:hover { color: var(--paper); text-decoration: underline; }
-/* Once the line wraps, a `li + li` separator lands at the START of the new line as
-   a dangling pipe — CSS can't ask whether an item begins a line. So below the width
-   where wrapping begins, drop the pipes and separate on gap instead. */
+/* Stacked on mobile, where separators read as noise rather than structure. */
 @media (max-width: 860px) {
   .footer-line-links { gap: 4px 16px; }
-  .footer-line-links li + li::before { content: none; margin: 0; }
+  .footer-line-links li:not(:last-child)::after { content: none; margin: 0; }
 }
 
 .footer-badges {
