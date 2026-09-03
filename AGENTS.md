@@ -80,6 +80,7 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
 * A comment earns its place by carrying context the file cannot show — keep it when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
+* A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 
 ## Ask first

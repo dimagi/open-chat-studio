@@ -61,7 +61,9 @@ class TracingService:
 
         if experiment and experiment.trace_provider:
             try:
-                tracers.append(experiment.trace_provider.get_service())
+                tracer = experiment.trace_provider.get_service(sample_rate=experiment.trace_sample_rate)
+                if tracer is not None:
+                    tracers.append(tracer)
             except Exception as e:  # noqa: BLE001
                 logger.error(f"Error setting up trace service: {e}")
 

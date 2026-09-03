@@ -2418,6 +2418,7 @@ components:
           items:
             type: string
             maxLength: 600
+          nullable: true
           description: Provider message IDs this message was built from, namespaced
             by platform.
         chat:
@@ -4013,6 +4014,14 @@ components:
           type: boolean
           description: Whether or not the bot should tell the user what it heard when
             the user sends voice messages
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         participant_allowlist:
           type: array
           items:
