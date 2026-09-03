@@ -165,11 +165,52 @@ class TestScheduledTriggerCelery:
         archived.refresh_from_db()
         assert archived.fired_at is None
 
-    def test_fire_scheduled_trigger_task(self, session):
-        trigger = _trigger(experiment=session.experiment)
+    def test_fire_scheduled_trigger_task(self, team_with_users):
+        working = ExperimentFactory.create(team=team_with_users)
+        published = working.create_new_version(make_default=True)
+        ExperimentSessionFactory.create(experiment=published)
+        past_date = (timezone.now() - timedelta(days=1)).date()
+        trigger = _trigger(experiment=published, trigger_date=past_date, trigger_time=dt_time(0, 0), timezone="UTC")
         fire_scheduled_trigger(trigger.id)
         trigger.refresh_from_db()
         assert trigger.fired_at is not None
+
+    def test_fire_scheduled_trigger_is_noop_when_trigger_deleted(self):
+        trigger = _trigger()
+        trigger_id = trigger.id
+        trigger.delete()
+        result = fire_scheduled_trigger(trigger_id)
+        assert result is None
+
+    def test_fire_scheduled_trigger_is_noop_when_already_fired(self, team_with_users):
+        working = ExperimentFactory.create(team=team_with_users)
+        published = working.create_new_version(make_default=True)
+        ExperimentSessionFactory.create(experiment=published)
+        past_date = (timezone.now() - timedelta(days=1)).date()
+        trigger = _trigger(experiment=published, trigger_date=past_date, trigger_time=dt_time(0, 0), timezone="UTC")
+        fire_scheduled_trigger(trigger.id)
+        trigger.refresh_from_db()
+        fired_at = trigger.fired_at
+        result = fire_scheduled_trigger(trigger.id)
+        assert result is None
+        trigger.refresh_from_db()
+        assert trigger.fired_at == fired_at
+
+    def test_fire_scheduled_trigger_is_noop_when_trigger_inactive(self, session):
+        trigger = _trigger(experiment=session.experiment, is_active=False)
+        result = fire_scheduled_trigger(trigger.id)
+        assert result is None
+        trigger.refresh_from_db()
+        assert trigger.fired_at is None
+
+    def test_fire_scheduled_trigger_is_noop_for_unpublished_experiment(self, team_with_users):
+        working = ExperimentFactory.create(team=team_with_users)
+        past_date = (timezone.now() - timedelta(days=1)).date()
+        trigger = _trigger(experiment=working, trigger_date=past_date, trigger_time=dt_time(0, 0), timezone="UTC")
+        result = fire_scheduled_trigger(trigger.id)
+        assert result is None
+        trigger.refresh_from_db()
+        assert trigger.fired_at is None
 
 
 @pytest.mark.django_db()

@@ -139,6 +139,23 @@ def test_scheduled_delete_and_toggle_reject_get_requests(client, team_with_users
 
 
 @pytest.mark.django_db()
+def test_toggle_rejects_trigger_belonging_to_different_experiment_in_same_team(client, team_with_users):
+    experiment1 = ExperimentFactory.create(team=team_with_users)
+    experiment2 = ExperimentFactory.create(team=team_with_users)
+    trigger = ScheduledTriggerFactory.create(experiment=experiment1)
+    _super_admin_client(client, team_with_users)
+
+    toggle_url = reverse(
+        "chatbots:events:scheduled_event_toggle",
+        args=[team_with_users.slug, experiment2.id, trigger.id],
+    )
+    assert client.post(toggle_url).status_code == 404
+
+    trigger.refresh_from_db()
+    assert trigger.is_active is True
+
+
+@pytest.mark.django_db()
 def test_event_logs_template_renders_without_session(client, team_with_users):
     trigger = ScheduledTriggerFactory.create(experiment=ExperimentFactory.create(team=team_with_users))
     trigger.event_logs.create(status=EventLogStatusChoices.SUCCESS, log="ok")

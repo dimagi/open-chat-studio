@@ -1,7 +1,7 @@
 import textwrap
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Prefetch
+from django.db.models import OuterRef, Prefetch, Subquery
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, serializers, status
@@ -170,9 +170,13 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                 "chat__messages__tags",
                 Prefetch(
                     "traces",
-                    queryset=Trace.objects.order_by("-timestamp", "-id").only(
-                        "id", "timestamp", "session_id", "participant_data", "participant_data_diff"
-                    ),
+                    queryset=Trace.objects.filter(
+                        id=Subquery(
+                            Trace.objects.filter(session_id=OuterRef("session_id"))
+                            .order_by("-timestamp", "-id")
+                            .values("id")[:1]
+                        )
+                    ).only("id", "timestamp", "session_id", "participant_data", "participant_data_diff"),
                     to_attr="_prefetched_traces",
                 ),
             )

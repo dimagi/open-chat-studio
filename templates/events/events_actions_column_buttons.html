@@ -7,7 +7,7 @@
 </form>
 <button type="button"
         class="btn btn-sm btn-outline btn-primary"
-        onclick="document.getElementById('toggleEventModal-{{ event.id }}').showModal()"
+        onclick="document.getElementById('toggleEventModal-{{ event.type }}-{{ event.id }}').showModal()"
         aria-label="Toggle active flag for this event">
     {% if event.is_active %}
         Disable

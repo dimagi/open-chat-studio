@@ -1,4 +1,4 @@
-<dialog id="toggleEventModal-{{ event.id }}" class="modal">
+<dialog id="toggleEventModal-{{ event.type }}-{{ event.id }}" class="modal">
   <form method="post" action="{{ toggle_active_flag_url }}" class="modal-box">
     {% csrf_token %}
     <h3 class="font-bold text-lg">Confirm Toggle</h3>
@@ -11,7 +11,7 @@
       </p>
     {% endif %}
     <div class="modal-action">
-      <button type="button" class="btn btn-sm" onclick="document.getElementById('toggleEventModal-{{ event.id }}').close()">Cancel</button>
+      <button type="button" class="btn btn-sm" onclick="document.getElementById('toggleEventModal-{{ event.type }}-{{ event.id }}').close()">Cancel</button>
       <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
     </div>
   </form>

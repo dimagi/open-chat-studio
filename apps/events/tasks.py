@@ -88,7 +88,14 @@ def poll_due_scheduled_triggers():
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def fire_scheduled_trigger(trigger_id):
-    trigger = ScheduledTrigger.objects.get(id=trigger_id)
+    try:
+        trigger = (
+            ScheduledTrigger.objects.published_versions()
+            .filter(is_active=True, fired_at__isnull=True, scheduled_at__lte=timezone.now())
+            .get(id=trigger_id)
+        )
+    except ScheduledTrigger.DoesNotExist:
+        return None
     return trigger.fire()
 
 
