@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.datamodels import Attachment
+from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.stages.core import ChatMessageCreationStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
@@ -146,3 +146,23 @@ class TestChatMessageCreationStage:
         self.stage(ctx)
 
         mock_enqueue.delay.assert_not_called()
+
+    def test_persists_external_ids(self):
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        msg = BaseMessage(
+            participant_id="123",
+            message_text="Hello",
+            external_ids=["connect:aaa", "connect:bbb"],
+        )
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            message=msg,
+            user_query="Hello",
+        )
+
+        self.stage(ctx)
+
+        ctx.human_message.refresh_from_db()
+        assert ctx.human_message.external_ids == ["connect:aaa", "connect:bbb"]
