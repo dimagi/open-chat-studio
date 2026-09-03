@@ -79,3 +79,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0055](0055-binary-field-type-extends-the-field-definition-union.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Binary field type extends the field definition union |
 | [0056](0056-client-credentials-applications-name-their-chatbots.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Client-credentials applications name the chatbots they may reach |
 | [0057](0057-remove-the-participant-allowlist.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Remove the participant allowlist |
+| [0058](0058-tri-state-everyone-and-teams-are-a-flags-only-inputs.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Tri-state everyone and team grants are a flag's only inputs |
