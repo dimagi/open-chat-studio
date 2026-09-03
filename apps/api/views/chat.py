@@ -26,9 +26,12 @@ from apps.api.authentication import (
     get_embed_key_channel,
     oauth_resolved_channel,
 )
+from apps.api.chat_consent import consent_refusal, session_consent_block
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
+    ChatConsentRequest,
+    ChatConsentSerializer,
     ChatPollResponse,
     ChatSendMessageRequest,
     ChatSendMessageResponse,
@@ -74,6 +77,15 @@ SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
 SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["chat_attachments"].split(",")
+
+CONSENT_REQUIRED_RESPONSE = inline_serializer(
+    "ChatConsentRequired",
+    {
+        "error": serializers.CharField(),
+        "code": serializers.CharField(help_text="`consent_required`."),
+        "consent": ChatConsentSerializer(),
+    },
+)
 
 logger = logging.getLogger("ocs.api_chat")
 
@@ -140,7 +152,8 @@ def validate_file_upload(file):
                     many=True,
                 )
             },
-        )
+        ),
+        403: CONSENT_REQUIRED_RESPONSE,
     },
     parameters=[
         OpenApiParameter(
@@ -166,6 +179,9 @@ def chat_upload_file(request, session_id):
 
     _, refusal = _public_session_version(request, session)
     if refusal:
+        return refusal
+
+    if refusal := consent_refusal(request, session):
         return refusal
     files = request.FILES.getlist("files")
     if not files:
@@ -526,6 +542,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
                     "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
                 },
                 "participant": {"identifier": "abc", "remote_id": "abc"},
+                "consent": {"required": False, "form_version_id": None, "text": None},
             },
             response_only=True,
         ),
@@ -542,6 +559,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
                     "url": "https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
                 },
                 "participant": {"identifier": "abc", "remote_id": "abc"},
+                "consent": {"required": False, "form_version_id": None, "text": None},
             },
             response_only=True,
         ),
@@ -645,6 +663,7 @@ def chat_start_session(request):
         "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
+        "consent": session_consent_block(session),
     }
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
@@ -668,7 +687,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     summary="Send a message to a chat session",
     tags=["Chat"],
     request=ChatSendMessageRequestWithAttachments,
-    responses={202: ChatSendMessageResponse},
+    responses={202: ChatSendMessageResponse, 403: CONSENT_REQUIRED_RESPONSE},
     parameters=[
         OpenApiParameter(
             name="session_id",
@@ -718,6 +737,9 @@ def chat_send_message(request, session_id):
 
     experiment_version, refusal = _send_version(request, session, version_number)
     if refusal:
+        return refusal
+
+    if refusal := consent_refusal(request, session):
         return refusal
 
     attachment_data = []
@@ -921,8 +943,85 @@ def chat_poll_response(request, session_id):
         messages = messages[:limit]
 
     session_status = "ended" if session.is_complete else "active"
-    response_data = {"messages": messages, "has_more": has_more, "session_status": session_status}
+    response_data = {
+        "messages": messages,
+        "has_more": has_more,
+        "session_status": session_status,
+        "consent": session_consent_block(session),
+    }
     return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    operation_id="chat_record_consent",
+    summary="Record that the participant accepted the chatbot's consent form",
+    tags=["Chat"],
+    request=ChatConsentRequest,
+    responses={
+        204: None,
+        400: inline_serializer(
+            "ChatConsentSessionEnded",
+            {"error": serializers.CharField()},
+        ),
+        409: inline_serializer(
+            "ChatConsentStale",
+            {
+                "error": serializers.CharField(),
+                "code": serializers.CharField(help_text="Always `consent_stale`."),
+                "consent": ChatConsentSerializer(),
+            },
+        ),
+    },
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+    ],
+)
+@widget_sunset_headers
+@api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes(SESSION_PERMISSION_CLASSES)
+def chat_record_consent(request, session_id):
+    """Record consent for the form version the participant was shown.
+
+    A `form_version_id` that is not the session version's current form is refused with `409`
+    and the current block, so the widget re-renders rather than recording consent to text the
+    participant never saw.
+    """
+    serializer = ChatConsentRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    form_version_id = serializer.validated_data["form_version_id"]
+
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        raise NotFound()
+    if session.is_complete:
+        return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if session.experiment_version.consent_form_id != form_version_id:
+        return Response(
+            {
+                "error": "The consent form has changed",
+                "code": "consent_stale",
+                "consent": session_consent_block(session),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    participant_data, _ = ParticipantData.objects.get_or_create(
+        participant=session.participant,
+        experiment=session.experiment.get_working_version(),
+        team=session.team,
+        defaults={"data": {}},
+    )
+    if not participant_data.has_consented_to(form_version_id):
+        participant_data.record_consent(form_version_id)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:

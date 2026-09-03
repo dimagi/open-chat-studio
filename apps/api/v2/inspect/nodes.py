@@ -14,7 +14,6 @@ def inspect_node_queryset():
         "llm_provider",
         "llm_provider_model",
         "source_material",
-        "assistant",
         "synthetic_voice",
         "synthetic_voice__voice_provider",
         "collection",

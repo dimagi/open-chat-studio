@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
     Case,
@@ -489,6 +489,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider",
+            "trace_sample_rate",
             "participant_allowlist",
             "debug_mode_enabled",
             "file_uploads_enabled",
@@ -574,6 +575,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    trace_sample_rate = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Overrides the trace provider's sample rate for this chatbot. Leave blank to use the "
+        "provider's own setting.",
     )
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
@@ -810,7 +818,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def trace_service(self):
         if self.trace_provider:
-            return self.trace_provider.get_service()
+            return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
 
     def get_api_url(self):
         if self.is_working_version:
@@ -892,6 +900,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
+            new_version.save(update_fields=["consent_form"])
 
         # Version the pipeline before the triggers so a trigger referencing this experiment's own
         # pipeline pins to the version just created here rather than spawning a redundant one.
@@ -1038,6 +1047,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+            VersionField(group_name="Tracing", name="trace_sample_rate", raw_value=self.trace_sample_rate),
             # Triggers
             VersionField(
                 group_name="Triggers",
@@ -1418,6 +1428,24 @@ class ParticipantData(BaseTeamModel):
 
     def update_consent(self, consent: bool):
         self.system_metadata["consent"] = consent
+        self.save(update_fields=["system_metadata"])
+
+    def has_consented_to(self, form_version_id: int) -> bool:
+        """Whether the participant accepted this frozen consent form.
+
+        Consent recorded without a form id (CommCare Connect, the legacy consent page) does not
+        cover any form: the participant has not seen this text.
+        """
+        return self.has_consented() and self.system_metadata.get("consent_form_version_id") == form_version_id
+
+    def record_consent(self, form_version_id: int) -> None:
+        """Record that the participant accepted a frozen consent form (D7 in the public channel design)."""
+        self.system_metadata = {
+            **self.system_metadata,
+            "consent": True,
+            "consent_at": timezone.now().isoformat(),
+            "consent_form_version_id": form_version_id,
+        }
         self.save(update_fields=["system_metadata"])
 
     class Meta:

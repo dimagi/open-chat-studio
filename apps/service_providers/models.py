@@ -917,8 +917,28 @@ class TraceProvider(BaseTeamModel):
         host = (self.config.get("host") or "").rstrip("/")
         return f"{host}/project/{project_id}" if host else None
 
-    def get_service(self) -> "tracing.Tracer":
-        return self.type_enum.get_service(self.config)
+    def get_service(self, sample_rate: float | None = None) -> "tracing.Tracer | None":
+        """Build this provider's tracer.
+
+        ``sample_rate``, when given, overrides the provider's own configured sample rate (a
+        chatbot's per-experiment setting takes precedence over the team-wide default). An
+        effective rate of exactly ``0.0`` returns ``None`` instead of a tracer: Langfuse's SDK
+        constructor treats ``sample_rate=0.0`` as falsy and silently substitutes its 1.0
+        default, so "trace nothing" has to be enforced here rather than trusted to the SDK.
+
+        A blank rate is normalized to ``1.0`` for the same reason: passing ``None`` through
+        lets the SDK fall back to the ``LANGFUSE_SAMPLE_RATE`` environment variable if one
+        happens to be set, which would silently override "leave blank to send every trace".
+        """
+        config = self.config
+        if sample_rate is not None:
+            config = {**config, "sample_rate": sample_rate}
+        effective_rate = config.get("sample_rate")
+        if effective_rate == 0.0:
+            return None
+        if effective_rate is None:
+            config = {**config, "sample_rate": 1.0}
+        return self.type_enum.get_service(config)
 
 
 class EmbeddingProviderModelManager(models.Manager):
