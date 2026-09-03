@@ -389,7 +389,8 @@ def test_usages_view_collapses_versions_into_one_row(team_with_users, client):
     response = client.get(url)
 
     body = response.content.decode()
-    assert body.count(">Interview Bot</a>") == 1, "the family should occupy a single row"
+    assert body.count("<li") == 1, "the family should occupy a single row"
+    assert body.count("Interview Bot") == 1, "the name should be rendered once, on that row"
     assert "Chatbots (1)" in body, "the category count should count families, not versions"
     assert "working version" in body, "expected working-version badge"
     assert "published v1" in body, "expected a version badge for the published copy"
