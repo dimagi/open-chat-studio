@@ -40,7 +40,7 @@ version section when a release is cut.
 - `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`,
   `LANGFUSE_SAMPLE_RATE`: new, optional. Trace the System Agent's LLM calls
   (code generation, filter building) in Langfuse. Unset by default (no
-  tracing); this is separate from a team's own Trace Provider. (#TODO-fill-in-pr-number)
+  tracing); this is separate from a team's own Trace Provider. (#4395)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
