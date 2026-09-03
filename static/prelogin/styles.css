@@ -2396,7 +2396,10 @@ footer {
 .footer-col a { color: rgba(255,255,255,0.72); }
 .footer-bottom { color: rgba(255,255,255,0.55); }
 .footer-grid {
-  display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: 48px;
+  /* Column count tracks templates/prelogin/base.html: brand + About + Resources.
+     It was repeat(4, ...) from the marketing footer this frame was cut down from,
+     which left empty grid tracks and pushed the columns hard left. */
+  display: grid; grid-template-columns: 1.4fr repeat(2, 1fr); gap: 48px;
   margin-bottom: 80px;
 }
 .footer-brand { max-width: 320px; }
