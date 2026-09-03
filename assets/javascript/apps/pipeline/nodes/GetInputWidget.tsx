@@ -134,7 +134,7 @@ type GetWidgetParamsGeneric = GetWidgetsParams & {
 }
 
 
-type InputWidgetParams = {
+export type InputWidgetParams = {
   id: string;
   name: string;
   schema: JsonSchema;

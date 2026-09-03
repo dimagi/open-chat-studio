@@ -1,7 +1,8 @@
 import {describe, expect, it, vi} from 'vitest';
 import {render} from '@testing-library/react';
 import {getNodeInputWidget, getWidgets, VisibleWhenWrapper} from './GetInputWidget';
-import type {JsonSchema, InputWidgetParams} from '../types/nodeParams';
+import type {InputWidgetParams} from './GetInputWidget';
+import type {JsonSchema} from '../types/nodeParams';
 
 const noop = () => {};
 

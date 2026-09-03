@@ -1,9 +1,17 @@
 import {beforeAll, describe, expect, it, vi} from 'vitest';
 import {render, fireEvent} from '@testing-library/react';
-import {getWidget} from './widgets';
+import {getWidget as getWidgetUntyped} from './widgets';
 import type {WidgetParams} from './widgets';
+import type {ComponentType} from 'react';
 import type {PropertySchema} from '../types/nodeParams';
 import usePipelineStore from '../stores/pipelineStore';
+
+// getWidget's inferred return type is a union across every case in its switch (each widget's
+// own prop type, e.g. ToggleWidget's boolean paramValue), so JSX usages below would otherwise
+// have to satisfy all of them at once. Both widgets under test here genuinely take WidgetParams
+// at runtime, so narrow to that once, rather than casting every paramValue at every call site.
+const getWidget = (name: string, params: PropertySchema): ComponentType<WidgetParams> =>
+  getWidgetUntyped(name, params) as ComponentType<WidgetParams>;
 
 // getCachedData() (assets/javascript/apps/pipeline/utils.tsx) reads these script tags once
 // and caches the result for the lifetime of the module — set them up before any widget runs.
