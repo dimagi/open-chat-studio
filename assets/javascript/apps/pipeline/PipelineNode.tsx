@@ -154,13 +154,14 @@ function NodeHeader({
   return (
       <div>
         <div className="dropdown dropdown-right absolute ml-2 mt-1 top-4 left-2">
-          <div
+          <button
+            type="button"
             className="text-primary/70 tooltip tooltip-top cursor-pointer"
             data-tip={nodeSchema["ui:label"] + " (Click to change node color)"}
-            tabIndex={0}
+            aria-label="Change node color"
           >
             <i className={icon}></i>
-          </div>
+          </button>
           <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
             <li className="menu-title">Select color</li>
             {NODE_COLORS.map((color) => {

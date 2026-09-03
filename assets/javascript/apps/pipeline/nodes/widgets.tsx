@@ -1087,9 +1087,9 @@ function HelpBubble({ helpText }: { helpText: string }) {
   );
   return (
     <div className="dropdown dropdown-right dropdown-hover">
-      <div role="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
+      <button type="button" className="btn btn-circle btn-ghost btn-xs text-info" aria-label="Help">
         <i className="text-xs fa-regular fa-circle-question"></i>
-      </div>
+      </button>
       <div tabIndex={0} className="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-80 shadow-sm">
         <div tabIndex={0} className="card-body font-medium text-wrap normal-case">
           <p>{content}</p>

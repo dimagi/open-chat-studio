@@ -19,11 +19,8 @@ beforeAll(() => {
 
 describe('getCachedData', () => {
   it('parses the DOM script tags once and returns the same nodeSchemas reference on every call', () => {
-    // loaded was checked but never set, so this re-parsed the DOM and built a brand new
-    // Map on every single call — silently defeating any caller that memoizes against it
-    // (e.g. a useCallback keyed on nodeSchemas never actually stabilizes). getCachedData()
-    // always returns the same mutated singleton object, so the values themselves must be
-    // captured at each call, not just the wrapper it returns.
+    // getCachedData() always returns the same mutated singleton object, so the values
+    // themselves must be captured at each call, not just the wrapper it returns.
     const firstSchemas = getCachedData().nodeSchemas;
     const firstValues = getCachedData().parameterValues;
     const secondSchemas = getCachedData().nodeSchemas;
