@@ -182,6 +182,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         models.CharField(max_length=EXTERNAL_ID_MAX_LENGTH),
         default=list,
         blank=True,
+        null=True,
         help_text="Provider message IDs this message was built from, namespaced by platform.",
     )
 
