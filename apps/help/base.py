@@ -63,9 +63,16 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
         tracing callback for agent.invoke(..., config=...); yields an empty config when
         no tracer is configured, so callers behave exactly as before tracing existed.
 
-        A tracer setup failure (Langfuse unreachable, bad credentials) is logged and
-        falls back to an empty config rather than propagating. An observability outage
-        must not break code generation or filter building. Mirrors TracingService.trace().
+        A synchronous failure while creating the trace (a malformed config, an SDK-internal
+        exception) is logged and falls back to an empty config rather than propagating.
+        Mirrors TracingService.trace(). This does not need to cover an unreachable Langfuse
+        host or bad credentials specifically: neither the SDK client nor
+        start_as_current_observation() connects eagerly, so those surface later, during
+        LangFuseTracer.trace()'s own flush() in its finally block, where OpenTelemetry's
+        exporter already logs and swallows the failure rather than raising it. Verified by
+        pointing LANGFUSE_HOST at an unresolvable domain and exercising this code path in a
+        real browser session: the request completed normally, and the export failure showed
+        up only as an "opentelemetry.sdk._shared_internal" log line, never reaching here.
         """
         tracer = get_help_agent_tracer()
         if tracer is None:
