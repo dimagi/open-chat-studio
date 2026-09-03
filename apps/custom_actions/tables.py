@@ -6,11 +6,8 @@ from apps.generics import actions
 
 
 class CustomActionTable(tables.Table):
-    name = tables.Column(
-        linkify=True,
-        attrs={
-            "a": {"class": "link"},
-        },
+    name = tables.TemplateColumn(
+        template_name="custom_actions/name_column.html",
         orderable=True,
     )
     health_status = tables.TemplateColumn(
@@ -31,7 +28,7 @@ class CustomActionTable(tables.Table):
 
     class Meta:
         model = CustomAction
-        fields = ("name", "description", "server_url", "health_status")
+        fields = ("name", "server_url", "health_status")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No actions found."

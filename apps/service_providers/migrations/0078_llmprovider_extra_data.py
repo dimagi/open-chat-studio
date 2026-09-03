@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0076_add_claude_fable_5_1"),
+        ("service_providers", "0077_deprecate_gpt5_family"),
     ]
 
     operations = [

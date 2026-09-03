@@ -84,8 +84,14 @@ def translations(c: Context):
 @task
 def schema(c: Context):
     """Generate an OpenAPI schema file per API surface (v1/v2, plus the standalone export surface)."""
+    # A locally configured OIDC_RSA_PRIVATE_KEY makes config.settings add openid/profile to
+    # OAUTH2_PROVIDER["SCOPES"], and so to every OAuth2 flow in the output. Clearing it keeps the
+    # committed schemas in the OIDC-disabled form that CI generates and compares against.
     for version in ("v1", "v2", "export"):
-        c.run(f"python manage.py spectacular --api-version {version} --file api-schemas/{version}.yml --validate")
+        c.run(
+            f"python manage.py spectacular --api-version {version} --file api-schemas/{version}.yml --validate",
+            env={"OIDC_RSA_PRIVATE_KEY": ""},
+        )
 
 
 @task(help={"step": "Run setup interactively, confirming each step"})

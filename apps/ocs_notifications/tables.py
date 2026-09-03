@@ -17,6 +17,12 @@ class UserNotificationTable(tables.Table):
         verbose_name="Level",
         orderable=False,
     )
+    event_count = columns.TemplateColumn(
+        template_name="ocs_notifications/components/event_count_badge.html",
+        verbose_name="Count",
+        orderable=False,
+        accessor="event_count",
+    )
     read = columns.TemplateColumn(
         template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=True
     )
@@ -42,6 +48,7 @@ class UserNotificationTable(tables.Table):
             "timestamp",
             "notification_content",
             "level",
+            "event_count",
             "mute",
             "read",
         )
