@@ -15,7 +15,8 @@ log = logging.getLogger("ocs.teams")
 def flag_is_active_for_team(team, flag_name):
     """The team-scoped counterpart of `waffle.flag_is_active(request, flag_name)`.
 
-    `everyone=True` wins; otherwise the flag is active when `team` is in its team M2M.
+    A set `everyone` wins either way (on or off for every team); `None` defers to the
+    flag's team M2M.
     """
     return Flag.get(flag_name).is_active_for_team(team)
 

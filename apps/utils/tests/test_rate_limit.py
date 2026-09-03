@@ -285,9 +285,7 @@ def test_exempt_flag_slugs_match():
 @pytest.mark.django_db()
 def test_is_exempt_for_flagged_team():
     """A team with the flag enabled is exempt; others are not."""
-    flag, _ = get_waffle_flag_model().objects.update_or_create(
-        name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": False}
-    )
+    flag, _ = get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": None})
     exempt_team = TeamFactory()
     other_team = TeamFactory()
     flag.teams.add(exempt_team)
