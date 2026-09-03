@@ -30,13 +30,6 @@ version section when a release is cut.
 - `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
   get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
   operator or team sets one. (#4371)
-- `service_providers.0078_llmprovider_extra_data`: reversible, non-locking
-  (metadata-only `ADD COLUMN` on PG 11+, no table rewrite), no manual steps.
-  Not backwards compatible: the column is `NOT NULL` and Django drops its
-  database default immediately after adding it, so code from the previous
-  release inserting an `LlmProvider` (creating one in team settings, or a
-  team-export import) fails until the new code is serving. Creating LLM
-  providers is unavailable for the length of the deploy window. (#4373)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
