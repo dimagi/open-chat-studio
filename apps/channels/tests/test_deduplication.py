@@ -72,3 +72,15 @@ class TestChatbotScope:
 
         assert is_duplicate_delivery(external_ids_for("telegram", bot_b.id, 55501, 1), bot_a.team_id) is False
         assert is_duplicate_delivery(external_ids_for("telegram", bot_a.id, 55501, 1), bot_a.team_id) is True
+
+
+@pytest.mark.django_db()
+def test_rows_with_no_external_ids_are_ignored(record_delivery):
+    """`external_ids` is nullable so the previous release's inserts survive a deploy's migration
+    step; those NULL rows must be invisible to the lookup rather than crashing it."""
+    team = TeamFactory()
+    record_delivery(team, None)
+    record_delivery(team, [])
+
+    assert _unseen_message_ids(["connect:a"], team.id) == {"connect:a"}
+    assert is_duplicate_delivery(["connect:a"], team.id) is False
