@@ -213,6 +213,7 @@ class JsonEditor extends BaseEditor {
     this.element.addEventListener('resetEditor', () => {
       setTimeout(() => this.reset(), 10);
     })
+    this.element.addEventListener('formatEditor', () => this.formatJSON());
   }
 
   /**
