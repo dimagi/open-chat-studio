@@ -21,7 +21,6 @@ class IntegrationsTable(Table):
     name = TemplateColumn(template_name="teams/components/integration_row_name.html", verbose_name="Name")
     category = Column(verbose_name="Category")
     provider = Column(verbose_name="Provider")
-    status = TemplateColumn(template_name="teams/components/status_badge.html", verbose_name="Status", orderable=False)
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(
