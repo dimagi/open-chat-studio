@@ -14,6 +14,16 @@
       <i class="fa-solid fa-box-archive mr-2"></i>{% translate "Data" %}
     </a>
   {% endif %}
+  <a href="{% url "single_team:feature_flags" request.team.slug %}"
+     class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+    <i class="fa-solid fa-flag mr-2"></i>{% translate "Feature Flags" %}
+  </a>
+  {% if request.user.is_staff %}
+    <a href="{% url "single_team:internal_metadata" request.team.slug %}"
+       class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+      <i class="fa-solid fa-database mr-2"></i>{% translate "Internal Metadata" %}
+    </a>
+  {% endif %}
 </nav>
 <div class="app-card p-4 text-sm">
   <p class="uppercase text-xs text-neutral-500 mb-2">{% translate "Team" %}</p>

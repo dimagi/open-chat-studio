@@ -128,16 +128,6 @@
         {% endif %}
         <label for="edit-team-toggle" class="btn btn-outline whitespace-nowrap">{% translate "Cancel" %}</label>
       </form>
-      <div class="flex flex-wrap gap-2">
-        <a href="{% url "single_team:feature_flags" request.team.slug %}"
-           class="btn btn-outline whitespace-nowrap">
-          <i class="fa-solid fa-flag mr-1 text-neutral-400"></i>{% translate "Feature flags" %}</a>
-        {% if request.user.is_staff %}
-          <a href="{% url "single_team:internal_metadata" request.team.slug %}"
-             class="btn btn-outline whitespace-nowrap">
-            <i class="fa-solid fa-database mr-1 text-neutral-400"></i>{% translate "Internal metadata" %}</a>
-        {% endif %}
-      </div>
     </div>
     <p class="mb-4">
       <span class="font-mono text-xs text-neutral-600 bg-base-200 rounded px-2 py-1">{{ team.slug }}</span>
