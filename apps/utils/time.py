@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.relativedelta import relativedelta
@@ -27,7 +27,7 @@ def timedelta_to_relative_delta(timedelta: timedelta):
     return relativedelta(seconds=timedelta.total_seconds())
 
 
-def resolve_timezone(name: str | None):
+def resolve_timezone(name: str | None) -> tzinfo:
     """Returns the named zone, falling back to the current timezone for a missing or invalid name."""
     if not name:
         return get_current_timezone()

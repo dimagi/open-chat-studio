@@ -15,7 +15,7 @@ def test_pretty_date_day_precision():
     assert pretty_date(date, "UTC", include_time=False) == "Tuesday, 16 June 2026"
 
 
-def test_pretty_date_renders_zone_unknown_to_pytz():
+def test_pretty_date_renders_a_recently_added_zone():
     date = datetime(2026, 6, 16, 14, 32, 5, tzinfo=UTC)
     assert pretty_date(date, "America/Coyhaique") == "Tuesday, 16 June 2026 11:32:05 -03"
 
