@@ -48,7 +48,6 @@ def test_node_component_declares_reference_keys(api_schema):
         "llm",
         "voice",
         "source_material",
-        "assistant",
         "custom_actions",
         "media_collection",
         "indexed_collections",

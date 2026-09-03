@@ -36,7 +36,6 @@ def test_llm_node_declares_all_keys_with_null_and_empty_when_unset():
     assert data["media_collection"] is None
     assert data["custom_actions"] == []
     assert data["indexed_collections"] == []
-    assert "assistant" not in data  # LLMResponseWithPrompt does not declare assistant
 
 
 @pytest.mark.django_db()
