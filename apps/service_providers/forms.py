@@ -527,6 +527,16 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     public_key = forms.CharField(label=_("Public Key"))
     # Only applies when creating: an existing provider's saved host arrives as form-level initial.
     host = forms.URLField(label=_("Host"), initial="https://cloud.langfuse.com")
+    sample_rate = forms.FloatField(
+        label=_("Sample Rate"),
+        required=False,
+        min_value=0.0,
+        max_value=1.0,
+        help_text=_(
+            "Fraction of traces to send to Langfuse, from 0.0 to 1.0. Leave blank to send every trace. "
+            "A chatbot's own sample rate, if set, overrides this."
+        ),
+    )
 
     def save(self, instance):
         """Save the config and record which Langfuse project/organization the keys belong to.

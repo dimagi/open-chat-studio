@@ -546,7 +546,10 @@ SPECTACULAR_SETTINGS = {
         },
         {
             "name": "Pipelines",
-            "description": "Discover the pipeline node types an agent may build and the resource ids it may reference.",
+            "description": (
+                "Discover the node types a pipeline may contain and the resource ids it may "
+                "reference, and edit a chatbot's pipeline a node at a time."
+            ),
         },
         {
             "name": "Usage",
@@ -1027,8 +1030,8 @@ SUPPORTED_FILE_TYPES = {
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
     "collections": (
-        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,.html,.htm,"
-        ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
+        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,"
+        ".html,.htm,.css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
     ),
 }
 
