@@ -1030,8 +1030,8 @@ SUPPORTED_FILE_TYPES = {
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
     "collections": (
-        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,.html,.htm,"
-        ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
+        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,"
+        ".html,.htm,.css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
     ),
 }
 
