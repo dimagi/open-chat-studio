@@ -63,7 +63,7 @@
               onclick="pricing_override_modal.showModal()">
         <i class="fa-solid fa-pencil"></i>
       </button>
-      {% if row.rates.has_team_override %}
+      {% if row.rates.can_revert %}
         <button id="revert-pricing-{{ row.id }}"
                 class="btn btn-xs btn-ghost"
                 title="Revert to global pricing"

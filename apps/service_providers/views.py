@@ -479,15 +479,18 @@ def _pricing_lookup(team, llm_models: list) -> dict:
     """
     if not llm_models:
         return {}
-    rules = PricingRule.objects.filter(
-        Q(team=team) | Q(team__isnull=True),
-        provider_type__in={m.type for m in llm_models},
-        model_name__in={m.name for m in llm_models},
-        effective_to__isnull=True,
+    rules = list(
+        PricingRule.objects.filter(
+            Q(team=team) | Q(team__isnull=True),
+            provider_type__in={m.type for m in llm_models},
+            model_name__in={m.name for m in llm_models},
+            effective_to__isnull=True,
+        )
     )
     by_key = _index_rules_by_provider_model(rules)
-    for rates in by_key.values():
-        _augment_with_template_helpers(rates)
+    global_keys = {(r.provider_type, r.model_name) for r in rules if r.team_id is None}
+    for key, rates in by_key.items():
+        _augment_with_template_helpers(rates, has_global_rate=key in global_keys)
     return {m.id: by_key[(m.type, m.name)] for m in llm_models if (m.type, m.name) in by_key}
 
 
@@ -504,16 +507,21 @@ def _index_rules_by_provider_model(rules) -> dict[tuple[str, str], dict]:
     return by_key
 
 
-def _augment_with_template_helpers(rates: dict) -> None:
+def _augment_with_template_helpers(rates: dict, *, has_global_rate: bool) -> None:
     """Mutates `rates` in place with two synthetic keys the template reads
     directly: `primary` (input rate, falling back to output) and
-    `has_team_override` (for the Revert button). Avoids the Django template
+    `can_revert` (for the Revert button). Avoids the Django template
     `|default:` gotcha on missing dict keys under strict resolution.
+
+    Reverting closes the team's rules and re-resolves against the global ones, so it is
+    only offered when a global rule exists. A custom model has none - reverting there would
+    leave the model unpriced, which is a delete, not a revert.
     """
     primary = rates.get(ServiceKind.LLM_INPUT.value) or rates.get(ServiceKind.LLM_OUTPUT.value)
     if primary:
         rates["primary"] = primary
-    rates["has_team_override"] = any(r["scope"] == "team" for r in rates.values() if isinstance(r, dict))
+    has_team_override = any(r["scope"] == "team" for r in rates.values() if isinstance(r, dict))
+    rates["can_revert"] = has_team_override and has_global_rate
 
 
 @require_POST

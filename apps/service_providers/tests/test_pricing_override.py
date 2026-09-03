@@ -143,6 +143,28 @@ class TestPricingRevert:
         global_rule = PricingRule.objects.get(team__isnull=True, model_name="test-pd")
         assert global_rule.effective_to is None
 
+    def test_row_offers_revert_when_a_global_rate_exists(self):
+        team = TeamWithUsersFactory.create()
+        model = _custom_model(team, name="test-pe")
+        _global_rule("openai", "test-pe", ServiceKind.LLM_INPUT, "0.00250")
+        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
+
+        response = _client_for(team).post(url, {"input_price_per_million_tokens": "5.0"})
+
+        assert f'id="revert-pricing-{model.id}"' in response.content.decode()
+
+    def test_row_withholds_revert_from_a_model_with_no_global_rate(self):
+        """Reverting a custom model's own pricing would leave it unpriced, not fall back."""
+        team = TeamWithUsersFactory.create()
+        model = _custom_model(team, name="test-pf")
+        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
+
+        response = _client_for(team).post(url, {"input_price_per_million_tokens": "5.0"})
+
+        body = response.content.decode()
+        assert f'id="revert-pricing-{model.id}"' not in body
+        assert "in&nbsp;$5" in body
+
 
 @pytest.mark.django_db()
 class TestCreateModelWithPricing:
