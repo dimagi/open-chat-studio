@@ -29,13 +29,12 @@
   </div>
 
   <div class="flex flex-wrap items-center justify-between gap-3 mt-4">
-    <div class="join" role="group" aria-label="Filter by role">
+    <div class="flex flex-wrap gap-2" role="group" aria-label="Filter by role">
       {% for key, label in role_filters %}
-        <button type="button" class="btn btn-sm join-item"
+        <button type="button" class="btn btn-xs btn-soft btn-primary rounded-full"
                 x-bind:class="role === '{{ key }}' ? 'btn-active' : ''"
                 x-on:click="role = '{{ key }}'; apply()">
-          {{ label }}
-          <span class="badge badge-xs badge-neutral ml-1" x-text="counts['{{ key }}']"></span>
+          {{ label }} <span class="ml-1 opacity-60" x-text="counts['{{ key }}']"></span>
         </button>
       {% endfor %}
     </div>
