@@ -783,6 +783,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "consent_form",
             "voice",
             "trace_provider",
+            "trace_sample_rate",
             "channels",
             "pipeline",
             "pipeline_valid",

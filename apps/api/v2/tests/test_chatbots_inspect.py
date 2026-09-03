@@ -811,6 +811,7 @@ def _expected_full_response(bot):
             "neural": True,
         },
         "trace_provider": {"id": bot.trace_provider.id, "type": bot.trace_provider.type, "name": "Langfuse Prod"},
+        "trace_sample_rate": None,
         "channels": [
             {
                 "platform": "telegram",

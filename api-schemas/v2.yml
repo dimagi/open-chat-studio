@@ -1039,6 +1039,13 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
           readOnly: true
@@ -1074,6 +1081,7 @@ components:
       - seed_message
       - synthetic_voice_id
       - trace_provider_id
+      - trace_sample_rate
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -1140,6 +1148,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/Provider'
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         channels:
           type: array
           items:
@@ -2305,6 +2321,14 @@ components:
         trace_provider_id:
           type: integer
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
         conversational_consent_enabled:
