@@ -105,6 +105,10 @@ def send_slack_notification_async(notification_channel_id, notification_event_id
             id=notification_event_id
         )
         send_slack_notification(notification_channel, notification_event)
+    except NotificationChannel.DoesNotExist:
+        logger.warning("Skipped Slack notification: notification channel %s no longer exists", notification_channel_id)
+    except NotificationEvent.DoesNotExist:
+        logger.warning("Skipped Slack notification: notification event %s no longer exists", notification_event_id)
     except Exception:
         logger.exception("Failed to send Slack notification async")
 

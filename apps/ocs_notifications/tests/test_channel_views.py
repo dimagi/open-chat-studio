@@ -107,6 +107,7 @@ class TestNotificationChannelViews:
     def test_permission_denied_for_non_admin(self, client):
         create_default_groups()
         team = TeamFactory.create()
+        _activate_flag_for_team("flag_slack_notifications", team)
         user = UserFactory.create()
         add_user_to_team(team, user)
         client.force_login(user)
@@ -174,7 +175,7 @@ class TestNotificationChannelViews:
         channel.refresh_from_db()
         assert channel.channel_name == "#updated"
 
-    def test_views_deny_access_when_flag_disabled(self, client):
+    def test_views_not_found_when_flag_disabled(self, client):
         create_default_groups()
         team = TeamFactory.create()
         user = UserFactory.create()
@@ -183,4 +184,4 @@ class TestNotificationChannelViews:
 
         for name in ["home", "table", "new"]:
             response = client.get(reverse(f"ocs_notifications_channels:{name}", args=[team.slug]))
-            assert response.status_code == 403
+            assert response.status_code == 404

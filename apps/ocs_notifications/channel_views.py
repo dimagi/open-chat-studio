@@ -1,7 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views import View
@@ -20,7 +19,7 @@ class FlagRequiredMixin:
 
     def dispatch(self, request, *args, **kwargs):
         if not Flag.get(self.flag_name).is_active_for_team(request.team):
-            raise PermissionDenied
+            raise Http404
         return super().dispatch(request, *args, **kwargs)
 
 

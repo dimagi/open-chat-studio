@@ -125,6 +125,26 @@ class TestSendSlackNotification:
         assert mock_send.call_args.args[0] == notification_channel
         assert mock_send.call_args.args[1].pk == event.pk
 
+    @patch("apps.ocs_notifications.slack.send_slack_notification")
+    def test_async_task_skips_when_channel_deleted(self, mock_send, team_with_users):
+        channel = NotificationChannelFactory.create(team=team_with_users)
+        event = _create_event(team_with_users)
+        channel.delete()
+
+        send_slack_notification_async(channel.id, event.id)
+
+        mock_send.assert_not_called()
+
+    @patch("apps.ocs_notifications.slack.send_slack_notification")
+    def test_async_task_skips_when_event_deleted(self, mock_send, team_with_users):
+        channel = NotificationChannelFactory.create(team=team_with_users)
+        event = _create_event(team_with_users)
+        event.delete()
+
+        send_slack_notification_async(channel.id, event.id)
+
+        mock_send.assert_not_called()
+
 
 @pytest.mark.django_db(transaction=True)
 class TestCreateNotificationSchedulesSlack:
