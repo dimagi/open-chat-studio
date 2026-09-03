@@ -26,7 +26,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
 from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
-from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable, ParticipantSessionsTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
@@ -629,13 +629,23 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     """View for rendering chatbot sessions table with filtering support."""
 
     model = ExperimentSession
-    table_class = ChatbotSessionsTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
 
+    def get_table_class(self):
+        # The participant details page renders a different column set (Started, single
+        # Version, "View" instead of "Session Details") -- a filter/date-range change on
+        # that page must keep those columns, not silently fall back to the generic ones.
+        if self.kwargs.get("participant_id"):
+            return ParticipantSessionsTable
+        return ChatbotSessionsTable
+
     def get_queryset(self):
         experiment_id = self.kwargs.get("experiment_id")
+        participant_id = self.kwargs.get("participant_id")
         query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
+        if participant_id:
+            query_set = query_set.filter(participant_id=participant_id)
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(
