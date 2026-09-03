@@ -29,10 +29,6 @@
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
     <!-- ───── NAV ───── -->
-    {% comment %}
-      No active_nav / aria-current any more: every link here points at another host,
-      so no nav item is ever the current page.
-    {% endcomment %}
     <div class="nav-wrap">
       <div class="container">
         <nav class="primary">
@@ -46,9 +42,6 @@
                         filter:brightness(0) invert(1);
                         opacity:0.95">
           </a>
-          <div class="nav-links">
-            <a href="{{ project_meta.MARKETING_SITE_URL }}/">Open Chat Studio</a>
-          </div>
           <div class="nav-cta">
             <a class="btn btn-ghost"
                href="https://github.com/dimagi/open-chat-studio"
@@ -58,11 +51,6 @@
               <a class="btn btn-primary" href="{% url 'sso:login' %}">Sign In</a>
             {% endblock nav_signin_cta %}
           </div>
-          <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">
-            {# djlint:off H020 #}
-            <span></span><span></span><span></span>
-            {# djlint:on #}
-          </button>
         </nav>
       </div>
     </div>
@@ -126,31 +114,6 @@
         </div>
       </div>
     </footer>
-    <!-- Mobile nav toggle -->
-    <script>
-(function () {
-  var ham = document.querySelector('.nav-hamburger');
-  if (ham) {
-    ham.addEventListener('click', function () {
-      var open = this.classList.toggle('is-open');
-      document.querySelector('.nav-links').classList.toggle('is-open');
-      document.querySelector('.nav-cta').classList.toggle('is-open');
-      this.setAttribute('aria-expanded', open ? 'true' : 'false');
-      this.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-    });
-  }
-  document.querySelectorAll('.nav-links a').forEach(function (a) {
-    a.addEventListener('click', function () {
-      var h = document.querySelector('.nav-hamburger');
-      h.classList.remove('is-open');
-      h.setAttribute('aria-expanded', 'false');
-      h.setAttribute('aria-label', 'Open menu');
-      document.querySelector('.nav-links').classList.remove('is-open');
-      document.querySelector('.nav-cta').classList.remove('is-open');
-    });
-  });
-})();
-    </script>
     {% block page_scripts %}
     {% endblock page_scripts %}
   </body>
