@@ -58,7 +58,7 @@ export function getWidget(name: string, params: PropertySchema) {
   }
 }
 
-interface WidgetParams {
+export interface WidgetParams {
   nodeId: string;
   name: string;
   label: string;
@@ -245,14 +245,13 @@ function SelectWidget(props: WidgetParams) {
 
 function MultiSelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
+  const setNode = usePipelineStore((state) => state.setNode);
   if (options.length == 0) {
     return <></>
   }
   // props.paramValue is made immutable when produce is used to update the node, so we have to copy props.paramValue
   // in order to push to it
   let selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
-
-  const setNode = usePipelineStore((state) => state.setNode);
 
   function getNewNodeData(old: Node, updatedList: Array<string>) {
     return produce(old, next => {
@@ -369,7 +368,7 @@ export function CodeWidget(props: WidgetParams) {
     <>
       {props.label}
       <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
-        <button className="btn btn-xs btn-ghost float-right" onClick={openModal}>
+        <button type="button" className="btn btn-xs btn-ghost float-right" onClick={openModal}>
           <i className="fa-solid fa-expand-alt"></i>
         </button>
       </div >
@@ -427,7 +426,7 @@ export function CodeModal(
     >
       <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
-          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+          <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
             ✕
           </button>
         </form>
@@ -439,7 +438,7 @@ export function CodeModal(
                 <i className="fa-regular fa-circle-question fa-sm"></i>
               </a>}
             </h4>
-            {!readOnly && <button className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
+            {!readOnly && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowGenerate(!showGenerate)}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Help
             </button>}
           </div>
@@ -461,7 +460,7 @@ export function CodeModal(
       </div>
       <form method="dialog" className="modal-backdrop">
         {/* Allows closing the modal by clicking outside of it */}
-        <button>close</button>
+        <button type="submit">close</button>
       </form>
     </dialog>
   );
@@ -521,7 +520,7 @@ function GenerateCodeSection({
           ></textarea>
           {error && <small className="text-red-500">{error}</small>}
           <div className={"flex items-center gap-2"}>
-            <button className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
+            <button type="button" className={"btn btn-sm btn-primary"} onClick={generateCode} disabled={!prompt}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Go
             </button>
             {generating && <span className="loading loading-bars loading-md"></span>}
@@ -537,7 +536,7 @@ function GenerateCodeSection({
             readOnly={false}
             />
         <div className={"my-2 join"}>
-          <button className={"btn btn-sm btn-success join-item"} onClick={() => {
+          <button type="button" className={"btn btn-sm btn-success join-item"} onClick={() => {
             onAccept(generated)
             setShowGenerate(false)
             setGenerated("")
@@ -546,7 +545,7 @@ function GenerateCodeSection({
             <i className="fa-solid fa-check"></i>
             Use Generated Code
           </button>
-          <button className={"btn btn-sm btn-warning join-item"} onClick={() => {
+          <button type="button" className={"btn btn-sm btn-warning join-item"} onClick={() => {
             setGenerated("")
             setShowGenerate(true)
           }}>
@@ -576,7 +575,7 @@ export function TextModal(
     >
       <div className="modal-box  min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
-          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+          <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
             ✕
           </button>
         </form>
@@ -595,7 +594,7 @@ export function TextModal(
       </div>
       <form method="dialog" className="modal-backdrop">
         {/* Allows closing the modal by clicking outside of it */}
-        <button>close</button>
+        <button type="submit">close</button>
       </form>
     </dialog>
   );
@@ -607,7 +606,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   const label = (
     <>{props.label}
       <div className="tooltip tooltip-left" data-tip={`Expand ${props.label}`}>
-        <button className="btn btn-xs btn-ghost" onClick={openModal}>
+        <button type="button" className="btn btn-xs btn-ghost" onClick={openModal}>
           <i className="fa-solid fa-expand-alt"></i>
         </button>
       </div>
@@ -636,24 +635,24 @@ export function ExpandableTextWidget(props: WidgetParams) {
   );
 }
 
+function getKeywordsNodeData(old: Node, keywords: any[], newDefaultIndex?: number) {
+  return produce(old, next => {
+    next.data.params["keywords"] = keywords;
+    if (newDefaultIndex !== undefined) {
+      next.data.params["default_keyword_index"] = newDefaultIndex;
+    }
+  });
+}
+
 export function KeywordsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
 
-  function getNewNodeData(old: Node, keywords: any[], newDefaultIndex?: number) {
-    return produce(old, next => {
-      next.data.params["keywords"] = keywords;
-      if (newDefaultIndex !== undefined) {
-        next.data.params["default_keyword_index"] = newDefaultIndex;
-      }
-    });
-  }
-
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
-      return getNewNodeData(old, updatedList);
+      return getKeywordsNodeData(old, updatedList);
     });
     updateNodeInternals(props.nodeId);
   }
@@ -663,7 +662,7 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
-        return getNewNodeData(old, updatedList);
+        return getKeywordsNodeData(old, updatedList);
       }
     );
   };
@@ -681,7 +680,7 @@ export function KeywordsWidget(props: WidgetParams) {
         newDefaultIndex = defaultIndex - 1;
       }
 
-      return getNewNodeData(old, updatedList, newDefaultIndex);
+      return getKeywordsNodeData(old, updatedList, newDefaultIndex);
     });
     updateNodeInternals(props.nodeId);
 
@@ -710,7 +709,7 @@ export function KeywordsWidget(props: WidgetParams) {
 
   const setAsDefault = (index: number) => {
     setNode(props.nodeId, (old) => {
-      return getNewNodeData(old, [...(old.data.params["keywords"] || [])], index);
+      return getKeywordsNodeData(old, [...(old.data.params["keywords"] || [])], index);
     });
   }
 
@@ -725,7 +724,7 @@ export function KeywordsWidget(props: WidgetParams) {
         <label className="label font-bold">
           Outputs
           <div className="tooltip tooltip-left" data-tip="Add Keyword">
-            <button className="btn btn-xs btn-ghost" onClick={() => addKeyword()}>
+            <button type="button" className="btn btn-xs btn-ghost" onClick={() => addKeyword()}>
               <i className="fa-solid fa-plus"></i>
             </button>
           </div>
@@ -757,7 +756,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   </div>
                 </label>
                 {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
-                  <button className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
+                  <button type="button" className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
                 </div>}
@@ -848,6 +847,10 @@ function ModelParametersWidget(props: LLMModelParametersWidgetProps) {
   );
 }
 
+function makeValue(providerId: string, providerModelId: string) {
+  return providerId + '|:|' + providerModelId;
+}
+
 export function LlmWidget(props: WidgetParams) {
 
   const {parameterValues, modelParams, modelParamSchemas} = getCachedData();
@@ -896,10 +899,6 @@ export function LlmWidget(props: WidgetParams) {
         }
       })
     );
-  };
-
-  const makeValue = (providerId: string, providerModelId: string) => {
-    return providerId + '|:|' + providerModelId;
   };
 
   type ProviderModelsByType = { [type: string]: TypedOption[] };
@@ -1040,15 +1039,16 @@ export function HistoryTypeWidget(props: WidgetParams) {
   );
 }
 
+const historyModeHelpTexts: Record<string, string> = {
+  summarize: "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
+  truncate_tokens: "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
+  max_history_length: "The chat history will always be truncated to the last N messages.",
+};
+
 export function HistoryModeWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
   const initialHistoryMode = concatenate(props.nodeParams["history_mode"]);
   const [historyMode, setHistoryMode] = useState(initialHistoryMode || "summarize");
-  const historyModeHelpTexts: Record<string, string> = {
-    summarize: "If the token count exceeds the limit, older messages will be summarized while keeping the last few messages intact.",
-    truncate_tokens: "If the token count exceeds the limit, older messages will be removed until the token count is below the limit.",
-    max_history_length: "The chat history will always be truncated to the last N messages.",
-  };
 
   return (
     <div className="flex join">
@@ -1128,6 +1128,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const providerKey = model?.type?.toLowerCase() || "";
   const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>
   const options = providerToolMap[providerKey] || [];
+  const setNode = usePipelineStore((state) => state.setNode);
 
   if (options.length === 0) return <></>;
 
@@ -1135,13 +1136,9 @@ function BuiltInToolsWidget(props: WidgetParams) {
   const providerToolConfigs = toolConfigsMap[providerKey] || {};
 
   const toolConfig = props.nodeParams.tool_config || {};
-  const [selectedValues, setSelectedValue] = useState(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
-  const setNode = usePipelineStore((state) => state.setNode);
-
-  // Sync local state with prop changes from the store
-  React.useEffect(() => {
-    setSelectedValue(Array.isArray(props.paramValue) ? [...props.paramValue] : []);
-  }, [props.paramValue]);
+  // Derived directly from props, like the sibling MultiSelectWidget above, rather than
+  // duplicated into local state synced by an effect — it can't go stale if it's never copied.
+  const selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
 
   function getNewNodeData(old: Node, updatedList: string[]) {
     return produce(old, (next) => {
@@ -1151,7 +1148,6 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
   function onUpdate(event: ChangeEvent<HTMLInputElement>) {
     const updatedList = event.target.checked ? [...selectedValues, event.target.name] : selectedValues.filter((tool) => tool !== event.target.name);
-    setSelectedValue(updatedList);
     setNode(props.nodeId, (old) => getNewNodeData(old, updatedList));
   }
 
@@ -1308,7 +1304,7 @@ function TextEditorModal({
     <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
       <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
-          <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
+          <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
             ✕
           </button>
         </form>
@@ -1321,7 +1317,7 @@ function TextEditorModal({
         {inputError && <div className="text-red-500">{inputError}</div>}
       </div>
       <form method="dialog" className="modal-backdrop">
-        <button>close</button>
+        <button type="submit">close</button>
       </form>
     </dialog>
   );
@@ -1396,7 +1392,7 @@ export function JinjaWidget(props: WidgetParams) {
       <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel" onClose={() => setIsModalOpen(false)}>
         <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
           <form method="dialog">
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+            <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
           </form>
           <div className="grow h-full w-full flex flex-col">
             <div className="flex items-center gap-1 mb-4">
@@ -1414,7 +1410,7 @@ export function JinjaWidget(props: WidgetParams) {
           {props.inputError && <div className="text-red-500">{props.inputError}</div>}
         </div>
         <form method="dialog" className="modal-backdrop">
-          <button>close</button>
+          <button type="submit">close</button>
         </form>
       </dialog>
     </>
