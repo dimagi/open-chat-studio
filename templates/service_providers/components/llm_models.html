@@ -19,3 +19,12 @@
     </div>
   </div>
 {% endfor %}
+{% with for_type_slug=for_type|stringformat:"s" %}
+  {# for_type is an LlmProviderTypes member, not a str - its .value dataclass isn't hashable, #}
+  {# so it can't be used as a dict-membership key directly; stringformat forces str() first. #}
+  {% if for_type_slug and for_type_slug not in llm_models_by_type %}
+    <div id="models_{{ for_type_slug }}" x-show="type === '{{ for_type_slug }}'" class="mt-2">
+      <p>{{ empty_message }}</p>
+    </div>
+  {% endif %}
+{% endwith %}

@@ -10,11 +10,15 @@ from django import forms
 from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.urls import reverse
+from django.utils.html import format_html
 from telebot import TeleBot, apihelper
 
+from apps.channels import widget_versions
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.utils import (
     ALL_DOMAINS,
     get_allowed_email_domains,
@@ -23,10 +27,15 @@ from apps.channels.utils import (
     validate_platform_availability,
 )
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
+from apps.oauth.models import manage_applications_url
+from apps.oauth.permissions import applications_allowing_chatbot
+from apps.service_providers.forms import whatsapp_number_label
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.channels")
+
+NUMBER_NOT_FOUND = "{number} was not found at the provider. Please make sure it is there before proceeding"
 
 
 class ChannelFormWrapper:
@@ -77,10 +86,10 @@ class ChannelFormWrapper:
         if self.extra_form and self.extra_form.is_valid():
             config_data = self.extra_form.cleaned_data
 
-        instance = self.channel_form.save(self.experiment, config_data)
-
-        if self.extra_form and hasattr(self.extra_form, "post_save"):
-            self.extra_form.post_save(channel=instance)
+        with transaction.atomic():
+            instance = self.channel_form.save(self.experiment, config_data)
+            if self.extra_form and hasattr(self.extra_form, "post_save"):
+                self.extra_form.post_save(channel=instance)
 
         return instance
 
@@ -151,6 +160,8 @@ class ExtraFormBase(forms.Form):
     warning_message = ""
     form_attrs = {}
     """Additional HTML attributes to be added to the form element"""
+    custom_template = None
+    """Template to render the form's fields with, when the default field rendering won't do"""
 
     def __init__(self, experiment, channel=None, **kwargs):
         self.experiment = experiment
@@ -159,8 +170,9 @@ class ExtraFormBase(forms.Form):
 
     @cached_property
     def messaging_provider(self) -> MessagingProvider | None:
+        """The submitted provider, scoped to the experiment's team."""
         if provider_id := self.data.get("messaging_provider"):
-            return MessagingProvider.objects.filter(id=provider_id).first()
+            return MessagingProvider.objects.filter(id=provider_id, team=self.experiment.team).first()
         return None
 
     def clean(self):
@@ -253,6 +265,8 @@ class TelegramChannelForm(ExtraFormBase):
 
 
 class WhatsappChannelForm(WebhookUrlFormBase):
+    custom_template = "channels/partials/whatsapp_channel_fields.html"
+
     number = forms.CharField(
         label="Number",
         max_length=20,
@@ -262,12 +276,84 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         ),
     )
 
+    @property
+    def form_attrs(self) -> dict:
+        """Hand the modal every Meta provider's cached numbers up front.
+
+        Switching provider then swaps the number control client-side, with no request. This is
+        evaluated at render time so numbers a sync fetched during validation are already here.
+        """
+        return {
+            "x-data": json.dumps(
+                {
+                    "numbersByProvider": self._numbers_by_provider,
+                    "providerId": self._selected_provider_id(),
+                    "number": self._submitted_number() or "",
+                }
+            ),
+            "x-on:change.document": (
+                "if ($event.target.name === 'messaging_provider') providerId = $event.target.value"
+            ),
+        }
+
+    @property
+    def has_cached_numbers(self) -> bool:
+        """Whether the provider selected right now has numbers, for the pre-Alpine render."""
+        provider_id = self._selected_provider_id()
+        return bool(self._numbers_by_provider.get(provider_id, {}).get("numbers"))
+
+    def _selected_provider_id(self) -> str:
+        if provider_id := self.data.get("messaging_provider"):
+            return str(provider_id)
+        if self.channel and self.channel.messaging_provider_id:
+            return str(self.channel.messaging_provider_id)
+        return ""
+
+    def _submitted_number(self) -> str | None:
+        if self.is_bound:
+            return self.data.get("number")
+        return (self.channel.extra_data or {}).get("number") if self.channel else None
+
+    @cached_property
+    def _numbers_by_provider(self) -> dict:
+        """The number options and provider page URL for each of the team's Meta providers.
+
+        Cached because one render reads it through both `form_attrs` and `has_cached_numbers`,
+        and it is a query every time. Nothing reads it before validation, so a sync that runs
+        during `clean()` is still reflected here.
+        """
+        team = self.experiment.team
+        saved_number = (self.channel.extra_data or {}).get("number") if self.channel else None
+        options = {}
+        for provider in MessagingProvider.objects.filter(team=team, type=MessagingProviderType.meta_cloud_api):
+            numbers = [
+                {"value": number["number"], "label": whatsapp_number_label(number)}
+                for number in provider.whatsapp_numbers
+                if number.get("number")
+            ]
+            # Keep a number the channel already uses selectable, even if Meta no longer lists it.
+            is_channels_provider = bool(self.channel) and self.channel.messaging_provider_id == provider.id
+            if saved_number and is_channels_provider and saved_number not in {n["value"] for n in numbers}:
+                numbers.append({"value": saved_number, "label": saved_number})
+            options[str(provider.id)] = {
+                "numbers": numbers,
+                "provider_url": reverse(
+                    "service_providers:edit",
+                    kwargs={"team_slug": team.slug, "provider_type": "messaging", "pk": provider.id},
+                ),
+            }
+        return options
+
     def clean_number(self):
         try:
             number_obj = phonenumbers.parse(self.cleaned_data["number"])
-            return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
         except phonenumbers.NumberParseException:
             raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).") from None
+        # Parsing only checks the shape, so reject numbers that cannot be dialled before we
+        # go looking for them at the provider.
+        if not phonenumbers.is_valid_number(number_obj):
+            raise forms.ValidationError("Enter a valid phone number (e.g. +12125552368).")
+        return phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
 
     def post_save(self, channel: ExperimentChannel):
         self.configure_webhook(channel)
@@ -275,24 +361,44 @@ class WhatsappChannelForm(WebhookUrlFormBase):
     def clean(self):
         cleaned_data = super().clean()
         number = cleaned_data.get("number")
-        if not number or not self.messaging_provider:
+        provider = self.messaging_provider
+        if not number or not provider:
             return cleaned_data
 
-        service = self.messaging_provider.get_messaging_service()
+        if unchanged := self._unchanged_number_config(provider, number):
+            cleaned_data.update(unchanged)
+            return cleaned_data
+
         try:
-            resolved_number = service.resolve_number(number)
-            if not resolved_number:
-                self.add_error(
-                    "number", f"{number} was not found at the provider. Please make sure it is there before proceeding"
-                )
-                return cleaned_data
-            elif self.messaging_provider.type == MessagingProviderType.meta_cloud_api:
-                cleaned_data["phone_number_id"] = resolved_number
+            resolved = provider.resolve_number(number)
         except Exception:
+            logger.exception("Could not resolve number at messaging provider %s", provider.id)
             self.add_error("number", "Could not validate this number right now. Please try again.")
             return cleaned_data
 
+        if resolved is None:
+            self.add_error("number", NUMBER_NOT_FOUND.format(number=number))
+            return cleaned_data
+
+        cleaned_data.update(resolved)
         return cleaned_data
+
+    def _unchanged_number_config(self, provider: MessagingProvider, number: str) -> dict | None:
+        """The config already saved for this number, when an edit leaves it and the provider alone.
+
+        The picker keeps a saved number selectable after the provider stops listing it, so
+        re-checking one here would block every later edit to the channel -- a rename included --
+        on a number the operator cannot change from this form. It was resolved when it was saved.
+        """
+        if not self.channel or self.channel.messaging_provider_id != provider.id:
+            return None
+        saved = self.channel.extra_data or {}
+        if saved.get("number") != number:
+            return None
+        config = {"number": number}
+        if phone_number_id := saved.get("phone_number_id"):
+            config["phone_number_id"] = phone_number_id
+        return config
 
 
 class SureAdhereChannelForm(WebhookUrlFormBase):
@@ -617,6 +723,8 @@ class WidgetParams(forms.Widget):
         context["widget"]["experiment"] = self.experiment
         context["widget"]["token"] = self.widget_token
         if self.channel:
+            context["widget"]["oauth"] = self.channel.credential_mode == CredentialMode.OAUTH
+            context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
@@ -628,12 +736,39 @@ class WidgetParams(forms.Widget):
         return context
 
 
+class CredentialModeSelect(forms.Select):
+    """The credential mode select along with the list of oauth applications which can be used with
+    this chatbot. If there are none a warning is displayed.
+    """
+
+    template_name = "channels/widgets/credential_mode.html"
+
+    def __init__(self, experiment, attrs=None, choices=()):
+        super().__init__(attrs, choices)
+        self.experiment = experiment
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
+        context["widget"]["oauth_applications"] = list(applications_allowing_chatbot(self.experiment))
+        context["widget"]["manage_applications_url"] = manage_applications_url(self.experiment.team.slug)
+        return context
+
+
 # Floor for the per-channel session lifetime override: anything shorter would make every
 # session on the channel dead on arrival.
 MIN_SESSION_TOKEN_LIFETIME = timedelta(minutes=5)
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
+    credential_mode = forms.ChoiceField(
+        label="Credential",
+        choices=CredentialMode.choices,
+        initial=CredentialMode.EMBED_KEY,
+        # Not required, so a submission that omits it falls back to the mode already stored
+        # rather than resetting the channel to the public default.
+        required=False,
+    )
     allow_all_domains = forms.BooleanField(
         label="Allow all domains", required=False, help_text="Allow access from any domain."
     )
@@ -651,7 +786,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             }
         ),
         required=False,
-        help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
+        help_text=(
+            "Enter the domains where this widget is allowed to be embedded (one per line). "
+            "Required for an embed key. With OAuth, leaving this blank makes the channel "
+            "server-only: any browser request is refused."
+        ),
     )
 
     session_token_lifetime = forms.DurationField(
@@ -682,7 +821,13 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         # rather than through the config dict the other fields on this form become. Seeded
         # from the channel so a post_save that runs without clean() cannot silently clear it.
         self._session_token_lifetime = self.channel.session_token_lifetime if self.channel else None
+        self._credential_mode = self.channel.credential_mode if self.channel else CredentialMode.EMBED_KEY
+        self.fields["credential_mode"].help_text = self._credential_mode_help_text()
+        self.fields["credential_mode"].widget = CredentialModeSelect(
+            experiment=self.experiment, choices=CredentialMode.choices
+        )
         if self.channel:
+            self.initial["credential_mode"] = self.channel.credential_mode
             self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
             allowed_domains = self.channel.extra_data.get("allowed_domains", [])
             self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
@@ -701,11 +846,36 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             "x-data": json.dumps(
                 {
                     "allowAllDomains": self.initial.get("allow_all_domains", False),
+                    # Seeded from the same value the select renders as chosen -- `BoundField.value()`
+                    # is what `Select.get_context` is handed -- so `x-model` binding to it on init is
+                    # a no-op rather than a silent change of the admin's selection.
+                    "credentialMode": str(self["credential_mode"].value() or self._credential_mode),
                 }
             )
         }
+        self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
+    def _credential_mode_help_text(self):
+        return format_html(
+            "What kind of token the widget must use to start a chat session. <strong>Embed key</strong> admits any "
+            "visitor on an allowed domain, as a public widget. <strong>OAuth token</strong> means your "
+            "backend creates a short-lived <code>{scope}</code> token and hands it to the widget;"
+            " any embed key is then ignored. The OAuth application must be <strong>client-credentials</strong> "
+            "and must list this chatbot "
+            '(<a href="{url}" class="link" target="_blank">manage OAuth applications</a>).',
+            scope=settings.CHAT_API_SCOPE,
+            url=reverse("oauth_apps:home", args=[self.experiment.team.slug]),
+        )
+
+    def _pop_credential_mode(self, cleaned_data) -> str:
+        """Take the mode out of `cleaned_data`, which becomes the channel's extra_data.
+
+        A real column of its own, for the same reason `session_token_lifetime` is one: it must
+        not also land in the JSON blob. A missing value keeps the mode the channel already has.
+        """
+        return cleaned_data.pop("credential_mode", None) or self._credential_mode
 
     @staticmethod
     def _pop_session_token_lifetime(cleaned_data):
@@ -725,9 +895,14 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         cleaned_data = super().clean()
 
         self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
+        self._credential_mode = self._pop_credential_mode(cleaned_data)
 
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
-        if not allow_all_domains and not cleaned_data.get("allowed_domains"):
+        no_domains = not allow_all_domains and not cleaned_data.get("allowed_domains")
+        if no_domains and self._credential_mode == CredentialMode.EMBED_KEY:
+            # An embed key with no domain list would admit a stolen key from anywhere, so the
+            # list is mandatory there. Under `oauth` a blank list is a real configuration: it
+            # means server-only, and the token is what authorises the caller.
             raise ValidationError(
                 {"allowed_domains": "You must specify at least one domain or select 'Allow all domains'."}
             )
@@ -745,10 +920,133 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
+        update_fields = []
+        if channel.credential_mode != self._credential_mode:
+            channel.credential_mode = self._credential_mode
+            update_fields.append("credential_mode")
         if channel.session_token_lifetime != self._session_token_lifetime:
             channel.session_token_lifetime = self._session_token_lifetime
-            channel.save(update_fields=["session_token_lifetime"])
+            update_fields.append("session_token_lifetime")
+        if update_fields:
+            channel.save(update_fields=update_fields)
         self.success_message = "Channel saved successfully"
+        if warning := self._oauth_mode_warning(channel):
+            self.warning_message = warning
+
+    def _oauth_mode_warning(self, channel: ExperimentChannel) -> str:
+        """Whether this channel's embed can actually present a token yet.
+
+        MIN_OAUTH_WIDGET_VERSION is advisory — nothing rejects on it — so an embed too old to
+        send one just fails admission with the door's deliberately opaque 401. Saying so here is
+        the only place an admin finds out before their visitors do.
+        """
+        if self._credential_mode != CredentialMode.OAUTH:
+            return ""
+        if not self.cleaned_data.get("allowed_domains"):
+            # Server-only: a blank domain list refuses every browser request outright, so there
+            # is no embed for the floor to constrain and nothing for an admin to upgrade. Read
+            # from cleaned_data rather than the channel: this is the list being saved.
+            return ""
+        version = channel.widget_version
+        min_version = widget_versions.MIN_OAUTH_WIDGET_VERSION
+        if not widget_versions.is_older_than(version, min_version):
+            return ""
+        reported = f"reported widget version {version}" if version else "not reported a widget version"
+        return (
+            f"This channel now requires an OAuth token. Your site has {reported}, and only "
+            f"{min_version} or newer can send one — upgrade the embed and install an "
+            "authTokenProvider on the element, or chats will fail."
+        )
+
+
+class PublicLinkParams(forms.Widget):
+    template_name = "channels/widgets/public_link.html"
+
+    def __init__(self, channel: ExperimentChannel):
+        super().__init__()
+        self.channel = channel
+
+    def format_value(self, value):
+        return "" if value is None else value
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["public_url"] = self.channel.public_url
+        context["widget"]["edit_url"] = reverse(
+            "channels:channel_edit_dialog",
+            args=[self.channel.team.slug, self.channel.experiment_id, self.channel.id],
+        )
+        return context
+
+
+class LinesField(SimpleArrayField):
+    """One entry per non-blank line; blank and trailing lines are dropped rather than rejected."""
+
+    def to_python(self, value):
+        lines = [line.strip() for line in (value or "").splitlines()]
+        return super().to_python("\n".join(line for line in lines if line))
+
+
+def _lines_field(label: str, help_text: str, placeholder: str) -> SimpleArrayField:
+    return LinesField(
+        forms.CharField(max_length=500),
+        delimiter="\n",
+        required=False,
+        label=label,
+        help_text=help_text,
+        widget=forms.Textarea(
+            attrs={"rows": 3, "class": "textarea textarea-bordered w-full", "placeholder": placeholder}
+        ),
+    )
+
+
+class PublicChannelForm(ExtraFormBase):
+    """Configuration for a public link. The link itself is the embed key, shown once a channel exists."""
+
+    welcome_messages = _lines_field(
+        "Welcome messages",
+        "Shown above the composer before the visitor sends anything. One message per line.",
+        "Hi! Ask me about opening hours or how to book.",
+    )
+    starter_questions = _lines_field(
+        "Starter questions",
+        "Buttons the visitor can tap to send a first message. One question per line.",
+        "What are your opening hours?",
+    )
+    widget_token = forms.CharField(required=False, widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initial = dict(self.initial)
+        self._previous_token = self.channel.extra_data.get("widget_token") if self.channel else None
+        self._previously_enabled = bool(self.channel and self.channel.enabled)
+        if self._previous_token:
+            self.initial["widget_token"] = self._previous_token
+            self.fields["widget_token"].widget = PublicLinkParams(channel=self.channel)
+            self.fields["widget_token"].label = ""
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cleaned_data.setdefault("welcome_messages", [])
+        cleaned_data.setdefault("starter_questions", [])
+        regenerate = self.data.get("regenerate_link") == "1"
+        if self._previous_token and not regenerate:
+            cleaned_data["widget_token"] = self._previous_token
+        else:
+            cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+        return cleaned_data
+
+    def post_save(self, channel: ExperimentChannel):
+        if self._previous_token and channel.extra_data.get("widget_token") != self._previous_token:
+            ended = channel.end_live_sessions()
+            self.success_message = (
+                f"Link regenerated. The old link no longer works and {ended} live conversation(s) were ended."
+            )
+        elif self._previously_enabled and not channel.enabled:
+            ended = channel.end_live_sessions()
+            self.success_message = f"Channel disabled. {ended} live conversation(s) were ended."
+        else:
+            self.success_message = "Channel saved successfully"
 
 
 class EmailChannelForm(ExtraFormBase):

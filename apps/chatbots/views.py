@@ -564,7 +564,42 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    context = {"version_details": experiment_version.version_details, "experiment": experiment_version}
+    # Earlier versions only. The diff then always reads oldest-to-newest, and any
+    # pair stays reachable by opening the newer of the two.
+    earlier_versions = list(
+        Experiment.objects.get_all()
+        .filter(working_version_id=experiment_id, version_number__lt=version_number)
+        .order_by("-version_number")
+    )
+
+    requested = request.GET.get("compare_to")
+    if requested:
+        try:
+            requested_version_number = int(requested)
+        except ValueError:
+            raise Http404("Invalid comparison target.") from None
+        # Never later than the version on screen, otherwise the diff would render the newer
+        # version in the "previous" column and read additions as deletions.
+        compare_to = get_object_or_404(
+            Experiment.objects.get_all(),
+            working_version_id=experiment_id,
+            version_number=requested_version_number,
+            version_number__lte=version_number,
+        )
+    else:
+        # The selector's own list, so the default target is always its first option.
+        compare_to = earlier_versions[0] if earlier_versions else None
+
+    version_details = experiment_version.version_details
+    if compare_to:
+        version_details.compare(compare_to.version_details)
+
+    context = {
+        "version_details": version_details,
+        "experiment": experiment_version,
+        "compare_to": compare_to,
+        "comparison_versions": earlier_versions,
+    }
     return render(request, "experiments/components/experiment_version_details_content.html", context)
 
 
@@ -720,7 +755,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         raise Http404() from None
 
     version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
@@ -838,7 +872,6 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 def _chatbot_chat_ui(request):
     chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
-        "assistant": chatbot_version.get_assistant(),
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,

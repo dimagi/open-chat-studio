@@ -7,7 +7,7 @@ from django.utils import timezone
 from field_audit.models import AuditAction, AuditEvent
 
 from apps.channels.forms import WidgetParams
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.channels.widget_versions import (
     LATEST_VERSION,
     UNKNOWN_WIDGET_VERSION,
@@ -18,6 +18,7 @@ from apps.channels.widget_versions import (
     is_deprecated,
     is_outdated,
     latest_deprecation,
+    widget_enforces_consent,
     widget_script_url,
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -142,6 +143,23 @@ class TestGetWidgetUpdateStatus:
         assert "unsupported" in status.message
 
 
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        pytest.param(None, False, id="no-header"),
+        pytest.param("unknown", False, id="pre-header-widget"),
+        pytest.param("garbage", False, id="unparseable"),
+        pytest.param("0.11.0", False, id="release-a"),
+        pytest.param("0.12.0", False, id="published-without-consent-panel"),
+        pytest.param("0.13.0", True, id="release-b"),
+        pytest.param("1.0.0", True, id="later"),
+        pytest.param("0.13.0rc1", False, id="release-b-prerelease"),
+    ],
+)
+def test_widget_enforces_consent(version, expected):
+    assert widget_enforces_consent(version) is expected
+
+
 def test_widget_script_url():
     assert widget_script_url() == (
         f"https://unpkg.com/open-chat-studio-widget@{LATEST_VERSION}"
@@ -240,6 +258,16 @@ class TestWidgetUpdateStatusProperty:
     def test_non_widget_channel(self):
         channel = ExperimentChannelFactory()  # telegram
         assert channel.widget_update_status is None
+
+    def test_public_link_channel(self):
+        """A public link serves the widget bundled with the platform. Its version follows the
+        deploy, so a badge, a minimum version and a pending minimum all name something the team
+        has no way to change."""
+        channel = ExperimentChannelFactory(platform=ChannelPlatform.PUBLIC, widget_version="0.1.0")
+        channel.pending_auth_level = WidgetAuthLevel.SESSION_TOKEN
+        assert channel.widget_update_status is None
+        assert channel.min_widget_version is None
+        assert channel.pending_min_widget_version is None
 
 
 @pytest.mark.django_db()

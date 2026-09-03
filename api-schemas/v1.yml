@@ -51,6 +51,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatTaskPollError'
           description: ''
+  /api/chat/{session_id}/consent/:
+    post:
+      operationId: chat_record_consent
+      description: |-
+        Record consent for the form version the participant was shown.
+
+        A `form_version_id` that is not the session version's current form is refused with `409`
+        and the current block, so the widget re-renders rather than recording consent to text the
+        participant never saw.
+      summary: Record that the participant accepted the chatbot's consent form
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatConsentRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - embedKeyAuth: []
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentSessionEnded'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentStale'
+          description: ''
   /api/chat/{session_id}/message/:
     post:
       operationId: chat_send_message
@@ -92,6 +135,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatSendMessageResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentRequired'
           description: ''
   /api/chat/{session_id}/poll/:
     get:
@@ -158,6 +207,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatUploadFileResponse'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatConsentRequired'
+          description: ''
   /api/chat/start/:
     post:
       operationId: chat_start_session
@@ -213,6 +268,10 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
+                    consent:
+                      required: false
+                      form_version_id: null
+                      text: null
                   summary: Session started with published version
                 StartSessionSpecificVersionResponse:
                   value:
@@ -226,6 +285,10 @@ paths:
                     participant:
                       identifier: abc
                       remote_id: abc
+                    consent:
+                      required: false
+                      form_version_id: null
+                      text: null
                   summary: Session started with specific version
           description: ''
         '401':
@@ -233,6 +296,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatAccessDenied'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStartSessionRefused'
           description: ''
   /api/experiments/:
     get:
@@ -1105,6 +1174,77 @@ components:
       - assistant
       type: string
       description: '* `assistant` - assistant'
+    ChatConsent:
+      type: object
+      properties:
+        required:
+          type: boolean
+          title: Consent required
+          description: True until the participant accepts the chatbot's consent form.
+            Send and upload return `403 consent_required` while this is true; poll
+            is never gated.
+        form_version_id:
+          type: integer
+          nullable: true
+          title: Consent form version ID
+          description: Identifies the frozen consent form text. Post it back to `/consent/`.
+            A changed form gets a new id, and consent is required again until the
+            participant accepts it.
+        text:
+          type: string
+          nullable: true
+          title: Consent text
+          description: Rendered HTML of the consent form. Present only while consent
+            is required.
+      required:
+      - form_version_id
+      - required
+      - text
+    ChatConsentRequest:
+      type: object
+      properties:
+        form_version_id:
+          type: integer
+          title: Consent form version ID
+          description: The `form_version_id` from the start or poll response being
+            accepted.
+      required:
+      - form_version_id
+    ChatConsentRequired:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: '`consent_required`.'
+        consent:
+          $ref: '#/components/schemas/ChatConsent'
+      required:
+      - code
+      - consent
+      - error
+    ChatConsentSessionEnded:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ChatConsentStale:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `consent_stale`.
+        consent:
+          $ref: '#/components/schemas/ChatConsent'
+      required:
+      - code
+      - consent
+      - error
     ChatPollResponse:
       type: object
       properties:
@@ -1120,7 +1260,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/SessionStatusEnum'
           title: Current session status
+        consent:
+          allOf:
+          - $ref: '#/components/schemas/ChatConsent'
+          readOnly: true
       required:
+      - consent
       - has_more
       - messages
       - session_status
@@ -1174,6 +1319,17 @@ components:
         * `processing` - Processing
         * `completed` - Completed
         * `error` - Error
+    ChatStartSessionRefused:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `no_published_version`.
+      required:
+      - code
+      - error
     ChatStartSessionRequest:
       type: object
       properties:
@@ -1225,8 +1381,13 @@ components:
           allOf:
           - $ref: '#/components/schemas/Participant'
           readOnly: true
+        consent:
+          allOf:
+          - $ref: '#/components/schemas/ChatConsent'
+          readOnly: true
       required:
       - chatbot
+      - consent
       - participant
       - session_id
     ChatTaskPoll:
@@ -1818,6 +1979,7 @@ components:
       - evaluations
       - embedded_widget
       - email
+      - public
       type: string
       description: |-
         * `telegram` - Telegram
@@ -1831,6 +1993,7 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+        * `public` - Public link
     SessionModelUsage:
       type: object
       properties:

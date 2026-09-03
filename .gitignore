@@ -30,6 +30,14 @@ venv
 .pytest_cache/
 .claude/worktrees
 
+# Local agent config. .codex/ is deny-all with its one shared file re-included.
+# .claude/ names just the per-machine file: its tracked skills/ tree is still
+# growing, and deny-all there would silently drop new shared entries. The
+# gitleaks hook is the general backstop for anything else.
+.claude/settings.local.json
+.codex/*
+!.codex/hooks.json
+
 # uncomment these lines after setting up the front-end build pipeline in dev and production
 static/css/
 static/js/

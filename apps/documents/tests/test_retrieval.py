@@ -288,6 +288,16 @@ class TestSearchCollection:
         with override_flag(HYBRID_FLAG, active=True):
             assert collection.hybrid_search_enabled is False
 
+    def test_team_screen_enabled_flag_reaches_hybrid_search(self, team_flag):
+        """A flag row shaped the way the team settings screen writes it must enable hybrid search.
+
+        The screen creates the row with `everyone=False` and adds the team to the M2M (#4321);
+        the stored `False` means "no global override", not "off for everyone".
+        """
+        collection = CollectionFactory.create(is_index=True)
+        team_flag(HYBRID_FLAG, collection.team)
+        assert collection.hybrid_search_enabled is True
+
     def test_provided_query_vector_avoids_recomputing_the_embedding(self):
         """The preview path passes a vector it already has; the service must not embed again."""
         collection, file = _make_indexed_collection()

@@ -50,6 +50,7 @@ The OCS team automates most of steps 3–6 — see the [Development Workflow](..
 
 - **User-facing changes** follow these [guidelines](../developer_guides/user_docs.md)
 - **API changes**: If your changes affect the REST API schema, update the `api-schemas/v1.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
+- **Operator-impacting changes** (migrations, new or changed settings, deployment shape, deprecations, removals, security fixes): check the "Self-hosted operators must know about or act on this change" box and add an entry under `[Unreleased]` in the repo-root `CHANGELOG.md`. See [two changelogs, two checkboxes](../developer_guides/user_docs.md#two-changelogs-two-checkboxes).
 
 ## Communication
 

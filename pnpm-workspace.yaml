@@ -9,3 +9,10 @@
 # To take an urgent release inside the window, add it to minimumReleaseAgeExclude
 # (supports `pkg@version` and `@scope/*` patterns) rather than lowering the floor.
 minimumReleaseAge: 4320
+
+# First-party package: published from this repo by .github/workflows/publish_widget.yml
+# via npm OIDC trusted publishing. The cooldown guards against third-party registry
+# compromise, which does not apply here, and would otherwise stall adoption of our own
+# widget releases for three days.
+minimumReleaseAgeExclude:
+  - open-chat-studio-widget

@@ -83,6 +83,29 @@ header can only tighten auth, never relax it. If the reported version drops back
 pending level before the grace period elapses, the pending bump is dropped. The channel
 details dialog shows the current minimum required version and any pending upgrade.
 
+### Credential mode
+
+`ExperimentChannel.credential_mode` is the separate, admin-chosen question of *which credential*
+a caller must present to start a session on the channel: `embed_key` (the public widget, and the
+default every existing channel migrated to) or `oauth` (a client-credentials bearer token). It is
+editable on the channel form; `required_auth_level` above is not.
+
+The two interact in one direction only. `oauth` mode **pins** `required_auth_level` to
+`SESSION_TOKEN`, in `clean()`/`save()` and again in a `CheckConstraint`, because an `oauth` channel
+at a lower level issues no session token and every follow-up request then fails the legacy-access
+check — a session dead on arrival. The ratchet skips `oauth` channels for the same reason: they are
+already at the top rung. Nothing goes the other way, so a widget upgrade can never switch on an
+authorization policy an admin did not choose.
+
+A browser embed in `oauth` mode also needs `MIN_OAUTH_WIDGET_VERSION` (`0.12.0`), the release that
+ships the `authTokenProvider` property — the only way a widget can present a bearer token. That
+floor is **advisory**: nothing rejects a request on it, an older embed simply cannot send a token
+and fails admission. `min_widget_version` reports it for `oauth` channels (in place of the
+`SESSION_TOKEN` level's own `0.9.0`, which would understate what the embed needs), and saving a
+channel into `oauth` mode warns when the last-reported version is below it.
+
+See `docs/design/oauth-chat-widget.md` for the admission model as a whole.
+
 ## Releasing a new widget version
 
 1. Publish the new version to npm (see `components/chat_widget`).
@@ -113,7 +136,11 @@ details dialog shows the current minimum required version and any pending upgrad
    changelog. The command slug is fixed; Django tracks each migration's single
    run, so `force=True` is required and nothing needs bumping. Preview with:
 
-        python manage.py notify_widget_version_release --dry-run --widget-version 0.10.0
+        python manage.py notify_widget_version_release --force --dry-run --widget-version 0.10.0
+
+   `--force` is needed alongside `--dry-run` because the fixed slug is already
+   marked applied from an earlier release, and the applied check runs before the
+   dry-run branch. `--dry-run` still writes nothing.
 
 ## Deprecating old versions
 
@@ -150,9 +177,10 @@ Keep the sunset date consistent across all three places — the `WidgetDeprecati
 entry, the changelog tag, and the `Sunset` header (which is derived from the
 entry automatically).
 
-To preview who would be notified before deploying, run the command manually:
+To preview who would be notified before deploying, run the command manually
+(`--force` for the same reason as above; `--dry-run` still writes nothing):
 
-        python manage.py notify_deprecated_widget_versions --dry-run
+        python manage.py notify_deprecated_widget_versions --force --dry-run
 
 To size up the impact before choosing a `below_version` and sunset date, see
 [which versions are actually in use](#auditing-which-versions-are-in-use).

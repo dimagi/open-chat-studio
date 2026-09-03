@@ -15,6 +15,7 @@ from slack_bolt import BoltContext, BoltResponse
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.datamodels import SlackMessage
+from apps.channels.deduplication import external_ids_for
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.rate_limiting import count_channel_message
 from apps.channels.slack_channel import SlackChannel
@@ -91,7 +92,11 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
         )
     message_text = _strip_bot_mention(context, event["text"])
     message = SlackMessage(
-        participant_id=slack_user, channel_id=channel_id, thread_ts=thread_ts, message_text=message_text
+        participant_id=slack_user,
+        channel_id=channel_id,
+        thread_ts=thread_ts,
+        message_text=message_text,
+        external_ids=external_ids_for("slack", event.get("client_msg_id")),
     )
 
     messaging_service = SlackService(slack_team_id="_", slack_installation_id=0)

@@ -11,6 +11,24 @@ LLM-based automation (with Claude) helps draft changelog entries **and** user do
 All user-facing changes should ideally be accompanied by documentation and changelog updates. However, use discretion: purely internal changes or very minor updates may not require docs. In general, treat documentation as part of the feature — this avoids shipping UI that points users to outdated or missing documentation.
 
 
+## Two changelogs, two checkboxes
+
+The PR template has two independent checkboxes, for two audiences:
+
+| Checkbox | Audience | Where the entry goes |
+|---|---|---|
+| "This PR requires docs/changelog update" | product users | docs repo, written for you by the automation below |
+| "Self-hosted operators must know about or act on this change" | self-host operators | `CHANGELOG.md` at the root of this repo, written by you in the PR |
+
+Most user-facing PRs need only the first. Check the second when an operator has
+to *do* something on upgrade — a migration, a new or changed setting, a change
+in deployment shape, a deprecation or removal, or a security fix that needs
+operator action such as rotating a credential. Some PRs need both, and a purely
+internal migration needs only the second. See [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md)
+for how those entries are cut into a tagged release.
+
+The rest of this page covers the user-facing changelog.
+
 ## Changelog process
 
 The easiest way to trigger a docs/changelog update is to check the **"This PR requires docs/changelog update"** checkbox in the PR description.

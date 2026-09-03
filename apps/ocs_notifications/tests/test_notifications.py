@@ -405,12 +405,11 @@ class TestTraceErrorNotification:
         assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
 
 
-def _affected(chatbots=None, pipelines=None, assistants=None, evaluators=None) -> AffectedResources:
+def _affected(chatbots=None, pipelines=None, evaluators=None) -> AffectedResources:
     """Build an ``AffectedResources`` with only the kinds a test cares about."""
     return AffectedResources(
         chatbots=chatbots or {},
         pipelines=pipelines or {},
-        assistants=assistants or {},
         evaluators=evaluators or {},
     )
 
@@ -463,21 +462,21 @@ class TestDeprecatedModelNotification:
             replacement_model_name=None,
             affected=_affected(
                 pipelines={"My Pipeline": "/pipelines/1/"},
-                assistants={"My Assistant": "/assistants/1/"},
+                evaluators={"My Evaluator": "/evaluators/1/"},
             ),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
             message=(
                 "The model 'gpt-4' has been deprecated and will be removed soon. "
-                "1 pipeline(s), 1 assistant(s) are still using it."
+                "1 pipeline(s), 1 evaluator(s) are still using it."
             ),
             level=LevelChoices.WARNING,
             team=team,
             slug="llm-model-deprecated",
             event_data={"model_name": "gpt-4"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={"My Pipeline": "/pipelines/1/", "My Assistant": "/assistants/1/"},
+            links={"My Pipeline": "/pipelines/1/", "My Evaluator": "/evaluators/1/"},
             once_per_event_type=True,
         )
 
@@ -519,14 +518,14 @@ class TestDeletedModelNotification:
             replacement_model_name=None,
             affected=_affected(
                 pipelines={"Pipeline X": "/pipelines/1/"},
-                assistants={"Assistant Y": "/assistants/1/"},
+                evaluators={"Evaluator Y": "/evaluators/1/"},
             ),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
             message=(
                 "The model 'claude-2.0' has been removed from the platform. "
-                "1 pipeline(s), 1 assistant(s) were affected. "
+                "1 pipeline(s), 1 evaluator(s) were affected. "
                 "References have been cleared and will need to be updated manually."
             ),
             level=LevelChoices.WARNING,
@@ -534,7 +533,7 @@ class TestDeletedModelNotification:
             slug="llm-model-deleted",
             event_data={"model_name": "claude-2.0"},
             permissions=["service_providers.change_llmprovidermodel"],
-            links={"Pipeline X": "/pipelines/1/", "Assistant Y": "/assistants/1/"},
+            links={"Pipeline X": "/pipelines/1/", "Evaluator Y": "/evaluators/1/"},
             once_per_event_type=True,
         )
 
