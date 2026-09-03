@@ -239,6 +239,55 @@ class TestBaseHelpAgentTracing:
         assert result == StubOutput(result="hi")
         mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "hi"}]}, config={})
 
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_run_succeeds_when_get_tracer_itself_raises(self, mock_build, mock_get_tracer):
+        """An out-of-range LANGFUSE_SAMPLE_RATE makes get_help_agent_tracer() itself raise
+        (see normalize_sample_rate); that must not break the underlying feature either."""
+        mock_get_tracer.side_effect = ValueError("Sample rate must be between 0.0 and 1.0, got 5.0")
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hi")}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hi"))
+        result = agent.run()
+
+        assert result == StubOutput(result="hi")
+        mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "hi"}]}, config={})
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_real_invoke_failure_propagates_untraced(self, mock_build, mock_get_tracer):
+        """A genuine bug in agent.invoke() (untraced path) must reach the caller as-is, not
+        get caught by _trace()'s own resilience try/except and misreported as a tracing
+        failure."""
+        mock_get_tracer.return_value = None
+        mock_agent = mock.Mock()
+        mock_agent.invoke.side_effect = RuntimeError("boom from the actual LLM call")
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hi"))
+        with pytest.raises(RuntimeError, match="boom from the actual LLM call"):
+            agent.run()
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_real_invoke_failure_propagates_when_traced(self, mock_build, mock_get_tracer):
+        """Same as above, but with a tracer configured: the traced yield point must not
+        swallow a real caller exception either."""
+        tracer = self._mock_tracer()
+        tracer.get_langchain_callback.return_value = mock.Mock()
+        mock_get_tracer.return_value = tracer
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.side_effect = RuntimeError("boom from the actual LLM call")
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hi"))
+        with pytest.raises(RuntimeError, match="boom from the actual LLM call"):
+            agent.run()
+
 
 class TestCodeGenerateAgent:
     @mock.patch("apps.help.agents.code_generate.build_system_agent")

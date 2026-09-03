@@ -4,14 +4,16 @@ import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
-from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
 from apps.help.agent import build_system_agent
 from apps.help.tracing import get_help_agent_tracer
 from apps.service_providers.tracing.base import TraceContext
+
+if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger("ocs.help")
 
@@ -73,8 +75,22 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
         pointing LANGFUSE_HOST at an unresolvable domain and exercising this code path in a
         real browser session: the request completed normally, and the export failure showed
         up only as an "opentelemetry.sdk._shared_internal" log line, never reaching here.
+        get_help_agent_tracer() itself is covered too, in its own try/except that contains
+        no yield: an out-of-range LANGFUSE_SAMPLE_RATE raises there (see
+        normalize_sample_rate), and it must not break the request either. Keeping that
+        outside the trace-entry try/except matters: a yield inside a try/except can receive
+        an exception thrown back in from the caller's own code (e.g. a real bug in
+        agent.invoke()) when the `with` block exits, and that must propagate untouched, not
+        get misreported as a tracing failure.
         """
-        tracer = get_help_agent_tracer()
+        from langchain_core.runnables import RunnableConfig  # noqa: PLC0415 - lazy: avoids loading langchain_core
+
+        try:
+            tracer = get_help_agent_tracer()
+        except Exception:
+            logger.exception("Failed to build Langfuse tracer for help_agent:%s; continuing untraced", self.name)
+            tracer = None
+
         if tracer is None:
             yield RunnableConfig()
             return

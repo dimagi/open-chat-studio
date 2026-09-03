@@ -39,11 +39,17 @@ def normalize_sample_rate(sample_rate: float | None) -> float | None:
     rather than trusted to the SDK. A blank rate is normalized to ``1.0`` for the same
     reason: passing ``None`` through lets the SDK fall back to that env var if one happens
     to be set, silently overriding "leave blank to trace every call".
+
+    Raises ``ValueError`` outside ``0.0``-``1.0``, matching the SDK's own validation: an
+    out-of-range rate would otherwise reach ``Langfuse.__init__`` and raise the identical
+    error there, deeper in client construction.
     """
     if sample_rate == 0.0:
         return None
     if sample_rate is None:
         return 1.0
+    if not 0.0 <= sample_rate <= 1.0:
+        raise ValueError(f"Sample rate must be between 0.0 and 1.0, got {sample_rate}")
     return sample_rate
 
 
