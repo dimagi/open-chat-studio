@@ -29,7 +29,15 @@ def request_for(team):
 
 @pytest.mark.django_db()
 def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, request_for):
-    """Row ids stay unique even if an LlmProvider and a VoiceProvider end up sharing a pk."""
+    """Row ids stay unique even if an LlmProvider and a VoiceProvider end up sharing a pk.
+
+    `get_integration_rows` merges rows from several independent provider models (LlmProvider,
+    VoiceProvider, etc.) into one table. Each model has its own pk sequence, so two providers of
+    different types can coincidentally share the same numeric pk. The `id` field is a composite
+    of `<provider-type>-<pk>` (e.g. `llm-3`, `voice-3`) specifically so row-level lookups and any
+    HTML `id`/`hx-target` built from it stay unique across the whole merged table, not just
+    within one provider type.
+    """
     llm = LlmProviderFactory(team=team)
     voice = VoiceProviderFactory(team=team)
 
