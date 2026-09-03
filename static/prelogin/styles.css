@@ -2396,10 +2396,11 @@ footer {
 .footer-col a { color: rgba(255,255,255,0.72); }
 .footer-bottom { color: rgba(255,255,255,0.55); }
 .footer-grid {
-  /* Column count tracks templates/prelogin/base.html: brand + About + Resources.
-     It was repeat(4, ...) from the marketing footer this frame was cut down from,
-     which left empty grid tracks and pushed the columns hard left. */
-  display: grid; grid-template-columns: 1.4fr repeat(2, 1fr); gap: 48px;
+  /* Columns track templates/prelogin/base.html: brand, then the flat link list.
+     `auto` on the second and `1.4fr` on the first puts the links against the right
+     edge instead of leaving dead grid tracks trailing off to the right, which is
+     what the repeat(4, ...) inherited from the marketing footer used to do. */
+  display: grid; grid-template-columns: 1.4fr auto; gap: 48px;
   margin-bottom: 80px;
 }
 .footer-brand { max-width: 320px; }
