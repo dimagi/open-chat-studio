@@ -425,12 +425,48 @@ class TestSavingVerifiesCredentials:
     def test_the_button_says_whether_saving_will_verify(
         self, team_with_users, authed_client, extra_data, expected_label
     ):
-        """The label is the only place the stored flag surfaces - there is no badge."""
         provider = LlmProviderFactory(team=team_with_users, extra_data=extra_data)
 
         response = authed_client.get(self._edit_url(team_with_users, provider))
 
         assert response.context["button_text"] == expected_label
+
+    @pytest.mark.parametrize(
+        ("extra_data", "expected_line"),
+        [
+            pytest.param({}, "have not been checked yet", id="never-verified"),
+            pytest.param({"verified_credentials": False}, "have not been checked yet", id="verification-failed"),
+            pytest.param({"verified_credentials": True}, "Credentials verified", id="verified"),
+        ],
+    )
+    def test_the_page_says_where_the_credentials_stand(self, team_with_users, authed_client, extra_data, expected_line):
+        """The stored flag has to be readable without inferring it from the button label."""
+        provider = LlmProviderFactory(team=team_with_users, extra_data=extra_data)
+
+        response = authed_client.get(self._edit_url(team_with_users, provider))
+
+        assert expected_line in response.content.decode()
+
+    def test_the_rejection_replaces_the_verification_line(self, team_with_users, authed_client):
+        """The provider's own words say where the credentials stand better than the line does."""
+        provider = LlmProviderFactory(
+            team=team_with_users,
+            extra_data={"verified_credentials": False, "verification_error": "Exception: kaboom"},
+        )
+
+        response = authed_client.get(self._edit_url(team_with_users, provider))
+
+        content = response.content.decode()
+        assert "The provider rejected these credentials" in content
+        assert "have not been checked yet" not in content
+
+    def test_an_untestable_provider_type_says_nothing_about_verification(self, team_with_users, authed_client):
+        """Voyage AI can never be checked, so there is no state to report."""
+        provider = LlmProviderFactory(team=team_with_users, type=str(LlmProviderTypes.voyage))
+
+        response = authed_client.get(self._edit_url(team_with_users, provider))
+
+        assert "credential-verification-state" not in response.content.decode()
 
     def test_an_untestable_provider_type_never_offers_to_verify(self, team_with_users, authed_client):
         """Voyage AI has no check to offer, so the label must not promise one and the

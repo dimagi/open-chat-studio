@@ -391,6 +391,7 @@ class CreateServiceProvider(
             ctx["new_model_form"] = LlmProviderModelForm(self.request.team)
             if instance:
                 ctx["verification_error"] = instance.verification_error
+                ctx["credentials_verified"] = instance.credentials_verified
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
 

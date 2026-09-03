@@ -23,12 +23,6 @@
   <div class="app-card max-w-5xl mx-auto"{% if can_verify_credentials %} x-data="{ configChanged: false }"{% endif %}>
     <h1 class="pg-title">{{ title }}</h1>
 
-    {% comment %}
-      The provider's own words about the credentials saved here, from whenever they were
-      last checked. Above the tabs because it is about the provider, not about whichever tab
-      you happen to be on. Stays until a check passes, so the reason is still here after a
-      reload; saving successfully clears it.
-    {% endcomment %}
     {% if verification_error %}
       <div role="alert" class="alert alert-error alert-soft text-sm items-start mt-3">
         <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
@@ -36,6 +30,18 @@
           <div class="font-semibold">The provider rejected these credentials</div>
           <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
         </div>
+      </div>
+    {% elif can_verify_credentials %}
+      <div class="flex items-center gap-2 text-sm mt-3 {% if credentials_verified %}text-success{% else %}text-base-content/60{% endif %}"
+           x-show="!configChanged"
+           data-testid="credential-verification-state">
+        {% if credentials_verified %}
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Credentials verified</span>
+        {% else %}
+          <i class="fa-regular fa-circle-question"></i>
+          <span>These credentials have not been checked yet - saving will check them</span>
+        {% endif %}
       </div>
     {% endif %}
 
