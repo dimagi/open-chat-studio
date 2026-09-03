@@ -1273,14 +1273,35 @@ class Participant(BaseTeamModel):
 
         Each returned dict carries `experiment` (the source `Experiment` instance) alongside the
         usual `as_dict()` fields, so callers can render a chatbot column without a second lookup.
+        Runs one query for every experiment rather than looping `get_schedules_for_experiment`,
+        which would issue a separate scheduled-message query and attempts-prefetch per chatbot.
         """
+        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
+            ScheduledMessage,
+        )
+
+        experiments_by_id = {e.id: e for e in self.get_experiments_for_display()}
+        if not experiments_by_id:
+            return []
+
+        messages = (
+            ScheduledMessage.objects.filter(
+                experiment_id__in=experiments_by_id.keys(),
+                participant=self,
+                team=self.team,
+            )
+            .select_related("action")
+            .prefetch_related("attempts")
+            .order_by("created_at", "id")
+        )
+        if not include_inactive:
+            messages = messages.filter(is_complete=False, cancelled_at=None)
+
         schedules = []
-        for experiment in self.get_experiments_for_display():
-            for schedule in self.get_schedules_for_experiment(
-                experiment.id, as_dict=True, as_timezone=as_timezone, include_inactive=include_inactive
-            ):
-                schedule["experiment"] = experiment
-                schedules.append(schedule)
+        for message in messages:
+            schedule = message.as_dict(as_timezone=as_timezone)
+            schedule["experiment"] = experiments_by_id[message.experiment_id]
+            schedules.append(schedule)
         return schedules
 
     def get_message_trend(self, days: int = 30) -> list[int]:

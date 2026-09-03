@@ -44,6 +44,44 @@ IMPORT_PERMISSIONS = [
 PARTICIPANT_COST_WINDOW_DAYS = 30
 
 
+def _parse_chatbot_filter(request) -> int | None:
+    """Parse the `?chatbot=` query param, treating anything unparsable as "All chatbots"."""
+    raw = request.GET.get("chatbot")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _apply_session_filters(sessions, request):
+    """Apply the Sessions tab's Search transcripts / State / Tag filters to a session queryset."""
+    search_query = request.GET.get("q", "").strip()
+    if search_query:
+        sessions = sessions.filter(chat__messages__content__icontains=search_query).distinct()
+    state_filter = request.GET.get("state", "").strip()
+    if state_filter == "active":
+        sessions = sessions.filter(ended_at__isnull=True)
+    elif state_filter == "ended":
+        sessions = sessions.filter(ended_at__isnull=False)
+    tag_filter = request.GET.get("tag", "").strip()
+    if tag_filter:
+        sessions = sessions.filter(chat__tags__name__icontains=tag_filter).distinct()
+    return sessions
+
+
+def _resolve_selected_data_experiment(
+    experiments: list[Experiment], filter_experiment_id: int | None, experiment_id: int | None
+) -> Experiment | None:
+    """Pick which chatbot the Participant Data tab shows: the active pill, an explicit
+    experiment, or the first chatbot the participant has used, in that order."""
+    selected_id = filter_experiment_id or experiment_id or (experiments[0].id if experiments else None)
+    if not selected_id:
+        return None
+    return next((e for e in experiments if e.id == selected_id), None)
+
+
 def single_participant_home_context(
     request, context: dict, participant_id: int, experiment_id: int | None = None
 ) -> dict:
@@ -61,8 +99,7 @@ def single_participant_home_context(
     participant = get_object_or_404(Participant, pk=participant_id, team=team)
     experiments = list(participant.get_experiments_for_display())
 
-    filter_experiment_id = request.GET.get("chatbot")
-    filter_experiment_id = int(filter_experiment_id) if filter_experiment_id else None
+    filter_experiment_id = _parse_chatbot_filter(request)
 
     total_session_count = ExperimentSession.objects.filter(team=team, participant=participant).count()
     sessions = (
@@ -70,17 +107,7 @@ def single_participant_home_context(
         .filter(participant=participant)
         .prefetch_related(chat_tagged_items_prefetch())
     )
-    search_query = request.GET.get("q", "").strip()
-    if search_query:
-        sessions = sessions.filter(chat__messages__content__icontains=search_query).distinct()
-    state_filter = request.GET.get("state", "").strip()
-    if state_filter == "active":
-        sessions = sessions.filter(ended_at__isnull=True)
-    elif state_filter == "ended":
-        sessions = sessions.filter(ended_at__isnull=False)
-    tag_filter = request.GET.get("tag", "").strip()
-    if tag_filter:
-        sessions = sessions.filter(chat__tags__name__icontains=tag_filter).distinct()
+    sessions = _apply_session_filters(sessions, request)
     table = ParticipantSessionsTable(sessions)
     # set request (no pagination) so the chatbot chip can permission-gate its link
     session_table = RequestConfig(request, paginate=False).configure(table)
@@ -89,11 +116,8 @@ def single_participant_home_context(
     if filter_experiment_id:
         schedules = [s for s in schedules if s["experiment"].id == filter_experiment_id]
 
-    selected_data_experiment_id = filter_experiment_id or experiment_id or (experiments[0].id if experiments else None)
+    selected_data_experiment = _resolve_selected_data_experiment(experiments, filter_experiment_id, experiment_id)
     participant_data_row = None
-    selected_data_experiment = None
-    if selected_data_experiment_id:
-        selected_data_experiment = next((e for e in experiments if e.id == selected_data_experiment_id), None)
     if selected_data_experiment:
         participant_data_row = (
             ParticipantData.objects.for_experiment(selected_data_experiment).filter(participant=participant).first()
@@ -369,7 +393,7 @@ def edit_name(request, team_slug: str, pk: int):
 def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: str):
     schedule = get_object_or_404(
         ScheduledMessage, external_id=schedule_id, participant_id=participant_id, team=request.team
-    ).prefetch_related("attempts")
+    )
     experiment = schedule.experiment
     schedule.cancel(cancelled_by=request.user)
     schedule_dict = schedule.as_dict()
