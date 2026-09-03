@@ -27,11 +27,6 @@ version section when a release is cut.
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
-- `0028_alter_chatmessage_external_ids`: reversible, metadata-only (`DROP NOT
-  NULL`; brief `ACCESS EXCLUSIVE` lock, no table rewrite), no manual steps.
-  Makes `chat_chatmessage.external_ids` nullable so that the release running
-  during a deploy, which predates the column, can still insert chat messages.
-  (#4387)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
