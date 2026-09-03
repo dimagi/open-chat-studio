@@ -34,18 +34,19 @@ def team():
 def team_flag():
     """Enable a feature flag for one specific team.
 
-    Writes the row the way the team settings screen does: `everyone=False` plus the team M2M.
+    Writes the row the way the team settings screen does: `everyone=None` plus the team M2M.
     For a flag that should simply be on, use `waffle.testutils.override_flag` instead. Flags are
     flushed again on teardown because waffle's cache outlives the test transaction.
     """
     flags = []
 
     def _enable(flag_name, team):
-        flag, _ = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
-        if flag.everyone:
+        flag, _ = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": None})
+        if flag.everyone is not None:
             raise RuntimeError(
-                f"{flag_name} is already on for everyone, so pinning it to a team would not scope "
-                "anything. Drop the override_flag / everyone=True setup or use a different flag."
+                f"{flag_name} is already globally {'on' if flag.everyone else 'off'}, so pinning it "
+                "to a team would not scope anything. Drop the everyone=True/False setup or use a "
+                "different flag."
             )
         flag.teams.add(team)
         flag.flush()

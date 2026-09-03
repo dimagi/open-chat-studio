@@ -1137,6 +1137,10 @@ OAUTH2_PROVIDER = {
         "usage:read": "Read usage and activity data",
     },
 }
+OIDC_ONLY_SCOPES = {
+    "openid": "OpenID Connect scope",
+    "profile": "User Profile",
+}
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
     OAUTH2_PROVIDER.update(
         {
@@ -1144,12 +1148,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
             "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
         }
     )
-    OAUTH2_PROVIDER["SCOPES"].update(
-        {
-            "openid": "OpenID Connect scope",
-            "profile": "User Profile",
-        }
-    )
+    OAUTH2_PROVIDER["SCOPES"].update(OIDC_ONLY_SCOPES)
 # Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
 # scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
 # machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.

@@ -1,6 +1,5 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
 
 import pytest
 from django.urls import reverse
@@ -724,22 +723,14 @@ def _expected_pipeline_nodes(bot):
                 "neural": True,
             },
         },
+        # ``AssistantNode`` renders through the generic shape: its type and stored params, with
+        # ``assistant_id`` suppressed -- no resource key lifts it, and it is an internal id.
         {
             "node_id": "assist",
             "type": "AssistantNode",
             "label": "Assistant",
             "params": {"citations_enabled": True},
             "output_handles": [{"handle": "output", "label": None}],
-            "assistant": {
-                "id": bot.assistant.id,
-                "name": "Helper",
-                "assistant_id": "asst_123",
-                "instructions": "Be helpful",
-                "builtin_tools": [],
-                "tools": [],
-                "temperature": 1.0,
-                "top_p": 1.0,
-            },
         },
     ]
 
@@ -885,14 +876,14 @@ def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
     """A pipeline_start trigger embeds a second pipeline whose node references a resource — proving
     the embedded pipeline serializer resolves the node's FK relations like the main pipeline does."""
     team = inspect_bot.experiment.team
-    assistant = OpenAiAssistantFactory.create(team=team, name="Embedded Helper", assistant_id="asst_embed")
+    source = SourceMaterialFactory.create(team=team, topic="Embedded topic")
     embedded = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
     _make_node(
         pipeline=embedded,
         flow_id="emb-1",
-        type="AssistantNode",
+        type="LLMResponseWithPrompt",
         label="Embedded",
-        params={"assistant_id": str(assistant.id)},
+        params={"source_material_id": str(source.id)},
     )
     StaticTriggerFactory.create(
         experiment=inspect_bot.experiment,
@@ -907,18 +898,17 @@ def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
     action = next(t["action"] for t in payload["events"]["static_triggers"] if t["action"]["type"] == "pipeline_start")
     assert "pipeline_id" not in action["params"]
     embedded_node = next(n for n in action["pipeline"]["nodes"] if n["label"] == "Embedded")
-    assert embedded_node["assistant"]["assistant_id"] == "asst_embed"
+    assert embedded_node["source_material"]["topic"] == "Embedded topic"
 
 
 # ── Query-count guard (review issues #5, #12, #16) ───────────────────────────────────────────────
 def _adversarial_bot():
-    """A multi-node pipeline, a pipeline_start trigger that embeds a second pipeline with its own
-    resources, and one LLM provider/model shared by two nodes (so a shared resource loads once)."""
+    """A multi-node pipeline, a pipeline_start trigger that embeds a second pipeline holding a
+    resource, and one LLM provider/model shared by two nodes (so a shared resource loads once)."""
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, name="Shared", type="openai")
     model = LlmProviderModelFactory.create(team=team, name="gpt-4o", deprecated=False)
     source = SourceMaterialFactory.create(team=team)
-    assistant = OpenAiAssistantFactory.create(team=team)
 
     pipeline = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
     _make_node(
@@ -945,9 +935,9 @@ def _adversarial_bot():
     _make_node(
         pipeline=embedded,
         flow_id="e1",
-        type="AssistantNode",
+        type="LLMResponseWithPrompt",
         label="Embedded",
-        params={"assistant_id": str(assistant.id)},
+        params={"source_material_id": str(source.id)},
     )
     StaticTriggerFactory.create(
         experiment=experiment,
@@ -971,9 +961,6 @@ EXPECTED_RENDER_QUERIES = 17
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("version_param", [None, "default", "1"])
-# Publishing now pins the pipeline_start trigger to a version of the embedded pipeline, which
-# versions its assistant node and would otherwise hit the OpenAI API.
-@patch("apps.assistants.sync.push_assistant_to_openai", Mock())
 def test_inspect_render_query_count_constant_across_versions(version_param, django_assert_num_queries):
     """Resolving, fetching and rendering takes the same fixed number of queries for every version
     mode — the working draft, the default, or a specific version number."""

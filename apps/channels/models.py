@@ -15,7 +15,8 @@ from apps.channels import widget_versions
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
-from apps.teams.models import BaseTeamModel, Flag
+from apps.teams.models import BaseTeamModel
+from apps.teams.utils import flag_is_active_for_team
 from apps.web.meta import absolute_url
 
 if TYPE_CHECKING:
@@ -71,9 +72,7 @@ class ChannelPlatform(models.TextChoices):
         if not settings.SLACK_ENABLED:
             platform_availability.pop(cls.SLACK)
 
-        flag = Flag.get("flag_commcare_connect")
-        commcare_connect_flag_enabled = flag.is_active_for_team(team)
-        if not commcare_connect_flag_enabled:
+        if not flag_is_active_for_team(team, "flag_commcare_connect"):
             platform_availability.pop(cls.COMMCARE_CONNECT)
         elif settings.COMMCARE_CONNECT_ENABLED:
             platform_availability[cls.COMMCARE_CONNECT] = True
@@ -90,7 +89,7 @@ class ChannelPlatform(models.TextChoices):
     @classmethod
     def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:
         """Offer `platform` only when its flag is on for the team (and, for email, domains are configured)."""
-        offered = Flag.get(flag_name).is_active_for_team(team)
+        offered = flag_is_active_for_team(team, flag_name)
         if platform == cls.EMAIL:
             offered = offered and bool(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS)
         if offered:
