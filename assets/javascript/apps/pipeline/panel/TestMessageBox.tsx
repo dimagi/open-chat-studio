@@ -190,7 +190,7 @@ export default function TestMessageBox({
                   <button className="btn btn-primary" type="submit">
                     Send
                   </button>
-                  <button className="btn" onClick={onClear}>Clear</button>
+                  <button type="button" className="btn" onClick={onClear}>Clear</button>
                 </div>
               </form>
             </div>
