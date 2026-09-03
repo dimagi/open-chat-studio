@@ -34,6 +34,11 @@ version section when a release is cut.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
+- `PRELOGIN_CONTACT_EMAIL`, `HUBSPOT_FORM_REGION`, `HUBSPOT_FORM_PORTAL_ID`,
+  `HUBSPOT_FORM_ID`, `PRELOGIN_DEMO_BOTS`: removed. The pre-login marketing
+  pages that read them are gone (see Deployment below). Setting them is now a
+  no-op rather than an error, so no action is required, but they can be dropped
+  from your environment. (#4389)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
@@ -50,6 +55,12 @@ version section when a release is cut.
   13 to 15. Audio conversion was verified against ffmpeg 5.1 across the mp3,
   opus and wav paths. No action required if you pull the published image. (#4283)
 - Container images no longer contain the `.git` directory. (#4283)
+- The app no longer serves the marketing pages. `/` renders a small landing page
+  for anonymous visitors, and `/about/`, `/applications/`, `/contact/`,
+  `/open-opportunities/` and `/platform/` now `301` to
+  `PROJECT_METADATA["MARKETING_SITE_URL"]`, which defaults to Dimagi's marketing
+  site. A fork that wants those paths to point somewhere else — or to serve its
+  own pages there — should override that key in `config/settings.py`. (#4389)
 
 ### Deprecated
 <!-- Signals intent to remove. Every entry names the earliest version in which
