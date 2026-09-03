@@ -291,8 +291,8 @@ class TestSearchCollection:
     def test_team_screen_enabled_flag_reaches_hybrid_search(self, team_flag):
         """A flag row shaped the way the team settings screen writes it must enable hybrid search.
 
-        The screen creates the row with `everyone=False` and adds the team to the M2M (#4321);
-        the stored `False` means "no global override", not "off for everyone".
+        The screen creates the row with `everyone=None` and adds the team to the M2M (#4321);
+        only an explicit `True`/`False` is a global decision.
         """
         collection = CollectionFactory.create(is_index=True)
         team_flag(HYBRID_FLAG, collection.team)

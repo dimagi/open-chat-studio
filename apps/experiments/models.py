@@ -892,6 +892,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
+            new_version.save(update_fields=["consent_form"])
 
         # Version the pipeline before the triggers so a trigger referencing this experiment's own
         # pipeline pins to the version just created here rather than spawning a redundant one.
@@ -1345,6 +1346,24 @@ class ParticipantData(BaseTeamModel):
 
     def update_consent(self, consent: bool):
         self.system_metadata["consent"] = consent
+        self.save(update_fields=["system_metadata"])
+
+    def has_consented_to(self, form_version_id: int) -> bool:
+        """Whether the participant accepted this frozen consent form.
+
+        Consent recorded without a form id (CommCare Connect, the legacy consent page) does not
+        cover any form: the participant has not seen this text.
+        """
+        return self.has_consented() and self.system_metadata.get("consent_form_version_id") == form_version_id
+
+    def record_consent(self, form_version_id: int) -> None:
+        """Record that the participant accepted a frozen consent form (D7 in the public channel design)."""
+        self.system_metadata = {
+            **self.system_metadata,
+            "consent": True,
+            "consent_at": timezone.now().isoformat(),
+            "consent_form_version_id": form_version_id,
+        }
         self.save(update_fields=["system_metadata"])
 
     class Meta:
