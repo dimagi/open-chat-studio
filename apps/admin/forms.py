@@ -80,9 +80,12 @@ class DateRangeForm(forms.Form):
 
 class FlagUpdateForm(forms.Form):
     """A flag decision is `everyone` or `teams`; the request-only waffle inputs
-    (`superusers`, `testing`, `rollout`, `percent`, `users`) are not accepted."""
+    (`superusers`, `testing`, `rollout`, `percent`, `users`) are not accepted.
 
-    everyone = forms.BooleanField(required=False)
+    `everyone` is a tri-state: on for everyone, off for everyone, or `None` to defer
+    to the team list. An absent key means `None`, never a hard off."""
+
+    everyone = forms.NullBooleanField(required=False)
     teams = forms.ModelMultipleChoiceField(
         queryset=Team.objects.all(), required=False, widget=forms.MultipleHiddenInput()
     )

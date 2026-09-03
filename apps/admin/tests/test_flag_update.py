@@ -28,13 +28,33 @@ class TestUpdateFlag:
 
         response = superuser_client.post(
             reverse("ocs_admin:update_flag", args=[flag.name]),
-            {"everyone": "on", "teams": [team.id]},
+            {"everyone": "true", "teams": [team.id]},
         )
 
         assert response.status_code == 200
         flag.refresh_from_db()
         assert flag.everyone is True
         assert list(flag.teams.all()) == [team]
+
+    @pytest.mark.parametrize(
+        ("posted", "expected"),
+        [
+            pytest.param({"everyone": "true"}, True, id="on-for-everyone"),
+            pytest.param({"everyone": "false"}, False, id="off-for-everyone"),
+            pytest.param({"everyone": "unknown"}, None, id="use-teams"),
+            pytest.param({}, None, id="absent-key-means-use-teams"),
+        ],
+    )
+    def test_everyone_is_written_as_a_tri_state(self, superuser_client, posted, expected):
+        """`everyone` is on for everyone, off for everyone, or defer to the team list;
+        an absent key must mean "use teams", not silently coerce to a hard off."""
+        flag = Flag.objects.create(name="flag_update_probe", everyone=None if expected is True else True)
+
+        response = superuser_client.post(reverse("ocs_admin:update_flag", args=[flag.name]), posted)
+
+        assert response.status_code == 200
+        flag.refresh_from_db()
+        assert flag.everyone is expected
 
     def test_request_only_inputs_are_ignored(self, superuser_client):
         """Posting the dropped fields leaves them untouched rather than writing them back."""
@@ -66,6 +86,8 @@ class TestFlagPages:
         content = response.content.decode()
         assert "formData.everyone" in content
         assert "teams-select" in content
+        for tri_state_option in ('value="true"', 'value="false"', 'value="unknown"'):
+            assert tri_state_option in content, "the everyone control must offer all three states"
         for dropped_control in (
             "formData.testing",
             "formData.superusers",
@@ -74,6 +96,27 @@ class TestFlagPages:
             "users-select",
         ):
             assert dropped_control not in content
+
+    @pytest.mark.parametrize(
+        ("everyone", "on_badge", "off_badge"),
+        [
+            pytest.param(True, True, False, id="globally-on"),
+            pytest.param(False, False, True, id="globally-off"),
+            pytest.param(None, False, False, id="use-teams-has-no-global-badge"),
+        ],
+    )
+    def test_list_page_badges_reflect_the_tri_state(self, superuser_client, everyone, on_badge, off_badge):
+        """A hard off is as much a global decision as a rollout, so it gets its own badge;
+        only the deferred state renders without one."""
+        flag = Flag.objects.create(name="flag_tristate_badge_probe", everyone=everyone)
+
+        response = superuser_client.get(reverse("ocs_admin:flags_home"))
+
+        content = response.content.decode()
+        list_item_start = content.index(f'id="flag-{flag.id}"')
+        list_item = content[list_item_start : content.index("</li>", list_item_start)]
+        assert ("Off for everyone" in list_item) is off_badge
+        assert ("Everyone" in list_item.replace("Off for everyone", "")) is on_badge
 
     def test_list_page_shows_only_the_everyone_badge(self, superuser_client):
         """Request-only field values still stored on a flag no longer render as badges."""

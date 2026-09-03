@@ -35,6 +35,10 @@
                       <span class="badge badge-success">
                         Everyone
                       </span>
+                    {% elif flag.everyone == False %}
+                      <span class="badge badge-error">
+                        Off for everyone
+                      </span>
                     {% endif %}
                   </div>
                   <div class="flex items-center space-x-2">
