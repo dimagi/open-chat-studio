@@ -1,9 +1,13 @@
+import os
+
 import pytest
 import yaml
 from django.core.management import call_command
 from django.test import Client
 
 from apps.api.schema import _swap_host
+
+VERSIONS = [pytest.param("v1", id="v1"), pytest.param("v2", id="v2"), pytest.param("export", id="export")]
 
 
 @pytest.mark.django_db()
@@ -53,14 +57,7 @@ def test_served_schema_uses_request_host():
     assert "example.com" not in body
 
 
-@pytest.mark.parametrize(
-    "version",
-    [
-        pytest.param("v1", id="v1"),
-        pytest.param("v2", id="v2"),
-        pytest.param("export", id="export"),
-    ],
-)
+@pytest.mark.parametrize("version", VERSIONS)
 def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
     """If this test fails run `inv schema` to update the schema."""
     path = tmp_path / f"{version}.yml"
@@ -72,3 +69,12 @@ def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
         old_schema = yaml.safe_load(f)
 
     assert old_schema == new_schema
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_schema_generates_without_warnings(version):
+    """Warnings mean a view or serializer could not be resolved. See `@extend_schema`.
+
+    The emitted warnings are printed to stderr, so pytest shows them on failure.
+    """
+    call_command("spectacular", api_version=version, fail_on_warn=True, file=os.devnull)

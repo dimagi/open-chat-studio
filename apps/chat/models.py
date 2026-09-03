@@ -2,6 +2,7 @@ from enum import StrEnum
 from urllib.parse import quote
 
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
@@ -153,6 +154,12 @@ class ChatMessageMetadataKeys(StrEnum):
         return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS, cls.CITED_FILES, cls.GENERATED_FILES})
 
 
+# Provider message ids are stored in their namespaced form ("whatsapp:wamid...."), so the limit has
+# to cover the longest provider id *plus* its prefix. Email is the binding case: a Message-ID is
+# capped at 500 chars when parsed, and "email:" takes six more.
+EXTERNAL_ID_MAX_LENGTH = 600
+
+
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
@@ -171,6 +178,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         default=dict, help_text="Dictionary of translated text keyed by the language code"
     )
     metadata = SanitizedJSONField(default=dict)
+    external_ids = ArrayField(
+        models.CharField(max_length=EXTERNAL_ID_MAX_LENGTH),
+        default=list,
+        blank=True,
+        help_text="Provider message IDs this message was built from, namespaced by platform.",
+    )
 
     class Meta:
         ordering = ["created_at"]
@@ -180,6 +193,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # Supports the global (cross-team) date-range scans in the admin dashboard,
             # which filter created_at without a chat/team prefix.
             models.Index(fields=["created_at"], name="chatmessage_created_at_idx"),
+            GinIndex(fields=["external_ids"], name="chatmessage_external_ids_idx"),
         ]
 
     @classmethod
