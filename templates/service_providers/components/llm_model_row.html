@@ -17,7 +17,10 @@
   <td class="font-mono">{{ row.name }}</td>
   <td>
     <span class="badge badge-xs badge-outline">{{ row.role }}</span>
-    {% if row.custom %}<span class="badge badge-xs badge-outline">custom</span>{% endif %}
+    {% if row.custom %}
+      <span class="badge badge-xs badge-outline tooltip"
+            data-tip="Added by this team, not managed by the platform">custom</span>
+    {% endif %}
     {% if row.deprecated %}<span class="badge badge-xs badge-outline">deprecated</span>{% endif %}
   </td>
   <td>
