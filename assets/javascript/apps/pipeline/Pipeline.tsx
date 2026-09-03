@@ -48,7 +48,6 @@ export default function Pipeline() {
   const onNodesChange = usePipelineStore((state) => state.onNodesChange);
   const onEdgesChange = usePipelineStore((state) => state.onEdgesChange);
   const onConnect = usePipelineStore((state) => state.onConnect);
-  const setNodes = usePipelineStore((state) => state.setNodes);
   const addNode = usePipelineStore((state) => state.addNode);
   const deleteEdge = usePipelineStore((state) => state.deleteEdge);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
@@ -104,7 +103,7 @@ export default function Pipeline() {
         setSelectedOverlay(null);
       }
     },
-    [getNodeId, setNodes, addNode]
+    [addNode]
   );
 
   const onNodeDragStop: NodeDragHandler = useCallback(() => {
@@ -147,7 +146,7 @@ export default function Pipeline() {
 
   const handlePaneClick = useCallback(() => {
     setSelectedOverlay(null);
-  }, [selectedOverlay]);
+  }, []);
 
   return (
     <div className="h-[80vh]">
