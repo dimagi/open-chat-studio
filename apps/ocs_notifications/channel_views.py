@@ -10,15 +10,16 @@ from django_tables2 import SingleTableView
 from apps.ocs_notifications.forms import NotificationChannelForm
 from apps.ocs_notifications.models import NotificationChannel
 from apps.ocs_notifications.tables import NotificationChannelTable
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 
 
 class FlagRequiredMixin:
-    flag_name = "flag_slack_notifications"
+    flag_name = Flags.SLACK_NOTIFICATIONS.slug
 
     def dispatch(self, request, *args, **kwargs):
-        if not Flag.get(self.flag_name).is_active_for_team(request.team):
+        if not flag_is_active_for_team(request.team, self.flag_name):
             raise Http404
         return super().dispatch(request, *args, **kwargs)
 

@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("ocs_notifications", "0006_eventtype_created_at_index"),
-        ("service_providers", "0074_add_deepseek_v4_flash_vision_exp"),
+        ("service_providers", "0077_deprecate_gpt5_family"),
         ("teams", "0015_team_created_by"),
     ]
 
@@ -58,8 +58,8 @@ class Migration(migrations.Migration):
                 "ordering": ("channel_name",),
                 "constraints": [
                     models.UniqueConstraint(
-                        fields=("team", "messaging_provider"),
-                        name="unique_notification_channel_per_team_and_provider",
+                        fields=("team", "messaging_provider", "level"),
+                        name="unique_notification_channel_per_team_provider_and_level",
                     )
                 ],
             },

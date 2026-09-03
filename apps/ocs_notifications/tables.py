@@ -88,7 +88,7 @@ class NotificationChannelTable(tables.Table):
         orderable=True,
     )
     level = columns.TemplateColumn(
-        template_name="ocs_notifications/components/level_badge.html",
+        template_name="ocs_notifications/components/notification_channel_level_badge.html",
         verbose_name="Level",
         orderable=True,
     )

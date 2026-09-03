@@ -143,12 +143,12 @@ For better code organization and maintainability, **preferably add your notifica
 
 ## Slack Notifications
 
-Teams can deliver notifications to a Slack channel in addition to in-app/email. This is a **team-level** configuration (one channel per Slack provider), distinct from the per-user preferences above.
+Teams can deliver notifications to a Slack channel in addition to in-app/email. This is a **team-level** configuration — a team can have one channel per Slack workspace per severity level, so e.g. critical alerts and informational notices can be routed to different Slack channels.
 
 ### The Model
 
 - **`NotificationChannel`** is team-scoped (`BaseTeamModel`) and holds:
-  - `messaging_provider` — the team's Slack `MessagingProvider` (created via OAuth). One channel per provider per team (enforced by a unique constraint).
+  - `messaging_provider` — the team's Slack `MessagingProvider` (created via OAuth). At most one channel per provider per severity level per team (enforced by a unique constraint on `(team, messaging_provider, level)`).
   - `channel_name` — the Slack channel to post to (e.g. `#alerts`).
   - `level` — only notifications at or above this severity are posted.
   - `enabled` — whether the channel currently receives notifications.
@@ -158,7 +158,7 @@ Teams can deliver notifications to a Slack channel in addition to in-app/email. 
 On every `create_notification()`, `get_slack_notification_channels()` (in `apps/ocs_notifications/utils.py`) selects the team's enabled, level-matching channels. Delivery is additionally gated by:
 
 - `settings.SLACK_ENABLED` (configured via `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`/`SLACK_SIGNING_SECRET`)
-- the `flag_slack_notifications` feature flag being active for the team
+- the `Flags.SLACK_NOTIFICATIONS` feature flag being active for the team
 
 Each matching channel is dispatched to a worker via `send_slack_notification_async()` (Celery, `Queues.BACKGROUND`), which renders the event with `build_slack_message()` and posts it through the provider's `SlackService`. Failures are logged and swallowed so they never break the notification pipeline.
 

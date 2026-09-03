@@ -1,30 +1,21 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from django.core.cache import cache
 from django.db import transaction
 from django.test import override_settings
 
-from apps.ocs_notifications.models import EventType, LevelChoices, NotificationEvent
+from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.slack import build_slack_message, send_slack_notification
 from apps.ocs_notifications.tasks import send_slack_notification_async
+from apps.ocs_notifications.tests.conftest import activate_flag_for_team
 from apps.ocs_notifications.utils import create_notification, get_slack_notification_channels
-from apps.teams.models import Flag
-from apps.utils.factories.notifications import NotificationChannelFactory
+from apps.teams.flags import Flags
+from apps.utils.factories.notifications import NotificationChannelFactory, NotificationEventFactory
 from apps.utils.factories.team import TeamFactory
 
 
-def _activate_flag_for_team(flag_name, team):
-    flag, _ = Flag.objects.get_or_create(name=flag_name)
-    flag.teams.add(team)
-    for key in flag.get_flush_keys():
-        cache.delete(key)
-    return flag
-
-
-def _create_event(team_with_users, level=LevelChoices.WARNING):
-    event_type = EventType.objects.create(team=team_with_users, identifier="slack-test", level=level)
-    return NotificationEvent.objects.create(team=team_with_users, event_type=event_type)
+def _create_event(team, level=LevelChoices.WARNING):
+    return NotificationEventFactory.create(team=team, event_type__level=level)
 
 
 @pytest.mark.django_db()
@@ -40,7 +31,7 @@ class TestGetSlackNotificationChannels:
             assert get_slack_notification_channels(team_with_users, LevelChoices.WARNING).count() == 0
 
     def test_ignores_disabled_channel_and_excludes_lower_level(self, team_with_users):
-        _activate_flag_for_team("flag_slack_notifications", team_with_users)
+        activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team_with_users)
         NotificationChannelFactory.create(team=team_with_users, enabled=False, level=LevelChoices.INFO)
         NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.ERROR)
         matching = NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.WARNING)
@@ -52,8 +43,8 @@ class TestGetSlackNotificationChannels:
 
     def test_scoped_to_team(self, team_with_users):
         other_team = TeamFactory()
-        _activate_flag_for_team("flag_slack_notifications", team_with_users)
-        _activate_flag_for_team("flag_slack_notifications", other_team)
+        activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team_with_users)
+        activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, other_team)
         NotificationChannelFactory.create(team=other_team, enabled=True, level=LevelChoices.INFO)
         NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.INFO)
 
@@ -66,11 +57,10 @@ class TestSendSlackNotification:
     def test_build_slack_message(self):
         notification_channel = NotificationChannelFactory.create()
         event = _create_event(notification_channel.team, LevelChoices.ERROR)
-        event.title = "Something failed"
 
         message = build_slack_message(event)
 
-        assert "Something failed" in message
+        assert event.title in message
         assert event.message in message
         assert "Error" in message
         assert notification_channel.team.name in message

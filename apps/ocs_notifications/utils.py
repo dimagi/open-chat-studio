@@ -19,7 +19,9 @@ from apps.ocs_notifications.models import (
     UserNotificationPreferences,
 )
 from apps.ocs_notifications.tasks import send_notification_email_async, send_slack_notification_async
-from apps.teams.models import Flag, Team
+from apps.teams.flags import Flags
+from apps.teams.models import Team
+from apps.teams.utils import flag_is_active_for_team
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -155,9 +157,11 @@ def get_slack_notification_channels(team: Team, event_level: LevelChoices):
     """Return the enabled Slack notification channels for a team that meet the event's level.
 
     Delivery is gated on both the feature flag and the Slack integration being configured, and
-    each channel posts only events at or above its configured severity threshold.
+    each channel posts only events at or above its configured severity threshold, so an event
+    fans out to every channel whose level is <= the event's level (e.g. a Warning channel also
+    receives Error events).
     """
-    if not settings.SLACK_ENABLED or not Flag.get("flag_slack_notifications").is_active_for_team(team):
+    if not settings.SLACK_ENABLED or not flag_is_active_for_team(team, Flags.SLACK_NOTIFICATIONS.slug):
         return NotificationChannel.objects.none()
     from apps.service_providers.models import MessagingProviderType  # noqa: PLC0415 - circular import avoided
 
@@ -165,6 +169,8 @@ def get_slack_notification_channels(team: Team, event_level: LevelChoices):
         team=team,
         enabled=True,
         level__lte=event_level,
+        # NotificationChannel.clean() enforces the provider-team invariant, but clean() is not
+        # run on save()/objects.create(), so also match at query time to prevent cross-team delivery.
         messaging_provider__team=team,
         messaging_provider__type=MessagingProviderType.slack,
     )

@@ -1,30 +1,22 @@
 import pytest
-from django.core.cache import cache
 from django.urls import reverse
 
 from apps.ocs_notifications.models import NotificationChannel
+from apps.ocs_notifications.tests.conftest import activate_flag_for_team
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.backends import TEAM_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.models import Flag
+from apps.teams.flags import Flags
 from apps.utils.factories.notifications import NotificationChannelFactory, SlackMessagingProviderFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
-def _activate_flag_for_team(flag_name, team):
-    flag, _ = Flag.objects.get_or_create(name=flag_name)
-    flag.teams.add(team)
-    for key in flag.get_flush_keys():
-        cache.delete(key)
-    return flag
-
-
 @pytest.fixture()
 def admin_client(client):
     create_default_groups()
     team = TeamFactory.create()
-    _activate_flag_for_team("flag_slack_notifications", team)
+    activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team)
     user = UserFactory.create()
     add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
     client.force_login(user)
@@ -107,7 +99,7 @@ class TestNotificationChannelViews:
     def test_permission_denied_for_non_admin(self, client):
         create_default_groups()
         team = TeamFactory.create()
-        _activate_flag_for_team("flag_slack_notifications", team)
+        activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team)
         user = UserFactory.create()
         add_user_to_team(team, user)
         client.force_login(user)

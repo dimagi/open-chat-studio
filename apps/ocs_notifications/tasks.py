@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.notifications")
 
 
-@shared_task(queue=Queues.BACKGROUND)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def send_notification_email_async(user_ids, notification_event_id):
     from apps.users.models import (  # noqa: PLC0415 - circular: users.models → ocs_notifications.utils → ocs_notifications.tasks
         CustomUser,
@@ -91,7 +91,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
             )
 
 
-@shared_task(queue=Queues.BACKGROUND)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def send_slack_notification_async(notification_channel_id, notification_event_id):
     from apps.ocs_notifications.slack import (  # noqa: PLC0415 - circular: slack imports channels.models
         send_slack_notification,
