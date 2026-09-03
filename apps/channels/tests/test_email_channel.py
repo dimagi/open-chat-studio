@@ -132,7 +132,7 @@ class TestEmailMessageParse:
             pytest.param("", [], id="without-a-message-id"),
         ],
     )
-    def test_parse_records_the_provider_id(self, message_id, expected):
+    def test_parse_records_message_id_as_external_id(self, message_id, expected):
         result = EmailMessage.parse(_make_inbound_message(message_id=message_id))
 
         assert result.external_ids == expected
