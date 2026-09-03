@@ -723,9 +723,8 @@ def _expected_pipeline_nodes(bot):
                 "neural": True,
             },
         },
-        # The node the `assistant` key used to hang off. It renders as any other node now: the
-        # type and its stored params through the generic shape, with ``assistant_id`` suppressed --
-        # there is no resource key left to lift it into, so it would otherwise leak an internal id.
+        # ``AssistantNode`` renders through the generic shape: its type and stored params, with
+        # ``assistant_id`` suppressed -- no resource key lifts it, and it is an internal id.
         {
             "node_id": "assist",
             "type": "AssistantNode",
