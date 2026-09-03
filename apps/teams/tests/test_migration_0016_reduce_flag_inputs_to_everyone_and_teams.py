@@ -10,8 +10,8 @@ from apps.teams.models import Flag
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
-_migration = importlib.import_module("apps.teams.migrations.0016_neutralise_request_only_flag_fields")
-neutralise_request_only_flag_inputs = _migration.neutralise_request_only_flag_inputs
+_migration = importlib.import_module("apps.teams.migrations.0016_reduce_flag_inputs_to_everyone_and_teams")
+reduce_flag_inputs_to_everyone_and_teams = _migration.reduce_flag_inputs_to_everyone_and_teams
 
 
 class FakeSchemaEditor:
@@ -28,7 +28,7 @@ def _requires_migrations(requires_migrations):
 def _run():
     """Run against the app state the migration actually receives, not the live registry."""
     state = MigrationLoader(None).project_state([("teams", "0015_team_created_by")])
-    neutralise_request_only_flag_inputs(state.apps, FakeSchemaEditor())
+    reduce_flag_inputs_to_everyone_and_teams(state.apps, FakeSchemaEditor())
 
 
 def _make_flag_with_request_only_inputs(**kwargs):
@@ -69,16 +69,25 @@ def test_neutralises_request_only_inputs():
 
 
 @pytest.mark.django_db()
-def test_everyone_and_teams_are_untouched():
-    """The two supported inputs survive the migration unchanged."""
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        pytest.param(False, None, id="false-becomes-none"),
+        pytest.param(True, True, id="true-survives"),
+        pytest.param(None, None, id="none-survives"),
+    ],
+)
+def test_everyone_false_becomes_none(stored, expected):
+    """`everyone=False` historically meant "no global override, use teams", so it becomes
+    `None` before the tri-state gives `False` its hard-off meaning. Team grants survive."""
     team = TeamFactory.create()
-    flag = _make_flag_with_request_only_inputs(everyone=True)
+    flag = _make_flag_with_request_only_inputs(everyone=stored)
     flag.teams.add(team)
 
     _run()
 
     flag.refresh_from_db()
-    assert flag.everyone is True
+    assert flag.everyone is expected
     assert list(flag.teams.all()) == [team]
 
 
