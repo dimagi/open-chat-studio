@@ -1,19 +1,26 @@
-"""Collection retrieval: dense (vector) search, lexical (full-text) search, and their fusion.
+"""Collection retrieval: dense (vector) search, lexical (full-text) search, fusion, and reranking.
 
 `search_collection` is the single entry point used by the chat search tools and the
 collection query preview, so both share one definition of "what retrieval means".
 
-When the `flag_hybrid_search` flag is inactive for a collection's team, retrieval is
-dense-only and returns exactly what it did before hybrid search existed. When it is active,
-a lexical ranking from Postgres full-text search is fused with the dense ranking using
-Reciprocal Rank Fusion (RRF).
+With both feature flags inactive for a collection's team, retrieval is dense-only and returns
+exactly what it did before either stage existed. The two stages are independent, and each falls
+back to what sits beneath it:
 
-RRF fuses *ranks*, not scores, on purpose: cosine distances and `ts_rank_cd` values live on
-incomparable scales, so score-level fusion would need brittle per-query normalization.
+`flag_hybrid_search` adds a lexical ranking from Postgres full-text search, fused with the dense
+ranking by Reciprocal Rank Fusion (RRF). RRF fuses *ranks*, not scores, on purpose: cosine
+distances and `ts_rank_cd` values live on incomparable scales, so score-level fusion would need
+brittle per-query normalization. A query with no lexical hits leaves the dense ranking as it is.
+
+`flag_reranking` rescores a wider pool of whatever candidates the stages above produced --
+dense-only or fused -- against the query, and returns the best `top_k`. A reranker that fails or
+answers with something unusable leaves the ranking it was given as it is.
 """
 
 import functools
+import logging
 import operator
+import time
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
@@ -23,11 +30,21 @@ from django.db.models import F
 from pgvector.django import CosineDistance
 
 from apps.documents.models import Collection, SearchLanguage, chunk_from_indexed_file
+from apps.documents.rerankers import RerankedDocument, Reranker
 from apps.files.models import FileChunkEmbedding
+
+logger = logging.getLogger("ocs.retrieval")
 
 # Fields every caller of `search_collection` relies on. Kept as one superset so the deferred
 # field set does not silently differ between call sites and trigger per-row queries later.
-_RESULT_ONLY_FIELDS = ("text", "file__name", "file__metadata")
+# `context` is here for `contextualized_text`, which is what the rerank stage scores: leaving it
+# deferred would turn one query into one per candidate the moment reranking was switched on.
+_RESULT_ONLY_FIELDS = ("text", "context", "file__name", "file__metadata")
+
+# Upper bound on the conversation context prepended to the reranker's query. Voyage clips the
+# query-document pair to the model's context window, so an unbounded context would eat the room
+# the chunk needs and leave the reranker scoring the query against a truncated document.
+MAX_RERANK_CONTEXT_CHARS = 1500
 
 
 def search_collection(
@@ -36,6 +53,7 @@ def search_collection(
     top_k: int = 5,
     *,
     query_vector: list[float] | None = None,
+    context: str | None = None,
 ) -> list[FileChunkEmbedding]:
     """Return the `top_k` chunks of `collection` most relevant to `query`.
 
@@ -45,14 +63,35 @@ def search_collection(
         top_k: Number of chunks to return.
         query_vector: Precomputed embedding of `query`. Pass this when an index manager is
             already on hand, to avoid rebuilding one just to embed the query.
+        context: Recent conversation turns, when the caller has them. Used only to condition the
+            reranker's view of the query, so it changes nothing unless reranking is active for
+            this collection.
 
     Returns:
-        Chunks ordered most relevant first. `text`, `file.name` and `file.metadata` are
-        loaded; other fields are deferred.
+        Chunks ordered most relevant first. `text`, `context`, `file.name` and `file.metadata`
+        are loaded; other fields are deferred.
     """
     if query_vector is None:
         query_vector = collection.get_query_vector(query)
 
+    reranker = collection.get_reranker()
+    # A reranker can only improve on the ranking it is given if it is given more than the caller
+    # asked for; `rerank_top_n` is that pool. With no reranker nothing widens, and the queries
+    # below are exactly the ones hybrid search has always run.
+    candidate_count = max(top_k, collection.rerank_top_n) if reranker else top_k
+    candidates = _retrieve_candidates(collection, query, query_vector, candidate_count)
+    if reranker is None:
+        return candidates
+    return _rerank(reranker, query, candidates, top_k, context=context)
+
+
+def _retrieve_candidates(
+    collection: Collection,
+    query: str,
+    query_vector: list[float],
+    top_k: int,
+) -> list[FileChunkEmbedding]:
+    """The best `top_k` chunks by dense search alone, or by dense and lexical search fused."""
     if not collection.hybrid_search_enabled:
         return list(_dense_queryset(collection, query_vector, top_k))
 
@@ -73,6 +112,117 @@ def search_collection(
     scores = _rrf_scores([dense_ids, lexical_ids], weights=[dense_weight, 1 - dense_weight])
     fused_ids = _rank_by_score(scores)[:top_k]
     return _load_chunks_in_order(fused_ids, scores)
+
+
+def _rerank(
+    reranker: Reranker,
+    query: str,
+    candidates: list[FileChunkEmbedding],
+    top_k: int,
+    *,
+    context: str | None,
+) -> list[FileChunkEmbedding]:
+    """Reorder `candidates` by the reranker's scores and keep the best `top_k`.
+
+    Every failure path returns the candidates in the order retrieval already put them in, cut to
+    `top_k`. Reranking is a quality stage on top of a ranking that is already usable, so a
+    reranker that errors, times out, or answers with something that does not describe the list it
+    was sent must cost the search its improvement, not its results.
+
+    Chunks that were reranked carry a `rerank_score`; on a fallback path they do not, which is
+    how the collection query preview knows which number it is looking at.
+    """
+    if top_k <= 0:
+        # A caller that wants nothing back gets it without a billed call.
+        return []
+    if len(candidates) <= 1:
+        # A single candidate cannot be reordered, and the provider would still bill the call.
+        return candidates[:top_k]
+
+    query = query.strip()
+    if not query:
+        # Nothing to score the candidates against. Dense search still ranks a blank query by
+        # whatever its embedding came out as, but a reranker has no such fallback.
+        return candidates[:top_k]
+
+    started = time.monotonic()
+    try:
+        ranked = reranker.rerank(
+            _rerank_query(query, context),
+            [candidate.contextualized_text for candidate in candidates],
+            limit=top_k,
+        )
+    except Exception:
+        logger.exception(
+            "Reranking failed; falling back to the un-reranked ranking",
+            extra={"candidate_count": len(candidates), "top_k": top_k},
+        )
+        return candidates[:top_k]
+
+    if not _ranking_describes_candidates(ranked, len(candidates)):
+        return candidates[:top_k]
+
+    logger.info(
+        "Reranked collection retrieval candidates",
+        extra={
+            "candidate_count": len(candidates),
+            "result_count": len(ranked),
+            "duration_ms": round((time.monotonic() - started) * 1000),
+        },
+    )
+    results = []
+    for item in ranked:
+        chunk = candidates[item.index]
+        chunk.rerank_score = item.score
+        results.append(chunk)
+    return results
+
+
+def _rerank_query(query: str, context: str | None) -> str:
+    """The query representation handed to the reranker.
+
+    `context` is the caller's conversation context (the context conditioning asked for in issue
+    #2681). Prepending it lets the reranker tell which of several superficially similar chunks
+    answers the question actually being asked -- "how much does it cost" scores differently once
+    the turn before it is visible. It is clipped to its tail because the recent turns are the
+    ones that disambiguate, and the query goes last and is never clipped here: it is the half the
+    reranker has to see in full.
+    """
+    if not context or not context.strip():
+        return query
+    return f"{context.strip()[-MAX_RERANK_CONTEXT_CHARS:]}\n\n{query}"
+
+
+def _ranking_describes_candidates(ranked: list[RerankedDocument], candidate_count: int) -> bool:
+    """Whether a reranker's answer can be applied to the candidate list as it stands.
+
+    An index outside the list, or the same index twice, means the answer does not describe what
+    was sent: the first would raise on lookup and the second would put one chunk into the prompt
+    twice. Neither is worth trying to repair, and both are quieter than they look -- without this
+    the duplicate would simply ship.
+    """
+    indices = [item.index for item in ranked]
+    if not indices:
+        # `top_k` is at least 1 by the time this is reached, so an answer naming none of the
+        # candidates is not "fewer results than asked for" -- it does not describe them at all.
+        logger.warning(
+            "Reranker ranked none of the candidates; falling back to the un-reranked ranking",
+            extra={"candidate_count": candidate_count},
+        )
+        return False
+    if any(not 0 <= index < candidate_count for index in indices):
+        logger.warning(
+            "Reranker returned an out-of-range candidate index; falling back to the un-reranked ranking",
+            extra={"candidate_count": candidate_count, "indices": indices},
+        )
+        return False
+    if len(set(indices)) != len(indices):
+        logger.warning(
+            "Reranker returned the same candidate more than once; falling back to the un-reranked ranking",
+            extra={"candidate_count": candidate_count, "indices": indices},
+        )
+        return False
+    return True
 
 
 def _rrf_scores(

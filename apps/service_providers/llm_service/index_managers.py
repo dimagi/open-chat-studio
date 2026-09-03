@@ -476,7 +476,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         Query the local index for the most relevant file chunks based on the query string.
 
         Delegates to `search_collection` so this shares one definition of retrieval with the
-        chat search tools, including hybrid search where the flag is active.
+        chat search tools, including hybrid search and reranking where their flags are active.
+        No conversation context is passed: a preview has no conversation to condition on.
 
         Args:
             index_id: The id of the collection to search.

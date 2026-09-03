@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
@@ -19,10 +20,12 @@ from apps.documents.models import (
 )
 from apps.documents.views import _queue_document_source_sync
 from apps.files.models import File, FilePurpose
+from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
-from apps.utils.factories.files import FileFactory
+from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import EmbeddingProviderModelFactory, LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -910,3 +913,106 @@ class TestCollectionUploadedFileCount:
         content = self._page(client, collection)
 
         assert ">2</span> uploaded" in content
+
+
+@pytest.mark.django_db()
+class TestQueryCollectionView:
+    """The query preview end to end: the real view, the real retrieval service, the real Voyage
+    adapter and the real template, with only the embedding call and the network faked.
+
+    The stage-level tests in test_retrieval.py stub the reranker; this one proves the pieces
+    actually connect, including which number the template ends up showing.
+    """
+
+    @pytest.fixture()
+    def collection_with_chunks(self):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(
+            team=team,
+            is_index=True,
+            is_remote_index=False,
+            llm_provider=LlmProviderFactory.create(team=team),
+            embedding_provider_model=EmbeddingProviderModelFactory.create(team=team),
+            enable_reranking=True,
+            reranker_provider=LlmProviderFactory.create(
+                team=team, type=str(LlmProviderTypes.voyage), config={"voyage_api_key": "test-voyage-key"}
+            ),
+        )
+        file = FileFactory.create(team=team, name="handbook.txt")
+        CollectionFile.objects.create(collection=collection, file=file, status=FileStatus.COMPLETED)
+        chunks = [
+            FileChunkEmbeddingFactory.create(
+                team=team,
+                collection=collection,
+                file=file,
+                chunk_number=index + 1,
+                text=text,
+                embedding=self._unit_vector(index),
+            )
+            for index, text in enumerate(["leave is accrued monthly", "the office is in Cape Town"])
+        ]
+        return collection, chunks
+
+    @staticmethod
+    def _unit_vector(index: int):
+        vector = [0.0] * settings.EMBEDDING_VECTOR_SIZE
+        vector[index] = 1.0
+        return vector
+
+    def _get(self, client, collection, query="how much leave do I get"):
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:collection_query", args=[collection.team.slug, collection.id])
+        # The embedding is what the dense ranking is built from; the first chunk's vector puts it
+        # on top, so a reordering below is unambiguously the reranker's doing.
+        with mock.patch.object(OpenAILocalIndexManager, "get_embedding_vector", return_value=self._unit_vector(0)):
+            return client.get(url, {"query": query, "top_k": 2})
+
+    def test_renders_the_reranked_order_and_score(self, collection_with_chunks, client):
+        collection, chunks = collection_with_chunks
+
+        with mock.patch("voyageai.Client") as client_cls:
+            client_cls.return_value.rerank.return_value = mock.Mock(
+                results=[
+                    mock.Mock(index=1, relevance_score=0.87),
+                    mock.Mock(index=0, relevance_score=0.21),
+                ]
+            )
+            with override_flag("flag_reranking", active=True):
+                response = self._get(client, collection)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        # The reranker's order, not the dense order.
+        assert html.index("the office is in Cape Town") < html.index("leave is accrued monthly")
+        assert "Relevance: 0.8700" in html
+        assert "Distance:" not in html
+        assert "reranker scoring each document against the query" in html
+
+    def test_renders_the_distance_when_reranking_is_off(self, collection_with_chunks, client):
+        """The regression guarantee at the surface the user sees: flag off and the preview is the
+        page it has always been."""
+        collection, chunks = collection_with_chunks
+
+        with override_flag("flag_reranking", active=False):
+            response = self._get(client, collection)
+
+        html = response.content.decode()
+        assert html.index("leave is accrued monthly") < html.index("the office is in Cape Town")
+        assert "Distance:" in html
+        assert "Relevance:" not in html
+
+    def test_a_reranker_failure_still_renders_the_results(self, collection_with_chunks, client):
+        """The failure path at the surface: the page renders the un-reranked ranking rather than
+        an error."""
+        collection, chunks = collection_with_chunks
+
+        with mock.patch("voyageai.Client") as client_cls:
+            client_cls.return_value.rerank.side_effect = RuntimeError("provider is down")
+            with override_flag("flag_reranking", active=True):
+                response = self._get(client, collection)
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "leave is accrued monthly" in html
+        assert "Distance:" in html
+        assert "Relevance:" not in html

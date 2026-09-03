@@ -178,7 +178,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     """Get instantiated tools for the given node configuration."""
     tools = get_node_tools(node.django_node, session, tool_callbacks=tool_callbacks)
     tools.extend(node.get_llm_service().attach_built_in_tools(node.built_in_tools, node.tool_config))
-    if search_tool := _get_search_tool(node):
+    if search_tool := _get_search_tool(node, session):
         tools.append(search_tool)
 
     if node.disabled_tools:
@@ -187,7 +187,12 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     return cast(list[dict | BaseTool], tools)
 
 
-def _get_search_tool(node):
+def _get_search_tool(node, session: ExperimentSession):
+    """Build the collection search tool for this node, or None if it has no local collections.
+
+    The session is handed to the tool so the rerank stage can condition on recent turns; the
+    tool only reads it for collections that actually have reranking active.
+    """
     if not node.collection_index_ids:
         return None
 
@@ -209,8 +214,7 @@ def _get_search_tool(node):
         search_config = SearchToolConfig(
             index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
         )
-        search_tool = SearchIndexTool(search_config=search_config)
-        return search_tool
+        return SearchIndexTool(search_config=search_config, experiment_session=session)
 
     # Multiple collections: check if they're remote or local
     first_collection = collections[0]
@@ -227,12 +231,12 @@ def _get_search_tool(node):
         )
     else:
         # All local: use the multi-index search tool
-        search_tool = SearchCollectionByIdTool(
+        return SearchCollectionByIdTool(
             max_results=node.max_results,
             generate_citations=node.generate_citations,
             allowed_collection_ids=node.collection_index_ids,
+            experiment_session=session,
         )
-        return search_tool
 
 
 def _get_final_ai_message(messages: list) -> AIMessage:

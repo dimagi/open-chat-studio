@@ -1,18 +1,31 @@
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
+from django.test.utils import CaptureQueriesContext
 from waffle.testutils import override_flag
 
 from apps.documents.models import CollectionFile, FileStatus, SearchLanguage
-from apps.documents.retrieval import _lexical_candidate_ids, _rank_by_score, _rrf_scores, search_collection
+from apps.documents.rerankers import RerankedDocument, Reranker, VoyageReranker
+from apps.documents.retrieval import (
+    MAX_RERANK_CONTEXT_CHARS,
+    _lexical_candidate_ids,
+    _rank_by_score,
+    _rrf_scores,
+    search_collection,
+)
+from apps.documents.views import _result_score_kind
 from apps.service_providers.llm_service.index_managers import LocalIndexManager
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 HYBRID_FLAG = "flag_hybrid_search"
+RERANK_FLAG = "flag_reranking"
 
 
 def _fuse(ranked_lists, weights, k=None) -> list[int]:
@@ -446,41 +459,89 @@ class TestQueryPreviewScore:
         assert len(results) == 1
         assert all(result.distance is not None for result in results)
 
+    def test_reranked_results_carry_a_rerank_score(self):
+        collection, file = _make_indexed_collection()
+        _add_chunk(collection, file, "some prose", _unit_vector(0))
+        _add_chunk(collection, file, "other prose", _unit_vector(1))
+
+        results = _search_with_reranker(
+            collection, "prose", _StubReranker([RerankedDocument(0, 0.8), RerankedDocument(1, 0.2)]), top_k=2
+        )
+
+        assert len(results) == 2
+        assert [result.rerank_score for result in results] == [0.8, 0.2]
+
     @pytest.mark.parametrize(
-        ("context", "expected", "absent"),
+        ("score_kind", "expected", "absent"),
         [
-            pytest.param({"hybrid_search": True}, "Score:", "Distance:", id="hybrid-renders-score"),
-            pytest.param({"hybrid_search": False}, "Distance:", "Score:", id="dense-renders-distance"),
+            pytest.param("rerank", "Relevance:", "Distance:", id="rerank-renders-relevance"),
+            pytest.param("hybrid", "Score:", "Distance:", id="hybrid-renders-score"),
+            pytest.param("dense", "Distance:", "Score:", id="dense-renders-distance"),
         ],
     )
-    def test_template_renders_the_right_number(self, context, expected, absent):
+    def test_template_renders_the_right_number(self, score_kind, expected, absent):
         collection, file = _make_indexed_collection()
         chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
         chunk.distance = 0.25
-        chunk.fused_score = 0.0123 if context["hybrid_search"] else None
+        chunk.fused_score = 0.0123
+        chunk.rerank_score = 0.4567
 
-        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], **context})
+        html = render_to_string(
+            "documents/collection_query_results.html", {"chunks": [chunk], "score_kind": score_kind}
+        )
 
         assert expected in html
         assert absent not in html
 
-    def test_a_zero_fused_score_still_renders_as_a_score(self):
-        """A fused score of 0 is legitimate: it happens when the dense weight is 0 and a chunk was
-        found by dense search alone. Testing the value for truthiness would send it down the
-        distance branch, which has no distance to render.
+    @pytest.mark.parametrize(
+        ("score_kind", "attribute", "expected"),
+        [
+            pytest.param("hybrid", "fused_score", "Score:", id="zero-fused-score"),
+            pytest.param("rerank", "rerank_score", "Relevance:", id="zero-rerank-score"),
+        ],
+    )
+    def test_a_zero_score_still_renders_as_a_score(self, score_kind, attribute, expected):
+        """Zero is a legitimate score on both branches: a fused score of 0 happens when the dense
+        weight is 0 and a chunk was found by dense search alone, and a reranker is free to score a
+        candidate 0. Testing the value for truthiness would send either down the distance branch,
+        which has no distance to render.
         """
         collection, file = _make_indexed_collection()
         chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
-        chunk.fused_score = 0.0
+        setattr(chunk, attribute, 0.0)
 
-        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], "hybrid_search": True})
+        html = render_to_string(
+            "documents/collection_query_results.html", {"chunks": [chunk], "score_kind": score_kind}
+        )
 
-        assert "Score:" in html
+        assert expected in html
         assert "Distance:" not in html
+
+    @pytest.mark.parametrize(
+        ("annotations", "expected"),
+        [
+            pytest.param({"rerank_score": 0.0, "fused_score": 0.5, "distance": 0.1}, "rerank", id="rerank-wins"),
+            pytest.param({"fused_score": 0.0, "distance": 0.1}, "hybrid", id="fused-beats-distance"),
+            pytest.param({"distance": 0.1}, "dense", id="distance-only"),
+        ],
+    )
+    def test_score_kind_prefers_the_latest_stage_that_ran(self, annotations, expected):
+        """Reranked results still carry whatever the stage beneath them annotated -- a dense-only
+        rerank keeps its `distance` -- so the order these are checked in is what decides.
+        """
+        collection, file = _make_indexed_collection()
+        chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
+        for attribute, value in annotations.items():
+            setattr(chunk, attribute, value)
+
+        assert _result_score_kind([chunk]) == expected
+
+    def test_score_kind_of_no_results_is_empty(self):
+        assert _result_score_kind([]) == ""
 
 
 @pytest.mark.django_db()
-class TestHybridSearchKnobConstraints:
+class TestSearchKnobConstraints:
     """The knobs are absent from every form, so `full_clean()` never runs and the field
     validators never fire. These constraints are the only thing actually stopping a bad value,
     so they are asserted against the database rather than through a form.
@@ -494,6 +555,8 @@ class TestHybridSearchKnobConstraints:
             pytest.param("search_dense_weight", None, id="weight-null"),
             pytest.param("search_fetch_k", 0, id="fetch-k-zero"),
             pytest.param("search_fetch_k", None, id="fetch-k-null"),
+            pytest.param("rerank_top_n", 0, id="rerank-top-n-zero"),
+            pytest.param("rerank_top_n", None, id="rerank-top-n-null"),
         ],
     )
     def test_out_of_range_values_are_rejected(self, field, value):
@@ -512,6 +575,7 @@ class TestHybridSearchKnobConstraints:
             pytest.param("search_dense_weight", 0.0, id="weight-zero"),
             pytest.param("search_dense_weight", 1.0, id="weight-one"),
             pytest.param("search_fetch_k", 1, id="fetch-k-one"),
+            pytest.param("rerank_top_n", 1, id="rerank-top-n-one"),
         ],
     )
     def test_valid_boundary_values_are_accepted(self, field, value):
@@ -520,3 +584,405 @@ class TestHybridSearchKnobConstraints:
         collection.save()
         collection.refresh_from_db()
         assert getattr(collection, field) == value
+
+
+class _StubReranker(Reranker):
+    """A reranker whose answer is scripted, so the stage's own behaviour is what is under test.
+
+    `error` makes the call fail the way a provider outage does, which is the path the stage's
+    fallback exists for.
+    """
+
+    def __init__(self, ranking: list[RerankedDocument] | None = None, *, error: Exception | None = None):
+        self._ranking = ranking or []
+        self._error = error
+        self.calls: list[tuple[str, list[str], int]] = []
+
+    def rerank(self, query, documents, *, limit):
+        self.calls.append((query, list(documents), limit))
+        if self._error:
+            raise self._error
+        return self._ranking
+
+
+def _search_with_reranker(collection, query, reranker, *, top_k=5, context=None, hybrid=False):
+    """Run `search_collection` with `reranker` as the collection's reranker.
+
+    `Collection.get_reranker` is stubbed rather than the provider SDK so these tests exercise the
+    rerank stage, not the Voyage adapter (which has its own tests). The gating that decides
+    whether a reranker is built at all is tested separately, against the real method.
+    """
+    with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_reranker", return_value=reranker):
+            with override_flag(HYBRID_FLAG, active=hybrid):
+                return search_collection(collection, query, top_k=top_k, context=context)
+
+
+@pytest.mark.django_db()
+class TestRerankStage:
+    """The rerank stage reorders whatever candidates retrieval produced and keeps the best few.
+
+    Its contract is that it can only improve the ranking: every way it can go wrong has to leave
+    the search with the ranking it already had.
+    """
+
+    def test_reorders_the_candidates(self):
+        collection, file = _make_indexed_collection()
+        first = _add_chunk(collection, file, "alpha", _unit_vector(0))
+        second = _add_chunk(collection, file, "beta", _unit_vector(1))
+
+        # Dense search ranks `first` above `second` (the query vector is `first`'s); the reranker
+        # disagrees, and the reranker is the last word.
+        reranker = _StubReranker([RerankedDocument(1, 0.9), RerankedDocument(0, 0.1)])
+        results = _search_with_reranker(collection, "alpha", reranker, top_k=2)
+
+        assert [result.id for result in results] == [second.id, first.id]
+        assert [result.rerank_score for result in results] == [0.9, 0.1]
+
+    def test_widens_the_candidate_pool_to_rerank_top_n(self):
+        """The stage's whole value is seeing more candidates than the caller asked for. Without
+        the widening it would only ever reshuffle the `top_k` dense search already picked.
+        """
+        collection, file = _make_indexed_collection(rerank_top_n=3)
+        for index in range(3):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(2, 0.9)])
+        results = _search_with_reranker(collection, "chunk", reranker, top_k=1)
+
+        query, documents, limit = reranker.calls[0]
+        assert len(documents) == 3
+        assert limit == 1
+        assert len(results) == 1
+
+    def test_rerank_top_n_never_narrows_below_top_k(self):
+        """A collection configured with a pool smaller than the caller's `top_k` must not cost the
+        caller results."""
+        collection, file = _make_indexed_collection(rerank_top_n=1)
+        for index in range(3):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(index, 1.0 - index / 10) for index in range(3)])
+        results = _search_with_reranker(collection, "chunk", reranker, top_k=3)
+
+        assert len(reranker.calls[0][1]) == 3
+        assert len(results) == 3
+
+    def test_scores_the_contextualized_text(self):
+        """Contextual retrieval's header is part of what was embedded and indexed, so it is part
+        of what the reranker has to see -- otherwise it scores a chunk the index does not have.
+        """
+        collection, file = _make_indexed_collection()
+        _add_chunk(collection, file, "It grew 3% over the quarter.", _unit_vector(0), context="Acme Q3 results.")
+        _add_chunk(collection, file, "unrelated", _unit_vector(1))
+
+        reranker = _StubReranker([RerankedDocument(0, 1.0)])
+        _search_with_reranker(collection, "Acme growth", reranker, top_k=1)
+
+        assert reranker.calls[0][1][0] == "Acme Q3 results.\n\nIt grew 3% over the quarter."
+
+    def test_reading_the_context_header_does_not_cost_a_query_per_candidate(self):
+        """`contextualized_text` reads `context`, which has to be in retrieval's deferred field
+        set. Left deferred, every candidate would fetch its own. The claim is that the query count
+        does not grow with the pool, so it is compared across pool sizes rather than pinned to a
+        number that would need editing every time retrieval gains a query.
+        """
+        collection, file = _make_indexed_collection(rerank_top_n=10)
+        reranker = _StubReranker([RerankedDocument(0, 1.0)])
+
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index), context=f"header {index}")
+        with CaptureQueriesContext(connection) as two_candidates:
+            _search_with_reranker(collection, "chunk", reranker, top_k=1)
+
+        for index in range(2, 8):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index), context=f"header {index}")
+        with CaptureQueriesContext(connection) as eight_candidates:
+            _search_with_reranker(collection, "chunk", reranker, top_k=1)
+
+        # Proves the pool really did grow, so the comparison below is not vacuous.
+        assert len(reranker.calls[0][1]) == 2
+        assert len(reranker.calls[1][1]) == 8
+        assert "header 0" in reranker.calls[1][1][0]
+        assert len(eight_candidates) == len(two_candidates)
+
+    @pytest.mark.parametrize("hybrid", [True, False], ids=["fused-candidates", "dense-candidates"])
+    def test_reranks_either_kind_of_candidate_list(self, hybrid):
+        """The two flags are independent, so the stage has to work on a fused ranking and on a
+        dense-only one."""
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        first = _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(0))
+        second = _add_chunk(collection, file, "Lyon is a city in France.", _unit_vector(1))
+
+        reranker = _StubReranker([RerankedDocument(1, 0.9), RerankedDocument(0, 0.1)])
+        results = _search_with_reranker(collection, "capital of France", reranker, top_k=2, hybrid=hybrid)
+
+        assert {result.id for result in results} == {first.id, second.id}
+        assert results[0].rerank_score == 0.9
+
+    def test_returns_only_what_the_reranker_ranked(self):
+        """ "Fewer candidates than asked for" is a legitimate answer; the stage must not pad it
+        back out with candidates the reranker rejected."""
+        collection, file = _make_indexed_collection()
+        for index in range(3):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(1, 0.9)])
+        results = _search_with_reranker(collection, "chunk", reranker, top_k=3)
+
+        assert len(results) == 1
+
+
+@pytest.mark.django_db()
+class TestRerankStageFallbacks:
+    """Reranking is a quality stage layered on a ranking that already works. Every failure has to
+    cost the search its improvement, never its results."""
+
+    @pytest.mark.parametrize(
+        "reranker",
+        [
+            pytest.param(_StubReranker(error=RuntimeError("provider is down")), id="provider-error"),
+            pytest.param(_StubReranker([RerankedDocument(9, 0.9)]), id="out-of-range-index"),
+            pytest.param(_StubReranker([RerankedDocument(0, 0.9), RerankedDocument(0, 0.1)]), id="duplicate-index"),
+            pytest.param(_StubReranker([]), id="empty-ranking"),
+        ],
+    )
+    def test_falls_back_to_the_pre_rerank_order(self, reranker):
+        collection, file = _make_indexed_collection()
+        near = _add_chunk(collection, file, "alpha", _unit_vector(0))
+        far = _add_chunk(collection, file, "beta", _unit_vector(1))
+
+        results = _search_with_reranker(collection, "alpha", reranker, top_k=2)
+
+        # The dense ordering, unchanged, and with no rerank score to advertise otherwise.
+        assert [result.id for result in results] == [near.id, far.id]
+        assert all(getattr(result, "rerank_score", None) is None for result in results)
+
+    def test_a_failed_rerank_still_honours_top_k(self):
+        """The candidate pool is wider than `top_k`. Falling back must not hand the caller the
+        whole pool."""
+        collection, file = _make_indexed_collection(rerank_top_n=5)
+        for index in range(5):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker(error=RuntimeError("provider is down"))
+        results = _search_with_reranker(collection, "chunk", reranker, top_k=2)
+
+        assert len(results) == 2
+
+    def test_a_request_for_no_results_is_not_sent_to_the_provider(self):
+        """`top_k` of 0 is what makes an empty ranking legitimate. Answering it here keeps the
+        malformed-answer check below unambiguous: past this point, no results means no results
+        the reranker could name.
+        """
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        assert _search_with_reranker(collection, "chunk", reranker, top_k=0) == []
+        assert reranker.calls == []
+
+    def test_a_lone_candidate_is_not_sent_to_the_provider(self):
+        """One candidate cannot be reordered, and the call would still be billed."""
+        collection, file = _make_indexed_collection()
+        only = _add_chunk(collection, file, "alpha", _unit_vector(0))
+
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        results = _search_with_reranker(collection, "alpha", reranker, top_k=5)
+
+        assert reranker.calls == []
+        assert [result.id for result in results] == [only.id]
+
+    @pytest.mark.parametrize("query", ["", "   ", "\n"], ids=["empty", "spaces", "newline"])
+    def test_a_blank_query_is_not_sent_to_the_provider(self, query):
+        """Dense search still ranks a blank query by whatever its embedding came out as. A
+        reranker has nothing to score against, so the stage is skipped rather than paid for."""
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(1, 0.9)])
+        results = _search_with_reranker(collection, query, reranker, top_k=2)
+
+        assert reranker.calls == []
+        assert len(results) == 2
+
+
+@pytest.mark.django_db()
+class TestRerankContextConditioning:
+    """The `context` parameter is issue #2681's context conditioning: recent conversation turns,
+    used to tell the reranker which question is actually being asked."""
+
+    def test_context_is_prepended_to_the_query(self):
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        _search_with_reranker(collection, "how much does it cost", reranker, context="user: tell me about the permit")
+
+        assert reranker.calls[0][0] == "user: tell me about the permit\n\nhow much does it cost"
+
+    @pytest.mark.parametrize("context", [None, "", "   "], ids=["none", "empty", "whitespace"])
+    def test_no_context_leaves_the_query_alone(self, context):
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        _search_with_reranker(collection, "how much does it cost", reranker, context=context)
+
+        assert reranker.calls[0][0] == "how much does it cost"
+
+    def test_a_long_context_is_clipped_but_the_query_is_not(self):
+        """The provider clips the pair to the model's context window from the end. An unbounded
+        context would therefore push the query itself out of the window -- the one part the
+        reranker has to see in full.
+        """
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        query = "how much does it cost"
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        _search_with_reranker(collection, query, reranker, context="x" * (MAX_RERANK_CONTEXT_CHARS * 3))
+
+        sent = reranker.calls[0][0]
+        assert sent.endswith(f"\n\n{query}")
+        assert len(sent) == MAX_RERANK_CONTEXT_CHARS + 2 + len(query)
+
+    def test_the_tail_of_the_context_is_what_survives(self):
+        """The recent turns are the ones that disambiguate a follow-up question, so clipping takes
+        the end, not the beginning."""
+        collection, file = _make_indexed_collection()
+        for index in range(2):
+            _add_chunk(collection, file, f"chunk {index}", _unit_vector(index))
+
+        context = "oldest turn " + "-" * MAX_RERANK_CONTEXT_CHARS + " newest turn"
+        reranker = _StubReranker([RerankedDocument(0, 0.9)])
+        _search_with_reranker(collection, "query", reranker, context=context)
+
+        sent = reranker.calls[0][0]
+        assert "newest turn" in sent
+        assert "oldest turn" not in sent
+
+    def test_context_is_ignored_when_there_is_no_reranker(self):
+        """Nothing else reads it, so a caller passing context to a collection without reranking
+        must get exactly the ranking it would have got anyway."""
+        collection, file = _make_indexed_collection()
+        near = _add_chunk(collection, file, "alpha", _unit_vector(0))
+        far = _add_chunk(collection, file, "beta", _unit_vector(1))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=False):
+                with_context = search_collection(collection, "alpha", top_k=2, context="something")
+                without_context = search_collection(collection, "alpha", top_k=2)
+
+        assert [chunk.id for chunk in with_context] == [chunk.id for chunk in without_context] == [near.id, far.id]
+
+
+def _rerankable_collection(**kwargs):
+    """A collection configured so that `get_reranker` has everything it needs."""
+    collection, file = _make_indexed_collection(enable_reranking=True, **kwargs)
+    collection.reranker_provider = LlmProviderFactory.create(
+        team=collection.team,
+        type=str(LlmProviderTypes.voyage),
+        config={"voyage_api_key": "test-voyage-key"},
+    )
+    collection.save()
+    return collection, file
+
+
+@pytest.mark.django_db()
+class TestRerankerGating:
+    """`Collection.get_reranker` decides whether the stage runs at all. It returns None for every
+    reason not to, because a misconfigured optional stage must not fail a search that works.
+    """
+
+    def test_builds_a_reranker_for_the_configured_provider_and_model(self):
+        collection, _ = _rerankable_collection(rerank_model="rerank-2-lite")
+
+        with override_flag(RERANK_FLAG, active=True):
+            reranker = collection.get_reranker()
+
+        assert isinstance(reranker, VoyageReranker)
+        assert reranker._model == "rerank-2-lite"
+
+    def test_flag_off_builds_nothing(self):
+        """The regression guarantee: a collection can be fully configured for reranking and still
+        behave exactly as it did before, until the flag is turned on for its team."""
+        collection, _ = _rerankable_collection()
+
+        with override_flag(RERANK_FLAG, active=False):
+            assert collection.get_reranker() is None
+            assert collection.reranking_enabled is False
+
+    def test_disabled_on_the_collection_builds_nothing(self):
+        collection, _ = _rerankable_collection()
+        collection.enable_reranking = False
+
+        with override_flag(RERANK_FLAG, active=True):
+            assert collection.get_reranker() is None
+
+    def test_remote_indexes_build_nothing(self):
+        """A remote index's chunks live at the provider and never reach a ranking stage OCS
+        controls, exactly as for hybrid search."""
+        collection, _ = _rerankable_collection()
+        collection.is_remote_index = True
+
+        with override_flag(RERANK_FLAG, active=True):
+            assert collection.get_reranker() is None
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            pytest.param("reranker_provider", None, id="no-provider"),
+            pytest.param("rerank_model", "", id="no-model"),
+        ],
+    )
+    def test_incomplete_configuration_builds_nothing(self, field, value):
+        collection, _ = _rerankable_collection()
+        setattr(collection, field, value)
+
+        with override_flag(RERANK_FLAG, active=True):
+            assert collection.get_reranker() is None
+
+    def test_a_provider_without_a_rerank_endpoint_builds_nothing(self):
+        """Only Voyage offers one. Every other provider's service raises NotImplementedError,
+        which has to read as "skip the stage", not as a failed search."""
+        collection, _ = _rerankable_collection()
+        collection.reranker_provider = LlmProviderFactory.create(team=collection.team)
+
+        with override_flag(RERANK_FLAG, active=True):
+            assert collection.get_reranker() is None
+
+
+@pytest.mark.django_db()
+class TestRerankingThroughTheProvider:
+    """One test of the whole chain -- collection configuration, provider credentials, the Voyage
+    adapter, the rerank stage -- with only the network faked, so the wiring is proven end to end
+    rather than inferred from the stubbed tests above.
+    """
+
+    def test_a_configured_collection_returns_the_providers_ranking(self):
+        collection, file = _rerankable_collection()
+        first = _add_chunk(collection, file, "alpha", _unit_vector(0))
+        second = _add_chunk(collection, file, "beta", _unit_vector(1))
+
+        with mock.patch("voyageai.Client") as client_cls:
+            client_cls.return_value.rerank.return_value = SimpleNamespace(
+                results=[
+                    SimpleNamespace(index=1, relevance_score=0.91),
+                    SimpleNamespace(index=0, relevance_score=0.12),
+                ]
+            )
+            with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+                with override_flag(RERANK_FLAG, active=True):
+                    results = search_collection(collection, "alpha", top_k=2)
+
+        # Dense search puts `first` on top; the provider's ranking overrides it.
+        assert [result.id for result in results] == [second.id, first.id]
+        assert [result.rerank_score for result in results] == [0.91, 0.12]
+        assert client_cls.call_args.kwargs["api_key"] == "test-voyage-key"
+        assert client_cls.return_value.rerank.call_args.kwargs["model"] == "rerank-2"
