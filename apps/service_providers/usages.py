@@ -25,6 +25,7 @@ from typing import Literal
 
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
+from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
@@ -318,6 +319,7 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
     for trigger_qs in (
         StaticTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
         TimeoutTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
+        ScheduledTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
     ):
         for trigger in trigger_qs:
             raw_pipeline_id = trigger.action.params.get("pipeline_id")

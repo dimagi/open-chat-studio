@@ -7,9 +7,9 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from time_machine import travel
 
+from apps.events.event_log import EventLogStatusChoices
 from apps.events.models import (
     EventActionType,
-    EventLogStatusChoices,
     ScheduledMessage,
     ScheduledMessageAttempt,
     StaticTrigger,

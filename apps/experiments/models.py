@@ -85,6 +85,9 @@ class VersionFieldDisplayFormatters:
             if static_trigger.trigger_type == "TimeoutTrigger":
                 seconds = seconds_to_human(static_trigger.delay)
                 string = f"{string} no response for {seconds}"
+            elif static_trigger.trigger_type == "ScheduledTrigger":
+                scheduled = f"{static_trigger.trigger_date} {static_trigger.trigger_time} ({static_trigger.timezone})"
+                string = f"{string} {scheduled}"
             else:
                 string = f"{string} {static_trigger.get_type_display().lower()}"
             trigger_action = static_trigger.action.get_action_type_display().lower()
@@ -654,7 +657,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def event_triggers(self):
-        return [*self.timeout_triggers.all(), *self.static_triggers.all()]
+        return [*self.timeout_triggers.all(), *self.static_triggers.all(), *self.scheduled_triggers.all()]
 
     @property
     def version_display(self) -> str:
@@ -945,6 +948,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
+        self.scheduled_triggers.update(is_archived=True)
 
         if self.is_working_version:
             self.delete_experiment_channels()
@@ -960,6 +964,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
+        self.scheduled_triggers.get_all().update(is_archived=False)
         # Mirrors archive(), which leaves the working version's pipeline alone.
         if not self.is_working_version and self.pipeline:
             self.pipeline.unarchive()
@@ -1049,6 +1054,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Triggers",
                 name="timeout_triggers",
                 queryset=self.timeout_triggers.all(),
+                to_display=VersionFieldDisplayFormatters.format_trigger,
+            ),
+            VersionField(
+                group_name="Triggers",
+                name="scheduled_triggers",
+                queryset=self.scheduled_triggers.all(),
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]

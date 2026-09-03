@@ -58,6 +58,7 @@ CONTENT_TYPES = {
         "eventaction",
         "statictrigger",
         "timeouttrigger",
+        "scheduledtrigger",
         "eventlog",
         "scheduledmessage",
         "scheduledmessageattempt",

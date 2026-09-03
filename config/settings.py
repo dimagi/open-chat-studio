@@ -600,6 +600,10 @@ SCHEDULED_TASKS = {
         "task": "apps.events.tasks.enqueue_timed_out_events",
         "schedule": 10,
     },
+    "events.tasks.poll_due_scheduled_triggers": {
+        "task": "apps.events.tasks.poll_due_scheduled_triggers",
+        "schedule": 60,
+    },
     "dashboard.tasks.cleanup_expired_cache_entries": {
         "task": "apps.dashboard.tasks.cleanup_expired_cache_entries",
         "schedule": timedelta(days=1),

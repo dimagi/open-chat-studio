@@ -1,7 +1,14 @@
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.utils import timezone
 
-from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.models import (
+    ScheduledMessage,
+    StaticTrigger,
+    StaticTriggerType,
+    TimeoutTrigger,
+)
+from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.experiments.models import ExperimentSession
 from apps.teams.export_service import migrating_team_ids
 from apps.utils.celery import Queues
@@ -66,6 +73,23 @@ def fire_trigger(trigger_id, session_id):
     session = ExperimentSession.objects.get(id=session_id)
     triggered = trigger.fire(session)
     return triggered
+
+
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
+def poll_due_scheduled_triggers():
+    due_triggers = (
+        ScheduledTrigger.objects.published_versions()
+        .filter(is_active=True, fired_at__isnull=True, scheduled_at__lte=timezone.now())
+        .exclude(experiment__team_id__in=migrating_team_ids())
+    )
+    for trigger in due_triggers:
+        fire_scheduled_trigger.delay(trigger.id)
+
+
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
+def fire_scheduled_trigger(trigger_id):
+    trigger = ScheduledTrigger.objects.get(id=trigger_id)
+    return trigger.fire()
 
 
 @shared_task(ignore_result=True, queue=Queues.CHAT)

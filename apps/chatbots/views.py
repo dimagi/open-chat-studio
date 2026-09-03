@@ -30,7 +30,13 @@ from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
-from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.event_log import EventLogStatusChoices
+from apps.events.models import (
+    StaticTrigger,
+    StaticTriggerType,
+    TimeoutTrigger,
+)
+from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
@@ -986,6 +992,9 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
 
 
 def _get_events_context(experiment: Experiment, team_slug: str):
+    # Three separate queries, one per trigger type, by design — each model has a distinct
+    # shape (e.g. ScheduledTrigger has trigger_date/timezone; TimeoutTrigger has delay).
+    # A follow-up ticket should union-query or batch these in one DB round trip.
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -1016,8 +1025,30 @@ def _get_events_context(experiment: Experiment, team_slug: str):
         )
         .all()
     )
+    scheduled_events = (
+        ScheduledTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "trigger_date",
+            "trigger_time",
+            "timezone",
+            "action__action_type",
+            "action__params",
+            "failure_count",
+            "is_active",
+        )
+        .all()
+    )
     for event in static_events:
         combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    for event in scheduled_events:
+        combined_events.append({**event, "type": "__scheduled__", "team_slug": team_slug})
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
