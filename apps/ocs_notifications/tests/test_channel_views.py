@@ -132,10 +132,28 @@ class TestNotificationChannelViews:
 
         assert response.status_code == 200
         assert any(
-            "already has a notification channel" in error
+            "already has a notification channel at this level" in error
             for error in response.context["form"].errors["messaging_provider"]
         )
         assert NotificationChannel.objects.filter(team=team).count() == 1
+
+    def test_create_allows_same_provider_at_different_levels(self, admin_client):
+        client, team = admin_client
+        provider = SlackMessagingProviderFactory.create(team=team)
+        NotificationChannelFactory.create(team=team, messaging_provider=provider, level=1)
+
+        response = client.post(
+            reverse("ocs_notifications_channels:new", args=[team.slug]),
+            {
+                "messaging_provider": provider.pk,
+                "channel_name": "#critical",
+                "level": "2",
+                "enabled": "on",
+            },
+        )
+
+        assert response.status_code == 302
+        assert NotificationChannel.objects.filter(team=team, messaging_provider=provider).count() == 2
 
     def test_create_allows_edit_keeping_same_provider(self, admin_client):
         client, team = admin_client

@@ -135,8 +135,8 @@ class NotificationChannel(BaseTeamModel):
         ordering = ("channel_name",)
         constraints = [
             models.UniqueConstraint(
-                fields=["team", "messaging_provider"],
-                name="unique_notification_channel_per_team_and_provider",
+                fields=["team", "messaging_provider", "level"],
+                name="unique_notification_channel_per_team_provider_and_level",
             ),
         ]
 

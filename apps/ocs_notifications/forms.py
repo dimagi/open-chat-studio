@@ -48,13 +48,18 @@ class NotificationChannelForm(forms.ModelForm):
         if self.instance and not self.instance.team_id:
             self.instance.team_id = request.team.id
 
-    def clean_messaging_provider(self):
-        provider = self.cleaned_data.get("messaging_provider")
-        if provider is None:
-            return provider
-        existing = NotificationChannel.objects.filter(team=self.request.team, messaging_provider=provider)
+    def clean(self):
+        cleaned_data = super().clean()
+        provider = cleaned_data.get("messaging_provider")
+        level = cleaned_data.get("level")
+        if provider is None or level is None:
+            return cleaned_data
+        existing = NotificationChannel.objects.filter(team=self.request.team, messaging_provider=provider, level=level)
         if self.instance and self.instance.pk:
             existing = existing.exclude(pk=self.instance.pk)
         if existing.exists():
-            raise forms.ValidationError("This Slack workspace already has a notification channel configured.")
-        return provider
+            self.add_error(
+                "messaging_provider",
+                "This Slack workspace already has a notification channel at this level.",
+            )
+        return cleaned_data
