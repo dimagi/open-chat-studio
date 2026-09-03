@@ -1,24 +1,11 @@
 from unittest import mock
 
-import pytest
 from django.test import override_settings
 
-from apps.help.tracing import get_help_agent_tracer, normalize_sample_rate
+from apps.help.tracing import get_help_agent_tracer
 
-
-class TestNormalizeSampleRate:
-    def test_zero_rate_means_trace_nothing(self):
-        """langfuse==4.14.1's Langfuse.__init__ treats sample_rate=0.0 as falsy and
-        silently substitutes the LANGFUSE_SAMPLE_RATE env var or 1.0, so "trace nothing"
-        has to be enforced here rather than trusted to the SDK."""
-        assert normalize_sample_rate(0.0) is None
-
-    def test_blank_rate_defaults_to_one(self):
-        assert normalize_sample_rate(None) == 1.0
-
-    @pytest.mark.parametrize("rate", [0.5, 1.0], ids=["partial", "full"])
-    def test_explicit_nonzero_rate_passes_through_unchanged(self, rate):
-        assert normalize_sample_rate(rate) == rate
+# normalize_sample_rate() itself now lives in apps.service_providers.tracing.langfuse,
+# shared with TraceProvider.get_service(); see test_sample_rate_normalization.py there.
 
 
 class TestGetHelpAgentTracer:

@@ -921,23 +921,19 @@ class TraceProvider(BaseTeamModel):
         """Build this provider's tracer.
 
         ``sample_rate``, when given, overrides the provider's own configured sample rate (a
-        chatbot's per-experiment setting takes precedence over the team-wide default). An
-        effective rate of exactly ``0.0`` returns ``None`` instead of a tracer: Langfuse's SDK
-        constructor treats ``sample_rate=0.0`` as falsy and silently substitutes its 1.0
-        default, so "trace nothing" has to be enforced here rather than trusted to the SDK.
-
-        A blank rate is normalized to ``1.0`` for the same reason: passing ``None`` through
-        lets the SDK fall back to the ``LANGFUSE_SAMPLE_RATE`` environment variable if one
-        happens to be set, which would silently override "leave blank to send every trace".
+        chatbot's per-experiment setting takes precedence over the team-wide default). See
+        ``tracing.langfuse.normalize_sample_rate`` for what an effective rate of ``0.0`` or
+        blank does; an effective rate of ``0.0`` returns ``None`` instead of a tracer.
         """
+        from .tracing.langfuse import normalize_sample_rate  # noqa: PLC0415 - lazy: avoids loading langfuse at startup
+
         config = self.config
         if sample_rate is not None:
             config = {**config, "sample_rate": sample_rate}
-        effective_rate = config.get("sample_rate")
-        if effective_rate == 0.0:
-            return None
+        effective_rate = normalize_sample_rate(config.get("sample_rate"))
         if effective_rate is None:
-            config = {**config, "sample_rate": 1.0}
+            return None
+        config = {**config, "sample_rate": effective_rate}
         return self.type_enum.get_service(config)
 
 
