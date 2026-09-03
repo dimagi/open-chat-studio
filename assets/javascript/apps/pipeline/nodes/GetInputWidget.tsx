@@ -63,7 +63,7 @@ type VisibleWhenWrapperProps = {
  * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
  * their values at a nested path rather than directly in node.data.params.
  */
-const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
+export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
   nodeParams,
   fieldName,
@@ -78,8 +78,20 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   // Use undefined as the initial value so we can detect the first render and
   // clear stale values for fields that are hidden on initial load.
   const prevVisibleRef = useRef<boolean | undefined>(undefined);
+  // Identifies which field this wrapper instance currently represents. The widget list
+  // reuses wrapper instances by position (see getWidgetsGeneric), so nodeId/fieldName can
+  // change without a remount — when that happens, prevVisibleRef still holds the outgoing
+  // field's state and must be reset, or the incoming field's own hidden-on-mount clear
+  // (or hidden-to-visible populate) silently never runs.
+  const fieldIdentity = `${nodeId}:${fieldName}`;
+  const prevFieldIdentityRef = useRef(fieldIdentity);
 
   useEffect(() => {
+    if (prevFieldIdentityRef.current !== fieldIdentity) {
+      prevFieldIdentityRef.current = fieldIdentity;
+      prevVisibleRef.current = undefined;
+    }
+
     // Clear the field value when:
     // 1. The field is initially hidden on mount (prevVisibleRef.current === undefined)
     // 2. The field transitions from visible to hidden (prevVisibleRef.current === true)
@@ -102,7 +114,7 @@ const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
       }
     }
     prevVisibleRef.current = isVisible;
-  }, [isVisible]);
+  }, [isVisible, fieldIdentity, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
 
   if (!isVisible) return <></>;
   return <>{children}</>;
@@ -143,26 +155,37 @@ const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "SendEmail": ["recipient_list", "subject", "body"],
 };
 
+type WidgetContext = {
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
+  readOnly: boolean;
+}
+
 /**
- * Retrieves the full list of widgets for the given schema
+ * Retrieves the full list of widgets for the given schema.
+ *
+ * getNodeFieldError/readOnly are passed in rather than read via usePipelineStore here,
+ * because this is a plain helper called from inside a schemaProperties.map() (see
+ * getWidgetsGeneric) — calling a hook from a non-component function invoked in a loop
+ * breaks React's Rules of Hooks. The caller (a real component) reads the store once.
  */
 export const getWidgets = (
-  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
+  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams,
+  {getNodeFieldError, readOnly}: WidgetContext
 ) => {
-  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
-  const readOnly = usePipelineStore((state) => state.readOnly);
-
   const wrappedInputWidget = (params: InputWidgetParams) => getInputWidget(params, getNodeFieldError, readOnly);
   return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: wrappedInputWidget});
 }
 
 /**
- * Retrieves the list of widgets for the given schema which should be displayed on a node
+ * Retrieves the list of widgets for the given schema which should be displayed on a node.
+ * See getWidgets for why getNodeFieldError/readOnly are passed in rather than read here.
  */
 export const getWidgetsForNode = (
-  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams
+  {schema, nodeId, nodeData, updateParamValue}: GetWidgetsParams,
+  {getNodeFieldError, readOnly}: WidgetContext
 ) => {
-  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator: getNodeInputWidget});
+  const widgetGenerator = (param: InputWidgetParams) => getNodeInputWidget(param, getNodeFieldError, readOnly);
+  return getWidgetsGeneric({schema, nodeId, nodeData, updateParamValue, widgetGenerator});
 }
 
 const getWidgetsGeneric = (
@@ -212,7 +235,11 @@ const getWidgetsGeneric = (
  *
  * @returns The input widget for the specified node type and parameter.
  */
-export const getNodeInputWidget = (param: InputWidgetParams) => {
+export const getNodeInputWidget = (
+  param: InputWidgetParams,
+  getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined,
+  readOnly: boolean,
+) => {
   if (!param.nodeType) {
     return <></>;
   }
@@ -222,9 +249,6 @@ export const getNodeInputWidget = (param: InputWidgetParams) => {
     /* name param is always in the advanced box */
     return <></>;
   }
-
-  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
-  const readOnly = usePipelineStore((state) => state.readOnly);
 
   return getInputWidget(param, getNodeFieldError, readOnly);
 }

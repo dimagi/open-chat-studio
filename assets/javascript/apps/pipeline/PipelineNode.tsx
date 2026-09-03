@@ -31,6 +31,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const hasErrors = usePipelineStore((state) => state.nodeHasErrors(id));
   const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
@@ -106,7 +108,10 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         <NodeInput />
         <div className="px-4">
           <div>
-            {getWidgetsForNode({schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue})}
+            {getWidgetsForNode(
+              {schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue},
+              {getNodeFieldError, readOnly}
+            )}
           </div>
           <div className="mt-2">
             <button className="btn btn-sm btn-ghost w-full"
@@ -158,11 +163,11 @@ function NodeHeader({
           </div>
           <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
             <li className="menu-title">Select color</li>
-            {NODE_COLORS.map((color, index) => {
+            {NODE_COLORS.map((color) => {
               const isCurrentColor = color.value === currentColor;
 
               return (
-                <li key={index} onClick={(e) => handleColorSelect(e as unknown as MouseEvent, color.value)}>
+                <li key={color.value} onClick={(e) => handleColorSelect(e as unknown as MouseEvent, color.value)}>
                   <a className={`flex justify-between ${isCurrentColor ? 'bg-base-200' : ''}`}>
                     <span>{color.label}</span>
                     <span className={`w-6 h-6 rounded-full ${color.value} border`}></span>
