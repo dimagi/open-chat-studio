@@ -45,6 +45,7 @@ export const getCachedData: () => typeof localCache = () => {
     localCache.flagsEnabled = JSON.parse(document.getElementById("flags-enabled")?.textContent || "[]");
     localCache.modelParams = JSON.parse(document.getElementById("llm-model-params")?.textContent || "{}");
     localCache.modelParamSchemas = JSON.parse(document.getElementById("llm-model-parameter-schemas")?.textContent || "{}");
+    localCache.loaded = true;
   }
   return localCache;
 };
