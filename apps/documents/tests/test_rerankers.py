@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -9,15 +8,7 @@ from apps.documents.rerankers import (
     RerankedDocument,
     VoyageReranker,
 )
-
-
-def _voyage_response(*pairs: tuple[int, float]):
-    """A stand-in for `voyageai.object.reranking.RerankingObject`.
-
-    Only `results[].index` and `results[].relevance_score` are read, so the double stays at
-    that shape rather than reproducing the SDK's class.
-    """
-    return SimpleNamespace(results=[SimpleNamespace(index=index, relevance_score=score) for index, score in pairs])
+from apps.documents.tests.retrieval_helpers import voyage_response
 
 
 class TestVoyageReranker:
@@ -28,7 +19,7 @@ class TestVoyageReranker:
     def test_maps_the_response_in_the_order_the_provider_returned_it(self):
         reranker = VoyageReranker(api_key="key", model="rerank-2")
         with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.return_value = _voyage_response((2, 0.9), (0, 0.4))
+            client_cls.return_value.rerank.return_value = voyage_response((2, 0.9), (0, 0.4))
             ranked = reranker.rerank("q", ["a", "b", "c"], limit=2)
 
         # Not sorted locally: the provider's order is the ranking, and re-sorting here would
@@ -38,7 +29,7 @@ class TestVoyageReranker:
     def test_sends_the_configured_credentials_and_model(self):
         reranker = VoyageReranker(api_key="test-api-key", model="rerank-2-lite")
         with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.return_value = _voyage_response((0, 1.0))
+            client_cls.return_value.rerank.return_value = voyage_response((0, 1.0))
             reranker.rerank("what is the capital of France", ["Paris is the capital."], limit=5)
 
         assert client_cls.call_args.kwargs == {
@@ -58,7 +49,7 @@ class TestVoyageReranker:
         some providers reject it, so the request is clamped."""
         reranker = VoyageReranker(api_key="key", model="rerank-2")
         with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.return_value = _voyage_response((0, 1.0))
+            client_cls.return_value.rerank.return_value = voyage_response((0, 1.0))
             reranker.rerank("q", ["only one"], limit=50)
 
         assert client_cls.return_value.rerank.call_args.kwargs["top_k"] == 1
@@ -95,7 +86,7 @@ class TestVoyageReranker:
         generator-backed sequence must not change the request."""
         reranker = VoyageReranker(api_key="key", model="rerank-2")
         with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.return_value = _voyage_response((0, 1.0))
+            client_cls.return_value.rerank.return_value = voyage_response((0, 1.0))
             reranker.rerank("q", ("a", "b"), limit=1)
 
         assert client_cls.return_value.rerank.call_args.kwargs["documents"] == ["a", "b"]

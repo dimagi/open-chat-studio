@@ -40,6 +40,7 @@ from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
+from apps.service_providers.models import LlmProviderTypes
 from apps.teams.utils import set_current_team
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
@@ -47,6 +48,7 @@ from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessio
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.mcp_integrations import MCPServerFactory
 from apps.utils.factories.pipelines import NodeFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.time import pretty_date
 
 RERANK_FLAG = "flag_reranking"
@@ -944,6 +946,17 @@ class TestRerankConversationContext:
     collecting them is gated on the stage actually being active.
     """
 
+    def _rerankable_collection(self, team):
+        """A collection the rerank stage would actually run for: `reranking_enabled` requires a
+        provider and a model, not just the switch and the flag."""
+        return CollectionFactory.create(
+            team=team,
+            enable_reranking=True,
+            reranker_provider=LlmProviderFactory.create(
+                team=team, type=str(LlmProviderTypes.voyage), config={"voyage_api_key": "test-voyage-key"}
+            ),
+        )
+
     def _session_with_turns(self, team, *turns):
         session = ExperimentSessionFactory.create(team=team)
         for index, (message_type, content) in enumerate(turns):
@@ -965,15 +978,28 @@ class TestRerankConversationContext:
 
         assert not [query for query in queries.captured_queries if "chatmessage" in query["sql"].lower()]
 
+    def test_reads_nothing_when_reranking_is_enabled_but_unconfigured(self, team):
+        """`reranking_enabled` covers the configuration, not just the flag, so a collection with
+        the switch on and no provider set costs no query either: the stage would not run.
+        """
+        collection = CollectionFactory.create(team=team, enable_reranking=True, reranker_provider=None)
+        session = self._session_with_turns(team, (ChatMessageType.HUMAN, "hello"))
+
+        with override_flag(RERANK_FLAG, active=True):
+            with CaptureQueriesContext(connection) as queries:
+                assert _recent_conversation_context(collection, session) is None
+
+        assert not [query for query in queries.captured_queries if "chatmessage" in query["sql"].lower()]
+
     def test_reads_nothing_without_a_session(self, team):
         """The collection query preview and the by-id tool can both run outside a session."""
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
 
         with override_flag(RERANK_FLAG, active=True):
             assert _recent_conversation_context(collection, None) is None
 
     def test_returns_the_recent_turns_oldest_first(self, team):
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
         session = self._session_with_turns(
             team,
             (ChatMessageType.HUMAN, "tell me about the permit"),
@@ -992,7 +1018,7 @@ class TestRerankConversationContext:
         """The context is clipped again downstream, but sending the whole history to be clipped
         would mean loading it first."""
         overflow = 4
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
         session = self._session_with_turns(
             team,
             *[(ChatMessageType.HUMAN, f"turn {index}") for index in range(RERANK_CONTEXT_MESSAGE_COUNT + overflow)],
@@ -1011,7 +1037,7 @@ class TestRerankConversationContext:
     def test_excludes_system_messages(self, team):
         """System messages are prompts and conversation summaries, not turns, and would crowd out
         the exchange the context exists to carry."""
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
         session = self._session_with_turns(
             team,
             (ChatMessageType.SYSTEM, "you are a helpful assistant"),
@@ -1024,7 +1050,7 @@ class TestRerankConversationContext:
         assert context == "user: the building one"
 
     def test_an_empty_chat_yields_no_context(self, team):
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
         session = ExperimentSessionFactory.create(team=team)
 
         with override_flag(RERANK_FLAG, active=True):
@@ -1032,7 +1058,7 @@ class TestRerankConversationContext:
 
     def test_the_tool_passes_the_context_to_retrieval(self, team, local_index_manager_mock):
         """The wiring, end to end: the tool's session reaches `search_collection`."""
-        collection = CollectionFactory.create(team=team, enable_reranking=True)
+        collection = self._rerankable_collection(team)
         session = self._session_with_turns(team, (ChatMessageType.HUMAN, "tell me about the permit"))
         search_config = SearchToolConfig(index_id=collection.id, max_results=2)
 

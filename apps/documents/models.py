@@ -582,46 +582,55 @@ class Collection(BaseTeamModel, VersionsMixin):
 
     @property
     def reranking_enabled(self) -> bool:
-        """Whether retrieval should rescore its candidates against the query for this collection.
+        """Whether the rerank stage will run for this collection.
 
         Independent of hybrid search: a reranker reorders whatever candidates retrieval produced,
         dense-only or fused, so the two flags can be rolled out in either order. Remote indexes
         are excluded for the same reason they are excluded from hybrid search -- their chunks live
         at the provider and never reach a ranking stage OCS controls.
 
-        The flag is checked last, after the two in-memory fields, so the default configuration
-        costs retrieval nothing at all rather than a flag lookup per search.
+        An incomplete configuration reads as off rather than as an error: the stage cannot run
+        without a provider and a model, and there is nothing for a search to do about it. The
+        failures an operator cannot predict -- a provider with no rerank endpoint, invalid
+        credentials, an API error -- are the ones that log, in `get_reranker` and in
+        `apps.documents.retrieval`.
+
+        Every check that can be answered from the instance comes before the flag lookup, and
+        `reranker_provider_id` is used rather than `reranker_provider` so none of them can reach
+        the database. Callers rely on this: the chat search tools ask this question before
+        collecting conversation context, precisely to avoid a query when the stage will not run.
         """
         if self.is_remote_index:
             return False
         if not self.enable_reranking:
+            return False
+        if not self.reranker_provider_id or not self.rerank_model:
             return False
         return flag_is_active_for_team(self.team, Flags.RERANKING.slug)
 
     def get_reranker(self) -> Reranker | None:
         """Build a reranker for this collection's retrieval, or None to skip the stage.
 
-        Every misconfiguration returns None rather than raising. Reranking is an optional quality
-        stage on top of a ranking that is already usable, so failing the search because its
-        reranker is misconfigured would be a strictly worse outcome than returning the ranking
-        retrieval already had. Mirrors `_build_contextualizer`.
+        Every failure returns None rather than raising. Reranking is an optional quality stage on
+        top of a ranking that is already usable, so failing the search because its reranker could
+        not be built would be a strictly worse outcome than returning the ranking retrieval
+        already had. Mirrors `_build_contextualizer`.
         """
         if not self.reranking_enabled:
             return None
-        if not self.reranker_provider or not self.rerank_model:
-            logger.warning(
-                "Reranking is enabled but no reranker provider and model are configured; skipping reranking.",
-                extra={"collection_id": self.id},
-            )
-            return None
         try:
             return self.reranker_provider.get_llm_service().get_reranker(self.rerank_model)
-        except (ServiceProviderConfigError, NotImplementedError):
+        except NotImplementedError:
             logger.warning(
-                "The configured reranker provider does not support reranking; skipping reranking.",
+                "The configured reranker provider has no rerank endpoint; skipping reranking.",
                 extra={"collection_id": self.id, "provider_type": self.reranker_provider.type},
             )
-            return None
+        except ServiceProviderConfigError:
+            logger.warning(
+                "The configured reranker provider's credentials are not usable; skipping reranking.",
+                extra={"collection_id": self.id, "provider_type": self.reranker_provider.type},
+            )
+        return None
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
