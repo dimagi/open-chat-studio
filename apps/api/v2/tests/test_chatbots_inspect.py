@@ -846,7 +846,7 @@ def _expected_full_response(bot):
             "nodes": _expected_pipeline_nodes(bot),
         },
         # The pipeline has no Start/End nodes, so it is reported invalid (a graph-level error), and
-        # the unwired side of the llm node lands in the advisory map. Neither blocked the read.
+        # the unwired sides of its two nodes land in the advisory map. Neither blocked the read.
         "pipeline_valid": False,
         "pipeline_errors": {
             "node": {},
