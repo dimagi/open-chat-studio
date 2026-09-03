@@ -522,21 +522,21 @@ def _create_scheduled_message_with_last_triggered_at(last_triggered_at):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "as_timezone",
+    ("as_timezone", "expected_offset"),
     [
-        pytest.param("Australia/Sydney", id="valid-zone"),
-        pytest.param("America/Coyhaique", id="zone-missing-from-older-tz-database"),
+        pytest.param("Australia/Sydney", timedelta(hours=10), id="valid-zone"),
+        pytest.param("America/Coyhaique", timedelta(hours=-4), id="zone-missing-from-older-tz-database"),
     ],
 )
-def test_as_dict_converts_datetimes_into_requested_timezone(as_timezone):
-    last_triggered_at = timezone.now() - relativedelta(days=1)
-    message = _create_scheduled_message_with_last_triggered_at(last_triggered_at)
+def test_as_dict_converts_datetimes_into_requested_timezone(as_timezone, expected_offset):
+    with travel("2024-06-15", tick=False):
+        last_triggered_at = timezone.now() - relativedelta(days=1)
+        message = _create_scheduled_message_with_last_triggered_at(last_triggered_at)
 
-    result = message.as_dict(as_timezone=as_timezone)
+        result = message.as_dict(as_timezone=as_timezone)
 
-    expected_zone = ZoneInfo(as_timezone)
-    assert result["next_trigger_date"].utcoffset() == message.next_trigger_date.astimezone(expected_zone).utcoffset()
-    assert result["last_triggered_at"].utcoffset() == last_triggered_at.astimezone(expected_zone).utcoffset()
+        assert result["next_trigger_date"].utcoffset() == expected_offset
+        assert result["last_triggered_at"].utcoffset() == expected_offset
 
 
 @pytest.mark.django_db()
@@ -556,7 +556,11 @@ def test_as_dict_leaves_datetimes_unconverted_for_unusable_timezone(as_timezone)
     result = message.as_dict(as_timezone=as_timezone)
 
     assert result["next_trigger_date"] == message.next_trigger_date
+    assert result["next_trigger_date"].tzinfo == message.next_trigger_date.tzinfo
+    assert result["next_trigger_date"].utcoffset() == message.next_trigger_date.utcoffset()
     assert result["last_triggered_at"] == last_triggered_at
+    assert result["last_triggered_at"].tzinfo == last_triggered_at.tzinfo
+    assert result["last_triggered_at"].utcoffset() == last_triggered_at.utcoffset()
 
 
 @pytest.mark.django_db()
@@ -567,7 +571,11 @@ def test_as_dict_without_timezone_leaves_datetimes_unconverted():
     result = message.as_dict()
 
     assert result["next_trigger_date"] == message.next_trigger_date
+    assert result["next_trigger_date"].tzinfo == message.next_trigger_date.tzinfo
+    assert result["next_trigger_date"].utcoffset() == message.next_trigger_date.utcoffset()
     assert result["last_triggered_at"] == last_triggered_at
+    assert result["last_triggered_at"].tzinfo == last_triggered_at.tzinfo
+    assert result["last_triggered_at"].utcoffset() == last_triggered_at.utcoffset()
 
 
 @pytest.mark.django_db()

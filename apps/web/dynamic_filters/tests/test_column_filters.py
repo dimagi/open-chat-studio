@@ -6,7 +6,9 @@ from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
-created_on_filter = TimestampFilter(label="Created On", column="created_at", query_param="created_on")
+
+def _timestamp_filter() -> TimestampFilter:
+    return TimestampFilter(label="Created On", column="created_at", query_param="created_on")
 
 
 def _sessions_with_created_at(*offsets: timedelta) -> tuple[ExperimentSession, ...]:
@@ -22,11 +24,11 @@ def _queryset_for(*sessions: ExperimentSession):
 
 
 @pytest.mark.django_db()
-def test_apply_range_filters_using_a_named_zone():
+def test_apply_range_accepts_a_named_timezone():
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_range(queryset, "1h", timezone="America/New_York")
+    filtered = _timestamp_filter().apply_range(queryset, "1h", timezone="America/New_York")
 
     assert list(filtered) == [recent]
 
@@ -36,17 +38,17 @@ def test_apply_range_accepts_a_recently_added_iana_zone():
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_range(queryset, "1h", timezone="America/Coyhaique")
+    filtered = _timestamp_filter().apply_range(queryset, "1h", timezone="America/Coyhaique")
 
     assert list(filtered) == [recent]
 
 
 @pytest.mark.django_db()
-def test_apply_range_falls_back_to_utc_when_timezone_is_none():
+def test_apply_range_accepts_a_missing_timezone():
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_range(queryset, "1h", timezone=None)
+    filtered = _timestamp_filter().apply_range(queryset, "1h", timezone=None)
 
     assert list(filtered) == [recent]
 
@@ -65,7 +67,7 @@ def test_apply_range_returns_queryset_unfiltered_for_invalid_timezone(bad_timezo
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_range(queryset, "1h", timezone=bad_timezone)
+    filtered = _timestamp_filter().apply_range(queryset, "1h", timezone=bad_timezone)
 
     assert set(filtered) == {recent, old}
 
@@ -82,7 +84,7 @@ def test_apply_range_returns_queryset_unfiltered_for_malformed_value(bad_value):
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_range(queryset, bad_value, timezone="UTC")
+    filtered = _timestamp_filter().apply_range(queryset, bad_value, timezone="UTC")
 
     assert set(filtered) == {recent, old}
 
@@ -93,7 +95,7 @@ def test_apply_after_filters_on_valid_iso_timestamp():
     queryset = _queryset_for(recent, old)
     threshold = (datetime.now(UTC) - timedelta(days=1)).isoformat()
 
-    filtered = created_on_filter.apply_after(queryset, threshold)
+    filtered = _timestamp_filter().apply_after(queryset, threshold)
 
     assert list(filtered) == [recent]
 
@@ -103,6 +105,6 @@ def test_apply_after_returns_queryset_unfiltered_for_non_iso_value():
     recent, old = _sessions_with_created_at(timedelta(minutes=-5), timedelta(days=-10))
     queryset = _queryset_for(recent, old)
 
-    filtered = created_on_filter.apply_after(queryset, "not-a-date")
+    filtered = _timestamp_filter().apply_after(queryset, "not-a-date")
 
     assert set(filtered) == {recent, old}
