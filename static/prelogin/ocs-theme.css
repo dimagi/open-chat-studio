@@ -518,15 +518,10 @@ footer h2 { color: #fff !important; }
 footer a { color: rgba(255,255,255,0.75) !important; }
 footer a:hover { color: var(--ocs-green) !important; }
 footer p { color: rgba(255,255,255,0.70) !important; }
-footer .footer-brand .logo img,
 footer .logo img {
   filter: brightness(0) invert(1) !important;
   opacity: 0.95 !important;
 }
-footer .footer-bottom { border-top-color: rgba(255,255,255,0.15) !important; }
-footer .footer-bottom span,
-footer .footer-bottom a { color: rgba(255,255,255,0.55) !important; }
-footer .footer-bottom a:hover { color: var(--ocs-green) !important; }
 
 /* Mobile: nav-links background matches static nav */
 @media (max-width: 860px) {

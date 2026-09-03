@@ -2385,41 +2385,50 @@ h3.feature-title {
 .page--resources .hero.hero-dark .btn-ghost-on-dark:hover { border-color: var(--ink); }
 
 /* ---- FOOTER ---- */
+/* One compact line: logo, copyright, pipe-separated links. Replaced the tall
+   four-column marketing footer this frame was cut down from; the .footer-grid /
+   .footer-brand / .footer-col / .footer-bottom rules went with the markup that
+   used them. */
 footer {
   background: #009090;
   color: rgba(255,255,255,0.72);
-  padding: 96px 0 36px;
-  font-size: 14px;
+  padding: 22px 0;
+  font-size: 13px;
   border-top: none;
 }
-.footer-brand p { color: rgba(255,255,255,0.62); }
-.footer-col a { color: rgba(255,255,255,0.72); }
-.footer-bottom { color: rgba(255,255,255,0.55); }
-.footer-grid {
-  /* Columns track templates/prelogin/base.html: brand, then the flat link list.
-     `auto` on the second and `1.4fr` on the first puts the links against the right
-     edge instead of leaving dead grid tracks trailing off to the right, which is
-     what the repeat(4, ...) inherited from the marketing footer used to do. */
-  display: grid; grid-template-columns: 1.4fr auto; gap: 48px;
-  margin-bottom: 80px;
+.footer-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
 }
-.footer-brand { max-width: 320px; }
-.footer-brand .logo { color: var(--paper); margin-bottom: 20px; }
-.footer-brand .logo-img { height: 44px; }
-.footer-brand p { color: rgba(255,255,255,0.52); }
-.footer-col h2 {
-  color: var(--paper);
-  font-family: var(--mono);
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.16em;
-  margin: 0 0 22px;
+.footer-line-logo { height: 22px; width: auto; display: block; }
+.footer-line-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.footer-col ul { list-style: none; padding: 0; margin: 0; }
-.footer-col li { margin-bottom: 6px; }
-.footer-col a { color: rgba(255,255,255,0.65); transition: color 120ms; }
-.footer-col a:hover { color: var(--paper); }
-/* External-link marker: any footer link that opens a new tab gets a ↗ */
-.footer-col a[target="_blank"]::after { content: " \2197"; font-size: 0.82em; opacity: 0.6; }
+.footer-line-links li { display: flex; align-items: center; }
+/* Separators live here, not in the markup, so a suppressed Sign In or an unset
+   legal URL never leaves a dangling pipe. */
+.footer-line-links li + li::before {
+  content: "|";
+  margin: 0 11px;
+  color: rgba(255,255,255,0.30);
+}
+.footer-line-links a { color: rgba(255,255,255,0.80); text-decoration: none; transition: color 120ms; }
+.footer-line-links a:hover { color: var(--paper); text-decoration: underline; }
+/* Once the line wraps, a `li + li` separator lands at the START of the new line as
+   a dangling pipe — CSS can't ask whether an item begins a line. So below the width
+   where wrapping begins, drop the pipes and separate on gap instead. */
+@media (max-width: 860px) {
+  .footer-line-links { gap: 4px 16px; }
+  .footer-line-links li + li::before { content: none; margin: 0; }
+}
+
 .footer-badges {
   display: flex;
   flex-direction: row;
@@ -2443,14 +2452,6 @@ footer {
   font-size: 9.5px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.14em;
   margin: 20px 0 12px;
-}
-.footer-bottom {
-  border-top: 1px solid rgba(255,255,255,0.08);
-  padding-top: 28px;
-  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-  font-family: var(--mono);
-  font-size: 12px; letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.42);
 }
 
 /* ---- SOLUTIONS DYNAMIC STAGE ---- */
@@ -3429,7 +3430,6 @@ footer {
   .provider-points { grid-template-columns: 1fr; gap: 24px; }
   .feature-row { grid-template-columns: 1fr; gap: 40px; padding: 56px 0; }
   .feature-row.reverse > .feature-visual { order: 0; }
-  .footer-grid { grid-template-columns: 1fr 1fr; }
   .nav-hamburger { display: flex; }
   .nav-wrap { position: sticky; }
   .nav-links {
@@ -3507,7 +3507,6 @@ footer {
   .stats-grid { grid-template-columns: 1fr; }
   .picker-programs { grid-template-columns: 1fr; }
   .picker-result { padding: 28px 22px; }
-  .footer-grid { grid-template-columns: 1fr; gap: 32px; }
   .picker-teaser { padding: 28px 22px; }
   .pricing-grid { grid-template-columns: 1fr; }
   .support-grid { grid-template-columns: 1fr; }
