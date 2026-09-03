@@ -2418,6 +2418,7 @@ components:
           items:
             type: string
             maxLength: 600
+          nullable: true
           description: Provider message IDs this message was built from, namespaced
             by platform.
         chat:
