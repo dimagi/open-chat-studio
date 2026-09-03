@@ -1,11 +1,41 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n static %}
+{% load form_tags humanize i18n static %}
+{% block page_head %}
+  {{ block.super }}
+  <style>
+    /* The header row above the editor already has a Format button; the JS-injected
+       floating one inside the editor would duplicate it. */
+    #participant-data-tab .json-editor > button {
+      display: none;
+    }
+    #participant-data-tab .json-editor .cm-editor,
+    #participant-data-tab .json-editor .cm-gutters {
+      background-color: oklch(92% 0 0);
+    }
+    #participant-data-tab .json-editor .cm-gutters {
+      display: none;
+    }
+    #participant-data-tab .json-editor .cm-activeLine,
+    #participant-data-tab .json-editor .cm-activeLineGutter {
+      background-color: transparent;
+    }
+  </style>
+{% endblock page_head %}
 
 {% block page_js %}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
+  <script src="{% static 'js/trends-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
         SiteJS.editors.initJsonEditors();
+        const canvas = document.getElementById('participant-message-trend');
+        if (canvas && window.SiteJS && window.SiteJS.trends) {
+          SiteJS.trends.renderChart(
+            canvas.getContext('2d'),
+            { successes: JSON.parse(canvas.dataset.trend), errors: [] },
+            { successColor: '#6366f1' }
+          );
+        }
     });
   </script>
 {% endblock page_js %}
@@ -13,66 +43,185 @@
 {% block breadcrumbs %}
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
     <ul>
-      <li><a href="{% url 'participants:participant_home' request.team.slug %}">Participants</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{{ participant }}</li>
+      <li><a href="{% url 'participants:participant_home' request.team.slug %}">{% translate "Participants" %}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{{ participant.name|default:participant.identifier }}</li>
     </ul>
   </div>
 {% endblock breadcrumbs %}
 
 {% block app %}
-  <div class="app-card">
-    <div class="grid grid-cols-6">
-      <div class="col-span-5">
-        <div class="flex">
-          <h1 class="pg-title">Participant details</h1>
+  <div class="app-card rounded-2xl border border-base-300 bg-base-100">
+    <div class="flex flex-wrap items-start justify-between gap-5">
+      <div class="flex items-start gap-5 flex-wrap">
+        <div class="avatar avatar-placeholder">
+          <div class="bg-primary/10 text-primary rounded-xl w-13">
+            <span class="text-lg font-bold">{{ participant.initials }}</span>
+          </div>
+        </div>
+        <div class="flex-1 min-w-70 flex flex-col gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="pg-title text-lg shrink-0" id="participant-name">
+              {% include "participants/partials/participant_name.html" %}
+            </h1>
+            <span class="badge badge-sm whitespace-nowrap
+                         {% if latest_session.status == 'active' %}badge-success{% else %}badge-ghost{% endif %}">
+              {% if latest_session.status == 'active' %}
+                {% translate "Active" %}
+              {% else %}
+                {% translate "Inactive" %}
+              {% endif %}
+            </span>
+            <button class="btn btn-xs btn-ghost"
+                    hx-get="{% url "participants:edit_name" request.team.slug participant.id %}"
+                    hx-swap="innerHTML"
+                    hx-target="#participant-name">
+              <i class="fa-solid fa-pencil"></i>
+            </button>
+          </div>
+          <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap text-xs text-base-content/70">
+            <span><i class="fa-regular fa-window-maximize text-base-content/50 mr-1"></i>{{ participant.get_platform_display }}</span>
+            <span class="text-base-content/30">|</span>
+            <span>{{ participant.identifier }}</span>
+            <span class="text-base-content/30">|</span>
+            <span>{{ experiments|length }} {% translate "chatbots" %}</span>
+          </div>
+        </div>
+        <div class="stats stats-horizontal">
+          <div class="stat py-2 px-0 pr-8 border-e-0">
+            <div class="stat-value text-lg">{{ total_session_count }}</div>
+            <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">{% translate "Sessions" %}</div>
+          </div>
+          <div class="stat py-2 px-0 pr-8 border-e-0">
+            {% with last_seen=participant.last_seen %}
+              <div class="stat-value text-lg">{{ last_seen|naturaltime|default:"-" }}</div>
+              <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">
+                {% translate "Last seen" %}{% if last_seen %} · {{ last_seen|date:"M j, Y" }}{% endif %}
+              </div>
+            {% endwith %}
+          </div>
+          <div class="stat py-2 px-0 border-e-0">
+            <div class="stat-value">
+              <div class="w-36 h-10">
+                <canvas id="participant-message-trend" data-trend="{{ message_trend }}"></canvas>
+              </div>
+            </div>
+            <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">
+              {% translate "Messages" %} · {% translate "last 30 days" %}
+            </div>
+          </div>
         </div>
       </div>
       {% if trigger_bot_form and perms.experiments.change_participant %}
-        <div class="col-span-1 flex justify-end items-start">
-          <button class="btn btn-sm btn-primary" onclick="trigger_message_dialog.showModal()">Trigger Bot Message</button>
-        </div>
+        <button class="btn btn-sm btn-primary"
+                onclick="trigger_message_dialog.showModal()">{% translate "Trigger Bot Message" %}</button>
       {% endif %}
     </div>
-
-    <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "participants/partials/participant_summary.html" %}
-    </div>
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Chatbots</h3>
-    <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "participants/partials/participant_experiments.html" %}
+    <div class="mt-4 border-t pt-3" x-data="{showDetails: false}">
+      <button class="btn btn-ghost btn-sm pl-0" @click="showDetails = !showDetails">
+        <i class="fa-solid fa-chevron-down transition-transform"
+           :class="showDetails ? 'rotate-180' : ''"></i>
+        <span x-show="!showDetails" class="text-xs">{% translate "Identity details" %}</span>
+        <span x-show="showDetails" x-cloak class="text-xs">{% translate "Hide identity details" %}</span>
+      </button>
+      <div x-show="showDetails"
+           x-cloak
+           class="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-2">
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Platform" %}</dt>
+          <dd class="text-xs mt-1">
+            {{ participant.get_platform_display }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Identifier" %}</dt>
+          <dd class="text-xs mt-1">
+            {{ participant.identifier }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Public ID" %}</dt>
+          <dd class="text-xs mt-1 flex items-center gap-1">
+            <code class="truncate max-w-32 inline-block"
+                  title="{{ participant.public_id }}">{{ participant.public_id }}</code>
+            {% include "generic/copy_chip.html" with copy_element_id="participant-public-id" copy_value=participant.public_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "User" %}</dt>
+          <dd class="text-sm mt-1">
+            {% if participant.user %}{{ participant.user }}{% else %}{% translate "Not linked" %}{% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Joined On" %}</dt>
+          <dd class="text-sm mt-1">
+            {{ participant.created_at }}
+          </dd>
+        </div>
+      </div>
     </div>
   </div>
-
+  <div role="tablist" class="tabs tabs-border">
+    <input type="radio"
+           name="participant_tabs"
+           role="tab"
+           class="tab checked:text-primary"
+           aria-label="{% translate 'Sessions' %} {{ total_session_count }}"
+           checked />
+    <div role="tabpanel" class="tab-content pt-3" id="sessions">
+      {% include "participants/partials/participant_sessions_table.html" %}
+    </div>
+    {% if perms.experiments.view_participantdata %}
+      <input type="radio"
+             name="participant_tabs"
+             role="tab"
+             class="tab checked:text-primary"
+             aria-label="{% translate 'Participant Data' %}" />
+      <div role="tabpanel" class="tab-content pt-3" id="participant-data-tab">
+        <div id="data-panel"
+             class="app-card rounded-2xl border border-base-300 bg-base-100">
+          {% include "participants/partials/participant_data_panel.html" %}
+        </div>
+      </div>
+      <input type="radio"
+             name="participant_tabs"
+             role="tab"
+             class="tab checked:text-primary"
+             aria-label="{% translate 'Schedules' %} {{ participant_schedules|length }}" />
+      <div role="tabpanel" class="tab-content pt-3" id="schedules">
+        {% include "participants/partials/participant_schedules_table.html" %}
+      </div>
+    {% endif %}
+  </div>
   {% if trigger_bot_form and perms.experiments.change_participant %}
-    <dialog id="trigger_message_dialog" {% if trigger_bot_form.errors %}open{% endif %} class="modal">
+    <dialog id="trigger_message_dialog"
+            {% if trigger_bot_form.errors %}open{% endif %}
+            class="modal">
       <div class="modal-box">
-          <h3 class="text-lg font-bold">Trigger Bot Message</h3>
-          <form id="trigger_bot_form_id"
+        <h3 class="text-lg font-bold">{% translate "Trigger Bot Message" %}</h3>
+        <form id="trigger_bot_form_id"
               method="post"
               class="my-2"
-              action="{% url 'participants:trigger_bot' request.team.slug participant.id %}"
-              >
+              action="{% url 'participants:trigger_bot' request.team.slug participant.id %}">
           {% csrf_token %}
           {{ trigger_bot_form.non_field_errors }}
           {% render_form_fields trigger_bot_form %}
           <label class="label font-bold text-xs">
             <span>{% translate "Session Data (JSON)" %}</span>
           </label>
-          <div class="json-editor w-full h-32 resize-y overflow-auto" data-target-field="#id_session_data"></div>
-
+          <div class="json-editor w-full h-32 resize-y overflow-auto"
+               data-target-field="#id_session_data"></div>
           <div class="prose prose-sm prose-light">
-              <p>This will trigger the selected chatbot to send a message to the participant using the prompt text provided.</p>
-              <p>If "Start a new session" is checked, any active session will be ended.</p>
+            <p>{% translate 'This will trigger the selected chatbot to send a message to the participant using the prompt text provided.' %}</p>
+            <p>{% translate 'If "Start a new session" is checked, any active session will be ended.' %}</p>
           </div>
-          </form>
-          <div class="modal-action">
-          <button type="submit" form="trigger_bot_form_id" class="btn btn-primary">
-              Trigger Bot
-          </button>
+        </form>
+        <div class="modal-action">
+          <button type="submit" form="trigger_bot_form_id" class="btn btn-primary">{% translate "Trigger Bot" %}</button>
           <form method="dialog">
-              <button class="btn">Close</button>
+            <button class="btn">{% translate "Close" %}</button>
           </form>
-          </div>
+        </div>
       </div>
     </dialog>
   {% endif %}

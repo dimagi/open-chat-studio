@@ -1,0 +1,27 @@
+{% load i18n %}
+<div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+  <div class="flex items-center gap-2 flex-wrap">
+    {% if experiments %}
+      <span class="text-sm text-base-content/60">{% translate "Data for" %}</span>
+    {% endif %}
+    {% for experiment in experiments %}
+      <a href="?chatbot={{ experiment.id }}#data"
+         hx-get="{{ data_panel_url }}?chatbot={{ experiment.id }}"
+         hx-target="#data-panel"
+         hx-swap="innerHTML"
+         hx-push-url="?chatbot={{ experiment.id }}"
+         class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
+                {% if selected_data_experiment == experiment %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
+    {% endfor %}
+  </div>
+  {% if selected_data_experiment %}
+    <span id="data-save-status" class="text-sm text-base-content/60">{% translate "All changes saved" %}</span>
+  {% endif %}
+</div>
+{% if selected_data_experiment %}
+  <div id="participant-data-card-{{ selected_data_experiment.id }}">
+    {% include "participants/partials/participant_data.html" with experiment=selected_data_experiment %}
+  </div>
+{% else %}
+  <p class="text-base-content/60">{% translate "This participant hasn't used any chatbots yet." %}</p>
+{% endif %}

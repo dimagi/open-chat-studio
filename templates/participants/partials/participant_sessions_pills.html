@@ -1,0 +1,22 @@
+{% load i18n %}
+<div id="sessions-panel" class="contents">
+  <div class="w-px h-5.5 bg-base-300 mx-1"></div>
+  <a href="?chatbot="
+     hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}?chatbot="
+     hx-target="#sessions-panel"
+     hx-swap="outerHTML"
+     hx-push-url="?chatbot="
+     class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
+            {% if not selected_experiment_id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{% translate "All chatbots" %}</a>
+  {% for experiment in experiments %}
+    <a href="?chatbot={{ experiment.id }}"
+       hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}?chatbot={{ experiment.id }}"
+       hx-target="#sessions-panel"
+       hx-swap="outerHTML"
+       hx-push-url="?chatbot={{ experiment.id }}"
+       class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
+              {% if selected_experiment_id == experiment.id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
+  {% endfor %}
+  <div class="flex-1"></div>
+  <span class="pg-help">{{ session_table.rows|length }} {% translate "of" %} {{ total_session_count }} {% translate "sessions" %}</span>
+</div>
