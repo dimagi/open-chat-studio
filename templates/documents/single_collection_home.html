@@ -122,11 +122,11 @@
 
               {% if collection.is_index %}
                 <div class="dropdown">
-                  <div tabindex="0" role="button" class="join-item btn btn-sm btn-primary"
+                  <button type="button" class="join-item btn btn-sm btn-primary"
                     {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
                   >
                     <i class="fa-solid fa-upload"></i> Add Document Source
-                  </div>
+                  </button>
                   <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                     {% for source_type in document_source_types %}
                     <li><a

@@ -85,7 +85,7 @@
   <div x-data="{ openSection: null }">
     <div class="flex items-center gap-2 mt-6 mb-2">
       <div class="dropdown">
-        <div tabindex="0" role="button" class="btn btn-primary btn-sm m-1">
+        <button type="button" class="btn btn-primary btn-sm m-1">
           <i class="fa-solid fa-plus mr-1"></i>
           {% if object.evaluation_mode == 'session' %}
             {% translate "Add Sessions" %}
@@ -93,7 +93,7 @@
             {% translate "Add Messages" %}
           {% endif %}
           <i class="fa-solid fa-chevron-down ml-1 text-xs"></i>
-        </div>
+        </button>
         <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 w-56 p-2 shadow">
           <li>
             <a href="{% url 'evaluations:dataset_add_sessions' request.team.slug object.id %}">
