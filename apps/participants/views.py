@@ -306,7 +306,10 @@ class ParticipantSessionsPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "participants/partials/participant_sessions_panel.html"
 
     def get_context_data(self, *args, **kwargs):
-        return single_participant_home_context(self.request, {}, participant_id=self.kwargs["participant_id"])
+        initial_context = super().get_context_data(*args, **kwargs)
+        return single_participant_home_context(
+            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        )
 
 
 class ParticipantSchedulesPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -316,7 +319,10 @@ class ParticipantSchedulesPanel(LoginAndTeamRequiredMixin, PermissionRequiredMix
     template_name = "participants/partials/participant_schedules_table.html"
 
     def get_context_data(self, *args, **kwargs):
-        return single_participant_home_context(self.request, {}, participant_id=self.kwargs["participant_id"])
+        initial_context = super().get_context_data(*args, **kwargs)
+        return single_participant_home_context(
+            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        )
 
 
 class ParticipantDataPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -326,7 +332,10 @@ class ParticipantDataPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
     template_name = "participants/partials/participant_data_panel.html"
 
     def get_context_data(self, *args, **kwargs):
-        return single_participant_home_context(self.request, {}, participant_id=self.kwargs["participant_id"])
+        initial_context = super().get_context_data(*args, **kwargs)
+        return single_participant_home_context(
+            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        )
 
 
 class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
