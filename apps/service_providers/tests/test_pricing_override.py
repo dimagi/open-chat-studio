@@ -117,6 +117,22 @@ class TestPricingOverride:
 
 
 @pytest.mark.django_db()
+class TestOverrideModalOpening:
+    """The modal body is filled over HTMX, so it must not be shown before the fill lands."""
+
+    def test_the_row_does_not_open_the_modal_on_click(self):
+        team = TeamWithUsersFactory.create()
+        model = _custom_model(team, name="test-pg")
+        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
+
+        body = _client_for(team).post(url, {"input_price_per_million_tokens": "5.0"}).content.decode()
+
+        assert 'onclick="pricing_override_modal.showModal()"' not in body
+        assert body.count("pricing_override_modal.showModal()") == 1
+        assert "hx-on::after-request" in body
+
+
+@pytest.mark.django_db()
 class TestPricingRevert:
     """POST /pricing/revert/ closes every active team rule for the model."""
 
