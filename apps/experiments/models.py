@@ -1141,6 +1141,14 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
+    @property
+    def initials(self) -> str:
+        name = self.name or (self.user.get_full_name() if self.user else "") or self.identifier
+        words = name.split()
+        if len(words) >= 2:
+            return (words[0][0] + words[1][0]).upper()
+        return name[:2].upper() if name else "?"
+
     def update_name_from_data(self, data: dict):
         """
         Updates participant name field from a data dictionary.
@@ -1259,6 +1267,50 @@ class Participant(BaseTeamModel):
             else:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
         return scheduled_messages
+
+    def get_schedules_for_all_experiments(self, as_timezone: str | None = None, include_inactive=False) -> list[dict]:
+        """Like `get_schedules_for_experiment`, but across every chatbot this participant has used.
+
+        Each returned dict carries `experiment` (the source `Experiment` instance) alongside the
+        usual `as_dict()` fields, so callers can render a chatbot column without a second lookup.
+        """
+        schedules = []
+        for experiment in self.get_experiments_for_display():
+            for schedule in self.get_schedules_for_experiment(
+                experiment.id, as_dict=True, as_timezone=as_timezone, include_inactive=include_inactive
+            ):
+                schedule["experiment"] = experiment
+                schedules.append(schedule)
+        return schedules
+
+    def get_message_trend(self, days: int = 30) -> list[int]:
+        """Daily message count for this participant across every chatbot, zero-filled for gaps.
+
+        Mirrors the bucket-and-zero-fill approach in `Experiment.get_trend_data`, but counts all
+        messages (not success/error traces) on a daily granularity over a longer window.
+        """
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=days - 1)
+
+        message_counts = (
+            ChatMessage.objects.filter(
+                chat__experiment_session__participant=self,
+                created_at__gte=from_date,
+            )
+            .annotate(day_bucket=functions.TruncDate("created_at"))
+            .values("day_bucket")
+            .annotate(count=Count("id"))
+        )
+        counts_by_day = {row["day_bucket"]: row["count"] for row in message_counts}
+
+        day_buckets = []
+        current = from_date.date()
+        end = to_date.date()
+        while current <= end:
+            day_buckets.append(current)
+            current += timezone.timedelta(days=1)
+
+        return [counts_by_day.get(day, 0) for day in day_buckets]
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment):

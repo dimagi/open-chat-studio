@@ -205,6 +205,60 @@ class TestExperimentSession:
         ]
         assert participant.get_schedules_for_experiment(experiment.id, as_dict=True) == expected_dict_version
 
+    @travel("2024-01-01", tick=False)
+    def test_get_schedules_for_all_experiments_aggregates_across_chatbots(self):
+        """The participant details page shows schedules from every chatbot the participant has
+        used, not just one -- this is the query that aggregation relies on."""
+        session_a = ExperimentSessionFactory.create()
+        participant = session_a.participant
+        experiment_a = session_a.experiment
+        experiment_b = ExperimentFactory.create(team=participant.team)
+        ExperimentSessionFactory.create(participant=participant, experiment=experiment_b, team=participant.team)
+
+        event_action_a, params_a = self._construct_event_action(
+            time_period=TimePeriod.DAYS, experiment_id=experiment_a.id
+        )
+        event_action_b, params_b = self._construct_event_action(
+            time_period=TimePeriod.DAYS, experiment_id=experiment_b.id
+        )
+        ScheduledMessageFactory.create(
+            experiment=experiment_a, team=participant.team, participant=participant, action=event_action_a
+        )
+        ScheduledMessageFactory.create(
+            experiment=experiment_b, team=participant.team, participant=participant, action=event_action_b
+        )
+
+        schedules = participant.get_schedules_for_all_experiments()
+        assert len(schedules) == 2
+        assert {s["experiment"] for s in schedules} == {experiment_a, experiment_b}
+
+    @travel("2024-01-03 12:00:00", tick=False)
+    def test_get_message_trend_zero_fills_and_aggregates_across_chatbots(self):
+        """Message counts must come from every chatbot the participant has used, and days with no
+        messages must appear as zero rather than being omitted, or a sparkline can't align bars."""
+        session_a = ExperimentSessionFactory.create()
+        participant = session_a.participant
+        experiment_b = ExperimentFactory.create(team=participant.team)
+        session_b = ExperimentSessionFactory.create(
+            participant=participant, experiment=experiment_b, team=participant.team
+        )
+
+        now = timezone.now()
+        ChatMessage.objects.create(
+            message_type=ChatMessageType.HUMAN, content="hi", chat=session_a.chat, created_at=now
+        )
+        ChatMessage.objects.create(
+            message_type=ChatMessageType.HUMAN, content="hi", chat=session_b.chat, created_at=now
+        )
+        two_days_ago = now - timezone.timedelta(days=2)
+        ChatMessage.objects.create(
+            message_type=ChatMessageType.HUMAN, content="old", chat=session_a.chat, created_at=two_days_ago
+        )
+
+        trend = participant.get_message_trend(days=3)
+        assert len(trend) == 3
+        assert trend == [1, 0, 2]
+
     @pytest.mark.parametrize(
         ("repetitions", "total_triggers", "expected_triggers_remaining"),
         [
@@ -1177,3 +1231,21 @@ class TestParticipantStr:
         participant = Participant(name="")
         participant.identifier = f"anon:{participant.public_id}"
         assert str(participant) == f"Anonymous [{str(participant.public_id)[:6]}]"
+
+
+class TestParticipantInitials:
+    @pytest.mark.parametrize(
+        ("name", "identifier", "expected"),
+        [
+            pytest.param("Osaikou K.", "osaikouk@dimagi.com", "OK", id="two_word_name"),
+            pytest.param("Anonymous", "anon:abc123", "AN", id="single_word_name"),
+            pytest.param("", "preston@test.com", "PR", id="falls_back_to_identifier"),
+            pytest.param("", "", "?", id="nothing_to_show"),
+        ],
+    )
+    def test_initials(self, name, identifier, expected):
+        assert Participant(name=name, identifier=identifier).initials == expected
+
+    def test_initials_falls_back_to_user_full_name(self):
+        user = CustomUser(first_name="Jane", last_name="Doe")
+        assert Participant(name="", identifier="jane@example.com", user=user).initials == "JD"
