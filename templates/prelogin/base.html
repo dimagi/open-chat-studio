@@ -73,7 +73,7 @@
                style="filter:brightness(0) invert(1);
                       opacity:0.9">
           <ul class="footer-line-links">
-            <li>Open Chat Studio is copyright © 2026 Dimagi, Inc.</li>
+            <li>Open Chat Studio is copyright © {% now "Y" %} Dimagi, Inc.</li>
             {% block footer_signin_link %}
               <li>
                 <a href="{% url 'sso:login' %}">Sign In</a>
