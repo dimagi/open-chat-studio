@@ -28,6 +28,7 @@ from apps.documents.tests.retrieval_helpers import (
 )
 from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -382,6 +383,23 @@ class TestRerankerGating:
 
         assert "no rerank endpoint" in caplog.text
 
+    def test_a_provider_from_another_team_builds_nothing(self, caplog):
+        """The field is editable in the Django admin, which offers every team's providers.
+        Reranking with another team's credentials would bill them and send this collection's
+        queries to their account, so the runtime refuses rather than trusting the configuration.
+        """
+        collection, _ = rerankable_collection()
+        other_team = TeamFactory.create()
+        collection.reranker_provider = LlmProviderFactory.create(
+            team=other_team, type=str(LlmProviderTypes.voyage), config={"voyage_api_key": "other-team-key"}
+        )
+
+        with caplog.at_level(logging.WARNING, logger="ocs.documents"):
+            with override_flag(RERANK_FLAG, active=True):
+                assert collection.get_reranker() is None
+
+        assert "belongs to another team" in caplog.text
+
     def test_unusable_provider_credentials_build_nothing(self, caplog):
         """A different cause from the one above, and said so: the provider does offer a rerank
         endpoint, but its stored configuration will not construct a service. An operator reading
@@ -423,3 +441,47 @@ class TestRerankingThroughTheProvider:
         assert [result.rerank_score for result in results] == [0.91, 0.12]
         assert client_cls.call_args.kwargs["api_key"] == "test-voyage-key"
         assert client_cls.return_value.rerank.call_args.kwargs["model"] == "rerank-2"
+
+
+@pytest.mark.django_db()
+class TestRerankColumnDatabaseDefaults:
+    """The three non-nullable rerank columns carry database-level defaults, not just Python ones.
+
+    Django applies `default` when *it* builds the INSERT, and drops the DDL default once the
+    column is backfilled. An INSERT from the release that predates the column therefore names
+    none of them and hits a NOT NULL violation, which is what `db_default` prevents. Asserted
+    against the database because that is the only place the guarantee actually lives.
+    """
+
+    @pytest.mark.parametrize(
+        ("column", "expected"),
+        [
+            pytest.param("enable_reranking", "false", id="enable-reranking"),
+            pytest.param("rerank_model", "'rerank-2'", id="rerank-model"),
+            pytest.param("rerank_top_n", "50", id="rerank-top-n"),
+        ],
+    )
+    def test_column_has_a_database_default(self, column, expected):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT column_default FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+                [Collection._meta.db_table, column],
+            )
+            row = cursor.fetchone()
+
+        assert row is not None, f"{column} is missing from {Collection._meta.db_table}"
+        default = row[0]
+        assert default is not None, f"{column} has no database default; an old-release INSERT would fail"
+        assert default.startswith(expected)
+
+    def test_the_nullable_provider_column_needs_no_default(self):
+        """`reranker_provider` is nullable, so an omitted value is already legal."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT is_nullable FROM information_schema.columns WHERE table_name = %s AND column_name = %s",
+                [Collection._meta.db_table, "reranker_provider_id"],
+            )
+            row = cursor.fetchone()
+
+        assert row is not None
+        assert row[0] == "YES"

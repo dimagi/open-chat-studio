@@ -272,6 +272,10 @@ class Collection(BaseTeamModel, VersionsMixin):
     # the pipeline node UI for the same reason too.
     enable_reranking = models.BooleanField(
         default=False,
+        # A database-level default as well as a Python one, so an INSERT from the release that
+        # predates this column still succeeds during a rolling deploy. `reranker_provider` needs
+        # no such thing: it is nullable.
+        db_default=False,
         help_text=(
             "If enabled, retrieval candidates are rescored against the query by a reranker before "
             "the best of them are returned."
@@ -288,6 +292,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     rerank_model = models.CharField(
         max_length=255,
         default="rerank-2",
+        db_default="rerank-2",
         help_text=(
             "Reranker model, named as the provider names it. A model the provider does not "
             "recognise leaves retrieval on its un-reranked ranking."
@@ -295,6 +300,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     rerank_top_n = models.PositiveIntegerField(
         default=50,
+        db_default=50,
         validators=[MinValueValidator(1)],
         help_text=(
             "How many retrieval candidates to rescore. This is what bounds the per-query cost of "
@@ -617,6 +623,16 @@ class Collection(BaseTeamModel, VersionsMixin):
         already had. Mirrors `_build_contextualizer`.
         """
         if not self.reranking_enabled:
+            return None
+        if self.reranker_provider.team_id != self.team_id:
+            # Nothing in the app sets this, but the field is editable in the Django admin, which
+            # offers every team's providers. Reranking with another team's credentials would bill
+            # them and leak this collection's queries to their account, so it does not happen
+            # quietly. The provider row is fetched either way to build the service below.
+            logger.warning(
+                "Reranker provider belongs to another team; skipping reranking.",
+                extra={"collection_id": self.id, "team_id": self.team_id},
+            )
             return None
         try:
             return self.reranker_provider.get_llm_service().get_reranker(self.rerank_model)

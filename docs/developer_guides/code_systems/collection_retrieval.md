@@ -117,7 +117,12 @@ context window — an unbounded context would push the query itself out of that 
 
 All three are required. Leaving the provider unset leaves reranking off, silently by design;
 the failures that do log are the ones an operator cannot predict, such as a provider with no
-rerank endpoint or credentials the provider rejects.
+rerank endpoint, credentials the provider rejects, or a provider belonging to another team.
+
+That last one is a runtime refusal rather than a form constraint: `reranker_provider` is
+editable in the Django admin, which offers every team's providers, so `get_reranker()` checks
+the provider's team itself. Reranking with another team's credentials would bill them and send
+this collection's queries to their account.
 
 The tuning fields (`search_language`, `search_dense_weight`, `search_fetch_k`, `enable_reranking`,
 `reranker_provider`, `rerank_model`, `rerank_top_n`) are model fields with no form or pipeline

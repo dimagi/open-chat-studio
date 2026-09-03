@@ -21,6 +21,7 @@ class Migration(migrations.Migration):
             name="enable_reranking",
             field=models.BooleanField(
                 default=False,
+                db_default=False,
                 help_text=(
                     "If enabled, retrieval candidates are rescored against the query by a reranker "
                     "before the best of them are returned."
@@ -46,6 +47,7 @@ class Migration(migrations.Migration):
             name="rerank_model",
             field=models.CharField(
                 default="rerank-2",
+                db_default="rerank-2",
                 help_text=(
                     "Reranker model, named as the provider names it. A model the provider does not "
                     "recognise leaves retrieval on its un-reranked ranking."
@@ -58,6 +60,7 @@ class Migration(migrations.Migration):
             name="rerank_top_n",
             field=models.PositiveIntegerField(
                 default=50,
+                db_default=50,
                 help_text=(
                     "How many retrieval candidates to rescore. This is what bounds the per-query cost "
                     "of reranking, since the reranker is charged per candidate."
