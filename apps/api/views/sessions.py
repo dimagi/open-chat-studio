@@ -1,6 +1,7 @@
 import textwrap
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Prefetch
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, serializers, status
@@ -14,6 +15,7 @@ from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSe
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession
 from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.trace.models import Trace
 
 update_state_serializer = inline_serializer(
     name="update_state_serializer",
@@ -163,7 +165,17 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         queryset = (
             ExperimentSession.objects.filter(team=self.request.team)
             .select_related("team", "experiment", "participant")
-            .prefetch_related("chat__tags", "chat__messages__tags")
+            .prefetch_related(
+                "chat__tags",
+                "chat__messages__tags",
+                Prefetch(
+                    "traces",
+                    queryset=Trace.objects.order_by("-timestamp", "-id").only(
+                        "id", "timestamp", "session_id", "participant_data", "participant_data_diff"
+                    ),
+                    to_attr="_prefetched_traces",
+                ),
+            )
             .all()
         )
         if tags_query_param := self.request.query_params.get("tags"):

@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.fields import DateTimeField
 
@@ -9,9 +10,10 @@ from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantDataFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.traces import TraceFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -111,7 +113,13 @@ def test_list_sessions_count_only_on_first_page(experiment):
     assert len(second_page["results"]) == 1
 
 
-def get_session_json(session, expected_messages=None, expected_tags=None, expected_usage=None):
+def get_session_json(
+    session,
+    expected_messages=None,
+    expected_tags=None,
+    expected_usage=None,
+    expected_participant_data=None,
+):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -130,10 +138,12 @@ def get_session_json(session, expected_messages=None, expected_tags=None, expect
         },
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
+        "ended_at": DateTimeField().to_representation(session.ended_at) if session.ended_at else None,
         "status": session.status,
         "platform": session.platform,
         "tags": expected_tags if expected_tags is not None else [],
         "state": session.state,
+        "participant_data": expected_participant_data if expected_participant_data is not None else {},
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
@@ -244,6 +254,63 @@ def test_retrieve_session_includes_usage_breakdown(session):
             {"model_name": "gpt-4o-mini", "cost": "0.50000000", "tokens": 50},
         ],
     }
+
+
+@pytest.mark.django_db()
+def test_session_includes_ended_at(session):
+    ended = timezone.now()
+    session.ended_at = ended
+    session.save()
+
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+    response = client.get(reverse("api:session-list"))
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["ended_at"] == DateTimeField().to_representation(ended)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("has_trace", "has_participant_data"),
+    [
+        pytest.param(False, False, id="no-trace-no-participant-data"),
+        pytest.param(False, True, id="no-trace-with-participant-data"),
+        pytest.param(True, True, id="with-trace-and-participant-data"),
+    ],
+)
+def test_session_participant_data(session, has_trace, has_participant_data):
+    participant_data_value = {"name": "Alice", "language": "en"} if has_participant_data else {}
+
+    if has_participant_data:
+        ParticipantDataFactory.create(
+            team=session.team,
+            experiment=session.experiment,
+            participant=session.participant,
+            data=participant_data_value,
+        )
+
+    if has_trace:
+        TraceFactory.create(
+            session=session,
+            participant=session.participant,
+            experiment=session.experiment,
+            team=session.team,
+            participant_data=participant_data_value,
+            participant_data_diff=None,
+        )
+
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["participant_data"] == participant_data_value
 
 
 def _create_attachments(chat, message):

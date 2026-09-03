@@ -1,6 +1,7 @@
 import textwrap
 from zoneinfo import available_timezones
 
+import dictdiffer
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -197,6 +198,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     messages = serializers.SerializerMethodField()
     usage = serializers.SerializerMethodField()
     tags = TagListSerializerField(source="chat.tags")
+    participant_data = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperimentSession
@@ -208,12 +210,14 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "participant",
             "created_at",
             "updated_at",
+            "ended_at",
             "status",
             "platform",
             "messages",
             "usage",
             "tags",
             "state",
+            "participant_data",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -223,7 +227,6 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             self.fields.pop("messages")
             self.fields.pop("usage")
         else:
-            # hack to change the component name for the schema to include messages
             self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
 
     @extend_schema_field(MessageSerializer(many=True))
@@ -234,6 +237,22 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     @extend_schema_field(SessionUsageSerializer)
     def get_usage(self, instance):
         return SessionUsageSerializer(session_usage(instance)).data
+
+    @extend_schema_field(serializers.DictField())
+    def get_participant_data(self, instance):
+        prefetched = getattr(instance, "_prefetched_traces", None)
+        if prefetched is not None:
+            trace = prefetched[0] if prefetched else None
+        else:
+            trace = instance.traces.order_by("-timestamp", "-id").first()
+
+        if trace is None:
+            return instance.participant_data_from_experiment
+
+        snapshot = trace.participant_data or {}
+        if trace.participant_data_diff:
+            return dictdiffer.patch(trace.participant_data_diff, snapshot)
+        return snapshot
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
