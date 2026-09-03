@@ -199,7 +199,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
-    extra_data = models.JSONField(default=dict, blank=True)
+    extra_data = models.JSONField(default=dict, blank=True, null=True)
 
     class Meta:
         ordering = ("type", "name")

@@ -339,6 +339,7 @@ class TestCredentialsVerifiedFlag:
     @pytest.mark.parametrize(
         ("extra_data", "expected"),
         [
+            pytest.param(None, False, id="column-null"),
             pytest.param({}, False, id="key-missing"),
             pytest.param({"verified_credentials": False}, False, id="key-false"),
             pytest.param({"verified_credentials": True}, True, id="key-true"),
@@ -346,8 +347,20 @@ class TestCredentialsVerifiedFlag:
     )
     def test_only_a_true_flag_counts_as_verified(self, extra_data, expected):
         """A missing key and a stored False mean the same thing - never verified, and
-        verified-then-failed both need the same next save."""
+        verified-then-failed both need the same next save. NULL is what a row inserted by
+        the previous release, before the column existed in its model, leaves behind.
+        """
         assert LlmProviderFactory(extra_data=extra_data).credentials_verified is expected
+
+    def test_a_null_column_takes_a_recorded_result(self):
+        """The row the previous release inserted has to survive its first check."""
+        provider = LlmProviderFactory(extra_data=None)
+        with mock.patch.object(LlmProvider, "test_connection"):
+            provider.run_connection_test_hook()
+
+        provider.refresh_from_db()
+        assert provider.extra_data == {"verified_credentials": True}
+        assert provider.verification_error == ""
 
     def test_a_pass_records_the_credentials_as_verified(self):
         provider = LlmProviderFactory()
