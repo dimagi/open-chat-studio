@@ -120,9 +120,29 @@ class StubAgent(BaseHelpAgent[StubInput, StubOutput]):
         return input.prompt
 
 
+class StubInputWithTeam(BaseModel):
+    prompt: str
+    team_id: int
+
+
+class StubAgentWithTeam(BaseHelpAgent[StubInputWithTeam, StubOutput]):
+    name = "stub_with_team"
+    mode = "low"
+
+    @classmethod
+    def get_system_prompt(cls, input):
+        return "You are a stub."
+
+    @classmethod
+    def get_user_message(cls, input):
+        return input.prompt
+
+
 class TestBaseHelpAgent:
+    @mock.patch("apps.help.base.get_help_agent_tracer")
     @mock.patch("apps.help.base.build_system_agent")
-    def test_run_invokes_agent_and_returns_parsed_output(self, mock_build):
+    def test_run_invokes_agent_and_returns_parsed_output(self, mock_build, mock_get_tracer):
+        mock_get_tracer.return_value = None
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hello")}
         mock_build.return_value = mock_agent
@@ -132,7 +152,92 @@ class TestBaseHelpAgent:
 
         assert result == StubOutput(result="hello")
         mock_build.assert_called_once_with("low", "You are a stub.", response_format=StubOutput)
-        mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]})
+        mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "say hi"}]}, config={})
+
+
+class TestBaseHelpAgentTracing:
+    """Tracing is opt-in via LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY (apps/help/tracing.py).
+    get_help_agent_tracer is mocked directly rather than via settings so these tests don't
+    depend on env state."""
+
+    def _mock_tracer(self):
+        tracer = mock.Mock()
+        trace_cm = tracer.trace.return_value
+        trace_cm.__enter__ = mock.Mock(return_value=mock.Mock())
+        trace_cm.__exit__ = mock.Mock(return_value=False)
+        return tracer
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_run_passes_tracing_callback_into_invoke(self, mock_build, mock_get_tracer):
+        tracer = self._mock_tracer()
+        callback = mock.Mock()
+        tracer.get_langchain_callback.return_value = callback
+        mock_get_tracer.return_value = tracer
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hi")}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hello"))
+        agent.run()
+
+        call_kwargs = mock_agent.invoke.call_args.kwargs
+        assert call_kwargs["config"]["callbacks"] == [callback]
+        tracer.trace.assert_called_once()
+        trace_kwargs = tracer.trace.call_args.kwargs
+        assert trace_kwargs["inputs"] == {"query": "hello"}
+        assert trace_kwargs["session"] is None
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_trace_metadata_includes_team_id_when_input_has_one(self, mock_build, mock_get_tracer):
+        tracer = self._mock_tracer()
+        tracer.get_langchain_callback.return_value = mock.Mock()
+        mock_get_tracer.return_value = tracer
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hi")}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgentWithTeam(input=StubInputWithTeam(prompt="hi", team_id=7))
+        agent.run()
+
+        assert tracer.trace.call_args.kwargs["metadata"] == {"team_id": "7"}
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_trace_metadata_omitted_when_input_has_no_team_id(self, mock_build, mock_get_tracer):
+        tracer = self._mock_tracer()
+        tracer.get_langchain_callback.return_value = mock.Mock()
+        mock_get_tracer.return_value = tracer
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hi")}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hi"))
+        agent.run()
+
+        assert tracer.trace.call_args.kwargs["metadata"] is None
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.base.build_system_agent")
+    def test_run_succeeds_when_tracer_setup_raises(self, mock_build, mock_get_tracer):
+        """A Langfuse outage/misconfiguration must not break the underlying feature."""
+        tracer = mock.Mock()
+        tracer.trace.side_effect = RuntimeError("langfuse unreachable")
+        mock_get_tracer.return_value = tracer
+
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": StubOutput(result="hi")}
+        mock_build.return_value = mock_agent
+
+        agent = StubAgent(input=StubInput(prompt="hi"))
+        result = agent.run()
+
+        assert result == StubOutput(result="hi")
+        mock_agent.invoke.assert_called_once_with({"messages": [{"role": "user", "content": "hi"}]}, config={})
 
 
 class TestCodeGenerateAgent:
@@ -198,8 +303,52 @@ class TestCodeGenerateAgent:
         inp = CodeGenerateInput(query="hello")
         assert inp.context == ""
 
+    def test_input_team_id_defaults_to_none(self):
+        inp = CodeGenerateInput(query="hello")
+        assert inp.team_id is None
+        assert CodeGenerateInput(query="hello", team_id=7).team_id == 7
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.agents.code_generate.build_system_agent")
+    def test_run_passes_trace_config_into_every_retry(self, mock_build, mock_get_tracer):
+        """The whole retry loop is one trace, not one per attempt."""
+        tracer = mock.Mock()
+        trace_cm = tracer.trace.return_value
+        trace_cm.__enter__ = mock.Mock(return_value=mock.Mock())
+        trace_cm.__exit__ = mock.Mock(return_value=False)
+        callback = mock.Mock()
+        tracer.get_langchain_callback.return_value = callback
+        mock_get_tracer.return_value = tracer
+
+        bad_code = "not valid python"
+        good_code = "def main(input: str, **kwargs) -> str:\n    return input"
+        mock_agent = mock.Mock()
+        mock_agent.invoke.side_effect = [
+            {"messages": [mock.Mock(text=bad_code)]},
+            {"messages": [mock.Mock(text=good_code)]},
+        ]
+        mock_build.return_value = mock_agent
+
+        with mock.patch("apps.pipelines.nodes.nodes.CodeNode") as mock_code_node:
+            mock_code_node.model_validate.side_effect = [
+                pydantic_module.ValidationError.from_exception_data("CodeNode", []),
+                None,
+            ]
+            agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+            agent.run()
+
+        assert mock_agent.invoke.call_count == 2
+        tracer.trace.assert_called_once()  # one trace covers both attempts
+        for call in mock_agent.invoke.call_args_list:
+            assert call.kwargs["config"]["callbacks"] == [callback]
+
 
 class TestProgressMessagesAgent:
+    def test_input_team_id_defaults_to_none(self):
+        inp = ProgressMessagesInput(chatbot_name="TestBot")
+        assert inp.team_id is None
+        assert ProgressMessagesInput(chatbot_name="TestBot", team_id=7).team_id == 7
+
     @mock.patch("apps.help.base.build_system_agent")
     def test_run_returns_messages(self, mock_build):
         mock_agent = mock.Mock()
