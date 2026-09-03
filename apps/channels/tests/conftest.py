@@ -7,7 +7,6 @@ from django.core.cache import caches
 
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProviderType
-from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -109,13 +108,6 @@ def meta_cloud_api_whatsapp_channel(meta_cloud_api_provider):
 
 
 @pytest.fixture()
-def public_flag(experiment):
-    """Turns on `flag_public_channel` for the experiment's team.
-
-    The platform gate reads `Flag.is_active_for_team`, which matches on the team M2M and never
-    on `everyone`, so `override_flag` leaves the flag off here.
-    """
-    flag = Flag.objects.create(name="flag_public_channel")
-    flag.teams.add(experiment.team)
-    flag.flush()
-    return flag
+def public_flag(experiment, team_flag):
+    """Turns on `flag_public_channel` for the experiment's team."""
+    return team_flag("flag_public_channel", experiment.team)
