@@ -53,6 +53,7 @@
                 hx-trigger="confirmed"
                 hx-target="#schedule_{{ schedule.external_id }}"
                 hx-swap="outerHTML"
+                hx-on::after-request="if (event.detail.successful) this.closest('dialog').close()"
                 onclick="confirmThenTrigger('cancel-schedule-{{ schedule.external_id }}', 'Are you sure you want to cancel this schedule?')">
           <i class="fa-solid fa-ban"></i> {% translate "Cancel schedule" %}
         </button>

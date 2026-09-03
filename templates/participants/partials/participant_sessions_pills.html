@@ -1,19 +1,21 @@
 {% load i18n %}
 <div id="sessions-panel" class="contents">
   <div class="w-px h-5.5 bg-base-300 mx-1"></div>
-  <a href="?chatbot="
-     hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}?chatbot="
+  <a href="?chatbot={% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.state %}&state={{ request.GET.state|urlencode }}{% endif %}{% if request.GET.tag %}&tag={{ request.GET.tag|urlencode }}{% endif %}"
+     hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}"
+     hx-vals='js:{chatbot: "", q: new URLSearchParams(window.location.search).get("q") || "", state: new URLSearchParams(window.location.search).get("state") || "", tag: new URLSearchParams(window.location.search).get("tag") || ""}'
      hx-target="#sessions-panel"
      hx-swap="outerHTML"
-     hx-push-url="?chatbot="
+     hx-push-url="true"
      class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
             {% if not selected_experiment_id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{% translate "All chatbots" %}</a>
   {% for experiment in experiments %}
-    <a href="?chatbot={{ experiment.id }}"
-       hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}?chatbot={{ experiment.id }}"
+    <a href="?chatbot={{ experiment.id }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.state %}&state={{ request.GET.state|urlencode }}{% endif %}{% if request.GET.tag %}&tag={{ request.GET.tag|urlencode }}{% endif %}"
+       hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}"
+       hx-vals='js:{chatbot: "{{ experiment.id }}", q: new URLSearchParams(window.location.search).get("q") || "", state: new URLSearchParams(window.location.search).get("state") || "", tag: new URLSearchParams(window.location.search).get("tag") || ""}'
        hx-target="#sessions-panel"
        hx-swap="outerHTML"
-       hx-push-url="?chatbot={{ experiment.id }}"
+       hx-push-url="true"
        class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
               {% if selected_experiment_id == experiment.id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
   {% endfor %}
