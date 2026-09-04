@@ -2,16 +2,15 @@
 
 from django.db import migrations
 
-from apps.cost_tracking.migration_utils import load_pricing_data
-
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('service_providers', '0061_add_gpt_5_6_models'),
-        ('cost_tracking', '0001_initial'),
+        ("service_providers", "0061_add_gpt_5_6_models"),
+        # Retained so the graph stays stable for environments that already applied this.
+        ("cost_tracking", "0001_initial"),
     ]
 
     operations = [
-        load_pricing_data(),
+        # load_pricing_data() moved to 0078_add_gemini_3_8_flash so it runs only once per deploy
+        # (the newest migration loads the whole seed file).
     ]
