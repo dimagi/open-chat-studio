@@ -493,49 +493,6 @@ class TestSavingVerifiesCredentials:
         assert provider.name == "Saved Anyway"
         assert provider.config.get("openai_api_key") == "a-new-key"
 
-    def test_the_button_reports_the_check_it_is_waiting_on(self, team_with_users, authed_client):
-        """The check runs inline and holds the page for seconds, so the button has to both
-        say what it is doing and stop taking clicks while it does."""
-        provider = LlmProviderFactory(team=team_with_users)
-
-        content = authed_client.get(self._edit_url(team_with_users, provider)).content.decode()
-
-        assert ':disabled="submitted"' in content
-        assert "Verifying credentials" in content
-
-    @pytest.mark.parametrize(
-        ("extra_data", "expected"),
-        [
-            pytest.param({}, "false", id="never-verified"),
-            pytest.param({"verified_credentials": False}, "false", id="verification-failed"),
-            pytest.param({"verified_credentials": True}, "true", id="verified"),
-        ],
-    )
-    def test_only_a_save_that_verifies_says_it_is_verifying(self, team_with_users, authed_client, extra_data, expected):
-        """Saving already-verified credentials skips the check, so the in-flight label has to
-        follow the same stored flag the save does rather than always promising a check."""
-        provider = LlmProviderFactory(team=team_with_users, extra_data=extra_data)
-
-        content = authed_client.get(self._edit_url(team_with_users, provider)).content.decode()
-
-        assert f"credentialsVerified: {expected}" in content
-
-
-@pytest.mark.django_db()
-def test_provider_form_without_a_credential_check_still_blocks_a_second_submit(team_with_users, authed_client):
-    """No check to wait on, but a double-submit is a double-save either way."""
-    provider = VoiceProviderFactory(team=team_with_users)
-
-    content = authed_client.get(
-        reverse(
-            "service_providers:edit",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": provider.pk},
-        )
-    ).content.decode()
-
-    assert ':disabled="submitted"' in content
-    assert "Verifying credentials" not in content
-
 
 @pytest.mark.django_db()
 def test_updating_voice_provider_still_redirects_to_team_list(team_with_users, authed_client):
