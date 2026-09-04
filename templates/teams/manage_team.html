@@ -282,6 +282,31 @@
                   </div>
                 </form>
               </div>
+
+              <div class="app-card">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <h3 class="pg-subtitle font-bold text-sm">{% translate "Two-factor authentication" %}</h3>
+                    <span class="text-neutral-500 section-subtitle">{% translate "Requires every member of this team to enrol in MFA." %}</span>
+                  </div>
+                </div>
+                <form method="post" action="{% url 'single_team:set_require_mfa' request.team.slug %}" class="mt-2">
+                  {% csrf_token %}
+                  <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+                    <div class="min-w-0">
+                      <label class="label cursor-pointer gap-2">
+                        <input type="checkbox" name="require_mfa" class="checkbox checkbox-sm shrink-0"
+                                {% if request.team.require_mfa %}checked{% endif %}>
+                        <span class="section-subtitle">{% translate "Require two-factor authentication" %}</span>
+                      </label>
+                      <p class="text-neutral-500 section-subtitle whitespace-normal">
+                        {% translate "Every member of this team must enrol in two-factor authentication to keep access." %}
+                      </p>
+                    </div>
+                    <input class="btn btn-primary" type="submit" value="{% translate "Save" %}">
+                  </div>
+                </form>
+              </div>
             </div>
 
             <div class="divider"></div>

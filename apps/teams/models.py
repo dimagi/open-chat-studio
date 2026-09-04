@@ -76,6 +76,11 @@ class Team(BaseModel):
         db_default=False,
         help_text="When set, the team's outbound message firing is frozen while its data is migrated.",
     )
+    require_mfa = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="When set, every member of this team must enrol in two-factor authentication.",
+    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models

@@ -1,4 +1,4 @@
-"""Tests for the staff MFA requirement (apps.users.middleware.RequireMfaForStaffMiddleware).
+"""Tests for the staff MFA requirement (apps.users.middleware.RequireMfaMiddleware).
 
 ``REQUIRE_MFA_FOR_STAFF`` defaults off in development and under test (see config/settings.py), so
 every test here switches it on explicitly.
@@ -14,8 +14,8 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 from django.urls import reverse
 
-from apps.users.middleware import RequireMfaForStaffMiddleware
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.users.middleware import RequireMfaMiddleware
+from apps.utils.factories.team import MembershipFactory, TeamFactory, TeamWithUsersFactory, get_test_user_groups
 from apps.utils.tests.clients import ApiTestClient
 
 PASSWORD = "sekr1t-passw0rd"
@@ -75,7 +75,7 @@ def test_redirect_explains_itself(client, user, gated_page):
     response = client.get(gated_page, follow=True)
 
     assert [str(message) for message in response.context["messages"]] == [
-        "Two-factor authentication is required for staff accounts. Please set it up to continue."
+        "Two-factor authentication is required for this account. Please set it up to continue."
     ]
 
 
@@ -112,13 +112,55 @@ def test_background_htmx_request_from_the_setup_page_is_dropped_not_redirected(c
 
 def test_browser_reload_stream_is_not_gated(client, user):
     """A redirected event stream makes the dev server's reload worker reload the page in a loop."""
-    middleware = RequireMfaForStaffMiddleware(lambda request: None)
+    middleware = RequireMfaMiddleware(lambda request: None)
 
     assert middleware._is_exempt_path("/__reload__/events/")
     assert not middleware._is_exempt_path(reverse("users:user_profile"))
 
 
 def test_unprivileged_user_without_mfa_is_not_gated(client, user, gated_page):
+    client.force_login(user)
+
+    assert client.get(gated_page).status_code == 200
+
+
+def test_team_member_without_mfa_is_sent_to_setup_when_team_requires_it(client, user, gated_page):
+    team = user.teams.first()
+    team.require_mfa = True
+    team.save()
+    client.force_login(user)
+
+    response = client.get(gated_page)
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("mfa_activate_totp")
+
+
+def test_member_of_a_team_that_does_not_require_mfa_is_not_gated(client, user, gated_page):
+    other_team = TeamFactory.create(require_mfa=True)
+    assert other_team not in user.teams.all()
+    client.force_login(user)
+
+    assert client.get(gated_page).status_code == 200
+
+
+def test_user_in_two_teams_is_gated_if_either_one_requires_mfa(client, user, gated_page):
+    """The requirement is site-wide: it does not matter which team's pages the user is on."""
+    second_team = TeamFactory.create(require_mfa=True)
+    MembershipFactory.create(user=user, team=second_team, groups=get_test_user_groups)
+    client.force_login(user)
+
+    response = client.get(gated_page)
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("mfa_activate_totp")
+
+
+def test_team_mfa_requirement_can_be_satisfied_by_enrolling(client, user, gated_page):
+    team = user.teams.first()
+    team.require_mfa = True
+    team.save()
+    totp_auth.TOTP.activate(user, totp_auth.generate_totp_secret())
     client.force_login(user)
 
     assert client.get(gated_page).status_code == 200
