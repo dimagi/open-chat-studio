@@ -24,8 +24,7 @@ COPY pyproject.toml uv.lock /_lock/
 
 # Synchronize dependencies.
 # This layer is cached until uv.lock or pyproject.toml change.
-RUN --mount=type=cache,target=/root/.cache \
-    cd /_lock && \
+RUN cd /_lock && \
     uv sync \
       --frozen \
       --no-default-groups \
@@ -54,9 +53,7 @@ FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1
 ENV DEBUG=0
 
-RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update \
     && apt-get install -y \
     # psycopg2 dependencies
