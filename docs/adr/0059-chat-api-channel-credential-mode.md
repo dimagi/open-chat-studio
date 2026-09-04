@@ -21,14 +21,14 @@ We will record the admin's choice in `ExperimentChannel.credential_mode`, a `Cre
 - Two values: `embed_key` (the default; every existing channel was migrated to it) and `oauth`. The column is audited.
 - The mode applies to `EMBEDDED_WIDGET` channels only. A `PUBLIC` channel always admits by embed key.
 - In `oauth` mode the embed key is ignored, not rejected. A snippet that sends `X-Embed-Key` continues to work if it also presents a valid token. The key alone does not admit a caller.
-- The mode affects only what the embed key proves. It does not affect team membership: ADR-0053's membership path is unchanged in both modes.
+- The mode determines which external credential admits an anonymous caller: the embed key in `embed_key` mode, a bearer token in `oauth` mode. It does not affect team membership: ADR-0053's membership path is unchanged in both modes.
 - The mode applies to `/api/chat/*` only. The `chatbots:interact` endpoints do not resolve a channel and are bounded by the ADR-0056 allowlist alone.
 - When the channel form omits `credential_mode`, the stored mode is kept. A partial save cannot change the required credential to a weaker one.
 - `oauth` mode sets `required_auth_level` to `SESSION_TOKEN`. The check constraint `oauth_credential_mode_requires_session_token` rejects any other combination, and the ratchet skips these channels.
 - The platform value `embedded_widget` is unchanged; its label becomes "Chat Widget & API". The value is also used as `Participant.platform`, so renaming it would create a second participant record for every existing participant.
 - In `oauth` mode the channel reports the first widget release that supports the `authTokenProvider` property as its minimum widget version. The minimum is advisory: the form warns when a browser-facing channel's last-reported widget version is lower, but no request is rejected because of it.
 
-There is no third mode requiring both key and token. In a browser embed the key is in page source and the token is available to page JavaScript, so a leak of one is a leak of the other. The per-chatbot restriction that such a mode would provide is provided instead by the application allowlist (ADR-0056).
+There is no third mode requiring both key and token. In a browser embed the key is in page source and the token is available to page JavaScript, so an attacker who can obtain the token from the page can also obtain the key, and requiring both adds no protection against that attacker. The per-chatbot restriction that such a mode would provide is provided instead by the application allowlist (ADR-0056; applied to `chat:start` in ADR-0063).
 
 ## Consequences
 
