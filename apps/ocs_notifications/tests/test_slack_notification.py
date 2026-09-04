@@ -60,18 +60,23 @@ class TestSendSlackNotification:
 
         message = build_slack_message(event)
 
-        assert event.title in message
-        assert event.message in message
-        assert "Error" in message
-        assert notification_channel.team.name in message
-        assert "View in OCS" in message
+        assert message["text"]
+        assert event.title in message["text"]
+        assert event.message in message["text"]
+        blocks = message["blocks"]
+        assert any(event.title in b["text"]["text"] for b in blocks if b["type"] == "header")
+        assert any(event.message in b["text"]["text"] for b in blocks if b["type"] == "section")
+        assert any("Error" in b["elements"][0]["text"] for b in blocks if b["type"] == "context")
+        assert any(notification_channel.team.name in b["elements"][0]["text"] for b in blocks if b["type"] == "context")
+        assert "View in OCS" in message["text"]
 
     def test_send_slack_notification_posts_to_resolved_channel(self, team_with_users):
-        notification_channel = NotificationChannelFactory.create(team=team_with_users, channel_name="#alerts")
+        notification_channel = NotificationChannelFactory.create(
+            team=team_with_users, channel_name="alerts", channel_id="C12345"
+        )
         event = _create_event(team_with_users)
 
         service = Mock()
-        service.get_channel_by_name.return_value = {"id": "C12345", "name": "alerts"}
         with patch.object(notification_channel.messaging_provider, "get_messaging_service", return_value=service):
             result = send_slack_notification(notification_channel, event)
 
@@ -80,13 +85,15 @@ class TestSendSlackNotification:
         call_kwargs = service.send_text_message.call_args.kwargs
         assert call_kwargs["to"] == "C12345"
         assert call_kwargs["platform"].value == "slack"
+        assert call_kwargs["blocks"]
 
     def test_send_slack_notification_falls_back_to_channel_name(self, team_with_users):
-        notification_channel = NotificationChannelFactory.create(team=team_with_users, channel_name="#private")
+        notification_channel = NotificationChannelFactory.create(
+            team=team_with_users, channel_name="#private", channel_id=""
+        )
         event = _create_event(team_with_users)
 
         service = Mock()
-        service.get_channel_by_name.return_value = None
         with patch.object(notification_channel.messaging_provider, "get_messaging_service", return_value=service):
             result = send_slack_notification(notification_channel, event)
 

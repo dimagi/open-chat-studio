@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.urls import reverse
 
@@ -10,6 +12,14 @@ from apps.utils.factories.notifications import NotificationChannelFactory, Slack
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+
+
+def _mock_slack_channel(channel_name):
+    name = channel_name[1:] if channel_name.startswith("#") else channel_name
+    return patch(
+        "apps.ocs_notifications.forms.resolve_slack_channel",
+        return_value={"id": "C12345", "name": name},
+    )
 
 
 @pytest.fixture()
@@ -63,19 +73,21 @@ class TestNotificationChannelViews:
         client, team = admin_client
         provider = SlackMessagingProviderFactory.create(team=team)
 
-        response = client.post(
-            reverse("ocs_notifications_channels:new", args=[team.slug]),
-            {
-                "messaging_provider": provider.pk,
-                "channel_name": "#alerts",
-                "level": "1",
-                "enabled": "on",
-            },
-        )
+        with _mock_slack_channel("#alerts"):
+            response = client.post(
+                reverse("ocs_notifications_channels:new", args=[team.slug]),
+                {
+                    "messaging_provider": provider.pk,
+                    "channel_name": "#alerts",
+                    "level": "1",
+                    "enabled": "on",
+                },
+            )
 
         assert response.status_code == 302
         channel = NotificationChannel.objects.get(team=team)
-        assert channel.channel_name == "#alerts"
+        assert channel.channel_name == "alerts"
+        assert channel.channel_id == "C12345"
         assert channel.messaging_provider_id == provider.pk
 
     def test_create_rejects_non_slack_provider(self, admin_client):
@@ -113,15 +125,16 @@ class TestNotificationChannelViews:
         provider = SlackMessagingProviderFactory.create(team=team)
         NotificationChannelFactory.create(team=team, messaging_provider=provider)
 
-        response = client.post(
-            reverse("ocs_notifications_channels:new", args=[team.slug]),
-            {
-                "messaging_provider": provider.pk,
-                "channel_name": "#other",
-                "level": "1",
-                "enabled": "on",
-            },
-        )
+        with _mock_slack_channel("#other"):
+            response = client.post(
+                reverse("ocs_notifications_channels:new", args=[team.slug]),
+                {
+                    "messaging_provider": provider.pk,
+                    "channel_name": "#other",
+                    "level": "1",
+                    "enabled": "on",
+                },
+            )
 
         assert response.status_code == 200
         assert any(
@@ -135,15 +148,16 @@ class TestNotificationChannelViews:
         provider = SlackMessagingProviderFactory.create(team=team)
         NotificationChannelFactory.create(team=team, messaging_provider=provider, level=1)
 
-        response = client.post(
-            reverse("ocs_notifications_channels:new", args=[team.slug]),
-            {
-                "messaging_provider": provider.pk,
-                "channel_name": "#critical",
-                "level": "2",
-                "enabled": "on",
-            },
-        )
+        with _mock_slack_channel("#critical"):
+            response = client.post(
+                reverse("ocs_notifications_channels:new", args=[team.slug]),
+                {
+                    "messaging_provider": provider.pk,
+                    "channel_name": "#critical",
+                    "level": "2",
+                    "enabled": "on",
+                },
+            )
 
         assert response.status_code == 302
         assert NotificationChannel.objects.filter(team=team, messaging_provider=provider).count() == 2
@@ -153,19 +167,21 @@ class TestNotificationChannelViews:
         provider = SlackMessagingProviderFactory.create(team=team)
         channel = NotificationChannelFactory.create(team=team, messaging_provider=provider)
 
-        response = client.post(
-            reverse("ocs_notifications_channels:edit", args=[team.slug, channel.pk]),
-            {
-                "messaging_provider": provider.pk,
-                "channel_name": "#updated",
-                "level": "1",
-                "enabled": "on",
-            },
-        )
+        with _mock_slack_channel("#updated"):
+            response = client.post(
+                reverse("ocs_notifications_channels:edit", args=[team.slug, channel.pk]),
+                {
+                    "messaging_provider": provider.pk,
+                    "channel_name": "#updated",
+                    "level": "1",
+                    "enabled": "on",
+                },
+            )
 
         assert response.status_code == 302
         channel.refresh_from_db()
-        assert channel.channel_name == "#updated"
+        assert channel.channel_name == "updated"
+        assert channel.channel_id == "C12345"
 
     def test_views_not_found_when_flag_disabled(self, client):
         create_default_groups()

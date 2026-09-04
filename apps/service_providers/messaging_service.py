@@ -937,13 +937,15 @@ class SlackService(MessagingService):
         platform: ChannelPlatform,
         last_activity_at: datetime | None = None,
         thread_ts: str | None = None,
+        blocks: list[dict] | None = None,
         **kwargs,
     ):
-        self.client.chat_postMessage(
-            channel=to,
-            text=message,
-            thread_ts=thread_ts,
-        )
+        kwargs = {"channel": to, "text": message}
+        if thread_ts is not None:
+            kwargs["thread_ts"] = thread_ts
+        if blocks is not None:
+            kwargs["blocks"] = blocks
+        self.client.chat_postMessage(**kwargs)
 
     @property
     def client(self) -> "WebClient":

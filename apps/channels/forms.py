@@ -19,6 +19,7 @@ from apps.channels import widget_versions
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
+from apps.channels.slack_utils import normalize_slack_channel_name, resolve_slack_channel
 from apps.channels.utils import (
     ALL_DOMAINS,
     get_allowed_email_domains,
@@ -498,10 +499,7 @@ class SlackChannelForm(ExtraFormBase):
         }
 
     def clean_slack_channel_name(self):
-        name = self.cleaned_data["slack_channel_name"].strip()
-        if name.startswith("#"):
-            name = name[1:]
-        return name
+        return normalize_slack_channel_name(self.cleaned_data["slack_channel_name"])
 
     def clean_keywords(self):
         keywords_str = self.cleaned_data.get("keywords", "").strip()
@@ -558,8 +556,7 @@ class SlackChannelForm(ExtraFormBase):
             if not channel_name:
                 raise forms.ValidationError("Channel name is required for specific channels.")
 
-            service = self.messaging_provider.get_messaging_service()
-            channel = service.get_channel_by_name(channel_name)
+            channel = resolve_slack_channel(self.messaging_provider, channel_name)
             if not channel:
                 raise forms.ValidationError(f"No channel found with name {channel_name}")
             cleaned_data["slack_channel_id"] = channel["id"]

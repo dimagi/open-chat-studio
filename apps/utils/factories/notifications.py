@@ -27,6 +27,7 @@ class NotificationChannelFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     messaging_provider = factory.SubFactory(SlackMessagingProviderFactory, team=factory.SelfAttribute("..team"))
     channel_name = factory.Sequence(lambda n: f"#notifications-{n}")
+    channel_id = factory.Sequence(lambda n: f"C{n:06d}")
     level = LevelChoices.WARNING
     enabled = True
 

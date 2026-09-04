@@ -1,5 +1,6 @@
 from django import forms
 
+from apps.channels.slack_utils import normalize_slack_channel_name, resolve_slack_channel
 from apps.ocs_notifications.models import LevelChoices, NotificationChannel, UserNotificationPreferences
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 
@@ -30,9 +31,10 @@ class NotificationChannelForm(forms.ModelForm):
 
     class Meta:
         model = NotificationChannel
-        fields = ["messaging_provider", "channel_name", "level", "enabled"]
+        fields = ["messaging_provider", "channel_name", "channel_id", "level", "enabled"]
         widgets = {
             "level": forms.RadioSelect(choices=LevelChoices.choices),
+            "channel_id": forms.HiddenInput(),
         }
         help_texts = {
             "channel_name": "The Slack channel to post to, e.g. #alerts.",
@@ -48,12 +50,20 @@ class NotificationChannelForm(forms.ModelForm):
         if self.instance and not self.instance.team_id:
             self.instance.team_id = request.team.id
 
+    def clean_channel_name(self):
+        name = self.cleaned_data["channel_name"]
+        return normalize_slack_channel_name(name)
+
     def clean(self):
         cleaned_data = super().clean()
         provider = cleaned_data.get("messaging_provider")
         level = cleaned_data.get("level")
         if provider is None or level is None:
             return cleaned_data
+        channel_name = cleaned_data.get("channel_name")
+        if channel_name:
+            channel = resolve_slack_channel(provider, channel_name) or {}
+            cleaned_data["channel_id"] = channel.get("id", channel_name)
         existing = NotificationChannel.objects.filter(team=self.request.team, messaging_provider=provider, level=level)
         if self.instance and self.instance.pk:
             existing = existing.exclude(pk=self.instance.pk)

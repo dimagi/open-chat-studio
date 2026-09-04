@@ -1,8 +1,11 @@
+from functools import wraps
+
 from django.contrib import messages
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -15,16 +18,24 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.utils import flag_is_active_for_team
 
 
-class FlagRequiredMixin:
-    flag_name = Flags.SLACK_NOTIFICATIONS.slug
+def slack_notifications_flag_required(view_func):
+    """404 when the team has not enabled the Slack notifications feature flag."""
 
-    def dispatch(self, request, *args, **kwargs):
-        if not flag_is_active_for_team(request.team, self.flag_name):
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        if not flag_is_active_for_team(request.team, Flags.SLACK_NOTIFICATIONS.slug):
             raise Http404
-        return super().dispatch(request, *args, **kwargs)
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped_view
 
 
-class NotificationChannelHome(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, TemplateView):
+def slack_notifications_flag_decorator():
+    return method_decorator(slack_notifications_flag_required, name="dispatch")
+
+
+@slack_notifications_flag_decorator()
+class NotificationChannelHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "ocs_notifications.view_notificationchannel"
 
@@ -37,9 +48,8 @@ class NotificationChannelHome(LoginAndTeamRequiredMixin, FlagRequiredMixin, Perm
         }
 
 
-class NotificationChannelTableView(
-    LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, SingleTableView
-):  # ty: ignore[invalid-method-override]
+@slack_notifications_flag_decorator()
+class NotificationChannelTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = NotificationChannel
     table_class = NotificationChannelTable
     template_name = "table/single_table.html"
@@ -53,7 +63,8 @@ class NotificationChannelTableView(
         )
 
 
-class CreateNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, CreateView):
+@slack_notifications_flag_decorator()
+class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
     template_name = "generic/object_form.html"
@@ -78,7 +89,8 @@ class CreateNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, Pe
         return super().form_valid(form)
 
 
-class EditNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, UpdateView):
+@slack_notifications_flag_decorator()
+class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
     template_name = "generic/object_form.html"
@@ -101,7 +113,8 @@ class EditNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, Perm
         return reverse("single_team:manage_team", args=[self.request.team.slug])
 
 
-class DeleteNotificationChannel(LoginAndTeamRequiredMixin, FlagRequiredMixin, PermissionRequiredMixin, View):
+@slack_notifications_flag_decorator()
+class DeleteNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "ocs_notifications.delete_notificationchannel"
 
     def delete(self, request, team_slug: str, pk: int):

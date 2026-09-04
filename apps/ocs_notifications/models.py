@@ -140,6 +140,12 @@ class NotificationChannel(BaseTeamModel):
         related_name="notification_channels",
     )
     channel_name = models.CharField(max_length=255)
+    channel_id = models.CharField(  # noqa: DJ001 - nullable so the AddField migration won't break the running release
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Resolved Slack channel ID (falls back to the channel name).",
+    )
     level = models.PositiveSmallIntegerField(
         choices=LevelChoices.choices,
         default=LevelChoices.WARNING,

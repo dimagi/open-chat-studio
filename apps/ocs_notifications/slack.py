@@ -9,34 +9,44 @@ from apps.web.meta import absolute_url
 logger = logging.getLogger("ocs.notifications")
 
 
-def build_slack_message(notification_event: NotificationEvent) -> str:
-    """Render a notification event as a Slack-formatted message."""
-    lines = [
-        f"*{notification_event.title}*",
-        "",
-        notification_event.message,
-        "",
-        f"_Level: {notification_event.event_type.get_level_display()} · Team: {notification_event.team.name}_",
-        "",
-        "Links:",
-    ]
+def build_slack_message(notification_event: NotificationEvent) -> dict:
+    """Render a notification event as a Slack BlockKit message.
+
+    Returns a ``blocks`` payload plus a plain-text ``text`` fallback (Slack's ``chat_postMessage``
+    requires ``text`` when sending blocks, and surfaced it in clients that can't render blocks).
+    """
     links = dict(notification_event.links or {})
     links["View in OCS"] = absolute_url(
         reverse("ocs_notifications:notification_event_home", args=[notification_event.event_type_id])
     )
+    link_text = " · ".join(f"<{url}|{label}>" for label, url in links.items())
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f":loudspeaker: {notification_event.title}"},
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"Open Chat Studio notification for *{notification_event.team.name}*\n"
+                        f"{notification_event.event_type.get_level_display()} · {link_text}"
+                    ),
+                }
+            ],
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Details*\n```{notification_event.message}```"},
+        },
+    ]
+
+    lines = [f"*{notification_event.title}*", "", notification_event.message]
     lines.extend(f"- <{url}|{label}>" for label, url in links.items())
-    return "\n".join(lines)
-
-
-def _resolve_channel_id(service, channel_name: str) -> str:
-    """Resolve a channel name to its ID, falling back to the raw name.
-
-    The Slack API accepts a public channel name directly, so the raw name is a safe fallback
-    when the bot cannot enumerate channels (e.g. the channel is private or the bot has limited
-    scopes).
-    """
-    channel = service.get_channel_by_name(channel_name)
-    return channel["id"] if channel else channel_name
+    return {"blocks": blocks, "text": "\n".join(lines)}
 
 
 def send_slack_notification(notification_channel: NotificationChannel, notification_event: NotificationEvent) -> bool:
@@ -47,11 +57,13 @@ def send_slack_notification(notification_channel: NotificationChannel, notificat
     """
     try:
         service = notification_channel.messaging_provider.get_messaging_service()
+        message = build_slack_message(notification_event)
         service.send_text_message(
-            message=build_slack_message(notification_event),
+            message=message["text"],
             from_=notification_event.team.slug,
-            to=_resolve_channel_id(service, notification_channel.channel_name),
+            to=notification_channel.channel_id or notification_channel.channel_name,
             platform=ChannelPlatform.SLACK,
+            blocks=message["blocks"],
         )
         return True
     except Exception:
