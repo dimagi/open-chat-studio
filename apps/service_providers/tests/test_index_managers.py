@@ -485,6 +485,9 @@ class TestRemoteIndexManager:
         assert other_row.failure_reason == ""
 
     def test_linking_success_does_not_reach_another_collection(self, remote_collection_index, index_manager):
+        """The success branch of the same batch update, on the same shared File."""
+        # embedding_provider_model shares a per-team unique key, so leave it unset to keep
+        # this Collection out of that constraint.
         other_collection = CollectionFactory.create(
             is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
         )

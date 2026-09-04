@@ -1,3 +1,5 @@
+import httpx
+import openai
 import pytest
 
 from apps.service_providers.exceptions import provider_error_message
@@ -52,3 +54,17 @@ def test_provider_error_message_ignores_a_non_string_message():
     exc = _FakeProviderError("Error code: 400", {"message": {"nested": "object"}})
 
     assert provider_error_message(exc) == "Error code: 400"
+
+
+def test_provider_error_message_reads_a_real_openai_exception():
+    """Pins the shape the helper depends on: the OpenAI SDK unwraps the response payload and
+    hands the inner error object to the exception, so the message sits at `body["message"]`
+    rather than `body["error"]["message"]`."""
+    response = httpx.Response(
+        401,
+        request=httpx.Request("GET", "https://api.openai.com/v1/files/f"),
+        json={"error": {"message": "Incorrect API key provided: sk-abc"}},
+    )
+    exc = openai.AuthenticationError("Error code: 401", response=response, body=response.json()["error"])
+
+    assert provider_error_message(exc) == "Incorrect API key provided: sk-abc"

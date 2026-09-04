@@ -932,7 +932,9 @@ class _RowsThatFailToClose:
 
 class _QuerySetThatFailsToClose:
     """Proxies the calls `index_collection_files` makes on its `collection_files_queryset`
-    argument, substituting `_RowsThatFailToClose` for the iterator it hands back."""
+    argument, substituting `_RowsThatFailToClose` for the iterator it hands back.
+
+    Deliberately minimal: it carries only the three queryset methods that function calls."""
 
     def __init__(self, queryset):
         self._queryset = queryset
