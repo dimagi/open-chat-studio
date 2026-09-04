@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pytz
 from dateutil.relativedelta import relativedelta
-from django.utils.timezone import get_current_timezone_name
+from django.utils.timezone import get_current_timezone
 
 
 def seconds_to_human(value):
@@ -27,12 +27,21 @@ def timedelta_to_relative_delta(timedelta: timedelta):
     return relativedelta(seconds=timedelta.total_seconds())
 
 
+def resolve_timezone(name: str | None) -> tzinfo:
+    """Returns the named zone, falling back to the current timezone for a missing or invalid name."""
+    if not name:
+        return get_current_timezone()
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return get_current_timezone()
+
+
 def pretty_date(date: datetime, as_timezone: str | None = None, include_time: bool = True) -> str:
     """Returns the date like this: 'Monday, 1 January 2024 08:00:00 UTC'.
 
     Set ``include_time=False`` for a day-precision rendering ('Monday, 1 January 2024').
     """
-    as_timezone = as_timezone or get_current_timezone_name()
-    date = date.astimezone(pytz.timezone(as_timezone))
+    date = date.astimezone(resolve_timezone(as_timezone))
     fmt = "%A, %d %B %Y %H:%M:%S %Z" if include_time else "%A, %d %B %Y"
     return date.strftime(fmt)
