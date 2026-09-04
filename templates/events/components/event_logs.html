@@ -4,6 +4,8 @@
         If <strong>
             {% if trigger.trigger_type == "TimeoutTrigger" %}
                 no response for {{ trigger.delay|seconds_to_human }}
+            {% elif trigger.trigger_type == "ScheduledTrigger" %}
+                {{ trigger.trigger_date }} {{ trigger.trigger_time }} ({{ trigger.timezone }})
             {% else %}
                 {{ trigger.get_type_display|lower }}
             {% endif %}
@@ -34,9 +36,13 @@
                         <td>{{ event_log.log }}</td>
                         {% if include_session %}
                             <td>
-                                <a class="btn btn-sm btn-outline btn-primary link" href="{% url 'chatbots:chatbot_session_view' team.slug trigger.experiment.public_id event_log.session.external_id %}">
-                                    Session Details
-                                </a>
+                                {% if event_log.session %}
+                                    <a class="btn btn-sm btn-outline btn-primary link" href="{% url 'chatbots:chatbot_session_view' team.slug trigger.experiment.public_id event_log.session.external_id %}">
+                                        Session Details
+                                    </a>
+                                {% else %}
+                                    <span class="text-sm text-gray-500">No session</span>
+                                {% endif %}
                             </td>
                         {% endif %}
                     </tr>

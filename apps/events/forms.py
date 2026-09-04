@@ -1,10 +1,20 @@
+import pytz
 from django import forms
+from django.utils import timezone
 
-from apps.events.models import TimePeriod
+from apps.events.models import (
+    TimePeriod,
+    scheduled_datetime_for,
+)
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
-from .models import EventAction, StaticTrigger, TimeoutTrigger
+from .models import (
+    EventAction,
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
 
 
 class SendMessageToBotForm(forms.Form):
@@ -158,3 +168,54 @@ class TimeoutTriggerForm(BaseTriggerForm):
             "delay": "Wait time",
             "trigger_from_first_message": "Trigger from first message",
         }
+
+
+class ScheduledTriggerForm(BaseTriggerForm):
+    timezone = forms.ChoiceField(
+        choices=[(tz, tz) for tz in pytz.all_timezones],
+        label="Timezone",
+        initial="UTC",
+    )
+
+    class Meta:
+        model = ScheduledTrigger
+        fields = ["trigger_date", "trigger_time", "timezone", "active_session_window_days"]
+        labels = {
+            "trigger_date": "Date",
+            "trigger_time": "Time",
+            "active_session_window_days": "Active session window (days)",
+        }
+        widgets = {
+            "trigger_date": forms.DateInput(attrs={"type": "date"}),
+            "trigger_time": forms.TimeInput(attrs={"type": "time"}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        self._validate_time_is_in_the_future(cleaned_data)
+        return cleaned_data
+
+    def _validate_time_is_in_the_future(self, cleaned_data):
+        trigger_date = cleaned_data.get("trigger_date")
+        trigger_time = cleaned_data.get("trigger_time")
+        timezone_name = cleaned_data.get("timezone")
+        if not self._has_full_schedule(trigger_date, trigger_time, timezone_name):
+            return
+        if self._schedule_unchanged(trigger_date, trigger_time, timezone_name):
+            return
+        scheduled_at = scheduled_datetime_for(trigger_date, trigger_time, timezone_name)
+        if scheduled_at <= timezone.now():
+            self.add_error("trigger_date", "The scheduled time must be in the future.")
+
+    def _schedule_unchanged(self, trigger_date, trigger_time, timezone_name):
+        """Return True when editing and none of the schedule fields have been modified."""
+        inst = self.instance
+        if inst is None or not inst.pk:
+            return False
+        return (
+            inst.trigger_date == trigger_date and inst.trigger_time == trigger_time and inst.timezone == timezone_name
+        )
+
+    @staticmethod
+    def _has_full_schedule(trigger_date, trigger_time, timezone_name):
+        return bool(trigger_date and trigger_time and timezone_name)
