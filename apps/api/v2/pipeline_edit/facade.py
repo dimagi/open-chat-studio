@@ -80,8 +80,8 @@ def _locked_pipeline(chatbot: Experiment) -> Pipeline:
     node from its row and reads the ``collection_indexes`` M2M per node.
     """
     if chatbot.pipeline_id is None:
-        # Every chatbot the UI or POST /chatbots/ creates is pipeline-backed, but nothing in the
-        # schema enforces it — so an older row without one is "no pipeline to edit", not a 500.
+        # Every chatbot the UI or the `chatbot_create` endpoint creates is pipeline-backed, but
+        # nothing in the schema enforces it — so an older row without one is "no pipeline to edit", not a 500.
         raise NotFound("This chatbot has no pipeline.")
     # get_object_or_404 rather than .get(): the default manager hides archived rows, so an archived
     # pipeline is a DoesNotExist here and a 404 is the answer, not a 500.

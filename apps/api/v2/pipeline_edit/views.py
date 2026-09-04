@@ -46,13 +46,13 @@ NODE_ID = OpenApiParameter(
     name="node_id",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.PATH,
-    description="The node's server-assigned id, as returned by a write or by GET /chatbots/{id}/inspect/.",
+    description="The node's server-assigned id, as returned by a write or by the `chatbot_inspect` endpoint.",
 )
 EDGE_ID = OpenApiParameter(
     name="edge_id",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.PATH,
-    description="The edge's server-assigned id, as returned by a wire or by GET /chatbots/{id}/inspect/.",
+    description="The edge's server-assigned id, as returned by a wire or by the `chatbot_inspect` endpoint.",
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
@@ -182,9 +182,9 @@ class PipelineNodeEditView(PipelineFacadeView):
             "The node's `node_id` and its position on the canvas are assigned by the server and "
             "cannot be chosen.\n\n"
             "What `params` may hold depends on `type`, so the examples below show a full body for "
-            "each type. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
-            "type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may "
-            "name."
+            "each type. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for "
+            "one type, and the `pipeline_node_options` endpoint serves the ids its resource params "
+            "may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
@@ -229,9 +229,9 @@ class PipelineNodeEditView(PipelineFacadeView):
             "across a keyword edit, so re-read `output_handles` after one.\n\n"
             "What `params` may hold depends on the node's type, not on the verb: the `POST` "
             "examples name every param of each type, and the examples here are partial bodies "
-            "instead. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
-            "type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may "
-            "name."
+            "instead. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for "
+            "one type, and the `pipeline_node_options` endpoint serves the ids its resource params "
+            "may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],
@@ -329,9 +329,9 @@ class PipelineEdgeEditView(PipelineFacadeView):
             "`source` and `target` are enough for most nodes: a handle you leave out means the only "
             "one the node has. A router is the exception — it exposes one handle per branch, so name "
             "the branch to wire in `source_handle`. No node is moved on the canvas.\n\n"
-            "Each edge's `id` is assigned by the server and cannot be chosen. It is the address "
-            "`DELETE .../pipeline/edges/{edge_id}/` takes, and `edges` reports them in the order the "
-            "body named them.\n\n"
+            "Each edge's `id` is assigned by the server and cannot be chosen. It is what the "
+            "`pipeline_edge_delete` endpoint takes, and `edges` reports them in the order the body "
+            "named them.\n\n"
             "Wiring a pair that is already wired the same way is refused rather than stored twice, "
             "so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it "
             "lands, and comes back in `pipeline_errors` for you to repair."

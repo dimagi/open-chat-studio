@@ -237,7 +237,7 @@ paths:
 
         `source` and `target` are enough for most nodes: a handle you leave out means the only one the node has. A router is the exception — it exposes one handle per branch, so name the branch to wire in `source_handle`. No node is moved on the canvas.
 
-        Each edge's `id` is assigned by the server and cannot be chosen. It is the address `DELETE .../pipeline/edges/{edge_id}/` takes, and `edges` reports them in the order the body named them.
+        Each edge's `id` is assigned by the server and cannot be chosen. It is what the `pipeline_edge_delete` endpoint takes, and `edges` reports them in the order the body named them.
 
         Wiring a pair that is already wired the same way is refused rather than stored twice, so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it lands, and comes back in `pipeline_errors` for you to repair.
       summary: Wire Pipeline Nodes
@@ -322,8 +322,8 @@ paths:
         name: edge_id
         schema:
           type: string
-        description: The edge's server-assigned id, as returned by a wire or by GET
-          /chatbots/{id}/inspect/.
+        description: The edge's server-assigned id, as returned by a wire or by the
+          `chatbot_inspect` endpoint.
         required: true
       - in: path
         name: id
@@ -363,7 +363,7 @@ paths:
 
         The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen.
 
-        What `params` may hold depends on `type`, so the examples below show a full body for each type. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on `type`, so the examples below show a full body for each type. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for one type, and the `pipeline_node_options` endpoint serves the ids its resource params may name.
       summary: Add a Pipeline Node
       parameters:
       - in: path
@@ -567,7 +567,7 @@ paths:
 
         Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. The node's edges follow their keyword: dropping a keyword deletes the edge that served it, and a renamed keyword counts as one branch gone and another new. Handle names are not stable across a keyword edit, so re-read `output_handles` after one.
 
-        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for one type, and the `pipeline_node_options` endpoint serves the ids its resource params may name.
       summary: Edit a Pipeline Node
       parameters:
       - in: path
@@ -581,8 +581,8 @@ paths:
         name: node_id
         schema:
           type: string
-        description: The node's server-assigned id, as returned by a write or by GET
-          /chatbots/{id}/inspect/.
+        description: The node's server-assigned id, as returned by a write or by the
+          `chatbot_inspect` endpoint.
         required: true
       tags:
       - Pipelines
@@ -661,8 +661,8 @@ paths:
         name: node_id
         schema:
           type: string
-        description: The node's server-assigned id, as returned by a write or by GET
-          /chatbots/{id}/inspect/.
+        description: The node's server-assigned id, as returned by a write or by the
+          `chatbot_inspect` endpoint.
         required: true
       tags:
       - Pipelines
@@ -1847,7 +1847,7 @@ components:
         source:
           type: string
           description: '``node_id`` the edge leaves from. Node ids are the ones a
-            node write returns and `GET /chatbots/{id}/inspect/` reports.'
+            node write returns and the `chatbot_inspect` endpoint reports.'
         target:
           type: string
           description: '``node_id`` the edge points to.'
@@ -2716,7 +2716,7 @@ components:
       properties:
         type:
           type: string
-          description: A node type from `GET /pipeline/nodes/`.
+          description: A node type the `pipeline_node_list` endpoint serves.
         label:
           type: string
           description: Display name shown in the pipeline builder. Defaults to the
@@ -2726,12 +2726,11 @@ components:
           additionalProperties: {}
           description: The node's configuration. Anything omitted takes the type's
             default, so `type` alone is a valid body. Param names are the node type's
-            own, as published by `GET /pipeline/nodes/{node_type}/`. They are not
-            always the name of the `/pipeline/options/` list a param draws its values
-            from -- `source_material_id` is the param, `source_material` is the list
-            it chooses from -- so send the param name. A name the type does not declare
-            is dropped rather than refused, and the response reports the params the
-            node ended up holding.
+            own, as published by the `pipeline_node_retrieve` endpoint. They are not
+            always the name of the option list a param draws its values from -- `source_material_id`
+            is the param, `source_material` is the list it chooses from -- so send
+            the param name. A name the type does not declare is dropped rather than
+            refused, and the response reports the params the node ended up holding.
       required:
       - type
       additionalProperties: false
@@ -2952,9 +2951,9 @@ components:
           type: object
           additionalProperties: {}
           description: The params to change; the ones you leave out are left as they
-            are. Param names are the node type's own, as published by `GET /pipeline/nodes/{node_type}/`.
-            They are not always the name of the `/pipeline/options/` list a param
-            draws its values from -- `source_material_id` is the param, `source_material`
+            are. Param names are the node type's own, as published by the `pipeline_node_retrieve`
+            endpoint. They are not always the name of the option list a param draws
+            its values from -- `source_material_id` is the param, `source_material`
             is the list it chooses from -- so send the param name. A name the type
             does not declare is dropped rather than refused, and the response reports
             the params the node ended up holding.
@@ -3083,7 +3082,7 @@ components:
       description: |-
         What every façade write reports back about the pipeline it just changed.
 
-        The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
+        The same three fields the `chatbot_inspect` endpoint publishes, so one shape is parsed across
         read and write.
       properties:
         pipeline_valid:
@@ -3582,7 +3581,7 @@ components:
     WrittenEdge:
       type: object
       description: |-
-        An edge as a write returns it: the field names ``GET /chatbots/{id}/inspect/`` reports under
+        An edge as a write returns it: the field names the `chatbot_inspect` endpoint reports under
         ``pipeline.graph.edges``, so one reader parses both.
 
         Not the identical schema: inspect's handles are nullable because the pipeline builder's own edges

@@ -53,7 +53,8 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     ``getNodeId`` produces. Params are already checked by the time this runs -- the type comes from
     the request body, so nothing here has to wait on the graph.
     """
-    # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
+    # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
+    # and
     # `get_node_type_schema` has already refused any other name, so this cannot come back None.
     node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
     node_id = _unused_node_id(flow, node_type)

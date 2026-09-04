@@ -15,8 +15,8 @@ from .graph_editor import settable_params
 #: Where a param's name comes from -- the one thing a free-form ``params`` object cannot say for
 #: itself. Spelled out on both write bodies, since a client reads one or the other.
 PARAM_NAMES = (
-    "Param names are the node type's own, as published by `GET /pipeline/nodes/{node_type}/`. They "
-    "are not always the name of the `/pipeline/options/` list a param draws its values from -- "
+    "Param names are the node type's own, as published by the `pipeline_node_retrieve` endpoint. "
+    "They are not always the name of the option list a param draws its values from -- "
     "`source_material_id` is the param, `source_material` is the list it chooses from -- so send "
     "the param name. A name the type does not declare is dropped rather than refused, and the "
     "response reports the params the node ended up holding."
@@ -61,7 +61,7 @@ class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
     server_assigned_keys = SERVER_ASSIGNED_NODE_KEYS
 
-    type = serializers.CharField(help_text="A node type from `GET /pipeline/nodes/`.")
+    type = serializers.CharField(help_text="A node type the `pipeline_node_list` endpoint serves.")
     label = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -126,7 +126,7 @@ class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 class PipelineWriteSerializer(serializers.Serializer):
     """What every façade write reports back about the pipeline it just changed.
 
-    The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
+    The same three fields the `chatbot_inspect` endpoint publishes, so one shape is parsed across
     read and write.
     """
 
@@ -199,8 +199,8 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
     source = serializers.CharField(
         help_text=(
-            "``node_id`` the edge leaves from. Node ids are the ones a node write returns and "
-            "`GET /chatbots/{id}/inspect/` reports."
+            "``node_id`` the edge leaves from. Node ids are the ones a node write returns and the "
+            "`chatbot_inspect` endpoint reports."
         )
     )
     target = serializers.CharField(help_text="``node_id`` the edge points to.")
@@ -226,7 +226,7 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
 
 class WrittenEdgeSerializer(serializers.Serializer):
-    """An edge as a write returns it: the field names ``GET /chatbots/{id}/inspect/`` reports under
+    """An edge as a write returns it: the field names the `chatbot_inspect` endpoint reports under
     ``pipeline.graph.edges``, so one reader parses both.
 
     Not the identical schema: inspect's handles are nullable because the pipeline builder's own edges

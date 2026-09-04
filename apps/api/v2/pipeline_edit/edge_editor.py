@@ -195,10 +195,11 @@ def _handle(side: _Side, content: FlowNodeData, requested: str | None) -> str:
 def _no_output_handles_message(content: FlowNodeData) -> str:
     """What to tell a caller that tried to wire from a node offering no output handle.
 
-    Only one of the cases is the caller's to fix, and it is on the documented happy path:
-    ``POST /pipeline/nodes/ {"type": "RouterNode"}`` stores ``keywords: []``, and a router's handles
-    *are* its keywords, so the one node type ``source_handle`` exists for arrives unwirable. Handed
-    the End node's answer instead, an agent would delete the node when the fix is one PATCH away.
+    Only one of the cases is the caller's to fix, and it is on the documented happy path: the
+    `pipeline_node_create` endpoint stores ``keywords: []`` for ``{"type": "RouterNode"}``, and a
+    router's handles *are* its keywords, so the one node type ``source_handle`` exists for arrives
+    unwirable. Handed the End node's answer instead, an agent would delete the node when the fix is
+    one PATCH away.
 
     Held as a lookup on :func:`~apps.pipelines.build_state.why_no_output_handles`, so a case added
     there raises ``KeyError`` here instead of quietly inheriting the End node's answer.
@@ -235,8 +236,8 @@ _SOURCE = _Side(
 )
 
 #: ``target_handle`` is never required, since only the Start node lacks an input handle and it
-#: cannot be a target at all. The field exists so an edge read back from ``GET /inspect/`` can be
-#: sent straight back, and so a multi-input node type would need no new field.
+#: cannot be a target at all. The field exists so an edge read back from the `chatbot_inspect`
+#: endpoint can be sent straight back, and so a multi-input node type would need no new field.
 _TARGET = _Side(
     endpoint="target",
     handle_field="target_handle",

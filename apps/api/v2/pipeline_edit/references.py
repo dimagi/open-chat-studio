@@ -3,9 +3,9 @@
 Refuses rather than reports: nothing downstream would tell the caller. Another team's id lands in
 the FK column untouched, and ``Pipeline.validate`` says nothing about it.
 
-``PARAMETER_OPTION_SOURCES`` says which ``/pipeline/options/`` lists a team could be denied a value
-from, and so which params are references. ``OptionsSource.get_resolver`` hands back the function that
-asks the database what the team may actually use.
+``PARAMETER_OPTION_SOURCES`` says which option lists a team could be denied a value from, and so
+which params are references. ``OptionsSource.get_resolver`` hands back the function that asks
+the database what the team may actually use.
 
 A resolver is reached through the source rather than the param, because the source decides the
 permitted values; the param name is only how the body spells it, and what an error is reported
@@ -61,7 +61,8 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
         if unknown := [item for item in requested_values if _is_not_allowed(item, available_values)]:
             errors[param] = (
                 f"Not available to this team: {', '.join(repr(item) for item in unknown)}. "
-                f"Choose from the '{param_option_map[param]}' list in GET /pipeline/options/{node_type}/."
+                f"Choose from the '{param_option_map[param]}' list the `pipeline_node_options` endpoint "
+                f"serves for '{node_type}'."
             )
     return errors
 
