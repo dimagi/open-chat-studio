@@ -1,40 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags humanize i18n json_tags static waffle_tags %}
 
-{% block page_head %}
-  {{ block.super }}
-  <style>
-    /* The Format/Revert/Save row above the editor already covers this; the
-       JS-injected floating Format button inside the editor would duplicate it. */
-    #participant-data-panel .json-editor > button {
-      display: none;
-    }
-    /* The mockup shows a plain, muted JSON block, not a developer-tool-styled
-       code editor -- flatten CodeMirror's line numbers and syntax colors to
-       match, scoped to this page so the richer editor elsewhere is untouched. */
-    #participant-data-panel .cm-gutters {
-      display: none;
-    }
-    #participant-data-panel .cm-content,
-    #participant-data-panel .cm-content * {
-      color: var(--color-base-content) !important;
-    }
-    #participant-data-panel .cm-activeLine,
-    #participant-data-panel .cm-activeLineGutter {
-      background-color: transparent !important;
-    }
-    #participant-data-panel .cm-editor {
-      background-color: var(--color-base-200) !important;
-      border: 1px solid var(--color-base-300);
-      border-radius: var(--radius-field, 0.5rem);
-    }
-    #participant-data-panel .cm-gutter,
-    #participant-data-panel .cm-scroller {
-      background-color: transparent !important;
-    }
-  </style>
-{% endblock page_head %}
-
 {% block breadcrumbs %}
   {% if request.user.is_authenticated %}
     <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -74,11 +40,11 @@
           <div class="join rounded-full overflow-hidden">
             <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=prev">
-              <i class="fa-solid fa-backward-step"></i> Older
+              <i class="fa-solid fa-backward-step"></i> {% translate "Previous session" %}
             </a>
             <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=next">
-              Newer <i class="fa-solid fa-forward-step"></i>
+              {% translate "Next session" %} <i class="fa-solid fa-forward-step"></i>
             </a>
           </div>
           {% if perms.trace.view_trace %}
@@ -315,31 +281,10 @@
     {% if perms.experiments.view_participantdata %}
       <div x-show="tab === 'data'" x-cloak class="pt-3">
         <div class="app-card">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div>
-              <h3 class="pg-subtitle">{% translate "Participant data" %}</h3>
-              <p class="pg-help mb-2">
-                {% translate "Scoped to" %} {{ experiment.name }}
-                {% if participant_data_updated_at %}
-                  · {% translate "last updated" %} {{ participant_data_updated_at }}
-                {% else %}
-                  · {% translate "no data recorded yet" %}
-                {% endif %}
-              </p>
-            </div>
-            {% if perms.experiments.change_participantdata %}
-              <div class="flex items-center gap-2">
-                <button type="button" class="btn btn-sm"
-                        onclick="document.querySelector('#participant-data-panel .json-editor').dispatchEvent(new Event('formatEditor'))">
-                  {% translate "Format" %}
-                </button>
-                <button type="reset" id="participant-data-revert-btn" class="btn btn-sm" form="participant-data-form">{% translate "Revert" %}</button>
-                <button type="submit" id="participant-data-save-btn" class="btn btn-sm btn-primary" form="participant-data-form">{% translate "Save changes" %}</button>
-              </div>
-            {% endif %}
-          </div>
-          <div id="participant-data-panel" class="mt-2">
-            {% include "participants/partials/participant_data.html" with hide_submit_button=True show_validation_hint=True external_disable_selector="#participant-data-save-btn, #participant-data-revert-btn" external_json_disable_elt="#participant-data-save-btn" %}
+          <h3 class="pg-subtitle">{% translate "Participant data" %}</h3>
+          <p class="pg-help mb-2">{% translate "As of the last message in this session" %}</p>
+          <div class="mt-2 p-3 border rounded-lg border-neutral-500">
+            <pre><code>{{ experiment_session.latest_participant_data|to_json }}</code></pre>
           </div>
         </div>
       </div>
@@ -373,11 +318,9 @@
     data-unlinkTagUrl="{% url 'annotations:unlink_tag' request.team.slug %}"
   >
   </script>
-  <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
       SiteJS.tagMultiselect.setupTagSelects();
-      SiteJS.editors.initJsonEditors();
     });
   </script>
 {% endblock page_js %}
