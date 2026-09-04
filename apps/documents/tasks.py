@@ -12,7 +12,7 @@ from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
@@ -106,10 +106,17 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
         except Exception as e:
             # IN_PROGRESS renders as a spinner for as long as the row exists, so the group needs
             # a terminal status here. The IN_PROGRESS filter leaves rows that add_files already
-            # failed carrying their own reason, which names the stage that failed.
-            CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
-                status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
-            )
+            # failed carrying their own reason, which names the stage that failed. A caller that
+            # holds a transaction around this call cannot accept the write once it has aborted.
+            try:
+                CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
+                    status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
+                )
+            except DatabaseError:
+                logger.exception(
+                    "Could not record the indexing failure against the collection files",
+                    extra={"collection_file_ids": ids},
+                )
             raise
 
     return previous_remote_file_ids

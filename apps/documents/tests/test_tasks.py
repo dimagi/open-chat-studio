@@ -9,6 +9,7 @@ import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from django.core.files.base import ContentFile
 from django.db import DatabaseError
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.documents.document_source_service import SyncResult
@@ -858,3 +859,27 @@ def test_index_collection_files_keeps_a_reason_already_written_by_add_files(add_
     collection_file.refresh_from_db()
     assert collection_file.status == FileStatus.FAILED
     assert collection_file.failure_reason == "FileUploadError: Incorrect API key provided: sk-abc"
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_propagates_the_error_that_stopped_indexing(add_files_to_index_mock, collection):
+    """A caller holding a transaction cannot accept the recovery write. The error that stopped
+    indexing is the one worth reporting."""
+    add_files_to_index_mock.side_effect = ValueError("the original failure")
+    collection_file = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+    original_update = QuerySet.update
+
+    def fail_only_the_recovery_write(self, **kwargs):
+        if kwargs.get("status") == FileStatus.FAILED:
+            raise DatabaseError("current transaction is aborted")
+        return original_update(self, **kwargs)
+
+    with patch.object(QuerySet, "update", fail_only_the_recovery_write):
+        with pytest.raises(ValueError, match="the original failure"):
+            index_collection_files_task([collection_file.id])
