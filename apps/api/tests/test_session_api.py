@@ -308,6 +308,59 @@ def test_session_participant_data(session, has_trace, has_participant_data):
 
 
 @pytest.mark.django_db()
+def test_session_participant_data_with_diff(session):
+    """participant_data_diff is applied to the snapshot when both list and detail endpoints are hit."""
+    snapshot = {"name": "Alice"}
+    diff = [("add", "", [("age", 30)])]
+
+    TraceFactory.create(
+        session=session,
+        team=session.team,
+        participant_data=snapshot,
+        participant_data_diff=diff,
+    )
+
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["participant_data"] == {"name": "Alice", "age": 30}
+
+
+@pytest.mark.django_db()
+def test_session_includes_ended_at_on_detail(session):
+    """ended_at is present on the detail endpoint, not just the list endpoint."""
+    ended = timezone.now()
+    session.ended_at = ended
+    session.save()
+    user = session.team.members.first()
+    response = ApiTestClient(user, session.team).get(reverse("api:session-detail", kwargs={"id": session.external_id}))
+    assert response.status_code == 200
+    assert response.json()["ended_at"] == DateTimeField().to_representation(ended)
+
+
+@pytest.mark.django_db()
+def test_session_ended_at_is_null_when_not_set(session):
+    """ended_at is null in both list and detail when not set."""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["ended_at"] is None
+
+
+@pytest.mark.django_db()
 def test_participant_data_prefetch_uses_only_latest_trace_per_session(experiment):
     user = experiment.team.members.first()
     session1, session2 = ExperimentSessionFactory.create_batch(2, experiment=experiment)
