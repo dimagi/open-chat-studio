@@ -218,6 +218,32 @@ describe('hold and release', () => {
     expect(page.root.shadowRoot.querySelector('.message-textarea')).not.toBeNull();
   });
 
+  it('sends a message held while a silent consent post was in flight', async () => {
+    const page = await mountWidget('persistent-session="true"');
+    window.localStorage.setItem('ocs-chat-consent-bot', '7');
+    let releasePost: () => void;
+    const recordConsent = jest.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
+    const sendMessage = processing();
+    stubService(page, { recordConsent, sendMessage });
+    page.rootInstance['activeSessionId'] = 'session-1';
+
+    // Polling hands the block to an un-awaited applyConsent, and nothing locks the composer
+    // for the round-trip, so a send can land while the stored acceptance is still posting.
+    const applied = page.rootInstance['applyConsent'](consentBlock);
+    await page.waitForChanges();
+    await page.rootInstance['sendMessage']('hello');
+    await page.waitForChanges();
+    expect(page.rootInstance['heldMessage']).toBe('hello');
+
+    releasePost();
+    await applied;
+    await settle(page);
+
+    expect(sendMessage).toHaveBeenCalledWith('session-1', expect.objectContaining({ message: 'hello' }));
+    expect(page.rootInstance['heldMessage']).toBeUndefined();
+    expect(consentPanel(page)).toBeNull();
+  });
+
   it('disables the agree button while the acceptance is in flight', async () => {
     const page = await mountWidget();
     let releasePost: () => void;

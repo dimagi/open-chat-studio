@@ -612,7 +612,11 @@ export class OcsChat {
     // form version: a failed one leaves `required` set and the next send shows the panel.
     if (this.autoConsentAttempted === consent.form_version_id) return;
     this.autoConsentAttempted = consent.form_version_id;
-    await this.postConsent(consent.form_version_id, { silent: true });
+    // The composer stays live for the round-trip, so a send during it is held against a
+    // requirement this post clears. Release it here rather than leaving it for a poll.
+    if (await this.postConsent(consent.form_version_id, { silent: true })) {
+      await this.releaseHeldMessage();
+    }
   }
 
   /**
