@@ -15,7 +15,7 @@ from apps.documents.models import Collection, CollectionFile, FileStatus, format
 from apps.documents.readers import FileReadException
 from apps.documents.retrieval import search_collection
 from apps.files.models import File, FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.exceptions import UnableToLinkFileException, provider_error_message
 from apps.service_providers.llm_service.openai_files import create_files_remote
 from apps.utils.deletion import chunk_list
 
@@ -184,7 +184,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
             if not (file.external_id and self.file_exists_at_remote(file)):
                 file.external_id = None  # ty: ignore[invalid-assignment]
                 self.upload_file_to_remote(file)
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "Failed to upload file to the remote index",
                 extra={
@@ -192,7 +192,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                     "team": file.team.slug,
                 },
             )
-            raise FileUploadError() from None
+            raise FileUploadError(provider_error_message(e)) from None
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
@@ -248,7 +248,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
                 "Failed to link files to OpenAI vector store",
                 extra={"vector_store_id": self.index_id, "chunking_strategy": chunking_strategy},
             )
-            raise UnableToLinkFileException("Failed to link files to OpenAI vector store") from e
+            raise UnableToLinkFileException(provider_error_message(e)) from e
 
     def file_exists_at_remote(self, file: File) -> bool:
         try:

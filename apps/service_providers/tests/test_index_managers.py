@@ -435,6 +435,7 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+        assert collection_file.failure_reason == "FileUploadError: Upload failed"
 
     def test_add_files_with_linking_failures(self, remote_collection_index, index_manager):
         file = FileFactory.create(external_id="test_file_id", file__data=b"test content")
@@ -452,6 +453,7 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+        assert collection_file.failure_reason == "UnableToLinkFileException: Link failed"
 
 
 @pytest.mark.django_db()
@@ -529,13 +531,30 @@ class TestOpenAIRemoteIndexManager:
         assert provider_client_mock.vector_stores.file_batches.create.call_count == 2
 
     def testlink_files_to_remote_index_failure(self, index_manager, provider_client_mock):
-        """Test linking files failure"""
-        provider_client_mock.vector_stores.file_batches.create.side_effect = Exception("Connection error")
+        """The provider's explanation reaches the exception, because a fixed string reads the
+        same for a rejected key, an unknown file id and a dropped connection."""
+        provider_error = Exception("Error code: 401 - unauthorized")
+        provider_error.body = {"message": "Incorrect API key provided: sk-abc"}
+        provider_client_mock.vector_stores.file_batches.create.side_effect = provider_error
 
         with pytest.raises(UnableToLinkFileException) as exc_info:
             index_manager.link_files_to_remote_index(["file-1", "file-2"])
 
-        assert "Failed to link files to OpenAI vector store" in str(exc_info.value)
+        assert str(exc_info.value) == "Incorrect API key provided: sk-abc"
+
+    def test_ensure_remote_file_exists_carries_the_provider_message(self, index_manager, provider_client_mock):
+        """The upload raise site takes no arguments today, so the reason renders as the bare
+        class name with nothing about the cause."""
+        provider_error = Exception("Error code: 401 - unauthorized")
+        provider_error.body = {"message": "Incorrect API key provided: sk-abc"}
+        provider_client_mock.files.retrieve.side_effect = provider_error
+        # Created rather than built: the handler logs file.team.slug on the way out.
+        file = FileFactory.create(external_id="ext-id-123")
+
+        with pytest.raises(FileUploadError) as exc_info:
+            index_manager._ensure_remote_file_exists(file)
+
+        assert str(exc_info.value) == "Incorrect API key provided: sk-abc"
 
     @pytest.mark.parametrize(
         ("file_external_id", "remote_file_exists", "create_file_called"),
