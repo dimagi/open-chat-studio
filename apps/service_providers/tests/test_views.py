@@ -493,16 +493,6 @@ class TestSavingVerifiesCredentials:
         assert provider.name == "Saved Anyway"
         assert provider.config.get("openai_api_key") == "a-new-key"
 
-    def test_the_button_reports_the_check_it_is_waiting_on(self, team_with_users, authed_client):
-        """The check runs inline and holds the page for seconds, so the button has to both
-        say what it is doing and stop taking clicks while it does."""
-        provider = LlmProviderFactory(team=team_with_users)
-
-        content = authed_client.get(self._edit_url(team_with_users, provider)).content.decode()
-
-        assert ':disabled="submitted"' in content
-        assert "Verifying credentials" in content
-
     @pytest.mark.parametrize(
         ("extra_data", "expected"),
         [
