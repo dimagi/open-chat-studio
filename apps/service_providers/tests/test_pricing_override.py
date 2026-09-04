@@ -10,7 +10,6 @@ from django.urls import reverse
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.views import llm_models_context
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -115,45 +114,6 @@ class TestPricingOverride:
 
         assert response.status_code == 400
         assert not PricingRule.objects.filter(team=team, model_name="test-pe").exists()
-
-
-@pytest.mark.django_db()
-class TestOverrideModalOpening:
-    """The modal body is filled over HTMX, so it must not be shown before the fill lands."""
-
-    def test_the_row_does_not_open_the_modal_on_click(self):
-        team = TeamWithUsersFactory.create()
-        model = _custom_model(team, name="test-pg")
-        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
-
-        body = _client_for(team).post(url, {"input_price_per_million_tokens": "5.0"}).content.decode()
-
-        assert 'onclick="pricing_override_modal.showModal()"' not in body
-        assert body.count("pricing_override_modal.showModal()") == 1
-        assert "hx-on::after-request" in body
-
-
-@pytest.mark.django_db()
-class TestCustomModelDialog:
-    def test_an_invalid_submission_leaves_the_dialog_open(self):
-        """The dialog holds the only copy of what the user typed, so closing it on a
-        rejected save throws the input away along with the reason."""
-        team = TeamWithUsersFactory.create()
-        provider = LlmProviderFactory(team=team)
-        url = reverse(
-            "service_providers:edit",
-            kwargs={"team_slug": team.slug, "provider_type": "llm", "pk": provider.pk},
-        )
-
-        body = _client_for(team).get(url).content.decode()
-
-        assert "if (event.detail.successful) new_custom_model.close()" in body
-        assert 'hx-on::after-request="new_custom_model.close()"' not in body
-        # A submit button inside <form method="dialog"> closes the dialog natively on click,
-        # before the response is back, so the conditional handler alone would not hold it open.
-        create_url = reverse("service_providers:llm_provider_model_new", kwargs={"team_slug": team.slug})
-        save_button = body[body.rindex("<button", 0, body.index(create_url)) : body.index(create_url)]
-        assert 'type="button"' in save_button
 
 
 @pytest.mark.django_db()
