@@ -1,15 +1,14 @@
 import logging
 from datetime import timedelta
 from functools import cached_property
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pytz
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functions
 from django.utils import timezone
-from pytz.exceptions import UnknownTimeZoneError
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
@@ -682,13 +681,13 @@ class ScheduledMessage(BaseTeamModel):
         last_triggered_at = self.last_triggered_at
         if as_timezone:
             try:
-                pytz_timezone = pytz.timezone(as_timezone)
-            except UnknownTimeZoneError:
+                zone = ZoneInfo(as_timezone)
+            except (ZoneInfoNotFoundError, ValueError, TypeError):
                 pass
             else:
-                next_trigger_date = next_trigger_date.astimezone(pytz_timezone)
+                next_trigger_date = next_trigger_date.astimezone(zone)
                 if last_triggered_at:
-                    last_triggered_at = last_triggered_at.astimezone(pytz_timezone)
+                    last_triggered_at = last_triggered_at.astimezone(zone)
         return {
             "name": self.name,
             "prompt": self.prompt_text,
