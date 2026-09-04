@@ -20,6 +20,7 @@ from apps.documents.tasks import (
     create_collection_from_assistant_task,
     create_collection_zip_task,
     delete_collection_task,
+    index_collection_files,
     index_collection_files_task,
     migrate_vector_stores,
     sync_all_document_sources_task,
@@ -883,3 +884,57 @@ def test_index_collection_files_propagates_the_error_that_stopped_indexing(add_f
     with patch.object(QuerySet, "update", fail_only_the_recovery_write):
         with pytest.raises(ValueError, match="the original failure"):
             index_collection_files_task([collection_file.id])
+
+
+class _RowsThatFailToClose:
+    """Yields the rows of an already-fetched queryset, then raises from close(), mimicking a
+    server-side cursor whose CLOSE fails against an already-aborted transaction."""
+
+    def __init__(self, rows):
+        self._rows = iter(rows)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._rows)
+
+    def close(self):
+        raise RuntimeError("cursor already closed")
+
+
+class _QuerySetThatFailsToClose:
+    """Proxies the calls `index_collection_files` makes on its `collection_files_queryset`
+    argument, substituting `_RowsThatFailToClose` for the iterator it hands back."""
+
+    def __init__(self, queryset):
+        self._queryset = queryset
+
+    def first(self):
+        return self._queryset.first()
+
+    def select_related(self, *fields):
+        return _QuerySetThatFailsToClose(self._queryset.select_related(*fields))
+
+    def iterator(self, chunk_size):
+        return _RowsThatFailToClose(list(self._queryset.iterator(chunk_size)))
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_propagates_the_error_when_the_cursor_close_also_fails(
+    add_files_to_index_mock, collection
+):
+    """Closing an abandoned cursor can itself fail, on a connection whose transaction the
+    original error already aborted. The original error is still the one worth reporting."""
+    add_files_to_index_mock.side_effect = ValueError("the original failure")
+    collection_file = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+    queryset = _QuerySetThatFailsToClose(CollectionFile.objects.filter(id=collection_file.id))
+
+    with pytest.raises(ValueError, match="the original failure"):
+        index_collection_files(collection_files_queryset=queryset)

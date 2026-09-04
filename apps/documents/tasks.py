@@ -78,9 +78,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 
     default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
     file_iterator = collection_files_queryset.select_related("file").iterator(100)
-    # The iterator holds a server-side cursor. Closing it here, rather than leaving it to be
-    # closed whenever the generator is garbage collected, keeps that closing point deterministic.
-    with contextlib.closing(file_iterator):
+    try:
         strategy_groups = groupby(
             file_iterator,
             lambda cf: cf.chunking_strategy or default_chunking_strategy,
@@ -124,6 +122,12 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
                         extra={"collection_file_ids": ids},
                     )
                 raise
+    finally:
+        # The iterator holds a server-side cursor, and closing it here keeps that point
+        # deterministic. A close against a connection whose transaction has already failed
+        # raises in turn, and that is not the failure worth propagating.
+        with contextlib.suppress(Exception):
+            file_iterator.close()
 
     return previous_remote_file_ids
 
