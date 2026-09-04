@@ -77,47 +77,53 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
     previous_remote_file_ids = []
 
     default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
-    strategy_groups = groupby(
-        collection_files_queryset.select_related("file").iterator(100),
-        lambda cf: cf.chunking_strategy or default_chunking_strategy,
-    )
+    file_iterator = collection_files_queryset.select_related("file").iterator(100)
+    # The iterator holds a server-side cursor. Closing it here, rather than leaving it to be
+    # closed whenever the generator is garbage collected, keeps that closing point deterministic.
+    with contextlib.closing(file_iterator):
+        strategy_groups = groupby(
+            file_iterator,
+            lambda cf: cf.chunking_strategy or default_chunking_strategy,
+        )
 
-    for strategy, collection_files_group in strategy_groups:
-        ids = []
-        for collection_file in collection_files_group:
-            ids.append(collection_file.id)
-            if collection_file.file.external_id:
-                previous_remote_file_ids.append(collection_file.file.external_id)
+        for strategy, collection_files_group in strategy_groups:
+            ids = []
+            for collection_file in collection_files_group:
+                ids.append(collection_file.id)
+                if collection_file.file.external_id:
+                    previous_remote_file_ids.append(collection_file.file.external_id)
 
-        # Every re-index route funnels through here, so this is where a reason from a previous
-        # attempt stops applying.
-        CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
+            # Every re-index route funnels through here, so this is where a reason from a previous
+            # attempt stops applying.
+            CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
 
-        try:
-            collection.add_files_to_index(
-                # `collection` is select_related because indexing reads the collection's search
-                # language per file to build the lexical vectors; without it that is a query per file.
-                collection_files=CollectionFile.objects.filter(id__in=ids)
-                .select_related("file", "collection")
-                .iterator(100),
-                chunk_size=strategy.chunk_size,
-                chunk_overlap=strategy.chunk_overlap,
-            )
-        except Exception as e:
-            # IN_PROGRESS renders as a spinner for as long as the row exists, so the group needs
-            # a terminal status here. The IN_PROGRESS filter leaves rows that add_files already
-            # failed carrying their own reason, which names the stage that failed. A caller that
-            # holds a transaction around this call cannot accept the write once it has aborted.
             try:
-                CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
-                    status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
+                collection.add_files_to_index(
+                    # `collection` is select_related because indexing reads the collection's
+                    # search language per file to build the lexical vectors; without it that is
+                    # a query per file.
+                    collection_files=CollectionFile.objects.filter(id__in=ids)
+                    .select_related("file", "collection")
+                    .iterator(100),
+                    chunk_size=strategy.chunk_size,
+                    chunk_overlap=strategy.chunk_overlap,
                 )
-            except DatabaseError:
-                logger.exception(
-                    "Could not record the indexing failure against the collection files",
-                    extra={"collection_file_ids": ids},
-                )
-            raise
+            except Exception as e:
+                # IN_PROGRESS renders as a spinner for as long as the row exists, so the group
+                # needs a terminal status here. The IN_PROGRESS filter leaves rows that add_files
+                # already failed carrying their own reason, which names the stage that failed. A
+                # caller that holds a transaction around this call cannot accept the write once
+                # it has aborted.
+                try:
+                    CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
+                        status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
+                    )
+                except DatabaseError:
+                    logger.exception(
+                        "Could not record the indexing failure against the collection files",
+                        extra={"collection_file_ids": ids},
+                    )
+                raise
 
     return previous_remote_file_ids
 
