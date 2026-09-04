@@ -98,7 +98,7 @@ Top of the stack — nothing imports these; they wire the domain to the outside 
 | `web` | Server-rendered web UI (also foundational for shared chrome). |
 | `admin` | Staff-only admin area. |
 | `dashboard` | Analytics dashboard. |
-| `prelogin` | Public marketing pages. |
+| `prelogin` | Anonymous landing page at `/`, the shared frame for the logged-out auth pages, and permanent redirects for the marketing URLs that moved to `openchatstudio.dimagi.com`. |
 | `users` · `oauth` · `sso` | Authentication and account management. |
 
 ## Blast radius

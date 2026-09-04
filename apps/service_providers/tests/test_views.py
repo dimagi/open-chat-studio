@@ -146,8 +146,8 @@ def test_llm_provider_edit_view_shows_reactive_update_button(team_with_users, au
         )
     )
     content = response.content.decode()
-    assert "x-text=\"configChanged ? 'Update and Verify' : 'Update'\"" in content
-    assert ">Update</button>" in content
+    assert "configChanged ? 'Update and Verify' : 'Update'" in content
+    assert ">Update</span>" in content
 
 
 @pytest.mark.django_db()
