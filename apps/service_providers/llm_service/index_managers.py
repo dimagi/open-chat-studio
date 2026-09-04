@@ -141,6 +141,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
         chunk_overlap: int | None = None,
     ):
         uploaded_files: list[File] = []
+        uploaded_row_ids: list[int] = []
         for collection_file in collection_files:
             file = collection_file.file
             if _reads_as_empty(file):
@@ -153,6 +154,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
             try:
                 self._ensure_remote_file_exists(file)
                 uploaded_files.append(file)
+                uploaded_row_ids.append(collection_file.pk)
             except FileUploadError as e:
                 self._fail(collection_file, e)
 
@@ -162,14 +164,14 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
             )
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+            CollectionFile.objects.filter(pk__in=uploaded_row_ids).update(
                 # A reason left by an earlier attempt describes an outcome that no longer holds.
                 status=FileStatus.COMPLETED,
                 failure_reason="",
             )
         except UnableToLinkFileException as e:
             logger.exception("Failed to link files to remote index")
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+            CollectionFile.objects.filter(pk__in=uploaded_row_ids).update(
                 status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
             )
 

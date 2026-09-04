@@ -455,6 +455,59 @@ class TestRemoteIndexManager:
         assert collection_file.status == FileStatus.FAILED
         assert collection_file.failure_reason == "UnableToLinkFileException: Link failed"
 
+    def test_linking_failure_does_not_reach_another_collection(self, remote_collection_index, index_manager):
+        """Two collections can share a File: (collection, file) has no uniqueness constraint,
+        and a collection can be built from the same assistant twice."""
+        # embedding_provider_model shares a per-team unique key, so leave it unset to keep
+        # this Collection out of that constraint.
+        other_collection = CollectionFactory.create(
+            is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
+        )
+        file = FileFactory.create(
+            external_id="shared_file_id", file__data=b"test content", team=remote_collection_index.team
+        )
+        remote_collection_index.files.add(file)
+        other_collection.files.add(file)
+        this_row = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        other_row = CollectionFile.objects.get(collection=other_collection, file=file)
+        CollectionFile.objects.filter(pk=other_row.pk).update(status=FileStatus.COMPLETED, failure_reason="")
+
+        with mock.patch.object(
+            index_manager, "link_files_to_remote_index", side_effect=UnableToLinkFileException("Link failed")
+        ):
+            iterator = CollectionFile.objects.filter(id=this_row.id).iterator(1)
+            remote_collection_index.add_files_to_index(iterator)
+
+        this_row.refresh_from_db()
+        other_row.refresh_from_db()
+        assert this_row.status == FileStatus.FAILED
+        assert other_row.status == FileStatus.COMPLETED
+        assert other_row.failure_reason == ""
+
+    def test_linking_success_does_not_reach_another_collection(self, remote_collection_index, index_manager):
+        other_collection = CollectionFactory.create(
+            is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
+        )
+        file = FileFactory.create(
+            external_id="shared_file_id_2", file__data=b"test content", team=remote_collection_index.team
+        )
+        remote_collection_index.files.add(file)
+        other_collection.files.add(file)
+        this_row = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        other_row = CollectionFile.objects.get(collection=other_collection, file=file)
+        CollectionFile.objects.filter(pk=other_row.pk).update(
+            status=FileStatus.FAILED, failure_reason="UnableToLinkFileException: Link failed"
+        )
+
+        iterator = CollectionFile.objects.filter(id=this_row.id).iterator(1)
+        remote_collection_index.add_files_to_index(iterator)
+
+        this_row.refresh_from_db()
+        other_row.refresh_from_db()
+        assert this_row.status == FileStatus.COMPLETED
+        assert other_row.status == FileStatus.FAILED
+        assert other_row.failure_reason == "UnableToLinkFileException: Link failed"
+
 
 @pytest.mark.django_db()
 class TestOpenAIRemoteIndexManager:
