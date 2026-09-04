@@ -215,6 +215,7 @@
         <div class="app-card">
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
           <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:scheduled_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Scheduled Event</a>
           {% if show_events %}
             {% render_table events_table %}
           {% endif %}

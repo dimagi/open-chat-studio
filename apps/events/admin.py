@@ -6,12 +6,49 @@ from django.http import HttpRequest
 from apps.experiments.admin import VersionedModelAdminMixin
 from apps.utils.admin import ReadonlyAdminMixin
 
-from .models import EventAction, EventLog, ScheduledMessage, StaticTrigger, TimeoutTrigger
+from .event_log import EventLog
+from .models import (
+    EventAction,
+    ScheduledMessage,
+    StaticTrigger,
+    TimeoutTrigger,
+)
+from .scheduled_trigger import ScheduledTrigger
 
 
 class EventLogInline(ReadonlyAdminMixin, GenericTabularInline):
     model = EventLog
     extra = 0
+
+
+@admin.register(ScheduledTrigger)
+class ScheduledTriggerAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "schedule",
+        "experiment",
+        "action_type",
+        "fired_at",
+        "is_active",
+        "version_family",
+        "is_archived",
+    )
+    inlines = [EventLogInline]
+
+    @admin.display(description="Schedule")
+    def schedule(self, obj):
+        return f"{obj.trigger_date} {obj.trigger_time} ({obj.timezone})"
+
+    @admin.display(description="Action")
+    def action_type(self, obj):
+        if obj.action:
+            return obj.action.action_type
+        return ""
+
+    def _get_working_version_label(self, working_version):
+        return working_version.id
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet:
+        return super().get_queryset(request).select_related("action", "experiment")
 
 
 @admin.register(TimeoutTrigger)

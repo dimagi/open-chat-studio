@@ -94,6 +94,7 @@ def test_delete():
         type=StaticTriggerType.LAST_TIMEOUT,
     )
     request = RequestFactory().get("/")
+    request.team = team
 
     _delete_event_view(
         trigger_type="static",

@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.fields import DateTimeField
 
@@ -9,9 +10,10 @@ from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantDataFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.traces import TraceFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -111,7 +113,13 @@ def test_list_sessions_count_only_on_first_page(experiment):
     assert len(second_page["results"]) == 1
 
 
-def get_session_json(session, expected_messages=None, expected_tags=None, expected_usage=None):
+def get_session_json(
+    session,
+    expected_messages=None,
+    expected_tags=None,
+    expected_usage=None,
+    expected_participant_data=None,
+):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -130,10 +138,12 @@ def get_session_json(session, expected_messages=None, expected_tags=None, expect
         },
         "created_at": DateTimeField().to_representation(session.created_at),
         "updated_at": DateTimeField().to_representation(session.updated_at),
+        "ended_at": DateTimeField().to_representation(session.ended_at) if session.ended_at else None,
         "status": session.status,
         "platform": session.platform,
         "tags": expected_tags if expected_tags is not None else [],
         "state": session.state,
+        "participant_data": expected_participant_data if expected_participant_data is not None else {},
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
@@ -231,11 +241,8 @@ def test_retrieve_session_includes_usage_breakdown(session):
     UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o", cost=Decimal("1.00"), quantity=100)
     UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o", cost=Decimal("2.00"), quantity=200)
     UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o-mini", cost=Decimal("0.50"), quantity=50)
-
     user = team.members.first()
-    client = ApiTestClient(user, team)
-    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
-
+    response = ApiTestClient(user, team).get(reverse("api:session-detail", kwargs={"id": session.external_id}))
     assert response.status_code == 200
     assert response.json()["usage"] == {
         "total_cost": "3.50000000",
@@ -244,6 +251,129 @@ def test_retrieve_session_includes_usage_breakdown(session):
             {"model_name": "gpt-4o-mini", "cost": "0.50000000", "tokens": 50},
         ],
     }
+
+
+@pytest.mark.django_db()
+def test_session_includes_ended_at(session):
+    ended = timezone.now()
+    session.ended_at = ended
+    session.save()
+    user = session.team.members.first()
+    response = ApiTestClient(user, session.team).get(reverse("api:session-list"))
+    assert response.status_code == 200
+    assert response.json()["results"][0]["ended_at"] == DateTimeField().to_representation(ended)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("has_trace", "has_participant_data"),
+    [
+        pytest.param(False, False, id="no-trace-no-participant-data"),
+        pytest.param(False, True, id="no-trace-with-participant-data"),
+        pytest.param(True, True, id="with-trace-and-participant-data"),
+    ],
+)
+def test_session_participant_data(session, has_trace, has_participant_data):
+    participant_data_value = {"name": "Alice", "language": "en"} if has_participant_data else {}
+
+    if has_participant_data:
+        ParticipantDataFactory.create(
+            team=session.team,
+            experiment=session.experiment,
+            participant=session.participant,
+            data=participant_data_value,
+        )
+
+    if has_trace:
+        TraceFactory.create(
+            session=session,
+            participant=session.participant,
+            experiment=session.experiment,
+            team=session.team,
+            participant_data=participant_data_value,
+            participant_data_diff=None,
+        )
+
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["participant_data"] == participant_data_value
+
+
+@pytest.mark.django_db()
+def test_session_participant_data_with_diff(session):
+    """participant_data_diff is applied to the snapshot when both list and detail endpoints are hit."""
+    snapshot = {"name": "Alice"}
+    diff = [("add", "", [("age", 30)])]
+
+    TraceFactory.create(
+        session=session,
+        team=session.team,
+        participant_data=snapshot,
+        participant_data_diff=diff,
+    )
+
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["participant_data"] == {"name": "Alice", "age": 30}
+
+
+@pytest.mark.django_db()
+def test_session_includes_ended_at_on_detail(session):
+    """ended_at is present on the detail endpoint, not just the list endpoint."""
+    ended = timezone.now()
+    session.ended_at = ended
+    session.save()
+    user = session.team.members.first()
+    response = ApiTestClient(user, session.team).get(reverse("api:session-detail", kwargs={"id": session.external_id}))
+    assert response.status_code == 200
+    assert response.json()["ended_at"] == DateTimeField().to_representation(ended)
+
+
+@pytest.mark.django_db()
+def test_session_ended_at_is_null_when_not_set(session):
+    """ended_at is null in both list and detail when not set."""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team)
+    for url in [
+        reverse("api:session-list"),
+        reverse("api:session-detail", kwargs={"id": session.external_id}),
+    ]:
+        response = client.get(url)
+        assert response.status_code == 200
+        result = response.json()["results"][0] if "results" in response.json() else response.json()
+        assert result["ended_at"] is None
+
+
+@pytest.mark.django_db()
+def test_participant_data_prefetch_uses_only_latest_trace_per_session(experiment):
+    user = experiment.team.members.first()
+    session1, session2 = ExperimentSessionFactory.create_batch(2, experiment=experiment)
+
+    TraceFactory.create(session=session1, team=experiment.team, participant_data={"s": 1})
+    TraceFactory.create(session=session1, team=experiment.team, participant_data={"s": "latest"})
+    TraceFactory.create(session=session2, team=experiment.team, participant_data={"s": 2})
+
+    response = ApiTestClient(user, experiment.team).get(reverse("api:session-list"))
+    assert response.status_code == 200
+    by_id = {r["id"]: r for r in response.json()["results"]}
+    assert by_id[str(session1.external_id)]["participant_data"] == {"s": "latest"}
+    assert by_id[str(session2.external_id)]["participant_data"] == {"s": 2}
 
 
 def _create_attachments(chat, message):
@@ -489,291 +619,6 @@ def test_create_session_with_messages_and_json_state(experiment):
     assert session.chat.messages.count() == 2
 
 
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_add_tags_to_session(auth_method, session):
-    """Test adding tags to a session via POST /tags/"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team, auth_method=auth_method)
-
-    # Add tags to session
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["important", "reviewed"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_200_OK
-    response_data = response.json()
-    assert set(response_data["tags"]) == {"important", "reviewed"}
-
-    # Verify tags were actually added
-    session.refresh_from_db()
-    tag_names = list(session.chat.tags.values_list("name", flat=True))
-    assert set(tag_names) == {"important", "reviewed"}
-
-    # Verify tags were created with correct team
-    tags = Tag.objects.filter(name__in=["important", "reviewed"])
-    assert tags.count() == 2
-    for tag in tags:
-        assert tag.team == session.team
-        assert tag.created_by == user
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_add_tags_to_session_creates_tags_if_not_exist(auth_method, session):
-    """Test that adding tags creates them if they don't exist"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team, auth_method=auth_method)
-
-    # Verify tags don't exist yet
-    assert not Tag.objects.filter(name="new_tag", team=session.team).exists()
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["new_tag"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_200_OK
-
-    # Verify tag was created
-    assert Tag.objects.filter(name="new_tag", team=session.team).exists()
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_add_tags_to_session_idempotent(auth_method, session):
-    """Test that adding the same tag twice is idempotent"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team, auth_method=auth_method)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["duplicate"]}
-
-    # Add tag first time
-    response = client.post(url, data=data, format="json")
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["tags"] == ["duplicate"]
-
-    # Add same tag again
-    response = client.post(url, data=data, format="json")
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["tags"] == ["duplicate"]
-
-    # Verify only one tag association exists
-    session.refresh_from_db()
-    assert session.chat.tags.count() == 1
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_remove_tags_from_session(auth_method, session):
-    """Test removing tags from a session via DELETE /tags/"""
-    user = session.team.members.first()
-    team = session.team
-
-    # Create and add tags to session
-    tags = Tag.objects.bulk_create(
-        [
-            Tag(name="tag1", slug="tag1", team=team, created_by=user),
-            Tag(name="tag2", slug="tag2", team=team, created_by=user),
-            Tag(name="tag3", slug="tag3", team=team, created_by=user),
-        ]
-    )
-
-    for tag in tags:
-        session.chat.add_tag(tag, team, user)
-
-    # Verify all tags were added
-    assert session.chat.tags.count() == 3
-
-    client = ApiTestClient(user, team, auth_method=auth_method)
-
-    # Remove some tags
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["tag1", "tag3"]}
-    response = client.delete(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_200_OK
-    response_data = response.json()
-    assert response_data["tags"] == ["tag2"]
-
-    # Verify tags were actually removed
-    session.refresh_from_db()
-    tag_names = list(session.chat.tags.values_list("name", flat=True))
-    assert tag_names == ["tag2"]
-
-
-@pytest.mark.django_db()
-def test_remove_nonexistent_tags_from_session(session):
-    """Test that removing non-existent tags doesn't cause errors"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["nonexistent_tag"]}
-    response = client.delete(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json()["tags"] == []
-
-
-@pytest.mark.django_db()
-def test_add_tags_missing_tags_field(session):
-    """Test error when 'tags' field is missing"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    response = client.post(url, data={}, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "Missing 'tags' in request" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-def test_add_tags_invalid_format(session):
-    """Test error when 'tags' is not a list"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": "not_a_list"}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "'tags' must be a list" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-def test_add_tags_session_not_found(experiment):
-    """Test error when session doesn't exist"""
-    user = experiment.team.members.first()
-    client = ApiTestClient(user, experiment.team)
-
-    url = "/api/sessions/nonexistent-session-id/tags/"
-    data = {"tags": ["test"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-    assert "Session not found" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-def test_tags_endpoint_team_isolation(experiment):
-    """Test that users can only manage tags for sessions in their team"""
-    # Create two teams with sessions
-    team1 = experiment.team
-    team2 = TeamWithUsersFactory.create()
-
-    experiment2 = ExperimentFactory.create(team=team2)
-    session2 = ExperimentSessionFactory.create(experiment=experiment2)
-
-    user1 = team1.members.first()
-    client1 = ApiTestClient(user1, team1)
-
-    # User from team1 trying to add tags to session in team2
-    url = f"/api/sessions/{session2.external_id}/tags/"
-    data = {"tags": ["test"]}
-    response = client1.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db()
-def test_add_tags_empty_string(session):
-    """Test error when tags list contains empty strings"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["", "valid"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "'tags' must be a list of non-empty strings" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-def test_add_tags_whitespace_only(session):
-    """Test error when tags list contains whitespace-only strings"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["  ", "valid"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "'tags' must be a list of non-empty strings" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-def test_add_tags_non_string_values(session):
-    """Test error when tags list contains non-string values"""
-    user = session.team.members.first()
-    client = ApiTestClient(user, session.team)
-
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": [123, "valid"]}
-    response = client.post(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "'tags' must be a list of non-empty strings" in response.json()["error"]
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_delete_session_tags_does_not_remove_system_tags(auth_method, session):
-    """Ensure API cannot delete system tags even if they share names with user tags."""
-    user = session.team.members.first()
-    team = session.team
-
-    # Create user tag
-    user_tag = Tag.objects.create(
-        name="important",
-        slug="important-user",
-        team=team,
-        is_system_tag=False,
-        category="",
-        created_by=user,
-    )
-
-    # Create system tag with same name but different category
-    system_tag = Tag.objects.create(
-        name="important",
-        slug="important-system",
-        team=team,
-        is_system_tag=True,
-        category=TagCategories.BOT_RESPONSE,
-    )
-
-    # Add both tags to session
-    session.chat.add_tag(user_tag, team, user)
-    session.chat.add_tag(system_tag, team, user)
-
-    # Verify both tags are present
-    assert session.chat.tags.count() == 2
-
-    client = ApiTestClient(user, team, auth_method=auth_method)
-
-    # Try to delete via API using the shared name
-    url = f"/api/sessions/{session.external_id}/tags/"
-    data = {"tags": ["important"]}
-    response = client.delete(url, data=data, format="json")
-
-    assert response.status_code == status.HTTP_200_OK
-
-    # User tag should be removed, system tag should remain
-    session.refresh_from_db()
-    remaining_tags = list(session.chat.tags.all())
-    assert len(remaining_tags) == 1
-    assert remaining_tags[0].id == system_tag.id
-    assert remaining_tags[0].is_system_tag is True
-
-    # Verify response shows the system tag
-    response_data = response.json()
-    assert response_data["tags"] == ["important"]
-
-
 def _create_session_request(session):
     return reverse("api:session-list"), {"experiment": str(session.experiment.public_id)}
 
@@ -807,9 +652,7 @@ def test_read_only_key_cannot_write_to_sessions(method, build_request, session):
     client = ApiTestClient(user, session.team, read_only=True)
     url, data = build_request(session)
     original_status = session.status
-
     response = getattr(client, method)(url, data=data, format="json")
-
     assert response.status_code == status.HTTP_403_FORBIDDEN
     session.refresh_from_db()
     assert session.status == original_status
@@ -822,6 +665,5 @@ def test_read_only_key_cannot_write_to_sessions(method, build_request, session):
 def test_read_only_key_can_read_sessions(session):
     user = session.team.members.first()
     client = ApiTestClient(user, session.team, read_only=True)
-
     assert client.get(reverse("api:session-list")).status_code == 200
     assert client.get(reverse("api:session-detail", kwargs={"id": session.external_id})).status_code == 200

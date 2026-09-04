@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from apps.events.models import EventAction
     from apps.experiments.models import Experiment
 
-TRIGGER_ACCESSORS = ("static_triggers", "timeout_triggers")
+TRIGGER_ACCESSORS = ("static_triggers", "timeout_triggers", "scheduled_triggers")
 
 
 class TriggerSyncMode(StrEnum):
