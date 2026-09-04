@@ -1,12 +1,13 @@
-"""The pipeline façade's node endpoints (#4140).
+"""The pipeline façade's node and edge endpoints (#4140, #4141).
 
-A chatbot's pipeline is edited one node at a time rather than replaced wholesale: the server holds
-the graph and applies the change, so a client never has to reproduce a whole document to alter one
-setting, and two edits to different nodes cannot overwrite each other.
+A chatbot's pipeline is edited one node or one edge at a time rather than replaced wholesale: the
+server holds the graph and applies the change, so a client never has to reproduce a whole document
+to alter one setting. Every write answers with the same envelope -- what it wrote, then the state of
+the pipeline it wrote into -- so a client never has to re-read to find out where it has got to.
 """
 
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
@@ -17,18 +18,26 @@ from apps.api.v2.discovery.node_types import get_node_class
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
+from apps.pipelines.flow import FlowEdge
 from apps.pipelines.models import Pipeline
 
+from . import edge_editor
 from .examples import create_examples, update_examples
 from .facade import edit_pipeline
 from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
 from .references import check_references
 from .serializers import (
+    MAX_WIRES_PER_CALL,
+    WIRES_FIELD,
+    EdgeWriteSerializer,
+    LeadsWithWhatWasWritten,
     NodeCreateSerializer,
     NodeUpdateSerializer,
     NodeWriteSerializer,
     PipelineWriteSerializer,
+    WireBodySerializer,
+    WrittenEdgeSerializer,
     WrittenNodeSerializer,
 )
 
@@ -39,18 +48,23 @@ NODE_ID = OpenApiParameter(
     name="node_id",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.PATH,
-    description="The node's server-assigned id, as returned by a write or by GET /api/v2/chatbots/{id}/inspect/.",
+    description="The node's server-assigned id, as returned by a write or by the `chatbot_inspect` endpoint.",
+)
+EDGE_ID = OpenApiParameter(
+    name="edge_id",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.PATH,
+    description="The edge's server-assigned id, as returned by a wire or by the `chatbot_inspect` endpoint.",
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
-        "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
-        "param-level errors are nested under `params`. This covers an unrecognised body key, a "
-        "server-assigned key the client tried to set (`node_id`, `position`), and a param naming a "
-        "resource this team cannot reach.\n\n"
-        "A param the type does not declare is *not* an error: it is dropped, and the response "
-        "reports the params the node actually holds. Nor is a param whose value the type cannot "
-        "parse — that is stored and reported in `pipeline_errors`, the same as a missing required "
-        "one, so a node can be built up over several calls."
+        "The body is not one this endpoint can act on. Errors are keyed by the field at fault, with "
+        "param-level errors nested under `params`: an unrecognised body key, a server-assigned key "
+        "the client tried to set (`node_id`, `position`), or a param naming a resource this team "
+        "cannot reach.\n\n"
+        "A param the type does not declare is dropped rather than refused, and a param whose value "
+        "the type cannot parse is stored and reported in `pipeline_errors` — so a node can be built "
+        "up over several calls."
     )
 )
 FORBIDDEN = OpenApiResponse(
@@ -66,26 +80,104 @@ SERVER_MANAGED = OpenApiResponse(
         "or deleted through the API."
     )
 )
+#: The shapes a wire body comes in. Node ids are placeholders for ones a node write or ``/inspect/``
+#: returned.
+WIRE_EXAMPLES = [
+    OpenApiExample(
+        name="Plain node",
+        summary="A source with one output handle: neither handle need be named.",
+        value={WIRES_FIELD: [{"source": "CodeNode-a1b2c", "target": "LLMResponseWithPrompt-d3e4f"}]},
+        request_only=True,
+    ),
+    OpenApiExample(
+        name="Router branch",
+        summary="A router exposes one handle per keyword, so the branch to wire has to be named.",
+        value={
+            WIRES_FIELD: [
+                {
+                    "source": "RouterNode-9f8e7",
+                    "target": "LLMResponseWithPrompt-d3e4f",
+                    "source_handle": "output_1",
+                }
+            ]
+        },
+        request_only=True,
+    ),
+    OpenApiExample(
+        name="A whole branch",
+        summary="Several wires in one call, so a router and both its branches land together.",
+        value={
+            WIRES_FIELD: [
+                {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", "source_handle": "output_0"},
+                {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},
+                {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"},
+            ]
+        },
+        request_only=True,
+    ),
+]
 
 
-class PipelineNodeEditView(GenericAPIView):
+class PipelineFacadeView(GenericAPIView):
+    """What every pipeline façade endpoint shares: the gates, and the shape of the response.
+
+    Declared once because these are the *same* gates, not merely similar ones. Editing a chatbot's
+    composition is a *change* to the chatbot whatever the verb, so the stock
+    ``DjangoModelPermissions`` verb map is replaced rather than extended: deleting a pipeline node
+    is not deleting the chatbot.
+    """
+
+    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    required_scopes = ["chatbots"]
+    # Only here so the generic view has a queryset; permissions are not derived from it.
+    queryset = Pipeline.objects.none()
+
+    #: The response serializer for this resource. Its ``written_field`` names the key the written
+    #: resource goes under, so the body and the published schema cannot disagree about it.
+    write_response_serializer: type[LeadsWithWhatWasWritten]
+
+    def _edit(self, request, chatbot_id: str, plan) -> dict:
+        """Run one façade edit and build its response. ``plan`` is all that differs per endpoint."""
+        return edit_pipeline(request, chatbot_id, plan, self._write_response)
+
+    def _write_response(self, pipeline: Pipeline, written_ids: list[str]) -> dict:
+        """The pipeline's build state, and in front of it whatever this write created or changed.
+
+        ``written_ids`` is empty for a delete -- there is nothing left to describe -- so the
+        response is the pipeline's state alone.
+        """
+        body = pipeline_state(pipeline)
+        if not written_ids:
+            return body
+        shape = self.write_response_serializer
+        written = []
+        for written_id in written_ids:
+            record = self._written(pipeline, written_id)
+            if record is None:
+                # Always a bug in this package rather than anything the client did -- the patch
+                # engine applied the diff, so the thing is there. *Which* bug differs per resource,
+                # and each `_written` says which one it is guarding against.
+                raise APIException(f"'{written_id}' was written but could not be read back.")
+            written.append(record)
+        return {shape.written_field: written if shape.written_many else written[0], **body}
+
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """This resource as the response reports it, or ``None`` if the write cannot be read back."""
+        raise NotImplementedError
+
+
+class PipelineNodeEditView(PipelineFacadeView):
     """The façade's node endpoints: add a node, edit one, remove one.
 
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers --
     otherwise a PATCH to the collection route would reach ``patch`` with no ``node_id`` and raise
     instead of answering 405.
-
-    Deleting a node is a *change* to the chatbot, not a deletion of it, so the stock
-    ``DjangoModelPermissions`` verb map is replaced rather than extended.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
-    required_scopes = ["chatbots"]
+    write_response_serializer = NodeWriteSerializer
     # So that OPTIONS on the detail route describes its PATCH body, which stock DRF metadata leaves
     # out entirely.
     metadata_class = DescribesPatch
-    # Only here so the generic view has a queryset; permissions are not derived from it.
-    queryset = Pipeline.objects.none()
 
     def get_serializer_class(self) -> type[serializers.Serializer]:
         """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
@@ -101,17 +193,15 @@ class PipelineNodeEditView(GenericAPIView):
         description=(
             "Add a node to the chatbot's working (draft) pipeline.\n\n"
             "`type` alone is enough: the node is created with that type's defaults, which the "
-            "response reports and which you can then change with PATCH. The node is not wired to "
+            "response reports and which you can then change with PATCH. It is not wired to "
             "anything, so it appears in `unwired_handles` until you connect it — that is advisory, "
             "not an error.\n\n"
             "The node's `node_id` and its position on the canvas are assigned by the server and "
-            "cannot be chosen. It is parked clear to the right of the nodes already there, and the "
-            "End node is moved further right if the new node reaches it, so the End node stays the "
-            "rightmost node on the canvas.\n\n"
+            "cannot be chosen.\n\n"
             "What `params` may hold depends on `type`, so the examples below show a full body for "
-            "each type. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
-            "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
-            "resource params may name."
+            "each type. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for "
+            "one type, and the `pipeline_node_options` endpoint serves the ids its resource params "
+            "may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
@@ -139,7 +229,7 @@ class PipelineNodeEditView(GenericAPIView):
         params = writable_params(node_class, body.validated_data["params"])
         check_references(team=request.team, node_class=node_class, params=params)
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
+            self._edit(request, id, lambda flow: plan_create(flow, node_type, label, params)),
             status=status.HTTP_201_CREATED,
         )
 
@@ -152,16 +242,13 @@ class PipelineNodeEditView(GenericAPIView):
             "Editing a router's `keywords` regenerates its output handles — they are positional, so "
             "`output_0` serves `keywords[0]` — and the response carries the new list. The node's "
             "edges follow their keyword: dropping a keyword deletes the edge that served it, and a "
-            "keyword that merely moved keeps its target on whichever handle it moved to. A renamed "
-            "keyword counts as one branch gone and another new, so its edge goes and the new branch "
-            "comes back unwired. Handle names are not stable across a keyword edit, so re-read "
-            "`output_handles` after one.\n\n"
+            "renamed keyword counts as one branch gone and another new. Handle names are not stable "
+            "across a keyword edit, so re-read `output_handles` after one.\n\n"
             "What `params` may hold depends on the node's type, not on the verb: the `POST` "
             "examples name every param of each type, and the examples here are partial bodies "
-            "instead, since a PATCH writes only the keys you send. "
-            "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
-            "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
-            "params may name."
+            "instead. The `pipeline_node_retrieve` endpoint is the authoritative JSON Schema for "
+            "one type, and the `pipeline_node_options` endpoint serves the ids its resource params "
+            "may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],
@@ -186,13 +273,12 @@ class PipelineNodeEditView(GenericAPIView):
         params = body.validated_data["params"]
         label = body.validated_data.get("label")
         return Response(
-            edit_pipeline(
+            self._edit(
                 request,
                 id,
                 # The node's type comes from the graph, so its params can only be checked under the
                 # lock; the team goes in so the check can look its references up there.
                 lambda flow: plan_update(flow, request.team, node_id, label, params),
-                self._write_response,
             )
         )
 
@@ -219,23 +305,154 @@ class PipelineNodeEditView(GenericAPIView):
     )
     def delete(self, request, id: str, node_id: str) -> Response:
         # `plan_delete` names no node, so the response reports the pipeline alone.
-        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._write_response))
+        return Response(self._edit(request, id, lambda flow: plan_delete(flow, node_id)))
 
-    @staticmethod
-    def _write_response(pipeline: Pipeline, node_id: str | None) -> dict:
-        """The response body every façade write returns: the pipeline's build state, and in front of
-        it the node this write created or changed (absent when the write deleted one)."""
-        state = pipeline_build_state(pipeline)
-        body = {
-            "pipeline_valid": state["pipeline_valid"],
-            "pipeline_errors": state["errors"],
-            "unwired_handles": state["unwired_handles"],
-        }
-        if node_id is None:
-            return body
-        node = next((node for node in pipeline.node_set.all() if node.flow_id == node_id), None)
-        if node is None:
-            # The patch engine applied the diff, so the row is there; not finding it means the
-            # graph and the rows disagree, which is a bug here rather than anything the client did.
-            raise APIException(f"Node '{node_id}' was written but could not be read back.")
-        return {"node": WrittenNodeSerializer(node).data, **body}
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """Read from the reconciled rows: a miss means the graph and the rows disagree."""
+        node = next((node for node in pipeline.node_set.all() if node.flow_id == written_id), None)
+        return None if node is None else WrittenNodeSerializer(node).data
+
+
+class PipelineEdgeEditView(PipelineFacadeView):
+    """The façade's edge endpoints: wire nodes together, unwire them one at a time.
+
+    An edge is not editable in place -- there is nothing to change but its two ends, and moving one
+    is a different wire -- so repointing a branch is a delete followed by a wire. That is also why
+    the detail route offers DELETE alone, and why stock DRF metadata suffices here where the node
+    routes need ``DescribesPatch``.
+    """
+
+    write_response_serializer = EdgeWriteSerializer
+    serializer_class = WireBodySerializer
+
+    @extend_schema(
+        operation_id="pipeline_edge_create",
+        summary="Wire Pipeline Nodes",
+        description=(
+            "Add edges to the chatbot's working (draft) pipeline, wiring one node's output handle to "
+            "another node's input.\n\n"
+            f"The wires go in a **list** under `{WIRES_FIELD}` — a single wire is a list of one, and "
+            f"at most {MAX_WIRES_PER_CALL} go in one call — and a call carrying several is all or "
+            "nothing: if any one of them is refused, none of them are stored and the pipeline is "
+            "left exactly as the call found it. So a whole branch lands in one call with no "
+            "half-wired state to unpick:\n\n"
+            "```json\n"
+            "{\n"
+            f'  "{WIRES_FIELD}": [\n'
+            '    {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", '
+            '"source_handle": "output_0"},\n'
+            '    {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},\n'
+            '    {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}\n'
+            "  ]\n"
+            "}\n"
+            "```\n\n"
+            "`source` and `target` are enough for most nodes: a handle you leave out means the only "
+            "one the node has. A router is the exception — it exposes one handle per branch, so name "
+            "the branch to wire in `source_handle`. No node is moved on the canvas.\n\n"
+            "Each edge's `id` is assigned by the server and cannot be chosen. It is what the "
+            "`pipeline_edge_delete` endpoint takes, and `edges` reports them in the order the body "
+            "named them.\n\n"
+            "Wiring a pair that is already wired the same way is refused rather than stored twice, "
+            "so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it "
+            "lands, and comes back in `pipeline_errors` for you to repair."
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID],
+        request=WireBodySerializer,
+        examples=WIRE_EXAMPLES,
+        responses={
+            201: EdgeWriteSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "Nothing was wired. Refusals come back under "
+                    f"`{WIRES_FIELD}`, **keyed by the position in the list of the wire at fault** — "
+                    "so one call reports everything wrong with it, and a wire that is fine is absent "
+                    "rather than empty.\n\n"
+                    "Each wire's entry is in turn keyed by the field at fault: a `source` or "
+                    "`target` that is not a node in this pipeline, a `source_handle` the source node "
+                    "does not offer (or a missing one where the node offers a choice), a "
+                    "`target_handle` that is not the target's input, a server-assigned key the "
+                    "client tried to set (`id`), or an unrecognised key on the wire.\n\n"
+                    "```json\n"
+                    "{\n"
+                    f'  "{WIRES_FIELD}": {{\n'
+                    '    "0": {"source": ["This pipeline has no node \'CodeNode-nope1\'."]},\n'
+                    '    "2": {"source_handle": ["..."]}\n'
+                    "  }\n"
+                    "}\n"
+                    "```\n\n"
+                    "A duplicate edge is reported under the wire's `non_field_errors`, with the "
+                    "existing edge's id between single quotes:\n\n"
+                    "> These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was "
+                    "changed.\n\n"
+                    "So a client whose first attempt's response it never saw can recover the edge id "
+                    "rather than re-reading the pipeline. A body wiring the same pair twice is "
+                    "refused the same way, naming the index of the first of the two.\n\n"
+                    "A `source` that offers no output handles at all is refused under `source`, and "
+                    "the message says whether that is fixable: a router with no `keywords` set yet "
+                    "needs a PATCH first, whereas the End node can never be a source.\n\n"
+                    f"A `{WIRES_FIELD}` that is not a list, is an empty one, or names more than "
+                    f"{MAX_WIRES_PER_CALL} wires is refused as a message on the field itself, before "
+                    "any wire in it is looked at; a body that is not an object at all is refused "
+                    "under `non_field_errors`."
+                )
+            ),
+            403: FORBIDDEN,
+            404: OpenApiResponse(description="No such chatbot."),
+        },
+    )
+    def post(self, request, id: str) -> Response:
+        body = self.get_serializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        wires = body.validated_data[WIRES_FIELD]
+        return Response(
+            self._edit(
+                request,
+                id,
+                # The handles a node offers depend on its params, so the whole body can only be
+                # checked against the locked graph.
+                lambda flow: edge_editor.plan_create(flow, wires),
+            ),
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        operation_id="pipeline_edge_delete",
+        summary="Unwire two Pipeline Nodes",
+        description=(
+            "Remove an edge from the chatbot's working (draft) pipeline. Both nodes stay, and stay "
+            "where they are on the canvas.\n\n"
+            "The hole this leaves is reported rather than refused: unwiring usually breaks the path "
+            "to the End node, which comes back under `pipeline_errors.node[<end node id>].root` for "
+            "you to repair, and both ends of the edge reappear in `unwired_handles`.\n\n"
+            "Repeating a delete answers 404, so a retry cannot disturb the graph the first call left."
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID, EDGE_ID],
+        request=None,
+        responses={
+            200: PipelineWriteSerializer,
+            403: FORBIDDEN,
+            404: OpenApiResponse(description="No such chatbot, or no such edge in this chatbot's pipeline."),
+        },
+    )
+    def delete(self, request, id: str, edge_id: str) -> Response:
+        # `plan_delete` names no edge, so the response reports the pipeline alone.
+        return Response(self._edit(request, id, lambda flow: edge_editor.plan_delete(flow, edge_id)))
+
+    def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
+        """Read from the saved graph rather than reported from the plan: the patch engine skips an
+        add whose id is already there, so reporting the planned edge would answer 201 for a wire
+        that was silently dropped."""
+        stored = next((edge for edge in (pipeline.data or {}).get("edges", []) if edge["id"] == written_id), None)
+        return None if stored is None else WrittenEdgeSerializer(FlowEdge(**stored)).data
+
+
+def pipeline_state(pipeline: Pipeline) -> dict:
+    """The three fields every façade write reports about the pipeline it has just changed."""
+    state = pipeline_build_state(pipeline)
+    return {
+        "pipeline_valid": state["pipeline_valid"],
+        "pipeline_errors": state["errors"],
+        "unwired_handles": state["unwired_handles"],
+    }

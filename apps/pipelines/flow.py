@@ -31,6 +31,29 @@ class FlowEdge(pydantic.BaseModel):
     sourceHandle: str | None = STANDARD_OUTPUT_NAME
     targetHandle: str | None = STANDARD_INPUT_NAME
 
+    @property
+    def source_handle_name(self) -> str:
+        """The output handle this edge leaves from, with an absent one read as the standard output.
+
+        The pipeline builder does name its source handles, so a null or omitted one turns up only on
+        a seeded or imported graph, and means what this field's own default declares.
+        """
+        return self.sourceHandle or STANDARD_OUTPUT_NAME
+
+    @property
+    def target_handle_name(self) -> str:
+        """The input handle this edge points at, with an absent one read as the standard input.
+
+        Absent on *every* edge the pipeline builder draws, which renders its target handles with no
+        id at all, so anything comparing stored edges has to fill it in.
+        """
+        return self.targetHandle or STANDARD_INPUT_NAME
+
+    @property
+    def wiring(self) -> tuple[str, str, str, str]:
+        """The four values that identify this edge: two edges sharing all four are the same wire."""
+        return (self.source, self.source_handle_name, self.target, self.target_handle_name)
+
 
 class FlowWithoutNodes(pydantic.BaseModel):
     """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0049).
