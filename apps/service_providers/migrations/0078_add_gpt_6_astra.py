@@ -1,7 +1,6 @@
 from django.db import migrations
 
 from apps.cost_tracking.migration_utils import load_pricing_data
-from apps.data_migrations.utils.migrations import RunDataMigration
 from apps.service_providers.migration_utils import llm_model_migration
 
 
@@ -18,6 +17,4 @@ class Migration(migrations.Migration):
     operations = [
         llm_model_migration(),
         load_pricing_data(),
-        # Carried over from 0077: notify teams about the gpt-5 family deprecation.
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
