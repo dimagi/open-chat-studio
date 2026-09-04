@@ -13,7 +13,7 @@ from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.trace.models import Trace
 
@@ -179,8 +179,14 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     ).only("id", "timestamp", "session_id", "participant_data", "participant_data_diff"),
                     to_attr="_prefetched_traces",
                 ),
+                # Prefetch participant data to avoid N+1 queries in the fallback path
+                # (sessions with no traces fall back to participant_data_from_experiment).
+                Prefetch(
+                    "participant__data_set",
+                    queryset=ParticipantData.objects.only("id", "participant_id", "experiment_id", "data"),
+                    to_attr="_prefetched_participant_data",
+                ),
             )
-            .all()
         )
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))

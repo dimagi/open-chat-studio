@@ -1,7 +1,6 @@
 import textwrap
 from zoneinfo import available_timezones
 
-import dictdiffer
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -14,6 +13,7 @@ from apps.cost_tracking.services.reporting import session_usage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
+from apps.trace.models import participant_data_from_trace
 
 
 class ApiUrlField(serializers.HyperlinkedIdentityField):
@@ -238,7 +238,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     def get_usage(self, instance):
         return SessionUsageSerializer(session_usage(instance)).data
 
-    @extend_schema_field(serializers.DictField())
+    @extend_schema_field(serializers.DictField(allow_null=True))
     def get_participant_data(self, instance):
         prefetched = getattr(instance, "_prefetched_traces", None)
         if prefetched is not None:
@@ -247,12 +247,19 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             trace = instance.traces.order_by("-timestamp", "-id").first()
 
         if trace is None:
-            return instance.participant_data_from_experiment
+            return self._participant_data_fallback(instance)
 
-        snapshot = trace.participant_data or {}
-        if trace.participant_data_diff:
-            return dictdiffer.patch(trace.participant_data_diff, snapshot)
-        return snapshot
+        return participant_data_from_trace(trace)
+
+    def _participant_data_fallback(self, instance) -> dict:
+        """Return experiment-level participant data, using prefetched data when available."""
+        prefetched = getattr(instance.participant, "_prefetched_participant_data", None)
+        if prefetched is not None:
+            for pd in prefetched:
+                if pd.experiment_id == instance.experiment_id:
+                    return pd.data
+            return {}
+        return instance.participant_data_from_experiment
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):

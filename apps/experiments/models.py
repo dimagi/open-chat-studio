@@ -10,7 +10,6 @@ from functools import cached_property
 from typing import Self, cast
 from uuid import uuid4
 
-import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -45,7 +44,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
-from apps.trace.models import Trace, TraceStatus
+from apps.trace.models import Trace, TraceStatus, participant_data_from_trace
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
@@ -1756,10 +1755,7 @@ class ExperimentSession(BaseTeamModel):
         trace = self.latest_trace
         if trace is None:
             return self.participant_data_from_experiment
-        snapshot = trace.participant_data or {}
-        if trace.participant_data_diff:
-            return dictdiffer.patch(trace.participant_data_diff, snapshot)
-        return snapshot
+        return participant_data_from_trace(trace)
 
     @cached_property
     def experiment_version(self) -> Experiment:

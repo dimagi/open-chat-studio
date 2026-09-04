@@ -1411,6 +1411,11 @@ components:
           type: string
           format: date-time
           readOnly: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
         status:
           $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
@@ -1422,11 +1427,17 @@ components:
           items:
             type: string
         state: {}
+        participant_data:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
       required:
       - created_at
       - experiment
       - id
       - participant
+      - participant_data
       - tags
       - team
       - updated_at
@@ -1485,6 +1496,11 @@ components:
           type: string
           format: date-time
           readOnly: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
         status:
           $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
@@ -1505,12 +1521,18 @@ components:
           items:
             type: string
         state: {}
+        participant_data:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
       required:
       - created_at
       - experiment
       - id
       - messages
       - participant
+      - participant_data
       - tags
       - team
       - updated_at
@@ -2024,6 +2046,8 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             usage:read: Read usage and activity data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header
