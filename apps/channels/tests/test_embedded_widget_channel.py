@@ -17,11 +17,13 @@ from apps.oauth.models import OAuth2Application, manage_applications_url
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
+TEST_WIDGET_TOKEN = "tok_test_widget_token_example"
+
 
 def _widget_channel(**kwargs):
     return ExperimentChannelFactory.create(
         platform=ChannelPlatform.EMBEDDED_WIDGET,
-        extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        extra_data={"widget_token": TEST_WIDGET_TOKEN, "allowed_domains": ["example.com"]},
         **kwargs,
     )
 
@@ -233,7 +235,7 @@ class TestEmbeddedWidgetChannelForm:
         channel = _widget_channel(credential_mode=CredentialMode.OAUTH)
         snippet = render_to_string(
             "experiments/share/widget.html",
-            {"experiment": channel.experiment, "embed_key": "tok_123456789012345678901234", "oauth": True},
+            {"experiment": channel.experiment, "embed_key": TEST_WIDGET_TOKEN, "oauth": True},
         )
         assert "authTokenProvider" in snippet
         assert "embed-key" not in snippet
@@ -243,7 +245,7 @@ class TestEmbeddedWidgetChannelForm:
 
         public = render_to_string(
             "experiments/share/widget.html",
-            {"experiment": channel.experiment, "embed_key": "tok_123456789012345678901234", "oauth": False},
+            {"experiment": channel.experiment, "embed_key": TEST_WIDGET_TOKEN, "oauth": False},
         )
         assert "authTokenProvider" not in public
         assert "embed-key" in public
@@ -285,7 +287,7 @@ class TestEmbeddedWidgetChannelForm:
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET,
             required_auth_level=WidgetAuthLevel.SESSION_TOKEN,
-            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+            extra_data={"widget_token": TEST_WIDGET_TOKEN, "allowed_domains": ["example.com"]},
         )
         form = EmbeddedWidgetChannelForm(
             data={"allowed_domains": "example.com", "required_auth_level": WidgetAuthLevel.NONE.value},
@@ -302,7 +304,7 @@ class TestEmbeddedWidgetChannelForm:
     def test_session_token_lifetime_round_trips_without_leaking_into_extra_data(self):
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET,
-            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+            extra_data={"widget_token": TEST_WIDGET_TOKEN, "allowed_domains": ["example.com"]},
         )
         form = EmbeddedWidgetChannelForm(
             data={"allowed_domains": "example.com", "session_token_lifetime": "12:00:00"},
@@ -342,7 +344,7 @@ class TestEmbeddedWidgetChannelForm:
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET,
             session_token_lifetime=timedelta(hours=4),
-            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+            extra_data={"widget_token": TEST_WIDGET_TOKEN, "allowed_domains": ["example.com"]},
         )
         channel.extra_form(experiment=channel.experiment)
         assert set(channel.extra_data) == {"widget_token", "allowed_domains"}
@@ -353,7 +355,7 @@ class TestEmbeddedWidgetChannelForm:
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET,
             session_token_lifetime=timedelta(hours=4),
-            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+            extra_data={"widget_token": TEST_WIDGET_TOKEN, "allowed_domains": ["example.com"]},
         )
         form = EmbeddedWidgetChannelForm(
             data={"allowed_domains": "example.com", "session_token_lifetime": ""},
