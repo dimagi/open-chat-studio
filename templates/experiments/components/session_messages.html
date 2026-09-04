@@ -1,4 +1,4 @@
-{% load chat_tags default_tags form_tags json_tags pagination_tags waffle_tags %}
+{% load chat_tags form_tags json_tags pagination_tags waffle_tags %}
 {% url 'chatbots:chatbot_session_view' request.team.slug experiment.public_id experiment_session.external_id as session_detail_url %}
 <div id="table-top" class="app-card p-0 overflow-hidden" x-data="{selectedDataset: null}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
