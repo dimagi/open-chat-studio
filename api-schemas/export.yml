@@ -5755,6 +5755,10 @@ components:
           type: boolean
           description: When set, the team's outbound message firing is frozen while
             its data is migrated.
+        require_mfa:
+          type: boolean
+          description: When set, every member of this team must enrol in two-factor
+            authentication.
         created_by:
           type: integer
           readOnly: true
