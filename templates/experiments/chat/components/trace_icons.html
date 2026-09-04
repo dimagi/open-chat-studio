@@ -1,17 +1,26 @@
 {% load waffle_tags %}
-
 {% if perms.trace.view_trace %}
   {% if trace_infos %}
     {% for trace_info in trace_infos %}
-      <div class="tooltip tooltip-right" data-tip="Open Trace on {{ trace_info.trace_provider|title }}">
-        <a class="btn btn-xs btn-square btn-ghost" href="{{ trace_info.trace_url }}" target="_blank">
-          <i class="fa-solid fa-diagram-project"></i>
+      <div class="tooltip tooltip-right"
+           data-tip="Open Trace on {{ trace_info.trace_provider|title }}">
+        <a class="btn btn-xs btn-square btn-ghost"
+           href="{{ trace_info.trace_url }}"
+           target="_blank">
+          {% if trace_info.trace_provider == "langfuse" %}
+            {% include "svg/langfuse.svg" %}
+          {% else %}
+            <i class="fa-solid fa-diagram-project"></i>
+          {% endif %}
         </a>
       </div>
     {% endfor %}
   {% else %}
-    <div class="tooltip tooltip-right" data-tip="No trace recorded for this message">
-      <button type="button" class="btn btn-xs btn-square btn-ghost btn-disabled" disabled>
+    <div class="tooltip tooltip-right"
+         data-tip="No trace recorded for this message">
+      <button type="button"
+              class="btn btn-xs btn-square btn-ghost btn-disabled"
+              disabled>
         <i class="fa-solid fa-diagram-project"></i>
       </button>
     </div>
