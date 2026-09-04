@@ -1,3 +1,21 @@
+from collections.abc import Mapping
+
+
+def provider_error_message(exc: Exception) -> str:
+    """Return the provider's own explanation of a failure, falling back to the exception text.
+
+    Provider SDKs put the parsed error object on `body`, so the useful sentence is there
+    rather than in `str(exc)`, which wraps it in the status code and the whole payload.
+    Read duck-typed so callers stay free of provider SDK imports.
+    """
+    body = getattr(exc, "body", None)
+    if isinstance(body, Mapping):
+        message = body.get("message")
+        if isinstance(message, str) and message:
+            return message
+    return str(exc)
+
+
 class ServiceProviderConfigError(Exception):
     def __init__(self, provider_type: str, message: str):
         self.provider_type = provider_type
