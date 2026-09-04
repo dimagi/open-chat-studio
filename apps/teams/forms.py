@@ -146,15 +146,19 @@ class TeamChangeForm(forms.ModelForm):
 class TeamPublicKeyForm(forms.ModelForm):
     class Meta:
         model = Team
-        fields = ("public_key",)
+        fields = ("public_key", "is_migrating")
         labels = {
             "public_key": _("Public Key"),
+            "is_migrating": _("Migration mode"),
         }
         help_texts = {
             "public_key": _("Public key used to seal data exported from this team."),
+            "is_migrating": _(
+                "Freeze this team's outbound message firing while its data is migrated to another server."
+            ),
         }
         widgets = {
-            "public_key": forms.Textarea(attrs={"rows": 4}),
+            "public_key": forms.Textarea(attrs={"rows": 4, "placeholder": "-----BEGIN PUBLIC KEY-----"}),
         }
 
     def clean_public_key(self):

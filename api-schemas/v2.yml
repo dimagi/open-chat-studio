@@ -1334,60 +1334,6 @@ components:
             type: string
       required:
       - paths
-    Assistant:
-      type: object
-      description: Assistant fields. ``instructions`` and ``assistant_id`` are exposed
-        on purpose.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          maxLength: 255
-        assistant_id:
-          type: string
-          maxLength: 255
-        instructions:
-          type: string
-        builtin_tools:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-        tools:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-        temperature:
-          type: number
-          format: double
-          maximum: 2.0
-          minimum: 0.0
-        top_p:
-          type: number
-          format: double
-          maximum: 1.0
-          minimum: 0.0
-      required:
-      - assistant_id
-      - id
-      - instructions
-      - name
-    AssistantNodeParams:
-      type: object
-      properties:
-        tag:
-          type: string
-          description: Tag applied to this node's output message; blank means no tag.
-        citations_enabled:
-          type: boolean
-          description: Include cited sources in responses.
-        input_formatter:
-          type: string
-          description: Optional wrapper for the user input; use ``{input}`` as the
-            placeholder.
     BooleanNodeParams:
       type: object
       properties:
@@ -1546,6 +1492,13 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
           readOnly: true
@@ -1581,6 +1534,7 @@ components:
       - seed_message
       - synthetic_voice_id
       - trace_provider_id
+      - trace_sample_rate
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -1647,6 +1601,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/Provider'
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         channels:
           type: array
           items:
@@ -2303,11 +2265,6 @@ components:
           - $ref: '#/components/schemas/SourceMaterial'
           readOnly: true
           nullable: true
-        assistant:
-          allOf:
-          - $ref: '#/components/schemas/Assistant'
-          readOnly: true
-          nullable: true
         custom_actions:
           type: array
           items:
@@ -2339,7 +2296,6 @@ components:
       - $ref: '#/components/schemas/StaticRouterNodeParams'
       - $ref: '#/components/schemas/BooleanNodeParams'
       - $ref: '#/components/schemas/SendEmailParams'
-      - $ref: '#/components/schemas/AssistantNodeParams'
       - $ref: '#/components/schemas/ExtractStructuredDataParams'
       - $ref: '#/components/schemas/ExtractParticipantDataParams'
     InspectOutputHandle:
@@ -2936,6 +2892,14 @@ components:
         trace_provider_id:
           type: integer
           nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
         debug_mode_enabled:
           type: boolean
         conversational_consent_enabled:

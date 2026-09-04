@@ -245,28 +245,55 @@ class LangFuseTracer(Tracer):
 class ClientManager:
     """This class manages the langfuse clients to avoid creating a new client for every request.
     On requests for a client it will also remove any clients that have been inactive for a
-    certain amount of time."""
+    certain amount of time.
+
+    Cached per config hash rather than public_key alone, so any config change (a rotated key, a
+    changed sample_rate, ...) misses the cache and builds a fresh client instead of needing a
+    separate invalidation path. `LangfuseResourceManager` -- the SDK's own client cache -- is
+    still keyed by public_key only, so a config change for a public_key already cached here
+    evicts that stale SDK-level entry too, rather than leaving it to the next stale-prune pass.
+    """
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.key_timestamps: dict[str | None, float] = {}
+        self.key_timestamps: dict[int, float] = {}
+        self._public_keys: dict[int, str | None] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
         self._start_prune_thread()
 
+    @staticmethod
+    def _config_hash(config: dict) -> int:
+        return hash(frozenset(config.items()))
+
     def get(self, config: dict) -> Langfuse:
         from langfuse import Langfuse  # noqa: PLC0415 - tests mock langfuse.Langfuse at source module
 
         public_key = config.get("public_key")
+        config_hash = self._config_hash(config)
         with LangfuseResourceManager._lock:
+            if config_hash not in self.key_timestamps:
+                self._evict_public_key(public_key, keep=config_hash)
+
             active_instances = LangfuseResourceManager._instances
             if target_instance := active_instances.get(public_key, None):
                 client = _create_client_from_instance(target_instance, public_key)
             else:
                 logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
                 client = Langfuse(**config)
-            self.key_timestamps[public_key] = time.time()
+            self.key_timestamps[config_hash] = time.time()
+            self._public_keys[config_hash] = public_key
         return client
+
+    def _evict_public_key(self, public_key, keep: int) -> None:
+        """Remove any entry cached under a different config hash for this public_key.
+
+        Without this, a config change for a public_key we've already seen would still find
+        `LangfuseResourceManager`'s stale singleton for that key and silently reuse it.
+        """
+        for other_hash, other_key in list(self._public_keys.items()):
+            if other_hash != keep and other_key == public_key:
+                self._remove_client(other_hash)
 
     def _start_prune_thread(self):
         self._prune_thread = threading.Thread(target=self._prune_worker, daemon=True)
@@ -282,26 +309,33 @@ class ClientManager:
             return
 
         logger.debug("Pruning clients...")
-        for public_key in list(self.key_timestamps.keys()):
-            timestamp = self.key_timestamps[public_key]
+        for config_hash in list(self.key_timestamps.keys()):
+            timestamp = self.key_timestamps[config_hash]
             if time.time() - timestamp > self.stale_timeout:
-                logger.debug("Pruning old client with public_key '%s'", public_key)
-                self._remove_client(public_key)
+                logger.debug("Pruning old client for public_key '%s'", self._public_keys.get(config_hash))
+                self._remove_client(config_hash)
 
         if len(self.key_timestamps) > self.max_clients:
             # remove the oldest clients until we are below the max
             sorted_keys = sorted(self.key_timestamps.items(), key=lambda x: x[1])
             keys_to_remove = sorted_keys[: len(self.key_timestamps) - self.max_clients]
             logger.debug("Pruned %d clients above max limit", len(keys_to_remove))
-            for public_key, _ in keys_to_remove:
-                self._remove_client(public_key)
+            for config_hash, _ in keys_to_remove:
+                self._remove_client(config_hash)
 
-    def _remove_client(self, public_key):
+    def _remove_client(self, config_hash: int):
+        # All bookkeeping happens under the same lock `get()` holds for its whole body, so a
+        # background prune (this method's other caller, from `_prune_worker`'s thread) can't
+        # interleave with a concurrent `get()` and leave the two dicts and
+        # `LangfuseResourceManager._instances` inconsistent with each other.
         with LangfuseResourceManager._lock:
+            public_key = self._public_keys.pop(config_hash, None)
+            self.key_timestamps.pop(config_hash, None)
+            if public_key is None:
+                return
             active_instances = LangfuseResourceManager._instances
             if target_instance := active_instances.pop(public_key, None):
                 target_instance.shutdown()
-            self.key_timestamps.pop(public_key)
 
     def shutdown(self):
         if self.key_timestamps:
@@ -309,6 +343,7 @@ class ClientManager:
         with LangfuseResourceManager._lock:
             LangfuseResourceManager.reset()
             self.key_timestamps.clear()
+            self._public_keys.clear()
 
 
 client_manager = ClientManager()

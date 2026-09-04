@@ -6,8 +6,8 @@ from django.core.cache import cache as default_cache
 from django.core.cache import caches
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.service_providers.models import MessagingProviderType
-from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -27,6 +27,22 @@ def _isolate_rate_limit_counters():
     _clear_rate_limit_counters()
     yield
     _clear_rate_limit_counters()
+
+
+@pytest.fixture()
+def record_delivery(db):
+    """Records a delivery as already handled, the way ChatMessageCreationStage would have."""
+
+    def _record(team, external_ids):
+        chat = Chat.objects.create(team=team, name="recorded chat")
+        return ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="already handled",
+            external_ids=external_ids,
+        )
+
+    return _record
 
 
 @pytest.fixture()
@@ -109,13 +125,6 @@ def meta_cloud_api_whatsapp_channel(meta_cloud_api_provider):
 
 
 @pytest.fixture()
-def public_flag(experiment):
-    """Turns on `flag_public_channel` for the experiment's team.
-
-    The platform gate reads `Flag.is_active_for_team`, which matches on the team M2M and never
-    on `everyone`, so `override_flag` leaves the flag off here.
-    """
-    flag = Flag.objects.create(name="flag_public_channel")
-    flag.teams.add(experiment.team)
-    flag.flush()
-    return flag
+def public_flag(experiment, team_flag):
+    """Turns on `flag_public_channel` for the experiment's team."""
+    return team_flag("flag_public_channel", experiment.team)

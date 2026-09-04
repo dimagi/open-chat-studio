@@ -41,5 +41,6 @@
   "ui:deprecated": true,
   "ui:deprecation_message": "Use the 'LLM' node instead.",
   "ui:flow_node_type": "pipelineNode",
-  "ui:label": "LLM response"
+  "ui:label": "LLM response",
+  "ui:removed": false
 }

@@ -36,6 +36,7 @@ from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAME
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
@@ -177,7 +178,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             ),
             "default_values": get_node_default_values(self.request.team),
             "allow_edit_name": True,
-            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "flags_enabled": [
+                name
+                for name in Flag.objects.values_list("name", flat=True)
+                if flag_is_active_for_team(self.request.team, name)
+            ],
             "read_only": pipeline.is_a_version,
             "widget_page_context": get_widget_page_context(pipeline),
             **llm_model_parameter_context(),

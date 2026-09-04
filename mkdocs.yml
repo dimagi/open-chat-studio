@@ -133,6 +133,7 @@ nav:
       - 0055 Binary field type extends the field definition union: adr/0055-binary-field-type-extends-the-field-definition-union.md
       - 0056 Client-credentials applications name the chatbots they may reach: adr/0056-client-credentials-applications-name-their-chatbots.md
       - 0057 Remove the participant allowlist: adr/0057-remove-the-participant-allowlist.md
+      - 0058 Tri-state everyone and team grants are a flag's only inputs: adr/0058-tri-state-everyone-and-teams-are-a-flags-only-inputs.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md

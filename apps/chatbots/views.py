@@ -63,6 +63,7 @@ from apps.pipelines.views import get_widget_page_context, llm_model_parameter_co
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -400,7 +401,11 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "default_values": get_node_default_values(self.request.team),
             "origin": "chatbots",
             "allow_edit_name": False,
-            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "flags_enabled": [
+                name
+                for name in Flag.objects.values_list("name", flat=True)
+                if flag_is_active_for_team(self.request.team, name)
+            ],
             "widget_page_context": get_widget_page_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }
@@ -755,7 +760,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         raise Http404() from None
 
     version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
@@ -873,7 +877,6 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 def _chatbot_chat_ui(request):
     chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
-        "assistant": chatbot_version.get_assistant(),
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,
