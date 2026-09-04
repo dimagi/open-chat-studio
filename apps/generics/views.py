@@ -1,9 +1,6 @@
-import json
-
 from django.contrib import messages
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
-from django.utils import timezone
 from django.utils.translation import gettext
 from waffle import flag_is_active
 
@@ -12,7 +9,7 @@ from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.cost_tracking.services.reporting import session_usage
 from apps.events.models import StaticTrigger, StaticTriggerType
 from apps.experiments.decorators import experiment_session_view
-from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
 from apps.teams.flags import Flags
 from apps.utils.time import seconds_to_human
@@ -34,8 +31,8 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
     # Usage/cost is team-internal: participants viewing their own session (no team
     # membership) don't see it.
     show_usage_summary = bool(request.team_membership)
-    session_start = session.consent_date or session.created_at
-    participant_data_row = ParticipantData.objects.for_experiment(experiment).filter(participant=participant).first()
+    session_start = session.created_at
+    session_end = session.ended_at or (session.latest_trace.timestamp if session.latest_trace else session_start)
     event_triggers = [
         {
             "event_logs": list(trigger.event_logs.filter(session=session).order_by("-created_at")),
@@ -58,7 +55,7 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             ),
             "session_start": session_start,
             "session_duration_display": seconds_to_human(
-                max(0, ((session.ended_at or timezone.now()) - session_start).total_seconds()), compact=True
+                max(0, (session_end - session_start).total_seconds()), compact=True
             ),
             "message_count": session.chat.messages.count(),
             "details": [
@@ -73,8 +70,6 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             ),
             "participant_id": session.participant_id,
             "participant": participant,
-            "participant_data": json.dumps(participant_data_row.data if participant_data_row else {}, indent=4),
-            "participant_data_updated_at": participant_data_row.updated_at if participant_data_row else None,
             "has_conversation_end_events": StaticTrigger.objects.filter(
                 experiment=experiment, type__in=StaticTriggerType.end_conversation_types(), is_active=True
             ).exists(),
