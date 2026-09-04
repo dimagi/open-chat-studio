@@ -139,7 +139,7 @@ def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, Flow
 
 
 @dataclass(frozen=True)
-class _Side:
+class Side:
     """One end of an edge, holding what differs between the two when a handle is resolved.
 
     Both ends answer the same three questions -- what does this node offer, what does an omitted
@@ -157,7 +157,7 @@ class _Side:
     none_offered: Callable[[FlowNodeData], str]
 
 
-def _handle(side: _Side, content: FlowNodeData, requested: str | None) -> str:
+def _handle(side: Side, content: FlowNodeData, requested: str | None) -> str:
     """Which of this end's handles the edge lands on.
 
     An omitted handle is filled in only when the node offers exactly one. A router offers one output
@@ -227,7 +227,7 @@ _NO_OUTPUT_HANDLES_MESSAGES = {
     ),
 }
 
-_SOURCE = _Side(
+_SOURCE = Side(
     endpoint="source",
     handle_field="source_handle",
     kind="output",
@@ -238,7 +238,7 @@ _SOURCE = _Side(
 #: ``target_handle`` is never required, since only the Start node lacks an input handle and it
 #: cannot be a target at all. The field exists so an edge read back from the `chatbot_inspect`
 #: endpoint can be sent straight back, and so a multi-input node type would need no new field.
-_TARGET = _Side(
+_TARGET = Side(
     endpoint="target",
     handle_field="target_handle",
     kind="input",
