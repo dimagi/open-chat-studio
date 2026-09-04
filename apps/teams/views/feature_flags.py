@@ -58,6 +58,10 @@ class FeatureFlagForm(forms.Form):
             flag_info = flag_infos.get(flag_name)
             if not flag_info or not flag_info.teams_can_manage:
                 continue
+            if is_enabled == self.fields[flag_name].initial:
+                # A flag on through `everyone` renders ticked; writing the team into the M2M
+                # on an unrelated save would keep the feature past the end of the rollout.
+                continue
 
             flag = self._get_or_create_flag(flag_name)
             if is_enabled:
@@ -77,7 +81,9 @@ class FeatureFlagForm(forms.Form):
             self._all_flags = {flag.name: flag for flag in Flag.get_all()}
 
         if flag_name not in self._all_flags:
-            flag, _created = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
+            flag, _created = Flag.objects.get_or_create(
+                name=flag_name, defaults={"everyone": None, "superusers": False}
+            )
             self._all_flags[flag_name] = flag
         return self._all_flags[flag_name]
 

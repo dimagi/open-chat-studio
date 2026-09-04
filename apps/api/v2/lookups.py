@@ -14,9 +14,10 @@ from django.db.models import QuerySet
 from rest_framework.generics import get_object_or_404
 
 from apps.experiments.models import Experiment
+from apps.teams.models import Team
 
 
-def working_chatbots(team) -> QuerySet[Experiment]:
+def working_chatbots(team: Team) -> QuerySet[Experiment]:
     """The team's working (draft) chatbots.
 
     Version snapshots are excluded because writes only ever target the working version, and the
@@ -25,7 +26,7 @@ def working_chatbots(team) -> QuerySet[Experiment]:
     return Experiment.objects.filter(team=team, working_version__isnull=True)
 
 
-def get_working_chatbot(team, public_id, *, lock: bool = False) -> Experiment:
+def get_working_chatbot(team: Team, public_id: str, *, lock: bool = False) -> Experiment:
     """The team's working chatbot named by ``public_id``, or ``Http404``.
 
     ``lock`` takes a row lock for the rest of the transaction, which a writer needs and a reader
