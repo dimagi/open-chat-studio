@@ -7,7 +7,7 @@ status: active
 > Design document for the follow-up ADR-0053 named "the natural follow-up": withdrawing the anonymous,
 > credential-free route into `POST /api/chat/start/`.
 >
-> Split out of [oauth-chat-widget.md](oauth-chat-widget.md), where it lived as D7. The two are
+> Split out of [oauth-chat-widget.md](oauth-chat-widget.md), since extracted to ADR-0059–0064. The two are
 > independent: that document **adds** a credential (OAuth), this one **removes** a non-credential. They
 > share only the admission table, and neither blocks the other.
 >

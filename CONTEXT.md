@@ -54,14 +54,14 @@ So "this Chatbot has no Chat API Channel" means "no outside embedder can reach i
 
 A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
 
-- **Credential Mode** — the column exists (`ExperimentChannel.credential_mode`) but nothing reads it yet, so it is not admin-selectable and every Channel sits at `embed_key`. Once the OAuth path lands ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1) it is the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+- **Credential Mode** — the *admin's* choice of what an *external* caller must present: the **Embed Key** (`embed_key`, the default), or an OAuth token (`oauth`) (ADR-0059). (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
 - **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin requires.
 
 An admin's policy must never be switched on by a widget upgrade, which is why these are two separate settings and not rungs of one ladder.
 
-Once the OAuth mode exists, exposure will take **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
+Under the OAuth mode, exposure takes **two** admin acts that must agree (ADR-0059, ADR-0063): the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
 _Backed by_: `ChannelPlatform.EMBEDDED_WIDGET`, labelled **Chat Widget & API** — the stored value stays `embedded_widget` because it is also a `Participant.platform` value. `Credential Mode` is `ExperimentChannel.credential_mode`; `Widget Auth Level` is `ExperimentChannel.required_auth_level`.
-_Planned_: the OAuth path that gives `credential_mode` its meaning (`oauth-chat-widget.md` D1–D4) — until it lands the column is inert.
+_Decided in_: ADR-0059 (the mode), ADR-0060 (origin rule per credential), ADR-0061–0063 (how a token is admitted).
 _Avoid_: "the Embedded Widget channel" (the old label) when the channel is serving a server integration — say "Chat API Channel". "The widget channel" is fine when a widget really is the client.
 
 **Embed Key**:
