@@ -15,6 +15,7 @@ from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, Z
 from apps.documents.models import SYNC_LOCK_TIMEOUT, CollectionFile, DocumentSource, FileStatus
 from apps.documents.tasks import (
     async_create_collection_version,
+    create_collection_from_assistant_task,
     create_collection_zip_task,
     delete_collection_task,
     index_collection_files_task,
@@ -23,6 +24,7 @@ from apps.documents.tasks import (
     sync_document_source_task,
 )
 from apps.files.models import File, FilePurpose
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -725,3 +727,55 @@ def test_index_collection_files_clears_the_failure_reason(add_files_to_index_moc
     collection_file.refresh_from_db()
     assert collection_file.status == FileStatus.IN_PROGRESS
     assert collection_file.failure_reason == ""
+
+
+@pytest.fixture()
+def assistant_with_remote_file(collection):
+    assistant = OpenAiAssistantFactory.create(team=collection.team)
+    file = FileFactory.create(team=collection.team, external_id="ext-file-1")
+    resource = assistant.tool_resources.create(tool_type="file_search")
+    resource.files.add(file)
+    return assistant
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.ensure_remote_index_created")
+@patch("apps.documents.models.Collection.get_index_manager")
+def test_create_collection_from_assistant_records_the_failure_reason(
+    get_index_manager, ensure_remote_index_created, collection, assistant_with_remote_file
+):
+    """Linking is the only remote call on this path, so its explanation is the whole of what
+    the badge can say about why the file did not index."""
+    get_index_manager.return_value.link_files_to_remote_index.side_effect = ValueError(
+        "Error code: 401 - Incorrect API key provided"
+    )
+
+    create_collection_from_assistant_task(collection.id, assistant_with_remote_file.id)
+
+    collection_file = CollectionFile.objects.get(collection=collection)
+    assert collection_file.status == FileStatus.FAILED
+    assert collection_file.failure_reason == "ValueError: Error code: 401 - Incorrect API key provided"
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.ensure_remote_index_created")
+@patch("apps.documents.models.Collection.get_index_manager")
+def test_create_collection_from_assistant_clears_the_failure_reason(
+    get_index_manager, ensure_remote_index_created, collection, assistant_with_remote_file
+):
+    """A row can already carry a reason. (collection, file) has no uniqueness constraint, so a
+    collection can be built from the same assistant more than once."""
+    file = assistant_with_remote_file.tool_resources.first().files.first()
+    CollectionFile.objects.create(
+        collection=collection,
+        file=file,
+        status=FileStatus.FAILED,
+        failure_reason="ValueError: stale reason from the previous attempt",
+    )
+
+    create_collection_from_assistant_task(collection.id, assistant_with_remote_file.id)
+
+    rows = list(CollectionFile.objects.filter(collection=collection))
+    assert rows
+    assert all(row.status == FileStatus.COMPLETED for row in rows)
+    assert all(row.failure_reason == "" for row in rows)
