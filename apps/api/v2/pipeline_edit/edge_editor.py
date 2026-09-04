@@ -9,9 +9,7 @@ A wire call carries as many wires as the client likes, and is all or nothing: on
 refuses the call, and the graph is left as the call found it.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import cast
+from typing import ClassVar, cast
 
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
@@ -66,8 +64,8 @@ def _planned_edge(flow: Flow, planned: list[FlowEdge], wire: dict) -> FlowEdge:
     """
     source, target = wire["source"], wire["target"]
     source_node, target_node = _endpoints(flow, source, target)
-    from_handle = _handle(_SOURCE, source_node, wire.get("source_handle"))
-    to_handle = _handle(_TARGET, target_node, wire.get("target_handle"))
+    from_handle = SourceSide.resolve_handle(source_node, wire.get("source_handle"))
+    to_handle = TargetSide.resolve_handle(target_node, wire.get("target_handle"))
     wiring: Wiring = (source, from_handle, target, to_handle)
     _refuse_duplicate(flow, planned, wiring)
     return FlowEdge(
@@ -138,73 +136,110 @@ def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, Flow
     )
 
 
-@dataclass(frozen=True)
 class Side:
-    """One end of an edge, holding what differs between the two when a handle is resolved.
+    """One end of an edge, and which of that node's handles a wire lands on.
 
     Both ends answer the same three questions -- what does this node offer, what does an omitted
-    handle mean, is the named one on offer -- so they are answered once and what differs is data.
+    handle mean, is the named one on offer -- so the answering lives here and a subclass supplies
+    only what differs. Only a router offers a choice today, and only on the source side, but a node
+    type accepting more than one input would ask the target the same question.
     """
 
     #: The body field naming the node at this end, and the one naming its handle.
-    endpoint: str
-    handle_field: str
+    endpoint: ClassVar[str]
+    handle_field: ClassVar[str]
     #: What this end's handles are called in a sentence.
-    kind: str
-    #: The handles the node at this end offers, by name.
-    offered: Callable[[FlowNodeData], list[str]]
-    #: What to tell a caller that named a node offering none.
-    none_offered: Callable[[FlowNodeData], str]
+    kind: ClassVar[str]
 
+    @classmethod
+    def resolve_handle(cls, content: FlowNodeData, requested: str | None) -> str:
+        """Which of this end's handles the edge lands on.
 
-def _handle(side: Side, content: FlowNodeData, requested: str | None) -> str:
-    """Which of this end's handles the edge lands on.
-
-    An omitted handle is filled in only when the node offers exactly one. A router offers one output
-    per branch, and picking a branch nobody named would route traffic somewhere nobody chose, so the
-    refusal lists the handles on offer instead.
-
-    Only a router offers a choice today, and only on the source side, but nothing here is particular
-    to that side: a node type accepting more than one input asks the target the same question.
-    """
-    offered = side.offered(content)
-    if not offered:
-        raise serializers.ValidationError({side.endpoint: side.none_offered(content)})
-    if requested is None:
-        if len(offered) > 1:
+        An omitted handle is filled in only when the node offers exactly one. A router offers one
+        output per branch, and picking a branch nobody named would route traffic somewhere nobody
+        chose, so the refusal lists the handles on offer instead.
+        """
+        offered = cls.handles_offered(content)
+        if not offered:
+            raise serializers.ValidationError({cls.endpoint: cls.no_handles_message(content)})
+        if requested is None:
+            if len(offered) > 1:
+                raise serializers.ValidationError(
+                    {
+                        cls.handle_field: (
+                            f"'{content.id}' offers more than one {cls.kind} handle; name the one to "
+                            f"wire: {', '.join(offered)}."
+                        )
+                    }
+                )
+            return offered[0]
+        if requested not in offered:
             raise serializers.ValidationError(
                 {
-                    side.handle_field: (
-                        f"'{content.id}' offers more than one {side.kind} handle; name the one to "
-                        f"wire: {', '.join(offered)}."
+                    cls.handle_field: (
+                        f"'{requested}' is not an {cls.kind} handle '{content.id}' offers. "
+                        f"On offer: {', '.join(offered)}."
                     )
                 }
             )
-        return offered[0]
-    if requested not in offered:
-        raise serializers.ValidationError(
-            {
-                side.handle_field: (
-                    f"'{requested}' is not an {side.kind} handle '{content.id}' offers. On offer: {', '.join(offered)}."
-                )
-            }
-        )
-    return requested
+        return requested
+
+    @classmethod
+    def handles_offered(cls, content: FlowNodeData) -> list[str]:
+        """The handles the node at this end offers, by name."""
+        raise NotImplementedError
+
+    @classmethod
+    def no_handles_message(cls, content: FlowNodeData) -> str:
+        """What to tell a caller that named a node offering none."""
+        raise NotImplementedError
 
 
-def _no_output_handles_message(content: FlowNodeData) -> str:
-    """What to tell a caller that tried to wire from a node offering no output handle.
+class SourceSide(Side):
+    """The end an edge leaves from."""
 
-    Only one of the cases is the caller's to fix, and it is on the documented happy path: the
-    `pipeline_node_create` endpoint stores ``keywords: []`` for ``{"type": "RouterNode"}``, and a
-    router's handles *are* its keywords, so the one node type ``source_handle`` exists for arrives
-    unwirable. Handed the End node's answer instead, an agent would delete the node when the fix is
-    one PATCH away.
+    endpoint = "source"
+    handle_field = "source_handle"
+    kind = "output"
 
-    Held as a lookup on :func:`~apps.pipelines.build_state.why_no_output_handles`, so a case added
-    there raises ``KeyError`` here instead of quietly inheriting the End node's answer.
+    @classmethod
+    def handles_offered(cls, content: FlowNodeData) -> list[str]:
+        return [handle["handle"] for handle in output_handles(content.type, content.params, content.id)]
+
+    @classmethod
+    def no_handles_message(cls, content: FlowNodeData) -> str:
+        """Why the node offers no output handle, and whether that is the caller's to fix.
+
+        Only one case is, and it is on the documented happy path: the `pipeline_node_create` endpoint
+        stores ``keywords: []`` for ``{"type": "RouterNode"}``, and a router's handles *are* its
+        keywords, so the one node type ``source_handle`` exists for arrives unwirable. Handed the End
+        node's answer instead, an agent would delete the node when the fix is one PATCH away.
+
+        Held as a lookup on :func:`~apps.pipelines.build_state.why_no_output_handles`, so a case
+        added there raises ``KeyError`` here instead of quietly inheriting the End node's answer.
+        """
+        return _NO_OUTPUT_HANDLES_MESSAGES[why_no_output_handles(content.type)].format(id=content.id, type=content.type)
+
+
+class TargetSide(Side):
+    """The end an edge points at.
+
+    ``target_handle`` is never required, since only the Start node lacks an input handle and it
+    cannot be a target at all. The field exists so an edge read back from the `chatbot_inspect`
+    endpoint can be sent straight back, and so a multi-input node type would need no new field.
     """
-    return _NO_OUTPUT_HANDLES_MESSAGES[why_no_output_handles(content.type)].format(id=content.id, type=content.type)
+
+    endpoint = "target"
+    handle_field = "target_handle"
+    kind = "input"
+
+    @classmethod
+    def handles_offered(cls, content: FlowNodeData) -> list[str]:
+        return input_handles(content.type)
+
+    @classmethod
+    def no_handles_message(cls, content: FlowNodeData) -> str:
+        return f"'{content.id}' has no input handles, so no edge can point at it."
 
 
 #: Wording per :class:`~apps.pipelines.build_state.NoOutputHandles` case. A mapping rather than a
@@ -226,25 +261,6 @@ _NO_OUTPUT_HANDLES_MESSAGES = {
         "can say for a '{type}' node."
     ),
 }
-
-_SOURCE = Side(
-    endpoint="source",
-    handle_field="source_handle",
-    kind="output",
-    offered=lambda content: [handle["handle"] for handle in output_handles(content.type, content.params, content.id)],
-    none_offered=_no_output_handles_message,
-)
-
-#: ``target_handle`` is never required, since only the Start node lacks an input handle and it
-#: cannot be a target at all. The field exists so an edge read back from the `chatbot_inspect`
-#: endpoint can be sent straight back, and so a multi-input node type would need no new field.
-_TARGET = Side(
-    endpoint="target",
-    handle_field="target_handle",
-    kind="input",
-    offered=lambda content: input_handles(content.type),
-    none_offered=lambda content: f"'{content.id}' has no input handles, so no edge can point at it.",
-)
 
 
 def _unused_edge_id(flow: Flow, planned: list[FlowEdge], wiring: Wiring) -> str:
