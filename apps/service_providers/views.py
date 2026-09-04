@@ -355,12 +355,6 @@ class CreateServiceProvider(
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         can_view_usages = self.request.user.has_perm(self.provider_type.get_permission("view"))
-        available_tabs = {"configuration"}
-        if instance:
-            if self.provider_type == ServiceProvider.llm:
-                available_tabs.add("models")
-            if can_view_usages:
-                available_tabs.add("usages")
         ctx = {
             "primary_form": primary_form,
             "config_form": config_form,
@@ -372,7 +366,7 @@ class CreateServiceProvider(
             # the template overrides it reactively based on whether credentials changed.
             "button_text": self._button_text(instance, subtype),
             "active_tab": "manage-team",
-            "active_provider_tab": _active_provider_tab(self.request, available_tabs),
+            "active_provider_tab": _active_provider_tab(self.request, self.provider_type, instance, can_view_usages),
             "can_view_usages": can_view_usages,
         }
         is_elevenlabs_voice = (
@@ -416,14 +410,20 @@ class CreateServiceProvider(
         return resolve_url("single_team:manage_team", team_slug=self.request.team.slug)
 
 
-def _active_provider_tab(request, available_tabs: set[str]) -> str:
+def _active_provider_tab(request, provider_type, instance, can_view_usages: bool) -> str:
     """The tab to open, limited to the ones this page actually renders.
 
     A tab strip whose radio group has nothing checked hides every panel, so naming a tab the
     page does not have would leave the form invisible rather than just unselected.
     """
+    available = {"configuration"}
+    if instance:
+        if provider_type == ServiceProvider.llm:
+            available.add("models")
+        if can_view_usages:
+            available.add("usages")
     tab = request.GET.get("tab")
-    return tab if tab in available_tabs else "configuration"
+    return tab if tab in available else "configuration"
 
 
 def _model_row(model, rates, is_embedding: bool) -> dict:
