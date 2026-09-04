@@ -21,6 +21,21 @@ urlpatterns = [
         views.EditParticipantData.as_view(),
         name="edit-participant-data",
     ),
+    path(
+        "<int:participant_id>/sessions-panel",
+        views.ParticipantSessionsPanel.as_view(),
+        name="sessions-panel",
+    ),
+    path(
+        "<int:participant_id>/schedules-panel",
+        views.ParticipantSchedulesPanel.as_view(),
+        name="schedules-panel",
+    ),
+    path(
+        "<int:participant_id>/data-panel",
+        views.ParticipantDataPanel.as_view(),
+        name="data-panel",
+    ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
     path(
         "participants/<int:participant_id>/cancel_schedule/<str:schedule_id>/",

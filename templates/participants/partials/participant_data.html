@@ -1,19 +1,71 @@
+{% load i18n %}
+{% if just_saved is not None %}
+  <span id="data-save-status"
+        hx-swap-oob="true"
+        class="text-sm
+               {% if error %}text-error{% else %}text-base-content/60{% endif %}">
+    {% if error %}
+      {% translate "Save failed" %}
+    {% else %}
+      {% translate "All changes saved" %}
+    {% endif %}
+  </span>
+{% endif %}
 {% if perms.experiments.change_participantdata %}
-    <form hx-post="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}">
-        {% csrf_token %}
-        <div class="mb-4">
-            <textarea name="participant-data" id="{{ experiment }}-data" class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
-        </div>
-        <div class="json-editor w-full mb-4" data-target-field="textarea[name='participant-data']" data-disable-elt="#submit-{{ experiment.id }}"></div>
-        {% if error %}
-            <p class="text-error text-sm mt-1">{{ error }}</p>
-        {% endif %}
-        <div class="flex items-center justify-between">
-            <button class="btn btn-primary" id="submit-{{ experiment.id }}" type="submit">Update</button>
-        </div>
-    </form>
-{% else %}
-    <div class="mt-3 p-3 border rounded-lg border-neutral-500">
-    <pre><code>{{ participant_data|escape }}</code></pre>
+  <div class="flex items-center justify-between gap-2 flex-wrap">
+    <h4 class="font-semibold">{{ experiment }}</h4>
+    <div class="flex items-center gap-2">
+      <button type="button"
+              class="btn btn-sm"
+              onclick="document.querySelector('#participant-data-{{ experiment.id }} .json-editor').dispatchEvent(new Event('formatEditor'))">
+        {% translate "Format" %}
+      </button>
+      <button type="reset"
+              class="btn btn-sm"
+              form="participant-data-form-{{ experiment.id }}">{% translate "Revert" %}</button>
+      <button class="btn btn-sm btn-primary"
+              id="submit-{{ experiment.id }}"
+              type="submit"
+              form="participant-data-form-{{ experiment.id }}">{% translate "Save changes" %}</button>
     </div>
+  </div>
+  <p class="pg-help mb-2">
+    {% if updated_at %}
+      {% translate "Last updated" %} {{ updated_at }} · {{ key_count }} {% translate "keys" %}
+    {% else %}
+      {% translate "No data recorded yet" %}
+    {% endif %}
+  </p>
+  <div id="participant-data-{{ experiment.id }}">
+    <form id="participant-data-form-{{ experiment.id }}"
+          hx-post="{% url 'participants:edit-participant-data' experiment.team.slug participant.id experiment.id %}"
+          hx-target="#participant-data-card-{{ experiment.id }}"
+          hx-swap="innerHTML"
+          hx-disabled-elt="#submit-{{ experiment.id }}">
+      {% csrf_token %}
+      <div class="mb-4">
+        <textarea name="participant-data"
+                  id="participant-data-textarea-{{ experiment.id }}"
+                  class="textarea textarea-bordered mt-1 block w-full h-96">{{ participant_data|escape }}</textarea>
+      </div>
+      <div class="json-editor w-full mb-4"
+           data-target-field="textarea[name='participant-data']"
+           data-disable-elt="#submit-{{ experiment.id }}"></div>
+      {% if error %}
+        <p class="text-error text-sm mt-1">{{ error }}</p>
+      {% endif %}
+    </form>
+  </div>
+  <p class="text-xs
+            {% if just_saved and not error %}text-success{% else %}text-base-content/50{% endif %}">
+    {% if just_saved and not error %}
+      {% translate "Saved. Valid JSON — 0 errors." %}
+    {% else %}
+      {% translate "Validated on save." %}
+    {% endif %}
+  </p>
+{% else %}
+  <div class="mt-3 p-3 border rounded-lg border-neutral-500">
+    <pre><code>{{ participant_data|escape }}</code></pre>
+  </div>
 {% endif %}

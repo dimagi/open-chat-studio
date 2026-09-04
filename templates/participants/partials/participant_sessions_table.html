@@ -1,0 +1,7 @@
+{% load i18n %}
+<div class="app-card p-0 overflow-hidden rounded-2xl border border-base-300 bg-base-100">
+  <div class="p-3 flex items-center gap-2 flex-wrap border-b border-base-300">
+    {% include "experiments/filters.html" with simple_mode=True simple_filter_url=sessions_panel_url simple_filter_target="#sessions-panel" %}
+  </div>
+  <div id="participant-sessions-table">{% include "table/single_table.html" with table=session_table %}</div>
+</div>

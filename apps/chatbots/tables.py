@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
+from django.utils.html import format_html, format_html_join
 from django_tables2 import columns
 
 from apps.api.session_tokens import issue_session_token
@@ -241,3 +242,76 @@ class ChatbotSessionsTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
+
+
+class ParticipantSessionsTable(ChatbotSessionsTable):
+    """Sessions table for the participant details page.
+
+    Adds a "Started" column and a single-version display, and swaps the "Session Details"
+    action for a plain "View" chip. Static, matching the #4231 mockup: no sortable
+    columns and no django-tables2 record-count line (the filter bar's own "N of M
+    sessions" text already covers that).
+    """
+
+    show_record_count = False
+
+    chatbot = columns.Column(verbose_name="Chatbot", accessor="experiment", orderable=False)
+    started = columns.Column(accessor="created_at", verbose_name="Started")
+    last_activity = TimeAgoColumn(accessor="last_activity", verbose_name="Last activity", orderable=False)
+    message_count = columns.Column(verbose_name="Messages", accessor="message_count", orderable=False)
+    state = columns.Column(verbose_name="State", accessor="status", orderable=False)
+    versions = ArrayColumn(verbose_name="Version", accessor="experiment_versions")
+
+    actions = actions.ActionsColumn(
+        actions=[
+            ContinueChatAction(
+                url_name="chatbots:chatbot_chat_session",
+                url_factory=session_chat_url,
+                icon_class="fa-solid fa-comment",
+                title="Continue Chat",
+                display_condition=_show_chat_button,
+            ),
+            chip_action(
+                label="View",
+                icon_class="fa-solid fa-eye",
+                url_factory=chatbot_url_factory,
+                button_style="btn-ghost",
+            ),
+        ],
+        align="right",
+        verbose_name="",
+    )
+
+    class Meta:
+        sequence = ("chatbot", "started", "last_activity", "message_count", "state", "tags", "versions", "actions")
+        exclude = ("participant", "remote_id")
+        attrs = {
+            **settings.DJANGO_TABLES2_TABLE_ATTRS,
+            "th": {"class": "py-3 px-3 text-left text-xs"},
+            "td": {"class": "py-3 px-3 text-left overflow-hidden text-xs"},
+        }
+        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
+        orderable = False
+        empty_text = "No sessions yet!"
+
+    def render_chatbot(self, record):
+        chatbot = record.experiment
+        if self._user_has_perm("experiments.view_experiment"):
+            return format_html(
+                '<a href="{}" class="font-medium link link-hover">{}</a>', chatbot.get_absolute_url(), str(chatbot)
+            )
+        return format_html('<span class="font-medium">{}</span>', str(chatbot))
+
+    def render_state(self, record):
+        return format_html('<span class="badge badge-ghost">{}</span>', record.get_status_display())
+
+    def render_tags(self, record, bound_column=None):
+        tags = record.chat.non_skipped_tags()
+        if not tags:
+            return "-"
+        return format_html_join(
+            " ", '<span class="badge badge-outline badge-info">{}</span>', ((tag["name"],) for tag in tags)
+        )
+
+    def render_versions(self, value):
+        return f"v{value[-1]}" if value else "-"
