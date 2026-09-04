@@ -225,3 +225,13 @@ The System Agent is an internal AI assistant used for certain platform features.
 | `SYSTEM_AGENT_MODELS_HIGH` | Model(s) for complex tasks, e.g. `openai:gpt-4o`. Use comma-separated values for fallback. |
 | `SYSTEM_AGENT_MODELS_LOW` | Model(s) for simple tasks, e.g. `openai:gpt-4o-mini`. |
 | `SYSTEM_AGENT_API_KEYS` | Provider API keys as `provider=key` pairs, e.g. `openai=sk-...,anthropic=sk-ant-...`. |
+
+Optionally, trace the System Agent's LLM calls in Langfuse. This is separate from a team's own
+Trace Provider: it's operator-level, covering System Agent usage across all teams.
+
+| Variable | Description |
+|----------|-------------|
+| `LANGFUSE_PUBLIC_KEY` | Langfuse project public key. Leave unset to disable System Agent tracing. |
+| `LANGFUSE_SECRET_KEY` | Langfuse project secret key. |
+| `LANGFUSE_HOST` | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `LANGFUSE_SAMPLE_RATE` | Fraction of calls to trace, `0.0`-`1.0`. Leave unset to trace every call. |

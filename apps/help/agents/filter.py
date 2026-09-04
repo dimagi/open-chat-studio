@@ -140,11 +140,15 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
         except Team.DoesNotExist as e:
             raise ValueError(f"Team with id {self.input.team_id} not found") from e
         options_tool = make_get_options_tool(filter_class, team)
-        agent = build_system_agent(
-            self.mode,
-            self.get_system_prompt(self.input),
-            tools=[options_tool],
-            response_format=self._get_output_type(),
-        )
-        response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
+        with self._trace({"query": self.get_user_message(self.input)}) as trace_config:
+            agent = build_system_agent(
+                self.mode,
+                self.get_system_prompt(self.input),
+                tools=[options_tool],
+                response_format=self._get_output_type(),
+            )
+            response = agent.invoke(
+                {"messages": [{"role": "user", "content": self.get_user_message(self.input)}]},
+                config=trace_config,
+            )
         return self.parse_response(response)

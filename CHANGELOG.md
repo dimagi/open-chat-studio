@@ -37,6 +37,10 @@ version section when a release is cut.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
+- `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`,
+  `LANGFUSE_SAMPLE_RATE`: new, optional. Trace the System Agent's LLM calls
+  (code generation, filter building) in Langfuse. Unset by default (no
+  tracing); this is separate from a team's own Trace Provider. (#4395)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,

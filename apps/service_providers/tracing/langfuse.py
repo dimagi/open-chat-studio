@@ -30,6 +30,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.tracing.langfuse")
 
 
+def normalize_sample_rate(sample_rate: float | None) -> float | None:
+    """Normalize a Langfuse sample rate.
+
+    Returns ``None`` when the rate is exactly ``0.0`` ("trace nothing"): langfuse's
+    ``Langfuse.__init__`` treats ``sample_rate=0.0`` as falsy and silently substitutes the
+    ``LANGFUSE_SAMPLE_RATE`` env var or 1.0, so "trace nothing" has to be enforced here
+    rather than trusted to the SDK. A blank rate is normalized to ``1.0`` for the same
+    reason: passing ``None`` through lets the SDK fall back to that env var if one happens
+    to be set, silently overriding "leave blank to trace every call".
+    """
+    if sample_rate == 0.0:
+        return None
+    if sample_rate is None:
+        return 1.0
+    return sample_rate
+
+
 def get_langfuse_api_client(config: dict) -> LangfuseAPI:
     """Create a Langfuse management API client for reading trace data."""
     from langfuse.api.client import LangfuseAPI  # noqa: PLC0415 - tests mock LangfuseAPI at source module
