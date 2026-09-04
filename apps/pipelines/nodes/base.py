@@ -23,6 +23,7 @@ from apps.pipelines.nodes.context import NodeContext
 
 if TYPE_CHECKING:
     from apps.pipelines.repository import ORMRepository
+    from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -489,6 +490,24 @@ class OptionsSource(StrEnum):
     template_variables = "template_variables"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
+
+    def get_resolver(self) -> Callable[["Team", list], set]:
+        """The function answering "which of these values may this team actually use?" for this list.
+
+        Raises for a list that can deny nothing -- the prompt-variable lists, and the tool-config
+        lists that nest their options under provider types. Reaching here with one of those means
+        something asked to check a value against a list that cannot refuse it, which is a bug rather
+        than a permissive answer.
+
+        The resolvers themselves live in ``node_metadata``, beside the querysets the option lists are
+        built from, so what a client is offered and what a write accepts cannot come apart.
+        """
+        from apps.pipelines.nodes.node_metadata import RESOLVERS  # noqa: PLC0415 - circular: node_metadata→base
+
+        try:
+            return RESOLVERS[self]
+        except KeyError:
+            raise NotImplementedError(f"'{self}' has no resolver: it offers nothing a team could be denied.") from None
 
 
 class VisibleWhen(BaseModel):

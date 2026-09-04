@@ -1,13 +1,12 @@
 import inspect
 import json
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from inspect import signature
 from typing import Annotated, ClassVar, get_args, get_origin
 from unittest import mock
 
 import pytest
-import pytz
 from django.db import IntegrityError, connection
 from django.utils import timezone
 from langchain.tools import InjectedState
@@ -286,7 +285,7 @@ def test_move_datetime_to_new_weekday_and_time(
 ):
     """Test weekday and time changes. A weekday change will not cause the datetime to jump to a different week"""
     initial_datetime = datetime.strptime(initial_datetime_str, "%Y-%m-%d %H:%M:%S")
-    initial_datetime = initial_datetime.astimezone(pytz.UTC)
+    initial_datetime = initial_datetime.astimezone(UTC)
     new_datetime = _move_datetime_to_new_weekday_and_time(
         initial_datetime, new_weekday=new_weekday, new_hour=new_hour, new_minute=new_minute
     )

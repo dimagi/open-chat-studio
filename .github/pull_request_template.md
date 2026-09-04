@@ -19,6 +19,12 @@ that the reviewer should be made aware of.
 This should NOT be a summary of the every change. Focus on decisions and outcomes.
 -->
 
+### Issue Link
+<!--
+Link to the issue or doc that prompted this change, if any.
+If this fully addresses an issue use one of the keywords to have it automatically closed when the PR is merged e.g. `fixes #XYZ`
+See https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/using-keywords-in-issues-and-pull-requests
+-->
 
 ### Migrations
 <!--
