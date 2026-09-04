@@ -45,6 +45,7 @@ class BaseEditor {
   constructor(element, instanceMap) {
     this.element = element;
     this.instanceMap = instanceMap;
+    this.boundListeners = [];
     this.setupTargets();
     this.createErrorContainer();
     this.setupEventListeners();
@@ -53,6 +54,17 @@ class BaseEditor {
     // Store the instance
     this.instanceMap.set(element, this);
 
+  }
+
+  /**
+   * Register an event listener and remember it so destroy() can remove it.
+   * Every listener added during setup must go through this instead of a raw
+   * addEventListener, or a reinitialized editor on the same element leaves a
+   * stale listener that keeps firing against a destroyed instance.
+   */
+  addTrackedListener(target, event, handler) {
+    target.addEventListener(event, handler);
+    this.boundListeners.push({ target, event, handler });
   }
 
   /**
@@ -95,7 +107,7 @@ class BaseEditor {
    * Set up HTMX event listeners
    */
   setupEventListeners() {
-    this.element.addEventListener('htmx:beforeRequest', () => {
+    this.addTrackedListener(this.element, 'htmx:beforeRequest', () => {
       if (this.view) {
         this.element.classList.add('opacity-60', 'cursor-not-allowed');
         this.view.dispatch({
@@ -104,7 +116,7 @@ class BaseEditor {
       }
     });
 
-    this.element.addEventListener('htmx:afterRequest', () => {
+    this.addTrackedListener(this.element, 'htmx:afterRequest', () => {
       if (this.view) {
         this.element.classList.remove('opacity-60', 'cursor-not-allowed');
         this.view.dispatch({
@@ -180,6 +192,11 @@ class BaseEditor {
       this.errorContainer.remove();
     }
 
+    this.boundListeners.forEach(({ target, event, handler }) => {
+      target.removeEventListener(event, handler);
+    });
+    this.boundListeners = [];
+
     this.instanceMap.delete(this.element);
   }
 }
@@ -206,13 +223,14 @@ class JsonEditor extends BaseEditor {
     // reset event listener
     const form = this.element.closest('form');
     if (form) {
-      form.addEventListener('reset', () => {
+      this.addTrackedListener(form, 'reset', () => {
         setTimeout(() => this.reset(), 10);
       });
     }
-    this.element.addEventListener('resetEditor', () => {
+    this.addTrackedListener(this.element, 'resetEditor', () => {
       setTimeout(() => this.reset(), 10);
-    })
+    });
+    this.addTrackedListener(this.element, 'formatEditor', () => this.formatJSON());
   }
 
   /**

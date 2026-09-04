@@ -6,7 +6,7 @@ from apps.service_providers.migration_utils import llm_model_migration
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0077_deprecate_gpt5_family"),
+        ("service_providers", "0078_llmprovider_extra_data"),
         # the only load_pricing_data() run in the graph, so it must come after the last
         # migration that changed the seed data
         ("cost_tracking", "0008_rate_update_20260904"),
