@@ -1827,7 +1827,7 @@ class ExperimentSession(BaseTeamModel):
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
-            return self.experiment.participantdata_set.get(participant=self.participant).data
+            return ParticipantData.objects.for_experiment(self.experiment).get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
 

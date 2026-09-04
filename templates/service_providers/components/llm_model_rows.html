@@ -1,0 +1,9 @@
+{% comment %}
+  The rows of the Models tab, on their own so the create endpoint can re-render just them.
+  Required context: `model_rows`.
+{% endcomment %}
+{% for row in model_rows %}
+  {% include "service_providers/components/llm_model_row.html" with row=row %}
+{% empty %}
+  <tr><td colspan="5" class="text-base-content/60">No models are configured for this provider type.</td></tr>
+{% endfor %}

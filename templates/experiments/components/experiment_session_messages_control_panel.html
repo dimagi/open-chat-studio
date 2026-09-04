@@ -1,8 +1,8 @@
-{% load form_tags %}
+{% load form_tags i18n %}
 
-<form 
+<form
     id="control-panel"
-    class="mt-1 max-w-5xl flex justify-between p-3 pb-5 border-b"
+    class="flex justify-between p-3 border-b border-base-300"
     hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
     hx-target="#messages-container"
     hx-trigger="change, submit">
@@ -103,9 +103,9 @@
                 {% for tag in all_tags %}
                   <div class="tooltip" data-tip="{{ tag.count }} message{{ tag.count|pluralize }}">
                   <input
-                      type="checkbox" 
-                      name="tag_filter" 
-                      aria-label="{{ tag.name }}" 
+                      type="checkbox"
+                      name="tag_filter"
+                      aria-label="{{ tag.name }}"
                       value="{{ tag.name }}"
                       class="btn btn-xs checked:btn-accent"
                       {% if tag.name in selected_tags %}checked{% endif %}
@@ -131,7 +131,7 @@
           <div>
             Show all messages
             <input
-              x-ref="showAllCheckbox"  
+              x-ref="showAllCheckbox"
               type="checkbox"
               name="show_all"
               class="toggle"
@@ -148,6 +148,12 @@
           <div>
             {% include "experiments/components/pagination_buttons.html" %}
           </div>
+        {% endif %}
+
+        {% if perms.experiments.download_chats %}
+          <a class="btn btn-sm" href="{% url 'chatbots:export_chatbot_session_messages' request.team.slug experiment.public_id experiment_session.external_id %}">
+            <i class="fa-solid fa-download"></i> {% translate "Export" %}
+          </a>
         {% endif %}
       </div>
     </div>
