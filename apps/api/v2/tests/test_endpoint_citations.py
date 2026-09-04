@@ -14,6 +14,10 @@ import yaml
 #: How this codebase cites an endpoint: its id in backticks, then the word "endpoint".
 CITATION = re.compile(r"`([a-z][a-z0-9_]*)` endpoint")
 
+#: Adjacent string literals, which is how a long description is written. Joined before scanning, so
+#: that where a citation happens to fall across the wrap makes no difference to what is checked.
+CONTINUATION = re.compile(r'"\s*\n\s*"')
+
 
 @pytest.fixture()
 def cited(pytestconfig) -> dict[str, list[str]]:
@@ -23,7 +27,7 @@ def cited(pytestconfig) -> dict[str, list[str]]:
     for source in v2.rglob("*.py"):
         if "tests" in source.parts:
             continue
-        if ids := CITATION.findall(source.read_text()):
+        if ids := CITATION.findall(CONTINUATION.sub("", source.read_text())):
             found[str(source.relative_to(pytestconfig.rootpath))] = ids
     return found
 
