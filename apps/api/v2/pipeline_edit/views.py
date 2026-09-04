@@ -46,13 +46,13 @@ NODE_ID = OpenApiParameter(
     name="node_id",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.PATH,
-    description="The node's server-assigned id, as returned by a write or by GET /api/v2/chatbots/{id}/inspect/.",
+    description="The node's server-assigned id, as returned by a write or by GET /chatbots/{id}/inspect/.",
 )
 EDGE_ID = OpenApiParameter(
     name="edge_id",
     type=OpenApiTypes.STR,
     location=OpenApiParameter.PATH,
-    description="The edge's server-assigned id, as returned by a wire or by GET /api/v2/chatbots/{id}/inspect/.",
+    description="The edge's server-assigned id, as returned by a wire or by GET /chatbots/{id}/inspect/.",
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
@@ -178,9 +178,9 @@ class PipelineNodeEditView(PipelineFacadeView):
             "The node's `node_id` and its position on the canvas are assigned by the server and "
             "cannot be chosen.\n\n"
             "What `params` may hold depends on `type`, so the examples below show a full body for "
-            "each type. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
-            "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
-            "resource params may name."
+            "each type. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
+            "type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may "
+            "name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
@@ -225,9 +225,9 @@ class PipelineNodeEditView(PipelineFacadeView):
             "across a keyword edit, so re-read `output_handles` after one.\n\n"
             "What `params` may hold depends on the node's type, not on the verb: the `POST` "
             "examples name every param of each type, and the examples here are partial bodies "
-            "instead. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
-            "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
-            "resource params may name."
+            "instead. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
+            "type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may "
+            "name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],

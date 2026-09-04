@@ -61,7 +61,7 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
         if unknown := [item for item in requested_values if _is_not_allowed(item, available_values)]:
             errors[param] = (
                 f"Not available to this team: {', '.join(repr(item) for item in unknown)}. "
-                f"Choose from the '{param_option_map[param]}' list in GET /api/v2/pipeline/options/{node_type}/."
+                f"Choose from the '{param_option_map[param]}' list in GET /pipeline/options/{node_type}/."
             )
     return errors
 

@@ -15,12 +15,11 @@ from .graph_editor import settable_params
 #: Where a param's name comes from -- the one thing a free-form ``params`` object cannot say for
 #: itself. Spelled out on both write bodies, since a client reads one or the other.
 PARAM_NAMES = (
-    "Param names are the node type's own, as published by "
-    "`GET /api/v2/pipeline/nodes/{node_type}/`. They are not always the name of the "
-    "`/pipeline/options/` list a param draws its values from -- `source_material_id` is the param, "
-    "`source_material` is the list it chooses from -- so send the param name. A name the type does "
-    "not declare is dropped rather than refused, and the response reports the params the node "
-    "ended up holding."
+    "Param names are the node type's own, as published by `GET /pipeline/nodes/{node_type}/`. They "
+    "are not always the name of the `/pipeline/options/` list a param draws its values from -- "
+    "`source_material_id` is the param, `source_material` is the list it chooses from -- so send "
+    "the param name. A name the type does not declare is dropped rather than refused, and the "
+    "response reports the params the node ended up holding."
 )
 
 #: Keys a client might reasonably try to set on a *node* that the server owns (W5). Named
@@ -62,7 +61,7 @@ class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
     server_assigned_keys = SERVER_ASSIGNED_NODE_KEYS
 
-    type = serializers.CharField(help_text="A node type from GET /api/v2/pipeline/nodes/.")
+    type = serializers.CharField(help_text="A node type from `GET /pipeline/nodes/`.")
     label = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -177,7 +176,7 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     source = serializers.CharField(
         help_text=(
             "``node_id`` the edge leaves from. Node ids are the ones a node write returns and "
-            "`GET /api/v2/chatbots/{id}/inspect/` reports."
+            "`GET /chatbots/{id}/inspect/` reports."
         )
     )
     target = serializers.CharField(help_text="``node_id`` the edge points to.")
