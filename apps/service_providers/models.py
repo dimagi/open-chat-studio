@@ -344,14 +344,21 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         the next thing stored beside these keys must not disappear on a retest. The stored
         response describes the most recent check only, so a check that produced none - a pass,
         or one that never reached the provider - clears it rather than leaving a stale reason.
+
+        The row is re-read under a lock rather than merged into the copy this instance was
+        loaded from: the check ahead of it makes a synchronous external request that can take
+        seconds, which is long enough for another save to have written here in the meantime.
         """
-        extra_data = {**(self.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
-        if detail:
-            extra_data[VERIFICATION_ERROR_KEY] = detail
-        else:
-            extra_data.pop(VERIFICATION_ERROR_KEY, None)
+        with transaction.atomic():
+            provider = LlmProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = {**(provider.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
+            if detail:
+                extra_data[VERIFICATION_ERROR_KEY] = detail
+            else:
+                extra_data.pop(VERIFICATION_ERROR_KEY, None)
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
         self.extra_data = extra_data
-        self.save(update_fields=["extra_data"])
 
 
 class LlmProviderModelManager(models.Manager):

@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 from django.core.exceptions import ValidationError
+from field_audit.models import AuditAction
 
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.exceptions import (
@@ -434,6 +435,21 @@ class TestCredentialsVerifiedFlag:
 
         provider.refresh_from_db()
         assert provider.verification_error == ""
+
+    def test_a_write_that_landed_during_the_check_is_not_clobbered(self):
+        """The check makes a multi-second external call, so extra_data can change under it.
+        The outcome has to merge into the row as it stands, not the copy loaded before."""
+        provider = LlmProviderFactory(extra_data={})
+        stale = LlmProvider.objects.get(pk=provider.pk)
+        LlmProvider.objects.filter(pk=provider.pk).update(
+            extra_data={"something_else": "written meanwhile"}, audit_action=AuditAction.AUDIT
+        )
+
+        with mock.patch.object(LlmProvider, "test_connection"):
+            stale.run_connection_test_hook()
+
+        provider.refresh_from_db()
+        assert provider.extra_data == {"something_else": "written meanwhile", "verified_credentials": True}
 
     def test_recording_the_flag_leaves_other_extra_data_alone(self):
         """extra_data is a general bag; a retest must not drop what is stored beside it."""
