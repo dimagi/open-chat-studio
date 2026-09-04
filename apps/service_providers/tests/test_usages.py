@@ -611,6 +611,32 @@ def test_provider_edit_page_tab_query_param(team_with_users, client, anthropic_p
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("", id="no-param"),
+        pytest.param("?tab=models", id="models-tab-this-provider-does-not-have"),
+        pytest.param("?tab=nonsense", id="unknown-tab"),
+    ],
+)
+def test_a_provider_without_a_models_tab_still_opens_a_tab(team_with_users, client, query):
+    """A tab this provider does not render leaves no radio checked, and daisyUI hides every
+    panel of an unchecked group - so the whole form disappears."""
+    voice = VoiceProviderFactory(team=team_with_users)
+    user = team_with_users.members.first()
+    client.force_login(user)
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": voice.pk},
+    )
+
+    body = client.get(url + query).content.decode()
+
+    assert 'aria-label="Models"' not in body
+    assert _checked_tab(body) == "Configuration"
+
+
+@pytest.mark.django_db()
 def test_provider_create_page_has_no_tabs(team_with_users, client):
     """There is nothing to show usages for before the provider exists."""
     user = team_with_users.members.first()
