@@ -447,6 +447,11 @@ EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", defaul
 
 SITE_ID = 1
 
+# Global cap on any request body Django buffers in memory, so it bounds web-UI form posts and
+# unauthenticated webhooks as well as the JSON API (DRF reads ``request.body`` to parse JSON).
+# Multipart uploads stream to disk and are bounded by the per-endpoint file size checks instead.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024)
+
 # DRF config
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

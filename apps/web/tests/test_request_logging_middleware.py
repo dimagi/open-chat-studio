@@ -1,3 +1,4 @@
+import json
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -80,3 +81,24 @@ class TestRequestLoggingMiddleware:
 
         extra = mock_log.call_args.kwargs["extra"]
         assert extra["experiment_id"] == "from-request"
+
+    def test_oversized_body_does_not_escape_the_middleware(self, middleware, request_factory, settings):
+        """Logging runs after the response, so a body it cannot read must not become an error.
+
+        ``request.body`` raises ``RequestDataTooBig`` without caching ``_body``, so reading it here
+        raises again even though the view has already answered. Nothing else covers this: pytest
+        leaves ``JSON_LOGGING`` False, so this middleware is absent from request-level tests.
+        """
+        settings.DATA_UPLOAD_MAX_MEMORY_SIZE = 1024
+        request = request_factory.post(
+            "/some/path",
+            data=json.dumps({"session_id": "from-body", "padding": "x" * 4096}),
+            content_type="application/json",
+        )
+
+        with patch.object(logging.getLogger("ocs.request"), "info") as mock_log:
+            middleware(request)
+
+        mock_log.assert_called_once()
+        # The body was never read, so the fields it would have supplied are simply absent.
+        assert "session_id" not in mock_log.call_args.kwargs["extra"]
