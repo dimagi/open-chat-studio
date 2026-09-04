@@ -702,11 +702,6 @@ PROJECT_METADATA = {
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
     "ACCEPTABLE_USE_POLICY_URL": env("ACCEPTABLE_USE_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
-    # The marketing site. Separate host, separate repo
-    # (dimagi-internal/open-chat-studio-prelogin, an Astro site on Cloudflare
-    # Workers). Lives here rather than being hardcoded because both the pre-login
-    # frame and the redirects in apps/prelogin/urls.py need it, and a second copy
-    # is a link that rots the next time it moves.
     "MARKETING_SITE_URL": "https://openchatstudio.dimagi.com",
 }
 
