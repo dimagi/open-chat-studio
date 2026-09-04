@@ -91,37 +91,7 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
                 if collection_file.file.external_id:
                     previous_remote_file_ids.append(collection_file.file.external_id)
 
-            # Every re-index route funnels through here, so this is where a reason from a previous
-            # attempt stops applying.
-            CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
-
-            try:
-                collection.add_files_to_index(
-                    # `collection` is select_related because indexing reads the collection's
-                    # search language per file to build the lexical vectors; without it that is
-                    # a query per file.
-                    collection_files=CollectionFile.objects.filter(id__in=ids)
-                    .select_related("file", "collection")
-                    .iterator(100),
-                    chunk_size=strategy.chunk_size,
-                    chunk_overlap=strategy.chunk_overlap,
-                )
-            except Exception as e:
-                # IN_PROGRESS renders as a spinner for as long as the row exists, so the group
-                # needs a terminal status here. The IN_PROGRESS filter leaves rows that add_files
-                # already failed carrying their own reason, which names the stage that failed. A
-                # caller that holds a transaction around this call cannot accept the write once
-                # it has aborted.
-                try:
-                    CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
-                        status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
-                    )
-                except DatabaseError:
-                    logger.exception(
-                        "Could not record the indexing failure against the collection files",
-                        extra={"collection_file_ids": ids},
-                    )
-                raise
+            _index_strategy_group(collection, ids, strategy)
     finally:
         # The iterator holds a server-side cursor, and closing it here keeps that point
         # deterministic. A close against a connection whose transaction has already failed
@@ -130,6 +100,39 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
             file_iterator.close()
 
     return previous_remote_file_ids
+
+
+def _index_strategy_group(collection: Collection, ids: list[int], strategy: ChunkingStrategy) -> None:
+    """Index one chunking strategy group, leaving it in a terminal status if indexing raises."""
+    # Every re-index route funnels through here, so this is where a reason from a previous
+    # attempt stops applying.
+    CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
+
+    try:
+        collection.add_files_to_index(
+            # `collection` is select_related because indexing reads the collection's search
+            # language per file to build the lexical vectors; without it that is a query per file.
+            collection_files=CollectionFile.objects.filter(id__in=ids)
+            .select_related("file", "collection")
+            .iterator(100),
+            chunk_size=strategy.chunk_size,
+            chunk_overlap=strategy.chunk_overlap,
+        )
+    except Exception as e:
+        # IN_PROGRESS renders as a spinner for as long as the row exists, so the group needs a
+        # terminal status here. The IN_PROGRESS filter leaves rows that add_files already failed
+        # carrying their own reason, which names the stage that failed. A caller that holds a
+        # transaction around this call cannot accept the write once it has aborted.
+        try:
+            CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
+                status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
+            )
+        except DatabaseError:
+            logger.exception(
+                "Could not record the indexing failure against the collection files",
+                extra={"collection_file_ids": ids},
+            )
+        raise
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
