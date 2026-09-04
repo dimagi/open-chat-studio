@@ -16,8 +16,12 @@ def _path_of(url: str | None) -> str:
     return urlparse(url).path if url else ""
 
 
-class RequireMfaForStaffMiddleware(MiddlewareMixin):
-    """Confine staff and superusers without MFA to the MFA setup flow.
+class RequireMfaMiddleware(MiddlewareMixin):
+    """Confine users without MFA to the MFA setup flow.
+
+    Two independent gates decide who this applies to: staff and superusers globally
+    (``REQUIRE_MFA_FOR_STAFF``), and any user who belongs to a team with ``Team.require_mfa``
+    set. Either one is enough to trigger enrolment.
 
     allauth's ``mfa`` app ships no enforcement hook, so this follows the ``BaseRequire2FAMiddleware``
     pattern documented by django-allauth-2fa:
@@ -29,10 +33,10 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
     and keep working while their owner enrols.
     """
 
-    MESSAGE = _("Two-factor authentication is required for staff accounts. Please set it up to continue.")
+    MESSAGE = _("Two-factor authentication is required for this account. Please set it up to continue.")
 
     VERIFY_EMAIL_MESSAGE = _(
-        "Two-factor authentication is required for staff accounts, and it can only be set up once "
+        "Two-factor authentication is required for this account, and it can only be set up once "
         "your email address is verified."
     )
 
@@ -73,17 +77,20 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
         return self._gate(request)
 
     def _must_enrol(self, request) -> bool:
-        if not settings.REQUIRE_MFA_FOR_STAFF:
-            return False
-
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
             return False
 
-        if not (user.is_staff or user.is_superuser):
+        is_staff_gated = settings.REQUIRE_MFA_FOR_STAFF and (user.is_staff or user.is_superuser)
+        if not (is_staff_gated or self._team_requires_mfa(user)):
             return False
 
         return not (is_mfa_enabled(user) or self._is_exempt(request))
+
+    @staticmethod
+    def _team_requires_mfa(user) -> bool:
+        """Whether any team the user belongs to requires MFA, regardless of which team's pages they're on."""
+        return user.teams.filter(require_mfa=True).exists()
 
     def _gate(self, request):
         if request.path.startswith(self.PROGRAMMATIC_PATH_PREFIXES):
@@ -119,8 +126,8 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
             not mfa_settings.ALLOW_UNVERIFIED_EMAIL
             and EmailAddress.objects.filter(user_id=user.pk, verified=False).exists()
         ):
-            return reverse("account_email"), RequireMfaForStaffMiddleware.VERIFY_EMAIL_MESSAGE
-        return reverse("mfa_activate_totp"), RequireMfaForStaffMiddleware.MESSAGE
+            return reverse("account_email"), RequireMfaMiddleware.VERIFY_EMAIL_MESSAGE
+        return reverse("mfa_activate_totp"), RequireMfaMiddleware.MESSAGE
 
     def _is_exempt(self, request) -> bool:
         if self._is_exempt_path(request.path):
