@@ -1,20 +1,20 @@
 from django.db import migrations
 
 from apps.data_migrations.utils.migrations import RunDataMigration
-from apps.service_providers.migration_utils import llm_model_migration
 
 
 class Migration(migrations.Migration):
     dependencies = [
         ("service_providers", "0076_add_claude_fable_5_1"),
-        # llm_model_migration() repoints evaluators off any custom model it replaces, so the
-        # Evaluator FK must be in this migration's app state (see _repoint_evaluators).
+        # Retained so the graph stays stable for environments that already applied this.
         ("evaluations", "0018_evaluator_llm_provider_fks"),
     ]
 
     operations = [
-        # Re-sync the whole model list, marking gpt-5/-mini/-nano/-pro deprecated in the DB.
-        llm_model_migration(),
-        # Notify affected teams about the deprecation and recommended replacements.
+        # llm_model_migration() moved to 0078_add_gemini_3_8_flash so it runs only once per deploy
+        # (the newest migration re-syncs the whole model list, which marks gpt-5/-mini/-nano/-pro
+        # deprecated too). The notification reads the deprecation flags from
+        # DEFAULT_LLM_PROVIDER_MODELS rather than the DB, so it does not depend on that re-sync
+        # having run first.
         RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
