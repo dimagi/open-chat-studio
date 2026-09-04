@@ -543,8 +543,8 @@ class TestOpenAIRemoteIndexManager:
         assert str(exc_info.value) == "Incorrect API key provided: sk-abc"
 
     def test_ensure_remote_file_exists_carries_the_provider_message(self, index_manager, provider_client_mock):
-        """The upload raise site takes no arguments today, so the reason renders as the bare
-        class name with nothing about the cause."""
+        """The provider's sentence is the only thing that distinguishes a rejected key from an
+        unknown file id, so the assertion is an exact match rather than a substring."""
         provider_error = Exception("Error code: 401 - unauthorized")
         provider_error.body = {"message": "Incorrect API key provided: sk-abc"}
         provider_client_mock.files.retrieve.side_effect = provider_error
