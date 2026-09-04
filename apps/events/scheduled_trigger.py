@@ -89,7 +89,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
         if self.pk and self.scheduled_at != new_scheduled_at:
             # Schedule changed on an existing trigger; allow it to fire again.
             self.fired_at = None
-        self.scheduled_at = new_scheduled_at
+        self.scheduled_at = new_scheduled_at  # always set, including on first save
         super().save(*args, **kwargs)
 
     @transaction.atomic()

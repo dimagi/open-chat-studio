@@ -19,9 +19,9 @@ from apps.experiments.models import Experiment
 from apps.teams.decorators import login_and_team_required
 
 
-def _validate_team_experiment(request, experiment_id):
-    """Return the team-scoped experiment or 404, so cross-team ids are treated as not found."""
-    return get_object_or_404(Experiment, id=experiment_id, team=request.team)
+def _assert_team_experiment(request, experiment_id):
+    """Raise 404 if experiment_id does not belong to request.team, treating cross-team ids as not found."""
+    get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
 
 def _get_events_url(team_slug, experiment_id):
@@ -48,7 +48,7 @@ def create_scheduled_event_view(request, team_slug: str, experiment_id: str):
 
 
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
-    _validate_team_experiment(request, experiment_id)
+    _assert_team_experiment(request, experiment_id)
     if request.method == "POST":
         action_type = request.POST.get("action_type") or _default_action_type()
         action_primary_form = EventActionForm(request.POST)

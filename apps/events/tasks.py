@@ -77,6 +77,7 @@ def fire_trigger(trigger_id, session_id):
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def poll_due_scheduled_triggers():
+    # TODO: add a partial index on (scheduled_at, is_active, fired_at) before scaling beyond pilot.
     due_triggers = (
         ScheduledTrigger.objects.published_versions()
         .filter(is_active=True, fired_at__isnull=True, scheduled_at__lte=timezone.now())
@@ -92,6 +93,7 @@ def fire_scheduled_trigger(trigger_id):
         trigger = (
             ScheduledTrigger.objects.published_versions()
             .filter(is_active=True, fired_at__isnull=True, scheduled_at__lte=timezone.now())
+            .select_related("action", "experiment")
             .get(id=trigger_id)
         )
     except ScheduledTrigger.DoesNotExist:
