@@ -6,6 +6,8 @@ pipeline unfinished: a cycle or an unreachable End node is a property of the *gr
 this edge, so it persists and comes back in the errors report.
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import cast
 
 from rest_framework import serializers
@@ -37,8 +39,8 @@ def plan_create(
     Neither node is moved: Phase 1 leaves the canvas alone (W11).
     """
     source_node, target_node = _endpoints(flow, source, target)
-    from_handle = _source_handle(source_node, source_handle)
-    to_handle = _target_handle(target_node, target_handle)
+    from_handle = _handle(_SOURCE, source_node, source_handle)
+    to_handle = _handle(_TARGET, target_node, target_handle)
     wiring: Wiring = (source, from_handle, target, to_handle)
     _refuse_duplicate(flow, wiring)
     edge = FlowEdge(
@@ -107,23 +109,45 @@ def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, Flow
     )
 
 
-def _source_handle(content: FlowNodeData, requested: str | None) -> str:
-    """Which of the source node's output handles the edge leaves from.
+@dataclass(frozen=True)
+class _Side:
+    """One end of an edge, holding what differs between the two when a handle is resolved.
 
-    An omitted handle is filled in only when the node offers exactly one. A router offers one per
-    branch, and picking a branch nobody named would route traffic somewhere nobody chose, so the
-    refusal lists the handles on offer instead.
+    Both ends answer the same three questions -- what does this node offer, what does an omitted
+    handle mean, is the named one on offer -- so they are answered once and what differs is data.
     """
-    offered = [handle["handle"] for handle in output_handles(content.type, content.params, content.id)]
+
+    #: The body field naming the node at this end, and the one naming its handle.
+    endpoint: str
+    handle_field: str
+    #: What this end's handles are called in a sentence.
+    kind: str
+    #: The handles the node at this end offers, by name.
+    offered: Callable[[FlowNodeData], list[str]]
+    #: What to tell a caller that named a node offering none.
+    none_offered: Callable[[FlowNodeData], str]
+
+
+def _handle(side: _Side, content: FlowNodeData, requested: str | None) -> str:
+    """Which of this end's handles the edge lands on.
+
+    An omitted handle is filled in only when the node offers exactly one. A router offers one output
+    per branch, and picking a branch nobody named would route traffic somewhere nobody chose, so the
+    refusal lists the handles on offer instead.
+
+    Only a router offers a choice today, and only on the source side, but nothing here is particular
+    to that side: a node type accepting more than one input asks the target the same question.
+    """
+    offered = side.offered(content)
     if not offered:
-        raise serializers.ValidationError({"source": _no_output_handles_message(content)})
+        raise serializers.ValidationError({side.endpoint: side.none_offered(content)})
     if requested is None:
         if len(offered) > 1:
             raise serializers.ValidationError(
                 {
-                    "source_handle": (
-                        f"'{content.id}' offers more than one output handle; name the one to wire "
-                        f"from: {', '.join(offered)}."
+                    side.handle_field: (
+                        f"'{content.id}' offers more than one {side.kind} handle; name the one to "
+                        f"wire: {', '.join(offered)}."
                     )
                 }
             )
@@ -131,8 +155,8 @@ def _source_handle(content: FlowNodeData, requested: str | None) -> str:
     if requested not in offered:
         raise serializers.ValidationError(
             {
-                "source_handle": (
-                    f"'{requested}' is not an output handle '{content.id}' offers. On offer: {', '.join(offered)}."
+                side.handle_field: (
+                    f"'{requested}' is not an {side.kind} handle '{content.id}' offers. On offer: {', '.join(offered)}."
                 )
             }
         )
@@ -173,30 +197,24 @@ _NO_OUTPUT_HANDLES_MESSAGES = {
     ),
 }
 
+_SOURCE = _Side(
+    endpoint="source",
+    handle_field="source_handle",
+    kind="output",
+    offered=lambda content: [handle["handle"] for handle in output_handles(content.type, content.params, content.id)],
+    none_offered=_no_output_handles_message,
+)
 
-def _target_handle(content: FlowNodeData, requested: str | None) -> str:
-    """Which of the target node's input handles the edge points at.
-
-    Never required: every node type has one implicit input handle -- bar Start, which has none. The
-    field exists so an edge read back from ``GET /inspect/`` can be sent straight back, and so a
-    multi-input node type would not need a new field.
-    """
-    accepted = input_handles(content.type)
-    if not accepted:
-        raise serializers.ValidationError(
-            {"target": f"'{content.id}' has no input handle, so no edge can point at it."}
-        )
-    if requested is None:
-        return accepted[0]
-    if requested not in accepted:
-        raise serializers.ValidationError(
-            {
-                "target_handle": (
-                    f"'{requested}' is not an input handle '{content.id}' accepts. Accepted: {', '.join(accepted)}."
-                )
-            }
-        )
-    return requested
+#: ``target_handle`` is never required, since only the Start node lacks an input handle and it
+#: cannot be a target at all. The field exists so an edge read back from ``GET /inspect/`` can be
+#: sent straight back, and so a multi-input node type would need no new field.
+_TARGET = _Side(
+    endpoint="target",
+    handle_field="target_handle",
+    kind="input",
+    offered=lambda content: input_handles(content.type),
+    none_offered=lambda content: f"'{content.id}' has no input handles, so no edge can point at it.",
+)
 
 
 def _unused_edge_id(flow: Flow, wiring: Wiring) -> str:
