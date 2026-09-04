@@ -15,14 +15,6 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-  {% comment %}
-  configChanged is scoped to the card rather than to the config fields, because the submit
-  button reads it too and sits outside them. Only a provider whose credentials can be
-  verified has anything to re-verify, so nothing else carries the scope.
-
-  willVerify mirrors the condition the save itself uses to decide whether to run the
-  connection test, so the in-flight label only promises a check that is really happening.
-  {% endcomment %}
   <div class="app-card max-w-5xl mx-auto"
        x-data="{ submitted: false{% if can_verify_credentials %}, configChanged: false, credentialsVerified: {{ credentials_verified|yesno:'true,false' }}, get willVerify() { return this.configChanged || !this.credentialsVerified }{% endif %} }">
     <h1 class="pg-title">{{ title }}</h1>
