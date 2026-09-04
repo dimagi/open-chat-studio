@@ -95,9 +95,13 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
     finally:
         # The iterator holds a server-side cursor, and closing it here keeps that point
         # deterministic. A close against a connection whose transaction has already failed
-        # raises in turn, and that is not the failure worth propagating.
-        with contextlib.suppress(Exception):
+        # raises in turn, and that is not the failure worth propagating. The close is not
+        # routed through Django's error wrapper, so it surfaces a raw psycopg error rather
+        # than a DatabaseError.
+        try:
             file_iterator.close()
+        except Exception:
+            logger.warning("Could not close the collection files cursor", exc_info=True)
 
     return previous_remote_file_ids
 
