@@ -16,7 +16,7 @@ The widget's error handling reads a `code` field from the response body, which D
 
 We will return one response for every admission failure that the start endpoint's own authorization raises for an anonymous caller.
 
-- Status 401, body `{"error": "Authentication required to chat with this chatbot", "code": "chat_access_denied"}`. The failed check is logged and not included in the response.
+- Status 401, body `{"error": "Authentication required to chat with this chatbot", "code": "chat_access_denied"}`. The failed check is not included in the response.
 - The 401 status results from the bearer-token authenticator being first and returning `Bearer realm="api"` (ADR-0061). The exception supplies the body.
 - Two refusals are outside this rule. An embed key that matches no channel is refused by the embed-key authenticator with DRF's default 401 body. A `version_number` from an anonymous caller, with or without a token, returns the 403 from ADR-0053's member-only rule.
 - Authenticated callers keep the 403 and the body "You do not have access to this chatbot". This includes a logged-in non-member whose embed key resolves an `oauth`-mode channel. A 401 to a logged-in user would indicate a broken session.
@@ -27,6 +27,7 @@ We will return one response for every admission failure that the start endpoint'
 
 - An invalid embed key on session start now returns 401 instead of 403. The session-bound endpoints still return 403, because their authentication classes are unchanged.
 - A misconfigured integrator receives the same response as an attacker. The channel dialog lists the applications whose allowlist includes the chatbot and warns when there are none.
+- No log records which check failed. Diagnosing a refused integration means checking the channel mode, domain list, token scope and allowlist by hand. Server-side logging of the failed check is a gap this decision leaves open.
 - The widget's session-token recovery is unaffected, because the session endpoints raise a permission error that DRF does not convert.
 
 ## Alternatives considered
