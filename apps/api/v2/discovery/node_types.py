@@ -1,17 +1,25 @@
-"""Reshapes the builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
+"""Reshapes the UI builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
 `/pipeline/nodes/` serves."""
 
 import hashlib
 import json
 from functools import cache
+from typing import cast
 
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
+from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource, PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
-from .contract import MUST_MATCH, OPTIONS_KEYED_BY, PER_KEYWORD_OUTPUT, SINGLE_OUTPUT, UI_KEY_TRANSLATIONS
+from .contract import (
+    MUST_MATCH,
+    OPTIONS_KEYED_BY,
+    PARAMETER_OPTION_SOURCES,
+    PER_KEYWORD_OUTPUT,
+    SINGLE_OUTPUT,
+    UI_KEY_TRANSLATIONS,
+)
 
 
 @cache
@@ -32,9 +40,35 @@ def get_node_types() -> list[dict]:
     return node_types
 
 
+def get_node_type_schema(node_type: str) -> dict:
+    """The named node type as ``/pipeline/nodes/`` serves it, or a 404 naming the valid ones."""
+    for node in get_node_types():
+        if node["type"] == node_type:
+            return node
+    raise unknown_node_type(node_type)
+
+
+def get_node_class(node_type: str) -> type[BasePipelineNode]:
+    """The node class behind a type this API publishes, or :func:`get_node_type_schema`'s 404.
+
+    The served types are exactly the resolvable node classes, so past the lookup this cannot be None.
+    """
+    get_node_type_schema(node_type)
+    return cast(type[BasePipelineNode], resolve_node_class(node_type))
+
+
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     """The option keys a single node type reads, or ``None`` if no such type is served."""
     return _option_keys_by_type().get(node_type)
+
+
+def parameter_option_mapping(node_type: str) -> dict[str, OptionsSource]:
+    """One node type's reference params, each mapped to the option list it draws from."""
+    return {
+        param: option_key
+        for param, option_key in _sources_by_type().get(node_type, {}).items()
+        if option_key in PARAMETER_OPTION_SOURCES
+    }
 
 
 def served_option_keys() -> frozenset[str]:
@@ -60,8 +94,8 @@ def etag(payload: list | dict) -> str:
 
 
 def _available_schemas() -> list[dict]:
-    """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
-    types and the structural ones the server manages."""
+    """The UI builder's schemas behind the listed node types. ``ui:can_add`` is False for the
+    deprecated types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
 
 
@@ -99,7 +133,7 @@ def _property(name: str, prop: dict) -> dict:
 
 
 def _param_links(name: str) -> dict:
-    """The cross-param rules the builder enforces in JS and the schema never stated."""
+    """The cross-param rules the UI builder enforces in JS and the schema never stated."""
     links = {}
     if name in MUST_MATCH:
         links["must_match"] = MUST_MATCH[name]
@@ -109,8 +143,8 @@ def _param_links(name: str) -> dict:
 
 
 def _documentation_url(schema: dict) -> str | None:
-    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the builder
-    joins it in the browser, an API client has no base to join it to."""
+    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the UI
+    builder joins it in the browser, an API client has no base to join it to."""
     link = schema.get("ui:documentation_link")
     if not link:
         return None
@@ -120,19 +154,30 @@ def _documentation_url(schema: dict) -> str | None:
 
 
 @cache
+def _sources_by_type() -> dict[str, dict[str, OptionsSource]]:
+    """``node type -> {param: the option list it draws from}``, read off ``ui:optionsSource``.
+
+    Withheld params and params with no source are left out. Unlike :func:`parameter_option_mapping`
+    this keeps the params whose list names no team records -- the prompt-variable lists among them.
+    """
+    return {
+        schema["title"]: {
+            name: prop["ui:optionsSource"]
+            for name, prop in schema["properties"].items()
+            if not prop.get("api:exclude") and prop.get("ui:optionsSource")
+        }
+        for schema in _available_schemas()
+    }
+
+
+@cache
 def _option_keys_by_type() -> dict[str, frozenset[str]]:
-    """The `/pipeline/options/` keys each node type's params can draw from, read off
-    ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
+    """The `/pipeline/options/` keys each node type's params can draw from. A known type that reads
+    nothing yields an empty set, not a missing key."""
     keys_by_type = {}
     for schema in _available_schemas():
-        properties = schema["properties"]
-        keys = set()
-        for prop in properties.values():
-            if prop.get("api:exclude"):
-                continue
-            if source := prop.get("ui:optionsSource"):
-                keys.add(source)
-        if "llm_provider_id" in properties:
+        keys = set(_sources_by_type()[schema["title"]].values())
+        if "llm_provider_id" in schema["properties"]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type
