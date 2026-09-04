@@ -1,0 +1,13 @@
+{% load default_tags %}
+{% comment %}
+Copies a direct link to `message` on the session-detail page, which highlights and scrolls
+to it (see `highlight_message_id` handling in `experiments:experiment_session_messages_view`).
+
+Params:
+  message: the ChatMessage to link to
+  session_detail_url: the chatbot_session_view URL for the session this message belongs to
+{% endcomment %}
+<input type="hidden" id="msg-link-{{ message.id }}" value="{% absolute_url session_detail_url %}?message_id={{ message.id }}">
+<button type="button" class="btn btn-ghost btn-xs btn-square" title="Copy link" onclick="SiteJS.app.copyToClipboard(this, 'msg-link-{{ message.id }}')">
+  <i class="fa-solid fa-link"></i>
+</button>

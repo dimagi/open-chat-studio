@@ -1,0 +1,131 @@
+{% load i18n %}
+<div class="app-card p-0 overflow-hidden">
+  <table class="table pg-table">
+    <thead>
+      <tr>
+        <th>{% translate "Schedule" %}</th>
+        <th>{% translate "Next run" %}</th>
+        <th>{% translate "Cadence" %}</th>
+        <th>{% translate "Status" %}</th>
+        <th>{% translate "Manage" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for schedule in participant_schedules %}
+        <tr id="schedule_{{ schedule.external_id }}"
+            class="hover:bg-base-200 transition-colors">
+          <td>
+            <div class="font-medium">{{ schedule.name }}</div>
+          </td>
+          <td class="whitespace-nowrap">
+            {% if schedule.is_complete or schedule.is_cancelled %}
+              -
+            {% elif schedule.next_trigger_date %}
+              <time datetime="{{ schedule.next_trigger_date.isoformat }}"
+                    title="{{ schedule.next_trigger_date.isoformat }}">
+                {{ schedule.next_trigger_date|date:"DATETIME_FORMAT" }}
+              </time>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            {% if schedule.repetitions %}
+              {% translate "Every" %} {{ schedule.frequency }} {{ schedule.time_period }}, {{ schedule.repetitions }} {% translate "times" %}
+            {% else %}
+              {% translate "One-off" %}
+            {% endif %}
+          </td>
+          <td>
+            {% if schedule.is_cancelled %}
+              <span class="badge badge-ghost">{% translate "Cancelled" %}</span>
+            {% elif schedule.is_complete %}
+              <span class="badge badge-ghost">{% translate "Completed" %}</span>
+            {% else %}
+              <span class="badge badge-ghost">{% translate "Active" %}</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-ghost"
+                    onclick="document.getElementById('schedule-logs-{{ schedule.external_id }}').showModal()">
+              <i class="fa-solid fa-gear"></i> {% translate "Manage" %}
+            </button>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5" class="text-center text-base-content/60">{% translate "No schedules for this session." %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% for schedule in participant_schedules %}
+  <dialog id="schedule-logs-{{ schedule.external_id }}" class="modal">
+    <div class="modal-box max-w-3xl">
+      <h3 class="font-bold text-lg">{% translate "Manage schedule" %} - {{ schedule.name }}</h3>
+      <p class="text-sm text-base-content/60 mt-1">{{ schedule.prompt }}</p>
+      <h4 class="font-semibold text-sm mt-4">{% translate "Message Logs" %}</h4>
+      {% if not schedule.attempts %}
+        <p class="text-sm text-base-content/60 mt-2">{% translate "No message logs yet." %}</p>
+      {% endif %}
+      <div class="mt-2 space-y-2">
+        {% if schedule.attempts %}
+          <div class="flex w-full justify-between px-4 py-2 font-semibold text-sm">
+            <div class="w-40">{% translate "Attempted At" %}</div>
+            <div class="w-20">{% translate "Trigger #" %}</div>
+            <div class="w-20">{% translate "Attempt #" %}</div>
+            <div class="w-20">{% translate "Result" %}</div>
+            <div class="w-32">{% translate "Log" %}</div>
+            <div class="w-20">{% translate "Trace" %}</div>
+          </div>
+        {% endif %}
+        {% for attempt in schedule.attempts %}
+          <div class="flex w-full justify-between px-4 py-2 border border-base-300 rounded text-sm">
+            <div class="w-40">{{ attempt.updated_at|date:"DATETIME_FORMAT" }}</div>
+            <div class="w-20">#{{ attempt.trigger_number }}</div>
+            <div class="w-20">#{{ attempt.attempt_number }}</div>
+            <div class="w-20">{{ attempt.attempt_result }}</div>
+            <div class="w-32">
+              {% if attempt.log_message %}
+                <details>
+                  <summary class="cursor-pointer underline text-primary">{% translate "View Log" %}</summary>
+                  <pre class="mt-1 p-2 bg-base-200 rounded text-xs whitespace-pre-wrap border border-base-300">{{ attempt.log_message }}</pre>
+                </details>
+              {% else %}
+                -
+              {% endif %}
+            </div>
+            <div class="w-20">
+              {% if attempt.trace_info %}
+                {% include "experiments/chat/components/trace_icons.html" with trace_infos=attempt.trace_info %}
+              {% else %}
+                -
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="modal-action">
+        {% if perms.experiments.change_participant %}
+          <button id="cancel-schedule-{{ schedule.external_id }}"
+                  class="btn btn-outline btn-error"
+                  {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
+                  hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
+                  hx-trigger="confirmed"
+                  hx-target="#schedule_{{ schedule.external_id }}"
+                  hx-swap="outerHTML"
+                  onclick="confirmThenTrigger('cancel-schedule-{{ schedule.external_id }}', 'Are you sure you want to cancel this schedule?')">
+            <i class="fa-solid fa-ban"></i> {% translate "Cancel schedule" %}
+          </button>
+        {% endif %}
+        <form method="dialog">
+          <button class="btn">{% translate "Close" %}</button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>{% translate "close" %}</button>
+    </form>
+  </dialog>
+{% endfor %}

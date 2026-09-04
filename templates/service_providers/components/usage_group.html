@@ -9,11 +9,7 @@
 {% endcomment %}
 <li{% if group.hidden_versions %} x-data="{ expanded: false }"{% endif %}>
   {% with head_url=group.head.get_absolute_url|default_if_none:"" %}
-    {% if head_url %}
-      <a class="link" href="{{ head_url }}">{{ group.name }}</a>
-    {% else %}
-      <span>{{ group.name }}</span>
-    {% endif %}
+    {% include "generic/chip_button.html" with url=head_url label=group.name %}
   {% endwith %}
   {% for member in group.visible_versions %}{% usage_version_pill member %}{% endfor %}
   {% if group.hidden_versions %}

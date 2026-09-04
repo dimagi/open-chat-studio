@@ -43,7 +43,7 @@
                   </div>
                 </div>
                 <div class="mt-2 text-sm">
-                  <a class="link" href="{% url 'service_providers:usages' provider.team.slug service_provider.slug provider.pk %}">
+                  <a class="link" href="{% url 'service_providers:edit' provider.team.slug service_provider.slug provider.pk %}?tab=usages">
                     {% translate "Open per-provider usages page →" %}
                   </a>
                 </div>

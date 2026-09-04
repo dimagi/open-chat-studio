@@ -1,0 +1,110 @@
+{% comment %}
+  The Models tab: every model this provider type can run, as one filtered list.
+  The rows are keyed on provider type plus team, so every provider of the same type
+  shows the same list - which is why no count appears in the page header.
+  Required context: `model_rows`, `role_filters`, `deprecated_count`, `subtype`.
+{% endcomment %}
+<div x-data="llmModelFilters">
+
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="font-bold text-lg">Models</h2>
+      <p class="text-xs text-base-content/60 mt-1">
+        Shared by every {{ subtype.label }} provider on this team
+      </p>
+    </div>
+    <button class="btn btn-primary btn-sm" type="button" onclick="new_custom_model.showModal()">
+      <i class="fa-solid fa-plus"></i>
+      Add custom model
+    </button>
+  </div>
+
+  <div role="alert" class="alert alert-info alert-soft text-sm py-2 mt-4">
+    <i class="fa-solid fa-circle-info"></i>
+    <span>
+      We use
+      <a href="https://llm-stats.com" target="_blank" rel="noopener noreferrer" class="link link-hover font-semibold">llm-stats.com</a>
+      to source new model releases as they become available.
+    </span>
+  </div>
+
+  <div class="flex flex-wrap items-center justify-between gap-3 mt-4">
+    <div class="flex flex-wrap gap-2" role="group" aria-label="Filter by role">
+      {% for key, label in role_filters %}
+        <button type="button" class="btn btn-xs btn-soft btn-primary rounded-full"
+                x-bind:class="role === '{{ key }}' ? 'btn-active' : ''"
+                x-on:click="role = '{{ key }}'; apply()">
+          {{ label }} <span class="ml-1 opacity-60" x-text="counts['{{ key }}']"></span>
+        </button>
+      {% endfor %}
+    </div>
+    {% if deprecated_count %}
+      <label class="label cursor-pointer gap-2 text-sm" x-show="deprecatedCount > 0">
+        <input type="checkbox" class="checkbox checkbox-sm" x-model="showDeprecated" x-on:change="apply()">
+        Show deprecated (<span x-text="deprecatedCount"></span>)
+      </label>
+    {% endif %}
+  </div>
+
+  <div class="overflow-x-auto mt-3">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Role</th>
+          <th>Pricing per 1M</th>
+          <th class="text-right">Context</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="custom_model_list" x-ref="rows">
+        {% include "service_providers/components/llm_model_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('alpine:init', () => {
+    // One pass owns both the filtering and the counts, reading the rendered rows, so a
+    // chip can never disagree with the list it filters. Rows are hidden from here rather
+    // than by a per-row x-show because Alpine does not bind directives on htmx-swapped
+    // content.
+    Alpine.data('llmModelFilters', () => ({
+      role: 'all',
+      showDeprecated: false,
+      counts: {},
+      deprecatedCount: 0,
+
+      init() {
+        // $nextTick so $refs.rows is registered: refs come from descendants, which Alpine
+        // has not walked yet when a root's init runs.
+        this.$nextTick(() => {
+          this.apply();
+          // Adding a custom model replaces the rows and deleting one removes a row, neither
+          // of which re-renders this wrapper. Watched with a MutationObserver rather than an
+          // htmx event because a delete swaps the row away, and htmx:afterSwap fires on the
+          // row as it detaches - too late to bubble anywhere useful.
+          new MutationObserver(() => this.apply()).observe(this.$refs.rows, {childList: true});
+        });
+      },
+
+      apply() {
+        const rows = [...this.$refs.rows.querySelectorAll('tr[data-role]')];
+        const shown = (r) => (this.showDeprecated || r.dataset.deprecated !== 'true');
+        const inRole = (r) => this.role === 'all'
+          || r.dataset.role === this.role
+          || (this.role === 'custom' && r.dataset.custom === 'true');
+        const pool = rows.filter(shown);
+        this.deprecatedCount = rows.length - rows.filter(r => r.dataset.deprecated !== 'true').length;
+        this.counts = {
+          all: pool.length,
+          chat: pool.filter(r => r.dataset.role === 'chat').length,
+          embedding: pool.filter(r => r.dataset.role === 'embedding').length,
+          custom: pool.filter(r => r.dataset.custom === 'true').length,
+        };
+        for (const r of rows) r.hidden = !(shown(r) && inRole(r));
+      },
+    }))
+  })
+</script>
