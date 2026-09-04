@@ -1,4 +1,11 @@
 {% load static %}
+{% comment %}
+  Shared frame for the pages this app still serves: the landing page at "/" and the
+  logged-out auth pages (via auth_base.html). The marketing pages it used to wrap
+  now live at project_meta.MARKETING_SITE_URL, so every nav and footer link below
+  leaves the app — but the frame, the CSS, and the blocks auth_base.html overrides
+  all stay exactly as they were.
+{% endcomment %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -25,7 +32,7 @@
     <div class="nav-wrap">
       <div class="container">
         <nav class="primary">
-          <a class="logo" href="{% url 'prelogin:home' %}">
+          <a class="logo" href="{{ project_meta.MARKETING_SITE_URL }}/">
             <img src="{% static 'prelogin/images/ocs-logo.png' %}"
                  width="175"
                  height="78"
@@ -35,16 +42,6 @@
                         filter:brightness(0) invert(1);
                         opacity:0.95">
           </a>
-          <div class="nav-links">
-            <a href="{% url 'prelogin:home' %}"
-               {% if active_nav == "home" %}class="nav-active" aria-current="page"{% endif %}>Open Chat Studio</a>
-            <a href="{% url 'prelogin:applications' %}"
-               {% if active_nav == "applications" %}class="nav-active" aria-current="page"{% endif %}>Use Cases</a>
-            <a href="{% url 'prelogin:about' %}"
-               {% if active_nav == "about" %}class="nav-active" aria-current="page"{% endif %}>Community</a>
-            <a href="{% url 'prelogin:contact' %}"
-               {% if active_nav == "contact" %}class="nav-active" aria-current="page"{% endif %}>Contact</a>
-          </div>
           <div class="nav-cta">
             <a class="btn btn-ghost"
                href="https://github.com/dimagi/open-chat-studio"
@@ -54,134 +51,69 @@
               <a class="btn btn-primary" href="{% url 'sso:login' %}">Sign In</a>
             {% endblock nav_signin_cta %}
           </div>
-          <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">
-            {# djlint:off H020 #}
-            <span></span><span></span><span></span>
-            {# djlint:on #}
-          </button>
         </nav>
       </div>
     </div>
     {% block content %}{% endblock %}
     <!-- ───── FOOTER ───── -->
+    {% comment %}
+      One compact line: logo, copyright, then pipe-separated links. The separators
+      are drawn by CSS on `li + li`, never typed into the markup, so a suppressed
+      Sign In (auth pages override the block below) or an unset legal URL can't
+      leave a dangling pipe behind it.
+    {% endcomment %}
     <footer>
       <div class="container">
-        <div class="footer-grid">
-          <div class="footer-brand">
-            <div class="logo" style="gap:10px;">
-              <img src="{% static 'prelogin/images/ocs-logo.png' %}"
-                   width="175"
-                   height="78"
-                   alt="Open Chat Studio by Dimagi"
-                   style="height:28px;
-                          width:auto;
-                          filter:brightness(0) invert(1);
-                          opacity:0.85">
-            </div>
-            <p>Open-source AI chatbots for global development.</p>
-          </div>
-          <div class="footer-col">
-            <h2>About</h2>
-            <ul>
+        <div class="footer-line">
+          <img class="footer-line-logo"
+               src="{% static 'prelogin/images/ocs-logo.png' %}"
+               width="175"
+               height="78"
+               alt="Open Chat Studio by Dimagi"
+               style="filter:brightness(0) invert(1);
+                      opacity:0.9">
+          <ul class="footer-line-links">
+            <li>Open Chat Studio is copyright © {% now "Y" %} Dimagi, Inc.</li>
+            {% block footer_signin_link %}
               <li>
-                <a href="{% url 'prelogin:home' %}">Open Chat Studio</a>
+                <a href="{% url 'sso:login' %}">Sign In</a>
               </li>
+            {% endblock footer_signin_link %}
+            <li>
+              <a href="https://github.com/dimagi/open-chat-studio"
+                 target="_blank"
+                 rel="noopener">GitHub</a>
+            </li>
+            <li>
+              <a href="https://docs.openchatstudio.com/"
+                 target="_blank"
+                 rel="noopener">Documentation</a>
+            </li>
+            {% if project_meta.PRIVACY_POLICY_URL %}
               <li>
-                <a href="{% url 'prelogin:applications' %}">Use Cases</a>
-              </li>
-              <li>
-                <a href="{% url 'prelogin:about' %}">Community</a>
-              </li>
-              <li>
-                <a href="{% url 'prelogin:open_opportunities' %}">Open Opportunities</a>
-              </li>
-              <li>
-                <a href="{% url 'prelogin:contact' %}">Contact</a>
-              </li>
-            </ul>
-          </div>
-          <div class="footer-col">
-            <h2>Resources</h2>
-            <ul>
-              {% block footer_signin_link %}
-                <li>
-                  <a href="{% url 'sso:login' %}">Sign In</a>
-                </li>
-              {% endblock footer_signin_link %}
-              <li>
-                <a href="https://github.com/dimagi/open-chat-studio"
-                   target="_blank"
-                   rel="noopener">GitHub</a>
-              </li>
-              <li>
-                <a href="https://docs.openchatstudio.com/"
-                   target="_blank"
-                   rel="noopener">Documentation</a>
-              </li>
-            </ul>
-          </div>
-          <div class="footer-col">
-            <h2>Dimagi</h2>
-            <ul>
-              <li>
-                <a href="https://dimagi.com/" target="_blank" rel="noopener">About Dimagi</a>
-              </li>
-              <li>
-                <a href="https://dimagi.com/blog/" target="_blank" rel="noopener">Blog</a>
-              </li>
-              <li>
-                <a href="https://www.dimagi.com/podcast/" target="_blank" rel="noopener">Podcast</a>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div class="footer-bottom">
-          <span>© 2026 DIMAGI, INC.</span>
-          {% if project_meta.PRIVACY_POLICY_URL or project_meta.TERMS_URL or project_meta.ACCEPTABLE_USE_POLICY_URL %}
-            <span style="display:flex;gap:24px;flex-wrap:wrap;">
-              {% if project_meta.PRIVACY_POLICY_URL %}
                 <a href="{{ project_meta.PRIVACY_POLICY_URL }}"
                    target="_blank"
-                   rel="noopener">PRIVACY</a>
-              {% endif %}
-              {% if project_meta.TERMS_URL %}
-                <a href="{{ project_meta.TERMS_URL }}" target="_blank" rel="noopener">TERMS</a>
-              {% endif %}
-              {% if project_meta.ACCEPTABLE_USE_POLICY_URL %}
+                   rel="noopener">Privacy</a>
+              </li>
+            {% endif %}
+            {% if project_meta.TERMS_URL %}
+              <li>
+                <a href="{{ project_meta.TERMS_URL }}"
+                   target="_blank"
+                   rel="noopener">Terms of Service</a>
+              </li>
+            {% endif %}
+            {% if project_meta.ACCEPTABLE_USE_POLICY_URL %}
+              <li>
                 <a href="{{ project_meta.ACCEPTABLE_USE_POLICY_URL }}"
                    target="_blank"
-                   rel="noopener">ACCEPTABLE USE POLICY</a>
-              {% endif %}
-            </span>
-          {% endif %}
+                   rel="noopener">Acceptable Use Policy</a>
+              </li>
+            {% endif %}
+          </ul>
         </div>
       </div>
     </footer>
-    <!-- Mobile nav toggle -->
-    <script>
-(function () {
-  var ham = document.querySelector('.nav-hamburger');
-  if (ham) {
-    ham.addEventListener('click', function () {
-      var open = this.classList.toggle('is-open');
-      document.querySelector('.nav-links').classList.toggle('is-open');
-      document.querySelector('.nav-cta').classList.toggle('is-open');
-      this.setAttribute('aria-expanded', open ? 'true' : 'false');
-      this.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-    });
-  }
-  document.querySelectorAll('.nav-links a').forEach(function (a) {
-    a.addEventListener('click', function () {
-      var h = document.querySelector('.nav-hamburger');
-      h.classList.remove('is-open');
-      h.setAttribute('aria-expanded', 'false');
-      h.setAttribute('aria-label', 'Open menu');
-      document.querySelector('.nav-links').classList.remove('is-open');
-      document.querySelector('.nav-cta').classList.remove('is-open');
-    });
-  });
-})();
-    </script>
     {% block page_scripts %}
     {% endblock page_scripts %}
   </body>
