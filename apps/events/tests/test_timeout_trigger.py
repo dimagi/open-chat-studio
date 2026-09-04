@@ -7,10 +7,10 @@ from time_machine import travel
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.events.const import TOTAL_FAILURES
-from apps.events.event_log import EventLogStatusChoices
 from apps.events.models import (
     EventAction,
     EventActionType,
+    EventLogStatusChoices,
     TimeoutTrigger,
 )
 from apps.events.tasks import enqueue_timed_out_events

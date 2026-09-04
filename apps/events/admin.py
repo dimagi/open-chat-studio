@@ -6,14 +6,14 @@ from django.http import HttpRequest
 from apps.experiments.admin import VersionedModelAdminMixin
 from apps.utils.admin import ReadonlyAdminMixin
 
-from .event_log import EventLog
 from .models import (
     EventAction,
+    EventLog,
     ScheduledMessage,
+    ScheduledTrigger,
     StaticTrigger,
     TimeoutTrigger,
 )
-from .scheduled_trigger import ScheduledTrigger
 
 
 class EventLogInline(ReadonlyAdminMixin, GenericTabularInline):

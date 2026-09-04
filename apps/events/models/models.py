@@ -15,7 +15,6 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events import actions
 from apps.events.const import TOTAL_FAILURES
-from apps.events.event_log import EventLog, EventLogStatusChoices
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.tracing import TraceInfo
@@ -23,6 +22,8 @@ from apps.teams.models import BaseTeamModel
 from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
+
+from .event_log import EventLog, EventLogStatusChoices
 
 logger = logging.getLogger("ocs.events")
 

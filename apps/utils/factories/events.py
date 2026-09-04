@@ -7,11 +7,11 @@ from apps.events.models import (
     EventAction,
     EventActionType,
     ScheduledMessage,
+    ScheduledTrigger,
     StaticTrigger,
     StaticTriggerType,
     TimeoutTrigger,
 )
-from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.utils.factories.experiment import ExperimentFactory
 
 

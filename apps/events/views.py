@@ -13,8 +13,11 @@ from apps.events.forms import (
     TimeoutTriggerForm,
     build_action_params_form,
 )
-from apps.events.models import StaticTrigger, TimeoutTrigger
-from apps.events.scheduled_trigger import ScheduledTrigger
+from apps.events.models import (
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
 from apps.experiments.models import Experiment
 from apps.teams.decorators import login_and_team_required
 

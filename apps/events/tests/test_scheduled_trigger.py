@@ -7,10 +7,13 @@ from django.test import override_settings
 from django.utils import timezone
 from time_machine import travel
 
-from apps.events.event_log import EventLogStatusChoices
 from apps.events.forms import ScheduledTriggerForm
-from apps.events.models import EventAction, EventActionType
-from apps.events.scheduled_trigger import scheduled_datetime_for
+from apps.events.models import (
+    EventAction,
+    EventActionType,
+    EventLogStatusChoices,
+    scheduled_datetime_for,
+)
 from apps.events.tasks import fire_scheduled_trigger, poll_due_scheduled_triggers
 from apps.experiments.models import VersionFieldDisplayFormatters
 from apps.utils.factories.events import EventActionFactory, ScheduledTriggerFactory
@@ -123,6 +126,31 @@ class TestScheduledTriggerModel:
         log = trigger.event_logs.first()
         assert log.status == EventLogStatusChoices.SUCCESS
         assert log.session == session
+
+    def test_fire_targets_all_active_sessions(self, team_with_users):
+        experiment = ExperimentFactory.create(team=team_with_users)
+        session_a = ExperimentSessionFactory.create(experiment=experiment)
+        session_b = ExperimentSessionFactory.create(experiment=experiment)
+        trigger = _trigger(experiment=experiment)
+        trigger.fire()
+        trigger.refresh_from_db()
+        assert trigger.fired_at is not None
+        assert trigger.event_logs.count() == 2
+        logged_sessions = {log.session for log in trigger.event_logs.all()}
+        assert logged_sessions == {session_a, session_b}
+
+    def test_fire_respects_active_session_window_days(self, team_with_users):
+        experiment = ExperimentFactory.create(team=team_with_users)
+        recent = ExperimentSessionFactory.create(
+            experiment=experiment, last_activity_at=timezone.now() - timedelta(days=2)
+        )
+        ExperimentSessionFactory.create(experiment=experiment, last_activity_at=timezone.now() - timedelta(days=10))
+        trigger = _trigger(experiment=experiment, active_session_window_days=7)
+        trigger.fire()
+        trigger.refresh_from_db()
+        assert trigger.fired_at is not None
+        assert trigger.event_logs.count() == 1
+        assert trigger.event_logs.first().session == recent
 
 
 @pytest.mark.django_db()

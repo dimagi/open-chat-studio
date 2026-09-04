@@ -4,11 +4,11 @@ from django.utils import timezone
 
 from apps.events.models import (
     ScheduledMessage,
+    ScheduledTrigger,
     StaticTrigger,
     StaticTriggerType,
     TimeoutTrigger,
 )
-from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.experiments.models import ExperimentSession
 from apps.teams.export_service import migrating_team_ids
 from apps.utils.celery import Queues

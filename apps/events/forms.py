@@ -2,13 +2,19 @@ import pytz
 from django import forms
 from django.utils import timezone
 
-from apps.events.models import TimePeriod
-from apps.events.scheduled_trigger import scheduled_datetime_for
+from apps.events.models import (
+    TimePeriod,
+    scheduled_datetime_for,
+)
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline, PipelineEventInputs
 
-from .models import EventAction, StaticTrigger, TimeoutTrigger
-from .scheduled_trigger import ScheduledTrigger
+from .models import (
+    EventAction,
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
 
 
 class SendMessageToBotForm(forms.Form):
@@ -173,8 +179,12 @@ class ScheduledTriggerForm(BaseTriggerForm):
 
     class Meta:
         model = ScheduledTrigger
-        fields = ["trigger_date", "trigger_time", "timezone"]
-        labels = {"trigger_date": "Date", "trigger_time": "Time"}
+        fields = ["trigger_date", "trigger_time", "timezone", "active_session_window_days"]
+        labels = {
+            "trigger_date": "Date",
+            "trigger_time": "Time",
+            "active_session_window_days": "Active session window (days)",
+        }
         widgets = {
             "trigger_date": forms.DateInput(attrs={"type": "date"}),
             "trigger_time": forms.TimeInput(attrs={"type": "time"}),

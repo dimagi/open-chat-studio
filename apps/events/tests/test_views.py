@@ -2,7 +2,7 @@ import pytest
 from django.template.loader import get_template
 from django.urls import reverse
 
-from apps.events.event_log import EventLogStatusChoices
+from apps.events.models import EventLogStatusChoices
 from apps.teams.backends import SUPER_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.utils.factories.events import ScheduledTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory

@@ -30,13 +30,13 @@ from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
-from apps.events.event_log import EventLogStatusChoices
 from apps.events.models import (
+    EventLogStatusChoices,
+    ScheduledTrigger,
     StaticTrigger,
     StaticTriggerType,
     TimeoutTrigger,
 )
-from apps.events.scheduled_trigger import ScheduledTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation

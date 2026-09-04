@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 import pytz
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 from pytz.exceptions import NonExistentTimeError
 
-from apps.events.event_log import EventLog, EventLogStatusChoices
-from apps.events.models import ACTION_HANDLERS, EventAction, EventActionType
-from apps.experiments.models import Experiment
+from apps.events.models.event_log import EventLog, EventLogStatusChoices
+from apps.events.models.models import ACTION_HANDLERS, EventAction, EventActionType
+from apps.experiments.models import Experiment, SessionStatus
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.utils.models import BaseModel
 
@@ -62,6 +63,13 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
     scheduled_at = models.DateTimeField(
         help_text="The trigger moment converted to UTC at save time, used to determine when the trigger is due"
     )
+    active_session_window_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Only fire against sessions with user activity in the last N days. Leave blank to target all open sessions."
+        ),
+    )
     fired_at = models.DateTimeField(null=True, blank=True)
     event_logs = GenericRelation(EventLog)
     working_version = models.ForeignKey(
@@ -106,23 +114,53 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
         if not claimed:
             return None
 
-        session = self._resolve_session()
-        try:
-            if not session:
-                raise ValueError("No active session was found to run this trigger.")
-            handler_cls = ACTION_HANDLERS.get(self.action.action_type)
-            if not handler_cls:
-                raise ValueError(f"Action with type '{self.action.action_type}' not found.")
-            result = handler_cls().invoke(session, self.action)
-            working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
-            return result
-        except Exception as e:
-            logger.exception(e)
-            working_version.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+        sessions = list(self._resolve_sessions())
+        if not sessions:
+            working_version.event_logs.create(
+                session=None,
+                status=EventLogStatusChoices.FAILURE,
+                log="No active session was found to run this trigger.",
+            )
+            return None
+
+        handler_cls = ACTION_HANDLERS.get(self.action.action_type)
+        if not handler_cls:
+            working_version.event_logs.create(
+                session=None,
+                status=EventLogStatusChoices.FAILURE,
+                log=f"Action with type '{self.action.action_type}' not found.",
+            )
+            return None
+
+        for session in sessions:
+            try:
+                result = handler_cls().invoke(session, self.action)
+                working_version.event_logs.create(session=session, status=EventLogStatusChoices.SUCCESS, log=result)
+            except Exception as e:
+                logger.exception(e)
+                working_version.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
+
         return None
 
-    def _resolve_session(self):
-        return self.experiment.sessions.order_by("-created_at").first()
+    def _resolve_sessions(self):
+        """Return a queryset of active sessions for this trigger's experiment.
+
+        Only ``ACTIVE`` sessions are targeted: ``SETUP``/``PENDING`` have no conversation
+        yet; ``PENDING_REVIEW``/``COMPLETE`` are ended. If ``active_session_window_days``
+        is set, only sessions with user activity within that window are included (matching
+        the broadcast feature's ``active_within_days`` logic — ``last_activity_at`` falls
+        back to ``created_at`` for sessions that never received a participant message).
+        """
+        qs = self.experiment.sessions.filter(
+            status=SessionStatus.ACTIVE,
+            ended_at=None,
+        )
+
+        if self.active_session_window_days is not None:
+            cutoff = timezone.now() - timedelta(days=self.active_session_window_days)
+            qs = qs.filter(Q(last_activity_at__gte=cutoff) | Q(last_activity_at__isnull=True, created_at__gte=cutoff))
+
+        return qs.order_by("-created_at")
 
     @transaction.atomic()
     def create_new_version(self, new_experiment: Experiment, is_copy: bool = False):  # ty: ignore[invalid-method-override]

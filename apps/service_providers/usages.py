@@ -24,8 +24,12 @@ from functools import cached_property
 from typing import Literal
 
 from apps.documents.models import Collection
-from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
-from apps.events.scheduled_trigger import ScheduledTrigger
+from apps.events.models import (
+    EventActionType,
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
 from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
