@@ -27,7 +27,7 @@ We will resolve the bearer token in a dedicated authentication class placed firs
 
 - OAuth traffic is throttled per channel with no change to the throttle. Two integrations on one chatbot share an allowance. A `PUBLIC` channel throttles session starts per visitor IP instead.
 - The 401 status results from the authenticator's position (ADR-0062).
-- Reordering the authenticators would stop token validation and change 401 responses back to 403.
+- Reordering the authenticators has two effects. If the embed-key authenticator ran first, a request carrying both `Authorization` and `X-Embed-Key` would be admitted by the key and the token would not be validated. If session authentication ran first, refusals would return 403 instead of 401, because it supplies no `WWW-Authenticate` value.
 - A session created with a token can be continued with the session token alone. A short-lived OAuth token therefore cannot expire mid-conversation.
 - An `Authorization` header on session start was previously ignored. It now produces a 401 when it is not a valid `chat:start` token.
 - A rejected token is not counted by the credentials throttle, because DRF authenticates before it throttles. A per-IP fail-closed bucket would also count ADR-0054's legitimate re-admission requests, so this is left to ADR-0052.
