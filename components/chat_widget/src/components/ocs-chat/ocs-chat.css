@@ -632,6 +632,9 @@
     padding: 1em 1em 0 1em;
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
+    /* A flex child floors at its content height, and the chat area clips what does not
+       fit, so a tall consent panel would push its accept button out of view. */
+    min-height: 0;
   }
 
   .input-container {
@@ -642,16 +645,23 @@
     @apply flex flex-col gap-3;
     padding-bottom: 1em;
     color: var(--input-text-color);
+    min-height: 0;
+    max-height: 100%;
   }
 
   .consent-text {
-    max-height: 40vh;
+    /* The consent form is a team's own copy and can run to any length. It has to fit the
+       space the widget has rather than a share of the viewport, which on a small embed is
+       larger than the whole window. */
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     font-size: 0.9rem;
   }
 
   .consent-agree {
     align-self: flex-end;
+    flex: 0 0 auto;
   }
 
   .message-textarea {
