@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import JSONObject
 from django.urls import reverse
@@ -128,6 +129,53 @@ class EventUserQuerySet(models.QuerySet):
 
 class EventUserManager(models.Manager.from_queryset(EventUserQuerySet)):
     pass
+
+
+class NotificationChannel(BaseTeamModel):
+    """A team-level Slack channel notifications are posted to."""
+
+    messaging_provider = models.ForeignKey(
+        "service_providers.MessagingProvider",
+        on_delete=models.CASCADE,
+        related_name="notification_channels",
+    )
+    channel_name = models.CharField(max_length=255)
+    channel_id = models.CharField(  # noqa: DJ001 - nullable so the AddField migration won't break the running release
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Resolved Slack channel ID (falls back to the channel name).",
+    )
+    level = models.PositiveSmallIntegerField(
+        choices=LevelChoices.choices,
+        default=LevelChoices.WARNING,
+    )
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "Notification channels"
+        ordering = ("channel_name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "messaging_provider", "level"],
+                name="unique_notification_channel_per_team_provider_and_level",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Notifications to {self.channel_name}"
+
+    def clean(self):
+        from apps.service_providers.models import MessagingProviderType  # noqa: PLC0415 - circular import avoided
+
+        super().clean()
+        if not self.messaging_provider_id:
+            return
+        provider = self.messaging_provider
+        if provider.team_id != self.team_id or provider.type != MessagingProviderType.slack:
+            raise ValidationError(
+                {"messaging_provider": "The Slack workspace must belong to this team and be a Slack provider."}
+            )
 
 
 class EventUser(BaseTeamModel):

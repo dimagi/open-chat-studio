@@ -89,12 +89,81 @@
 
 {% block breadcrumbs %}
   {% if not create %}
-    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-      <ul>
-        <li><a href="{% url 'dashboard:index' request.team.slug %}">{{ team.name }}</a></li>
-        <li class="pg-breadcrumb-active" aria-current="page">{% translate "Team settings" %}</li>
-      </ul>
+    {% include "service_providers/service_provider_home.html" with provider_type="llm" subtitle="Large Language Model and Embedding model services" perm="add_llmprovider" %}
+    {% translate "Speech to text and visa versa" as speech_subtitle %}
+    {% include "service_providers/service_provider_home.html" with provider_type="voice" subtitle=speech_subtitle perm="add_voiceprovider" %}
+    {% translate "WhatsApp, SMS etc" as messaging_subtitle %}
+    {% include "service_providers/service_provider_home.html" with provider_type="messaging" subtitle=messaging_subtitle perm="add_messagingprovider" %}
+    {% translate "Authentication credentials for integrations" as auth_subtitle %}
+    {% include "service_providers/service_provider_home.html" with provider_type="auth" subtitle=auth_subtitle perm="add_authprovider" %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
+      {% url "custom_actions:table" request.team.slug as actions_table_url %}
+      {% url "custom_actions:new" request.team.slug as actions_new_url %}
+      {% translate "Allow Chatbots to call external services" as actions_subtitle %}
+      {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" %}
+    {% endwith %}
+    {% flag "flag_mcp" %}
+    {% has_perm "mcp_integrations" "add_mcpserver" as allow_new_mcp %}
+    {% url "mcp_integrations:table" request.team.slug as mcp_table_url %}
+    {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
+    {% translate "Manage MCP Servers" as mcp_subtitle %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
+    {% endwith %}
+  {% endflag %}
+  {% flag "flag_slack_notifications" %}
+    {% has_perm "ocs_notifications" "view_notificationchannel" as can_view_notification_channels %}
+    {% if can_view_notification_channels %}
+      {% has_perm "ocs_notifications" "add_notificationchannel" as allow_new_notification_channel %}
+      {% url "ocs_notifications_channels:table" request.team.slug as notification_channels_table_url %}
+      {% url "ocs_notifications_channels:new" request.team.slug as notification_channels_new_url %}
+      {% translate "Post this team's notifications to a Slack channel" as slack_notifications_subtitle %}
+      {% with button_style="btn-outline" title_class="pg-subtitle" %}
+        {% include "generic/object_home_content.html" with new_object_url=notification_channels_new_url title="Slack Notifications" table_url=notification_channels_table_url allow_new=allow_new_notification_channel subtitle=slack_notifications_subtitle data_cy_title="title-slack-notifications" %}
+      {% endwith %}
+    {% endif %}
+  {% endflag %}
+  {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
+  {% if can_view_oauth_apps %}
+    {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}
+    {% url "oauth_apps:table" request.team.slug as oauth_apps_table_url %}
+    {% url "oauth_apps:new" request.team.slug as oauth_apps_new_url %}
+    {% translate "Applications that access this team's data over the API" as oauth_apps_subtitle %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=oauth_apps_new_url title="OAuth Applications" table_url=oauth_apps_table_url allow_new=allow_new_oauth_app subtitle=oauth_apps_subtitle data_cy_title="title-oauth-apps" %}
+    {% endwith %}
+  {% endif %}
+  {% translate "Record trace details of bot activity" as trace_subtitle %}
+  {% include "service_providers/service_provider_home.html" with provider_type="tracing" subtitle=trace_subtitle perm="add_traceprovider" %}
+  <section class="app-card">
+    <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
+    <div class="table-responsive">
+      <table class="table pg-table">
+        <thead>
+          <tr>
+            <th>{% translate "Member" %}</th>
+            <th>{% translate "Roles" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for membership in team.sorted_memberships.all %}
+            <tr>
+              <td>
+                {% if request.team_membership.is_team_admin or request.team_membership == membership %}
+                  <a class="link"
+                     href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
+                {% else %}
+                  {{ membership.user }}
+                {% endif %}
+              </td>
+              <td>{{ membership.groups.all|join:", " }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+  </section>
   {% endif %}
 {% endblock breadcrumbs %}
 
