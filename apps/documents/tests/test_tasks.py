@@ -785,6 +785,33 @@ def test_create_collection_from_assistant_clears_the_failure_reason(
 
 
 @pytest.mark.django_db()
+@patch("apps.documents.tasks.index_collection_files_task")
+@patch("apps.documents.models.Collection.ensure_remote_index_created")
+@patch("apps.documents.models.Collection.get_index_manager")
+def test_create_collection_from_assistant_indexes_only_its_own_rows(
+    get_index_manager, ensure_remote_index_created, index_collection_files_task_mock, collection
+):
+    """A File with no external id can carry a row in more than one collection, and indexing
+    takes its target vector store from the first row it is handed. Rows from another collection
+    in that list index into the wrong store."""
+    # embedding_provider_model shares a per-team unique key, so leave it unset to keep this
+    # Collection out of that constraint.
+    other_collection = CollectionFactory.create(
+        is_index=True, is_remote_index=True, team=collection.team, embedding_provider_model=None
+    )
+    file = FileFactory.create(team=collection.team)
+    assistant = OpenAiAssistantFactory.create(team=collection.team)
+    assistant.tool_resources.create(tool_type="file_search").files.add(file)
+    other_row = CollectionFile.objects.create(collection=other_collection, file=file, status=FileStatus.PENDING)
+
+    create_collection_from_assistant_task(collection.id, assistant.id)
+
+    this_row = CollectionFile.objects.get(collection=collection, file=file)
+    index_collection_files_task_mock.assert_called_once_with(collection_file_ids=[this_row.id])
+    assert other_row.id not in index_collection_files_task_mock.call_args.kwargs["collection_file_ids"]
+
+
+@pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
 def test_index_collection_files_fails_the_group_when_indexing_raises(add_files_to_index_mock, collection):
     """A failure that no handler inside add_files covers still has to leave the group in a

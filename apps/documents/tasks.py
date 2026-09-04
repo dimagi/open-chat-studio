@@ -201,7 +201,9 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
     # Index files that don't have external IDs
     if file_without_remote_ids:
         file_ids_to_index = list(
-            CollectionFile.objects.filter(file__in=file_without_remote_ids).values_list("id", flat=True)
+            CollectionFile.objects.filter(collection=collection, file__in=file_without_remote_ids).values_list(
+                "id", flat=True
+            )
         )
         index_collection_files_task(collection_file_ids=file_ids_to_index)
 
