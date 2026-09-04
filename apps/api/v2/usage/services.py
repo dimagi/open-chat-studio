@@ -9,7 +9,7 @@ serializer) at ``total``/``daily``/``weekly``/``monthly`` granularity, optionall
 and :func:`group_rows`. See ``docs/design/usage-api.md``.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -128,7 +128,7 @@ class UsageQuery:
     Build a query, then resolve it before running any aggregation."""
 
     team: Team
-    metrics: set[str]
+    metrics: Collection[str]
     start: datetime
     end: datetime
     tz: ZoneInfo

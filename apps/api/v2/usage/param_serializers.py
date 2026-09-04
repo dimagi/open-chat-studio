@@ -50,7 +50,8 @@ class _WindowDateTimeField(serializers.DateTimeField):
 
 class UsageQuerySerializer(serializers.Serializer):
     # Repeat the param to request several metrics: ``?metric=messages&metric=sessions``. Returns a
-    # set, so duplicates collapse. MultipleChoiceField reads repeated query params via ``getlist``.
+    # list in the order supplied, with duplicates collapsed. MultipleChoiceField reads repeated query
+    # params via ``getlist``.
     metric = serializers.MultipleChoiceField(
         choices=sorted(SUPPORTED_METRICS),
         allow_empty=False,
