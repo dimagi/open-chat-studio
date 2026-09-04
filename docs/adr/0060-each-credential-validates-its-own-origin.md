@@ -16,13 +16,13 @@ A bearer token needs a different rule. A server integration sends no origin head
 
 We will apply the origin rule of whichever credential admits the caller, and use the channel's domain list to distinguish a browser-facing `oauth` channel from a server-only one.
 
-| Mode | `allowed_domains` | Origin present | Origin absent |
+| Mode | `allowed_domains` | `Origin` or `Referer` present | Neither present |
 |---|---|---|---|
 | `embed_key` | required | must match | reject |
 | `oauth`, list non-blank | optional | must match | reject |
 | `oauth`, list blank | optional | reject | admit |
 
-- A blank list on an `oauth` channel means server-only. Every request with an origin header is refused, regardless of the token. `allowed_domains` is required in `embed_key` mode and optional in `oauth` mode. The form's help text states that a blank list means server-only.
+- A blank list on an `oauth` channel means server-only. Every request with an `Origin` or `Referer` header is refused, regardless of the token. `allowed_domains` is required in `embed_key` mode and optional in `oauth` mode. The form's help text states that a blank list means server-only.
 - The origin rule is applied once, by the credential that resolves the channel. No later check re-evaluates a token-resolved channel, because the blank-list "admit" row cannot be expressed as a domain match.
 - A `PUBLIC` channel's origin must equal the canonical Site hostname. The comparison is hostname to hostname, so ports are ignored.
 - After session start, the rule follows the credential presented. A session token has no origin semantics (ADR-0039). An embed key sent with a session-bound request is checked against the domain list in the usual way.
