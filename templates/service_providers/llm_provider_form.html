@@ -31,12 +31,12 @@
         </div>
         <div class="modal-action">
           <form method="dialog">
-            <button class="btn btn-primary"
+            <button type="button" class="btn btn-primary"
                     hx-post="{% url "service_providers:llm_provider_model_new" request.team.slug %}"
                     hx-include="#new_model_form"
                     hx-target="#custom_model_list"
                     hx-swap="innerHTML"
-                    hx-on::after-request="new_custom_model.close()">
+                    hx-on::after-request="if (event.detail.successful) new_custom_model.close()">
               Save
             </button>
             <button class="btn">Cancel</button>
