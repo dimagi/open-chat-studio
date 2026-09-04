@@ -1,9 +1,14 @@
+import os
+
 import pytest
 import yaml
+from django.conf import settings
 from django.core.management import call_command
 from django.test import Client
 
 from apps.api.schema import _swap_host
+
+VERSIONS = [pytest.param("v1", id="v1"), pytest.param("v2", id="v2"), pytest.param("export", id="export")]
 
 
 @pytest.mark.django_db()
@@ -53,14 +58,29 @@ def test_served_schema_uses_request_host():
     assert "example.com" not in body
 
 
-@pytest.mark.parametrize(
-    "version",
-    [
-        pytest.param("v1", id="v1"),
-        pytest.param("v2", id="v2"),
-        pytest.param("export", id="export"),
-    ],
-)
+def _drop_oidc_scopes(schema):
+    """Remove the OIDC-only scopes from ``schema``'s security schemes, in place.
+
+    The committed schemas are generated with ``OIDC_RSA_PRIVATE_KEY`` unset -- that is what
+    ``.github/workflows/update-generated-files.yml`` and ``inv schema`` both run with. A developer
+    who sets a key of their own makes ``config.settings`` add ``openid``/``profile`` to
+    ``OAUTH2_PROVIDER["SCOPES"]`` and so to every OAuth2 flow in the generated schema. Dropping just
+    those scopes keeps the comparison sensitive to real schema drift instead of to local env.
+
+    Only the freshly-generated schema is normalized, never the committed one: a committed schema
+    that *contains* these scopes is itself the bug, and must keep failing.
+    """
+    for scheme in schema.get("components", {}).get("securitySchemes", {}).values():
+        for flow in (scheme.get("flows") or {}).values():
+            scopes = flow.get("scopes")
+            if not scopes:
+                continue
+            for scope in settings.OIDC_ONLY_SCOPES:
+                scopes.pop(scope, None)
+    return schema
+
+
+@pytest.mark.parametrize("version", VERSIONS)
 def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
     """If this test fails run `inv schema` to update the schema."""
     path = tmp_path / f"{version}.yml"
@@ -71,4 +91,49 @@ def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
     with open(f"{pytestconfig.rootdir}/api-schemas/{version}.yml") as f:
         old_schema = yaml.safe_load(f)
 
+    if settings.OIDC_RSA_PRIVATE_KEY:
+        _drop_oidc_scopes(new_schema)
+
     assert old_schema == new_schema
+
+
+def test_drop_oidc_scopes_only_removes_oidc_scopes():
+    """Only the OIDC-only scopes are stripped -- everything else must survive, so that genuine
+    schema drift still fails ``test_schema_is_up_to_date_and_valid``."""
+    schema = {
+        "components": {
+            "securitySchemes": {
+                "OAuth2": {
+                    "flows": {
+                        "authorizationCode": {
+                            "scopes": {
+                                "chatbots:read": "List and Retrieve Chatbot Data",
+                                "openid": "OpenID Connect scope",
+                                "profile": "User Profile",
+                            }
+                        }
+                    }
+                },
+                "chatOAuth2": {"flows": {"clientCredentials": {"scopes": {"chat:start": "Start a chat session"}}}},
+                "apiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-api-key"},
+            }
+        }
+    }
+
+    _drop_oidc_scopes(schema)
+
+    schemes = schema["components"]["securitySchemes"]
+    assert schemes["OAuth2"]["flows"]["authorizationCode"]["scopes"] == {
+        "chatbots:read": "List and Retrieve Chatbot Data"
+    }
+    assert schemes["chatOAuth2"]["flows"]["clientCredentials"]["scopes"] == {"chat:start": "Start a chat session"}
+    assert schemes["apiKeyAuth"] == {"type": "apiKey", "in": "header", "name": "X-api-key"}
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_schema_generates_without_warnings(version):
+    """Warnings mean a view or serializer could not be resolved. See `@extend_schema`.
+
+    The emitted warnings are printed to stderr, so pytest shows them on failure.
+    """
+    call_command("spectacular", api_version=version, fail_on_warn=True, file=os.devnull)

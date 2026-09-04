@@ -15,6 +15,7 @@ from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import EmailMessage, RawAttachment
+from apps.channels.deduplication import external_ids_for
 from apps.channels.email_channel import (
     EmailChannel,
     EmailSender,
@@ -124,6 +125,18 @@ def _make_session(team, channel, external_id, participant_email="user@example.co
 
 
 class TestEmailMessageParse:
+    @pytest.mark.parametrize(
+        ("message_id", "expected"),
+        [
+            pytest.param("<msg1@example.com>", ["email:<msg1@example.com>"], id="with-a-message-id"),
+            pytest.param("", [], id="without-a-message-id"),
+        ],
+    )
+    def test_parse_records_message_id_as_external_id(self, message_id, expected):
+        result = EmailMessage.parse(_make_inbound_message(message_id=message_id))
+
+        assert result.external_ids == expected
+
     def test_basic_parse(self):
         inbound = _make_inbound_message()
         result = EmailMessage.parse(inbound)
@@ -855,6 +868,45 @@ class TestHandleEmailMessageTask:
             assert ec_kwarg.id == channel.id
             mock_instance.new_user_message.assert_called_once()
 
+    @pytest.mark.parametrize(
+        ("retries", "expected_ids"),
+        [
+            pytest.param(0, ["email:<msg1@example.com>"], id="first-attempt-is-recorded"),
+            pytest.param(1, [], id="celery-retry-is-not-deduplicated"),
+        ],
+    )
+    def test_a_celery_retry_is_not_treated_as_a_provider_replay(self, team_with_users, retries, expected_ids):
+        """A failed attempt has already recorded its ids, so carrying them into the retry would
+        have DuplicateDeliveryStage drop it and leave the participant with no reply at all."""
+        team = team_with_users
+        experiment = ExperimentFactory(team=team)
+        channel = ExperimentChannelFactory(
+            experiment=experiment,
+            platform=ChannelPlatform.EMAIL,
+            extra_data={"email_address": "bot@chat.openchatstudio.com"},
+            team=team,
+        )
+        email_data = {
+            "participant_id": "sender@example.com",
+            "message_text": "Hello bot",
+            "from_address": "sender@example.com",
+            "to_address": "bot@chat.openchatstudio.com",
+            "subject": "Test",
+            "message_id": "<msg1@example.com>",
+            "in_reply_to": None,
+            "references": [],
+            "external_ids": ["email:<msg1@example.com>"],
+        }
+
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
+            mock_instance = MockEmailChannel.return_value
+            handle_email_message.apply(
+                kwargs={"email_data": email_data, "channel_id": channel.id}, retries=retries, throw=True
+            )
+
+        message = mock_instance.new_user_message.call_args.args[0]
+        assert message.external_ids == expected_ids
+
     def test_task_legacy_payload_falls_back_to_routing(self, team_with_users):
         """Tasks queued before deploy won't carry channel_id; the task should
         still resolve the channel via the existing routing chain."""
@@ -931,6 +983,16 @@ class TestEmailInboundHandler:
 
         assert isinstance(email_data["content_type"], str), "content_type must not be a MESSAGE_TYPES enum instance"
         json.dumps(email_data)  # raises TypeError if Celery would EncodeError
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_email_with_no_message_id_is_let_through(self, team_with_users):
+        _make_email_channel(team_with_users, email_address="bot@chat.openchatstudio.com", is_default=True)
+        inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", message_id="")
+
+        with patch("apps.channels.tasks.handle_email_message") as task_mock:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        task_mock.delay.assert_called_once()
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_thread_reply_allowed_through(self, team_with_users):
@@ -1343,6 +1405,24 @@ class TestEmailInboundHandlerWithAttachments:
         kwargs = delay.call_args.kwargs
         assert kwargs["channel_id"] == channel.id
         assert len(kwargs["email_data"]["attachment_file_ids"]) == 1
+
+    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
+    def test_replay_is_dropped_before_files_are_persisted(self, team_with_users, record_delivery):
+        """The whole reason Email checks at the boundary rather than leaving it to the stage: by the
+        time the pipeline runs, the attachments of a replay are already written."""
+        team = team_with_users
+        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
+        inbound = _make_inbound_with_attachments(
+            [pdf], to_email="bot@chat.openchatstudio.com", message_id="<replay@example.com>"
+        )
+        record_delivery(channel.team, external_ids_for("email", "<replay@example.com>"))
+
+        with patch("apps.channels.tasks.handle_email_message") as task_mock:
+            email_inbound_handler(sender=None, event=MagicMock(message=inbound))
+
+        task_mock.delay.assert_not_called()
+        assert not File.objects.filter(team=team).exists()
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com", "example.com"])
     def test_handler_no_files_saved_when_no_channel_match(self, team_with_users):
