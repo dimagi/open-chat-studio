@@ -8,6 +8,7 @@ from unittest.mock import ANY, MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 from django.core.files.base import ContentFile
+from django.db import DatabaseError
 from django.utils import timezone
 
 from apps.documents.document_source_service import SyncResult
@@ -779,3 +780,81 @@ def test_create_collection_from_assistant_clears_the_failure_reason(
     assert rows
     assert all(row.status == FileStatus.COMPLETED for row in rows)
     assert all(row.failure_reason == "" for row in rows)
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_fails_the_group_when_indexing_raises(add_files_to_index_mock, collection):
+    """A failure that no handler inside add_files covers still has to leave the group in a
+    terminal status, because IN_PROGRESS renders as a spinner for as long as the row exists."""
+    add_files_to_index_mock.side_effect = DatabaseError("connection already closed")
+    collection_file = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+
+    with pytest.raises(DatabaseError):
+        index_collection_files_task([collection_file.id])
+
+    collection_file.refresh_from_db()
+    assert collection_file.status == FileStatus.FAILED
+    assert collection_file.failure_reason == "DatabaseError: connection already closed"
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_leaves_rows_outside_the_group_alone(add_files_to_index_mock, collection):
+    """Groups are indexed one chunking strategy at a time. A row not yet reached is still
+    PENDING and has not failed at anything."""
+    add_files_to_index_mock.side_effect = DatabaseError("connection already closed")
+    failing_row = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+    untouched_row = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 1000, "chunk_overlap": 100}},
+    )
+
+    with pytest.raises(DatabaseError):
+        index_collection_files_task([failing_row.id, untouched_row.id])
+
+    failing_row.refresh_from_db()
+    untouched_row.refresh_from_db()
+    assert failing_row.status == FileStatus.FAILED
+    assert untouched_row.status == FileStatus.PENDING
+    assert untouched_row.failure_reason == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_keeps_a_reason_already_written_by_add_files(add_files_to_index_mock, collection):
+    """add_files writes a reason naming the stage that failed. That is more specific than
+    whatever killed the surrounding call, so it is left in place."""
+    collection_file = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+
+    def fail_the_row_then_raise(*args, **kwargs):
+        CollectionFile.objects.filter(pk=collection_file.pk).update(
+            status=FileStatus.FAILED, failure_reason="FileUploadError: Incorrect API key provided: sk-abc"
+        )
+        raise DatabaseError("connection already closed")
+
+    add_files_to_index_mock.side_effect = fail_the_row_then_raise
+
+    with pytest.raises(DatabaseError):
+        index_collection_files_task([collection_file.id])
+
+    collection_file.refresh_from_db()
+    assert collection_file.status == FileStatus.FAILED
+    assert collection_file.failure_reason == "FileUploadError: Incorrect API key provided: sk-abc"
