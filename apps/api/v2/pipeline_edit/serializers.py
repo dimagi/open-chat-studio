@@ -166,26 +166,19 @@ class NodeWriteSerializer(LeadsWithWhatWasWritten):
     node = WrittenNodeSerializer()
 
 
-class WireListSerializer(serializers.ListSerializer):
-    """The POST body proper: a list, even when it holds one wire.
+#: The wire body's one key. Named here because the planner keys its own refusals by it, so a
+#: refusal from the graph is positioned like a refusal from this serializer.
+WIRES_FIELD = "wires"
 
-    One shape whether a client is wiring the node it has just created or laying out a whole branch,
-    and no second code path for the plural case.
-    """
-
-    default_error_messages = {
-        "not_a_list": "Expected a list of wires; got {input_type}. A single wire is a list of one.",
-        "empty": "Name at least one wire to add.",
-    }
-
-    def __init__(self, *args, **kwargs):
-        # A body that would wire nothing is a mistake worth reporting, not a 201 that wrote nothing.
-        kwargs.setdefault("allow_empty", False)
-        super().__init__(*args, **kwargs)
+#: Most wires one call may carry. Every wire is checked against every wire before it, under the
+#: pipeline's row lock, so the planner's cost is the square of the body's length -- an unbounded body
+#: would hold that lock against every other writer for as long as it took to walk. Well above any
+#: real pipeline's edge count, so a client that meets it is laying out a graph no canvas would hold.
+MAX_WIRES_PER_CALL = 100
 
 
 class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
-    """One entry of the POST body: which two nodes to wire, and from which handle.
+    """One entry of the body's ``wires``: which two nodes to wire, and from which handle.
 
     ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
     ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
@@ -193,9 +186,6 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     """
 
     server_assigned_keys = SERVER_ASSIGNED_EDGE_KEYS
-
-    class Meta:
-        list_serializer_class = WireListSerializer
 
     source = serializers.CharField(
         help_text=(
@@ -221,6 +211,37 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
             "Input handle on the target node. Never required, and ``input`` is the only accepted "
             "value: every node type has that one implicit input handle, bar the Start node, which "
             "has none and so cannot be a `target`."
+        ),
+    )
+
+
+class WireBodySerializer(RejectsUnknownKeys, serializers.Serializer):
+    """The POST body: the wires to add, under one key.
+
+    ``wires`` holds a list even for a single wire, so a client wiring the node it has just created
+    and a client laying out a whole branch send the same shape and the server runs one code path.
+    """
+
+    default_error_messages = {
+        # What a client sending the wires with nothing around them, or a lone wire, is answered with.
+        "invalid": (
+            'Expected an object with a "wires" key; got {datatype}. The wires go in a list under '
+            "that key, a single wire being a list of one."
+        ),
+    }
+
+    wires = serializers.ListField(
+        child=EdgeCreateSerializer(),
+        min_length=1,
+        max_length=MAX_WIRES_PER_CALL,
+        error_messages={
+            "not_a_list": "Expected a list of wires; got {input_type}. A single wire is a list of one.",
+            "min_length": "Name at least one wire to add.",
+            "max_length": "Name at most {max_length} wires per call; split a larger graph across calls.",
+        },
+        help_text=(
+            "The wires to add, applied in the order given. All of them land or none of them do, and "
+            "each edge's `id` comes back in this order."
         ),
     )
 

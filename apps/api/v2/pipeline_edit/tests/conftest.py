@@ -200,6 +200,22 @@ def stored_edges(pipeline) -> list[dict]:
     return pipeline.data["edges"]
 
 
+def post_wires(client, chatbot, wires: list[dict]):
+    """POST a wire body, which names its wires under one key. Tests pass the wires alone, so the
+    body's shape is written once here rather than at every call site."""
+    return client.post(edges_url(chatbot), {"wires": wires}, format="json")
+
+
+def wire_refusals(response) -> dict[int, dict]:
+    """The per-wire refusals a 400 carries, keyed by the position of the wire at fault.
+
+    JSON object keys are strings, so they are read back as ints here and a test names an index the
+    way the body ordered it. A refusal about ``wires`` as a whole -- a missing key, a bad length --
+    is not this shape and is asserted directly.
+    """
+    return {int(index): refusal for index, refusal in response.json()["wires"].items()}
+
+
 def wire(client, chatbot, source: str, target: str, **body) -> str:
     """Wire two nodes through the endpoint, and return the id the server assigned the edge."""
     return wire_all(client, chatbot, [{"source": source, "target": target, **body}])[0]
@@ -207,7 +223,7 @@ def wire(client, chatbot, source: str, target: str, **body) -> str:
 
 def wire_all(client, chatbot, wires: list[dict]) -> list[str]:
     """Wire several pairs in one call, and return the ids the server assigned, in the body's order."""
-    response = client.post(edges_url(chatbot), wires, format="json")
+    response = post_wires(client, chatbot, wires)
     assert response.status_code == 201, response.content
     return [edge["id"] for edge in response.json()["edges"]]
 

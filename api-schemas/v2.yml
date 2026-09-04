@@ -225,14 +225,16 @@ paths:
       description: |-
         Add edges to the chatbot's working (draft) pipeline, wiring one node's output handle to another node's input.
 
-        The body is a **list** of wires — a single wire is a list of one — and a call carrying several is all or nothing: if any one of them is refused, none of them are stored and the pipeline is left exactly as the call found it. So a whole branch lands in one call with no half-wired state to unpick:
+        The wires go in a **list** under `wires` — a single wire is a list of one, and at most 100 go in one call — and a call carrying several is all or nothing: if any one of them is refused, none of them are stored and the pipeline is left exactly as the call found it. So a whole branch lands in one call with no half-wired state to unpick:
 
         ```json
-        [
-          {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", "source_handle": "output_0"},
-          {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},
-          {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}
-        ]
+        {
+          "wires": [
+            {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", "source_handle": "output_0"},
+            {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},
+            {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}
+          ]
+        }
         ```
 
         `source` and `target` are enough for most nodes: a handle you leave out means the only one the node has. A router is the exception — it exposes one handle per branch, so name the branch to wire in `source_handle`. No node is moved on the canvas.
@@ -255,23 +257,36 @@ paths:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/EdgeCreate'
+              $ref: '#/components/schemas/WireBody'
             examples:
               PlainNode:
                 value:
-                - source: CodeNode-a1b2c
-                  target: LLMResponseWithPrompt-d3e4f
+                  wires:
+                  - source: CodeNode-a1b2c
+                    target: LLMResponseWithPrompt-d3e4f
                 summary: 'A source with one output handle: neither handle need be
                   named.'
               RouterBranch:
                 value:
-                - source: RouterNode-9f8e7
-                  target: LLMResponseWithPrompt-d3e4f
-                  source_handle: output_1
+                  wires:
+                  - source: RouterNode-9f8e7
+                    target: LLMResponseWithPrompt-d3e4f
+                    source_handle: output_1
                 summary: A router exposes one handle per keyword, so the branch to
                   wire has to be named.
+              AWholeBranch:
+                value:
+                  wires:
+                  - source: RouterNode-9f8e7
+                    target: LLMResponseWithPrompt-d3e4f
+                    source_handle: output_0
+                  - source: RouterNode-9f8e7
+                    target: CodeNode-a1b2c
+                    source_handle: output_1
+                  - source: CodeNode-a1b2c
+                    target: EndNode-b2c3d
+                summary: Several wires in one call, so a router and both its branches
+                  land together.
         required: true
       security:
       - OAuth2:
@@ -287,11 +302,20 @@ paths:
           description: ''
         '400':
           description: |-
-            Nothing was wired. The response is a **list positioned like the body** — `{}` where a wire is fine — so one call reports everything wrong with it.
+            Nothing was wired. Refusals come back under `wires`, **keyed by the position in the list of the wire at fault** — so one call reports everything wrong with it, and a wire that is fine is absent rather than empty.
 
-            Each entry is keyed by the field at fault: a `source` or `target` that is not a node in this pipeline, a `source_handle` the source node does not offer (or a missing one where the node offers a choice), a `target_handle` that is not the target's input, a server-assigned key the client tried to set (`id`), or an unrecognised body key.
+            Each wire's entry is in turn keyed by the field at fault: a `source` or `target` that is not a node in this pipeline, a `source_handle` the source node does not offer (or a missing one where the node offers a choice), a `target_handle` that is not the target's input, a server-assigned key the client tried to set (`id`), or an unrecognised key on the wire.
 
-            A duplicate edge is reported under `non_field_errors`, with the existing edge's id between single quotes:
+            ```json
+            {
+              "wires": {
+                "0": {"source": ["This pipeline has no node 'CodeNode-nope1'."]},
+                "2": {"source_handle": ["..."]}
+              }
+            }
+            ```
+
+            A duplicate edge is reported under the wire's `non_field_errors`, with the existing edge's id between single quotes:
 
             > These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was changed.
 
@@ -299,7 +323,7 @@ paths:
 
             A `source` that offers no output handles at all is refused under `source`, and the message says whether that is fixable: a router with no `keywords` set yet needs a PATCH first, whereas the End node can never be a source.
 
-            A body that is not a list, or is an empty one, is refused under `non_field_errors` instead.
+            A `wires` that is not a list, is an empty one, or names more than 100 wires is refused as a message on the field itself, before any wire in it is looked at; a body that is not an object at all is refused under `non_field_errors`.
         '403':
           description: 'The caller is authenticated but not authorised to modify this
             chatbot: either its role lacks permission to change chatbots, or it is
@@ -1838,7 +1862,7 @@ components:
     EdgeCreate:
       type: object
       description: |-
-        One entry of the POST body: which two nodes to wire, and from which handle.
+        One entry of the body's ``wires``: which two nodes to wire, and from which handle.
 
         ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
         ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
@@ -3578,6 +3602,25 @@ components:
         * `always` - Always
         * `reciprocal` - Reciprocal
         * `never` - Never
+    WireBody:
+      type: object
+      description: |-
+        The POST body: the wires to add, under one key.
+
+        ``wires`` holds a list even for a single wire, so a client wiring the node it has just created
+        and a client laying out a whole branch send the same shape and the server runs one code path.
+      properties:
+        wires:
+          type: array
+          items:
+            $ref: '#/components/schemas/EdgeCreate'
+          description: The wires to add, applied in the order given. All of them land
+            or none of them do, and each edge's `id` comes back in this order.
+          maxItems: 100
+          minItems: 1
+      required:
+      - wires
+      additionalProperties: false
     WrittenEdge:
       type: object
       description: |-

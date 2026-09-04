@@ -28,13 +28,15 @@ from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
 from .references import check_references
 from .serializers import (
-    EdgeCreateSerializer,
+    MAX_WIRES_PER_CALL,
+    WIRES_FIELD,
     EdgeWriteSerializer,
     LeadsWithWhatWasWritten,
     NodeCreateSerializer,
     NodeUpdateSerializer,
     NodeWriteSerializer,
     PipelineWriteSerializer,
+    WireBodySerializer,
     WrittenEdgeSerializer,
     WrittenNodeSerializer,
 )
@@ -78,23 +80,38 @@ SERVER_MANAGED = OpenApiResponse(
         "or deleted through the API."
     )
 )
-#: The two shapes a wire comes in. One wire each, since drf-spectacular renders an example of a list
-#: body by wrapping the value in a list of one -- a body of several is in the description instead.
-#: Node ids are placeholders for ones a node write or ``/inspect/`` returned.
+#: The shapes a wire body comes in. Node ids are placeholders for ones a node write or ``/inspect/``
+#: returned.
 WIRE_EXAMPLES = [
     OpenApiExample(
         name="Plain node",
         summary="A source with one output handle: neither handle need be named.",
-        value={"source": "CodeNode-a1b2c", "target": "LLMResponseWithPrompt-d3e4f"},
+        value={WIRES_FIELD: [{"source": "CodeNode-a1b2c", "target": "LLMResponseWithPrompt-d3e4f"}]},
         request_only=True,
     ),
     OpenApiExample(
         name="Router branch",
         summary="A router exposes one handle per keyword, so the branch to wire has to be named.",
         value={
-            "source": "RouterNode-9f8e7",
-            "target": "LLMResponseWithPrompt-d3e4f",
-            "source_handle": "output_1",
+            WIRES_FIELD: [
+                {
+                    "source": "RouterNode-9f8e7",
+                    "target": "LLMResponseWithPrompt-d3e4f",
+                    "source_handle": "output_1",
+                }
+            ]
+        },
+        request_only=True,
+    ),
+    OpenApiExample(
+        name="A whole branch",
+        summary="Several wires in one call, so a router and both its branches land together.",
+        value={
+            WIRES_FIELD: [
+                {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", "source_handle": "output_0"},
+                {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},
+                {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"},
+            ]
         },
         request_only=True,
     ),
@@ -306,7 +323,7 @@ class PipelineEdgeEditView(PipelineFacadeView):
     """
 
     write_response_serializer = EdgeWriteSerializer
-    serializer_class = EdgeCreateSerializer
+    serializer_class = WireBodySerializer
 
     @extend_schema(
         operation_id="pipeline_edge_create",
@@ -314,17 +331,20 @@ class PipelineEdgeEditView(PipelineFacadeView):
         description=(
             "Add edges to the chatbot's working (draft) pipeline, wiring one node's output handle to "
             "another node's input.\n\n"
-            "The body is a **list** of wires — a single wire is a list of one — and a call carrying "
-            "several is all or nothing: if any one of them is refused, none of them are stored and "
-            "the pipeline is left exactly as the call found it. So a whole branch lands in one call "
-            "with no half-wired state to unpick:\n\n"
+            f"The wires go in a **list** under `{WIRES_FIELD}` — a single wire is a list of one, and "
+            f"at most {MAX_WIRES_PER_CALL} go in one call — and a call carrying several is all or "
+            "nothing: if any one of them is refused, none of them are stored and the pipeline is "
+            "left exactly as the call found it. So a whole branch lands in one call with no "
+            "half-wired state to unpick:\n\n"
             "```json\n"
-            "[\n"
-            '  {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", '
+            "{\n"
+            f'  "{WIRES_FIELD}": [\n'
+            '    {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", '
             '"source_handle": "output_0"},\n'
-            '  {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},\n'
-            '  {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}\n'
-            "]\n"
+            '    {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},\n'
+            '    {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}\n'
+            "  ]\n"
+            "}\n"
             "```\n\n"
             "`source` and `target` are enough for most nodes: a handle you leave out means the only "
             "one the node has. A router is the exception — it exposes one handle per branch, so name "
@@ -338,21 +358,31 @@ class PipelineEdgeEditView(PipelineFacadeView):
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
-        request=EdgeCreateSerializer(many=True),
+        request=WireBodySerializer,
         examples=WIRE_EXAMPLES,
         responses={
             201: EdgeWriteSerializer,
             400: OpenApiResponse(
                 description=(
-                    "Nothing was wired. The response is a **list positioned like the body** — `{}` "
-                    "where a wire is fine — so one call reports everything wrong with it.\n\n"
-                    "Each entry is keyed by the field at fault: a `source` or `target` that is not a "
-                    "node in this pipeline, a `source_handle` the source node does not offer (or a "
-                    "missing one where the node offers a choice), a `target_handle` that is not the "
-                    "target's input, a server-assigned key the client tried to set (`id`), or an "
-                    "unrecognised body key.\n\n"
-                    "A duplicate edge is reported under `non_field_errors`, with the existing edge's "
-                    "id between single quotes:\n\n"
+                    "Nothing was wired. Refusals come back under "
+                    f"`{WIRES_FIELD}`, **keyed by the position in the list of the wire at fault** — "
+                    "so one call reports everything wrong with it, and a wire that is fine is absent "
+                    "rather than empty.\n\n"
+                    "Each wire's entry is in turn keyed by the field at fault: a `source` or "
+                    "`target` that is not a node in this pipeline, a `source_handle` the source node "
+                    "does not offer (or a missing one where the node offers a choice), a "
+                    "`target_handle` that is not the target's input, a server-assigned key the "
+                    "client tried to set (`id`), or an unrecognised key on the wire.\n\n"
+                    "```json\n"
+                    "{\n"
+                    f'  "{WIRES_FIELD}": {{\n'
+                    '    "0": {"source": ["This pipeline has no node \'CodeNode-nope1\'."]},\n'
+                    '    "2": {"source_handle": ["..."]}\n'
+                    "  }\n"
+                    "}\n"
+                    "```\n\n"
+                    "A duplicate edge is reported under the wire's `non_field_errors`, with the "
+                    "existing edge's id between single quotes:\n\n"
                     "> These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was "
                     "changed.\n\n"
                     "So a client whose first attempt's response it never saw can recover the edge id "
@@ -361,8 +391,10 @@ class PipelineEdgeEditView(PipelineFacadeView):
                     "A `source` that offers no output handles at all is refused under `source`, and "
                     "the message says whether that is fixable: a router with no `keywords` set yet "
                     "needs a PATCH first, whereas the End node can never be a source.\n\n"
-                    "A body that is not a list, or is an empty one, is refused under "
-                    "`non_field_errors` instead."
+                    f"A `{WIRES_FIELD}` that is not a list, is an empty one, or names more than "
+                    f"{MAX_WIRES_PER_CALL} wires is refused as a message on the field itself, before "
+                    "any wire in it is looked at; a body that is not an object at all is refused "
+                    "under `non_field_errors`."
                 )
             ),
             403: FORBIDDEN,
@@ -370,9 +402,9 @@ class PipelineEdgeEditView(PipelineFacadeView):
         },
     )
     def post(self, request, id: str) -> Response:
-        body = self.get_serializer(data=request.data, many=True)
+        body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
-        wires = body.validated_data
+        wires = body.validated_data[WIRES_FIELD]
         return Response(
             self._edit(
                 request,

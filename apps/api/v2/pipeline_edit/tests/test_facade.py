@@ -4,6 +4,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from apps.api.v2.pipeline_edit.serializers import MAX_WIRES_PER_CALL
 from apps.pipelines.models import Node
 from apps.utils.factories.documents import CollectionFactory
 
@@ -16,6 +17,7 @@ from .conftest import (
     inspect_url,
     node_url,
     nodes_url,
+    post_wires,
     wire,
 )
 
@@ -30,9 +32,7 @@ class TestRoutes:
         [
             pytest.param("nodes", "POST", {"type", "label", "params"}, id="node-collection-post"),
             pytest.param("node", "PATCH", {"label", "params"}, id="node-detail-patch"),
-            pytest.param(
-                "edges", "POST", {"source", "target", "source_handle", "target_handle"}, id="edge-collection-post"
-            ),
+            pytest.param("edges", "POST", {"wires"}, id="edge-collection-post"),
         ],
     )
     def test_options_describes_the_body_the_route_takes(self, client, chatbot, route, verb, fields):
@@ -43,6 +43,18 @@ class TestRoutes:
 
         assert response.status_code == 200, response.content
         assert set(response.json()["actions"][verb]) == fields
+
+    def test_options_describes_the_wire_inside_the_wire_body(self, client, chatbot):
+        """The wire body names one field, so the fields a client actually fills in are a level down.
+        Described because that is the only place OPTIONS says what a wire holds -- and alongside them
+        the bounds on how many wires one call takes.
+        """
+        response = client.options(_url(client, chatbot, "edges"))
+
+        assert response.status_code == 200, response.content
+        wires = response.json()["actions"]["POST"]["wires"]
+        assert set(wires["child"]["children"]) == {"source", "target", "source_handle", "target_handle"}
+        assert (wires["min_length"], wires["max_length"]) == (1, MAX_WIRES_PER_CALL)
 
     def test_options_on_a_route_with_no_writable_verb_describes_no_body(self, client, chatbot):
         """The edge detail route offers DELETE alone, which takes no body -- so OPTIONS has to answer
@@ -243,10 +255,10 @@ def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_nod
     comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)
-    client.post(edges_url(chatbot), [{"source": start_node, "target": node_id}], format="json")
+    post_wires(client, chatbot, [{"source": start_node, "target": node_id}])
 
     with CaptureQueriesContext(connection) as captured:
-        response = client.post(edges_url(chatbot), [{"source": node_id, "target": end_node}], format="json")
+        response = post_wires(client, chatbot, [{"source": node_id, "target": end_node}])
 
     assert response.status_code == 201, response.content
     sql = [query["sql"] for query in captured.captured_queries]

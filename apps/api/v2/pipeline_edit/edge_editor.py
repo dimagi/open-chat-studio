@@ -5,8 +5,8 @@ handle the node does not offer, a pair already wired -- and let through one that
 pipeline unfinished: a cycle or an unreachable End node is a property of the *graph* rather than of
 this edge, so it persists and comes back in the errors report.
 
-A wire call carries as many wires as the client likes, and is all or nothing: one refused wire
-refuses the call, and the graph is left as the call found it.
+A wire call carries as many wires as the body's ``max_length`` allows, and is all or nothing: one
+refused wire refuses the call, and the graph is left as the call found it.
 """
 
 from typing import ClassVar, cast
@@ -20,6 +20,7 @@ from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
+from .serializers import WIRES_FIELD
 
 #: The four values that identify an edge: ``(source, source handle, target, target handle)``, as
 #: :attr:`~apps.pipelines.flow.FlowEdge.wiring` reads them off a stored edge.
@@ -30,9 +31,11 @@ def plan_create(flow: Flow, wires: list[dict]) -> PipelineEdit:
     """Wire every pair ``wires`` names, or none of them.
 
     Every wire is checked even once one has been refused, so a body comes back with everything wrong
-    with it rather than one fault per round trip. The refusals are positioned like the body -- ``{}``
-    where a wire is fine -- which is the shape DRF's own list serializer refuses in. Nothing is
-    written either way: the planner runs before the graph is saved, inside the write's transaction.
+    with it rather than one fault per round trip. The refusals are keyed by the position in ``wires``
+    of the wire at fault, under the body's own ``wires`` key -- the shape the body serializer refuses
+    a wire in -- so a client parses a refusal from the graph exactly as it parses one from the body.
+    Nothing is written either way: the planner runs before the graph is saved, inside the write's
+    transaction.
 
     A wire is checked against the wires before it as well as against the graph, so one body cannot
     wire a pair twice, and no two wires can be handed the same id.
@@ -40,16 +43,14 @@ def plan_create(flow: Flow, wires: list[dict]) -> PipelineEdit:
     No node is moved: Phase 1 leaves the canvas alone (W11).
     """
     planned: list[FlowEdge] = []
-    refusals: list[dict] = []
-    for wire in wires:
+    refusals: dict[int, dict] = {}
+    for index, wire in enumerate(wires):
         try:
             planned.append(_planned_edge(flow, planned, wire))
         except serializers.ValidationError as refusal:
-            refusals.append(refusal.detail)
-        else:
-            refusals.append({})
-    if any(refusals):
-        raise serializers.ValidationError(refusals)
+            refusals[index] = refusal.detail
+    if refusals:
+        raise serializers.ValidationError({WIRES_FIELD: refusals})
     return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=planned)), written_ids=[edge.id for edge in planned])
 
 
