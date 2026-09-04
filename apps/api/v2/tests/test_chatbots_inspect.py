@@ -813,6 +813,7 @@ def _expected_full_response(bot):
             "neural": True,
         },
         "trace_provider": {"id": bot.trace_provider.id, "type": bot.trace_provider.type, "name": "Langfuse Prod"},
+        "trace_sample_rate": None,
         "channels": [
             {
                 "platform": "telegram",
@@ -905,13 +906,12 @@ def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
 
 # ── Query-count guard (review issues #5, #12, #16) ───────────────────────────────────────────────
 def _adversarial_bot():
-    """A multi-node pipeline, a pipeline_start trigger that embeds a second pipeline with its own
-    resources, and one LLM provider/model shared by two nodes (so a shared resource loads once)."""
+    """A multi-node pipeline, a pipeline_start trigger that embeds a second pipeline holding a
+    resource, and one LLM provider/model shared by two nodes (so a shared resource loads once)."""
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, name="Shared", type="openai")
     model = LlmProviderModelFactory.create(team=team, name="gpt-4o", deprecated=False)
     source = SourceMaterialFactory.create(team=team)
-    embedded_source = SourceMaterialFactory.create(team=team)
 
     pipeline = PipelineFactory.create(team=team, data={"nodes": [], "edges": []})
     _make_node(
@@ -940,7 +940,7 @@ def _adversarial_bot():
         flow_id="e1",
         type="LLMResponseWithPrompt",
         label="Embedded",
-        params={"source_material_id": str(embedded_source.id)},
+        params={"source_material_id": str(source.id)},
     )
     StaticTriggerFactory.create(
         experiment=experiment,

@@ -500,10 +500,11 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "indexed_collections": ("collection_index_ids",),
     }
     _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
-    # ``assistant_id`` lost its render key when the Assistant node was removed (#4254), so it
-    # would otherwise fall through into ``params`` and expose an internal id. Kept out of
-    # ``_RESOURCE_PARAM_KEYS`` because no node type declares the field any more (pinned by
-    # test_resource_param_fields_are_real_node_fields). Goes with the stored rows in phase 2.
+    # ``assistant_id`` is suppressed rather than lifted: ``_RESOURCE_PARAM_KEYS`` is derived from
+    # ``_CONDITIONAL_KEY_PARAMS`` and no render key claims it, so hiding it keeps an internal id
+    # out of the generic ``params`` payload. Stripping it from the stored rows instead needs
+    # ``Node.assistant`` gone -- ``Node._sync_resource_fk_fields`` re-derives the id from that
+    # column -- so it waits for the data-model removal in #4254.
     _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS | {"assistant_id"}
 
     node_id = serializers.CharField(source="flow_id")
@@ -782,6 +783,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "consent_form",
             "voice",
             "trace_provider",
+            "trace_sample_rate",
             "channels",
             "pipeline",
             "pipeline_valid",
