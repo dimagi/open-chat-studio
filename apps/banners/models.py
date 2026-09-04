@@ -23,6 +23,8 @@ class Banner(models.Model):
         ("pipelines_new", "New Pipelines"),
         ("chatbots_home", "Chatbots Home"),
         ("chatbots_new", "New Chatbot"),
+        # The assistants page is gone (#4254), but existing Banner rows may still point here.
+        # Kept until the production data is checked; removed in phase 2 with the models.
         ("assistants_home", "Assistants Home"),
         ("team_settings", "Team Settings"),
     )

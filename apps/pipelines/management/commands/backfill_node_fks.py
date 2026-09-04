@@ -20,7 +20,7 @@ class Command(IdempotentCommand):
 
         Uses the archive-inclusive ``_base_manager``: archiving is a soft-delete, so an archived
         row still exists and its FK is satisfiable. The default manager on the versioned resource
-        models (Collection, SourceMaterial, OpenAiAssistant) filters ``is_archived=False``, which
+        models (Collection, SourceMaterial) filters ``is_archived=False``, which
         would treat a valid reference to an archived resource as dangling and wrongly null it out.
         Mirrors ``perform_migration``'s use of ``get_all()`` for the same reason.
         """

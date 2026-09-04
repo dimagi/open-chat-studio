@@ -9,12 +9,15 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
+from apps.teams.management.commands.clone_team import CloneContext, Command
 from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
+from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -392,3 +395,32 @@ def test_clone_team_copies_feature_flags(source_team):
 
     # Verify target team is in the same flag
     assert flag.teams.filter(id=target.id).exists()
+
+
+@pytest.mark.django_db()
+def test_clone_team_drops_assistant_reference_from_node_params():
+    """A cloned `AssistantNode` must not keep pointing at the source team's assistant.
+
+    `AssistantNode` lost its class (#4254), so a stored one is inert and cloning no longer
+    refuses it -- but `Node._sync_resource_fk_fields` resolves ids without scoping them to a
+    team, so the id has to be dropped from params rather than carried across.
+    """
+    source, target = TeamFactory.create(), TeamFactory.create()
+    assistant = OpenAiAssistantFactory.create(team=source)
+    pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
+    node = Node.objects.create(
+        pipeline=pipeline,
+        type="AssistantNode",
+        flow_id="assist",
+        label="Assistant",
+        params={"assistant_id": assistant.id, "citations_enabled": True},
+    )
+    node.update_from_params()
+    assert node.assistant_id == assistant.id, "precondition: the FK mirror resolves the source id"
+
+    Command()._remap_node_params(CloneContext(source_team=source, target_team=target), node)
+
+    node.refresh_from_db()
+    assert "assistant_id" not in node.params
+    assert node.assistant_id is None
+    assert node.params["citations_enabled"] is True

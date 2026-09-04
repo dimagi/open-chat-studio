@@ -4,19 +4,15 @@ from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
-from langchain_classic.agents.openai_assistant.base import OpenAIAssistantFinish, OutputType
 from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from openai import OpenAI
 from pydantic import ConfigDict
 
 from apps.service_providers.llm_service import LlmService, OpenAIGenericService
-from apps.service_providers.llm_service.openai_assistant import OpenAIAssistantRunnable
 
 
 class FakeLlm(FakeListChatModel):
@@ -72,10 +68,6 @@ class FakeLlmService(LlmService):
     def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
 
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
-
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []
 
@@ -86,10 +78,6 @@ class FakeOpenAILlmService(OpenAIGenericService):
 
     def get_chat_model(self, llm_model: str, **kwargs):
         return self.llm
-
-    def get_assistant(self, assistant_id: str, as_agent=False):
-        client = OpenAI(api_key="fake_key", base_url="https://fake.com")
-        return OpenAIAssistantRunnable(assistant_id=assistant_id, as_agent=as_agent, client=client)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict | None = None) -> list:
         return []
@@ -105,27 +93,6 @@ class FakeOpenAILlmService(OpenAIGenericService):
     @property
     def openai_organization(self) -> str:
         return "openai_organization"
-
-
-class FakeAssistant(RunnableSerializable[dict, OutputType]):
-    responses: list
-    i: int = 0
-
-    def invoke(self, input: dict, config: RunnableConfig | None = None) -> OutputType:  # ty: ignore[invalid-method-override]
-        response = self._get_next_response()
-        if isinstance(response, BaseException):
-            raise response
-        return OpenAIAssistantFinish(
-            return_values={"output": response, "run_id": "456"}, log="", thread_id="123", run_id="456"
-        )
-
-    def _get_next_response(self):
-        response = self.responses[self.i]
-        if self.i < len(self.responses) - 1:
-            self.i += 1
-        else:
-            self.i = 0
-        return response
 
 
 class FakeLlmSimpleTokenCount(FakeLlm):
@@ -162,15 +129,7 @@ def mock_llm(responses: list[Any]):
     def fake_llm_service(self):
         return service
 
-    assistant = FakeAssistant(responses=responses)
-
-    def fake_get_assistant(self):
-        return assistant
-
-    with (
-        patch("apps.assistants.models.OpenAiAssistant.get_assistant", new=fake_get_assistant),
-        patch("apps.service_providers.models.LlmProvider.get_llm_service", new=fake_llm_service),
-    ):
+    with patch("apps.service_providers.models.LlmProvider.get_llm_service", new=fake_llm_service):
         yield service
 
 

@@ -16,8 +16,6 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
 
-    from apps.assistants.models import OpenAiAssistant
-
 
 class RepositoryLookupError(Exception):
     """Raised when a repository lookup finds no matching record."""
@@ -232,18 +230,6 @@ class ORMRepository:
         """Get scheduled messages for the current participant and experiment."""
         return self.participant.get_schedules_for_experiment(self.session.experiment_id, **kwargs)
 
-    # --- Assistants (deprecated node support) ---
-
-    @instance_cache
-    def get_assistant(self, assistant_id: int) -> OpenAiAssistant:
-        """Fetch an OpenAI assistant by ID. Raises RepositoryLookupError if not found."""
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→repository
-
-        try:
-            return OpenAiAssistant.objects.get(id=assistant_id)
-        except OpenAiAssistant.DoesNotExist:
-            raise RepositoryLookupError(f"Assistant with id {assistant_id} not found") from None
-
 
 class InMemoryPipelineRepository(ORMRepository):
     """Test implementation with no DB access.
@@ -264,7 +250,6 @@ class InMemoryPipelineRepository(ORMRepository):
         self.history_messages: list[dict] = []
         self.chat_histories: dict[str, Any] = {}
         self.attached_files: list[dict] = []
-        self.assistants: dict[int, Any] = {}
         self.session_messages: list[BaseMessage] = []
         self.participant_schedules: list = []
         self.participant_global_data: dict = {}
@@ -382,8 +367,3 @@ class InMemoryPipelineRepository(ORMRepository):
 
     def get_participant_schedules(self, **kwargs):
         return list(self.participant_schedules)
-
-    def get_assistant(self, assistant_id):
-        if assistant_id not in self.assistants:
-            raise RepositoryLookupError(f"Assistant with id {assistant_id} not found")
-        return self.assistants[assistant_id]

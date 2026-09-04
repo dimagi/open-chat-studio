@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Self
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -45,10 +44,6 @@ class ExperimentHistoryManager(BaseHistoryManager):
         # TODO: Think about passing this in as context metadata rather
         self.experiment_version_number = experiment.version_number
         self.experiment_is_a_version = experiment.is_a_version
-
-    @classmethod
-    def for_assistant(cls, session: ExperimentSession, experiment: Experiment, trace_service) -> Self:
-        return cls(session=session, experiment=experiment, trace_service=trace_service)
 
     def add_messages_to_history(
         self,
@@ -111,15 +106,3 @@ class ExperimentHistoryManager(BaseHistoryManager):
 
     def get_trace_metadata(self) -> dict:
         return self.trace_service.get_trace_metadata()
-
-
-class AssistantPipelineHistoryManager(BaseHistoryManager):
-    def __init__(self):
-        self.input_message_metadata = {}
-        self.output_message_metadata = {}
-
-    def add_messages_to_history(
-        self, input: str, input_message_metadata: dict, output: str, output_message_metadata: dict, *args, **kwargs
-    ):
-        self.input_message_metadata = input_message_metadata
-        self.output_message_metadata = self.output_message_metadata | output_message_metadata

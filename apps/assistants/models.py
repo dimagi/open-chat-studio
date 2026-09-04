@@ -1,14 +1,17 @@
+"""Data models for the retired OpenAI Assistants feature.
+
+The behaviour is gone (issue #4254, phase 1) — these models survive only so the rows and the
+Django admin remain available during the cool-off period. Phase 2 drops them along with the
+``Node.assistant`` and ``CustomActionOperation.assistant`` FKs.
+"""
+
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models, transaction
+from django.db import models
 from field_audit import audit_fields
-from field_audit.models import AuditAction, AuditingManager
+from field_audit.models import AuditingManager
 
-from apps.chat.agent.tools import get_assistant_tools
-from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import Experiment, VersionFieldDisplayFormatters
-from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.pipelines.models import Node
+from apps.experiments.versioning import VersionsMixin, VersionsObjectManagerMixin
 from apps.teams.models import BaseTeamModel
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
@@ -29,9 +32,7 @@ class OpenAiAssistantManager(VersionsObjectManagerMixin, AuditingManager):
     "top_p",
     audit_special_queryset_writes=True,
 )
-class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
-    ALLOWED_INSTRUCTIONS_VARIABLES = {"participant_data", "current_datetime"}
-
+class OpenAiAssistant(BaseTeamModel, VersionsMixin):
     assistant_id = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     instructions = models.TextField()
@@ -76,157 +77,6 @@ class OpenAiAssistant(BaseTeamModel, VersionsMixin, CustomActionOperationMixin):
 
     def __str__(self):
         return self.name
-
-    @property
-    def formatted_tools(self):
-        return [{"type": tool} for tool in self.builtin_tools]
-
-    def get_llm_service(self):
-        return self.llm_provider.get_llm_service()
-
-    def get_assistant(self):
-        return self.get_llm_service().get_assistant(self.assistant_id, as_agent=True)
-
-    def supports_code_interpreter_attachments(self):
-        return "code_interpreter" in self.builtin_tools and self.allow_code_interpreter_attachments
-
-    def supports_file_search_attachments(self):
-        return "file_search" in self.builtin_tools and self.allow_file_search_attachments
-
-    @property
-    def tools_enabled(self):
-        return len(self.tools) > 0 or self.has_custom_actions()
-
-    def has_custom_actions(self):
-        return self.custom_action_operations.exists()
-
-    @transaction.atomic()
-    def create_new_version(self):  # ty: ignore[invalid-method-override]
-        from .sync import push_assistant_to_openai  # noqa: PLC0415 - circular: sync.py imports assistants.models
-
-        version_number = self.version_number
-        self.version_number = version_number + 1
-        self.save(update_fields=["version_number"])
-        assistant_version = super().create_new_version(save=False)
-        assistant_version.version_number = version_number
-        assistant_version.name = f"{self.name} v{version_number}"
-        assistant_version.assistant_id = ""
-        assistant_version.save()
-        assistant_version.tools = self.tools.copy()
-        for tool_resource in self.tool_resources.all():
-            new_tool_resource = ToolResources.objects.create(
-                assistant=assistant_version,
-                tool_type=tool_resource.tool_type,
-                extra=tool_resource.extra,
-            )
-            if tool_resource.tool_type == "file_search":
-                # Clear the vector store ID so that a new one will be created
-                new_tool_resource.extra["vector_store_id"] = None
-            new_tool_resource.save()
-
-            new_tool_resource.files.set(tool_resource.files.all())
-
-        self._copy_custom_action_operations_to_new_version(new_assistant=assistant_version)
-
-        push_assistant_to_openai(assistant_version, internal_tools=get_assistant_tools(assistant_version))
-        return assistant_version
-
-    def archive(self):
-        from apps.assistants.tasks import (  # noqa: PLC0415 - circular: tasks.py → sync.py → assistants.models
-            delete_openai_assistant_task,
-        )
-
-        if self._is_actively_used:
-            return False
-
-        if self.is_working_version:
-            for (
-                version
-            ) in self.versions.all():  # first perform all checks so assistants are not archived prior to return False
-                if version._is_actively_used:
-                    return False
-
-            for version in self.versions.all():
-                delete_openai_assistant_task.delay(version.id)
-            self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
-
-        super().archive()
-        delete_openai_assistant_task.delay(self.id)
-        return True
-
-    def get_related_pipeline_node_queryset(self, assistant_ids: list | None = None):
-        """Returns working version pipelines with assistant nodes containing the assistant ids"""
-        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
-        return Node.objects.assistant_nodes().filter(
-            pipeline__working_version_id=None,
-            params__assistant_id__in=assistant_ids,
-            is_archived=False,
-            pipeline__is_archived=False,
-        )
-
-    def get_related_experiments_with_pipeline_queryset(self, assistant_ids: list | None = None):
-        """Returns published experiment versions referenced by versioned pipelines with assistant nodes
-        containing the assistant ids"""
-        assistant_ids = assistant_ids if assistant_ids else [str(self.id)]
-        nodes = Node.objects.assistant_nodes().filter(
-            pipeline__working_version_id__isnull=False,
-            params__assistant_id__in=assistant_ids,
-            is_archived=False,
-            pipeline__is_archived=False,
-        )
-
-        if pipeline_ids := nodes.values_list("pipeline_id", flat=True):
-            return Experiment.objects.filter(
-                is_default_version=True,
-                pipeline_id__in=pipeline_ids,
-                is_archived=False,
-            )
-        return Experiment.objects.none()
-
-    @property
-    def _is_actively_used(self) -> bool:
-        """Check if the assistant is actively used in any experiments or pipelines"""
-        return (
-            self.get_related_pipeline_node_queryset().exists()
-            or self.get_related_experiments_with_pipeline_queryset().exists()
-        )
-
-    def _get_version_details(self) -> VersionDetails:
-
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(group_name="General", name="name", raw_value=self.name.split(" v")[0]),
-                VersionField(group_name="General", name="include_file_info", raw_value=self.include_file_info),
-                VersionField(group_name="Language Model", name="llm_provider", raw_value=self.llm_provider),
-                VersionField(group_name="Language Model", name="llm_provider_model", raw_value=self.llm_provider_model),
-                VersionField(group_name="Language Model", name="temperature", raw_value=self.temperature),
-                VersionField(group_name="Language Model", name="top_p", raw_value=self.top_p),
-                VersionField(group_name="Language Model", name="instructions", raw_value=self.instructions),
-                VersionField(
-                    group_name="Tools",
-                    name="builtin_tools",
-                    raw_value=self.builtin_tools,
-                    to_display=VersionFieldDisplayFormatters.format_builtin_tools,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="tools",
-                    raw_value=self.tools,
-                    to_display=VersionFieldDisplayFormatters.format_tools,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="allow_file_search_attachments",
-                    raw_value=self.allow_file_search_attachments,
-                ),
-                VersionField(
-                    group_name="Tools",
-                    name="allow_code_interpreter_attachments",
-                    raw_value=self.allow_code_interpreter_attachments,
-                ),
-            ],
-        )
 
 
 @audit_fields(

@@ -38,7 +38,6 @@ from apps.teams.utils import get_current_team, get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
-    from apps.assistants.models import OpenAiAssistant
     from apps.pipelines.models import Node
 
 logger = logging.getLogger("ocs.tools")
@@ -777,12 +776,6 @@ TOOL_CLASS_MAP = {
 }
 
 
-def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
-    tools = get_tool_instances(assistant.tools, experiment_session)
-    tools.extend(get_custom_action_tools(assistant))
-    return tools
-
-
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
@@ -828,7 +821,7 @@ def get_tool_instances(
     return tools
 
 
-def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant", "Node"]) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 

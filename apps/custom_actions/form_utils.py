@@ -55,7 +55,7 @@ def set_custom_actions(holder, custom_action_infos: list[CustomActionOperationIn
     Set the custom actions for the holder.
 
     Args:
-        holder: The holder model instance, an Experiment or an OpenAiAssistant.
+        holder: The holder model instance, an Experiment or a pipeline Node.
         custom_action_infos: A list of dictionaries containing the custom action information.
     """
     from apps.custom_actions.models import (  # noqa: PLC0415 - circular: custom_actions.models imports form_utils

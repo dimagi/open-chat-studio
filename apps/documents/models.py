@@ -421,7 +421,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         experiments. When check_versions is True, it will return all experiments that reference any version of this
         collection.
         """
-        # TODO: Update assistant archive code to use get_related_pipeline_experiments_queryset
         ids = list(self.versions.values_list("id", flat=True)) + [self.id]
 
         index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(

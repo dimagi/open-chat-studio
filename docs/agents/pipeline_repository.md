@@ -80,4 +80,3 @@ def test_my_integration(experiment_session):
 
 ## Out of scope
 * **`bots.py` finalization** — runs after pipeline execution, outside the node boundary
-* **`AssistantAdapter` FK traversals** — deprecated node, deferred
