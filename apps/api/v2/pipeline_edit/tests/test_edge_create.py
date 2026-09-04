@@ -3,6 +3,8 @@
 The node endpoints' rule applied to wiring: a request naming something the pipeline does not have is
 refused, while a graph that is merely *wrong* -- a cycle, an End node nothing reaches -- persists and
 is reported.
+
+The body is a list of wires whatever its length, so most of what follows sends a list of one.
 """
 
 import pytest
@@ -21,6 +23,7 @@ from .conftest import (
     nodes_url,
     stored_edges,
     wire,
+    wire_all,
 )
 
 
@@ -46,17 +49,19 @@ class TestWhatAWireStores:
         uses. Pinned in full because the trailing ``input`` is the one place the two diverge: the
         builder renders no target handle ids, so its own edges stop at the target's node id."""
         response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, "source_handle": "output"}, format="json"
+            edges_url(chatbot), [{"source": llm_node, "target": end_node, "source_handle": "output"}], format="json"
         )
 
         assert response.status_code == 201, response.content
-        assert response.json()["edge"] == {
-            "id": f"reactflow__edge-{llm_node}output-{end_node}input",
-            "source": llm_node,
-            "target": end_node,
-            "source_handle": "output",
-            "target_handle": "input",
-        }
+        assert response.json()["edges"] == [
+            {
+                "id": f"reactflow__edge-{llm_node}output-{end_node}input",
+                "source": llm_node,
+                "target": end_node,
+                "source_handle": "output",
+                "target_handle": "input",
+            }
+        ]
         assert [edge["id"] for edge in edges_from(chatbot.pipeline, llm_node)] == [
             f"reactflow__edge-{llm_node}output-{end_node}input"
         ]
@@ -68,11 +73,11 @@ class TestWhatAWireStores:
         it is ``edge_id``, so each has to answer with the rule rather than "no such field".
         """
         response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, key: "mine-1"}, format="json"
+            edges_url(chatbot), [{"source": llm_node, "target": end_node, key: "mine-1"}], format="json"
         )
 
         assert response.status_code == 400, response.content
-        assert "server" in str(response.json()[key]).lower()
+        assert "server" in str(response.json()[0][key]).lower()
         assert edges_from(chatbot.pipeline, llm_node) == []
 
     def test_a_colliding_edge_id_is_made_unique(self, client, chatbot, router, end_node):
@@ -122,11 +127,11 @@ class TestHandleDefaults:
     def test_a_router_source_must_name_the_branch_to_wire(self, client, chatbot, router, end_node):
         """A router's handles are its branches, so guessing one would wire a branch nobody chose. The
         refusal names the handles on offer, so the next call can pick one without a re-read."""
-        response = client.post(edges_url(chatbot), {"source": router, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": router, "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "output_0" in str(response.json()["source_handle"])
-        assert "output_1" in str(response.json()["source_handle"])
+        assert "output_0" in str(response.json()[0]["source_handle"])
+        assert "output_1" in str(response.json()[0]["source_handle"])
 
     def test_a_multi_output_node_of_an_unpublished_type_must_still_name_its_branch(self, client, chatbot, end_node):
         """``BooleanNode`` offers two handles but is not a type the API publishes, so it can only reach
@@ -135,18 +140,18 @@ class TestHandleDefaults:
         """
         node = Node.objects.create(pipeline=chatbot.pipeline, flow_id="BooleanNode-1", type="BooleanNode", params={})
 
-        response = client.post(edges_url(chatbot), {"source": node.flow_id, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": node.flow_id, "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "output_0, output_1" in str(response.json()["source_handle"])
+        assert "output_0, output_1" in str(response.json()[0]["source_handle"])
 
     def test_a_named_router_branch_is_wired_to_that_handle(self, client, chatbot, router, end_node):
         response = client.post(
-            edges_url(chatbot), {"source": router, "target": end_node, "source_handle": "output_1"}, format="json"
+            edges_url(chatbot), [{"source": router, "target": end_node, "source_handle": "output_1"}], format="json"
         )
 
         assert response.status_code == 201, response.content
-        assert response.json()["edge"]["source_handle"] == "output_1"
+        assert response.json()["edges"][0]["source_handle"] == "output_1"
 
     @pytest.mark.parametrize(
         "handles",
@@ -161,11 +166,11 @@ class TestHandleDefaults:
         Null counts as omitted because ``GET /inspect/`` reports the UI builder's edges with a null
         ``target_handle``: a body built from one has to mean what a body without the key means.
         """
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": end_node, **handles}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": end_node, **handles}], format="json")
 
         assert response.status_code == 201, response.content
-        assert response.json()["edge"]["source_handle"] == "output"
-        assert response.json()["edge"]["target_handle"] == "input"
+        assert response.json()["edges"][0]["source_handle"] == "output"
+        assert response.json()["edges"][0]["target_handle"] == "input"
         stored = edges_from(chatbot.pipeline, llm_node)
         assert (stored[0]["sourceHandle"], stored[0]["targetHandle"]) == ("output", "input")
 
@@ -177,25 +182,25 @@ class TestRefusedWires:
     """
 
     def test_a_source_that_is_not_a_node_in_this_pipeline_is_refused(self, client, chatbot, end_node):
-        response = client.post(edges_url(chatbot), {"source": "CodeNode-nope1", "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": "CodeNode-nope1", "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "CodeNode-nope1" in str(response.json()["source"])
+        assert "CodeNode-nope1" in str(response.json()[0]["source"])
         assert edges_from(chatbot.pipeline, "CodeNode-nope1") == []
 
     def test_a_target_that_is_not_a_node_in_this_pipeline_is_refused(self, client, chatbot, llm_node):
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": "CodeNode-nope1"}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": "CodeNode-nope1"}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "CodeNode-nope1" in str(response.json()["target"])
+        assert "CodeNode-nope1" in str(response.json()[0]["target"])
 
     def test_two_unknown_endpoints_are_both_reported(self, client, chatbot):
         """A client working from a stale read has both ends wrong as easily as one, so it learns both
         in a single call rather than one refusal at a time."""
-        response = client.post(edges_url(chatbot), {"source": "CodeNode-a", "target": "CodeNode-b"}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": "CodeNode-a", "target": "CodeNode-b"}], format="json")
 
         assert response.status_code == 400, response.content
-        assert set(response.json()) == {"source", "target"}
+        assert set(response.json()[0]) == {"source", "target"}
 
     def test_a_node_from_another_chatbots_pipeline_is_refused(self, client, chatbot, llm, end_node):
         """Node ids are unique per pipeline, not globally, so "is a node" has to mean "is a node
@@ -203,7 +208,7 @@ class TestRefusedWires:
         elsewhere = ChatbotFactory.create(team=chatbot.team, name="Other bot", description="")
 
         response = client.post(
-            edges_url(chatbot), {"source": add_llm_node(client, elsewhere, llm), "target": end_node}, format="json"
+            edges_url(chatbot), [{"source": add_llm_node(client, elsewhere, llm), "target": end_node}], format="json"
         )
 
         assert response.status_code == 400, response.content
@@ -212,18 +217,18 @@ class TestRefusedWires:
         """An edge on a handle its source does not offer is dropped from the wired graph and reported
         stranded, so it is refused on the way in rather than stored to be complained about later."""
         response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, "source_handle": "output_7"}, format="json"
+            edges_url(chatbot), [{"source": llm_node, "target": end_node, "source_handle": "output_7"}], format="json"
         )
 
         assert response.status_code == 400, response.content
-        assert "output" in str(response.json()["source_handle"])
+        assert "output" in str(response.json()[0]["source_handle"])
         assert edges_from(chatbot.pipeline, llm_node) == []
 
     def test_a_routers_standard_output_handle_is_refused(self, client, chatbot, router, end_node):
         """A router offers ``output_0``/``output_1``, never the plain ``output`` every other node has
         -- the one wrong handle a client is most likely to send."""
         response = client.post(
-            edges_url(chatbot), {"source": router, "target": end_node, "source_handle": "output"}, format="json"
+            edges_url(chatbot), [{"source": router, "target": end_node, "source_handle": "output"}], format="json"
         )
 
         assert response.status_code == 400, response.content
@@ -231,36 +236,36 @@ class TestRefusedWires:
 
     def test_a_wire_out_of_the_end_node_is_refused(self, client, chatbot, llm_node, end_node):
         """The End node offers no output handles: nothing runs after the end of the pipeline."""
-        response = client.post(edges_url(chatbot), {"source": end_node, "target": llm_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": end_node, "target": llm_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "no output" in str(response.json()["source"]).lower()
+        assert "no output" in str(response.json()[0]["source"]).lower()
 
     def test_a_wire_into_the_start_node_is_refused(self, client, chatbot, llm_node, start_node):
         """The Start node has no input handle -- the UI builder draws none, so this is a connection a
         human could not make either."""
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": start_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": start_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "no input" in str(response.json()["target"]).lower()
+        assert "no input" in str(response.json()[0]["target"]).lower()
 
     def test_a_target_handle_that_is_not_the_nodes_input_is_refused(self, client, chatbot, llm_node, end_node):
         response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, "target_handle": "output"}, format="json"
+            edges_url(chatbot), [{"source": llm_node, "target": end_node, "target_handle": "output"}], format="json"
         )
 
         assert response.status_code == 400, response.content
-        assert "input" in str(response.json()["target_handle"])
+        assert "input" in str(response.json()[0]["target_handle"])
 
     @pytest.mark.parametrize("missing", ["source", "target"])
     def test_a_body_missing_an_endpoint_is_refused(self, client, chatbot, llm_node, end_node, missing):
         body = {"source": llm_node, "target": end_node}
         del body[missing]
 
-        response = client.post(edges_url(chatbot), body, format="json")
+        response = client.post(edges_url(chatbot), [body], format="json")
 
         assert response.status_code == 400, response.content
-        assert missing in response.json()
+        assert missing in response.json()[0]
 
     def test_a_wire_out_of_a_node_of_an_unpublished_type_is_refused(self, client, chatbot, end_node):
         """A type naming no node class -- removed since, or never one -- has no handles the server
@@ -269,10 +274,10 @@ class TestRefusedWires:
         """
         node = Node.objects.create(pipeline=chatbot.pipeline, flow_id="Gone-1", type="Gone", params={})
 
-        response = client.post(edges_url(chatbot), {"source": node.flow_id, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": node.flow_id, "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "names no node type this server knows" in str(response.json()["source"])
+        assert "names no node type this server knows" in str(response.json()[0]["source"])
 
     @pytest.mark.parametrize("node_type", ["RouterNode", "StaticRouterNode"])
     def test_a_router_with_no_keywords_yet_is_told_to_set_them(self, client, chatbot, end_node, node_type):
@@ -283,10 +288,10 @@ class TestRefusedWires:
         """
         node_id = add_bare_node(client, chatbot, node_type)
 
-        response = client.post(edges_url(chatbot), {"source": node_id, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": node_id, "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
-        assert "keywords" in str(response.json()["source"])
+        assert "keywords" in str(response.json()[0]["source"])
 
     def test_a_router_can_be_wired_once_its_keywords_are_set(self, client, chatbot, end_node):
         """The other half of the test above: the refusal names a step that actually works."""
@@ -299,11 +304,11 @@ class TestRefusedWires:
         """The body's shape is the API's own, so an unknown key is a typo worth reporting rather than
         something to drop silently."""
         response = client.post(
-            edges_url(chatbot), {"source": llm_node, "target": end_node, "colour": "red"}, format="json"
+            edges_url(chatbot), [{"source": llm_node, "target": end_node, "colour": "red"}], format="json"
         )
 
         assert response.status_code == 400, response.content
-        assert "colour" in response.json()
+        assert "colour" in response.json()[0]
 
 
 @pytest.mark.django_db()
@@ -316,13 +321,27 @@ class TestDuplicateWires:
     def test_wiring_the_same_pair_twice_is_refused(self, client, chatbot, llm_node, end_node):
         edge_id = wire(client, chatbot, llm_node, end_node)
 
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": end_node}], format="json")
 
         assert response.status_code == 400, response.content
         # The existing edge's id, so a client that never saw the first call's response can carry on
         # from the refusal rather than re-reading the whole pipeline to find it.
         assert edge_id in str(response.json())
         assert len(edges_from(chatbot.pipeline, llm_node)) == 1
+
+    def test_a_body_wiring_the_same_pair_twice_is_refused(self, client, chatbot, llm_node, end_node):
+        """The rule holds within one body as well as against the graph. There is no id to name yet,
+        so the refusal names where the first of the two is instead."""
+        response = client.post(
+            edges_url(chatbot),
+            [{"source": llm_node, "target": end_node}, {"source": llm_node, "target": end_node}],
+            format="json",
+        )
+
+        assert response.status_code == 400, response.content
+        assert response.json()[0] == {}
+        assert "index 0" in str(response.json()[1])
+        assert edges_from(chatbot.pipeline, llm_node) == []
 
     def test_a_second_edge_from_the_same_handle_to_another_node_is_allowed(self, client, chatbot, llm, end_node):
         """Not a duplicate: one output handle may fan out, and the pipeline runs both branches."""
@@ -357,13 +376,13 @@ class TestReportedRatherThanRefused:
         first, second = (add_llm_node(client, chatbot, llm) for _ in range(2))
         wire(client, chatbot, first, second)
 
-        response = client.post(edges_url(chatbot), {"source": second, "target": first}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": second, "target": first}], format="json")
 
         assert response.status_code == 201, response.content
         body = response.json()
         assert body["pipeline_valid"] is False
         assert body["pipeline_errors"]["pipeline"] == ["A cycle was detected"]
-        assert body["edge"]["id"] in {edge["id"] for edge in stored_edges(chatbot.pipeline)}
+        assert body["edges"][0]["id"] in {edge["id"] for edge in stored_edges(chatbot.pipeline)}
 
     def test_a_wire_that_leaves_the_end_node_unreachable_persists_and_is_reported(self, client, chatbot, llm, end_node):
         """Wiring an island: the two nodes reach each other and nothing else, so the pipeline still
@@ -372,7 +391,7 @@ class TestReportedRatherThanRefused:
         chatbot.pipeline.save(update_fields=["data"])
         first, second = (add_llm_node(client, chatbot, llm) for _ in range(2))
 
-        response = client.post(edges_url(chatbot), {"source": first, "target": second}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": first, "target": second}], format="json")
 
         assert response.status_code == 201, response.content
         body = response.json()
@@ -384,15 +403,15 @@ class TestReportedRatherThanRefused:
         still accepts an edge, which is what lets a graph keep running while it is migrated off one."""
         node = Node.objects.create(pipeline=chatbot.pipeline, flow_id="Gone-1", type="Gone", params={})
 
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": node.flow_id}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": node.flow_id}], format="json")
 
         assert response.status_code == 201, response.content
-        assert response.json()["edge"]["target_handle"] == "input"
+        assert response.json()["edges"][0]["target_handle"] == "input"
 
     def test_a_self_loop_persists_and_is_reported(self, client, chatbot, llm_node):
         """The shortest cycle there is. Refusing it would be a special case for something the general
         cycle check already reports, and the node it names is the one the agent has to repair anyway."""
-        response = client.post(edges_url(chatbot), {"source": llm_node, "target": llm_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": llm_node}], format="json")
 
         assert response.status_code == 201, response.content
         assert response.json()["pipeline_errors"]["pipeline"] == ["A cycle was detected"]
@@ -404,7 +423,7 @@ class TestReportedRatherThanRefused:
             "node_id"
         ]
 
-        response = client.post(edges_url(chatbot), {"source": node_id, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": node_id, "target": end_node}], format="json")
 
         assert response.status_code == 201, response.content
         assert "llm_provider_id" in response.json()["pipeline_errors"]["node"][node_id]
@@ -439,20 +458,128 @@ class TestUnwiredHandles:
     def test_a_wire_clears_the_handle_at_each_end(self, client, chatbot, llm, start_node):
         source = add_llm_node(client, chatbot, llm)
         target = add_llm_node(client, chatbot, llm)
-        before = client.post(edges_url(chatbot), {"source": start_node, "target": source}, format="json").json()
+        before = client.post(edges_url(chatbot), [{"source": start_node, "target": source}], format="json").json()
         assert before["unwired_handles"][source] == [{"handle": "output", "label": None}]
 
-        body = client.post(edges_url(chatbot), {"source": source, "target": target}, format="json").json()
+        body = client.post(edges_url(chatbot), [{"source": source, "target": target}], format="json").json()
 
         assert source not in body["unwired_handles"]
         assert body["unwired_handles"][target] == [{"handle": "output", "label": None}]
 
     def test_wiring_one_router_branch_leaves_the_others_listed(self, client, chatbot, router, end_node):
         body = client.post(
-            edges_url(chatbot), {"source": router, "target": end_node, "source_handle": "output_0"}, format="json"
+            edges_url(chatbot), [{"source": router, "target": end_node, "source_handle": "output_0"}], format="json"
         ).json()
 
         assert body["unwired_handles"][router] == [
             {"handle": "input", "label": None},
             {"handle": "output_1", "label": "RESCHEDULE"},
         ]
+
+
+@pytest.mark.django_db()
+class TestWiringSeveralAtOnce:
+    """One call carries as many wires as the client likes, and lands all of them or none -- so a
+    whole branch can be laid out in one call without leaving half of it behind to unpick.
+    """
+
+    def test_every_wire_in_the_body_lands(self, client, chatbot, router, llm, end_node):
+        other = add_llm_node(client, chatbot, llm)
+
+        wired = wire_all(
+            client,
+            chatbot,
+            [
+                {"source": router, "target": other, "source_handle": "output_0"},
+                {"source": router, "target": end_node, "source_handle": "output_1"},
+                {"source": other, "target": end_node},
+            ],
+        )
+
+        assert len(wired) == 3
+        assert set(wired) <= {edge["id"] for edge in stored_edges(chatbot.pipeline)}
+
+    def test_the_edges_come_back_in_the_bodys_order(self, client, chatbot, llm, end_node):
+        """The response is how a client learns the ids it did not choose, so it has to be able to
+        tell which id belongs to which wire it sent."""
+        first, second = (add_llm_node(client, chatbot, llm) for _ in range(2))
+
+        response = client.post(
+            edges_url(chatbot),
+            [{"source": second, "target": end_node}, {"source": first, "target": second}],
+            format="json",
+        )
+
+        assert response.status_code == 201, response.content
+        assert [(edge["source"], edge["target"]) for edge in response.json()["edges"]] == [
+            (second, end_node),
+            (first, second),
+        ]
+
+    def test_one_refused_wire_leaves_the_whole_body_unwired(self, client, chatbot, llm_node, end_node):
+        """The good wire in front of the bad one is not stored either, so a client sending the
+        corrected body again cannot trip over half of its own first attempt."""
+        response = client.post(
+            edges_url(chatbot),
+            [{"source": llm_node, "target": end_node}, {"source": llm_node, "target": "CodeNode-nope1"}],
+            format="json",
+        )
+
+        assert response.status_code == 400, response.content
+        assert edges_from(chatbot.pipeline, llm_node) == []
+
+    def test_a_refused_body_leaves_the_edit_revision_alone(self, client, chatbot, llm_node, end_node):
+        """Nothing was written at all, rather than written and rolled back to the same values: an
+        open pipeline builder session has no conflict to see."""
+        chatbot.pipeline.refresh_from_db()
+        before = chatbot.pipeline.edit_revision
+
+        response = client.post(edges_url(chatbot), [{"source": llm_node, "target": "CodeNode-nope1"}], format="json")
+
+        assert response.status_code == 400, response.content
+        chatbot.pipeline.refresh_from_db()
+        assert chatbot.pipeline.edit_revision == before
+
+    def test_a_call_bumps_the_edit_revision_once_however_many_wires_it_carries(self, client, chatbot, llm, end_node):
+        """One call is one save, so the builder sees one conflict rather than one per wire."""
+        first, second = (add_llm_node(client, chatbot, llm) for _ in range(2))
+        chatbot.pipeline.refresh_from_db()
+        before = chatbot.pipeline.edit_revision
+
+        wire_all(client, chatbot, [{"source": first, "target": second}, {"source": second, "target": end_node}])
+
+        chatbot.pipeline.refresh_from_db()
+        assert chatbot.pipeline.edit_revision == before + 1
+
+    def test_every_refused_wire_is_reported_at_its_own_index(self, client, chatbot, llm_node, end_node):
+        """Positioned like the body, `{}` where a wire is fine, so a client working from a stale read
+        of the graph learns everything wrong with its call in one round trip."""
+        response = client.post(
+            edges_url(chatbot),
+            [
+                {"source": "CodeNode-nope1", "target": end_node},
+                {"source": llm_node, "target": end_node},
+                {"source": llm_node, "target": end_node, "source_handle": "output_7"},
+            ],
+            format="json",
+        )
+
+        assert response.status_code == 400, response.content
+        refusals = response.json()
+        assert [set(refusal) for refusal in refusals] == [{"source"}, set(), {"source_handle"}]
+
+    def test_a_single_wire_sent_as_an_object_is_refused_with_the_shape_to_send(
+        self, client, chatbot, llm_node, end_node
+    ):
+        """The body a client is most likely to try first, so the refusal says what to send instead."""
+        response = client.post(edges_url(chatbot), {"source": llm_node, "target": end_node}, format="json")
+
+        assert response.status_code == 400, response.content
+        assert "list of one" in str(response.json())
+
+    def test_an_empty_body_is_refused(self, client, chatbot):
+        """A call that would wire nothing is a mistake worth reporting, not a 201 that wrote nothing."""
+        response = client.post(edges_url(chatbot), [], format="json")
+
+        assert response.status_code == 400, response.content
+        assert "at least one" in str(response.json())

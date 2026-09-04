@@ -149,6 +149,9 @@ class LeadsWithWhatWasWritten(PipelineWriteSerializer):
 
     #: Name of the field to lead with, declared on the subclass alongside the field itself.
     written_field: str
+    #: Whether that field holds a list. One call wires as many edges as it likes; a node write is
+    #: always one node.
+    written_many: bool = False
 
     def get_fields(self) -> dict[str, serializers.Field]:
         fields = super().get_fields()
@@ -163,8 +166,26 @@ class NodeWriteSerializer(LeadsWithWhatWasWritten):
     node = WrittenNodeSerializer()
 
 
+class WireListSerializer(serializers.ListSerializer):
+    """The POST body proper: a list, even when it holds one wire.
+
+    One shape whether a client is wiring the node it has just created or laying out a whole branch,
+    and no second code path for the plural case.
+    """
+
+    default_error_messages = {
+        "not_a_list": "Expected a list of wires; got {input_type}. A single wire is a list of one.",
+        "empty": "Name at least one wire to add.",
+    }
+
+    def __init__(self, *args, **kwargs):
+        # A body that would wire nothing is a mistake worth reporting, not a 201 that wrote nothing.
+        kwargs.setdefault("allow_empty", False)
+        super().__init__(*args, **kwargs)
+
+
 class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
-    """The POST body: which two nodes to wire, and from which handle.
+    """One entry of the POST body: which two nodes to wire, and from which handle.
 
     ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
     ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
@@ -172,6 +193,9 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     """
 
     server_assigned_keys = SERVER_ASSIGNED_EDGE_KEYS
+
+    class Meta:
+        list_serializer_class = WireListSerializer
 
     source = serializers.CharField(
         help_text=(
@@ -217,8 +241,9 @@ class WrittenEdgeSerializer(serializers.Serializer):
 
 
 class EdgeWriteSerializer(LeadsWithWhatWasWritten):
-    """An edge write's response: the edge as written, then the pipeline's state after the write."""
+    """A wire call's response: the edges as written, then the pipeline's state after the write."""
 
-    written_field = "edge"
+    written_field = "edges"
+    written_many = True
 
-    edge = WrittenEdgeSerializer()
+    edges = WrittenEdgeSerializer(many=True, help_text="The edges this call wired, in the order the body named them.")

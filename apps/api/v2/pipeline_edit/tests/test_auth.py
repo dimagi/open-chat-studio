@@ -50,7 +50,7 @@ def _call(client, chatbot, verb="post"):
         "post": lambda: client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json"),
         "patch": lambda: client.patch(node_url(chatbot, node.flow_id), {"label": "Renamed"}, format="json"),
         "delete": lambda: client.delete(node_url(chatbot, node.flow_id)),
-        "post_edge": lambda: client.post(edges_url(chatbot), {"source": node.flow_id, "target": end}, format="json"),
+        "post_edge": lambda: client.post(edges_url(chatbot), [{"source": node.flow_id, "target": end}], format="json"),
         "delete_edge": lambda: client.delete(edge_url(chatbot, add_edge(chatbot.pipeline, node.flow_id, end))),
     }
     return calls[verb]()

@@ -243,10 +243,10 @@ def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_nod
     comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)
-    client.post(edges_url(chatbot), {"source": start_node, "target": node_id}, format="json")
+    client.post(edges_url(chatbot), [{"source": start_node, "target": node_id}], format="json")
 
     with CaptureQueriesContext(connection) as captured:
-        response = client.post(edges_url(chatbot), {"source": node_id, "target": end_node}, format="json")
+        response = client.post(edges_url(chatbot), [{"source": node_id, "target": end_node}], format="json")
 
     assert response.status_code == 201, response.content
     sql = [query["sql"] for query in captured.captured_queries]

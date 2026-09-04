@@ -202,9 +202,14 @@ def stored_edges(pipeline) -> list[dict]:
 
 def wire(client, chatbot, source: str, target: str, **body) -> str:
     """Wire two nodes through the endpoint, and return the id the server assigned the edge."""
-    response = client.post(edges_url(chatbot), {"source": source, "target": target, **body}, format="json")
+    return wire_all(client, chatbot, [{"source": source, "target": target, **body}])[0]
+
+
+def wire_all(client, chatbot, wires: list[dict]) -> list[str]:
+    """Wire several pairs in one call, and return the ids the server assigned, in the body's order."""
+    response = client.post(edges_url(chatbot), wires, format="json")
     assert response.status_code == 201, response.content
-    return response.json()["edge"]["id"]
+    return [edge["id"] for edge in response.json()["edges"]]
 
 
 def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:

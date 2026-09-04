@@ -223,14 +223,24 @@ paths:
     post:
       operationId: pipeline_edge_create
       description: |-
-        Add an edge to the chatbot's working (draft) pipeline, wiring one node's output handle to another node's input.
+        Add edges to the chatbot's working (draft) pipeline, wiring one node's output handle to another node's input.
 
-        `source` and `target` are enough for most nodes: a handle you leave out means the only one the node has. A router is the exception — it exposes one handle per branch, so name the branch to wire in `source_handle`. Neither node is moved on the canvas.
+        The body is a **list** of wires — a single wire is a list of one — and a call carrying several is all or nothing: if any one of them is refused, none of them are stored and the pipeline is left exactly as the call found it. So a whole branch lands in one call with no half-wired state to unpick:
 
-        The edge's `id` is assigned by the server and cannot be chosen. It is the address `DELETE .../pipeline/edges/{edge_id}/` takes.
+        ```json
+        [
+          {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", "source_handle": "output_0"},
+          {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},
+          {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}
+        ]
+        ```
+
+        `source` and `target` are enough for most nodes: a handle you leave out means the only one the node has. A router is the exception — it exposes one handle per branch, so name the branch to wire in `source_handle`. No node is moved on the canvas.
+
+        Each edge's `id` is assigned by the server and cannot be chosen. It is the address `DELETE .../pipeline/edges/{edge_id}/` takes, and `edges` reports them in the order the body named them.
 
         Wiring a pair that is already wired the same way is refused rather than stored twice, so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it lands, and comes back in `pipeline_errors` for you to repair.
-      summary: Wire two Pipeline Nodes
+      summary: Wire Pipeline Nodes
       parameters:
       - in: path
         name: id
@@ -245,17 +255,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EdgeCreate'
+              type: array
+              items:
+                $ref: '#/components/schemas/EdgeCreate'
             examples:
               PlainNode:
                 value:
-                  source: CodeNode-a1b2c
+                - source: CodeNode-a1b2c
                   target: LLMResponseWithPrompt-d3e4f
                 summary: 'A source with one output handle: neither handle need be
                   named.'
               RouterBranch:
                 value:
-                  source: RouterNode-9f8e7
+                - source: RouterNode-9f8e7
                   target: LLMResponseWithPrompt-d3e4f
                   source_handle: output_1
                 summary: A router exposes one handle per keyword, so the branch to
@@ -275,15 +287,19 @@ paths:
           description: ''
         '400':
           description: |-
-            The body is not one this endpoint can act on, keyed by the field at fault: a `source` or `target` that is not a node in this pipeline, a `source_handle` the source node does not offer (or a missing one where the node offers a choice), a `target_handle` that is not the target's input, a server-assigned key the client tried to set (`id`), or an unrecognised body key.
+            Nothing was wired. The response is a **list positioned like the body** — `{}` where a wire is fine — so one call reports everything wrong with it.
+
+            Each entry is keyed by the field at fault: a `source` or `target` that is not a node in this pipeline, a `source_handle` the source node does not offer (or a missing one where the node offers a choice), a `target_handle` that is not the target's input, a server-assigned key the client tried to set (`id`), or an unrecognised body key.
 
             A duplicate edge is reported under `non_field_errors`, with the existing edge's id between single quotes:
 
             > These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was changed.
 
-            So a client whose first attempt's response it never saw can recover the edge id rather than re-reading the pipeline.
+            So a client whose first attempt's response it never saw can recover the edge id rather than re-reading the pipeline. A body wiring the same pair twice is refused the same way, naming the index of the first of the two.
 
             A `source` that offers no output handles at all is refused under `source`, and the message says whether that is fixable: a router with no `keywords` set yet needs a PATCH first, whereas the End node can never be a source.
+
+            A body that is not a list, or is an empty one, is refused under `non_field_errors` instead.
         '403':
           description: 'The caller is authenticated but not authorised to modify this
             chatbot: either its role lacks permission to change chatbots, or it is
@@ -307,7 +323,7 @@ paths:
         schema:
           type: string
         description: The edge's server-assigned id, as returned by a wire or by GET
-          /api/v2/chatbots/{id}/inspect/.
+          /chatbots/{id}/inspect/.
         required: true
       - in: path
         name: id
@@ -347,7 +363,7 @@ paths:
 
         The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen.
 
-        What `params` may hold depends on `type`, so the examples below show a full body for each type. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on `type`, so the examples below show a full body for each type. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may name.
       summary: Add a Pipeline Node
       parameters:
       - in: path
@@ -551,7 +567,7 @@ paths:
 
         Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. The node's edges follow their keyword: dropping a keyword deletes the edge that served it, and a renamed keyword counts as one branch gone and another new. Handle names are not stable across a keyword edit, so re-read `output_handles` after one.
 
-        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource params may name.
+        What `params` may hold depends on the node's type, not on the verb: the `POST` examples name every param of each type, and the examples here are partial bodies instead. `GET /pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one type, and `GET /pipeline/options/{node_type}/` serves the ids its resource params may name.
       summary: Edit a Pipeline Node
       parameters:
       - in: path
@@ -566,7 +582,7 @@ paths:
         schema:
           type: string
         description: The node's server-assigned id, as returned by a write or by GET
-          /api/v2/chatbots/{id}/inspect/.
+          /chatbots/{id}/inspect/.
         required: true
       tags:
       - Pipelines
@@ -646,7 +662,7 @@ paths:
         schema:
           type: string
         description: The node's server-assigned id, as returned by a write or by GET
-          /api/v2/chatbots/{id}/inspect/.
+          /chatbots/{id}/inspect/.
         required: true
       tags:
       - Pipelines
@@ -1822,7 +1838,7 @@ components:
     EdgeCreate:
       type: object
       description: |-
-        The POST body: which two nodes to wire, and from which handle.
+        One entry of the POST body: which two nodes to wire, and from which handle.
 
         ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
         ``/inspect/`` reports the pipeline builder's own edges) means the only one the node has, so it is
@@ -1831,7 +1847,7 @@ components:
         source:
           type: string
           description: '``node_id`` the edge leaves from. Node ids are the ones a
-            node write returns and `GET /api/v2/chatbots/{id}/inspect/` reports.'
+            node write returns and `GET /chatbots/{id}/inspect/` reports.'
         target:
           type: string
           description: '``node_id`` the edge points to.'
@@ -1855,11 +1871,14 @@ components:
       additionalProperties: false
     EdgeWrite:
       type: object
-      description: 'An edge write''s response: the edge as written, then the pipeline''s
+      description: 'A wire call''s response: the edges as written, then the pipeline''s
         state after the write.'
       properties:
-        edge:
-          $ref: '#/components/schemas/WrittenEdge'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WrittenEdge'
+          description: The edges this call wired, in the order the body named them.
         pipeline_valid:
           type: boolean
           description: 'Whether the pipeline validates cleanly: all three error buckets
@@ -1876,7 +1895,7 @@ components:
             every output handle with no outgoing edge and every implicit ``input``
             handle with no incoming edge. Never an error and never blocks a publish.'
       required:
-      - edge
+      - edges
       - pipeline_errors
       - pipeline_valid
       - unwired_handles
@@ -2697,7 +2716,7 @@ components:
       properties:
         type:
           type: string
-          description: A node type from GET /api/v2/pipeline/nodes/.
+          description: A node type from `GET /pipeline/nodes/`.
         label:
           type: string
           description: Display name shown in the pipeline builder. Defaults to the
@@ -2707,12 +2726,12 @@ components:
           additionalProperties: {}
           description: The node's configuration. Anything omitted takes the type's
             default, so `type` alone is a valid body. Param names are the node type's
-            own, as published by `GET /api/v2/pipeline/nodes/{node_type}/`. They are
-            not always the name of the `/pipeline/options/` list a param draws its
-            values from -- `source_material_id` is the param, `source_material` is
-            the list it chooses from -- so send the param name. A name the type does
-            not declare is dropped rather than refused, and the response reports the
-            params the node ended up holding.
+            own, as published by `GET /pipeline/nodes/{node_type}/`. They are not
+            always the name of the `/pipeline/options/` list a param draws its values
+            from -- `source_material_id` is the param, `source_material` is the list
+            it chooses from -- so send the param name. A name the type does not declare
+            is dropped rather than refused, and the response reports the params the
+            node ended up holding.
       required:
       - type
       additionalProperties: false
@@ -2933,7 +2952,7 @@ components:
           type: object
           additionalProperties: {}
           description: The params to change; the ones you leave out are left as they
-            are. Param names are the node type's own, as published by `GET /api/v2/pipeline/nodes/{node_type}/`.
+            are. Param names are the node type's own, as published by `GET /pipeline/nodes/{node_type}/`.
             They are not always the name of the `/pipeline/options/` list a param
             draws its values from -- `source_material_id` is the param, `source_material`
             is the list it chooses from -- so send the param name. A name the type

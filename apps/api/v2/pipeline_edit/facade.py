@@ -8,7 +8,7 @@ removing a node removes that node's edges with it.
 
 import contextlib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django.db import transaction
 from rest_framework.exceptions import NotFound
@@ -28,14 +28,14 @@ UNUSED_BASE_REVISION = 0
 
 @dataclass
 class PipelineEdit:
-    """One façade edit: the diff to apply, and the id of the thing the response should describe.
+    """One façade edit: the diff to apply, and the ids of what the response should describe.
 
-    One id rather than one field per resource kind -- each view already knows which kind it serves.
-    A delete names none, and the response then reports the pipeline's state alone.
+    Ids rather than one field per resource kind -- each view already knows which kind it serves. A
+    delete names none, and the response then reports the pipeline's state alone.
     """
 
     diff: PipelineDiffPayload
-    written_id: str | None = None
+    written_ids: list[str] = field(default_factory=list)
 
 
 def graph_diff(nodes: NodeDiff | None = None, edges: EdgeDiff | None = None) -> PipelineDiffPayload:
@@ -47,7 +47,7 @@ def edit_pipeline(
     request,
     public_id: str,
     plan: Callable[[Flow], PipelineEdit],
-    respond: Callable[[Pipeline, str | None], dict],
+    respond: Callable[[Pipeline, list[str]], dict],
 ) -> dict:
     """Apply one façade edit to the chatbot's working pipeline, under a row lock.
 
@@ -69,7 +69,7 @@ def edit_pipeline(
         graph = pipeline.flow_data
         edit = plan(Flow(**graph))
         _persist(pipeline, graph, edit.diff)
-        return respond(pipeline, edit.written_id)
+        return respond(pipeline, edit.written_ids)
 
 
 def _locked_pipeline(chatbot: Experiment) -> Pipeline:

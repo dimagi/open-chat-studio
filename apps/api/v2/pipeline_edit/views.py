@@ -78,8 +78,9 @@ SERVER_MANAGED = OpenApiResponse(
         "or deleted through the API."
     )
 )
-#: The two shapes a wire body comes in. Node ids are placeholders for ones a node write or
-#: ``/inspect/`` returned; showing both makes the point that the handle is the only difference.
+#: The two shapes a wire comes in. One wire each, since drf-spectacular renders an example of a list
+#: body by wrapping the value in a list of one -- a body of several is in the description instead.
+#: Node ids are placeholders for ones a node write or ``/inspect/`` returned.
 WIRE_EXAMPLES = [
     OpenApiExample(
         name="Plain node",
@@ -122,23 +123,26 @@ class PipelineFacadeView(GenericAPIView):
         """Run one façade edit and build its response. ``plan`` is all that differs per endpoint."""
         return edit_pipeline(request, chatbot_id, plan, self._write_response)
 
-    def _write_response(self, pipeline: Pipeline, written_id: str | None) -> dict:
+    def _write_response(self, pipeline: Pipeline, written_ids: list[str]) -> dict:
         """The pipeline's build state, and in front of it whatever this write created or changed.
 
-        ``written_id`` is ``None`` for a delete -- there is nothing left to describe -- so the
+        ``written_ids`` is empty for a delete -- there is nothing left to describe -- so the
         response is the pipeline's state alone.
         """
         body = pipeline_state(pipeline)
-        if written_id is None:
+        if not written_ids:
             return body
-        key = self.write_response_serializer.written_field
-        written = self._written(pipeline, written_id)
-        if written is None:
-            # Always a bug in this package rather than anything the client did -- the patch engine
-            # applied the diff, so the thing is there. *Which* bug differs per resource, and each
-            # `_written` says which one it is guarding against.
-            raise APIException(f"{key.capitalize()} '{written_id}' was written but could not be read back.")
-        return {key: written, **body}
+        shape = self.write_response_serializer
+        written = []
+        for written_id in written_ids:
+            record = self._written(pipeline, written_id)
+            if record is None:
+                # Always a bug in this package rather than anything the client did -- the patch
+                # engine applied the diff, so the thing is there. *Which* bug differs per resource,
+                # and each `_written` says which one it is guarding against.
+                raise APIException(f"'{written_id}' was written but could not be read back.")
+            written.append(record)
+        return {shape.written_field: written if shape.written_many else written[0], **body}
 
     def _written(self, pipeline: Pipeline, written_id: str) -> dict | None:
         """This resource as the response reports it, or ``None`` if the write cannot be read back."""
@@ -293,7 +297,7 @@ class PipelineNodeEditView(PipelineFacadeView):
 
 
 class PipelineEdgeEditView(PipelineFacadeView):
-    """The façade's edge endpoints: wire two nodes, unwire them.
+    """The façade's edge endpoints: wire nodes together, unwire them one at a time.
 
     An edge is not editable in place -- there is nothing to change but its two ends, and moving one
     is a different wire -- so repointing a branch is a delete followed by a wire. That is also why
@@ -306,41 +310,59 @@ class PipelineEdgeEditView(PipelineFacadeView):
 
     @extend_schema(
         operation_id="pipeline_edge_create",
-        summary="Wire two Pipeline Nodes",
+        summary="Wire Pipeline Nodes",
         description=(
-            "Add an edge to the chatbot's working (draft) pipeline, wiring one node's output handle "
-            "to another node's input.\n\n"
+            "Add edges to the chatbot's working (draft) pipeline, wiring one node's output handle to "
+            "another node's input.\n\n"
+            "The body is a **list** of wires — a single wire is a list of one — and a call carrying "
+            "several is all or nothing: if any one of them is refused, none of them are stored and "
+            "the pipeline is left exactly as the call found it. So a whole branch lands in one call "
+            "with no half-wired state to unpick:\n\n"
+            "```json\n"
+            "[\n"
+            '  {"source": "RouterNode-9f8e7", "target": "LLMResponseWithPrompt-d3e4f", '
+            '"source_handle": "output_0"},\n'
+            '  {"source": "RouterNode-9f8e7", "target": "CodeNode-a1b2c", "source_handle": "output_1"},\n'
+            '  {"source": "CodeNode-a1b2c", "target": "EndNode-b2c3d"}\n'
+            "]\n"
+            "```\n\n"
             "`source` and `target` are enough for most nodes: a handle you leave out means the only "
             "one the node has. A router is the exception — it exposes one handle per branch, so name "
-            "the branch to wire in `source_handle`. Neither node is moved on the canvas.\n\n"
-            "The edge's `id` is assigned by the server and cannot be chosen. It is the address "
-            "`DELETE .../pipeline/edges/{edge_id}/` takes.\n\n"
+            "the branch to wire in `source_handle`. No node is moved on the canvas.\n\n"
+            "Each edge's `id` is assigned by the server and cannot be chosen. It is the address "
+            "`DELETE .../pipeline/edges/{edge_id}/` takes, and `edges` reports them in the order the "
+            "body named them.\n\n"
             "Wiring a pair that is already wired the same way is refused rather than stored twice, "
             "so a wire is safe to retry. A wire that leaves the *graph* wrong is not refused: it "
             "lands, and comes back in `pipeline_errors` for you to repair."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
-        request=EdgeCreateSerializer,
+        request=EdgeCreateSerializer(many=True),
         examples=WIRE_EXAMPLES,
         responses={
             201: EdgeWriteSerializer,
             400: OpenApiResponse(
                 description=(
-                    "The body is not one this endpoint can act on, keyed by the field at fault: a "
-                    "`source` or `target` that is not a node in this pipeline, a `source_handle` the "
-                    "source node does not offer (or a missing one where the node offers a choice), a "
-                    "`target_handle` that is not the target's input, a server-assigned key the client "
-                    "tried to set (`id`), or an unrecognised body key.\n\n"
+                    "Nothing was wired. The response is a **list positioned like the body** — `{}` "
+                    "where a wire is fine — so one call reports everything wrong with it.\n\n"
+                    "Each entry is keyed by the field at fault: a `source` or `target` that is not a "
+                    "node in this pipeline, a `source_handle` the source node does not offer (or a "
+                    "missing one where the node offers a choice), a `target_handle` that is not the "
+                    "target's input, a server-assigned key the client tried to set (`id`), or an "
+                    "unrecognised body key.\n\n"
                     "A duplicate edge is reported under `non_field_errors`, with the existing edge's "
                     "id between single quotes:\n\n"
                     "> These nodes are already wired this way, by edge '&lt;edge_id&gt;'. Nothing was "
                     "changed.\n\n"
                     "So a client whose first attempt's response it never saw can recover the edge id "
-                    "rather than re-reading the pipeline.\n\n"
+                    "rather than re-reading the pipeline. A body wiring the same pair twice is "
+                    "refused the same way, naming the index of the first of the two.\n\n"
                     "A `source` that offers no output handles at all is refused under `source`, and "
                     "the message says whether that is fixable: a router with no `keywords` set yet "
-                    "needs a PATCH first, whereas the End node can never be a source."
+                    "needs a PATCH first, whereas the End node can never be a source.\n\n"
+                    "A body that is not a list, or is an empty one, is refused under "
+                    "`non_field_errors` instead."
                 )
             ),
             403: FORBIDDEN,
@@ -348,22 +370,16 @@ class PipelineEdgeEditView(PipelineFacadeView):
         },
     )
     def post(self, request, id: str) -> Response:
-        body = self.get_serializer(data=request.data)
+        body = self.get_serializer(data=request.data, many=True)
         body.is_valid(raise_exception=True)
-        wire = body.validated_data
+        wires = body.validated_data
         return Response(
             self._edit(
                 request,
                 id,
                 # The handles a node offers depend on its params, so the whole body can only be
                 # checked against the locked graph.
-                lambda flow: edge_editor.plan_create(
-                    flow,
-                    source=wire["source"],
-                    target=wire["target"],
-                    source_handle=wire.get("source_handle"),
-                    target_handle=wire.get("target_handle"),
-                ),
+                lambda flow: edge_editor.plan_create(flow, wires),
             ),
             status=status.HTTP_201_CREATED,
         )

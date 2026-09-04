@@ -4,6 +4,9 @@ The endpoints refuse a wire the graph could not carry -- an endpoint that is not
 handle the node does not offer, a pair already wired -- and let through one that merely leaves the
 pipeline unfinished: a cycle or an unreachable End node is a property of the *graph* rather than of
 this edge, so it persists and comes back in the errors report.
+
+A wire call carries as many wires as the client likes, and is all or nothing: one refused wire
+refuses the call, and the graph is left as the call found it.
 """
 
 from collections.abc import Callable
@@ -25,32 +28,55 @@ from .ids import with_free_suffix
 Wiring = tuple[str, str, str, str]
 
 
-def plan_create(
-    flow: Flow, source: str, target: str, source_handle: str | None, target_handle: str | None
-) -> PipelineEdit:
-    """Wire ``source`` to ``target``.
+def plan_create(flow: Flow, wires: list[dict]) -> PipelineEdit:
+    """Wire every pair ``wires`` names, or none of them.
+
+    Every wire is checked even once one has been refused, so a body comes back with everything wrong
+    with it rather than one fault per round trip. The refusals are positioned like the body -- ``{}``
+    where a wire is fine -- which is the shape DRF's own list serializer refuses in. Nothing is
+    written either way: the planner runs before the graph is saved, inside the write's transaction.
+
+    A wire is checked against the wires before it as well as against the graph, so one body cannot
+    wire a pair twice, and no two wires can be handed the same id.
+
+    No node is moved: Phase 1 leaves the canvas alone (W11).
+    """
+    planned: list[FlowEdge] = []
+    refusals: list[dict] = []
+    for wire in wires:
+        try:
+            planned.append(_planned_edge(flow, planned, wire))
+        except serializers.ValidationError as refusal:
+            refusals.append(refusal.detail)
+        else:
+            refusals.append({})
+    if any(refusals):
+        raise serializers.ValidationError(refusals)
+    return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=planned)), written_ids=[edge.id for edge in planned])
+
+
+def _planned_edge(flow: Flow, planned: list[FlowEdge], wire: dict) -> FlowEdge:
+    """The edge one wire asks for, refused if the graph or the wires before it cannot carry it.
 
     The id is the server's to assign (W5), built with react-flow's own ``getEdgeId`` formula so an
     API-wired edge reads like a hand-wired one. Not byte-identical to one: the UI builder's edges
     carry ``targetHandle: null``, so their ids end at the target's node id where these end in
     ``input``. Ids are opaque, and the duplicate check compares the wiring rather than the id, so
     the two conventions sit side by side in one graph.
-
-    Neither node is moved: Phase 1 leaves the canvas alone (W11).
     """
+    source, target = wire["source"], wire["target"]
     source_node, target_node = _endpoints(flow, source, target)
-    from_handle = _handle(_SOURCE, source_node, source_handle)
-    to_handle = _handle(_TARGET, target_node, target_handle)
+    from_handle = _handle(_SOURCE, source_node, wire.get("source_handle"))
+    to_handle = _handle(_TARGET, target_node, wire.get("target_handle"))
     wiring: Wiring = (source, from_handle, target, to_handle)
-    _refuse_duplicate(flow, wiring)
-    edge = FlowEdge(
-        id=_unused_edge_id(flow, wiring),
+    _refuse_duplicate(flow, planned, wiring)
+    return FlowEdge(
+        id=_unused_edge_id(flow, planned, wiring),
         source=source,
         target=target,
         sourceHandle=from_handle,
         targetHandle=to_handle,
     )
-    return PipelineEdit(diff=graph_diff(edges=EdgeDiff(add=[edge])), written_id=edge.id)
 
 
 def plan_delete(flow: Flow, edge_id: str) -> PipelineEdit:
@@ -64,23 +90,26 @@ def plan_delete(flow: Flow, edge_id: str) -> PipelineEdit:
     return PipelineEdit(diff=graph_diff(edges=EdgeDiff(delete=[edge_id])))
 
 
-def _refuse_duplicate(flow: Flow, wiring: Wiring) -> None:
-    """Refuse a wire the graph already holds, naming the edge that holds it.
+def _refuse_duplicate(flow: Flow, planned: list[FlowEdge], wiring: Wiring) -> None:
+    """Refuse a wire the graph already holds, or one the same body has already asked for.
 
     Two edges wiring the same pair from the same handle are one edge said twice: the pipeline follows
     the wire once either way. Refusing the second makes the most retry-prone write in the API safe to
     retry (spec §8.2), and the existing edge's id is in the refusal so a client that never saw the
-    first response can carry on without re-reading the graph.
+    first response can carry on without re-reading the graph. A repeat within one body has no id to
+    name yet, so it names where the first of the two is instead.
     """
     for edge in flow.edges:
         if edge.wiring == wiring:
-            raise serializers.ValidationError(
-                {
-                    api_settings.NON_FIELD_ERRORS_KEY: [
-                        f"These nodes are already wired this way, by edge '{edge.id}'. Nothing was changed."
-                    ]
-                }
-            )
+            raise _refusal(f"These nodes are already wired this way, by edge '{edge.id}'. Nothing was changed.")
+    for index, edge in enumerate(planned):
+        if edge.wiring == wiring:
+            raise _refusal(f"This body already wires these nodes this way, at index {index}. Nothing was changed.")
+
+
+def _refusal(message: str) -> serializers.ValidationError:
+    """A refusal about a wire as a whole rather than about one of its fields."""
+    return serializers.ValidationError({api_settings.NON_FIELD_ERRORS_KEY: [message]})
 
 
 def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, FlowNodeData]:
@@ -217,8 +246,8 @@ _TARGET = _Side(
 )
 
 
-def _unused_edge_id(flow: Flow, wiring: Wiring) -> str:
-    """An edge id no edge in this graph already has.
+def _unused_edge_id(flow: Flow, planned: list[FlowEdge], wiring: Wiring) -> str:
+    """An edge id neither this graph nor an earlier wire in the same body already has.
 
     The base is the id react-flow's own ``getEdgeId`` draws for these ends, which is not unique on
     its own: a keyword edit can leave an edge holding the id of a wiring it no longer has (see
@@ -229,5 +258,5 @@ def _unused_edge_id(flow: Flow, wiring: Wiring) -> str:
     """
     source, source_handle, target, target_handle = wiring
     base = f"reactflow__edge-{source}{source_handle}-{target}{target_handle}"
-    taken = {edge.id for edge in flow.edges}
+    taken = {edge.id for edge in flow.edges} | {edge.id for edge in planned}
     return base if base not in taken else with_free_suffix(base, taken)
