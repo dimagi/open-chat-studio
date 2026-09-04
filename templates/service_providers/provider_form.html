@@ -19,8 +19,12 @@
   configChanged is scoped to the card rather than to the config fields, because the submit
   button reads it too and sits outside them. Only a provider whose credentials can be
   verified has anything to re-verify, so nothing else carries the scope.
+
+  willVerify mirrors the condition the save itself uses to decide whether to run the
+  connection test, so the in-flight label only promises a check that is really happening.
   {% endcomment %}
-  <div class="app-card max-w-5xl mx-auto"{% if can_verify_credentials %} x-data="{ configChanged: false }"{% endif %}>
+  <div class="app-card max-w-5xl mx-auto"
+       x-data="{ submitted: false{% if can_verify_credentials %}, configChanged: false, credentialsVerified: {{ credentials_verified|yesno:'true,false' }}, get willVerify() { return this.configChanged || !this.credentialsVerified }{% endif %} }">
     <h1 class="pg-title">{{ title }}</h1>
 
     {% if verification_error %}
@@ -62,7 +66,7 @@
       {% include "service_providers/components/trace_project.html" %}
     {% endif %}
     {% block pre_form %}{% endblock %}
-    <form method="post" class="my-2" enctype="multipart/form-data">
+    <form method="post" class="my-2" enctype="multipart/form-data" @submit="submitted = true">
       {% csrf_token %}
       {% render_form_fields primary_form %}
       {% if config_form.custom_template %}
@@ -96,11 +100,15 @@
         {% comment %}
         The label says up front whether saving will also verify credentials. button_text
         already accounts for credentials that have never passed a check; editing a field
-        adds the cases only the browser knows about.
+        adds the cases only the browser knows about. Once submitted it says so again in the
+        present tense, because the verification request holds the page for several seconds.
         {% endcomment %}
-        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Verify' : '{{ button_text }}'">{{ button_text }}</button>
+        <button type="submit" class="btn btn-primary mt-2" :disabled="submitted">
+          <span class="loading loading-spinner loading-xs" x-show="submitted" x-cloak></span>
+          <span x-text="submitted ? (willVerify ? 'Verifying credentials…' : 'Saving…') : (configChanged ? 'Update and Verify' : '{{ button_text }}')">{{ button_text }}</span>
+        </button>
       {% else %}
-        <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+        <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}" :disabled="submitted">
       {% endif %}
     </form>
     {% block post_form %}
