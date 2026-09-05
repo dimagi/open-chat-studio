@@ -1,6 +1,6 @@
 # Changelog Automation
 
-This covers how the automatic changelog update works internally, and what to do if it doesn't fire for your PR. See [User Documentation and Changelog Process](index.md) for what you need to do in your PR to trigger it.
+This covers how the automatic changelog update works internally, and what to do if it doesn't fire for your PR. For what you need to do in your PR to trigger it, see [What to do in your PR](index.md#what-to-do-in-your-pr).
 
 ## How the automatic changelog update works
 
