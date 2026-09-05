@@ -703,7 +703,9 @@ class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Collect
             with transaction.atomic():
                 collection.openai_vector_store_id = None  # Reset the vector store ID
                 collection.ensure_remote_index_created()
-                CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
+                CollectionFile.objects.filter(collection_id=collection.id).update(
+                    status=FileStatus.PENDING, failure_reason=""
+                )
 
             tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,

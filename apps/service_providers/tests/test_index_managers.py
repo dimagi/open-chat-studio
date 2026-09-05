@@ -435,6 +435,7 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+        assert collection_file.failure_reason == "FileUploadError: Upload failed"
 
     def test_add_files_with_linking_failures(self, remote_collection_index, index_manager):
         file = FileFactory.create(external_id="test_file_id", file__data=b"test content")
@@ -452,6 +453,63 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
+        assert collection_file.failure_reason == "UnableToLinkFileException: Link failed"
+
+    def test_linking_failure_does_not_reach_another_collection(self, remote_collection_index, index_manager):
+        """Two collections can share a File: (collection, file) has no uniqueness constraint,
+        and a collection can be built from the same assistant twice."""
+        # embedding_provider_model shares a per-team unique key, so leave it unset to keep
+        # this Collection out of that constraint.
+        other_collection = CollectionFactory.create(
+            is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
+        )
+        file = FileFactory.create(
+            external_id="shared_file_id", file__data=b"test content", team=remote_collection_index.team
+        )
+        remote_collection_index.files.add(file)
+        other_collection.files.add(file)
+        this_row = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        other_row = CollectionFile.objects.get(collection=other_collection, file=file)
+        CollectionFile.objects.filter(pk=other_row.pk).update(status=FileStatus.COMPLETED, failure_reason="")
+
+        with mock.patch.object(
+            index_manager, "link_files_to_remote_index", side_effect=UnableToLinkFileException("Link failed")
+        ):
+            iterator = CollectionFile.objects.filter(id=this_row.id).iterator(1)
+            remote_collection_index.add_files_to_index(iterator)
+
+        this_row.refresh_from_db()
+        other_row.refresh_from_db()
+        assert this_row.status == FileStatus.FAILED
+        assert other_row.status == FileStatus.COMPLETED
+        assert other_row.failure_reason == ""
+
+    def test_linking_success_does_not_reach_another_collection(self, remote_collection_index, index_manager):
+        """The success branch of the same batch update, on the same shared File."""
+        # embedding_provider_model shares a per-team unique key, so leave it unset to keep
+        # this Collection out of that constraint.
+        other_collection = CollectionFactory.create(
+            is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
+        )
+        file = FileFactory.create(
+            external_id="shared_file_id_2", file__data=b"test content", team=remote_collection_index.team
+        )
+        remote_collection_index.files.add(file)
+        other_collection.files.add(file)
+        this_row = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        other_row = CollectionFile.objects.get(collection=other_collection, file=file)
+        CollectionFile.objects.filter(pk=other_row.pk).update(
+            status=FileStatus.FAILED, failure_reason="UnableToLinkFileException: Link failed"
+        )
+
+        iterator = CollectionFile.objects.filter(id=this_row.id).iterator(1)
+        remote_collection_index.add_files_to_index(iterator)
+
+        this_row.refresh_from_db()
+        other_row.refresh_from_db()
+        assert this_row.status == FileStatus.COMPLETED
+        assert other_row.status == FileStatus.FAILED
+        assert other_row.failure_reason == "UnableToLinkFileException: Link failed"
 
 
 @pytest.mark.django_db()
@@ -529,13 +587,30 @@ class TestOpenAIRemoteIndexManager:
         assert provider_client_mock.vector_stores.file_batches.create.call_count == 2
 
     def testlink_files_to_remote_index_failure(self, index_manager, provider_client_mock):
-        """Test linking files failure"""
-        provider_client_mock.vector_stores.file_batches.create.side_effect = Exception("Connection error")
+        """The provider's explanation reaches the exception, because a fixed string reads the
+        same for a rejected key, an unknown file id and a dropped connection."""
+        provider_error = Exception("Error code: 401 - unauthorized")
+        provider_error.body = {"message": "Incorrect API key provided: sk-abc"}
+        provider_client_mock.vector_stores.file_batches.create.side_effect = provider_error
 
         with pytest.raises(UnableToLinkFileException) as exc_info:
             index_manager.link_files_to_remote_index(["file-1", "file-2"])
 
-        assert "Failed to link files to OpenAI vector store" in str(exc_info.value)
+        assert str(exc_info.value) == "Incorrect API key provided: sk-abc"
+
+    def test_ensure_remote_file_exists_carries_the_provider_message(self, index_manager, provider_client_mock):
+        """The provider's sentence is the only thing that distinguishes a rejected key from an
+        unknown file id, so the assertion is an exact match rather than a substring."""
+        provider_error = Exception("Error code: 401 - unauthorized")
+        provider_error.body = {"message": "Incorrect API key provided: sk-abc"}
+        provider_client_mock.files.retrieve.side_effect = provider_error
+        # Created rather than built: the handler logs file.team.slug on the way out.
+        file = FileFactory.create(external_id="ext-id-123")
+
+        with pytest.raises(FileUploadError) as exc_info:
+            index_manager._ensure_remote_file_exists(file)
+
+        assert str(exc_info.value) == "Incorrect API key provided: sk-abc"
 
     @pytest.mark.parametrize(
         ("file_external_id", "remote_file_exists", "create_file_called"),

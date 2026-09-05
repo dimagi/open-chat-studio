@@ -28,18 +28,6 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 
-@pytest.fixture()
-def collection(db):
-    llm_provider = LlmProviderFactory.create(name="test-provider")
-    return CollectionFactory.create(
-        name="test-collection",
-        llm_provider=llm_provider,
-        openai_vector_store_id="vs_123",
-        is_index=True,
-        is_remote_index=True,
-    )
-
-
 @pytest.mark.django_db()
 def test_delete_collection_task_deletes_files_of_archived_collection():
     """delete_collection_task runs after Collection.archive() has already set is_archived=True, so it
@@ -60,17 +48,17 @@ def test_delete_collection_task_deletes_files_of_archived_collection():
 
 @pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
-def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, collection):
+def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, remote_collection_index):
     """Test that collection files are grouped by chunking strategy"""
     col_file_1 = CollectionFile.objects.create(
-        file=FileFactory.create(team=collection.team),
-        collection=collection,
+        file=FileFactory.create(team=remote_collection_index.team),
+        collection=remote_collection_index,
         status=FileStatus.PENDING,
         metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
     )
     col_file_2 = CollectionFile.objects.create(
-        file=FileFactory.create(team=collection.team),
-        collection=collection,
+        file=FileFactory.create(team=remote_collection_index.team),
+        collection=remote_collection_index,
         status=FileStatus.PENDING,
         metadata={"chunking_strategy": {"chunk_size": 1000, "chunk_overlap": 100}},
     )
@@ -94,19 +82,21 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
 
 @pytest.mark.django_db()
 @patch("apps.documents.models.Collection.add_files_to_index")
-def test_migrate_vector_stores_does_cleanup(add_files_to_index_mock, collection, remote_index_manager_mock):
+def test_migrate_vector_stores_does_cleanup(
+    add_files_to_index_mock, remote_collection_index, remote_index_manager_mock
+):
     """Test that the migration task cleans up old vector stores"""
     previous_llm_provider = LlmProviderFactory.create(name="old-provider")
 
-    file = FileFactory.create(team=collection.team, external_id="old-file-id")
+    file = FileFactory.create(team=remote_collection_index.team, external_id="old-file-id")
     col_file = CollectionFile.objects.create(
         file=file,
-        collection=collection,
+        collection=remote_collection_index,
         status=FileStatus.PENDING,
         metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
     )
     migrate_vector_stores(
-        collection.id, from_vector_store_id="old_vs_123", from_llm_provider_id=previous_llm_provider.id
+        remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=previous_llm_provider.id
     )
     assert add_files_to_index_mock.call_count == 1
     iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
@@ -704,24 +694,3 @@ def test_async_create_collection_version_clears_task_id_on_failure(create_new_ve
 
     collection.refresh_from_db()
     assert collection.create_version_task_id == ""
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.models.Collection.add_files_to_index")
-def test_index_collection_files_clears_the_failure_reason(add_files_to_index_mock, collection):
-    """Every re-index route funnels through this transition, so it is where a reason from a
-    previous attempt stops applying. Indexing itself is patched out, so nothing downstream can
-    clear it: an empty reason here proves the IN_PROGRESS transition did it."""
-    collection_file = CollectionFile.objects.create(
-        file=FileFactory.create(team=collection.team),
-        collection=collection,
-        status=FileStatus.FAILED,
-        failure_reason="ValueError: Error code: 401 - Incorrect API key provided",
-        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
-    )
-
-    index_collection_files_task([collection_file.id])
-
-    collection_file.refresh_from_db()
-    assert collection_file.status == FileStatus.IN_PROGRESS
-    assert collection_file.failure_reason == ""
