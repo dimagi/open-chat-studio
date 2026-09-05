@@ -19,6 +19,7 @@
   "modal.confirm": "Conferma",
   "composer.placeholder": "Scrivi un messaggio...",
   "composer.send": "Invia messaggio",
+  "consent.agree": "Accetto",
   "error.fileTooLarge": "File troppo grande",
   "error.totalTooLarge": "Dimensione totale del file troppo grande",
   "error.unsupportedType": "Tipo di file non supportato",

@@ -492,6 +492,12 @@
     @apply flex flex-col flex-grow overflow-hidden;
   }
 
+  .chat-content-consent .messages-container {
+    /* Consent blocks the conversation, and on a first send the list behind it is empty,
+       so the form has the whole window. */
+    display: none;
+  }
+
   .chat-banner {
     /* Always-visible, non-dismissable notice banner */
     @apply w-full text-center break-words shrink-0;
@@ -634,8 +640,66 @@
     border-top: 1px solid var(--input-border-color);
   }
 
+  .input-area-consent {
+    /* The chat area clips what does not fit, and the consent panel is the only thing in
+       here that can outgrow it, so the shrink belongs to this state alone. */
+    min-height: 0;
+    flex: 1 1 auto;
+    /* A short form sits at the bottom, where the composer it replaces is. */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
   .input-container {
     @apply flex gap-[8px];
+  }
+
+  .consent-panel {
+    @apply flex flex-col gap-3;
+    padding-bottom: 1em;
+    color: var(--input-text-color);
+    min-height: 0;
+    max-height: 100%;
+  }
+
+  .consent-text-frame {
+    /* A mask applies to the border box, so the border sits on this wrapper, outside the
+       element the fade below masks. */
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid var(--input-border-color);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .consent-text {
+    /* The consent form is a team's own copy and can run to any length, so it fits itself
+       to the space the widget has. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    font-size: 0.9rem;
+    padding: 0.75em 0.75em 1.5em;
+    /* A form longer than the box fades out rather than stopping mid-line, so it reads as
+       more to scroll. The bottom padding matches the fade, which keeps it clear of a form
+       that fits and of the last line once it has been scrolled to. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent);
+  }
+
+  /* Tighter than a chat bubble. The form is read once and in full, and the prose leading
+     these share costs it about four lines, which is the difference between fitting a
+     small embed and scrolling. Scoped here so message bubbles keep their spacing. */
+  .consent-text.chat-markdown > *,
+  .consent-text.chat-markdown li {
+    line-height: 1.4;
+  }
+
+  .consent-agree {
+    align-self: flex-end;
+    flex: 0 0 auto;
   }
 
   .message-textarea {
