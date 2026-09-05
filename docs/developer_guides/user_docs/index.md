@@ -2,9 +2,11 @@
 
 OCS uses a Docs-as-Code + LLM Augmentation approach for user documentation: the source of truth for [user-facing docs](https://docs.openchatstudio.com/) and the [user-facing changelog](https://docs.openchatstudio.com/changelog/) live in version-controlled files in the [docs repo][docs_repo], and follow the same PR/review workflow as product code.
 
-LLM-based automation (with Claude) helps draft changelog entries **and** user documentation updates from merged PRs, while developers still decide when changes are user-facing, provide context in the PR, and review generated output before publishing. [Weekly release notes](release_notes.md) are then automatically published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
+LLM-based automation (with Claude) helps draft changelog entries **and** user documentation updates from merged PRs, while developers still decide when changes are user-facing, provide context in the PR, and review generated output before publishing.
 
-## Guidelines
+[Weekly release notes](release_notes.md) are then automatically published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
+
+## When to update docs
 
 All user-facing changes should ideally be accompanied by documentation and changelog updates. However, use discretion: purely internal changes or very minor updates may not require docs. In general, treat documentation as part of the feature — this avoids shipping UI that points users to outdated or missing documentation.
 
@@ -34,7 +36,7 @@ Most PRs fall into one main case, plus two variants. Follow whichever applies:
 2. Add notes in the PR description to help the automation write accurate changelog and user docs content — keep entries brief, but link to any relevant documentation for further details.
 3. Merge as normal. The automation picks up the merge and opens a docs PR on your behalf — see [Changelog Automation](changelog_automation.md) for how that works internally, and what to do if it doesn't fire.
 
-### A. Widget changes
+### 2. Widget changes
 
 If your PR touches the chat widget (files under `components/`):
 
@@ -43,13 +45,13 @@ If your PR touches the chat widget (files under `components/`):
 3. Include the widget version number in the PR description (e.g. "v0.4.9").
 4. The automation writes to `docs/chat_widget/changelog.md` instead of `docs/changelog.md`.
 
-### B. Self-hosted operator-impacting changes
+### 3. Self-hosted operator-impacting changes (manual process)
 
 If an operator needs to *do* something on upgrade — a migration, a new or changed setting, a change in deployment shape, a deprecation or removal, or a security fix that needs operator action such as rotating a credential:
 
 1. Check the **"Self-hosted operators must know about or act on this change"** checkbox.
 2. Add an entry yourself under `[Unreleased]` in the repo-root `CHANGELOG.md` — this one is not automated.
 
-Some PRs need both the main case (or A) and B — e.g. a user-facing feature that also requires an operator migration.
+Some PRs need both 1 (or 2) and 3 — e.g. a user-facing feature that also requires an operator migration.
 
 [docs_repo]: https://github.com/dimagi/open-chat-studio-docs
