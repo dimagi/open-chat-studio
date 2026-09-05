@@ -493,8 +493,8 @@
   }
 
   .chat-content-consent .messages-container {
-    /* Consent blocks the conversation and the list behind it is empty on a first send, so
-       the form takes the window rather than sharing it with nothing. */
+    /* Consent blocks the conversation, and on a first send the list behind it is empty,
+       so the form has the whole window. */
     display: none;
   }
 
@@ -641,12 +641,11 @@
   }
 
   .input-area-consent {
-    /* Only the consent panel can outgrow the chat area, which clips what does not fit, so
-       only it may shrink. Letting the composer shrink squeezes it over the footer. */
+    /* The chat area clips what does not fit, and the consent panel is the only thing in
+       here that can outgrow it, so the shrink belongs to this state alone. */
     min-height: 0;
     flex: 1 1 auto;
-    /* A short form settles where the composer it replaced was, rather than floating at the
-       top of the space the hidden message list left behind. */
+    /* A short form sits at the bottom, where the composer it replaces is. */
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -665,8 +664,8 @@
   }
 
   .consent-text-frame {
-    /* Holds the border so the fade below cannot eat it: a mask applies to the border box,
-       which dissolved the outline along with the text. */
+    /* A mask applies to the border box, so the border sits on this wrapper, outside the
+       element the fade below masks. */
     display: flex;
     flex: 1 1 auto;
     min-height: 0;
@@ -676,9 +675,8 @@
   }
 
   .consent-text {
-    /* The consent form is a team's own copy and can run to any length. It has to fit the
-       space the widget has rather than a share of the viewport, which on a small embed is
-       larger than the whole window. */
+    /* The consent form is a team's own copy and can run to any length, so it fits itself
+       to the space the widget has. */
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
