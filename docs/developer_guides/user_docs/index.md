@@ -19,12 +19,7 @@ The PR template has two independent checkboxes, for two audiences:
 | "This PR requires docs/changelog update" | product users | docs repo, written for you by the automation |
 | "Self-hosted operators must know about or act on this change" | self-host operators | `CHANGELOG.md` at the root of this repo, written by you in the PR |
 
-Most user-facing PRs need only the first. Check the second when an operator has
-to *do* something on upgrade — a migration, a new or changed setting, a change
-in deployment shape, a deprecation or removal, or a security fix that needs
-operator action such as rotating a credential. Some PRs need both, and a purely
-internal migration needs only the second. See [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md)
-for how those entries are cut into a tagged release.
+Most user-facing PRs need only the first. Some need both 1 and 3 below — e.g. a user-facing feature that also requires an operator migration — and a purely internal migration needs only 3.
 
 ## What to do in your PR
 
@@ -43,15 +38,13 @@ If your PR touches the chat widget (files under `components/`):
 1. Keep widget changes in a separate PR from any main app changes — a PR touching both is treated as a widget change, and only the widget changelog gets updated.
 2. Check the **"This PR requires docs/changelog update"** checkbox, same as the main case.
 3. Include the widget version number in the PR description (e.g. "v0.4.9").
-4. The automation writes to `docs/chat_widget/changelog.md` instead of `docs/changelog.md`.
+4. The automation writes to `docs/chat_widget/changelog.md` instead of `docs/changelog.md` — see [Changelog Automation](changelog_automation.md) for how that works.
 
 ### 3. Self-hosted operator-impacting changes (manual process)
 
-If an operator needs to *do* something on upgrade — a migration, a new or changed setting, a change in deployment shape, a deprecation or removal, or a security fix that needs operator action such as rotating a credential:
+Check this box when an operator has to *do* something on upgrade — a migration, a new or changed setting, a change in deployment shape, a deprecation or removal, or a security fix that needs operator action such as rotating a credential. See [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md) for how those entries are cut into a tagged release.
 
 1. Check the **"Self-hosted operators must know about or act on this change"** checkbox.
 2. Add an entry yourself under `[Unreleased]` in the repo-root `CHANGELOG.md` — this one is not automated.
-
-Some PRs need both 1 (or 2) and 3 — e.g. a user-facing feature that also requires an operator migration.
 
 [docs_repo]: https://github.com/dimagi/open-chat-studio-docs
