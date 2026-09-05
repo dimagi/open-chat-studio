@@ -15,6 +15,7 @@ from field_audit.models import AuditingManager
 
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
+from apps.documents.rerankers import Reranker
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
@@ -267,6 +268,45 @@ class Collection(BaseTeamModel, VersionsMixin):
         validators=[MinValueValidator(1)],
         help_text=("How many candidates to retrieve from each of the dense and lexical searches before fusing them."),
     )
+    # Reranking. Literal defaults for the same reason as the hybrid search knobs above, and off
+    # the pipeline node UI for the same reason too.
+    enable_reranking = models.BooleanField(
+        default=False,
+        # A database-level default as well as a Python one, so an INSERT from the release that
+        # predates this column still succeeds during a rolling deploy. `reranker_provider` needs
+        # no such thing: it is nullable.
+        db_default=False,
+        help_text=(
+            "If enabled, retrieval candidates are rescored against the query by a reranker before "
+            "the best of them are returned."
+        ),
+    )
+    reranker_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="Provider whose credentials are used for reranking. Only Voyage AI offers a rerank endpoint.",
+    )
+    rerank_model = models.CharField(
+        max_length=255,
+        default="rerank-2",
+        db_default="rerank-2",
+        help_text=(
+            "Reranker model, named as the provider names it. A model the provider does not "
+            "recognise leaves retrieval on its un-reranked ranking."
+        ),
+    )
+    rerank_top_n = models.PositiveIntegerField(
+        default=50,
+        db_default=50,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "How many retrieval candidates to rescore. This is what bounds the per-query cost of "
+            "reranking, since the reranker is charged per candidate."
+        ),
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -288,6 +328,10 @@ class Collection(BaseTeamModel, VersionsMixin):
             models.CheckConstraint(
                 condition=models.Q(search_fetch_k__gte=1),
                 name="collection_search_fetch_k_at_least_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(rerank_top_n__gte=1),
+                name="collection_rerank_top_n_at_least_1",
             ),
         ]
 
@@ -541,6 +585,68 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_remote_index:
             return False
         return flag_is_active_for_team(self.team, Flags.HYBRID_SEARCH.slug)
+
+    @property
+    def reranking_enabled(self) -> bool:
+        """Whether the rerank stage will run for this collection.
+
+        Independent of hybrid search: a reranker reorders whatever candidates retrieval produced,
+        dense-only or fused, so the two flags can be rolled out in either order. Remote indexes
+        are excluded for the same reason they are excluded from hybrid search -- their chunks live
+        at the provider and never reach a ranking stage OCS controls.
+
+        An incomplete configuration reads as off rather than as an error: the stage cannot run
+        without a provider and a model, and there is nothing for a search to do about it. The
+        failures an operator cannot predict -- a provider with no rerank endpoint, invalid
+        credentials, an API error -- are the ones that log, in `get_reranker` and in
+        `apps.documents.retrieval`.
+
+        Every check that can be answered from the instance comes before the flag lookup, and
+        `reranker_provider_id` is used rather than `reranker_provider` so none of them can reach
+        the database. Callers rely on this: the chat search tools ask this question before
+        collecting conversation context, precisely to avoid a query when the stage will not run.
+        """
+        if self.is_remote_index:
+            return False
+        if not self.enable_reranking:
+            return False
+        if not self.reranker_provider_id or not self.rerank_model:
+            return False
+        return flag_is_active_for_team(self.team, Flags.RERANKING.slug)
+
+    def get_reranker(self) -> Reranker | None:
+        """Build a reranker for this collection's retrieval, or None to skip the stage.
+
+        Every failure returns None rather than raising. Reranking is an optional quality stage on
+        top of a ranking that is already usable, so failing the search because its reranker could
+        not be built would be a strictly worse outcome than returning the ranking retrieval
+        already had. Mirrors `_build_contextualizer`.
+        """
+        if not self.reranking_enabled:
+            return None
+        if self.reranker_provider.team_id != self.team_id:
+            # Nothing in the app sets this, but the field is editable in the Django admin, which
+            # offers every team's providers. Reranking with another team's credentials would bill
+            # them and leak this collection's queries to their account, so it does not happen
+            # quietly. The provider row is fetched either way to build the service below.
+            logger.warning(
+                "Reranker provider belongs to another team; skipping reranking.",
+                extra={"collection_id": self.id, "team_id": self.team_id},
+            )
+            return None
+        try:
+            return self.reranker_provider.get_llm_service().get_reranker(self.rerank_model)
+        except NotImplementedError:
+            logger.warning(
+                "The configured reranker provider has no rerank endpoint; skipping reranking.",
+                extra={"collection_id": self.id, "provider_type": self.reranker_provider.type},
+            )
+        except ServiceProviderConfigError:
+            logger.warning(
+                "The configured reranker provider's credentials are not usable; skipping reranking.",
+                extra={"collection_id": self.id, "provider_type": self.reranker_provider.type},
+            )
+        return None
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

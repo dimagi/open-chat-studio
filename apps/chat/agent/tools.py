@@ -21,7 +21,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-from apps.chat.models import ChatAttachment
+from apps.chat.models import ChatAttachment, ChatMessageType
 from apps.documents.models import Collection
 from apps.documents.retrieval import search_collection
 from apps.events.forms import ScheduledMessageConfigForm
@@ -150,8 +150,42 @@ def _get_search_tool_footer(with_citations: bool):
     return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
+# How many recent turns to hand the reranker as conversation context. Six is three exchanges:
+# enough to carry the referent of a follow-up question ("how much does it cost?"), short enough
+# that the reranker's query stays dominated by the query the LLM actually asked.
+RERANK_CONTEXT_MESSAGE_COUNT = 6
+
+
+def _recent_conversation_context(collection, session: ExperimentSession | None) -> str | None:
+    """The tail of the conversation, for the reranker's view of the query.
+
+    Returns None unless reranking is actually active for the collection. The rerank stage is the
+    only consumer and it is off by default, so the query this costs must not be paid by every
+    search. `reranking_enabled` is a cached waffle lookup, which is the cheaper of the two.
+    """
+    if session is None or not collection.reranking_enabled:
+        return None
+
+    # System messages are excluded: they are prompts and summaries, not turns, and would crowd
+    # out the exchange the context exists to carry.
+    recent = list(
+        session.chat.messages.filter(message_type__in=[ChatMessageType.HUMAN, ChatMessageType.AI])
+        .order_by("-created_at")
+        .values_list("message_type", "content")[:RERANK_CONTEXT_MESSAGE_COUNT]
+    )
+    # Newest first out of the database, oldest first into the context, so it reads as a transcript.
+    recent.reverse()
+    turns = [f"{ChatMessageType(message_type).role}: {content}" for message_type, content in recent]
+    return "\n".join(turns) or None
+
+
 def _perform_collection_search(
-    collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
+    collection,
+    query: str,
+    max_results: int = 5,
+    generate_citations: bool = True,
+    include_collection_info: bool = False,
+    session: ExperimentSession | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -162,11 +196,18 @@ def _perform_collection_search(
         max_results: Maximum number of results to return
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
+        session: The session this search is part of, when there is one. Its recent turns condition
+            the reranker; it is unused when reranking is not active for the collection.
 
     Returns:
         Formatted search results string
     """
-    embeddings = search_collection(collection=collection, query=query, top_k=max_results)
+    embeddings = search_collection(
+        collection=collection,
+        query=query,
+        top_k=max_results,
+        context=_recent_conversation_context(collection, session),
+    )
 
     if not embeddings:
         if include_collection_info:
@@ -544,6 +585,7 @@ class SearchIndexTool(CustomBaseTool):
             max_results=self.search_config.max_results,
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
+            session=self.experiment_session,
         )
 
 
@@ -581,6 +623,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             max_results=self.max_results,
             generate_citations=self.generate_citations,
             include_collection_info=True,
+            session=self.experiment_session,
         )
 
 

@@ -1,3 +1,5 @@
+"""Dense search, lexical search, and their fusion. The rerank stage lives in test_reranking.py."""
+
 from unittest import mock
 
 import pytest
@@ -7,12 +9,20 @@ from django.template.loader import render_to_string
 from waffle.testutils import override_flag
 
 from apps.documents.models import CollectionFile, FileStatus, SearchLanguage
+from apps.documents.rerankers import RerankedDocument
 from apps.documents.retrieval import _lexical_candidate_ids, _rank_by_score, _rrf_scores, search_collection
+from apps.documents.tests.retrieval_helpers import (
+    HYBRID_FLAG,
+    StubReranker,
+    add_chunk,
+    make_indexed_collection,
+    search_with_reranker,
+    unit_vector,
+)
+from apps.documents.views import _result_score_kind
 from apps.service_providers.llm_service.index_managers import LocalIndexManager
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
-
-HYBRID_FLAG = "flag_hybrid_search"
+from apps.utils.factories.files import FileFactory
 
 
 def _fuse(ranked_lists, weights, k=None) -> list[int]:
@@ -98,47 +108,16 @@ class TestReciprocalRankFusion:
             _fuse([[1], [2]], weights=[1.0])
 
 
-def _make_indexed_collection(**kwargs):
-    """A collection whose chunks all belong to a cleanly indexed file."""
-    collection = CollectionFactory.create(is_index=True, is_remote_index=False, **kwargs)
-    file = FileFactory.create(team=collection.team)
-    CollectionFile.objects.create(collection=collection, file=file, status=FileStatus.COMPLETED)
-    return collection, file
-
-
-def _add_chunk(collection, file, text, embedding, context=""):
-    chunk = FileChunkEmbeddingFactory.create(
-        team=collection.team,
-        collection=collection,
-        file=file,
-        text=text,
-        context=context,
-        embedding=embedding,
-    )
-    # Build the lexical vector through the same helper the indexing pipeline uses, so these tests
-    # exercise the production path rather than a reimplementation of it.
-    LocalIndexManager._build_search_vectors([chunk], collection)
-    chunk.refresh_from_db()
-    return chunk
-
-
-def _unit_vector(index: int) -> list[float]:
-    """A one-hot embedding, so cosine similarity between distinct vectors is controllable."""
-    vector = [0.0] * settings.EMBEDDING_VECTOR_SIZE
-    vector[index] = 1.0
-    return vector
-
-
 @pytest.mark.django_db()
 class TestSearchCollection:
     def test_flag_off_returns_dense_only_ordering(self):
         """Regression guarantee: with the flag off, results match the dense-only query exactly."""
-        collection, file = _make_indexed_collection()
-        near = _add_chunk(collection, file, "totally unrelated prose", _unit_vector(0))
-        far = _add_chunk(collection, file, "quokka", _unit_vector(1))
+        collection, file = make_indexed_collection()
+        near = add_chunk(collection, file, "totally unrelated prose", unit_vector(0))
+        far = add_chunk(collection, file, "quokka", unit_vector(1))
 
         # Query vector aligns with `near`, and the lexical term only appears in `far`.
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=False):
                 results = search_collection(collection, "quokka", top_k=2)
 
@@ -146,11 +125,11 @@ class TestSearchCollection:
 
     def test_hybrid_surfaces_keyword_match_dense_search_misses(self):
         """The point of hybrid search: an exact keyword hit that the embedding does not rank."""
-        collection, file = _make_indexed_collection()
-        dense_hit = _add_chunk(collection, file, "totally unrelated prose", _unit_vector(0))
-        keyword_hit = _add_chunk(collection, file, "the quokka is a small macropod", _unit_vector(1))
+        collection, file = make_indexed_collection()
+        dense_hit = add_chunk(collection, file, "totally unrelated prose", unit_vector(0))
+        keyword_hit = add_chunk(collection, file, "the quokka is a small macropod", unit_vector(1))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=1)
 
@@ -163,11 +142,11 @@ class TestSearchCollection:
         The LLM search tool passes a natural-language question, not a single keyword, so this is
         the shape of every real call.
         """
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        dense_hit = _add_chunk(collection, file, "totally unrelated prose", _unit_vector(0))
-        answer = _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(1))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        dense_hit = add_chunk(collection, file, "totally unrelated prose", unit_vector(0))
+        answer = add_chunk(collection, file, "Paris is the capital of France.", unit_vector(1))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "what is the capital of France", top_k=1)
 
@@ -176,10 +155,10 @@ class TestSearchCollection:
 
     def test_hybrid_still_returns_dense_hit_when_lexical_misses(self):
         """A query with no lexical match degrades gracefully to the dense ordering."""
-        collection, file = _make_indexed_collection()
-        dense_hit = _add_chunk(collection, file, "totally unrelated prose", _unit_vector(0))
+        collection, file = make_indexed_collection()
+        dense_hit = add_chunk(collection, file, "totally unrelated prose", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "nonexistentterm", top_k=5)
 
@@ -198,10 +177,10 @@ class TestSearchCollection:
     )
     def test_untokenizable_queries_fall_back_to_dense(self, query):
         """Arbitrary user input must never raise; it degrades to dense-only ordering."""
-        collection, file = _make_indexed_collection()
-        chunk = _add_chunk(collection, file, "some indexed prose", _unit_vector(0))
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(collection, file, "some indexed prose", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, query, top_k=5)
 
@@ -209,16 +188,16 @@ class TestSearchCollection:
 
     def test_context_is_searched_lexically(self):
         """Contextual retrieval headers (phase 1) must be lexically searchable too."""
-        collection, file = _make_indexed_collection()
-        chunk = _add_chunk(
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(
             collection,
             file,
             "the animal is nocturnal",
-            _unit_vector(5),
+            unit_vector(5),
             context="This passage is about the quokka.",
         )
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=5)
 
@@ -226,14 +205,14 @@ class TestSearchCollection:
 
     def test_excludes_chunks_of_unindexed_files(self):
         """A file that failed indexing must not leak chunks through either branch."""
-        collection, good_file = _make_indexed_collection()
-        good = _add_chunk(collection, good_file, "quokka facts", _unit_vector(0))
+        collection, good_file = make_indexed_collection()
+        good = add_chunk(collection, good_file, "quokka facts", unit_vector(0))
 
         failed_file = FileFactory.create(team=collection.team)
         CollectionFile.objects.create(collection=collection, file=failed_file, status=FileStatus.FAILED)
-        failed_chunk = _add_chunk(collection, failed_file, "quokka facts", _unit_vector(0))
+        failed_chunk = add_chunk(collection, failed_file, "quokka facts", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=5)
 
@@ -242,12 +221,12 @@ class TestSearchCollection:
         assert failed_chunk.id not in result_ids
 
     def test_does_not_leak_across_collections(self):
-        collection, file = _make_indexed_collection()
-        mine = _add_chunk(collection, file, "quokka facts", _unit_vector(0))
-        other_collection, other_file = _make_indexed_collection()
-        theirs = _add_chunk(other_collection, other_file, "quokka facts", _unit_vector(0))
+        collection, file = make_indexed_collection()
+        mine = add_chunk(collection, file, "quokka facts", unit_vector(0))
+        other_collection, other_file = make_indexed_collection()
+        theirs = add_chunk(other_collection, other_file, "quokka facts", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=5)
 
@@ -256,11 +235,11 @@ class TestSearchCollection:
         assert theirs.id not in result_ids
 
     def test_respects_top_k(self):
-        collection, file = _make_indexed_collection()
+        collection, file = make_indexed_collection()
         for index in range(5):
-            _add_chunk(collection, file, f"quokka chunk {index}", _unit_vector(index))
+            add_chunk(collection, file, f"quokka chunk {index}", unit_vector(index))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=2)
 
@@ -272,11 +251,11 @@ class TestSearchCollection:
         fetch_k widens the candidate pool for fusion; it is not a cap on what the caller asked
         for. The node's max_results (top_k) is what controls the final count.
         """
-        collection, file = _make_indexed_collection(search_fetch_k=2)
+        collection, file = make_indexed_collection(search_fetch_k=2)
         for index in range(5):
-            _add_chunk(collection, file, f"quokka chunk {index}", _unit_vector(index))
+            add_chunk(collection, file, f"quokka chunk {index}", unit_vector(index))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "quokka", top_k=5)
 
@@ -300,12 +279,12 @@ class TestSearchCollection:
 
     def test_provided_query_vector_avoids_recomputing_the_embedding(self):
         """The preview path passes a vector it already has; the service must not embed again."""
-        collection, file = _make_indexed_collection()
-        chunk = _add_chunk(collection, file, "indexed prose", _unit_vector(0))
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(collection, file, "indexed prose", unit_vector(0))
 
         with mock.patch.object(type(collection), "get_query_vector") as get_query_vector:
             with override_flag(HYBRID_FLAG, active=False):
-                results = search_collection(collection, "prose", top_k=1, query_vector=_unit_vector(0))
+                results = search_collection(collection, "prose", top_k=1, query_vector=unit_vector(0))
 
         get_query_vector.assert_not_called()
         assert [result.id for result in results] == [chunk.id]
@@ -338,8 +317,8 @@ class TestLexicalSearchLanguage:
         A real question is several words, and under a language config the stopwords are stripped
         at parse time and the rest are stemmed, so it matches.
         """
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = add_chunk(collection, file, self.ANSWER, unit_vector(0))
 
         assert _lexical_candidate_ids(collection, self.QUESTION, 10) == [chunk.id]
 
@@ -348,8 +327,8 @@ class TestLexicalSearchLanguage:
         word of the question is absent from the chunk, which is the normal case for a real
         question. Only the terms the chunk does contain should be needed.
         """
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        chunk = _add_chunk(collection, file, "Paris is the capital of France. Population 2.1 million.", _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = add_chunk(collection, file, "Paris is the capital of France. Population 2.1 million.", unit_vector(0))
 
         # "2024" and "census" appear nowhere in the chunk; AND semantics would return nothing.
         assert _lexical_candidate_ids(collection, "capital of France population 2024 census", 10) == [chunk.id]
@@ -359,8 +338,8 @@ class TestLexicalSearchLanguage:
         and is the honest behaviour when the collection's language is unknown. It must not be
         quietly turned into an OR, which would rank stopword-heavy chunks first.
         """
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.SIMPLE)
-        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.SIMPLE)
+        chunk = add_chunk(collection, file, self.ANSWER, unit_vector(0))
 
         assert _lexical_candidate_ids(collection, self.QUESTION, 10) == []
         # The exact tokens it does hold still match.
@@ -380,8 +359,8 @@ class TestLexicalSearchLanguage:
     )
     def test_round_trip_per_language(self, language, document, question):
         """Stemming and stopword handling differ per configuration, including non-Latin scripts."""
-        collection, file = _make_indexed_collection(search_language=language)
-        chunk = _add_chunk(collection, file, document, _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=language)
+        chunk = add_chunk(collection, file, document, unit_vector(0))
 
         assert _lexical_candidate_ids(collection, question, 10) == [chunk.id]
 
@@ -392,8 +371,8 @@ class TestLexicalSearchLanguage:
         indistinguishable from a query that simply has none. Re-indexing rebuilds the vectors with
         the current language; nothing else does, which is why the field's help text says so.
         """
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.SPANISH)
-        chunk = _add_chunk(collection, file, "Paris es la capital de Francia.", _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.SPANISH)
+        chunk = add_chunk(collection, file, "Paris es la capital de Francia.", unit_vector(0))
 
         collection.search_language = SearchLanguage.ENGLISH
         collection.save()
@@ -405,12 +384,12 @@ class TestLexicalSearchLanguage:
 
     def test_stopword_only_query_falls_back_to_dense(self):
         """Every term is stripped, so the tsquery is empty and matches nothing."""
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = add_chunk(collection, file, self.ANSWER, unit_vector(0))
 
         assert _lexical_candidate_ids(collection, "what is the", 10) == []
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "what is the", top_k=5)
         assert [result.id for result in results] == [chunk.id]
@@ -423,10 +402,10 @@ class TestQueryPreviewScore:
     """
 
     def test_hybrid_results_carry_a_fused_score(self):
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        add_chunk(collection, file, "Paris is the capital of France.", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "capital of France", top_k=5)
 
@@ -436,51 +415,99 @@ class TestQueryPreviewScore:
         assert all(result.fused_score is not None and result.fused_score > 0 for result in results)
 
     def test_dense_only_results_keep_their_distance(self):
-        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
-        _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(0))
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        add_chunk(collection, file, "Paris is the capital of France.", unit_vector(0))
 
-        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
             with override_flag(HYBRID_FLAG, active=False):
                 results = search_collection(collection, "capital of France", top_k=5)
 
         assert len(results) == 1
         assert all(result.distance is not None for result in results)
 
+    def test_reranked_results_carry_a_rerank_score(self):
+        collection, file = make_indexed_collection()
+        add_chunk(collection, file, "some prose", unit_vector(0))
+        add_chunk(collection, file, "other prose", unit_vector(1))
+
+        results = search_with_reranker(
+            collection, "prose", StubReranker([RerankedDocument(0, 0.8), RerankedDocument(1, 0.2)]), top_k=2
+        )
+
+        assert len(results) == 2
+        assert [result.rerank_score for result in results] == [0.8, 0.2]
+
     @pytest.mark.parametrize(
-        ("context", "expected", "absent"),
+        ("score_kind", "expected", "absent"),
         [
-            pytest.param({"hybrid_search": True}, "Score:", "Distance:", id="hybrid-renders-score"),
-            pytest.param({"hybrid_search": False}, "Distance:", "Score:", id="dense-renders-distance"),
+            pytest.param("rerank", "Relevance:", "Distance:", id="rerank-renders-relevance"),
+            pytest.param("hybrid", "Score:", "Distance:", id="hybrid-renders-score"),
+            pytest.param("dense", "Distance:", "Score:", id="dense-renders-distance"),
         ],
     )
-    def test_template_renders_the_right_number(self, context, expected, absent):
-        collection, file = _make_indexed_collection()
-        chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
+    def test_template_renders_the_right_number(self, score_kind, expected, absent):
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(collection, file, "some prose", unit_vector(0))
         chunk.distance = 0.25
-        chunk.fused_score = 0.0123 if context["hybrid_search"] else None
+        chunk.fused_score = 0.0123
+        chunk.rerank_score = 0.4567
 
-        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], **context})
+        html = render_to_string(
+            "documents/collection_query_results.html", {"chunks": [chunk], "score_kind": score_kind}
+        )
 
         assert expected in html
         assert absent not in html
 
-    def test_a_zero_fused_score_still_renders_as_a_score(self):
-        """A fused score of 0 is legitimate: it happens when the dense weight is 0 and a chunk was
-        found by dense search alone. Testing the value for truthiness would send it down the
-        distance branch, which has no distance to render.
+    @pytest.mark.parametrize(
+        ("score_kind", "attribute", "expected"),
+        [
+            pytest.param("hybrid", "fused_score", "Score:", id="zero-fused-score"),
+            pytest.param("rerank", "rerank_score", "Relevance:", id="zero-rerank-score"),
+        ],
+    )
+    def test_a_zero_score_still_renders_as_a_score(self, score_kind, attribute, expected):
+        """Zero is a legitimate score on both branches: a fused score of 0 happens when the dense
+        weight is 0 and a chunk was found by dense search alone, and a reranker is free to score a
+        candidate 0. Testing the value for truthiness would send either down the distance branch,
+        which has no distance to render.
         """
-        collection, file = _make_indexed_collection()
-        chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
-        chunk.fused_score = 0.0
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(collection, file, "some prose", unit_vector(0))
+        setattr(chunk, attribute, 0.0)
 
-        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], "hybrid_search": True})
+        html = render_to_string(
+            "documents/collection_query_results.html", {"chunks": [chunk], "score_kind": score_kind}
+        )
 
-        assert "Score:" in html
+        assert expected in html
         assert "Distance:" not in html
+
+    @pytest.mark.parametrize(
+        ("annotations", "expected"),
+        [
+            pytest.param({"rerank_score": 0.0, "fused_score": 0.5, "distance": 0.1}, "rerank", id="rerank-wins"),
+            pytest.param({"fused_score": 0.0, "distance": 0.1}, "hybrid", id="fused-beats-distance"),
+            pytest.param({"distance": 0.1}, "dense", id="distance-only"),
+        ],
+    )
+    def test_score_kind_prefers_the_latest_stage_that_ran(self, annotations, expected):
+        """Reranked results still carry whatever the stage beneath them annotated -- a dense-only
+        rerank keeps its `distance` -- so the order these are checked in is what decides.
+        """
+        collection, file = make_indexed_collection()
+        chunk = add_chunk(collection, file, "some prose", unit_vector(0))
+        for attribute, value in annotations.items():
+            setattr(chunk, attribute, value)
+
+        assert _result_score_kind([chunk]) == expected
+
+    def test_score_kind_of_no_results_is_empty(self):
+        assert _result_score_kind([]) == ""
 
 
 @pytest.mark.django_db()
-class TestHybridSearchKnobConstraints:
+class TestSearchKnobConstraints:
     """The knobs are absent from every form, so `full_clean()` never runs and the field
     validators never fire. These constraints are the only thing actually stopping a bad value,
     so they are asserted against the database rather than through a form.
@@ -494,6 +521,8 @@ class TestHybridSearchKnobConstraints:
             pytest.param("search_dense_weight", None, id="weight-null"),
             pytest.param("search_fetch_k", 0, id="fetch-k-zero"),
             pytest.param("search_fetch_k", None, id="fetch-k-null"),
+            pytest.param("rerank_top_n", 0, id="rerank-top-n-zero"),
+            pytest.param("rerank_top_n", None, id="rerank-top-n-null"),
         ],
     )
     def test_out_of_range_values_are_rejected(self, field, value):
@@ -512,6 +541,7 @@ class TestHybridSearchKnobConstraints:
             pytest.param("search_dense_weight", 0.0, id="weight-zero"),
             pytest.param("search_dense_weight", 1.0, id="weight-one"),
             pytest.param("search_fetch_k", 1, id="fetch-k-one"),
+            pytest.param("rerank_top_n", 1, id="rerank-top-n-one"),
         ],
     )
     def test_valid_boundary_values_are_accepted(self, field, value):

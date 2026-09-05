@@ -90,6 +90,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    RERANKING = (
+        "flag_reranking",
+        "Reranking - rescore collection retrieval candidates against the query (issue #2681)",
+        "",
+        [],
+        True,
+    )
+
     IGNORE_RATE_LIMITING = (
         "flag_ignore_rate_limiting",
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
