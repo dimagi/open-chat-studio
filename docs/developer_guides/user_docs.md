@@ -4,7 +4,7 @@ OCS uses a Docs-as-Code + LLM Augmentation approach for user documentation: the 
 
 LLM-based automation (with Claude) helps draft changelog entries **and** user documentation updates from merged PRs, while developers still decide when changes are user-facing, provide context in the PR, and review generated output before publishing.
 
-[Weekly release notes](#weekly-release-notes-from-changelog-summaries) are automatically published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
+[Weekly release notes](release_notes.md) are automatically published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
 
 ## Guidelines
 
@@ -57,31 +57,8 @@ The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/
 ### Manual option
 Alternatively, you can update the main changelog or widget changelog as appropriate (see above).
 
-## Weekly release notes from changelog summaries
-
-Once a week (currently on a Monday), a [GitHub Actions workflow](https://github.com/dimagi/open-chat-studio-docs/blob/main/.github/workflows/release.yml) runs and generates a [release note](https://github.com/dimagi/open-chat-studio-docs/releases) in the GitHub **docs repo** with a summary of the changes since the previous release.
-This creates a way for users to get notified of changes by subscribing to the release feed of the docs repo.
-
-The automated releases are created in `draft` state, which allows a developer to review the generated text before publishing. The releases should contain the following sections:
-
-- New Features: new features added to the product
-- Improvements: changes to existing features that don't classify as 'new features'
-- Bug Fixes
-
-It should not contain a top-level summary, upgrade recommendations, etc.
-
-### Review and Publish Release Note
-The process for manually reviewing and publishing a release is:
-
-1. Review the repo diff between this release and the previous release using the 'Compare' dropdown in the left sidebar to ensure accuracy and completeness.
-2. Review the previous release notes to see if there are any items that have already been included in a previous release.
-3. If there are user docs to link to for any item, ensure that they are added.
-4. If you think there should be docs where there aren't, either create them immediately or open an [issue](https://github.com/dimagi/open-chat-studio-docs/issues) to be prioritized later.
-
-Once you are happy with the release notes, publish the release. This will send a notification to all users who are subscribed to the docs release feed.
-
-[docs_repo]: https://github.com/dimagi/open-chat-studio-docs
-
 ## API Documentation
 
 See the [API Documentation guide](api_documentation.md) for information on how the OCS REST API is documented, how to generate the schema locally, and what to do when your changes affect the API schema.
+
+[docs_repo]: https://github.com/dimagi/open-chat-studio-docs
