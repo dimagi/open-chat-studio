@@ -2232,7 +2232,9 @@ export class OcsChat {
   private renderConsentPanel() {
     return (
       <div class="consent-panel" role="region" aria-label={this.translationManager.get('consent.agree')}>
-        <div class="consent-text chat-markdown" innerHTML={sanitizeHTML(this.consent?.text ?? '')}></div>
+        <div class="consent-text-frame">
+          <div class="consent-text chat-markdown" innerHTML={sanitizeHTML(this.consent?.text ?? '')}></div>
+        </div>
         <button class="consent-agree send-button send-button-enabled" disabled={this.consentPostInFlight} onClick={() => void this.acceptConsent()}>
           {this.translationManager.get('consent.agree')}
         </button>
@@ -2345,7 +2347,7 @@ export class OcsChat {
             )}
 
             {/* Chat Content */}
-            <div class="chat-content">
+            <div class={`chat-content${this.shouldShowConsentPanel() ? ' chat-content-consent' : ''}`}>
               {/* Banner (top) */}
               {this.renderBanner('top')}
 
