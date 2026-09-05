@@ -2216,10 +2216,11 @@ export class OcsChat {
   }
 
   private renderInputArea() {
+    const consenting = this.shouldShowConsentPanel();
     return (
-      <div class="input-area">
+      <div class={`input-area${consenting ? ' input-area-consent' : ''}`}>
         {this.renderKioskRestart()}
-        {this.shouldShowConsentPanel() ? this.renderConsentPanel() : this.renderComposer()}
+        {consenting ? this.renderConsentPanel() : this.renderComposer()}
       </div>
     );
   }
@@ -2359,7 +2360,7 @@ export class OcsChat {
               {/* Messages */}
               {
                 <div ref={el => (this.messageListRef = el)} class="messages-container">
-                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
+                  {this.messages.length === 0 && !this.shouldShowConsentPanel() && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -2411,7 +2412,7 @@ export class OcsChat {
               }
 
               {/* Starter Questions */}
-              {!this.isReadOnly() && this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
+              {!this.isReadOnly() && this.messages.length === 0 && !this.shouldShowConsentPanel() && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">

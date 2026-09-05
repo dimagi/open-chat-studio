@@ -632,8 +632,11 @@
     padding: 1em 1em 0 1em;
     background-color: var(--input-bg-color);
     border-top: 1px solid var(--input-border-color);
-    /* A flex child floors at its content height, and the chat area clips what does not
-       fit, so a tall consent panel would push its accept button out of view. */
+  }
+
+  .input-area-consent {
+    /* Only the consent panel can outgrow the chat area, which clips what does not fit, so
+       only it may shrink. Letting the composer shrink squeezes it over the footer. */
     min-height: 0;
   }
 

@@ -218,6 +218,34 @@ describe('hold and release', () => {
     expect(page.root.shadowRoot.querySelector('.message-textarea')).not.toBeNull();
   });
 
+  it('withdraws the welcome messages and starter questions while the panel is up', async () => {
+    const page = await mountWidget(`welcome-messages="['Hi there']" starter-questions="['Tell me more']"`);
+    stubService(page);
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+
+    // They render on an empty message list, and holding adds no bubble, so without this
+    // they sit behind the panel offering a send that would replace what is held.
+    expect(consentPanel(page)).not.toBeNull();
+    expect(page.root.shadowRoot.querySelector('.starter-questions')).toBeNull();
+    expect(page.root.shadowRoot.querySelector('.welcome-messages')).toBeNull();
+  });
+
+  it('brings the starter questions back if the panel closes with nothing sent', async () => {
+    const page = await mountWidget(`welcome-messages="['Hi there']" starter-questions="['Tell me more']"`);
+    stubService(page);
+
+    await page.rootInstance['sendMessage']('hello');
+    await settle(page);
+    page.rootInstance['heldMessage'] = undefined;
+    await page.waitForChanges();
+
+    expect(consentPanel(page)).toBeNull();
+    expect(page.root.shadowRoot.querySelector('.starter-questions')).not.toBeNull();
+    expect(page.root.shadowRoot.querySelector('.welcome-messages')).not.toBeNull();
+  });
+
   it('sends a message held while a silent consent post was in flight', async () => {
     const page = await mountWidget('persistent-session="true"');
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
