@@ -145,6 +145,7 @@ nav:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
       - User Docs:
         - Overview: developer_guides/user_docs.md
+        - Changelog Automation: developer_guides/changelog_automation.md
         - Weekly Release Notes: developer_guides/release_notes.md
       - API Documentation: developer_guides/api_documentation.md
       - Pull Requests: contributing/pull_requests.md
