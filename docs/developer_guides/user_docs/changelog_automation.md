@@ -1,6 +1,6 @@
 # Changelog Automation
 
-This covers how the automatic changelog update works internally, and what to do if it doesn't fire for your PR. See [User Documentation and Changelog Process](user_docs.md) for what you need to do in your PR to trigger it.
+This covers how the automatic changelog update works internally, and what to do if it doesn't fire for your PR. See [User Documentation and Changelog Process](index.md) for what you need to do in your PR to trigger it.
 
 ## How the automatic changelog update works
 
@@ -15,9 +15,12 @@ The automation handles **chat widget** changes (files under `components/`) diffe
 
 ## If the automation doesn't fire
 
-This can happen when your PR doesn't touch `apps/`, `components/`, `config/`, `assets/`, or `templates/` (e.g. tech docs-only changes) — the dispatch workflow only triggers on those paths. In that case:
+This can happen when your PR doesn't touch `apps/`, `components/`, `config/`, `assets/`, or `templates/` (e.g. tech docs-only changes) — the dispatch workflow only triggers on those paths. In that case, use one of:
 
-- **Manual trigger in docs repo**: The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **GitHub Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
-- **Manual option**: Alternatively, you can update the main changelog or widget changelog yourself directly.
+### Manual trigger in docs repo
+The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **GitHub Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
+
+### Manual option
+Alternatively, you can update the main changelog or widget changelog yourself directly.
 
 [docs_repo]: https://github.com/dimagi/open-chat-studio-docs
