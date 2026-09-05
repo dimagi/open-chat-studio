@@ -100,7 +100,7 @@ holdout cannot block removal indefinitely.
 
 | Lever | Mechanism | When |
 |---|---|---|
-| Changelog/docs | Entry in the [docs repo](https://github.com/dimagi/open-chat-studio-docs) — see [User Docs](user_docs.md) | Every deprecation, day 0 |
+| Changelog/docs | Entry in the [docs repo](https://github.com/dimagi/open-chat-studio-docs) — see [User Docs](user_docs/index.md) | Every deprecation, day 0 |
 | In-feature warning | Warning callout on the feature's own templates with removal date + migration link | Used tier, day 0 → removal |
 | Banner | `apps/banners` `Banner` row; scoped location if one exists, else global; set `start_date`/`end_date` | Used tier, day 0 (optionally a second reminder banner for the final 2 weeks) |
 | In-product notification | `apps/ocs_notifications` notification to affected teams — see [Notifications](../developer_guides/code_systems/notifications.md) | Used tier, day 0 |
