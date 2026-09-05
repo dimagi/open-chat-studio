@@ -3,9 +3,9 @@
 ``params`` is a free-form object in the schema -- what it may hold depends on the ``type``, and one
 endpoint serves every type -- so the schema alone cannot say what a body for a given type looks
 like. The POST examples do, one per served type, each naming *every* param that type declares. Two
-things they say that it cannot: a param's name is the node type's own rather than the
-``/pipeline/options/`` list it draws from (``source_material_id`` is the param, ``source_material``
-the list), and every id here is a placeholder for one that endpoint serves.
+things they say that it cannot: a param's name is the node type's own rather than the option list
+it draws from (``source_material_id`` is the param, ``source_material`` the list), and every id here
+is a placeholder for one that endpoint serves.
 
 The PATCH examples are partial bodies instead. Its params are the POST ones, so a full payload per
 type there would only repeat the same eight payloads under a second verb.
@@ -187,7 +187,7 @@ def update_examples() -> list[OpenApiExample]:
     """One partial PATCH body per thing a PATCH does.
 
     The full param set per type is what the POST examples document; a reader after one type's
-    vocabulary goes to ``GET /pipeline/nodes/{node_type}/`` either way.
+    vocabulary goes to the `pipeline_node_retrieve` endpoint either way.
     """
     return [
         OpenApiExample(name=body.name, summary=body.summary, value=body.value, request_only=True)

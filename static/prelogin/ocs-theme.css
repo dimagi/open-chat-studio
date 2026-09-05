@@ -96,45 +96,16 @@ h1 em, h2 em, h3 em {
 .nav-wrap .logo img {
   filter: none !important;
   opacity: 1 !important;
-  transition: filter 220ms ease, opacity 220ms ease !important;
+  transition: opacity 220ms ease !important;
 }
+/* A gentle fade, not a tint. This used to run the logo through a generated
+   hex-to-filter chain that began with brightness(0) — which flattens the
+   two-tone mark to a single silhouette before colouring it, so the brand logo
+   became a flat yellow-green shape on the turquoise band. */
 .nav-wrap .logo:hover img,
 .nav-wrap .logo:focus-visible img {
-  filter: brightness(0) saturate(100%) invert(82%) sepia(45%) saturate(534%) hue-rotate(54deg) brightness(99%) contrast(89%) !important;
-  opacity: 1 !important;
+  opacity: 0.7 !important;
 }
-.nav-wrap .nav-links {
-  font-family: 'Work Sans', sans-serif !important;
-  font-size: 14px !important;
-  letter-spacing: -0.005em !important;
-}
-.nav-wrap .nav-links a {
-  color: rgba(22,0,109,0.78) !important;
-  font-weight: 300 !important;
-  text-decoration: none !important;
-  padding: 6px 4px !important;
-  background: transparent !important;
-  border-radius: 0 !important;
-  transition: font-weight 120ms ease, color 120ms ease;
-}
-.nav-wrap .nav-links a:hover {
-  background: transparent !important;
-  color: var(--ocs-purple) !important;
-  font-weight: 700 !important;
-  text-decoration: none !important;
-}
-.nav-wrap .nav-links a.nav-active {
-  color: var(--ocs-purple) !important;
-  font-weight: 700 !important;
-  text-decoration: none !important;
-  background: transparent !important;
-}
-.nav-wrap .nav-links a.nav-active:hover {
-  background: transparent !important;
-  color: var(--ocs-purple) !important;
-  font-weight: 700 !important;
-}
-.nav-wrap .nav-links a.nav-sep::before { background: rgba(22,0,109,0.18) !important; }
 .nav-wrap .btn-ghost {
   color: var(--ocs-purple) !important;
   border-color: rgba(22,0,109,0.35) !important;
@@ -158,7 +129,6 @@ h1 em, h2 em, h3 em {
   background: var(--ocs-green-bright) !important;
   color: var(--ocs-purple) !important;
 }
-.nav-wrap .nav-hamburger span { background: var(--ocs-purple) !important; }
 
 /* ── Hero (home only): subtle pale→turquoise vertical gradient ── */
 .hero-ocs.hero-home {
@@ -518,20 +488,7 @@ footer h2 { color: #fff !important; }
 footer a { color: rgba(255,255,255,0.75) !important; }
 footer a:hover { color: var(--ocs-green) !important; }
 footer p { color: rgba(255,255,255,0.70) !important; }
-footer .footer-brand .logo img,
 footer .logo img {
   filter: brightness(0) invert(1) !important;
   opacity: 0.95 !important;
-}
-footer .footer-bottom { border-top-color: rgba(255,255,255,0.15) !important; }
-footer .footer-bottom span,
-footer .footer-bottom a { color: rgba(255,255,255,0.55) !important; }
-footer .footer-bottom a:hover { color: var(--ocs-green) !important; }
-
-/* Mobile: nav-links background matches static nav */
-@media (max-width: 860px) {
-  .nav-wrap .nav-links {
-    background: var(--ocs-turquoise) !important;
-    border-top-color: rgba(22,0,109,0.20) !important;
-  }
 }

@@ -1,4 +1,3 @@
-{# Service provider create / edit. Replaces generic/type_select_form.html. #}
 {% extends "web/app/app_base.html" %}
 {% load form_tags i18n %}
 {% block breadcrumbs %}
@@ -16,43 +15,63 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-  {% comment %}
-  configChanged is shared by the whole card, not just the config fields below: the submit
-  button's label and the separate Test Connection form (in post_form) both read it too, so
-  they need to be in the same Alpine scope even though only the config fields set it.
-  {% endcomment %}
-  <div class="app-card max-w-5xl mx-auto" x-data="{ configChanged: false }">
-    <div class="flex items-center justify-between gap-2">
-      <h1 class="pg-title">{{ title }}</h1>
-      {% if object.id %}
-        <a class="btn btn-outline btn-sm"
-           href="{% url 'service_providers:usages' request.team.slug provider.slug object.id %}">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          Show usages
-        </a>
-      {% endif %}
-    </div>
+  <div class="app-card max-w-5xl mx-auto"
+       x-data="{ submitted: false{% if can_verify_credentials %}, configChanged: false, credentialsVerified: {{ credentials_verified|yesno:'true,false' }}, get willVerify() { return this.configChanged || !this.credentialsVerified }{% endif %} }">
+    <h1 class="pg-title">{{ title }}</h1>
+
+    {% if verification_error %}
+      <div role="alert" class="alert alert-error alert-soft text-sm items-start mt-3">
+        <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+        <div>
+          <div class="font-semibold">The provider rejected these credentials</div>
+          <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
+        </div>
+      </div>
+    {% elif can_verify_credentials %}
+      <div class="flex items-center gap-2 text-sm mt-3 {% if credentials_verified %}text-success{% else %}text-base-content/60{% endif %}"
+           x-show="!configChanged"
+           data-testid="credential-verification-state">
+        {% if credentials_verified %}
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Credentials verified</span>
+        {% else %}
+          <i class="fa-regular fa-circle-question"></i>
+          <span>These credentials have not been checked yet - saving will check them</span>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% comment %}
+      On edit the page splits into tabs; on create there is nothing to show models or
+      usages for, so the configuration content stands alone. The two halves of the tab
+      wrapper are separate {% templatetag openblock %} if {% templatetag closeblock %} tags so that content is written once here
+      and stays reachable by the blocks that llm_provider_form.html overrides.
+    {% endcomment %}
+    {% if object.id %}
+      <div role="tablist" class="tabs tabs-border mt-4">
+        <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Configuration"
+               {% if active_provider_tab == 'configuration' %}checked{% endif %}>
+        <div role="tabpanel" class="tab-content pt-4">
+    {% endif %}
+
     {% if object.id and provider.slug == 'tracing' %}
       {% include "service_providers/components/trace_project.html" %}
     {% endif %}
     {% block pre_form %}{% endblock %}
-    <form method="post" class="my-2" enctype="multipart/form-data">
+    <form method="post" class="my-2" enctype="multipart/form-data" @submit="submitted = true">
       {% csrf_token %}
       {% render_form_fields primary_form %}
       {% if config_form.custom_template %}
         {% include config_form.custom_template with object=object form=config_form %}
       {% else %}
-        {% if test_llm_connection_url %}
+        {% if can_verify_credentials %}
           {% comment %}
-          Nudges toward re-testing after an edit, not a saved "untested" state: resets on
-          reload by design, same as the manual Test Connection button it points at.
+          Editing a credential means the next save has to verify it, which the submit button
+          says by itself - so this only has to notice the edit. Resets on reload by design:
+          it describes the unsaved edit, not stored state.
           {% endcomment %}
           <div x-on:input="configChanged = true" x-on:change="configChanged = true">
             {% render_form_fields config_form %}
-            <div x-show="configChanged" x-cloak role="alert" class="alert alert-warning alert-soft text-sm py-2 mt-2">
-              <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>You've changed the credentials above. Save and use Test Connection to confirm they still work.</span>
-            </div>
           </div>
         {% else %}
           {% render_form_fields config_form %}
@@ -69,15 +88,19 @@
           {% endif %}
         {% endif %}
       {% endif %}
-      {% if test_llm_connection_url %}
+      {% if can_verify_credentials %}
         {% comment %}
-        Only on the edit page for an existing LLM provider: the label says up front whether
-        saving will also re-test credentials, driven by the same configChanged the banner
-        and the manual button below use.
+        The label says up front whether saving will also verify credentials. button_text
+        already accounts for credentials that have never passed a check; editing a field
+        adds the cases only the browser knows about. Once submitted it says so again in the
+        present tense, because the verification request holds the page for several seconds.
         {% endcomment %}
-        <button type="submit" class="btn btn-primary mt-2" x-text="configChanged ? 'Update and Test' : 'Update'">{{ button_text }}</button>
+        <button type="submit" class="btn btn-primary mt-2" :disabled="submitted">
+          <span class="loading loading-spinner loading-xs" x-show="submitted" x-cloak></span>
+          <span x-text="submitted ? (willVerify ? 'Verifying credentials…' : 'Saving…') : (configChanged ? 'Update and Verify' : '{{ button_text }}')">{{ button_text }}</span>
+        </button>
       {% else %}
-        <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}">
+        <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}" :disabled="submitted">
       {% endif %}
     </form>
     {% block post_form %}
@@ -96,16 +119,39 @@
           <button type="submit" class="btn btn-outline">Sync Voices from ElevenLabs</button>
         </form>
       {% endif %}
-      {% if test_llm_connection_url %}
-        {% comment %}
-        Hidden while credentials are unsaved: without this, clicking it would test whatever
-        is still saved in the database, not what's currently typed - misleading either way.
-        {% endcomment %}
-        <form method="post" action="{{ test_llm_connection_url }}" class="mt-4" x-show="!configChanged">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline">Test Connection</button>
-        </form>
-      {% endif %}
     {% endblock post_form %}
+
+    {% if object.id %}
+        </div>
+        {% block extra_tabs %}{% endblock %}
+        {% if can_view_usages %}
+          <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Usages"
+                 {% if active_provider_tab == 'usages' %}checked{% endif %}>
+          <div role="tabpanel" class="tab-content pt-4">
+            {% comment %}
+              Resolving usages fans out over many tables and can take several seconds.
+              An unselected daisyUI tab panel is display:none, so "intersect once" holds
+              the request back until someone actually opens the tab.
+            {% endcomment %}
+            <div id="provider-usages"
+                 hx-get="{% url 'service_providers:usages_content' request.team.slug provider.slug object.id %}"
+                 hx-trigger="intersect once">
+              <div class="flex items-center gap-2 text-base-content/60">
+                <span class="loading loading-spinner loading-md"></span>
+                <span>Searching for usages…</span>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
+
+  {% comment %}
+    Outside the tab wrapper on purpose. An unselected daisyUI tab panel is display:none,
+    and a <dialog> under a hidden ancestor is promoted to the top layer but generates no
+    boxes - showModal() would open it with nothing on screen. Anything opened from one tab
+    whose markup would otherwise sit in another belongs here.
+  {% endcomment %}
+  {% block modals %}{% endblock %}
 {% endblock app %}

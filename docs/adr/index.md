@@ -80,3 +80,9 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0056](0056-client-credentials-applications-name-their-chatbots.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Client-credentials applications name the chatbots they may reach |
 | [0057](0057-remove-the-participant-allowlist.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Remove the participant allowlist |
 | [0058](0058-tri-state-everyone-and-teams-are-a-flags-only-inputs.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Tri-state everyone and team grants are a flag's only inputs |
+| [0059](0059-chat-api-channel-credential-mode.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | The Chat API Channel's credential mode determines which credential admits a caller |
+| [0060](0060-each-credential-validates-its-own-origin.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Each credential validates its own origin |
+| [0061](0061-bearer-token-authenticator-first-on-session-start-only.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | The bearer token is resolved by an authenticator, first in the list, on session start only |
+| [0062](0062-uniform-401-for-anonymous-admission-failures.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Anonymous admission failures at session start return one uniform 401 |
+| [0063](0063-session-start-requires-a-chat-start-machine-token.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Session start requires a client-credentials token with the `chat:start` scope |
+| [0064](0064-per-channel-session-token-lifetime-override.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Channels may override the session token lifetime |

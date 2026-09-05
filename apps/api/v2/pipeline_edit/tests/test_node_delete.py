@@ -4,20 +4,18 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import add_edge, add_llm_node, node_url
+from .conftest import add_edge, add_llm_node, boundary_node, node_url
 
 
 @pytest.fixture()
-def wired_llm_node(client, chatbot, llm):
+def wired_llm_node(client, chatbot, llm, start_node, end_node):
     """An LLM node spliced between Start and End, so deleting it has edges to take with it."""
     node_id = add_llm_node(client, chatbot, llm)
-    start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
-    end = chatbot.pipeline.node_set.get(type="EndNode").flow_id
     # Spliced, not added alongside: with the direct Start -> End edge still there, removing this
     # node would leave a perfectly valid graph and prove nothing.
     chatbot.pipeline.data["edges"] = []
-    add_edge(chatbot.pipeline, start, node_id)
-    add_edge(chatbot.pipeline, node_id, end)
+    add_edge(chatbot.pipeline, start_node, node_id)
+    add_edge(chatbot.pipeline, node_id, end_node)
     return node_id
 
 
@@ -56,7 +54,7 @@ def test_delete_of_an_unknown_node_is_a_404(client, chatbot):
 def test_delete_refuses_a_node_the_server_manages(client, chatbot, node_type):
     """Start and End cannot be added back through the API — POST refuses those types — so a delete
     would strand the chatbot in a state only the UI builder could repair."""
-    node_id = chatbot.pipeline.node_set.get(type=node_type).flow_id
+    node_id = boundary_node(chatbot, node_type)
 
     response = client.delete(node_url(chatbot, node_id))
 

@@ -1,8 +1,8 @@
 """Turning a request body's params into the params a node row holds (#4140).
 
 A write stores the node model's own dump, not the body's dict. Nothing here reads the JSON Schema
-``/pipeline/nodes/`` publishes — that is derived from these same models, so checking against it
-would be checking against a copy.
+the `pipeline_node_retrieve` endpoint publishes — that is derived from these same models, so
+checking against it would be checking against a copy.
 """
 
 import types

@@ -1,5 +1,6 @@
 {% load chat_tags form_tags json_tags pagination_tags waffle_tags %}
-<div id="table-top" class="max-w-5xl mt-4 border rounded-2xl" x-data="{selectedDataset: null}">
+{% url 'chatbots:chatbot_session_view' request.team.slug experiment.public_id experiment_session.external_id as session_detail_url %}
+<div id="table-top" class="app-card p-0 overflow-hidden" x-data="{selectedDataset: null}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
 
   <!-- Loading indicator for initial messages -->
@@ -10,197 +11,174 @@
     </div>
   </div>
 
-  <div class="flow-root">
-    <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-      <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-        <table class="min-w-full divide-y divide-gray-300 ">
-          <tbody class="divide-y divide-gray-200" x-data="{commentsRow: null}">
-            {% for message in messages %}
-              {% if message.time_gap_text %}
-                <tr class="bg-base-200/50">
-                  <td colspan="2" class="py-3 text-center">
-                    <div class="flex items-center justify-center gap-2 text-sm text-base-content/60">
-                      <div class="h-px flex-1 bg-base-content/20"></div>
-                      <span class="font-medium px-2">{{ message.time_gap_text }}</span>
-                      <div class="h-px flex-1 bg-base-content/20"></div>
+  <div class="flex flex-col" x-data="{commentsRow: null}">
+    {% for message in messages %}
+      {% if message.time_gap_text %}
+        <div class="py-3 text-center bg-base-200/50">
+          <div class="flex items-center justify-center gap-2 text-sm text-base-content/60 px-5">
+            <div class="h-px flex-1 bg-base-content/20"></div>
+            <span class="font-medium px-2">{{ message.time_gap_text }}</span>
+            <div class="h-px flex-1 bg-base-content/20"></div>
+          </div>
+        </div>
+      {% endif %}
+      <div
+        class="group flex gap-3.5 px-5 py-4 border-b border-base-300 {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
+        x-data="{
+                tags: {{ message.all_tag_names|to_json|force_escape }},
+                get isSelected() { return commentsRow === {{ forloop.counter }} },
+                }"
+        {% if highlight_message_id == message.id %}
+          id="{{ message.id }}"
+        {% endif %}
+      >
+        <div class="flex flex-col items-center gap-1.5 w-8 flex-none">
+          <span class="text-xs text-base-content/50 tabular-nums">{{ page_start_index|add:forloop.counter|add:-1 }}</span>
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center {% if message.is_ai_message %}bg-base-200 text-base-content/70{% else %}bg-primary/10 text-primary{% endif %}">
+            {% if message.is_ai_message %}
+              <i class="fa-solid fa-robot"></i>
+            {% else %}
+              <i class="fa-regular fa-user"></i>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex-1 min-w-0 flex flex-col gap-2">
+          <div class="w-full {% if message.is_ai_message %}chat-message-system{% else %}chat-message-user{% endif %}">
+            <div class="message-contents text-sm!">
+              {% if message.translation == default_message %}
+                <div id="chat-message-{{ message.id }}-translation">
+                  <div id="translation-loading-spinner-{{ message.id }}" >
+                    <div class="translation-loading-spinner htmx-show">
+                      <span class="loading loading-spinner loading-sm"></span>
+                      <span class="ml-2">Translating...</span>
                     </div>
-                  </td>
-                </tr>
-              {% endif %}
-              <tr
-                class="{% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
-                x-data="{
-                        tags: {{ message.all_tag_names|to_json|force_escape }},
-                        get isSelected() { return commentsRow === {{ forloop.counter }} },
-                        }"
-                {% if highlight_message_id == message.id %}
-                  id="{{ message.id }}"
-                {% endif %}
-              >
-                <td class="whitespace-nowrap py-2 pl-4 pr-3 text-sm font-medium">{{ page_start_index|add:forloop.counter|add:-1 }}</td>
-                <td class="px-3 py-2 text-sm flex flex-col gap-2">
-                  <div class="flex place-items-center">
-                    {% if message.is_ai_message %}
-                      {% include "experiments/chat/components/system_icon.html" %}
-                    {% else %}
-                      {% include "experiments/chat/components/user_icon.html" %}
-                    {% endif %}
-                    <div class="grow">
-                      <div class="message-contents">
-                        {% if message.translation == default_message %}
-                          <div id="chat-message-{{ message.id }}-translation">
-	                          <div id="translation-loading-spinner-{{ message.id }}" >
-		                          <div class="translation-loading-spinner htmx-show">
-		                            <span class="loading loading-spinner loading-sm"></span>
-		                            <span class="ml-2">Translating...</span>
-		                          </div>
-		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
-		                            <p>{{ message.translation|render_markdown }}</p>
-		                          </div>
-	                          </div>
-                          </div>
-                        {% else %}
-                          <div id="chat-message-{{ message.id }}-translation">
-	                          <div id="translation-loading-spinner-{{ message.id }}">
-		                          <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
-		                            {% if message.translation %}
-		                              <p>{{ message.translation|render_markdown }}</p>
-		                            {% else %}
-		                              <p>{{ message.content|render_markdown }}</p>
-		                            {% endif %}
-		                          </div>
-		                          <div class="translation-loading-spinner htmx-show">
-		                            <span class="loading loading-spinner loading-sm"></span>
-		                            <span class="ml-2">Translating...</span>
-		                          </div>
-	                          </div>
-                          </div>
-                        {% endif %}
-                      </div>
-
-                      {% if show_original_translation and not message.translation == default_message %}
-                        <div id="chat-message-{{ message.id }}-original" class="pg-text-muted">
-                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
-                        </div>
-                      {% endif %}
-                      {% if message.translation == default_message %}
-                        {# hidden when loading spinners are shown #}
-                        <div id="chat-message-{{ message.id }}-original-default" class="pg-text-muted htmx-hide">
-                          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
-                        </div>
-                      {% endif %}
-                      <div class="flex flex-col">
-                        {% for file in message.get_attached_files %}
-                          <div class="inline text-sm p-1">
-                            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
-                              <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
-                            </a>
-                            ({{ file.display_size }})
-                            {% if file.is_image %}
-                              <div class="mt-1" x-data="{ showImage: false }">
-                                <button
-                                  @click="showImage = !showImage"
-                                  class="btn btn-ghost btn-xs"
-                                  :class="showImage ? 'text-primary' : 'text-gray-500'">
-                                  <i class="fa-solid fa-image fa-sm mr-1"></i>
-                                  <span x-text="showImage ? 'Hide Image' : 'Show Image'"></span>
-                                </button>
-                                <div
-                                  x-show="showImage"
-                                  x-transition
-                                  class="mt-2"
-                                  hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
-                                  hx-trigger="intersect once"
-                                  hx-swap="innerHTML">
-                                  <div class="flex items-center gap-2 text-xs text-gray-500">
-                                    <i class="fa-solid fa-spinner fa-spin"></i>
-                                    Loading image...
-                                  </div>
-                                </div>
-                              </div>
-                            {% elif file.is_audio %}
-                              <div class="mt-1">
-                                <audio controls class="h-8">
-                                  <source src="{% url 'experiments:download_file' request.team.slug experiment_session.id file.id %}" type="{{ file.content_type }}">
-                                </audio>
-                              </div>
-                            {% endif %}
-                          </div>
-                        {% endfor %}
-                      </div>
-                      <div class="mt-2 pg-text-muted flex justify-between items-center gap-2">
-                        <div>
-                          <i class="fa-solid fa-clock mr-1"></i>
-                          <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
-                            {{ message.created_at|date:"DATETIME_FORMAT" }}
-                          </time>
-                        </div>
-                        {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
-                        {% if message.is_ai_message %}
-                          {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
-                        {% endif %}
-                        {% if perms.evaluations.change_evaluationdataset and message.is_human_message %}
-                          <div class="tooltip" data-tip="Add to dataset" @click="selectedMessageId={{ message.id }}">
-                            <button
-                              hx-get="{% url "evaluations:add_single_message_to_dataset" team.slug experiment_session.external_id %}"
-                              hx-target="#update_dataset_modal"
-                              hx-swap="innerHTML"
-                              hx-disabled-elt="this"
-                              class="btn btn-sm btn-square btn-ghost">
-                              <i class="fa-solid fa-database"></i>
-                            </button>
-                          </div>
-                        {% endif %}
-                        {% if perms.annotations.add_usercomment %}
-                          <div class="grow">
-                            {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
-                          </div>
-                        {% endif %}
-                      </div>
+                    <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+                      <p>{{ message.translation|render_markdown }}</p>
                     </div>
-                    {% if perms.annotations.add_usercomment %}
-                      <div class="text min-w-fit">
-                        <button class="whitespace-nowrap btn btn-ghost" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
-                          <i class="fa-regular fa-comment"></i>
-                          <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
-                        </button>
-                      </div>
-                    {% endif %}
                   </div>
-                  {% if perms.annotations.add_usercomment %}
-                    <div
-                      x-show="commentsRow === {{ forloop.counter }}"
-                      x-cloak>
-                      <div class="flex justify-between">
-                        <h3 class="font-medium">Message Comments</h3>
-                        <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
-                          <i class="fa-solid fa-close"></i>
-                        </button>
-                      </div>
-                      {% include "experiments/components/user_comments.html" with object=message allow_edit=experiment.is_editable %}
+                </div>
+              {% else %}
+                <div id="chat-message-{{ message.id }}-translation">
+                  <div id="translation-loading-spinner-{{ message.id }}">
+                    <div class="translation-content-{{ message.id }} translation-loading-spinner htmx-hide">
+                      {% if message.translation %}
+                        <p>{{ message.translation|render_markdown }}</p>
+                      {% else %}
+                        <p>{{ message.content|render_markdown }}</p>
+                      {% endif %}
                     </div>
-                  {% endif %}
-                </td>
-              </tr>
-            {% empty %}
-              <tr>
-                <td colspan="2" class="px-4 py-2 text-center text">
-                  {% if search %}
-                    No messages found matching "{{ search }}".
-                  {% else %}
-                    No messages found.
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+                    <div class="translation-loading-spinner htmx-show">
+                      <span class="loading loading-spinner loading-sm"></span>
+                      <span class="ml-2">Translating...</span>
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          </div>
 
-        <div class="flex justify-end p-3">
-          {% include "experiments/components/pagination_buttons.html" %}
+          {% if show_original_translation and not message.translation == default_message %}
+            <div id="chat-message-{{ message.id }}-original" class="pg-text-muted">
+              <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+            </div>
+          {% endif %}
+          {% if message.translation == default_message %}
+            {# hidden when loading spinners are shown #}
+            <div id="chat-message-{{ message.id }}-original-default" class="pg-text-muted htmx-hide">
+              <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+            </div>
+          {% endif %}
+          <div class="flex flex-col">
+            {% for file in message.get_attached_files %}
+              <div class="inline text-sm p-1">
+                <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
+                  <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
+                </a>
+                ({{ file.display_size }})
+                {% if file.is_image %}
+                  <div class="mt-1" x-data="{ showImage: false }">
+                    <button
+                      @click="showImage = !showImage"
+                      class="btn btn-ghost btn-xs"
+                      :class="showImage ? 'text-primary' : 'text-gray-500'">
+                      <i class="fa-solid fa-image fa-sm mr-1"></i>
+                      <span x-text="showImage ? 'Hide Image' : 'Show Image'"></span>
+                    </button>
+                    <div
+                      x-show="showImage"
+                      x-transition
+                      class="mt-2"
+                      hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
+                      hx-trigger="intersect once"
+                      hx-swap="innerHTML">
+                      <div class="flex items-center gap-2 text-xs text-gray-500">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        Loading image...
+                      </div>
+                    </div>
+                  </div>
+                {% elif file.is_audio %}
+                  <div class="mt-1">
+                    <audio controls class="h-8">
+                      <source src="{% url 'experiments:download_file' request.team.slug experiment_session.id file.id %}" type="{{ file.content_type }}">
+                    </audio>
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="pg-help flex items-center gap-3 flex-wrap">
+            <span>
+              <i class="fa-regular fa-clock mr-1"></i>
+              <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
+                {{ message.created_at|date:"DATETIME_FORMAT" }}
+              </time>
+            </span>
+            <div class="flex items-center gap-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+              {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
+              {% if message.is_ai_message %}
+                {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
+              {% endif %}
+              {% include "experiments/chat/components/copy_message_link.html" with message=message session_detail_url=session_detail_url %}
+              {% if perms.annotations.add_usercomment %}
+                {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
+              {% endif %}
+            </div>
+            {% if perms.annotations.add_usercomment %}
+              <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
+                <i class="fa-regular fa-comment"></i>
+                <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
+              </button>
+            {% endif %}
+          </div>
+          {% if perms.annotations.add_usercomment %}
+            <div
+              x-show="commentsRow === {{ forloop.counter }}"
+              x-cloak>
+              <div class="flex justify-between">
+                <h3 class="font-medium">Message Comments</h3>
+                <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
+                  <i class="fa-solid fa-close"></i>
+                </button>
+              </div>
+              {% include "experiments/components/user_comments.html" with object=message allow_edit=experiment.is_editable %}
+            </div>
+          {% endif %}
         </div>
       </div>
-    </div>
+    {% empty %}
+      <div class="px-5 py-6 text-center text-base-content/60">
+        {% if search %}
+          No messages found matching "{{ search }}".
+        {% else %}
+          No messages found.
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="flex justify-end p-3">
+    {% include "experiments/components/pagination_buttons.html" %}
   </div>
   <div id="update_dataset_modal"></div>
 </div>
