@@ -225,8 +225,6 @@ describe('hold and release', () => {
     await page.rootInstance['sendMessage']('hello');
     await settle(page);
 
-    // They render on an empty message list, and holding adds no bubble, so without this
-    // they sit behind the panel offering a send that would replace what is held.
     expect(consentPanel(page)).not.toBeNull();
     expect(page.root.shadowRoot.querySelector('.starter-questions')).toBeNull();
     expect(page.root.shadowRoot.querySelector('.welcome-messages')).toBeNull();
