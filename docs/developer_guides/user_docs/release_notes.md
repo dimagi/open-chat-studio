@@ -1,7 +1,7 @@
 # Weekly Release Notes From Changelog Summaries
 
 This is the automated process that turns the week's merged changelog entries into a single published release note.
-A human developer must review them before they are pulished.
+A human developer must review them before they are published.
 
 See the [User Docs overview](index.md) for how changelog entries get created in the first place.
 
