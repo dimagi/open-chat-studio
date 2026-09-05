@@ -45,6 +45,22 @@ async function settle(page: SpecPage) {
   await page.waitForChanges();
 }
 
+/** Hold a message on a widget configured with both empty-state prompts. */
+async function holdWithPrompts(): Promise<SpecPage> {
+  const page = await mountWidget(`welcome-messages="['Hi there']" starter-questions="['Tell me more']"`);
+  stubService(page);
+  await page.rootInstance['sendMessage']('hello');
+  await settle(page);
+  return page;
+}
+
+function emptyStatePrompts(page: SpecPage) {
+  return {
+    starters: page.root.shadowRoot.querySelector('.starter-questions'),
+    welcome: page.root.shadowRoot.querySelector('.welcome-messages'),
+  };
+}
+
 describe('consent memory', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -219,29 +235,23 @@ describe('hold and release', () => {
   });
 
   it('withdraws the welcome messages and starter questions while the panel is up', async () => {
-    const page = await mountWidget(`welcome-messages="['Hi there']" starter-questions="['Tell me more']"`);
-    stubService(page);
-
-    await page.rootInstance['sendMessage']('hello');
-    await settle(page);
+    const page = await holdWithPrompts();
+    const { starters, welcome } = emptyStatePrompts(page);
 
     expect(consentPanel(page)).not.toBeNull();
-    expect(page.root.shadowRoot.querySelector('.starter-questions')).toBeNull();
-    expect(page.root.shadowRoot.querySelector('.welcome-messages')).toBeNull();
+    expect(starters).toBeNull();
+    expect(welcome).toBeNull();
   });
 
   it('brings the starter questions back if the panel closes with nothing sent', async () => {
-    const page = await mountWidget(`welcome-messages="['Hi there']" starter-questions="['Tell me more']"`);
-    stubService(page);
-
-    await page.rootInstance['sendMessage']('hello');
-    await settle(page);
+    const page = await holdWithPrompts();
     page.rootInstance['heldMessage'] = undefined;
     await page.waitForChanges();
+    const { starters, welcome } = emptyStatePrompts(page);
 
     expect(consentPanel(page)).toBeNull();
-    expect(page.root.shadowRoot.querySelector('.starter-questions')).not.toBeNull();
-    expect(page.root.shadowRoot.querySelector('.welcome-messages')).not.toBeNull();
+    expect(starters).not.toBeNull();
+    expect(welcome).not.toBeNull();
   });
 
   it('sends a message held while a silent consent post was in flight', async () => {
