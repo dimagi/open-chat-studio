@@ -546,6 +546,20 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
+def _set_messages_view_push_url(response, request, team_slug, experiment, session_id):
+    """experiment_session_messages_view only ever renders the messages fragment, never the
+    full session page, so a plain hx-push-url would point the address bar at that bare,
+    unstyled fragment. Push the full page's URL instead: its own #messages-container
+    re-fetches this same view with the querystring on load, so a refresh lands back on the
+    same filtered/translated state.
+    """
+    if not request.htmx:
+        return
+    session_url = reverse("chatbots:chatbot_session_view", args=[team_slug, experiment.public_id, session_id])
+    querystring = request.GET.urlencode()
+    response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -666,15 +680,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "experiments/components/session_messages.html",
         context,
     )
-    if request.htmx:
-        # This view only ever renders the messages fragment, never the full session
-        # page, so a plain hx-push-url would point the address bar at a bare,
-        # unstyled partial. Point it at the real page instead: that page's own
-        # #messages-container re-fetches this same view with the querystring on
-        # load, so a refresh lands back on the same filtered/translated state.
-        session_url = reverse("chatbots:chatbot_session_view", args=[team_slug, experiment.public_id, session_id])
-        querystring = request.GET.urlencode()
-        response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
+    _set_messages_view_push_url(response, request, team_slug, experiment, session_id)
     return response
 
 
