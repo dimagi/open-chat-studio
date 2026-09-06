@@ -1,4 +1,4 @@
-"""Query orchestration for the usage API (``GET /api/v2/usage/``).
+"""Query orchestration for the `usage` endpoint.
 
 This is the single place that turns a validated ``UsageQuery`` into team-scoped aggregates. It
 supports the ``messages``, ``sessions``, ``participants``, ``cost``, and ``tokens`` metrics over an
