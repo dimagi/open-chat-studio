@@ -661,11 +661,21 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "highlight_message_id": highlight_message_id,
     }
 
-    return TemplateResponse(
+    response = TemplateResponse(
         request,
         "experiments/components/session_messages.html",
         context,
     )
+    if request.htmx:
+        # This view only ever renders the messages fragment, never the full session
+        # page, so a plain hx-push-url would point the address bar at a bare,
+        # unstyled partial. Point it at the real page instead: that page's own
+        # #messages-container re-fetches this same view with the querystring on
+        # load, so a refresh lands back on the same filtered/translated state.
+        session_url = reverse("chatbots:chatbot_session_view", args=[team_slug, experiment.public_id, session_id])
+        querystring = request.GET.urlencode()
+        response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
+    return response
 
 
 @experiment_session_view()
