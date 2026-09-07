@@ -652,6 +652,15 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
         if participant_id:
             query_set = query_set.filter(participant_id=participant_id)
+            # The participant page's chatbot quick-filter pills aren't a dynamic filter column,
+            # just a `?chatbot=` param on the page's own URL -- the filter widget's own fetch
+            # forwards it here alongside its f_/op_ params (see triggerFilterChange), so honor it.
+            try:
+                chatbot_id = int(self.request.GET.get("chatbot", ""))
+            except ValueError:
+                chatbot_id = None
+            if chatbot_id:
+                query_set = query_set.filter(experiment_id=chatbot_id)
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(
