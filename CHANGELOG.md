@@ -38,12 +38,9 @@ version section when a release is cut.
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
 - `DATA_UPLOAD_MAX_MEMORY_SIZE`: new, optional, defaults to `10485760` (10 MB).
-  Caps any request body Django buffers in memory — the JSON API, web-UI form
-  posts and channel webhooks alike. Django's own default is 2.5 MB, which
-  silently became the API's limit when DRF 3.17 started reading `request.body`
-  to parse JSON; setting it explicitly makes the limit a deliberate choice.
-  Lower it to tighten what a single request can buffer. Multipart uploads
-  stream to disk and are unaffected. (#4411)
+  Caps the request body Django buffers in memory. See the
+  [configuration reference](docs/hosting/configuration.md#security) for why it
+  is now set explicitly and when to change it. (#4411)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
