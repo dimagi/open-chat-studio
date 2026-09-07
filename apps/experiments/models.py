@@ -1116,14 +1116,6 @@ class Participant(BaseTeamModel):
             return {"name": self.name}
         return {}
 
-    @property
-    def initials(self) -> str:
-        name = self.name or (self.user.get_full_name() if self.user else "") or self.identifier
-        words = name.split()
-        if len(words) >= 2:
-            return (words[0][0] + words[1][0]).upper()
-        return name[:2].upper() if name else "?"
-
     def update_name_from_data(self, data: dict):
         """
         Updates participant name field from a data dictionary.
@@ -1285,24 +1277,22 @@ class Participant(BaseTeamModel):
         return schedules
 
     def get_message_trend(self, days: int = 30) -> list[int]:
-        """Daily message count for this participant across every chatbot, zero-filled for gaps.
+        """Daily trace count for this participant across every chatbot, zero-filled for gaps.
 
-        Mirrors the bucket-and-zero-fill approach in `Experiment.get_trend_data`, but counts all
-        messages (not success/error traces) on a daily granularity over a longer window.
+        Mirrors the bucket-and-zero-fill approach in `Experiment.get_bulk_trend_data`, scoped to
+        this participant (`Trace.participant`) instead of an experiment, and bucketed by day over
+        a longer window instead of by hour over 24h.
         """
         to_date = timezone.now()
         from_date = to_date - timezone.timedelta(days=days - 1)
 
-        message_counts = (
-            ChatMessage.objects.filter(
-                chat__experiment_session__participant=self,
-                created_at__gte=from_date,
-            )
-            .annotate(day_bucket=functions.TruncDate("created_at"))
+        trace_counts = (
+            Trace.objects.filter(participant=self, timestamp__gte=from_date, timestamp__lte=to_date)
+            .annotate(day_bucket=functions.TruncDate("timestamp"))
             .values("day_bucket")
             .annotate(count=Count("id"))
         )
-        counts_by_day = {row["day_bucket"]: row["count"] for row in message_counts}
+        counts_by_day = {row["day_bucket"]: row["count"] for row in trace_counts}
 
         day_buckets = []
         current = from_date.date()

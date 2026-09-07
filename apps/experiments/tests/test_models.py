@@ -45,6 +45,7 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
 from apps.utils.tests.langchain import build_fake_llm_service
 
 
@@ -233,8 +234,8 @@ class TestExperimentSession:
 
     @travel("2024-01-03 12:00:00", tick=False)
     def test_get_message_trend_zero_fills_and_aggregates_across_chatbots(self):
-        """Message counts must come from every chatbot the participant has used, and days with no
-        messages must appear as zero rather than being omitted, or a sparkline can't align bars."""
+        """Trace counts must come from every chatbot the participant has used, and days with no
+        traces must appear as zero rather than being omitted, or a sparkline can't align bars."""
         session_a = ExperimentSessionFactory.create()
         participant = session_a.participant
         experiment_b = ExperimentFactory.create(team=participant.team)
@@ -243,16 +244,14 @@ class TestExperimentSession:
         )
 
         now = timezone.now()
-        ChatMessage.objects.create(
-            message_type=ChatMessageType.HUMAN, content="hi", chat=session_a.chat, created_at=now
-        )
-        ChatMessage.objects.create(
-            message_type=ChatMessageType.HUMAN, content="hi", chat=session_b.chat, created_at=now
-        )
+        TraceFactory.create(team=participant.team, participant=participant, session=session_a, at=now)
+        TraceFactory.create(team=participant.team, participant=participant, session=session_b, at=now)
         two_days_ago = now - timezone.timedelta(days=2)
-        ChatMessage.objects.create(
-            message_type=ChatMessageType.HUMAN, content="old", chat=session_a.chat, created_at=two_days_ago
-        )
+        TraceFactory.create(team=participant.team, participant=participant, session=session_a, at=two_days_ago)
+
+        # A trace for a different participant must not leak into this participant's trend.
+        other_participant = ExperimentSessionFactory.create(team=participant.team).participant
+        TraceFactory.create(team=participant.team, participant=other_participant, at=now)
 
         trend = participant.get_message_trend(days=3)
         assert len(trend) == 3
@@ -1225,21 +1224,3 @@ class TestParticipantStr:
         participant = Participant(name="")
         participant.identifier = f"anon:{participant.public_id}"
         assert str(participant) == f"Anonymous [{str(participant.public_id)[:6]}]"
-
-
-class TestParticipantInitials:
-    @pytest.mark.parametrize(
-        ("name", "identifier", "expected"),
-        [
-            pytest.param("Osaikou K.", "osaikouk@dimagi.com", "OK", id="two_word_name"),
-            pytest.param("Anonymous", "anon:abc123", "AN", id="single_word_name"),
-            pytest.param("", "preston@test.com", "PR", id="falls_back_to_identifier"),
-            pytest.param("", "", "?", id="nothing_to_show"),
-        ],
-    )
-    def test_initials(self, name, identifier, expected):
-        assert Participant(name=name, identifier=identifier).initials == expected
-
-    def test_initials_falls_back_to_user_full_name(self):
-        user = CustomUser(first_name="Jane", last_name="Doe")
-        assert Participant(name="", identifier="jane@example.com", user=user).initials == "JD"
