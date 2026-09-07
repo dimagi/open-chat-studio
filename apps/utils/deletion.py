@@ -364,8 +364,7 @@ def get_related_experiment_versions_queryset(
     queryset = get_related_pipeline_experiments_queryset(ids, param_key)
     if list_param_key:
         queryset = queryset | get_related_pipeline_experiments_queryset_list_param(ids, list_param_key)
-    # Filter for default published versions, excluding non-default published and working versions
-    return queryset.filter(is_default_version=True).exclude(working_version__id__isnull=True)
+    return queryset.filter(Q(is_default_version=True) | Q(working_version__id__isnull=True))
 
 
 def has_related_pipeline_references(instance, param_key: str, list_param_key: str | None = None) -> bool:

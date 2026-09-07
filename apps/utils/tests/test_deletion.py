@@ -86,13 +86,20 @@ class TestGetRelatedExperimentVersionsQueryset:
         collection = CollectionFactory.create()
         collection_version = collection.create_new_version()
         pipeline = PipelineFactory.create()
-        NodeFactory.create(
+        node = NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={"collection_id": str(collection_version.id)},
         )
         experiment = ExperimentFactory.create(pipeline=pipeline)
         published = experiment.create_new_version()
+
+        # collection_id is LIVE_REFERENCE, so publishing never rewrites it — the working
+        # experiment's own node still references collection_version.id verbatim too. Clear it so
+        # only the published version's node is left referencing it, isolating this tier from the
+        # working-experiment reference that would otherwise also match.
+        node.params = {}
+        node.save()
 
         result = get_related_experiment_versions_queryset(collection, "collection_id", "collection_index_ids")
 
@@ -102,7 +109,7 @@ class TestGetRelatedExperimentVersionsQueryset:
         collection = CollectionFactory.create()
         collection_version = collection.create_new_version()
         pipeline = PipelineFactory.create()
-        NodeFactory.create(
+        node = NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={"collection_id": str(collection_version.id)},
@@ -111,6 +118,12 @@ class TestGetRelatedExperimentVersionsQueryset:
         published = experiment.create_new_version()
         published.is_default_version = False
         published.save()
+
+        # Clear the working experiment's own leftover reference (see note above) so only the
+        # non-default published version's node references the collection, isolating what this
+        # test is actually checking.
+        node.params = {}
+        node.save()
 
         result = get_related_experiment_versions_queryset(collection, "collection_id", "collection_index_ids")
 
