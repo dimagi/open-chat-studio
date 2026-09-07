@@ -173,6 +173,7 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "apps.web.cache_control_middleware.SensitiveDataCacheControlMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
             "apps.users.middleware.RequireMfaForStaffMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
