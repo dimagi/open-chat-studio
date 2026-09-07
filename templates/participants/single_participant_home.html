@@ -31,8 +31,8 @@
 {% block app %}
   <div class="app-card rounded-2xl border border-base-300 bg-base-100">
     <div class="flex flex-wrap items-start justify-between gap-5">
-      <div class="flex items-center gap-5 flex-wrap">
-        <div class="flex-1 min-w-70 flex flex-col gap-2">
+      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-8 gap-y-2 flex-1">
+        <div class="grid grid-rows-subgrid row-span-2 gap-2 min-w-70">
           <div class="flex items-center gap-2 flex-wrap">
             <h1 class="pg-title text-lg shrink-0" id="participant-name">
               {% include "participants/partials/participant_name.html" %}
@@ -52,7 +52,7 @@
               <i class="fa-solid fa-pencil"></i>
             </button>
           </div>
-          <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap text-xs text-base-content/70">
+          <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap text-xs text-base-content/70 self-end">
             <span><i class="fa-regular fa-window-maximize text-base-content/50 mr-1"></i>{{ participant.get_platform_display }}</span>
             <span class="text-base-content/30">|</span>
             <span>{{ participant.identifier }}</span>
@@ -60,26 +60,26 @@
             <span>{{ experiments|length }} {% translate "chatbots" %}</span>
           </div>
         </div>
-        <div class="stats stats-horizontal ml-4">
-          <div class="stat py-2 px-0 pr-8 border-e-0">
-            <div class="stat-value text-lg">{{ total_session_count }}</div>
-            <div class="stat-title stat-title-upper">{% translate "Sessions" %}</div>
+        <div class="grid grid-rows-subgrid row-span-2 grid-flow-col auto-cols-max gap-x-8 ml-4">
+          <div class="grid grid-rows-subgrid row-span-2 gap-1 pe-8 border-e border-base-300">
+            <div class="text-lg font-extrabold self-end">{{ total_session_count }}</div>
+            <div class="stat-title-upper">{% translate "Sessions" %}</div>
           </div>
-          <div class="stat py-2 px-0 pr-8 border-e-0">
+          <div class="grid grid-rows-subgrid row-span-2 gap-1 pe-8 border-e border-base-300">
             {% with last_seen=participant.last_seen %}
-              <div class="stat-value text-lg">{{ last_seen|naturaltime|default:"-" }}</div>
-              <div class="stat-title stat-title-upper">
+              <div class="text-lg font-extrabold self-end whitespace-nowrap">{{ last_seen|naturaltime|default:"-" }}</div>
+              <div class="stat-title-upper whitespace-nowrap">
                 {% translate "Last seen" %}{% if last_seen %} · {{ last_seen|date:"M j, Y" }}{% endif %}
               </div>
             {% endwith %}
           </div>
-          <div class="stat py-2 px-0 border-e-0">
-            <div class="stat-value">
+          <div class="grid grid-rows-subgrid row-span-2 gap-1">
+            <div class="self-end">
               <div class="w-36 h-10">
                 <canvas id="participant-message-trend" data-trend="{{ message_trend }}"></canvas>
               </div>
             </div>
-            <div class="stat-title stat-title-upper">
+            <div class="stat-title-upper whitespace-nowrap">
               {% translate "Messages" %} · {% translate "last 30 days" %}
             </div>
           </div>

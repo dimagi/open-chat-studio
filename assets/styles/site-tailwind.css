@@ -64,7 +64,7 @@
 }
 
 @utility stat-title-upper {
-  @apply uppercase tracking-[.08em] text-xs font-semibold;
+  @apply uppercase tracking-[.08em] text-xs font-semibold text-base-content/60;
 }
 
 @utility tab {
