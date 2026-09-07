@@ -87,6 +87,7 @@ def utf16_aware_split(text: str, limit: int) -> list[str]:
 
     return chunks
 
+
 if TYPE_CHECKING:
     from slack_sdk import WebClient
     from turn import TurnClient
