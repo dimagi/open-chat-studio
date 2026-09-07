@@ -31,20 +31,15 @@
 {% block app %}
   <div class="app-card rounded-2xl border border-base-300 bg-base-100">
     <div class="flex flex-wrap items-start justify-between gap-5">
-      <div class="flex items-start gap-5 flex-wrap">
-        <div class="avatar avatar-placeholder">
-          <div class="bg-primary/10 text-primary rounded-xl w-13">
-            <span class="text-lg font-bold">{{ participant.initials }}</span>
-          </div>
-        </div>
+      <div class="flex items-center gap-5 flex-wrap">
         <div class="flex-1 min-w-70 flex flex-col gap-2">
           <div class="flex items-center gap-2 flex-wrap">
             <h1 class="pg-title text-lg shrink-0" id="participant-name">
               {% include "participants/partials/participant_name.html" %}
             </h1>
             <span class="badge badge-sm whitespace-nowrap
-                         {% if latest_session.status == 'active' %}badge-success{% else %}badge-ghost{% endif %}">
-              {% if latest_session.status == 'active' %}
+                         {% if participant.is_recently_active %}badge-success{% else %}badge-ghost{% endif %}">
+              {% if participant.is_recently_active %}
                 {% translate "Active" %}
               {% else %}
                 {% translate "Inactive" %}
@@ -68,12 +63,12 @@
         <div class="stats stats-horizontal ml-4">
           <div class="stat py-2 px-0 pr-8 border-e-0">
             <div class="stat-value text-lg">{{ total_session_count }}</div>
-            <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">{% translate "Sessions" %}</div>
+            <div class="stat-title stat-title-upper">{% translate "Sessions" %}</div>
           </div>
           <div class="stat py-2 px-0 pr-8 border-e-0">
             {% with last_seen=participant.last_seen %}
               <div class="stat-value text-lg">{{ last_seen|naturaltime|default:"-" }}</div>
-              <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">
+              <div class="stat-title stat-title-upper">
                 {% translate "Last seen" %}{% if last_seen %} · {{ last_seen|date:"M j, Y" }}{% endif %}
               </div>
             {% endwith %}
@@ -84,7 +79,7 @@
                 <canvas id="participant-message-trend" data-trend="{{ message_trend }}"></canvas>
               </div>
             </div>
-            <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">
+            <div class="stat-title stat-title-upper">
               {% translate "Messages" %} · {% translate "last 30 days" %}
             </div>
           </div>

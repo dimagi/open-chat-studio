@@ -63,6 +63,10 @@
   @apply lg:shadow-md p-4 mb-2 mt-2 lg:mt-0 lg:p-8 border border-base-300 rounded-2xl bg-base-100;
 }
 
+@utility stat-title-upper {
+  @apply uppercase tracking-[.08em] text-xs font-semibold;
+}
+
 @utility tab {
   &:is(input[type='radio']) {
     @apply whitespace-nowrap;

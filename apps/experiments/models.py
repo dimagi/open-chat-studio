@@ -1169,6 +1169,11 @@ class Participant(BaseTeamModel):
             .first()
         )
 
+    def is_recently_active(self, days: int = 30) -> bool:
+        """Whether this participant has sent a message within the last `days` days."""
+        last_seen = self.last_seen()
+        return bool(last_seen and last_seen >= timezone.now() - timezone.timedelta(days=days))
+
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
