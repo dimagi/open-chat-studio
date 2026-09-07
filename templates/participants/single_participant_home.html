@@ -37,8 +37,9 @@
             <h1 class="pg-title text-lg shrink-0" id="participant-name">
               {% include "participants/partials/participant_name.html" %}
             </h1>
-            <span class="badge badge-sm whitespace-nowrap
-                         {% if participant.is_recently_active %}badge-success{% else %}badge-ghost{% endif %}">
+            <span class="badge badge-sm whitespace-nowrap tooltip
+                         {% if participant.is_recently_active %}badge-success{% else %}badge-ghost{% endif %}"
+                  data-tip="{% translate 'Has been active in the last 30 days' %}">
               {% if participant.is_recently_active %}
                 {% translate "Active" %}
               {% else %}
@@ -137,7 +138,15 @@
   </div>
   <div role="tablist" class="tabs tabs-border">
     <label role="tab" class="tab has-checked:text-primary">
-      <input type="radio" name="participant_tabs" class="hidden" checked />
+      <input type="radio"
+             name="participant_tabs"
+             class="hidden"
+             checked
+             hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}"
+             hx-target="#sessions-panel"
+             hx-swap="outerHTML"
+             hx-trigger="change"
+             hx-vals='js:{chatbot: new URLSearchParams(window.location.search).get("chatbot") || ""}' />
       {% translate "Sessions" %} <span class="text-base-content/50 ml-1">{{ total_session_count }}</span>
     </label>
     <div role="tabpanel" class="tab-content pt-3" id="sessions">
@@ -145,7 +154,14 @@
     </div>
     {% if perms.experiments.view_participantdata %}
       <label role="tab" class="tab has-checked:text-primary">
-        <input type="radio" name="participant_tabs" class="hidden" />
+        <input type="radio"
+               name="participant_tabs"
+               class="hidden"
+               hx-get="{% url 'participants:data-panel' request.team.slug participant.id %}"
+               hx-target="#data-panel"
+               hx-swap="innerHTML"
+               hx-trigger="change"
+               hx-vals='js:{chatbot: new URLSearchParams(window.location.search).get("chatbot") || ""}' />
         {% translate "Participant Data" %}
       </label>
       <div role="tabpanel" class="tab-content pt-3" id="participant-data-tab">
@@ -155,7 +171,14 @@
         </div>
       </div>
       <label role="tab" class="tab has-checked:text-primary">
-        <input type="radio" name="participant_tabs" class="hidden" />
+        <input type="radio"
+               name="participant_tabs"
+               class="hidden"
+               hx-get="{% url 'participants:schedules-panel' request.team.slug participant.id %}"
+               hx-target="#schedules-panel"
+               hx-swap="outerHTML"
+               hx-trigger="change"
+               hx-vals='js:{chatbot: new URLSearchParams(window.location.search).get("chatbot") || ""}' />
         {% translate "Schedules" %} <span class="text-base-content/50 ml-1">{{ participant_schedules|length }}</span>
       </label>
       <div role="tabpanel" class="tab-content pt-3" id="schedules">
