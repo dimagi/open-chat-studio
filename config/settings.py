@@ -904,7 +904,6 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "deploy_channels": "/how-to/deploy_to_different_channels/",
-    "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
 }
