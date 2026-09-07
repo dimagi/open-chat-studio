@@ -155,7 +155,7 @@ def test_members_table_load_more_returns_next_page_with_control(client, team):
     assert response.status_code == 200
     assert b"member-page2@example.org" in response.content
     assert b'hx-select="tbody > tr"' in response.content
-    assert b'hx-target="this"' in response.content
+    assert b'hx-target="closest tr"' in response.content
 
 
 @pytest.mark.django_db()

@@ -7,7 +7,7 @@ already includes the closing `</tbody>` tag -- there's no seam to append a trail
 into otherwise.
 {% endcomment %}
 
-{% block pagination %}{% endblock pagination %}
+{% block pagination %}{% endblock %}
 
 {% block table.tbody %}
     <tbody {{ table.attrs.tbody.as_html }}>
@@ -27,12 +27,17 @@ into otherwise.
         {% endif %}
     {% endfor %}
     {% if table.page.has_next %}
-        <tr hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
-            hx-target="this"
-            hx-select="tbody > tr"
-            hx-swap="outerHTML"
-            style="cursor: pointer;">
-            <td colspan="{{ table.columns|length }}" class="text-center text-sm">{% trans "Load more" %}</td>
+        <tr>
+            <td colspan="{{ table.columns|length }}" class="text-center">
+                <button type="button"
+                        class="btn btn-ghost btn-sm"
+                        hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
+                        hx-target="closest tr"
+                        hx-select="tbody > tr"
+                        hx-swap="outerHTML">
+                    {% translate "Load more" %}
+                </button>
+            </td>
         </tr>
     {% endif %}
     </tbody>
