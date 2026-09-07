@@ -82,25 +82,23 @@ def _resolve_selected_data_experiment(
     return next((e for e in experiments if e.id == selected_id), None)
 
 
-def single_participant_home_context(
-    request, context: dict, participant_id: int, experiment_id: int | None = None
-) -> dict:
-    """A helper function to build context for a single participant's home view.
+def _get_participant_and_chatbots(request, participant_id: int) -> tuple[Participant, list[Experiment], int | None]:
+    """Resolve the participant, the chatbots they've used, and the active `?chatbot=` pill.
 
-    Loads sessions and schedules across every chatbot the participant has used (not
-    gated behind picking one first). A shared `?chatbot=` query param, applied via plain
-    links (full page reload, no new client-side filtering logic), narrows the Sessions
-    and Schedules tabs to one chatbot -- "All chatbots" simply omits the param. The
-    Participant Data tab always shows one chatbot at a time (there's no sensible
-    "all chatbots" merged JSON view), selected the same way, defaulting to the first
-    chatbot the participant has used.
+    Shared by the full page and all three tab panels -- every one of them needs to know
+    who the participant is and which chatbots to show as pills, nothing else here is
+    common to all four.
     """
-    team = request.team
-    participant = get_object_or_404(Participant, pk=participant_id, team=team)
+    participant = get_object_or_404(Participant, pk=participant_id, team=request.team)
     experiments = list(participant.get_experiments_for_display())
-
     filter_experiment_id = _parse_chatbot_filter(request)
+    return participant, experiments, filter_experiment_id
 
+
+def _sessions_panel_context(
+    request, participant: Participant, experiments: list[Experiment], filter_experiment_id: int | None
+) -> dict:
+    team = request.team
     total_session_count = ExperimentSession.objects.filter(team=team, participant=participant).count()
     sessions = (
         ExperimentSession.objects.get_table_queryset(team, filter_experiment_id)
@@ -111,43 +109,91 @@ def single_participant_home_context(
     table = ParticipantSessionsTable(sessions)
     # set request (no pagination) so the chatbot chip can permission-gate its link
     session_table = RequestConfig(request, paginate=False).configure(table)
+    filter_context = get_filter_context_data(
+        team=team,
+        columns=ExperimentSessionFilter.columns(team),
+        filter_class=ExperimentSessionFilter,
+        table_url=reverse("chatbots:participant_sessions_list", args=[team.slug, participant.id]),
+        table_container_id="participant-sessions-table",
+        table_type=FilterSet.TableType.ALL_SESSIONS,
+    )
+    return {
+        "participant": participant,
+        "experiments": experiments,
+        "selected_experiment_id": filter_experiment_id,
+        "session_table": session_table,
+        "total_session_count": total_session_count,
+        **filter_context,
+    }
 
+
+def _schedules_panel_context(
+    request, participant: Participant, experiments: list[Experiment], filter_experiment_id: int | None
+) -> dict:
     schedules = participant.get_schedules_for_all_experiments(include_inactive=True)
     if filter_experiment_id:
         schedules = [s for s in schedules if s["experiment"].id == filter_experiment_id]
+    return {
+        "participant": participant,
+        "experiments": experiments,
+        "selected_experiment_id": filter_experiment_id,
+        "participant_schedules": schedules,
+    }
 
+
+def _data_panel_context(
+    request,
+    participant: Participant,
+    experiments: list[Experiment],
+    filter_experiment_id: int | None,
+    experiment_id: int | None = None,
+) -> dict:
+    team = request.team
     selected_data_experiment = _resolve_selected_data_experiment(experiments, filter_experiment_id, experiment_id)
     participant_data_row = None
     if selected_data_experiment:
         participant_data_row = (
             ParticipantData.objects.for_experiment(selected_data_experiment).filter(participant=participant).first()
         )
+    return {
+        "participant": participant,
+        "experiments": experiments,
+        "selected_data_experiment": selected_data_experiment,
+        "data_panel_url": reverse("participants:data-panel", args=[team.slug, participant.id]),
+        "participant_data": json.dumps(participant_data_row.data if participant_data_row else {}, indent=4),
+        "updated_at": participant_data_row.updated_at if participant_data_row else None,
+        "key_count": len(participant_data_row.data) if participant_data_row else 0,
+    }
 
-    filter_context = get_filter_context_data(
-        team=team,
-        columns=ExperimentSessionFilter.columns(team),
-        filter_class=ExperimentSessionFilter,
-        table_url=reverse("chatbots:participant_sessions_list", args=[team.slug, participant_id]),
-        table_container_id="participant-sessions-table",
-        table_type=FilterSet.TableType.ALL_SESSIONS,
-    )
 
+def single_participant_home_context(
+    request, context: dict, participant_id: int, experiment_id: int | None = None
+) -> dict:
+    """Build context for the full single-participant page: the header plus all three tabs.
+
+    Loads sessions and schedules across every chatbot the participant has used (not
+    gated behind picking one first). A shared `?chatbot=` query param, applied via plain
+    links (full page reload, no new client-side filtering logic), narrows the Sessions
+    and Schedules tabs to one chatbot -- "All chatbots" simply omits the param. The
+    Participant Data tab always shows one chatbot at a time (there's no sensible
+    "all chatbots" merged JSON view), selected the same way, defaulting to the first
+    chatbot the participant has used.
+
+    The three tab panel views below build only their own tab's slice of this instead of
+    calling this directly: a chatbot-pill click only ever re-renders one tab, so there's
+    no reason for it to also rebuild the session table, aggregate every schedule, and
+    load participant data for the other two.
+    """
+    team = request.team
+    participant, experiments, filter_experiment_id = _get_participant_and_chatbots(request, participant_id)
+
+    context.update({"active_tab": "participants", "participant": participant})
+    context.update(_sessions_panel_context(request, participant, experiments, filter_experiment_id))
+    context.update(_schedules_panel_context(request, participant, experiments, filter_experiment_id))
+    context.update(_data_panel_context(request, participant, experiments, filter_experiment_id, experiment_id))
     context.update(
         {
-            "active_tab": "participants",
-            "participant": participant,
-            "experiments": experiments,
-            "selected_experiment_id": filter_experiment_id,
-            "selected_data_experiment": selected_data_experiment,
-            "session_table": session_table,
-            "total_session_count": total_session_count,
             "sessions_panel_url": reverse("participants:sessions-panel", args=[team.slug, participant_id]),
-            "data_panel_url": reverse("participants:data-panel", args=[team.slug, participant_id]),
-            **filter_context,
-            "participant_data": json.dumps(participant_data_row.data if participant_data_row else {}, indent=4),
-            "updated_at": participant_data_row.updated_at if participant_data_row else None,
-            "key_count": len(participant_data_row.data) if participant_data_row else 0,
-            "participant_schedules": schedules,
             "message_trend": participant.get_message_trend(),
             "latest_session": participant.experimentsession_set.order_by("-created_at").first(),
         }
@@ -295,11 +341,11 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
 class ParticipantSessionsPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """Sessions tab content, re-rendered via htmx when a chatbot quick-filter pill is clicked.
 
-    Reuses the same context builder as the full page so a pill click and a full page load
-    produce identical data. Renders a dedicated fragment rather than the full-page partial:
-    that one also includes `experiments/filters.html`, whose Alpine component re-mounts (and
-    re-fires its own auto-load) on every swap if included here too, racing this endpoint's
-    own htmx-swapped table content -- no full page reload, so no scroll jump or reload flash.
+    Builds only the Sessions tab's own slice of context, not the Schedules/Data tabs' data
+    too. Renders a dedicated fragment rather than the full-page partial: that one also
+    includes `experiments/filters.html`, whose Alpine component re-mounts (and re-fires its
+    own auto-load) on every swap if included here too, racing this endpoint's own
+    htmx-swapped table content -- no full page reload, so no scroll jump or reload flash.
     """
 
     permission_required = "experiments.view_participant"
@@ -307,9 +353,11 @@ class ParticipantSessionsPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 
     def get_context_data(self, *args, **kwargs):
         initial_context = super().get_context_data(*args, **kwargs)
-        return single_participant_home_context(
-            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        participant, experiments, filter_experiment_id = _get_participant_and_chatbots(
+            self.request, self.kwargs["participant_id"]
         )
+        initial_context.update(_sessions_panel_context(self.request, participant, experiments, filter_experiment_id))
+        return initial_context
 
 
 class ParticipantSchedulesPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -320,9 +368,11 @@ class ParticipantSchedulesPanel(LoginAndTeamRequiredMixin, PermissionRequiredMix
 
     def get_context_data(self, *args, **kwargs):
         initial_context = super().get_context_data(*args, **kwargs)
-        return single_participant_home_context(
-            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        participant, experiments, filter_experiment_id = _get_participant_and_chatbots(
+            self.request, self.kwargs["participant_id"]
         )
+        initial_context.update(_schedules_panel_context(self.request, participant, experiments, filter_experiment_id))
+        return initial_context
 
 
 class ParticipantDataPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -333,9 +383,11 @@ class ParticipantDataPanel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
 
     def get_context_data(self, *args, **kwargs):
         initial_context = super().get_context_data(*args, **kwargs)
-        return single_participant_home_context(
-            self.request, initial_context, participant_id=self.kwargs["participant_id"]
+        participant, experiments, filter_experiment_id = _get_participant_and_chatbots(
+            self.request, self.kwargs["participant_id"]
         )
+        initial_context.update(_data_panel_context(self.request, participant, experiments, filter_experiment_id))
+        return initial_context
 
 
 class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
