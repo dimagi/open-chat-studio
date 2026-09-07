@@ -7,7 +7,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SourceMaterial
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
@@ -242,6 +242,7 @@ class TestArchivingNodes:
         collection_index = CollectionFactory.create(
             is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
         )
+        source_material = SourceMaterialFactory.create()
 
         # Build the pipeline
         pipeline = PipelineFactory.create()
@@ -252,11 +253,13 @@ class TestArchivingNodes:
             params={
                 "collection_id": str(collection.id),
                 "collection_index_ids": [str(collection_index.id)],
+                "source_material_id": str(source_material.id),
             },
         )
         pipeline.create_new_version()
 
         assistant_version = assistant.versions.first()
+        source_material_version = source_material.versions.first()
 
         pipeline.archive()
 
@@ -264,7 +267,9 @@ class TestArchivingNodes:
         assistant.refresh_from_db()
         collection.refresh_from_db()
         collection_index.refresh_from_db()
+        source_material.refresh_from_db()
         assistant_version.refresh_from_db()
+        source_material_version.refresh_from_db()
 
         assert assistant.is_archived is False
         # ADR-0031: media + index collections are live shared resources — never versioned per bot,
@@ -274,8 +279,10 @@ class TestArchivingNodes:
         assert collection_index.is_archived is False
         assert not collection_index.versions.exists()
 
-        # Assistants are still versioned per bot and get archived.
+        # Assistants and source materials are still versioned per bot and get archived.
         assert assistant_version.is_archived is True
+        assert source_material.is_archived is False
+        assert source_material_version.is_archived is True
 
     def test_archive_legacy_frozen_index_version(self):
         """
@@ -337,6 +344,42 @@ class TestArchivingNodes:
         frozen_media.refresh_from_db()
         assert frozen_media.is_archived is True
         assert working_media.is_archived is False
+
+    def test_archiving_one_node_version_leaves_a_shared_source_material_version_intact(self):
+        """REUSE_UNCHANGED means one SourceMaterial version can legitimately be referenced by more
+        than one separately-published node, when the content hasn't changed between publishes.
+        Archiving the node behind one reference must not archive the shared version while another
+        live node still needs it; archiving both must then archive it."""
+        source_material = SourceMaterialFactory.create()
+
+        pipeline_a = PipelineFactory.create()
+        node_a = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline_a,
+            params={"source_material_id": str(source_material.id)},
+        )
+        node_a_version = node_a.create_new_version()
+        shared_version_id = node_a_version.params["source_material_id"]
+        assert shared_version_id != str(source_material.id), "pre-condition: first publish versions it"
+
+        pipeline_b = PipelineFactory.create()
+        node_b = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline_b,
+            params={"source_material_id": str(source_material.id)},
+        )
+        node_b_version = node_b.create_new_version()
+        assert node_b_version.params["source_material_id"] == shared_version_id, (
+            "pre-condition: unchanged content reuses the existing version rather than creating a new one"
+        )
+
+        node_a_version.archive()
+        shared_version = SourceMaterial.objects.get(id=shared_version_id)
+        assert shared_version.is_archived is False, "node_b_version still references this version"
+
+        node_b_version.archive()
+        shared_version.refresh_from_db()
+        assert shared_version.is_archived is True
 
 
 class TestPipeline:
