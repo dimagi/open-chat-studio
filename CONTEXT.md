@@ -35,6 +35,22 @@ A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Router
 The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
 _Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 
+**Version Spec**:
+The declaration of what travels with a versioned record when it is snapshotted, reverted, or archived — one per versioned model, bound to it by `Meta.model`.
+_Status_: agreed, not yet built — see [#4433](https://github.com/dimagi/open-chat-studio/issues/4433). Today the same facts are spread across `VERSIONED_CONTENT_FIELDS`/`VERSION_IDENTITY_FIELDS` on `Experiment`, `_copy_attr_to_new_version`, `sync_triggers`, and the `VersionedParamSpec`/`EventActionParamSpec` registries. The vocabulary below is the agreed target and is worth using in discussion now; there is no `VersionSpec` class to grep for yet.
+
+A Version Spec lists **members**, each with an *address kind* and, for the kinds that reference another record, a *travel strategy*:
+
+- **Row field** — a concrete field on the record itself, classified as either versioned content or version identity. No strategy: cloning the row is the whole behaviour. A field the Spec does not account for is a load-time error, which is what stops a newly added field from silently joining the snapshot.
+- **Forward reference** — an FK to another versioned record (a Chatbot Version's Consent Form, its Pipeline).
+- **Owned set** — a set of records belonging to this one (a Chatbot Version's Static Triggers, a Pipeline Version's Nodes, a **Collection**'s Files). Copied and re-pointed at the new parent; records on the target with no counterpart on the source are archived. Named "owned set" rather than "collection" to avoid colliding with the **Collection** model, which is one of the things an owned set can hold.
+- **Param reference** — an id held inside a `params` JSON blob rather than an FK column (a Pipeline Node's `source_material_id`, an Event Action's `pipeline_id`). May name a mirror FK column that the Spec keeps in step.
+
+The travel strategies are **New Version** (always snapshot the referenced record), **Reuse Unchanged** (snapshot it only if it differs from its latest version, otherwise point at that version), **Live Reference** (keep the working id verbatim — how ADR-0031's live shared resources are declared), and **Private Clone** (copy the record as a child of exactly one version of its parent, with no version family of its own and no independent history — an **Event Action** belongs to one Static Trigger version this way).
+
+Distinct from the **operation**, which is a property of the traversal and not of any member: *publish* (working → version), *revert* (version → working), and *copy* (duplicate a working record, keeping every reference verbatim). Member order within a Spec is significant, and a member that reads state produced by an earlier one declares what it reads.
+_Avoid_: "versioning config" and "version registry" (the two per-param registries it replaces were `VersionedParamSpec` and `EventActionParamSpec`); "Version Details", which is the *rendered comparison* of two versions, not the declaration.
+
 ### Runtime
 
 **Channel**:
@@ -171,6 +187,7 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - A **Pipeline** references **Custom Action Operations** to make outbound HTTP calls.
 - **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
 - **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
+- Every versioned model has exactly one **Version Spec**, and the list above is the *sum of those Specs* rather than an independent fact about the system: a resource is snapshotted because some Spec names it with a **New Version** or **Reuse Unchanged** strategy, and live because a Spec names it as a **Live Reference** (or names it not at all).
 
 ## Example dialogue
 
