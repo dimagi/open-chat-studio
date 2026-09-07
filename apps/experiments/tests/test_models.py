@@ -18,9 +18,11 @@ from apps.experiments.models import (
     Experiment,
     ExperimentSession,
     Participant,
+    SourceMaterial,
     SyntheticVoice,
 )
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.utils import get_slug_for_team
@@ -681,6 +683,105 @@ class TestSourceMaterialVersioning:
         original.refresh_from_db()
         assert original.working_version is None
         _compare_models(original, new_version, expected_changed_fields=["id", "working_version_id"])
+
+
+@pytest.mark.django_db()
+class TestSourceMaterialArchiving:
+    def test_archive_succeeds_when_unused(self):
+        source_material = SourceMaterialFactory.create()
+        assert source_material.archive() is True
+        source_material.refresh_from_db()
+        assert source_material.is_archived is True
+
+    def test_archive_fails_when_referenced_by_a_working_pipeline_node(self):
+        source_material = SourceMaterialFactory.create()
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"source_material_id": str(source_material.id)},
+        )
+
+        assert source_material.archive() is False
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
+
+    def test_archive_fails_when_a_published_experiment_still_uses_a_version(self):
+        source_material = SourceMaterialFactory.create()
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"source_material_id": str(source_material.id)},
+        )
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment.create_new_version()
+
+        # Publishing rewrites the NEW node version's source_material_id to a fresh version, but
+        # never touches the original working node's own params — clear it so only the published
+        # version's node (pointing at that fresh version, not the working id) still needs the
+        # working record, isolating the experiment-rollup tier from the direct-node tier.
+        node.params = {}
+        node.save()
+
+        assert source_material.archive() is False
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
+
+    def test_archive_succeeds_once_the_referencing_experiment_is_archived(self):
+        source_material = SourceMaterialFactory.create()
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"source_material_id": str(source_material.id)},
+        )
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        published = experiment.create_new_version()
+
+        # Clear the working node's own reference (see the previous test's note) so only the
+        # published experiment still blocks archiving.
+        node.params = {}
+        node.save()
+
+        # Archive the PUBLISHED experiment, not the working one — Experiment.archive() deliberately
+        # never archives the working pipeline (only a published version's pipeline gets archived),
+        # matching the established pattern in apps/assistants/tests/test_delete.py::
+        # test_archive_assistant_fails_with_working_related_versioned_pipeline_and_working_experiment.
+        published.archive()
+
+        assert source_material.archive() is True
+
+    def test_archive_fails_when_a_non_default_published_experiment_still_has_a_live_node(self):
+        """Proves parity with Collection: the direct-node-reference tier has no pipeline/experiment
+        status filtering, so it catches a live reference regardless of which experiment version it
+        belongs to. Unlike collection_id (LIVE_REFERENCE), source_material_id is REUSE_UNCHANGED —
+        publishing always rewrites the published node's param to a freshly-created version id, so
+        a non-default published node never references the raw working id. This is exercised by
+        archiving that specific VERSION directly instead, which is also the realistic case: the
+        node-archiving cascade always archives a version for this param, never the working record."""
+        source_material = SourceMaterialFactory.create()
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"source_material_id": str(source_material.id)},
+        )
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        published = experiment.create_new_version()
+        published.is_default_version = False
+        published.save()
+
+        published_node = published.pipeline.node_set.get(flow_id=node.flow_id)
+        shared_version_id = published_node.params["source_material_id"]
+        shared_version = SourceMaterial.objects.get(id=shared_version_id)
+
+        assert shared_version.archive() is False
+        shared_version.refresh_from_db()
+        assert shared_version.is_archived is False
+        # Confirms the protection came from the direct-node tier, not the experiment-rollup tier —
+        # the published experiment is non-default, so it's excluded from get_related_experiments_queryset.
+        assert not shared_version.get_related_experiments_queryset().exists()
 
 
 @pytest.mark.django_db()
