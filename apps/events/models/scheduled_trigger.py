@@ -27,16 +27,22 @@ def scheduled_datetime_for(trigger_date, trigger_time, timezone_name) -> datetim
     """
     zone = ZoneInfo(timezone_name)
     local_datetime = datetime.combine(trigger_date, trigger_time)
+    return _resolve_dst_transition(zone, local_datetime).astimezone(UTC)
+
+
+def _resolve_dst_transition(zone: ZoneInfo, local_datetime: datetime) -> datetime:
+    """Pick the deterministic interpretation of a local time that falls on a DST transition.
+
+    A repeated (fall-back) hour resolves to its standard-time occurrence; a skipped
+    (spring-forward) hour keeps the earlier wall-clock, i.e. the clock right after the gap.
+    """
     fold0 = local_datetime.replace(tzinfo=zone, fold=0)
     fold1 = local_datetime.replace(tzinfo=zone, fold=1)
-    if (fold0.utcoffset() or timedelta()) <= (fold1.utcoffset() or timedelta()):
-        # Unambiguous time, or a spring-forward gap: fold0 keeps the earlier-wall-clock
-        # instant, which for a gap lands just after the transition, preserving the slot.
-        localized = fold0
-    else:
-        # Fall-back: the local hour repeats. fold1 is the standard-time (second) occurrence.
-        localized = fold1
-    return localized.astimezone(UTC)
+    offset0 = fold0.utcoffset() or timedelta()
+    offset1 = fold1.utcoffset() or timedelta()
+    if offset0 <= offset1:
+        return fold0
+    return fold1
 
 
 class ScheduledTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
