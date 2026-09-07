@@ -1,89 +1,48 @@
 {% extends "service_providers/provider_form.html" %}
 {% load form_tags i18n %}
-{% block pre_form %}
-  <div class="my-4 flex flex-col gap-4" x-data="{ type: '{{ subtype }}' }">
-    <div role="alert" class="alert alert-info alert-soft text-sm py-2">
-      <i class="fa-solid fa-circle-info"></i>
-      <span>
-        We use
-        <a href="https://llm-stats.com" target="_blank" rel="noopener noreferrer" class="link link-hover font-semibold">llm-stats.com</a>
-        to source new model releases as they become available.
-      </span>
-    </div>
-    <div>
-      <h2 class="font-bold text-lg">Default LLM Models
-        {% blocktranslate asvar help_text %}
-          Default models are the published models for this provider. If you need to use a model that isn't in
-          this list, create a custom model.
-        {% endblocktranslate %}
-        {% include "generic/help.html" with help_content=help_text %}
-      </h2>
-      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype pricing_lookup=pricing_lookup empty_message="No default models are available for this provider." %}
-    </div>
 
-    <div>
-      <div class="flex justify-between">
-        <h2 class="font-bold text-lg">Custom LLM Models
-          {% blocktranslate asvar help_text %}
-            Custom models are specific to this provider type and are available to all providers of the same type.
-          {% endblocktranslate %}
-          {% include "generic/help.html" with help_content=help_text %}
-        </h2>
-        <div class="tooltip" data-tip="Add a new custom model">
-          <button class="btn btn-primary btn-xs" type="button" onclick="new_custom_model.showModal()">
-            <i class="fa-solid fa-plus"></i>
-          </button>
-        </div>
-      </div>
-      <div id="custom_model_list">
-        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type for_type=subtype pricing_lookup=pricing_lookup %}
-      </div>
-    </div>
-
-    <div>
-      <h2 class="font-bold text-lg">Embedding Models
-        {% blocktranslate asvar help_text %}
-          Embedding models are used to convert text into vector representations.
-        {% endblocktranslate %}
-        {% include "generic/help.html" with help_content=help_text %}
-      </h2>
-      {% include "service_providers/components/embedding_models.html" with embedding_models_by_type=embedding_models_by_type for_type=subtype %}
-    </div>
+{% block extra_tabs %}
+  <input type="radio" name="provider_tabs" role="tab" class="tab" aria-label="Models"
+         {% if active_provider_tab == 'models' %}checked{% endif %}>
+  <div role="tabpanel" class="tab-content pt-4">
+    {% include "service_providers/components/llm_models_tab.html" %}
   </div>
-{% endblock pre_form %}
+{% endblock extra_tabs %}
 
-{% block post_form %}
-  {{ block.super }}
-  <dialog id="pricing_override_modal" class="modal">
-    <div class="modal-box" id="pricing_override_modal_body">
-      {# Populated by HTMX on demand from each model row's Override button. #}
-    </div>
-    <form method="dialog" class="modal-backdrop"><button>close</button></form>
-  </dialog>
-  <dialog id="new_custom_model" class="modal">
-    <div class="modal-box">
-      <h3 class="text-lg font-bold">Create a new Custom Model</h3>
-      <div id="new_model_form">
-        <input name="type" type="hidden" value="{{ subtype }}" id="id_type">
-        {% render_form_fields new_model_form "name" "max_token_limit" %}
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-1">
-          Optional: set the model's pricing now (per 1M tokens) or leave blank to add it later.
+{% block modals %}
+  {% comment %}Both are opened from the Models tab, which only exists once the provider does.{% endcomment %}
+  {% if object.id %}
+    <dialog id="pricing_override_modal" class="modal">
+      <div class="modal-box" id="pricing_override_modal_body">
+        {# Populated by HTMX on demand from each model row's Override button. #}
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+    <dialog id="new_custom_model" class="modal">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold">Create a new Custom Model</h3>
+        <div id="new_model_form">
+          <input name="type" type="hidden" value="{{ subtype }}" id="id_type">
+          {% render_form_fields new_model_form "name" "max_token_limit" %}
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-1">
+            Optional: set the model's pricing now (per 1M tokens) or leave blank to add it later.
+          </div>
+          {% render_form_fields new_model_form "input_price_per_million_tokens" "output_price_per_million_tokens" %}
         </div>
-        {% render_form_fields new_model_form "input_price_per_million_tokens" "output_price_per_million_tokens" %}
+        <div class="modal-action">
+          <form method="dialog">
+            <button type="button" class="btn btn-primary"
+                    hx-post="{% url "service_providers:llm_provider_model_new" request.team.slug %}"
+                    hx-include="#new_model_form"
+                    hx-target="#custom_model_list"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if (event.detail.successful) new_custom_model.close()">
+              Save
+            </button>
+            <button class="btn">Cancel</button>
+          </form>
+        </div>
       </div>
-      <div class="modal-action">
-        <form method="dialog">
-          <button class="btn btn-primary"
-                  hx-post="{% url "service_providers:llm_provider_model_new" request.team.slug %}"
-                  hx-include="#new_model_form"
-                  hx-target="#custom_model_list"
-                  hx-swap="innerHTML"
-                  hx-on::after-request="new_custom_model.close()">
-            Save
-          </button>
-          <button class="btn">Cancel</button>
-        </form>
-      </div>
-    </div>
-  </dialog>
-{% endblock post_form %}
+    </dialog>
+  {% endif %}
+{% endblock modals %}

@@ -553,7 +553,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     session = request.experiment_session
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
-    selected_tags = list(filter(None, request.GET.get("tag_filter", "").split(",")))
+    selected_tags = list(filter(None, request.GET.getlist("tag_filter")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
     try:

@@ -1,48 +1,103 @@
-"""What every façade endpoint shares: the routes, and the write cycle behind them (#4140, W2/W7)."""
+"""What every façade endpoint shares: the routes, and the write cycle behind them (#4140, #4141, W2/W7)."""
 
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from apps.api.v2.pipeline_edit.serializers import MAX_WIRES_PER_CALL
 from apps.pipelines.models import Node
 from apps.utils.factories.documents import CollectionFactory
 
-from .conftest import node_url, nodes_url
+from .conftest import (
+    add_bare_node,
+    add_llm_node,
+    boundary_node,
+    edge_url,
+    edges_url,
+    inspect_url,
+    node_url,
+    nodes_url,
+    post_wires,
+    wire,
+)
 
 
 @pytest.mark.django_db()
 class TestRoutes:
-    """One view class serves the collection and the detail route, so what each offers is resolved
-    per route rather than per class."""
+    """One view class per resource serves both its collection and its detail route, so what each
+    offers is resolved per route rather than per class."""
 
     @pytest.mark.parametrize(
         ("route", "verb", "fields"),
         [
-            pytest.param("collection", "POST", {"type", "label", "params"}, id="collection-post"),
-            pytest.param("detail", "PATCH", {"label", "params"}, id="detail-patch"),
+            pytest.param("nodes", "POST", {"type", "label", "params"}, id="node-collection-post"),
+            pytest.param("node", "PATCH", {"label", "params"}, id="node-detail-patch"),
+            pytest.param("edges", "POST", {"wires"}, id="edge-collection-post"),
         ],
     )
     def test_options_describes_the_body_the_route_takes(self, client, chatbot, route, verb, fields):
         """The body described has to be resolved per verb rather than per class -- and since PATCH is
-        the detail route's only writable verb, stock DRF metadata (PUT and POST alone) would answer it
-        with no body at all."""
-        node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
-        url = nodes_url(chatbot) if route == "collection" else node_url(chatbot, node_id)
-
-        response = client.options(url)
+        the node detail route's only writable verb, stock DRF metadata (PUT and POST alone) would
+        answer it with no body at all."""
+        response = client.options(_url(client, chatbot, route))
 
         assert response.status_code == 200, response.content
         assert set(response.json()["actions"][verb]) == fields
 
-    def test_a_verb_the_route_does_not_offer_is_a_405(self, client, chatbot):
+    def test_options_describes_the_wire_inside_the_wire_body(self, client, chatbot):
+        """The wire body names one field, so the fields a client actually fills in are a level down.
+        Described because that is the only place OPTIONS says what a wire holds -- and alongside them
+        the bounds on how many wires one call takes.
+        """
+        response = client.options(_url(client, chatbot, "edges"))
+
+        assert response.status_code == 200, response.content
+        wires = response.json()["actions"]["POST"]["wires"]
+        assert set(wires["child"]["children"]) == {"source", "target", "source_handle", "target_handle"}
+        assert (wires["min_length"], wires["max_length"]) == (1, MAX_WIRES_PER_CALL)
+
+    def test_options_on_a_route_with_no_writable_verb_describes_no_body(self, client, chatbot):
+        """The edge detail route offers DELETE alone, which takes no body -- so OPTIONS has to answer
+        without inventing one."""
+        response = client.options(_url(client, chatbot, "edge"))
+
+        assert response.status_code == 200, response.content
+        assert "actions" not in response.json()
+
+    @pytest.mark.parametrize(
+        ("route", "verb"),
+        [
+            pytest.param("nodes", "patch", id="node-collection-patch"),
+            pytest.param("nodes", "delete", id="node-collection-delete"),
+            pytest.param("node", "post", id="node-detail-post"),
+            pytest.param("edges", "patch", id="edge-collection-patch"),
+            pytest.param("edges", "delete", id="edge-collection-delete"),
+            pytest.param("edge", "post", id="edge-detail-post"),
+            pytest.param("edge", "patch", id="edge-detail-patch"),
+        ],
+    )
+    def test_a_verb_the_route_does_not_offer_is_a_405(self, client, chatbot, route, verb):
         """Each `path()` narrows `http_method_names` to the verbs its own route offers -- without
         that, a verb from the other route reaches its handler with the wrong path kwargs and raises
         a 500."""
-        node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+        url = _url(client, chatbot, route)
+        call = getattr(client, verb)
 
-        assert client.patch(nodes_url(chatbot), {"params": {}}, format="json").status_code == 405
-        assert client.delete(nodes_url(chatbot)).status_code == 405
-        assert client.post(node_url(chatbot, node_id), {"type": "CodeNode"}, format="json").status_code == 405
+        response = call(url) if verb == "delete" else call(url, {}, format="json")
+
+        assert response.status_code == 405, response.content
+
+
+def _url(client, chatbot, route: str) -> str:
+    """One of the four façade routes, with a node and an edge created for the detail ones."""
+    if route == "nodes":
+        return nodes_url(chatbot)
+    if route == "edges":
+        return edges_url(chatbot)
+    node_id = add_bare_node(client, chatbot, "CodeNode")
+    if route == "node":
+        return node_url(chatbot, node_id)
+    return edge_url(chatbot, wire(client, chatbot, node_id, boundary_node(chatbot, "EndNode")))
 
 
 @pytest.mark.django_db()
@@ -154,7 +209,7 @@ class TestTheResponseEnvelope:
         assert "mcp_tools" in stored
         assert "mcp_tools" not in created["params"]
 
-        inspected = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/").json()
+        inspected = client.get(inspect_url(chatbot)).json()
         node = next(node for node in inspected["pipeline"]["nodes"] if node["node_id"] == created["node_id"])
 
         # Inspect keeps resource ids and `name` out of params, renders the resources separately, and
@@ -178,18 +233,51 @@ class TestTheResponseEnvelope:
 QUERIES_UNDER_THE_LOCK = 29
 
 
+#: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
+#: Pinned to a number for the same reason :data:`QUERIES_UNDER_THE_LOCK` is: the thing worth catching
+#: is work creeping back *in*, and a comparison against the node path cannot see that -- wiring sits
+#: far enough below it to compare favourably either way, because the node path moves by the same
+#: amount per node.
+#:
+#: Two rules, so that a failure says which of the two unrelated causes it is. Restoring the node
+#: reconcile this endpoint does not need costs a flat 7 statements at any graph size, so a failure at
+#: 17 is that revert. Every extra node on the fixture graph costs 2 (``pipeline_state`` validates each
+#: one), so a failure at 12 is someone having changed the fixture. Raising it deliberately is a
+#: decision about how long the row is held: say in the commit what the extra statements buy.
+WIRE_QUERIES_UNDER_THE_LOCK = 10
+
+
+@pytest.mark.django_db()
+def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
+    """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with
+    it the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for.
+    The absolute count is what pins that: reverting the skip takes it from 10 to 17, while a
+    comparison against the node path would not, wiring being cheaper either way.
+    """
+    node_id = add_llm_node(client, chatbot, llm)
+    post_wires(client, chatbot, [{"source": start_node, "target": node_id}])
+
+    with CaptureQueriesContext(connection) as captured:
+        response = post_wires(client, chatbot, [{"source": node_id, "target": end_node}])
+
+    assert response.status_code == 201, response.content
+    sql = [query["sql"] for query in captured.captured_queries]
+    locks = [index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query]
+    assert locks, "the pipeline row was never locked"
+    assert len(sql) - min(locks) == WIRE_QUERIES_UNDER_THE_LOCK, "see the constant"
+
+
 @pytest.mark.django_db()
 def test_a_reference_check_reads_only_the_ids_it_was_sent(client, chatbot, llm, team):
     """A PATCH only learns the node's type from the locked graph, so its reference check runs inside
     the lock. What keeps that from serialising concurrent edits is that the check asks after the ids
-    it was sent rather than building the lists to pick them out of.
+    it was sent rather than building the lists to pick them out of. Two things have to hold, and
+    they fail on different axes:
 
-    Two things have to hold, and they fail on different axes:
-
-    * the count stays at :data:`QUERIES_UNDER_THE_LOCK` -- building the option lists in here is a
-      fixed dozen extra queries, which only an absolute number catches.
-    * it does not move with the number of ids sent, the axis a resolver querying per value instead
-      of per param would grow on.
+    * the count stays at :data:`QUERIES_UNDER_THE_LOCK`, which only an absolute number catches --
+      building the option lists in here is a fixed dozen extra queries.
+    * it does not move with the number of ids sent, the axis a resolver querying per value would
+      grow on.
 
     Query counting rather than threads: a real concurrency test would be slow and flaky.
     """

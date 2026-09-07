@@ -1,15 +1,46 @@
 import pytest
+from django.conf import settings
 from django.urls import reverse
 
-from apps.channels.widget_versions import widget_script_url
 from apps.utils.factories.team import TeamWithUsersFactory
+
+MARKETING = settings.PROJECT_METADATA["MARKETING_SITE_URL"]
 
 
 @pytest.mark.django_db()
-def test_home_renders_for_anonymous_user(client):
+def test_landing_page_renders_for_anonymous_user(client):
     response = client.get(reverse("prelogin:home"))
     assert response.status_code == 200
-    assert b"The responsible layer between AI" in response.content
+    content = response.content.decode()
+    assert "Open-source AI chatbots for" in content
+    assert reverse("sso:login") in content
+    # The landing page signposts the marketing site rather than duplicating it, and
+    # names it as canonical so the two hosts don't compete for the same content.
+    assert f'<link rel="canonical" href="{MARKETING}/">' in content
+
+
+@pytest.mark.django_db()
+def test_landing_page_does_not_reintroduce_the_marketing_content(client):
+    """The whole point of the teardown: this host serves a signpost, not a second copy."""
+    content = client.get(reverse("prelogin:home")).content.decode()
+    assert "<open-chat-studio-widget" not in content
+    assert "js.hsforms.net" not in content
+    assert "Expression of Interest" not in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("path", ["/", "/accounts/login/", "/accounts/signup/"])
+def test_prelogin_frame_leaks_no_unrendered_template_syntax(client, path):
+    """Django's {# ... #} comment is SINGLE-LINE only.
+
+    A multi-line one isn't recognised by the lexer, so it renders as visible text at
+    the top of the page — which is exactly what happened while writing landing.html,
+    and no content assertion caught it. Covers the auth pages too, since they share
+    the frame.
+    """
+    content = client.get(path).content.decode()
+    for token in ["{#", "#}", "{%", "%}", "{{", "}}"]:
+        assert token not in content, f"{path} leaked {token!r}"
 
 
 @pytest.mark.django_db()
@@ -23,138 +54,69 @@ def test_home_redirects_authenticated_user_to_dashboard(client):
 
 
 @pytest.mark.django_db()
-def test_platform_redirects_to_home_anchor(client):
-    response = client.get(reverse("prelogin:platform"))
-    assert response.status_code == 301
-    assert response.url == "/#how-it-works"
-
-
-@pytest.mark.django_db()
-def test_about_page_renders(client):
-    response = client.get(reverse("prelogin:about"))
-    assert response.status_code == 200
-    assert b"Community" in response.content
-
-
-@pytest.mark.django_db()
-def test_applications_page_renders(client):
-    response = client.get(reverse("prelogin:applications"))
-    assert response.status_code == 200
-    assert b"Use Cases" in response.content
-
-
-@pytest.mark.django_db()
-def test_applications_page_embeds_widget_for_configured_demo_bots(client, settings):
-    settings.PRELOGIN_DEMO_BOTS = {"nanibot": {"id": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c", "embed_key": "token-123"}}
-    response = client.get(reverse("prelogin:applications"))
-    content = response.content.decode()
-    assert 'chatbot-id="6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"' in content
-    assert 'embed-key="token-123"' in content
-    assert widget_script_url() in content
-    # The configured bot's card opens the widget; the other two stay inert.
-    assert content.count('data-demo-bot-trigger="nanibot"') == 1
-    assert content.count('class="bot-card bot-card-h bot-card-interactive"') == 1
-    assert content.count("Try this bot") == 1
-    # Every demo widget carries the same demonstration-only banner.
-    assert 'banner-message="Example bot: for demonstration and research purposes only."' in content
-    assert 'banner-style="info"' in content
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "demo_bots",
+    ("url_name", "expected"),
     [
-        pytest.param({"nanibot": {"id": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"}}, id="missing-embed-key"),
-        pytest.param({"nanibot": {"embed_key": "token-123"}}, id="missing-id"),
-        pytest.param({"nanibot": {"id": "", "embed_key": ""}}, id="blank-fields"),
-        pytest.param({"nanibot": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"}, id="entry-not-an-object"),
-        pytest.param(["6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"], id="setting-not-an-object"),
-        pytest.param("nanibot", id="setting-is-a-string"),
+        ("about", f"{MARKETING}/about/"),
+        ("contact", f"{MARKETING}/contact/"),
+        ("applications", f"{MARKETING}/applications/"),
+        ("open_opportunities", f"{MARKETING}/open-opportunities/"),
+        # Straight to the anchor: /platform/ on the marketing site is itself a 301,
+        # so pointing there would make this a two-hop chain.
+        ("platform", f"{MARKETING}/#how-it-works"),
     ],
 )
-def test_applications_page_ignores_malformed_demo_bot_config(client, settings, demo_bots):
-    """Operator-supplied JSON of the wrong shape degrades to static cards, it doesn't 500."""
-    settings.PRELOGIN_DEMO_BOTS = demo_bots
-    response = client.get(reverse("prelogin:applications"))
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert "<open-chat-studio-widget" not in content
-    assert "data-demo-bot-trigger" not in content
-    assert "Try this bot" not in content
+def test_retired_marketing_paths_redirect_permanently(client, url_name, expected):
+    response = client.get(reverse(f"prelogin:{url_name}"))
+    assert response.status_code == 301
+    assert response.url == expected
+
+
+LEGAL_URLS = {
+    "PRIVACY_POLICY_URL": "https://dimagi.com/terms-privacy/",
+    "TERMS_URL": "https://dimagi.com/terms-of-service/",
+    "ACCEPTABLE_USE_POLICY_URL": "https://dimagi.com/terms-aup/",
+}
+
+
+def _footer(content):
+    return content[content.index("<footer") :]
 
 
 @pytest.mark.django_db()
-def test_applications_page_cards_are_inert_without_demo_bot_config(client, settings):
-    settings.PRELOGIN_DEMO_BOTS = {}
-    response = client.get(reverse("prelogin:applications"))
-    content = response.content.decode()
-    assert "<open-chat-studio-widget" not in content
-    assert "data-demo-bot-trigger" not in content
-    assert 'bot-card-interactive"' not in content  # the class is only ever in the stylesheet
-    assert "Try this bot" not in content
-    # No links to the chat UI that replaced these cards.
-    assert "/experiments/e/" not in content
+@pytest.mark.parametrize("path", ["/", "/accounts/login/"])
+def test_footer_legal_links_follow_the_settings(client, settings, path):
+    """Set in PROJECT_METADATA, they render; unset, the whole <li> is omitted.
+
+    Omitted rather than emptied matters: the footer's separators are drawn by CSS on
+    `li:not(:last-child)`, so an empty <li> left behind would show as an orphan pipe.
+    """
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **LEGAL_URLS}
+    footer = _footer(client.get(path).content.decode())
+    for url in LEGAL_URLS.values():
+        assert url in footer
+
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **dict.fromkeys(LEGAL_URLS, "")}
+    footer = _footer(client.get(path).content.decode())
+    for url in LEGAL_URLS.values():
+        assert url not in footer
+    assert "Acceptable Use Policy" not in footer
 
 
 @pytest.mark.django_db()
-def test_contact_page_renders(client):
-    response = client.get(reverse("prelogin:contact"))
-    assert response.status_code == 200
-    assert b"collaborate" in response.content
+def test_footer_separators_are_not_in_the_markup(client, settings):
+    """CSS draws them. A typed-in pipe would orphan whenever an item is gated off."""
+    settings.PROJECT_METADATA = {**settings.PROJECT_METADATA, **LEGAL_URLS}
+    assert "|" not in _footer(client.get("/").content.decode())
 
 
 @pytest.mark.django_db()
-def test_contact_page_shows_hubspot_form_when_configured(client, settings):
-    settings.HUBSPOT_FORM_PORTAL_ID = "503070"
-    settings.HUBSPOT_FORM_ID = "ab84dc67-539d-40d3-b9ac-466d8b8348bf"
-    response = client.get(reverse("prelogin:contact"))
-    content = response.content.decode()
-    assert 'id="hubspot-form"' in content
-    assert "js.hsforms.net" in content
-    assert "503070" in content
-
-
-@pytest.mark.django_db()
-def test_contact_page_hides_hubspot_form_when_not_configured(client, settings):
-    settings.HUBSPOT_FORM_PORTAL_ID = ""
-    settings.HUBSPOT_FORM_ID = ""
-    response = client.get(reverse("prelogin:contact"))
-    content = response.content.decode()
-    assert 'id="hubspot-form"' not in content
-    assert "js.hsforms.net" not in content
-
-
-@pytest.mark.django_db()
-def test_contact_page_shows_contact_email_when_configured(client, settings):
-    settings.HUBSPOT_FORM_PORTAL_ID = ""
-    settings.HUBSPOT_FORM_ID = ""
-    settings.PRELOGIN_CONTACT_EMAIL = "hello@example.com"
-    response = client.get(reverse("prelogin:contact"))
-    assert b"mailto:hello@example.com" in response.content
-
-
-@pytest.mark.django_db()
-def test_contact_page_omits_email_when_not_configured(client, settings):
-    settings.HUBSPOT_FORM_PORTAL_ID = ""
-    settings.HUBSPOT_FORM_ID = ""
-    settings.PRELOGIN_CONTACT_EMAIL = ""
-    response = client.get(reverse("prelogin:contact"))
-    assert b"mailto:" not in response.content
-
-
-@pytest.mark.django_db()
-def test_open_opportunities_page_renders(client):
-    response = client.get(reverse("prelogin:open_opportunities"))
-    assert response.status_code == 200
-    assert b"Expression of Interest" in response.content
-
-
-@pytest.mark.django_db()
-def test_sitemap_lists_prelogin_pages(client):
+def test_sitemap_lists_only_the_landing_page(client):
     response = client.get("/sitemap.xml")
     assert response.status_code == 200
     content = response.content.decode()
-    for name in ["about", "contact", "applications", "open_opportunities"]:
-        assert reverse(f"prelogin:{name}") in content
-    # home reverses to "/" which trivially appears in every URL; assert via entry count instead
-    assert content.count("<url>") == 5
+    assert content.count("<url>") == 1
+    # None of the retired paths, which are redirects now — a sitemap should not
+    # nominate a redirect.
+    for path in ["/about/", "/contact/", "/applications/", "/open-opportunities/"]:
+        assert f"<loc>http://testserver{path}</loc>" not in content
