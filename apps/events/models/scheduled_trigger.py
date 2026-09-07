@@ -1,14 +1,13 @@
 """Scheduled-trigger model, manager, and DST-aware UTC conversion helpers."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
-import pytz
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
-from pytz.exceptions import NonExistentTimeError
 
 from apps.events.models.event_log import EventLog, EventLogStatusChoices
 from apps.events.models.models import ACTION_HANDLERS, EventAction, EventActionType
@@ -26,24 +25,18 @@ def scheduled_datetime_for(trigger_date, trigger_time, timezone_name) -> datetim
     an ambiguous time maps to the standard-time occurrence, and a non-existent time is
     advanced through the spring-forward gap to preserve the intended wall-clock schedule.
     """
-    tz = pytz.timezone(timezone_name)
+    zone = ZoneInfo(timezone_name)
     local_datetime = datetime.combine(trigger_date, trigger_time)
-    try:
-        localized = tz.localize(local_datetime, is_dst=False)
-    except NonExistentTimeError:
-        localized = tz.localize(_advance_through_dst_gap(tz, local_datetime))
-    return localized.astimezone(pytz.utc)
-
-
-def _advance_through_dst_gap(tz, local_datetime) -> datetime:
-    """Advance a naive local time that falls in a spring-forward gap over that gap.
-
-    The gap equals the jump in UTC offset across the transition (typically one hour), so
-    adding it yields a valid local instant just after the gap, preserving the wall-clock slot.
-    """
-    offset_before = tz.localize(local_datetime - timedelta(hours=1)).utcoffset() or timedelta()
-    offset_after = tz.localize(local_datetime + timedelta(hours=1)).utcoffset() or timedelta()
-    return local_datetime + (offset_after - offset_before)
+    fold0 = local_datetime.replace(tzinfo=zone, fold=0)
+    fold1 = local_datetime.replace(tzinfo=zone, fold=1)
+    if (fold0.utcoffset() or timedelta()) <= (fold1.utcoffset() or timedelta()):
+        # Unambiguous time, or a spring-forward gap: fold0 keeps the earlier-wall-clock
+        # instant, which for a gap lands just after the transition, preserving the slot.
+        localized = fold0
+    else:
+        # Fall-back: the local hour repeats. fold1 is the standard-time (second) occurrence.
+        localized = fold1
+    return localized.astimezone(UTC)
 
 
 class ScheduledTriggerObjectManager(VersionsObjectManagerMixin, models.Manager):
@@ -93,6 +86,9 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
         return scheduled_datetime_for(self.trigger_date, self.trigger_time, self.timezone)
 
     def save(self, *args, **kwargs):
+        # Coerce serialized (string) date/time to typed values so an imported row survives save().
+        self.trigger_date = self._meta.get_field("trigger_date").to_python(self.trigger_date)
+        self.trigger_time = self._meta.get_field("trigger_time").to_python(self.trigger_time)
         new_scheduled_at = self.scheduled_datetime
         if self.pk and self.scheduled_at != new_scheduled_at:
             # Schedule changed on an existing trigger; allow it to fire again.

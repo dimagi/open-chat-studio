@@ -67,6 +67,7 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("events.eventaction", "event_actions", "pk"),
     ManifestEntry("events.statictrigger", "static_triggers", "pk"),
     ManifestEntry("events.timeouttrigger", "timeout_triggers", "pk"),
+    ManifestEntry("events.scheduledtrigger", "scheduled_triggers", "pk"),
     ManifestEntry("experiments.participant", "participants", "updated_at_id"),
     ManifestEntry("experiments.participantdata", "participant_data", "updated_at_id", secret=True),
     ManifestEntry("chat.chat", "chats", "updated_at_id"),
@@ -152,6 +153,7 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
     "documents.collectionfile": "collection__team",
     "events.statictrigger": "experiment__team",
     "events.timeouttrigger": "experiment__team",
+    "events.scheduledtrigger": "experiment__team",
     # EventAction has no team FK; StaticTrigger and TimeoutTrigger each hold a OneToOneField to it.
     "events.eventaction": [
         "static_trigger__experiment__team",

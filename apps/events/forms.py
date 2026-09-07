@@ -1,4 +1,5 @@
-import pytz
+from zoneinfo import available_timezones
+
 from django import forms
 from django.utils import timezone
 
@@ -172,9 +173,9 @@ class TimeoutTriggerForm(BaseTriggerForm):
 
 class ScheduledTriggerForm(BaseTriggerForm):
     timezone = forms.ChoiceField(
-        choices=[(tz, tz) for tz in pytz.all_timezones],
+        choices=[(tz, tz) for tz in sorted(available_timezones())],
         label="Timezone",
-        initial="UTC",
+        initial=getattr(timezone.get_current_timezone(), "key", "UTC"),
     )
 
     class Meta:

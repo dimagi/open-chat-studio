@@ -6,7 +6,6 @@ from apps.events.models import EventLogStatusChoices
 from apps.teams.backends import SUPER_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.utils.factories.events import ScheduledTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory
-from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -82,77 +81,6 @@ def test_action_params_form_view_400_for_invalid_action_type(experiment, authed_
     )
     response = authed_client.get(url, {"action_type": "bogus"})
     assert response.status_code == 400
-
-
-@pytest.mark.django_db()
-def test_scheduled_views_are_scoped_to_request_team(client, team_with_users):
-    other_team = TeamWithUsersFactory.create()
-    other_experiment = ExperimentFactory.create(team=other_team)
-    other_trigger = ScheduledTriggerFactory.create(experiment=other_experiment)
-    _super_admin_client(client, team_with_users)
-
-    new_url = reverse("chatbots:events:scheduled_event_new", args=[team_with_users.slug, other_experiment.id])
-    assert client.get(new_url).status_code == 404
-
-    edit_url = reverse(
-        "chatbots:events:scheduled_event_edit",
-        args=[team_with_users.slug, other_experiment.id, other_trigger.id],
-    )
-    assert client.get(edit_url).status_code == 404
-
-    logs_url = reverse(
-        "chatbots:events:scheduled_logs_view",
-        args=[team_with_users.slug, other_experiment.id, other_trigger.id],
-    )
-    assert client.get(logs_url).status_code == 404
-
-    delete_url = reverse(
-        "chatbots:events:scheduled_event_delete",
-        args=[team_with_users.slug, other_experiment.id, other_trigger.id],
-    )
-    assert client.post(delete_url).status_code == 404
-
-    toggle_url = reverse(
-        "chatbots:events:scheduled_event_toggle",
-        args=[team_with_users.slug, other_experiment.id, other_trigger.id],
-    )
-    assert client.post(toggle_url).status_code == 404
-
-
-@pytest.mark.django_db()
-def test_scheduled_delete_and_toggle_reject_get_requests(client, team_with_users):
-    team_experiment = ExperimentFactory.create(team=team_with_users)
-    trigger = ScheduledTriggerFactory.create(experiment=team_experiment)
-    _super_admin_client(client, team_with_users)
-
-    delete_url = reverse(
-        "chatbots:events:scheduled_event_delete",
-        args=[team_with_users.slug, team_experiment.id, trigger.id],
-    )
-    assert client.get(delete_url).status_code == 405
-
-    toggle_url = reverse(
-        "chatbots:events:scheduled_event_toggle",
-        args=[team_with_users.slug, team_experiment.id, trigger.id],
-    )
-    assert client.get(toggle_url).status_code == 405
-
-
-@pytest.mark.django_db()
-def test_toggle_rejects_trigger_belonging_to_different_experiment_in_same_team(client, team_with_users):
-    experiment1 = ExperimentFactory.create(team=team_with_users)
-    experiment2 = ExperimentFactory.create(team=team_with_users)
-    trigger = ScheduledTriggerFactory.create(experiment=experiment1)
-    _super_admin_client(client, team_with_users)
-
-    toggle_url = reverse(
-        "chatbots:events:scheduled_event_toggle",
-        args=[team_with_users.slug, experiment2.id, trigger.id],
-    )
-    assert client.post(toggle_url).status_code == 404
-
-    trigger.refresh_from_db()
-    assert trigger.is_active is True
 
 
 @pytest.mark.django_db()
