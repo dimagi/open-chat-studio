@@ -134,6 +134,12 @@ nav:
       - 0056 Client-credentials applications name the chatbots they may reach: adr/0056-client-credentials-applications-name-their-chatbots.md
       - 0057 Remove the participant allowlist: adr/0057-remove-the-participant-allowlist.md
       - 0058 Tri-state everyone and team grants are a flag's only inputs: adr/0058-tri-state-everyone-and-teams-are-a-flags-only-inputs.md
+      - 0059 The Chat API Channel's credential mode determines which credential admits a caller: adr/0059-chat-api-channel-credential-mode.md
+      - 0060 Each credential validates its own origin: adr/0060-each-credential-validates-its-own-origin.md
+      - 0061 The bearer token is resolved by an authenticator, first in the list, on session start only: adr/0061-bearer-token-authenticator-first-on-session-start-only.md
+      - 0062 Anonymous admission failures at session start return one uniform 401: adr/0062-uniform-401-for-anonymous-admission-failures.md
+      - 0063 Session start requires a client-credentials token with the chat:start scope: adr/0063-session-start-requires-a-chat-start-machine-token.md
+      - 0064 Channels may override the session token lifetime: adr/0064-per-channel-session-token-lifetime-override.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
