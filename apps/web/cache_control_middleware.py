@@ -18,6 +18,7 @@ class SensitiveDataCacheControlMiddleware:
 
     def __call__(self, request):
         response = self.get_response(request)
-        if request.user and not request.user.is_anonymous and not response.has_header("Cache-Control"):
+        is_authenticated = request.user and not request.user.is_anonymous
+        if is_authenticated and not response.has_header("Cache-Control"):
             add_never_cache_headers(response)
         return response
