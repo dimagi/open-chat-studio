@@ -16,78 +16,6 @@ from django.conf import settings
 from django.utils import timezone
 from telebot.util import smart_split
 
-
-def _utf16_len(text: str) -> int:
-    """Return the number of UTF-16 code units in *text*.
-
-    Twilio counts message length in UTF-16 code units, meaning emoji and other
-    characters outside the Basic Multilingual Plane (U+0000–U+FFFF) consume 2
-    units each.  Python's built-in ``len()`` counts Unicode code points (1 per
-    character regardless of plane), so using it to enforce Twilio's 1 600-unit
-    limit can produce chunks that Twilio rejects (error 21617).
-    """
-    return len(text.encode("utf-16-le")) // 2
-
-
-def utf16_aware_split(text: str, limit: int) -> list[str]:
-    """Split *text* into chunks whose UTF-16 length does not exceed *limit*.
-
-    Splits preferring ``\\n`` boundaries, then word (space) boundaries, and
-    finally hard character boundaries as a last resort.  The original text is
-    reconstructed exactly (no characters are added or dropped).
-    """
-    if _utf16_len(text) <= limit:
-        return [text]
-
-    def _hard_char_split(segment: str, current: str) -> tuple[list[str], str]:
-        """Append *segment* character by character into *current*, flushing
-        completed chunks.  Returns (new_chunks, updated_current)."""
-        new_chunks: list[str] = []
-        for ch in segment:
-            if _utf16_len(current + ch) > limit:
-                new_chunks.append(current)
-                current = ""
-            current += ch
-        return new_chunks, current
-
-    chunks: list[str] = []
-    current = ""
-
-    for line in text.splitlines(keepends=True):
-        if _utf16_len(line) <= limit:
-            # Line fits in a single chunk
-            if _utf16_len(current + line) <= limit:
-                current += line
-            else:
-                chunks.append(current)
-                current = line
-        else:
-            # Line is too long on its own — split by words first
-            if current:
-                chunks.append(current)
-                current = ""
-            words = line.split(" ")
-            for i, word in enumerate(words):
-                # Restore the space between words; the last word keeps its
-                # trailing newline (already included by splitlines keepends=True).
-                segment = word if i == len(words) - 1 else word + " "
-                if _utf16_len(segment) >= limit:
-                    # Even a single word exceeds the limit — hard char split
-                    extra_chunks, current = _hard_char_split(segment, current)
-                    chunks.extend(extra_chunks)
-                elif _utf16_len(current + segment) <= limit:
-                    current += segment
-                else:
-                    if current:
-                        chunks.append(current)
-                    current = segment
-
-    if current:
-        chunks.append(current)
-
-    return chunks
-
-
 if TYPE_CHECKING:
     from slack_sdk import WebClient
     from turn import TurnClient
@@ -108,6 +36,68 @@ from apps.service_providers.speech_service import SynthesizedAudio
 logger = logging.getLogger("ocs.messaging")
 
 MEDIA_DOWNLOAD_TIMEOUT = 30
+
+
+def _utf16_len(text: str) -> int:
+    """Return the number of UTF-16 code units in `text`.
+
+    Twilio counts message length in UTF-16 code units, so emoji and other characters outside the
+    Basic Multilingual Plane (U+0000–U+FFFF) consume 2 units each. Python's ``len()`` counts code
+    points (1 per character regardless of plane), so using it to enforce Twilio's 1600 unit limit
+    can produce chunks that Twilio rejects (error 21617).
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _hard_split(segment: str, limit: int):
+    """Yield `segment` in character-boundary pieces of at most `limit` UTF-16 units."""
+    piece = ""
+    for char in segment:
+        if piece and _utf16_len(piece + char) > limit:
+            yield piece
+            piece = ""
+        piece += char
+    if piece:
+        yield piece
+
+
+def _split_pieces(text: str, limit: int):
+    """Yield `text` in pieces of at most `limit` UTF-16 units, preferring natural boundaries.
+
+    Lines are only broken into words when the line itself is over the limit, and words are only
+    broken mid-character when the word alone is over the limit.
+    """
+    for line in text.splitlines(keepends=True):
+        if _utf16_len(line) <= limit:
+            yield line
+            continue
+
+        words = line.split(" ")
+        for index, word in enumerate(words):
+            # Reattach the separator consumed by split(); the final word keeps whatever line
+            # ending splitlines(keepends=True) left on it.
+            piece = word if index == len(words) - 1 else word + " "
+            if _utf16_len(piece) <= limit:
+                yield piece
+            else:
+                yield from _hard_split(piece, limit)
+
+
+def utf16_aware_split(text: str, limit: int) -> list[str]:
+    """Split `text` into chunks of at most `limit` UTF-16 units, reconstructing it exactly."""
+    if _utf16_len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for piece in _split_pieces(text, limit):
+        if current and _utf16_len(current + piece) > limit:
+            chunks.append(current)
+            current = ""
+        current += piece
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 _TEMPLATE_PARAM_WHITESPACE_RE = re.compile(r"\s+")
