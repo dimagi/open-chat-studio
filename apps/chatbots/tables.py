@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
-from django.utils.html import format_html, format_html_join
+from django.utils.html import format_html
 from django_tables2 import columns
 
 from apps.api.session_tokens import issue_session_token
@@ -294,24 +294,8 @@ class ParticipantSessionsTable(ChatbotSessionsTable):
         orderable = False
         empty_text = "No sessions yet!"
 
-    def render_chatbot(self, record):
-        chatbot = record.experiment
-        if self._user_has_perm("experiments.view_experiment"):
-            return format_html(
-                '<a href="{}" class="font-medium link link-hover">{}</a>', chatbot.get_absolute_url(), str(chatbot)
-            )
-        return format_html('<span class="font-medium">{}</span>', str(chatbot))
-
     def render_state(self, record):
         return format_html('<span class="badge badge-ghost">{}</span>', record.get_status_display())
 
-    def render_tags(self, record, bound_column=None):
-        tags = record.chat.non_skipped_tags()
-        if not tags:
-            return "-"
-        return format_html_join(
-            " ", '<span class="badge badge-outline badge-info">{}</span>', ((tag["name"],) for tag in tags)
-        )
-
     def render_versions(self, value):
-        return f"v{value[-1]}" if value else "-"
+        return ", ".join(f"v{v}" for v in value) if value else "-"
