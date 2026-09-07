@@ -993,11 +993,11 @@ SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_ke
 # Operator-level Langfuse tracing for the system agent (apps/help/). Separate from a team's own
 # Trace Provider: the system agent has no Experiment/Session to attach one to, and its model
 # choice is already operator-configured above, not per-team.
-LANGFUSE_PUBLIC_KEY = env("LANGFUSE_PUBLIC_KEY", default="")
-LANGFUSE_SECRET_KEY = env("LANGFUSE_SECRET_KEY", default="")
-LANGFUSE_HOST = env("LANGFUSE_HOST", default="https://cloud.langfuse.com")
+OCS_LANGFUSE_PUBLIC_KEY = env("OCS_LANGFUSE_PUBLIC_KEY", default="")
+OCS_LANGFUSE_SECRET_KEY = env("OCS_LANGFUSE_SECRET_KEY", default="")
+OCS_LANGFUSE_HOST = env("OCS_LANGFUSE_HOST", default="https://cloud.langfuse.com")
 # Fraction of system agent calls to trace, from 0.0 to 1.0. Leave unset to trace every call.
-LANGFUSE_SAMPLE_RATE = env.float("LANGFUSE_SAMPLE_RATE", default=None)
+OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 
 
 # Document Management

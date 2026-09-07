@@ -8,20 +8,20 @@ from apps.service_providers.tracing.langfuse import LangFuseTracer, normalize_sa
 def get_help_agent_tracer() -> LangFuseTracer | None:
     """Build the operator-configured Langfuse tracer for the system agent (apps/help/).
 
-    Returns None when LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY aren't set, or when the
-    effective sample rate is 0.0, so agents run exactly as before tracing was added.
+    Returns None when OCS_LANGFUSE_PUBLIC_KEY/OCS_LANGFUSE_SECRET_KEY aren't set, or when
+    the effective sample rate is 0.0, so agents run exactly as before tracing was added.
     """
-    if not (settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY):
+    if not (settings.OCS_LANGFUSE_PUBLIC_KEY and settings.OCS_LANGFUSE_SECRET_KEY):
         return None
 
-    sample_rate = normalize_sample_rate(settings.LANGFUSE_SAMPLE_RATE)
+    sample_rate = normalize_sample_rate(settings.OCS_LANGFUSE_SAMPLE_RATE)
     if sample_rate is None:
         return None
 
     config = {
-        "public_key": settings.LANGFUSE_PUBLIC_KEY,
-        "secret_key": settings.LANGFUSE_SECRET_KEY,
-        "host": settings.LANGFUSE_HOST,
+        "public_key": settings.OCS_LANGFUSE_PUBLIC_KEY,
+        "secret_key": settings.OCS_LANGFUSE_SECRET_KEY,
+        "host": settings.OCS_LANGFUSE_HOST,
         "sample_rate": sample_rate,
     }
     return LangFuseTracer("langfuse", config)

@@ -156,7 +156,7 @@ class TestBaseHelpAgent:
 
 
 class TestBaseHelpAgentTracing:
-    """Tracing is opt-in via LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY (apps/help/tracing.py).
+    """Tracing is opt-in via OCS_LANGFUSE_PUBLIC_KEY/OCS_LANGFUSE_SECRET_KEY (apps/help/tracing.py).
     get_help_agent_tracer is mocked directly rather than via settings so these tests don't
     depend on env state."""
 
@@ -242,7 +242,7 @@ class TestBaseHelpAgentTracing:
     @mock.patch("apps.help.base.get_help_agent_tracer")
     @mock.patch("apps.help.base.build_system_agent")
     def test_run_succeeds_when_get_tracer_itself_raises(self, mock_build, mock_get_tracer):
-        """An out-of-range LANGFUSE_SAMPLE_RATE makes get_help_agent_tracer() itself raise
+        """An out-of-range OCS_LANGFUSE_SAMPLE_RATE makes get_help_agent_tracer() itself raise
         (see normalize_sample_rate); that must not break the underlying feature either."""
         mock_get_tracer.side_effect = ValueError("Sample rate must be between 0.0 and 1.0, got 5.0")
 

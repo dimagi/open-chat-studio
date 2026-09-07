@@ -4,16 +4,14 @@ import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import ClassVar, Literal
 
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
 from apps.help.agent import build_system_agent
 from apps.help.tracing import get_help_agent_tracer
 from apps.service_providers.tracing.base import TraceContext
-
-if TYPE_CHECKING:
-    from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger("ocs.help")
 
@@ -60,31 +58,11 @@ class BaseHelpAgent[TInput: BaseModel, TOutput: BaseModel](BaseModel):
 
     @contextmanager
     def _trace(self, inputs: dict) -> Iterator[RunnableConfig]:
-        """Wrap one help-agent invocation in a Langfuse trace, if the operator has
-        configured one (see apps/help/tracing.py). Yields a RunnableConfig carrying the
-        tracing callback for agent.invoke(..., config=...); yields an empty config when
-        no tracer is configured, so callers behave exactly as before tracing existed.
-
-        A synchronous failure while creating the trace (a malformed config, an SDK-internal
-        exception) is logged and falls back to an empty config rather than propagating.
-        Mirrors TracingService.trace(). This does not need to cover an unreachable Langfuse
-        host or bad credentials specifically: neither the SDK client nor
-        start_as_current_observation() connects eagerly, so those surface later, during
-        LangFuseTracer.trace()'s own flush() in its finally block, where OpenTelemetry's
-        exporter already logs and swallows the failure rather than raising it. Verified by
-        pointing LANGFUSE_HOST at an unresolvable domain and exercising this code path in a
-        real browser session: the request completed normally, and the export failure showed
-        up only as an "opentelemetry.sdk._shared_internal" log line, never reaching here.
-        get_help_agent_tracer() itself is covered too, in its own try/except that contains
-        no yield: an out-of-range LANGFUSE_SAMPLE_RATE raises there (see
-        normalize_sample_rate), and it must not break the request either. Keeping that
-        outside the trace-entry try/except matters: a yield inside a try/except can receive
-        an exception thrown back in from the caller's own code (e.g. a real bug in
-        agent.invoke()) when the `with` block exits, and that must propagate untouched, not
-        get misreported as a tracing failure.
+        """Wrap one help-agent invocation in a Langfuse trace, if configured. Yields a
+        RunnableConfig carrying the tracing callback, or an empty one if untraced, so
+        tracing setup or creation failures never break the underlying agent call. A real
+        exception raised from within the `with` block still propagates normally.
         """
-        from langchain_core.runnables import RunnableConfig  # noqa: PLC0415 - lazy: avoids loading langchain_core
-
         try:
             tracer = get_help_agent_tracer()
         except Exception:

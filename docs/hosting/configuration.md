@@ -231,7 +231,7 @@ Trace Provider: it's operator-level, covering System Agent usage across all team
 
 | Variable | Description |
 |----------|-------------|
-| `LANGFUSE_PUBLIC_KEY` | Langfuse project public key. Leave unset to disable System Agent tracing. |
-| `LANGFUSE_SECRET_KEY` | Langfuse project secret key. |
-| `LANGFUSE_HOST` | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
-| `LANGFUSE_SAMPLE_RATE` | Fraction of calls to trace, `0.0`-`1.0`. Leave unset to trace every call. |
+| `OCS_LANGFUSE_PUBLIC_KEY` | Langfuse project public key. Leave unset to disable System Agent tracing. |
+| `OCS_LANGFUSE_SECRET_KEY` | Langfuse project secret key. |
+| `OCS_LANGFUSE_HOST` | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `OCS_LANGFUSE_SAMPLE_RATE` | Fraction of calls to trace, `0.0`-`1.0`. Leave unset to trace every call. |
