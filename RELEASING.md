@@ -20,7 +20,7 @@ This governs the tagged, external-facing release train only. It does not change:
 - **The user-facing changelog.** Per-PR entries continue to flow to the docs
   repo via the "This PR requires docs/changelog update" checkbox and
   `docs-changelog-dispatch.yml`. See
-  [user docs and changelog process](docs/developer_guides/user_docs.md).
+  [user docs and changelog process](docs/developer_guides/user_docs/index.md).
 - **The weekly docs-repo release notes.** The Monday workflow in the docs repo
   still publishes the user-subscribed release feed, on its own cadence.
 - **The chat widget train.** The widget is versioned, published to npm and

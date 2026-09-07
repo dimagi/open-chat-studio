@@ -6,6 +6,9 @@ marked.setOptions({
   gfm: true,
 });
 
+/** `http://`, `https://` or protocol-relative `//`, against a trimmed lower-cased href. */
+const EXTERNAL_HREF = /^(https?:)?\/\//;
+
 /**
  * Post-processes rendered HTML to add additional attributes
  * This is called after DOMPurify to ensure external links open in new tabs
@@ -19,11 +22,12 @@ export function postProcessMarkdownHTML(html: string): string {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
 
-    // Add target="_blank" and rel="noopener noreferrer" to external links
+    // Add target="_blank" and rel="noopener noreferrer" to external links.
+    // Normalised first: a padded, upper case or protocol-relative href is external too.
     const links = tempDiv.querySelectorAll('a[href]');
     links.forEach(link => {
-      const href = link.getAttribute('href');
-      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+      const href = link.getAttribute('href')?.trim().toLowerCase() ?? '';
+      if (EXTERNAL_HREF.test(href)) {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
       }
@@ -77,6 +81,14 @@ export const SANITIZE_CONFIG = {
   FORBID_TAGS: ['script', 'style', 'form', 'input', 'button', 'iframe', 'object', 'embed', 'svg', 'math'],
   FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
 };
+
+/** Sanitize server-rendered HTML (already markdown-rendered) with the message config. */
+export function sanitizeHTML(html: string): string {
+  if (!html || typeof html !== 'string') {
+    return '';
+  }
+  return postProcessMarkdownHTML(DOMPurify.sanitize(html, SANITIZE_CONFIG));
+}
 
 export function renderMarkdownSync(content: string): string {
   if (!content || typeof content !== 'string') {

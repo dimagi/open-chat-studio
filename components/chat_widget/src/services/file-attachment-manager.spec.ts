@@ -53,6 +53,48 @@ describe('FileAttachmentManager request headers', () => {
     expect(result.errorMessage).toBe('Session token required');
   });
 
+  it('reports a consent refusal without treating it as a token rejection', async () => {
+    const manager = makeManager();
+    const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required', consent: consentBlock }),
+    } as Response);
+
+    const result = await manager.uploadPendingFiles([{ file: makeFile() }], {
+      apiBaseUrl: 'https://example.com',
+      sessionId: 's1',
+      participantId: 'p1',
+      headers: { 'X-Session-Token': 'tok-123' },
+    });
+
+    expect(result.tokenRejected).toBe(false);
+    expect(result.consent).toEqual(consentBlock);
+    expect(result.selectedFiles[0].error).toBeUndefined();
+  });
+
+  it('treats a consent refusal with no block as an ordinary upload failure', async () => {
+    const manager = makeManager();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required' }),
+    } as Response);
+
+    const result = await manager.uploadPendingFiles([{ file: makeFile() }], {
+      apiBaseUrl: 'https://example.com',
+      sessionId: 's1',
+      participantId: 'p1',
+      headers: { 'X-Session-Token': 'tok-123' },
+    });
+
+    // Not a token rejection: the file error stops the send instead.
+    expect(result.consent).toBeUndefined();
+    expect(result.tokenRejected).toBe(false);
+    expect(result.selectedFiles[0].error).toBe('Consent is required');
+  });
+
   it('sends no auth headers when none are provided', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({

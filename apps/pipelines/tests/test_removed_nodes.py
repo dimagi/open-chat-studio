@@ -10,9 +10,8 @@ mechanisms:
   builder has something to render where the node used to be. The stub is built directly rather than
   from a node class, which is what keeps the first bullet true.
 
-The registry is empty until a node class is actually deleted (``AssistantNode`` is the first, in
-#4254), so these tests register a type of their own rather than depending on whichever types happen
-to be listed.
+Most of these tests register a type of their own rather than depending on whichever types happen
+to be listed; the last one covers ``AssistantNode``, the first real entry (#4254).
 """
 
 from unittest import mock
@@ -113,7 +112,13 @@ class TestRemovedNodeStillLoadsInTheEditor:
         assert schemas["LLMResponseWithPrompt"].get("ui:removed", False) is False
         assert schemas["LLMResponseWithPrompt"]["properties"] != {}
 
-    def test_no_stub_is_served_while_the_registry_is_empty(self):
-        """The mechanism is inert until a class is actually deleted."""
-        assert REMOVED_NODE_TYPES == {}
-        assert all(schema.get("ui:removed") is False for schema in get_node_schemas())
+    def test_the_assistant_node_is_served_as_a_stub(self):
+        """The first real user of the registry: AssistantNode lost its class with #4254, and
+        pipelines still holding one have to open."""
+        assert "AssistantNode" in REMOVED_NODE_TYPES
+
+        stub = next(s for s in get_node_schemas() if s["title"] == "AssistantNode")
+
+        assert stub["ui:removed"] is True
+        assert stub["properties"] == {}
+        assert resolve_node_class("AssistantNode") is None, "it must still refuse to build"
