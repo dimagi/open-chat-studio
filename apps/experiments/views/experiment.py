@@ -549,7 +549,7 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """View for loading paginated messages with HTMX"""
+    """View for loading a session's messages with HTMX, one page at a time via scroll."""
     session = request.experiment_session
     experiment = request.experiment
     page = int(request.GET.get("page", 1))
@@ -661,9 +661,15 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "highlight_message_id": highlight_message_id,
     }
 
+    # Scrolling for more messages just needs the messages, not the whole page again.
+    template_name = (
+        "experiments/components/session_messages_list.html"
+        if request.GET.get("next_page")
+        else "experiments/components/session_messages.html"
+    )
     return TemplateResponse(
         request,
-        "experiments/components/session_messages.html",
+        template_name,
         context,
     )
 
