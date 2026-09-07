@@ -55,22 +55,6 @@ def _parse_chatbot_filter(request) -> int | None:
         return None
 
 
-def _apply_session_filters(sessions, request):
-    """Apply the Sessions tab's Search transcripts / State / Tag filters to a session queryset."""
-    search_query = request.GET.get("q", "").strip()
-    if search_query:
-        sessions = sessions.filter(chat__messages__content__icontains=search_query).distinct()
-    state_filter = request.GET.get("state", "").strip()
-    if state_filter == "active":
-        sessions = sessions.filter(ended_at__isnull=True)
-    elif state_filter == "ended":
-        sessions = sessions.filter(ended_at__isnull=False)
-    tag_filter = request.GET.get("tag", "").strip()
-    if tag_filter:
-        sessions = sessions.filter(chat__tags__name__icontains=tag_filter).distinct()
-    return sessions
-
-
 def _resolve_selected_data_experiment(
     experiments: list[Experiment], filter_experiment_id: int | None, experiment_id: int | None
 ) -> Experiment | None:
@@ -105,7 +89,6 @@ def _sessions_panel_context(
         .filter(participant=participant)
         .prefetch_related(chat_tagged_items_prefetch())
     )
-    sessions = _apply_session_filters(sessions, request)
     table = ParticipantSessionsTable(sessions)
     # set request (no pagination) so the chatbot chip can permission-gate its link
     session_table = RequestConfig(request, paginate=False).configure(table)
@@ -195,7 +178,6 @@ def single_participant_home_context(
         {
             "sessions_panel_url": reverse("participants:sessions-panel", args=[team.slug, participant_id]),
             "message_trend": participant.get_message_trend(),
-            "latest_session": participant.experimentsession_set.order_by("-created_at").first(),
         }
     )
     if participant.platform not in ChannelPlatform.team_global_platforms():

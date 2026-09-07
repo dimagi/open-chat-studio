@@ -184,7 +184,7 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
         response = client.get(url)
 
         assert response.status_code == 200
-        for key in ("session_table", "participant_schedules", "participant_data", "message_trend", "latest_session"):
+        for key in ("session_table", "participant_schedules", "participant_data", "message_trend"):
             assert key in response.context, key
 
 
