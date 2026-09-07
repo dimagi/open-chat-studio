@@ -135,3 +135,41 @@ def test_members_table_pagination_request_returns_bare_table_only(client, team):
     assert response.status_code == 200
     assert b"overflow-x-auto" not in response.content
     assert b'class="table-container"' in response.content
+
+
+@pytest.mark.django_db()
+def test_members_table_load_more_returns_next_page_with_control(client, team):
+    """The load-more row uses `hx-select="tbody > tr"` to pull just the new rows (and
+    the next load-more row) out of the normal full-container response -- htmx does
+    the filtering client-side, so the server keeps rendering the same container it
+    always has. A request for a page with more after it must include a fresh
+    load-more row alongside that page's own rows."""
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+    add_user_to_team(team, UserFactory(email="member-page2@example.org"))
+    add_user_to_team(team, UserFactory(email="member-page3@example.org"))
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "2", "per_page": "1"})
+
+    assert response.status_code == 200
+    assert b"member-page2@example.org" in response.content
+    assert b'hx-select="tbody > tr"' in response.content
+    assert b'hx-target="this"' in response.content
+
+
+@pytest.mark.django_db()
+def test_members_table_load_more_omits_control_on_last_page(client, team):
+    """The load-more row has to vanish once there's nothing left to load, not sit
+    there disabled, or clicking it on the last page just re-requests the same page."""
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+    add_user_to_team(team, UserFactory(email="member-page2@example.org"))
+    add_user_to_team(team, UserFactory(email="member-page3@example.org"))
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "3", "per_page": "1"})
+
+    assert response.status_code == 200
+    assert b"member-page3@example.org" in response.content
+    assert b'hx-select="tbody > tr"' not in response.content
