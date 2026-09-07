@@ -1,26 +1,5 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags humanize i18n static %}
-{% block page_head %}
-  {{ block.super }}
-  <style>
-    /* The header row above the editor already has a Format button; the JS-injected
-       floating one inside the editor would duplicate it. */
-    #participant-data-tab .json-editor > button {
-      display: none;
-    }
-    #participant-data-tab .json-editor .cm-editor,
-    #participant-data-tab .json-editor .cm-gutters {
-      background-color: oklch(92% 0 0);
-    }
-    #participant-data-tab .json-editor .cm-gutters {
-      display: none;
-    }
-    #participant-data-tab .json-editor .cm-activeLine,
-    #participant-data-tab .json-editor .cm-activeLineGutter {
-      background-color: transparent;
-    }
-  </style>
-{% endblock page_head %}
 
 {% block page_js %}
   <script src="{% static 'js/editors-bundle.js' %}"></script>
@@ -86,7 +65,7 @@
             <span>{{ experiments|length }} {% translate "chatbots" %}</span>
           </div>
         </div>
-        <div class="stats stats-horizontal">
+        <div class="stats stats-horizontal ml-4">
           <div class="stat py-2 px-0 pr-8 border-e-0">
             <div class="stat-value text-lg">{{ total_session_count }}</div>
             <div class="stat-title uppercase tracking-[.08em] text-[10px] font-semibold">{% translate "Sessions" %}</div>
@@ -162,32 +141,28 @@
     </div>
   </div>
   <div role="tablist" class="tabs tabs-border">
-    <input type="radio"
-           name="participant_tabs"
-           role="tab"
-           class="tab checked:text-primary"
-           aria-label="{% translate 'Sessions' %} {{ total_session_count }}"
-           checked />
+    <label role="tab" class="tab has-checked:text-primary">
+      <input type="radio" name="participant_tabs" class="hidden" checked />
+      {% translate "Sessions" %} <span class="text-base-content/50 ml-1">{{ total_session_count }}</span>
+    </label>
     <div role="tabpanel" class="tab-content pt-3" id="sessions">
       {% include "participants/partials/participant_sessions_table.html" %}
     </div>
     {% if perms.experiments.view_participantdata %}
-      <input type="radio"
-             name="participant_tabs"
-             role="tab"
-             class="tab checked:text-primary"
-             aria-label="{% translate 'Participant Data' %}" />
+      <label role="tab" class="tab has-checked:text-primary">
+        <input type="radio" name="participant_tabs" class="hidden" />
+        {% translate "Participant Data" %}
+      </label>
       <div role="tabpanel" class="tab-content pt-3" id="participant-data-tab">
         <div id="data-panel"
              class="app-card rounded-2xl border border-base-300 bg-base-100">
           {% include "participants/partials/participant_data_panel.html" %}
         </div>
       </div>
-      <input type="radio"
-             name="participant_tabs"
-             role="tab"
-             class="tab checked:text-primary"
-             aria-label="{% translate 'Schedules' %} {{ participant_schedules|length }}" />
+      <label role="tab" class="tab has-checked:text-primary">
+        <input type="radio" name="participant_tabs" class="hidden" />
+        {% translate "Schedules" %} <span class="text-base-content/50 ml-1">{{ participant_schedules|length }}</span>
+      </label>
       <div role="tabpanel" class="tab-content pt-3" id="schedules">
         {% include "participants/partials/participant_schedules_table.html" %}
       </div>

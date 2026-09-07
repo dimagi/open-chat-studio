@@ -22,3 +22,23 @@
 .cm-merge-b {
     background-color: oklab(0.792 -0.184039 0.0990491 / 0.2)
 }
+
+/* The header row above the editor already has a Format button; the JS-injected
+   floating one inside the editor would duplicate it. */
+#participant-data-tab .json-editor > button {
+    display: none;
+}
+
+#participant-data-tab .json-editor .cm-editor,
+#participant-data-tab .json-editor .cm-gutters {
+    background-color: oklch(92% 0 0);
+}
+
+#participant-data-tab .json-editor .cm-gutters {
+    display: none;
+}
+
+#participant-data-tab .json-editor .cm-activeLine,
+#participant-data-tab .json-editor .cm-activeLineGutter {
+    background-color: transparent;
+}
