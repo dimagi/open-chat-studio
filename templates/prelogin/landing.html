@@ -1,0 +1,119 @@
+{% extends "prelogin/base.html" %}
+{% load static %}
+{% comment %}
+  The app's front door for anonymous visitors. Deliberately NOT a copy of the
+  marketing home page — that lives at project_meta.MARKETING_SITE_URL now. This is a
+  signpost: what this is, how to sign in, and where to read more. Styled off
+  auth_base.html's palette so signing in barely changes the page.
+{% endcomment %}
+
+{% block meta %}
+  <meta name="description"
+        content="Sign in to Open Chat Studio, the open-source platform for building and deploying AI chatbots for global development.">
+  {% comment %}
+    The marketing site is the canonical home for this content, and it is the host we
+    want indexed. Point crawlers there rather than competing with it.
+  {% endcomment %}
+  <link rel="canonical" href="{{ project_meta.MARKETING_SITE_URL }}/">
+{% endblock meta %}
+
+{% block page_styles %}
+  <style>
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+
+  .landing {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 88px 0 96px;
+    background:
+      radial-gradient(800px 360px at 0% 0%, rgba(137,210,220,0.30), transparent 65%),
+      radial-gradient(700px 320px at 100% 100%, rgba(141,233,105,0.14), transparent 65%),
+      var(--ocs-turquoise-pale, #D6EEF2);
+  }
+  @media (max-width: 600px) {
+    .landing { padding: 56px 0 64px; }
+  }
+
+  .landing-inner { max-width: 620px; }
+
+  .landing-logo {
+    height: 68px;
+    width: auto;
+    display: block;
+    margin: 0 0 28px;
+  }
+  @media (max-width: 600px) {
+    .landing-logo { height: 52px; margin-bottom: 22px; }
+  }
+
+  .landing-title {
+    font-size: clamp(30px, 4vw, 44px);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    font-weight: 200;
+    margin: 0 0 18px;
+  }
+
+  .landing-sub {
+    font-size: 1.06rem;
+    line-height: 1.65;
+    font-weight: 400;
+    color: rgba(22,0,109,0.72);
+    margin: 0 0 34px;
+  }
+
+  .landing-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+
+  .landing-links {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+    padding-top: 26px;
+    border-top: 1px solid rgba(22,0,109,0.12);
+  }
+  .landing-links a {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ocs-purple, #16006D);
+    text-decoration: none;
+    border-bottom: 2px solid rgba(141,233,105,0.85);
+    padding-bottom: 2px;
+  }
+  .landing-links a:hover {
+    color: var(--ocs-purple-hover, #2A1090);
+    border-bottom-color: var(--ocs-green, #8DE969);
+  }
+  </style>
+{% endblock page_styles %}
+
+{% block content %}
+  <section id="main" class="landing">
+    <div class="container">
+      <div class="landing-inner">
+        <img class="landing-logo"
+             src="{% static 'prelogin/images/ocs-logo.png' %}"
+             width="175"
+             height="78"
+             alt="Open Chat Studio by Dimagi">
+        <h1 class="landing-title">Open-source AI chatbots for <em>global development</em></h1>
+        <p class="landing-sub">
+          Build, deploy and evaluate AI chatbots, and reach people on WhatsApp, Telegram, SMS and the web.
+        </p>
+        <div class="landing-actions">
+          <a class="btn btn-indigo btn-arrow" href="{% url 'sso:login' %}">Sign In</a>
+          <a class="btn btn-ghost btn-arrow" href="{{ project_meta.MARKETING_SITE_URL }}/">Explore Open Chat Studio</a>
+        </div>
+        <div class="landing-links">
+          <a href="https://docs.openchatstudio.com/" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/dimagi/open-chat-studio" target="_blank" rel="noopener">GitHub</a>
+          <a href="{{ project_meta.MARKETING_SITE_URL }}/contact/">Contact</a>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock content %}

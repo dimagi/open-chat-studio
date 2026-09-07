@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n json_tags static waffle_tags %}
+{% load form_tags humanize i18n json_tags static waffle_tags %}
 
 {% block breadcrumbs %}
   {% if request.user.is_authenticated %}
@@ -15,21 +15,36 @@
 
 {% block app %}
   <div class="app-card">
-    <div class="flex flex-wrap gap-2">
-      <div class="flex-1">
-        <h1 class="pg-title">Chatbot Review</h1>
+    <div class="flex flex-wrap items-start justify-between gap-5">
+      <div class="flex-1 min-w-70 flex flex-col gap-2">
+        <div class="flex items-center gap-2 flex-nowrap">
+          <h1 class="pg-title whitespace-nowrap text-2xl">Session Transcript</h1>
+          <span class="badge badge-sm whitespace-nowrap
+                       {% if experiment_session.status == 'active' %}badge-success
+                       {% elif experiment_session.status == 'pending' or experiment_session.status == 'pending-review' %}badge-warning
+                       {% else %}badge-outline{% endif %}">
+            <i class="fa-solid fa-circle text-[7px]"></i> {{ experiment_session.get_status_display }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap text-sm text-base-content/70">
+          <span><i class="fa-solid fa-robot text-base-content/50 mr-1"></i>{{ experiment.name }}</span>
+          <span class="text-base-content/30">|</span>
+          {% include "generic/chip.html" with chip=participant_chip %}
+          <span class="text-base-content/30">|</span>
+          <span>Started {{ session_start }}</span>
+        </div>
       </div>
       {% if request.user.is_authenticated %}
         {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <div class="join">
+          <div class="join rounded-full overflow-hidden">
             <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=prev">
-              <i class="fa-solid fa-backward-step"></i> Older
+              <i class="fa-solid fa-backward-step"></i> {% translate "Previous session" %}
             </a>
             <a class="btn btn-sm join-item"
                href="{{ paginate_url }}?dir=next">
-              Newer <i class="fa-solid fa-forward-step"></i>
+              {% translate "Next session" %} <i class="fa-solid fa-forward-step"></i>
             </a>
           </div>
           {% if perms.trace.view_trace %}
@@ -38,49 +53,60 @@
               <i class="fa-solid fa-stream"></i> View Traces
             </a>
           {% endif %}
-          {% if perms.experiments.change_experimentsession and not experiment_session.ended_at %}
-
-            {% if experiment_session.platform != "web" %}
-              <button type="button"
-                      class="btn btn-sm btn-primary"
-                      onclick="document.getElementById('new_session_modal').showModal()">
-                {% translate "New Session" %}
-              </button>
-
-              <dialog id="new_session_modal" class="modal">
-                <div class="modal-box">
-                  <h3 class="font-bold text-lg">{% translate "Start New Session?" %}</h3>
-                  <p class="text-md mt-2">{% translate "This will end the current session and create a new one." %}</p>
-                  <form id="new_session_form" method="post" action="{% url 'chatbots:chatbot_new_session' team.slug experiment.public_id experiment_session.external_id %}">
-                    {% csrf_token %}
-                    {% if has_conversation_end_events %}
-                      <label class="label cursor-pointer justify-start gap-2 mt-4">
-                        <input type="checkbox" checked name="fire_end_event" class="checkbox checkbox-sm checkbox-primary">
-                        <span class="label-text">{% translate "Trigger conversation end event(s)" %}</span>
-                      </label>
-                    {% endif %}
-                    <fieldset class="fieldset">
-                        <legend class="fieldset-legend">{% translate "Seed Message Prompt" %}</legend>
-                        <textarea required rows="6" name="prompt" class="textarea textarea-bordered" placeholder="{% translate 'Enter a prompt to send to the bot' %}">{{ experiment.default_version.seed_message }}</textarea>
-                    </fieldset>
-                  </form>
-                  <div class="modal-action">
-                    <form method="dialog">
-                      <button class="btn">{% translate "Cancel" %}</button>
-                    </form>
-                    <button form="new_session_form" type="submit" class="btn btn-primary">{% translate "Start New Session" %}</button>
-                  </div>
-                </div>
-                <form method="dialog" class="modal-backdrop">
-                  <button>{% translate "close" %}</button>
-                </form>
-              </dialog>
-            {% endif %}
+          {% if perms.experiments.change_experimentsession %}
 
             <button type="button"
-                    class="btn btn-sm btn-error"
-                    onclick="document.getElementById('end_session_modal').showModal()">
-              {% translate "End Session" %}
+                    class="btn btn-sm btn-primary"
+                    {% if experiment_session.experiment_channel.platform == "web" %}
+                      disabled
+                      title="{% translate "Cannot create a new session from a web session." %}"
+                    {% elif experiment_session.channel_is_disabled %}
+                      disabled
+                      title="{% translate "This session's channel is disabled." %}"
+                    {% else %}
+                      onclick="document.getElementById('new_session_modal').showModal()"
+                    {% endif %}>
+              <i class="fa-solid fa-plus"></i> {% translate "New Session" %}
+            </button>
+
+            <dialog id="new_session_modal" class="modal">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg">{% translate "Start New Session?" %}</h3>
+                <p class="text-md mt-2">{% translate "This will end the current session and create a new one." %}</p>
+                <form id="new_session_form" method="post" action="{% url 'chatbots:chatbot_new_session' team.slug experiment.public_id experiment_session.external_id %}">
+                  {% csrf_token %}
+                  {% if has_conversation_end_events %}
+                    <label class="label cursor-pointer justify-start gap-2 mt-4">
+                      <input type="checkbox" checked name="fire_end_event" class="checkbox checkbox-sm checkbox-primary">
+                      <span class="label-text">{% translate "Trigger conversation end event(s)" %}</span>
+                    </label>
+                  {% endif %}
+                  <fieldset class="fieldset">
+                      <legend class="fieldset-legend">{% translate "Seed Message Prompt" %}</legend>
+                      <textarea required rows="6" name="prompt" class="textarea textarea-bordered" placeholder="{% translate 'Enter a prompt to send to the bot' %}">{{ experiment.default_version.seed_message }}</textarea>
+                  </fieldset>
+                </form>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn">{% translate "Cancel" %}</button>
+                  </form>
+                  <button form="new_session_form" type="submit" class="btn btn-primary">{% translate "Start New Session" %}</button>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>{% translate "close" %}</button>
+              </form>
+            </dialog>
+
+            <button type="button"
+                    class="btn btn-sm text-red-700"
+                    {% if experiment_session.ended_at %}
+                      disabled
+                      title="{% translate "This session has already ended." %}"
+                    {% else %}
+                      onclick="document.getElementById('end_session_modal').showModal()"
+                    {% endif %}>
+              <i class="fa-solid fa-stop"></i> {% translate "End Session" %}
             </button>
 
             <dialog id="end_session_modal" class="modal">
@@ -112,64 +138,174 @@
         </div>
       {% endif %}
     </div>
-    <h3 class="text-base font-semibold leading-7 mt-8 pl-4">Session details</h3>
-    <div class="max-w-5xl mt-4 border rounded-2xl">
-      {% include "experiments/components/experiment_details.html" %}
-    </div>
 
-    <div role="tablist" class="mt-4 tabs tabs-border max-w-5xl">
-      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Messages" checked/>
-      <div role="tabpanel" class="tab-content pt-3">
-        <div id="messages-container" class="min-w-full"
-             hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring %}"
-             hx-trigger="intersect once"
-             hx-indicator="#messages-initial-loading">
-          <div id="messages-initial-loading" class="flex items-center justify-center p-10">
-            <span class="loading loading-spinner"></span>
-          </div>
-        </div>
+    <div class="flex flex-wrap gap-8 mt-4">
+      <div>
+        <div class="text-2xl font-bold leading-none">{{ message_count }}</div>
+        <div class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Messages" %}</div>
       </div>
-      {% if perms.experiments.view_participantdata %}
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Data" />
-        <div role="tabpanel" class="tab-content pt-3">
-          <div class="p-3 border rounded-lg">
-            {% if experiment_session.latest_trace %}
-              <p class="text-sm text-base-content/60 mb-2">
-                Participant data as of the last message from this session ({{ experiment_session.latest_trace.timestamp }})
-              </p>
+      {% if show_usage_summary %}
+        <div data-testid="session-usage-summary">
+          <div class="text-2xl font-bold leading-none flex items-center gap-1">
+            {% if usage_summary.by_model %}
+              {{ usage_summary.total_tokens|intcomma }}
             {% else %}
-              <p class="text-sm text-base-content/60 mb-2">
-                Current participant data (no interactions recorded yet)
-              </p>
+              -
             {% endif %}
-          <pre><code class="text-sm">{{ experiment_session.latest_participant_data|to_json }}</code></pre>
           </div>
-        </div>
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Participant Schedules" />
-        <div role="tabpanel" class="tab-content pt-3">
-          <div class="border rounded-lg divide-y">
-            {% include "participants/partials/participant_schedules.html" %}
+          <div class="text-xs uppercase tracking-wide text-base-content/60">
+            {% if usage_summary.by_model %}
+              {% translate "Tokens" %} ·
+              {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.total_cost unpriced=usage_summary.has_unpriced estimated=usage_summary.has_estimated unknown=usage_summary.has_unknown testid_prefix="session-usage" %}
+            {% else %}
+              {% translate "No usage recorded" %}
+            {% endif %}
           </div>
         </div>
       {% endif %}
-      <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Session State" />
-      <div role="tabpanel" class="tab-content pt-3">
-        <div class="p-3 border rounded-lg">
+      <div>
+        <div class="text-2xl font-bold leading-none">{{ session_duration_display }}</div>
+        <div class="text-xs uppercase tracking-wide text-base-content/60">
+          {% translate "Duration" %} · {% if experiment_session.ended_at %}{% translate "Ended" %}{% else %}{% translate "Still open" %}{% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center gap-2 h-8">
+          {% include "annotations/tag_ui.html" with object=experiment_session.chat allow_edit=experiment.is_editable label_text="Add tag" %}
+        </div>
+        <div class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Tags" %}</div>
+      </div>
+    </div>
+
+    <div class="mt-4 border-t pt-3" x-data="{showDetails: false}">
+      <button class="btn btn-ghost btn-sm pl-0" @click="showDetails = !showDetails">
+        <i class="fa-solid fa-chevron-down transition-transform" :class="showDetails ? 'rotate-180' : ''"></i>
+        <span x-show="!showDetails">{% translate "Session details" %}</span>
+        <span x-show="showDetails" x-cloak>{% translate "Hide session details" %}</span>
+      </button>
+      <div x-show="showDetails" x-cloak class="pl-4 pt-2">
+        <dl class="grid grid-cols-2 lg:grid-cols-5 gap-6">
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Session ID" %}</dt>
+            <dd class="text-sm mt-1 flex items-center gap-1">
+              <code class="truncate max-w-32 inline-block" title="{{ experiment_session.external_id }}">{{ experiment_session.external_id }}</code>
+              {% include "generic/copy_chip.html" with copy_element_id="session-external-id" copy_value=experiment_session.external_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+            </dd>
+          </div>
+          {% for label, chip in details %}
+            <div>
+              <dt class="text-xs uppercase tracking-wide text-base-content/60">{{ label }}</dt>
+              <dd class="text-sm mt-1">{% include "generic/chip.html" %}</dd>
+            </div>
+          {% endfor %}
+          <div>
+            <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Platform" %}</dt>
+            <dd class="text-sm mt-1">
+              {{ experiment_session.get_platform_name }}
+              {% if experiment_session.chat.embed_source %}
+                ·
+                {% if experiment_session.chat.embed_source_url %}
+                  <a class="link" href="{{ experiment_session.chat.embed_source_url }}" target="_blank">{{ experiment_session.chat.embed_source }}</a>
+                {% else %}
+                  {{ experiment_session.chat.embed_source }}
+                {% endif %}
+              {% endif %}
+            </dd>
+          </div>
+          {% flag "flag_human_annotations" %}
+            {% if perms.human_annotations.add_annotationitem %}
+              <div>
+                <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Annotation Queues" %}</dt>
+                <dd class="text-sm mt-1 flex flex-wrap items-center gap-2">
+                  {% for name in annotation_queue_names %}
+                    <span class="badge badge-outline badge-sm">{{ name }}</span>
+                  {% endfor %}
+                  <button class="btn btn-xs btn-ghost"
+                          hx-get="{% url 'human_annotations:session_add_to_queue' request.team.slug experiment_session.external_id %}"
+                          hx-target="#add-to-queue-modal-container-{{ experiment_session.pk }}"
+                          hx-swap="innerHTML">
+                    <i class="fa-solid fa-plus"></i> {% translate "Add to Queue" %}
+                  </button>
+                  <div id="add-to-queue-modal-container-{{ experiment_session.pk }}"></div>
+                </dd>
+              </div>
+            {% endif %}
+          {% endflag %}
+        </dl>
+        {% if perms.annotations.add_usercomment %}
+          <div x-data="{showComments: false}" class="mt-4">
+            <dt class="text-xs uppercase tracking-wide text-base-content/60">
+              {% translate "Comments" %} (<span id="{{ experiment_session.chat.comment_count_element_id }}">{{ experiment_session.chat.get_user_comments|length }}</span>)
+            </dt>
+            <dd class="text-sm mt-1">
+              <button class="btn btn-sm btn-ghost pl-0" @click="showComments = !showComments;">
+                <i class="fa-regular fa-comment"></i>
+                <span x-show="!showComments">{% translate "View comments" %}</span>
+                <span x-show="showComments" x-cloak>{% translate "Hide comments" %}</span>
+              </button>
+            </dd>
+            <div x-cloak x-show="showComments" class="mt-2">
+              {% include "experiments/components/user_comments.html" with object=experiment_session.chat allow_edit=experiment.is_editable %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div x-data="{tab: 'messages'}">
+    <div role="tablist" class="tabs tabs-border">
+      <button type="button" role="tab" class="tab" :class="tab === 'messages' ? 'tab-active text-primary' : ''" @click="tab = 'messages'">
+        {% translate "Messages" %} <span class="text-base-content/50 ml-1">{{ message_count }}</span>
+      </button>
+      {% if perms.experiments.view_participantdata %}
+        <button type="button" role="tab" class="tab" :class="tab === 'data' ? 'tab-active text-primary' : ''" @click="tab = 'data'">{% translate "Participant Data" %}</button>
+        <button type="button" role="tab" class="tab" :class="tab === 'schedules' ? 'tab-active text-primary' : ''" @click="tab = 'schedules'">{% translate "Participant Schedules" %}</button>
+      {% endif %}
+      <button type="button" role="tab" class="tab" :class="tab === 'state' ? 'tab-active text-primary' : ''" @click="tab = 'state'">{% translate "Session State" %}</button>
+      {% if perms.events.view_eventlog %}
+        <button type="button" role="tab" class="tab" :class="tab === 'events' ? 'tab-active text-primary' : ''" @click="tab = 'events'">{% translate "Chatbot Events" %}</button>
+      {% endif %}
+    </div>
+
+    <div x-show="tab === 'messages'" class="pt-3">
+      <div id="messages-container" class="min-w-full"
+           hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring %}"
+           hx-trigger="intersect once"
+           hx-indicator="#messages-initial-loading">
+        <div id="messages-initial-loading" class="flex items-center justify-center p-10">
+          <span class="loading loading-spinner"></span>
+        </div>
+      </div>
+    </div>
+    {% if perms.experiments.view_participantdata %}
+      <div x-show="tab === 'data'" x-cloak class="pt-3">
+        <div class="app-card">
+          <h3 class="pg-subtitle">{% translate "Participant data" %}</h3>
+          <p class="pg-help mb-2">{% translate "As of the last message in this session" %}</p>
+          <div class="mt-2 p-3 border rounded-lg border-neutral-500">
+            <pre><code>{{ experiment_session.latest_participant_data|to_json }}</code></pre>
+          </div>
+        </div>
+      </div>
+      <div x-show="tab === 'schedules'" x-cloak class="pt-3">
+        {% include "experiments/components/session_schedules_table.html" %}
+      </div>
+    {% endif %}
+    <div x-show="tab === 'state'" x-cloak class="pt-3">
+      <div class="app-card">
+        <h3 class="pg-subtitle">{% translate "Session state" %}</h3>
+        <p class="pg-help mb-2">{% translate "Read-only snapshot of the pipeline state for this session." %}</p>
+        <div class="p-3 border border-base-300 rounded-lg bg-base-200">
           <pre><code class="text-sm">{{ experiment_session.state|to_json }}</code></pre>
         </div>
       </div>
-      {% if perms.events.view_eventlog %}
-        <input type="radio" name="experiment_tabs-{{ experiment_session.id }}" role="tab" class="tab" aria-label="Chatbot Events"/>
-        <div role="tabpanel" class="tab-content pt-3">
-          {% for event_trigger in event_triggers %}
-            <div class="max-w-5xl mt-4 border rounded-2xl">
-              {% include "events/components/event_logs.html" with trigger=event_trigger.trigger event_logs=event_trigger.event_logs %}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
     </div>
-
+    {% if perms.events.view_eventlog %}
+      <div x-show="tab === 'events'" x-cloak class="pt-3">
+        {% include "experiments/components/session_event_triggers_table.html" %}
+      </div>
+    {% endif %}
   </div>
 {% endblock app %}
 

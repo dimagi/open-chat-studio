@@ -15,13 +15,11 @@ class StaticViewSitemap(sitemaps.Sitemap):
 
     def items(self):
         # add any urls (by name) for static content you want to appear in your sitemap to this list
-        return [
-            "prelogin:home",
-            "prelogin:about",
-            "prelogin:contact",
-            "prelogin:applications",
-            "prelogin:open_opportunities",
-        ]
+        #
+        # Only the landing page. The marketing pages that used to be listed here are
+        # 301s to the marketing site now, and a sitemap that nominates redirects tells
+        # Google to keep crawling this host for content it should be reading there.
+        return ["prelogin:home"]
 
     def location(self, item):  # ty: ignore[invalid-method-override]
         return reverse(item)

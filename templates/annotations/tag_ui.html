@@ -1,12 +1,11 @@
 <div id="tag-ui-{{ object.id }}" class="text-gray-500">
   {% if not edit_mode %}
     {% if object.has_voice_tag %}<span class="italic pr-2">Sent by voice</span>{% endif %}
-    <i class="fa-solid fa-tags"></i>
     {% for tag in object.non_skipped_tags %}
       <div
         class="badge
                {% if not tag.is_system_tag %}
-                  badge-neutral
+                  badge-info
                  {% if tag.added_by == request.user.email %}
                    ring-1 ring-blue-400
                  {% endif %}
@@ -17,8 +16,9 @@
         data-tip="Added by {% if tag.added_by == request.user.email %}me{% else %}{{ tag.added_by }}{% endif %}"
       >{{ tag.name }}</div>
     {% endfor %}
+    {% if not label_text %}<i class="fa-solid fa-tags"></i>{% endif %}
     {% if allow_edit|default_if_none:True and perms.annotations.add_customtaggeditem %}
-    <button class="btn btn-xs btn-ghost" title="Edit tags"
+    <button class="btn btn-xs btn-ghost {% if not label_text %}btn-square{% endif %}" title="Edit tags"
             hx-get="{% url 'annotations:tag_ui' request.team.slug %}?edit=1"
             hx-vals='{{ object.object_info }}'
             hx-target="#tag-ui-{{ object.id }}"
@@ -27,7 +27,7 @@
             hx-disabled-elt="this"
     >
       <span id="indicator-{{ object.id }}">
-        <i class="fa-solid fa-pencil htmx-hide"></i>
+        <i class="fa-solid {% if label_text %}fa-tag{% else %}fa-pencil{% endif %} htmx-hide"></i>{% if label_text %} {{ label_text }}{% endif %}
         <span class="loading loading-spinner loading-xs htmx-show"></span>
       </span>
     </button>
