@@ -447,8 +447,6 @@ EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", defaul
 
 SITE_ID = 1
 
-# Set explicitly because Django's 2.5 MB default silently became the JSON API's request size limit
-# when DRF 3.17 started reading ``request.body`` to parse JSON.
 # https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024)
 

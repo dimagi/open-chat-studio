@@ -39,8 +39,7 @@ version section when a release is cut.
   to the release you intend to run rather than tracking `latest`. (#4283)
 - `DATA_UPLOAD_MAX_MEMORY_SIZE`: new, optional, defaults to `10485760` (10 MB).
   Caps the request body Django buffers in memory. See the
-  [configuration reference](docs/hosting/configuration.md#security) for why it
-  is now set explicitly and when to change it. (#4411)
+  [configuration reference](docs/hosting/configuration.md#security). (#4411)
 - `PRELOGIN_CONTACT_EMAIL`, `HUBSPOT_FORM_REGION`, `HUBSPOT_FORM_PORTAL_ID`,
   `HUBSPOT_FORM_ID`, `PRELOGIN_DEMO_BOTS`: removed. The pre-login marketing
   pages that read them are gone (see Deployment below). Setting them is now a
