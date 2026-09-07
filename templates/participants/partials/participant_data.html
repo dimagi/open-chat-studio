@@ -1,25 +1,18 @@
 {% load i18n %}
-{% if just_saved is not None %}
-  <span id="data-save-status"
-        hx-swap-oob="true"
-        class="text-sm
-               {% if error %}text-error{% else %}text-base-content/60{% endif %}">
-    {% if error %}
-      {% translate "Save failed" %}
-    {% else %}
-      {% translate "All changes saved" %}
-    {% endif %}
-  </span>
-{% endif %}
+<span id="data-save-status"
+      hx-swap-oob="true"
+      class="text-sm
+             {% if error %}text-error{% else %}text-base-content/60{% endif %}">
+  {% if error %}
+    {% translate "Save failed" %}
+  {% else %}
+    {% translate "All changes saved" %}
+  {% endif %}
+</span>
 {% if perms.experiments.change_participantdata %}
   <div class="flex items-center justify-between gap-2 flex-wrap">
     <h4 class="font-semibold">{{ experiment }}</h4>
     <div class="flex items-center gap-2">
-      <button type="button"
-              class="btn btn-sm"
-              onclick="document.querySelector('#participant-data-{{ experiment.id }} .json-editor').dispatchEvent(new Event('formatEditor'))">
-        {% translate "Format" %}
-      </button>
       <button type="reset"
               class="btn btn-sm"
               form="participant-data-form-{{ experiment.id }}">{% translate "Revert" %}</button>

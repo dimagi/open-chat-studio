@@ -14,9 +14,6 @@
                 {% if selected_data_experiment == experiment %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
     {% endfor %}
   </div>
-  {% if selected_data_experiment %}
-    <span id="data-save-status" class="text-sm text-base-content/60">{% translate "All changes saved" %}</span>
-  {% endif %}
 </div>
 {% if selected_data_experiment %}
   <div id="participant-data-card-{{ selected_data_experiment.id }}">
