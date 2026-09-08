@@ -1,0 +1,8 @@
+<div class="flex items-center gap-1">
+  <code class="truncate max-w-32 inline-block" title="{{ record.external_id }}">{{ record.external_id }}</code>
+  {% with id_str=record.external_id|stringformat:"s" %}
+    {% with copy_id="session-id-"|add:id_str %}
+      {% include "generic/copy_chip.html" with copy_element_id=copy_id copy_value=record.external_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+    {% endwith %}
+  {% endwith %}
+</div>

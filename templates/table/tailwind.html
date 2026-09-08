@@ -15,7 +15,9 @@
         {% endblock record_count %}
 
         {% block table %}
-            {{ block.super }}
+            <div class="overflow-x-auto">
+                {{ block.super }}
+            </div>
         {% endblock table %}
 
         {% block pagination %}

@@ -22,6 +22,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chat.models import ChatMessage
 from apps.evaluations.dataset_clone import (
     MESSAGE_MODE_ALL_MATCHING_LIMIT,
@@ -265,6 +266,18 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionReq
         queryset = get_base_session_queryset(self.request)
         queryset = queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
+
+    def get_table(self, **kwargs):
+        """Configure the table, then attach the tag prefetch to the paginated page only.
+
+        Hooking after `RequestConfig.configure` ensures the underlying queryset is sliced
+        with LIMIT before we evaluate it — so both the page rows and the CustomTaggedItem
+        lookup are bounded to a single page, not the full filtered set.
+        """
+        table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
 
 
 def get_base_session_queryset(request):
