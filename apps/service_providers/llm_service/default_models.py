@@ -258,6 +258,16 @@ def get_default_model(provider_type: str) -> Model | None:
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, ()) if m.is_default), None)
 
 
+def get_deprecated_models() -> dict[tuple[str, str], str | None]:
+    """``{(provider_type, model_name): replacement}`` for every deprecated model."""
+    return {
+        (provider_type, model.name): model.replacement
+        for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items()
+        for model in models
+        if model.deprecated
+    }
+
+
 def get_default_translation_models_by_provider() -> dict:
     """
     Returns a dict mapping provider labels (e.g., "OpenAI") to their default translation model name.

@@ -1,4 +1,4 @@
-"""Build-state reporting for a pipeline: the errors report and the advisory unwired-handles map.
+"""Build-state reporting for a pipeline: the errors report and the advisory maps beside it.
 
 ``Pipeline.validate()`` returns a complete :class:`~apps.pipelines.exceptions.ErrorReport`, which
 this passes through unchanged::
@@ -22,6 +22,8 @@ from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.nodes import EndNode, StartNode
+from apps.service_providers.llm_service.default_models import get_deprecated_models
+from apps.service_providers.models import LlmProviderModel
 
 
 def pipeline_build_state(pipeline: Pipeline) -> dict:
@@ -32,6 +34,37 @@ def pipeline_build_state(pipeline: Pipeline) -> dict:
         "errors": errors,
         "unwired_handles": unwired_handles(pipeline),
     }
+
+
+def deprecated_models(pipeline: Pipeline) -> dict:
+    """The advisory ``{node_id: {model, replacement}}`` map of nodes pointing at a deprecated model.
+    ``replacement`` is the model the team should move to, or ``None`` where none is declared.
+    """
+    nodes_by_model_id = {}
+    for node in pipeline.node_set.all():
+        model_id = _referenced_model_id(node)
+        if model_id is not None:
+            nodes_by_model_id.setdefault(model_id, []).append(node.flow_id)
+    if not nodes_by_model_id:
+        return {}
+
+    warnings = {}
+    replacements = get_deprecated_models()
+    deprecated = LlmProviderModel.objects.for_team(pipeline.team_id).filter(id__in=nodes_by_model_id, deprecated=True)
+    for model in deprecated.values_list("id", "type", "name", named=True):
+        warning = {"model": model.name, "replacement": replacements.get((model.type, model.name))}
+        for flow_id in nodes_by_model_id[model.id]:
+            warnings[flow_id] = warning
+    return warnings
+
+
+def _referenced_model_id(node: Node) -> int | None:
+    """The LLM model id a node's params name, or None if it names none."""
+    model_id = (node.params or {}).get("llm_provider_model_id")
+    try:
+        return int(model_id)
+    except (TypeError, ValueError):
+        return None
 
 
 def unwired_handles(pipeline: Pipeline) -> dict:
