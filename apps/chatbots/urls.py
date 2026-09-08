@@ -115,7 +115,7 @@ urlpatterns = [
     path("sessions-list/", views.ChatbotSessionsTableView.as_view(), name="all_sessions_list"),
     path(
         "participants/<int:participant_id>/sessions-list/",
-        views.ChatbotSessionsTableView.as_view(),
+        views.ParticipantScopedSessionsTableView.as_view(),
         name="participant_sessions_list",
     ),
 ]
