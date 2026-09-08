@@ -1206,12 +1206,15 @@ class Participant(BaseTeamModel):
             return {}
 
     def get_schedules_for_experiment(
-        self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
+        self, experiment_id=None, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
-        """
-        Returns all scheduled messages for the associated participant for this session's experiment
+        """Scheduled messages for this participant, optionally narrowed to one experiment.
 
         Parameters:
+        experiment_id: Scope to one chatbot. Omit to aggregate across every chatbot this
+            participant has used, in which case each dict also carries `experiment` (the
+            source `Experiment` instance) so callers can render a chatbot column without a
+            second lookup.
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
         """
@@ -1219,9 +1222,18 @@ class Participant(BaseTeamModel):
             ScheduledMessage,
         )
 
+        if experiment_id is not None:
+            experiment_ids = [experiment_id]
+            experiments_by_id = None
+        else:
+            experiments_by_id = {e.id: e for e in self.get_experiments_for_display()}
+            if not experiments_by_id:
+                return []
+            experiment_ids = list(experiments_by_id.keys())
+
         messages = (
             ScheduledMessage.objects.filter(
-                experiment_id=experiment_id,
+                experiment_id__in=experiment_ids,
                 participant=self,
                 team=self.team,
             )
@@ -1234,47 +1246,14 @@ class Participant(BaseTeamModel):
 
         scheduled_messages = []
         for message in messages:
-            if as_dict:
-                scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
-            else:
+            if not as_dict:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
-        return scheduled_messages
-
-    def get_schedules_for_all_experiments(self, as_timezone: str | None = None, include_inactive=False) -> list[dict]:
-        """Like `get_schedules_for_experiment`, but across every chatbot this participant has used.
-
-        Each returned dict carries `experiment` (the source `Experiment` instance) alongside the
-        usual `as_dict()` fields, so callers can render a chatbot column without a second lookup.
-        Runs one query for every experiment rather than looping `get_schedules_for_experiment`,
-        which would issue a separate scheduled-message query and attempts-prefetch per chatbot.
-        """
-        from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
-            ScheduledMessage,
-        )
-
-        experiments_by_id = {e.id: e for e in self.get_experiments_for_display()}
-        if not experiments_by_id:
-            return []
-
-        messages = (
-            ScheduledMessage.objects.filter(
-                experiment_id__in=experiments_by_id.keys(),
-                participant=self,
-                team=self.team,
-            )
-            .select_related("action")
-            .prefetch_related("attempts")
-            .order_by("created_at", "id")
-        )
-        if not include_inactive:
-            messages = messages.filter(is_complete=False, cancelled_at=None)
-
-        schedules = []
-        for message in messages:
+                continue
             schedule = message.as_dict(as_timezone=as_timezone)
-            schedule["experiment"] = experiments_by_id[message.experiment_id]
-            schedules.append(schedule)
-        return schedules
+            if experiments_by_id is not None:
+                schedule["experiment"] = experiments_by_id[message.experiment_id]
+            scheduled_messages.append(schedule)
+        return scheduled_messages
 
     def get_message_trend(self, days: int = 30) -> list[int]:
         """Daily trace count for this participant across every chatbot, zero-filled for gaps.

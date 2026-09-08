@@ -228,7 +228,7 @@ class TestExperimentSession:
             experiment=experiment_b, team=participant.team, participant=participant, action=event_action_b
         )
 
-        schedules = participant.get_schedules_for_all_experiments()
+        schedules = participant.get_schedules_for_experiment(as_dict=True)
         assert len(schedules) == 2
         assert {s["experiment"] for s in schedules} == {experiment_a, experiment_b}
 
