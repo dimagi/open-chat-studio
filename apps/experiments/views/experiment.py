@@ -553,7 +553,7 @@ def _tag_filter_context_ids(chat, matched_ids: set[int]) -> set[int]:
     IDs aren't guaranteed contiguous per chat, so this walks the chat's own ordered id list
     rather than doing id +/- 1 arithmetic.
     """
-    ordered_ids = list(ChatMessage.objects.filter(chat=chat).order_by("created_at").values_list("id", flat=True))
+    ordered_ids = list(ChatMessage.objects.filter(chat=chat).order_by("created_at", "id").values_list("id", flat=True))
     context_ids = set()
     for index, message_id in enumerate(ordered_ids):
         if message_id not in matched_ids:
@@ -563,6 +563,22 @@ def _tag_filter_context_ids(chat, matched_ids: set[int]) -> set[int]:
         if index < len(ordered_ids) - 1:
             context_ids.add(ordered_ids[index + 1])
     return context_ids - matched_ids
+
+
+def _apply_tag_filter(messages_queryset, chat, selected_tags):
+    """Narrow the queryset to matched messages plus one message of context on each side."""
+    if not selected_tags:
+        return messages_queryset, set(), set()
+    matched_ids = set(messages_queryset.filter(tags__name__in=selected_tags).distinct().values_list("id", flat=True))
+    context_ids = _tag_filter_context_ids(chat, matched_ids)
+    return messages_queryset.filter(id__in=matched_ids | context_ids), matched_ids, context_ids
+
+
+def _mark_tag_context(messages, selected_tags, matched_ids):
+    if not selected_tags:
+        return
+    for message in messages:
+        message.is_tag_context = message.id not in matched_ids
 
 
 @experiment_session_view()
@@ -604,7 +620,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
     messages_queryset = (
         ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at")
+        .order_by("created_at", "id")
         .prefetch_related(
             Prefetch(
                 "tagged_items",
@@ -620,14 +636,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             ),
         )
     )
-    matched_ids: set[int] = set()
-    context_ids: set[int] = set()
-    if selected_tags:
-        matched_ids = set(
-            messages_queryset.filter(tags__name__in=selected_tags).distinct().values_list("id", flat=True)
-        )
-        context_ids = _tag_filter_context_ids(session.chat, matched_ids)
-        messages_queryset = messages_queryset.filter(id__in=matched_ids | context_ids)
+    messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -662,9 +671,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
 
-    if selected_tags:
-        for message in current_page_messages:
-            message.is_tag_context = message.id not in matched_ids
+    _mark_tag_context(current_page_messages, selected_tags, matched_ids)
 
     context = {
         "experiment_session": session,
