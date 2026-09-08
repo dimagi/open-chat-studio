@@ -1,0 +1,4 @@
+<a class="font-semibold no-underline hover:underline" href="{{ record.get_absolute_url }}">{{ record.name }}</a>
+{% if record.description %}
+  <span class="block text-neutral-500 text-xs">{{ record.description }}</span>
+{% endif %}

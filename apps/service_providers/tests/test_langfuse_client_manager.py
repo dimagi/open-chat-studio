@@ -10,16 +10,24 @@ from apps.service_providers.tracing.langfuse import ClientManager
 
 
 def mock_client_factory():
-    """Factory method that creates mock clients and 'registers' them with the LangfuseResourceManager"""
+    """Factory that mints mock clients and registers them with `LangfuseResourceManager`,
+    mirroring the real SDK's own `LangfuseResourceManager.__new__`: a public_key already
+    present in `_instances` returns the existing entry regardless of the kwargs passed this
+    time. This is the exact behavior that makes a bare public_key cache key insufficient --
+    the fix under test is `ClientManager` evicting the stale entry itself before a config
+    change reaches this factory.
+    """
 
     def mock_register_client(**kwargs):
         public_key = kwargs["public_key"]
-        if public_key not in mock_register_client.registry:
-            mock_register_client.registry[public_key] = mock.MagicMock(name=public_key)
-            with LangfuseResourceManager._lock:
-                LangfuseResourceManager._instances[public_key] = mock_register_client.registry[public_key]
-
-        return mock_register_client.registry[public_key]
+        with LangfuseResourceManager._lock:
+            if public_key in LangfuseResourceManager._instances:
+                return LangfuseResourceManager._instances[public_key]
+            client = mock.MagicMock(name=public_key)
+            client.sample_rate = kwargs.get("sample_rate")
+            LangfuseResourceManager._instances[public_key] = client
+            mock_register_client.registry[public_key] = client
+        return client
 
     mock_register_client.registry = {}
 
@@ -58,6 +66,10 @@ def config():
     return {"public_key": "test_key", "secret_key": "test_secret"}
 
 
+def _hash(client_manager, config):
+    return client_manager._config_hash(config)
+
+
 def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_client_registry):
     # Act
     client = client_manager.get(config)
@@ -67,6 +79,7 @@ def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_clie
     assert len(mock_client_registry.registry) == 1
     assert client == mock_client_registry.registry[config["public_key"]]
     assert len(client_manager.key_timestamps) == 1
+    assert _hash(client_manager, config) in client_manager.key_timestamps
 
 
 def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
@@ -95,6 +108,48 @@ def test_get_creates_different_clients_for_different_configs(client_manager, con
     assert len(client_manager.key_timestamps) == 2
 
 
+def test_get_rebuilds_the_client_when_the_config_changes_for_the_same_public_key(client_manager, config, langfuse_mock):
+    """The scenario the cache-key change exists for: a config change (e.g. a new sample_rate)
+    for a public_key already cached must build a fresh client, not silently keep serving the
+    settings the client was first built with.
+    """
+    client_manager.get({**config, "sample_rate": 0.5})
+    langfuse_mock.reset_mock()
+
+    client_manager.get({**config, "sample_rate": 0.9})
+
+    langfuse_mock.assert_called_with(**{**config, "sample_rate": 0.9})
+    # Only the current config for this public_key is tracked -- the stale entry was evicted
+    # immediately, not left for the next stale-prune pass.
+    assert len(client_manager.key_timestamps) == 1
+
+
+def test_get_reuses_the_client_when_the_config_is_unchanged_including_sample_rate(
+    client_manager, config, langfuse_mock
+):
+    sampled_config = {**config, "sample_rate": 0.5}
+    first_client = client_manager.get(sampled_config)
+    langfuse_mock.reset_mock()
+
+    second_client = client_manager.get(sampled_config)
+
+    langfuse_mock.assert_not_called()
+    assert first_client == second_client
+
+
+def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_manager, config, langfuse_mock):
+    """`LangfuseResourceManager` is a singleton keyed by public_key alone -- changing our own
+    cache key to hash(config) only forces a rebuild if the stale public_key entry it shares
+    with the SDK is actually evicted, not just dropped from our own bookkeeping.
+    """
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
+
+    client_manager.get({**config, "sample_rate": 0.9})
+
+    first_client.shutdown.assert_called_once()
+    assert LangfuseResourceManager._instances[config["public_key"]] is not first_client
+
+
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
@@ -103,7 +158,7 @@ def test_prune_stale_clients(client_manager, config, langfuse_mock):
     assert len(client_manager.key_timestamps) == 2
 
     # Backdate the first client so only it is past the stale timeout
-    client_manager.key_timestamps[config["public_key"]] -= client_manager.stale_timeout + 1
+    client_manager.key_timestamps[_hash(client_manager, config)] -= client_manager.stale_timeout + 1
 
     client_manager._prune_stale()
 
@@ -140,10 +195,10 @@ def test_max_clients_limit(client_manager, langfuse_mock, mock_client_registry):
     clients[0].shutdown.assert_called_once()  # The oldest client should be shut down
 
     # The remaining clients should be the newer ones
-    assert configs[0]["public_key"] not in client_manager.key_timestamps
-    assert configs[1]["public_key"] in client_manager.key_timestamps
-    assert configs[2]["public_key"] in client_manager.key_timestamps
-    assert configs[3]["public_key"] in client_manager.key_timestamps
+    assert _hash(client_manager, configs[0]) not in client_manager.key_timestamps
+    assert _hash(client_manager, configs[1]) in client_manager.key_timestamps
+    assert _hash(client_manager, configs[2]) in client_manager.key_timestamps
+    assert _hash(client_manager, configs[3]) in client_manager.key_timestamps
 
 
 def test_prune_thread_starts_automatically(langfuse_mock):

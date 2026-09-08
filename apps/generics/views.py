@@ -12,11 +12,10 @@ from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
 from apps.teams.flags import Flags
+from apps.utils.time import seconds_to_human
 
 
-def render_session_details(
-    request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
-):
+def render_session_details(request, team_slug, experiment_id, session_id, active_tab, template_path):
     session = ExperimentSession.objects.prefetch_related(chat_tagged_items_prefetch()).get(
         external_id=session_id, team=request.team
     )
@@ -32,6 +31,15 @@ def render_session_details(
     # Usage/cost is team-internal: participants viewing their own session (no team
     # membership) don't see it.
     show_usage_summary = bool(request.team_membership)
+    session_start = session.created_at
+    session_end = session.ended_at or (session.latest_trace.timestamp if session.latest_trace else session_start)
+    event_triggers = [
+        {
+            "event_logs": list(trigger.event_logs.filter(session=session).order_by("-created_at")),
+            "trigger": trigger,
+        }
+        for trigger in experiment.event_triggers
+    ]
     return TemplateResponse(
         request,
         template_path,
@@ -42,29 +50,26 @@ def render_session_details(
             "annotation_queue_names": annotation_queue_names,
             "show_usage_summary": show_usage_summary,
             "usage_summary": session_usage(session) if show_usage_summary else None,
+            "participant_chip": session.get_participant_chip(
+                include_link=request.user.has_perm("experiments.view_participant")
+            ),
+            "session_start": session_start,
+            "session_duration_display": seconds_to_human(
+                max(0, (session_end - session_start).total_seconds()), compact=True
+            ),
+            "message_count": session.chat.messages.count(),
             "details": [
-                (
-                    gettext("Participant"),
-                    session.get_participant_chip(include_link=request.user.has_perm("experiments.view_participant")),
-                ),
                 (gettext("Remote ID"), participant.remote_id if participant and participant.remote_id else "-"),
-                (gettext("Status"), session.get_status_display),
-                (gettext("Started"), session.consent_date or session.created_at),
                 (gettext("Ended"), session.ended_at or "-"),
-                (gettext(session_type), experiment.name),
             ],
             "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
-            "event_triggers": [
-                {
-                    "event_logs": trigger.event_logs.filter(session=session).order_by("-created_at").all(),
-                    "trigger": trigger,
-                }
-                for trigger in experiment.event_triggers
-            ],
+            "event_triggers": event_triggers,
+            "has_event_logs": any(item["event_logs"] for item in event_triggers),
             "participant_schedules": session.participant.get_schedules_for_experiment(
                 experiment.id, as_dict=True, include_inactive=True
             ),
             "participant_id": session.participant_id,
+            "participant": participant,
             "has_conversation_end_events": StaticTrigger.objects.filter(
                 experiment=experiment, type__in=StaticTriggerType.end_conversation_types(), is_active=True
             ).exists(),

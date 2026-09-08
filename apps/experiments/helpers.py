@@ -14,8 +14,8 @@ def excluded_voice_services(request) -> list[str]:
     touched.
 
     Shared by ``ChatbotSettingsForm`` and the API serializers so the two cannot drift, and takes a
-    request rather than a team because ``Flag.is_active`` is waffle's full predicate -- ``everyone``,
-    ``percent``, ``superusers``, the user and group lists -- *or* our team override. Checking only
+    request rather than a team because ``Flag.is_active`` is waffle's full predicate --
+    ``everyone`` -- *or* our team override. Checking only
     the team half would leave the settings page offering voices the API rejects the moment the flag
     is switched on any other way, which is what a normal ``everyone=True`` rollout does.
     """

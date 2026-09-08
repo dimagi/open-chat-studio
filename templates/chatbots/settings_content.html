@@ -122,11 +122,17 @@
     <h4 class="text-md font-bold mb-2">Tracing</h4>
     <div class="p-4 bg-base-200 rounded-md">
       {% if edit_mode %}
-        {% render_form_fields form "trace_provider" "debug_mode_enabled" %}
+        {% render_form_fields form "trace_provider" "trace_sample_rate" "debug_mode_enabled" %}
       {% else %}
         <div>
           <span class="font-semibold">Trace Provider:</span>
           <span id="trace_provider-content">{{ experiment.trace_provider.name|default:"None" }}</span>
+        </div>
+        <div>
+          <span class="font-semibold">Sample Rate:</span>
+          <span id="trace_sample_rate-content">
+            {% if experiment.trace_provider %}{{ experiment.trace_sample_rate|default_if_none:"Provider default" }}{% else %}None{% endif %}
+          </span>
         </div>
         <div>
           <span class="font-semibold">Debug Mode:</span>

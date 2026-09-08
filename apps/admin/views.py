@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
@@ -438,7 +439,7 @@ def _string_to_date(date_str: str) -> datetime.date:
 
 @is_superuser
 def flags_home(request):
-    flags = Flag.objects.prefetch_related("teams", "users").all().order_by("name")
+    flags = Flag.objects.prefetch_related("teams").all().order_by("name")
     flag_info_map = get_all_flag_info()
 
     # Separate flags into active and legacy
@@ -478,6 +479,25 @@ def flag_detail(request, flag_name):
     )
 
 
+def _collect_delta_ids(deltas, field):
+    """Row IDs referenced by the `field` entry of each audit delta."""
+    ids = set()
+    for delta in deltas:
+        change = delta.get(field, {})
+        ids.update(change.get("add", []))
+        ids.update(change.get("remove", []))
+    return ids
+
+
+def _apply_delta_names(deltas, field, names, fallback):
+    """Swap the row IDs in each `field` delta for display names."""
+    for delta in deltas:
+        change = delta.get(field, {})
+        for action in ("add", "remove"):
+            if action in change:
+                change[action] = [names.get(obj_id, fallback.format(obj_id)) for obj_id in change[action]]
+
+
 @is_superuser
 def flag_history(request, flag_name):
     flag = get_object_or_404(Flag, name=flag_name)
@@ -486,38 +506,17 @@ def flag_history(request, flag_name):
         "-event_date"
     )[:50]  # Last 50 changes
 
-    # Collect all team and user IDs from audit event deltas
-    team_ids = set()
-    user_ids = set()
-
-    def _collect_ids(field, delta, id_set):
-        if field in delta:
-            for action in ["add", "remove"]:
-                if action in delta[field]:
-                    id_set.update(delta[field][action])
-
-    for event in audit_events:
-        if event.delta:
-            _collect_ids("teams", event.delta, team_ids)
-            _collect_ids("users", event.delta, user_ids)
-
-    # Bulk load teams and users to avoid N+1 queries
-    teams_map = {team.id: team.name for team in Team.objects.filter(id__in=team_ids)}
-    users_map = {user.id: user.get_display_name() for user in User.objects.filter(id__in=user_ids)}
-
-    # Transform audit event deltas to include names instead of IDs
-    def _update_delta(field, delta, display_map, default_template):
-        if field in delta:
-            for action in ["add", "remove"]:
-                if action in delta[field]:
-                    delta[field][action] = [
-                        display_map.get(obj_id, default_template.format(obj_id)) for obj_id in delta[field][action]
-                    ]
-
-    for event in audit_events:
-        if event.delta:
-            _update_delta("teams", event.delta, teams_map, "Team {}")
-            _update_delta("users", event.delta, users_map, "User {}")
+    # Audited M2M fields store row IDs; render them as names, bulk loading each
+    # model once rather than per delta.
+    deltas = [event.delta for event in audit_events if event.delta]
+    team_names = {team.id: team.name for team in Team.objects.filter(id__in=_collect_delta_ids(deltas, "teams"))}
+    user_names = {
+        user.id: user.get_display_name() for user in User.objects.filter(id__in=_collect_delta_ids(deltas, "users"))
+    }
+    group_names = {group.id: group.name for group in Group.objects.filter(id__in=_collect_delta_ids(deltas, "groups"))}
+    _apply_delta_names(deltas, "teams", team_names, "Team {}")
+    _apply_delta_names(deltas, "users", user_names, "User {}")
+    _apply_delta_names(deltas, "groups", group_names, "Group {}")
 
     return TemplateResponse(
         request,
@@ -635,6 +634,7 @@ def tracing_usage_api(request):
 @is_superuser
 @require_http_methods(["POST"])
 def update_flag(request, flag_name):
+    """Write the flag's `everyone` and `teams` settings, the only supported inputs."""
     flag = get_object_or_404(Flag, name=flag_name)
 
     form = FlagUpdateForm(request.POST)
@@ -644,14 +644,7 @@ def update_flag(request, flag_name):
     try:
         with transaction.atomic():
             flag.everyone = form.cleaned_data["everyone"]
-            flag.testing = form.cleaned_data["testing"]
-            flag.superusers = form.cleaned_data["superusers"]
-            flag.rollout = form.cleaned_data["rollout"]
-            flag.percent = form.cleaned_data["percent"]
-
             flag.teams.set(form.cleaned_data["teams"])
-            flag.users.set(form.cleaned_data["users"])
-
             flag.save()
 
         return JsonResponse({"success": True})

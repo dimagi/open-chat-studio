@@ -1,5 +1,5 @@
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -11,10 +11,9 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
-from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, RouterNode
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
-    assistant_node,
     boolean_node,
     content_flow_node,
     create_pipeline_model,
@@ -24,7 +23,6 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
@@ -52,38 +50,6 @@ def test_archive_pipeline_archives_nodes_as_well():
 
 @pytest.mark.django_db()
 class TestVersioningNodes:
-    @pytest.mark.parametrize("versioned_assistant_linked", [True, False])
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_version_assistant_node(self, versioned_assistant_linked):
-        """
-        Versioning an assistant node should version the assistant as well, but only when the linked assistant is not
-        already a version
-        """
-        node_type = AssistantNode.__name__
-        assistant = OpenAiAssistantFactory.create()
-        if versioned_assistant_linked:
-            assistant = assistant.create_new_version()
-
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(type=node_type, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
-        assert pipeline.node_set.filter(type=node_type).exists()
-
-        pipeline.create_new_version()
-
-        original_node = pipeline.node_set.get(type=node_type)
-        node_version = pipeline.versions.first().node_set.get(type=node_type)
-        assistant_version = assistant if versioned_assistant_linked else assistant.versions.first()
-
-        original_node_assistant_id = original_node.params["assistant_id"]
-        node_version_assistant_id = node_version.params["assistant_id"]
-
-        if versioned_assistant_linked:
-            assert original_node_assistant_id == node_version_assistant_id == str(assistant.id)
-        else:
-            assert original_node_assistant_id != node_version_assistant_id
-            assert original_node_assistant_id == str(assistant.id)
-            assert node_version_assistant_id == str(assistant_version.id)
-
     @pytest.mark.parametrize("is_index", [True, False])
     def test_version_llm_with_prompt_node_with_collection(self, is_index):
         node_type = LLMResponseWithPrompt.__name__
@@ -234,10 +200,8 @@ class TestArchivingNodes:
         node_version.archive()
         archive_related_params.assert_called()
 
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_archive_related_objects(self):
         # Setup related objects
-        assistant = OpenAiAssistantFactory.create()
         collection = CollectionFactory.create()
         collection_index = CollectionFactory.create(
             is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
@@ -245,7 +209,6 @@ class TestArchivingNodes:
 
         # Build the pipeline
         pipeline = PipelineFactory.create()
-        NodeFactory.create(type=AssistantNode.__name__, pipeline=pipeline, params={"assistant_id": str(assistant.id)})
         NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
@@ -256,26 +219,18 @@ class TestArchivingNodes:
         )
         pipeline.create_new_version()
 
-        assistant_version = assistant.versions.first()
-
         pipeline.archive()
 
         # Ensure that the working versions are not archived
-        assistant.refresh_from_db()
         collection.refresh_from_db()
         collection_index.refresh_from_db()
-        assistant_version.refresh_from_db()
 
-        assert assistant.is_archived is False
         # ADR-0031: media + index collections are live shared resources — never versioned per bot,
         # so the working collections are untouched and no collection versions exist.
         assert collection.is_archived is False
         assert not collection.versions.exists()
         assert collection_index.is_archived is False
         assert not collection_index.versions.exists()
-
-        # Assistants are still versioned per bot and get archived.
-        assert assistant_version.is_archived is True
 
     def test_archive_legacy_frozen_index_version(self):
         """
@@ -411,9 +366,7 @@ class TestPipeline:
 
     @pytest.mark.django_db()
     def test_archive_pipeline(self):
-        assistant = OpenAiAssistantFactory.create()
         pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
         start_pipeline__action = EventActionFactory.create(
             action_type=EventActionType.PIPELINE_START,
             params={
@@ -434,10 +387,6 @@ class TestPipeline:
         static_trigger.archive()
         # Nothing uses it, so archive it
         assert pipeline.archive() is True
-
-        # Double check that the node didn't archive the assistant
-        assistant.refresh_from_db()
-        assert assistant.is_archived is False
 
 
 @pytest.mark.django_db()
@@ -747,53 +696,46 @@ class TestLayoutOnlyData:
 
 @pytest.mark.django_db()
 class TestPipelineRevert:
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
     def test_revert_remaps_versioned_params_back_to_working_records(self):
         """Reverting rebuilds the working pipeline from a version's data, remapping params that
-        reference versioned records (assistant, source material) back to their working ids."""
-        assistant = OpenAiAssistantFactory.create()
-        source_material = SourceMaterialFactory.create(team=assistant.team)
-        provider = LlmProviderFactory.create(team=assistant.team)
-        provider_model = LlmProviderModelFactory.create(team=assistant.team)
+        reference versioned records (source material) back to their working ids."""
+        team = TeamFactory.create()
+        source_material = SourceMaterialFactory.create(team=team)
+        other_material = SourceMaterialFactory.create(team=team)
+        provider = LlmProviderFactory.create(team=team)
+        provider_model = LlmProviderModelFactory.create(team=team)
 
-        start, asst, llm, end = (
+        start, llm, end = (
             start_node(),
-            assistant_node(str(assistant.id)),
             llm_response_with_prompt_node(
                 str(provider.id), str(provider_model.id), source_material_id=str(source_material.id)
             ),
             end_node(),
         )
-        pipeline = create_pipeline_model([start, asst, llm, end])
+        pipeline = create_pipeline_model([start, llm, end])
         pipeline.save(update_fields=["data"])
         version = pipeline.create_new_version()
 
         # On publish, the version's node params point at the versioned records.
-        version_asst = version.node_set.get(type=AssistantNode.__name__)
-        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
         version_llm = version.node_set.get(type=LLMResponseWithPrompt.__name__)
         assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
 
         # Edit the working pipeline so revert has something to undo.
-        other_assistant = OpenAiAssistantFactory.create(team=assistant.team)
-        asst["params"]["assistant_id"] = str(other_assistant.id)
-        create_pipeline_model([start, asst, llm, end], pipeline=pipeline)
+        llm["params"]["source_material_id"] = str(other_material.id)
+        create_pipeline_model([start, llm, end], pipeline=pipeline)
 
         pipeline.revert_to_version(version)
 
-        working_asst = pipeline.node_set.get(type=AssistantNode.__name__)
         working_llm = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
-        # Params point at the working records, not the versioned ones from the snapshot.
-        assert working_asst.params["assistant_id"] == str(assistant.id)
+        # Params point at the working record, not the versioned one from the snapshot.
         assert working_llm.params["source_material_id"] == str(source_material.id)
-        # The mirrored resource FK columns are re-synced to the working records too.
-        assert working_asst.assistant_id == assistant.id
+        # The mirrored resource FK column is re-synced to the working record too.
         assert working_llm.source_material_id == source_material.id
 
         # The version's nodes are untouched by the revert.
-        version_asst.refresh_from_db()
-        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
-        assert version_asst.assistant_id == assistant.latest_version.id
+        version_llm.refresh_from_db()
+        assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
+        assert version_llm.source_material_id == source_material.latest_version.id
 
     def test_revert_leaves_no_stale_node_caches(self):
         """Revert writes the node rows straight to the DB, behind the back of ``flow_data``'s
@@ -889,8 +831,8 @@ class TestPipelineValidation:
     ("node_type", "param_name", "expected"),
     [
         pytest.param(LLMResponseWithPrompt.__name__, "llm_provider_id", True, id="declared"),
-        pytest.param(LLMResponseWithPrompt.__name__, "assistant_id", False, id="not-declared"),
-        pytest.param(AssistantNode.__name__, "assistant_id", True, id="declared-on-other-type"),
+        pytest.param(LLMResponseWithPrompt.__name__, "route_key", False, id="not-declared"),
+        pytest.param(RouterNode.__name__, "prompt", True, id="declared-on-other-type"),
         pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
     ],
 )

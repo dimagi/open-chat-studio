@@ -187,16 +187,6 @@ class SendEmailParams(_TagParams):
     )
 
 
-@extend_schema_serializer(component_name="AssistantNodeParams")
-class AssistantNodeParams(_TagParams):
-    citations_enabled = serializers.BooleanField(required=False, help_text="Include cited sources in responses.")
-    input_formatter = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        help_text="Optional wrapper for the user input; use ``{input}`` as the placeholder.",
-    )
-
-
 @extend_schema_serializer(component_name="ExtractStructuredDataParams")
 class ExtractStructuredDataParams(_TagParams, _LlmParams):
     data_schema = serializers.CharField(
@@ -231,7 +221,6 @@ NODE_PARAM_SERIALIZERS = {
     "StaticRouterNode": StaticRouterNodeParams,
     "BooleanNode": BooleanNodeParams,
     "SendEmail": SendEmailParams,
-    "AssistantNode": AssistantNodeParams,
     "ExtractStructuredData": ExtractStructuredDataParams,
     "ExtractParticipantData": ExtractParticipantDataParams,
 }

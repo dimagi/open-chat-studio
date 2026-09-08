@@ -1,7 +1,8 @@
 from django.db import transaction
+from django.db.models import QuerySet
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
-from rest_framework import mixins, status
+from rest_framework import mixins, serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
@@ -19,6 +20,7 @@ from apps.api.v2.write.serializers import (
     ChatbotDetailSerializer,
     ChatbotWriteSerializer,
 )
+from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.teams.models import Team
 
@@ -57,10 +59,10 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         """The team the credential authenticated with."""
         return self.request.team
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Experiment]:
         return working_chatbots(self.team).select_related("team").prefetch_related("versions")
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[serializers.BaseSerializer]:
         # The actions below build their serializers directly, but any `self.get_serializer()` call
         # resolves the class through here, so it has to be right.
         action = self.action
@@ -81,16 +83,16 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         summary="Create Chatbot",
         description=(
             "Create a chatbot's working (draft) version, seeded with a Start -> LLM -> End "
-            "pipeline. Nothing is published: use POST /api/v2/chatbots/{id}/versions/ for that. On a "
-            "team with no LLM provider the seed is Start + End with no edge between them, so the new "
-            "chatbot reports pipeline_valid: false until you wire it. A key that is not listed "
-            "below is rejected rather than ignored."
+            "pipeline. Nothing is published -- this API writes the draft only. On a team with no "
+            "LLM provider the seed is Start + End with no edge between them, so the new chatbot "
+            "reports pipeline_valid: false until you wire it. A key that is not listed below is "
+            "rejected rather than ignored."
         ),
         tags=["Chatbots"],
         request=ChatbotCreateSerializer,
         responses={201: ChatbotDetailSerializer},
     )
-    def create(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs) -> Response:
         serializer = ChatbotCreateSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         chatbot = serializer.save()
@@ -137,10 +139,11 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         description=(
             "Update the working (draft) chatbot's settings and its wiring to existing resources. "
             "The writable fields are the ones the chatbot settings page edits, with references "
-            "given as ids (listed by GET /api/v2/pipeline/options/). GET /api/v2/chatbots/{id}/inspect/ "
-            "returns more than this -- names, types and resolved values that describe a reference "
-            "rather than address it -- so it is not a template for this body. Only the keys you send "
-            "are changed, and a key that is not listed below is rejected rather than ignored. The "
+            "given as ids (listed by the `pipeline_options` endpoint). "
+            "The `chatbot_inspect` endpoint returns more than this -- names, types and resolved "
+            "values that describe a reference rather than address it -- so it is not a template "
+            "for this body. Only the keys you send are changed, and a key that is not listed "
+            "below is rejected rather than ignored. The "
             "response includes read-only fields (id, pipeline_id, version_number) that the request "
             "does not accept."
         ),
@@ -163,7 +166,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             ),
         },
     )
-    def partial_update(self, request, *args, **kwargs):
+    def partial_update(self, request, *args, **kwargs) -> Response:
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
             # naming different fields would silently clobber one another.

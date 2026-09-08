@@ -43,6 +43,11 @@ urlpatterns = [
         name="chatbot_session_view",
     ),
     path(
+        "e/<uuid:experiment_id>/s/<str:session_id>/export/",
+        views.export_chatbot_session_messages,
+        name="export_chatbot_session_messages",
+    ),
+    path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",
         views.end_chatbot_session,
         name="chatbot_end_session",
