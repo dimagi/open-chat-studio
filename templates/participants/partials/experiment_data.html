@@ -1,10 +1,11 @@
-{% load render_table from django_tables2 %}
 <td colspan="100%" class="px-3 py-2">
   <div role="tablist" class="tabs tabs-border">
     <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab" aria-label="Sessions"
            checked/>
     <div role="tabpanel" class="tab-content">
-      {% include "table/single_table.html" with table=session_table %}
+      <div hx-get="{{ session_table_url }}" hx-trigger="load" hx-target="this" hx-swap="innerHTML">
+        {% include "table/table_placeholder.html" %}
+      </div>
     </div>
     {% if perms.experiments.view_participantdata %}
       <input type="radio" name="experiment_tabs-{{ experiment.id }}" role="tab" class="tab"
