@@ -24,6 +24,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from functools import cached_property
+from itertools import batched
 from urllib.parse import urlparse
 
 from django.core.management.base import BaseCommand, CommandError
@@ -177,6 +178,21 @@ def _scrub_fields(row, plan: ScrubPlan, text_fields: tuple[str, ...], json_field
     return changed
 
 
+def _scrubbed_rows(
+    queryset, plans: dict[int, ScrubPlan], *, text_fields: tuple[str, ...], json_fields: tuple[str, ...]
+):
+    """Stream the rows the scrub actually altered, each already rewritten in memory.
+
+    A row whose owner is not in ``plans`` is left alone: scrubbing it would mean using someone
+    else's search terms.
+    """
+    # only(): a message history is unbounded, and no other column is read or written here.
+    for row in queryset.only(*text_fields, *json_fields).iterator(chunk_size=CHUNK_SIZE):
+        plan = plans.get(getattr(row, OWNER))
+        if plan is not None and _scrub_fields(row=row, plan=plan, text_fields=text_fields, json_fields=json_fields):
+            yield row
+
+
 def _apply(
     queryset,
     plans: dict[int, ScrubPlan],
@@ -185,31 +201,18 @@ def _apply(
     text_fields: tuple[str, ...] = (),
     json_fields: tuple[str, ...] = (),
 ) -> int:
-    """Stream ``queryset``, scrub each row with its owner's plan, and write back what changed.
+    """Scrub every eligible row of ``queryset``, writing back what changed one batch at a time.
 
     ``plans`` is keyed by whatever the ``OWNER`` annotation yields, so one query serves a whole
-    chunk of participants rather than one query per participant. A row whose owner is not in
-    ``plans`` is left alone: scrubbing it would mean using someone else's search terms.
+    chunk of participants rather than one query per participant.
     """
-    model = queryset.model
     fields = [*text_fields, *json_fields]
+    rows = _scrubbed_rows(queryset=queryset, plans=plans, text_fields=text_fields, json_fields=json_fields)
     changed = 0
-    batch = []
-    # only(): a message history is unbounded, and no other column is read or written here.
-    for row in queryset.only(*fields).iterator(chunk_size=CHUNK_SIZE):
-        plan = plans.get(getattr(row, OWNER))
-        if plan is None:
-            continue
-        if _scrub_fields(row=row, plan=plan, text_fields=text_fields, json_fields=json_fields):
-            batch.append(row)
-        if len(batch) >= CHUNK_SIZE:
-            if not dry_run:
-                model.objects.bulk_update(batch, fields)
-            changed += len(batch)
-            batch = []
-    if batch:
+    # strict=False: the last batch is short whenever the row count is not a whole multiple.
+    for batch in batched(rows, CHUNK_SIZE, strict=False):
         if not dry_run:
-            model.objects.bulk_update(batch, fields)
+            queryset.model.objects.bulk_update(batch, fields)
         changed += len(batch)
     return changed
 
@@ -457,20 +460,21 @@ def _participant_chunks(working: Experiment, participant_ids: list[int]):
         )
 
 
+def _key_for_token(token: str, keys: list[str]) -> str:
+    """Look up the key that one typed number names."""
+    if not token.isdigit() or not 1 <= int(token) <= len(keys):
+        raise CommandError(f"{token!r} is not one of the listed numbers; nothing was written.")
+    return keys[int(token) - 1]
+
+
 def resolve_selection(answer: str, keys: list[str]) -> list[str]:
     """Turn a typed answer ("all", or numbers) into the list of keys it names."""
     answer = answer.strip()
     if answer.lower() == "all":
         return keys
-    selected = []
-    for token in (part.strip() for part in answer.split(",")):
-        if not token:
-            continue
-        if not token.isdigit() or not 1 <= int(token) <= len(keys):
-            raise CommandError(f"{token!r} is not one of the listed numbers; nothing was written.")
-        key = keys[int(token) - 1]
-        if key not in selected:
-            selected.append(key)
+    tokens = [token for token in (part.strip() for part in answer.split(",")) if token]
+    # dict.fromkeys: keeps the typed order while dropping a number listed twice.
+    selected = list(dict.fromkeys(_key_for_token(token, keys) for token in tokens))
     if not selected:
         raise CommandError("No keys selected; nothing was written.")
     return selected
