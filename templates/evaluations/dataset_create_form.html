@@ -78,6 +78,7 @@
           </div>
 
           <div id="sessions-table"
+               class="overflow-x-auto"
                :class="{'session-mode-active': evaluationMode === 'session', 'opacity-60': sessionScope !== 'selected'}"
                data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
             {% include "table/table_placeholder.html" %}

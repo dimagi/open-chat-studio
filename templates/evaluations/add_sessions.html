@@ -135,6 +135,7 @@
 
     <!-- Sessions table (HTMX lazy-loaded). Dimmed when not in 'selected' mode. -->
     <div id="sessions-table"
+         class="overflow-x-auto"
          :class="{ 'opacity-60': mode !== 'selected' }"
          data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
       {% include "table/table_placeholder.html" %}
