@@ -18,6 +18,13 @@ from .models import (
 )
 
 
+def _current_timezone_name() -> str:
+    """The active request timezone's IANA name, falling back to UTC when none is detected."""
+    current = timezone.get_current_timezone()
+    name = getattr(current, "key", None) or getattr(current, "zone", None)
+    return name if name in available_timezones() else "UTC"
+
+
 class SendMessageToBotForm(forms.Form):
     message_to_bot = forms.CharField(
         widget=forms.Textarea,
@@ -175,8 +182,11 @@ class ScheduledTriggerForm(BaseTriggerForm):
     timezone = forms.ChoiceField(
         choices=[(tz, tz) for tz in sorted(available_timezones())],
         label="Timezone",
-        initial=getattr(timezone.get_current_timezone(), "key", "UTC"),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["timezone"].initial = _current_timezone_name()
 
     class Meta:
         model = ScheduledTrigger

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 
 import pytest
@@ -274,6 +274,16 @@ class TestScheduledTriggerForm:
             },
         )
         assert form.is_valid(), form.errors
+
+    def test_timezone_initial_defaults_to_detected_timezone(self):
+        with timezone.override(pytz.timezone("America/New_York")):
+            form = ScheduledTriggerForm()
+        assert form.fields["timezone"].initial == "America/New_York"
+
+    def test_timezone_initial_falls_back_to_utc(self):
+        with timezone.override(UTC):
+            form = ScheduledTriggerForm()
+        assert form.fields["timezone"].initial == "UTC"
 
 
 @pytest.mark.django_db()
