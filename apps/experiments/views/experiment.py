@@ -556,31 +556,12 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     selected_tags = list(filter(None, request.GET.getlist("tag_filter")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
+    is_fragment_request = bool(request.GET.get("next_page"))
     try:
         highlight_message_id = int(request.GET.get("message_id"))
     except (ValueError, TypeError):
         highlight_message_id = None
 
-    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-    all_tags = (
-        Tag.objects.filter(
-            annotations_customtaggeditem_items__content_type=chat_message_content_type,
-            annotations_customtaggeditem_items__object_id__in=Subquery(
-                ChatMessage.objects.filter(chat=session.chat).values("id")
-            ),
-        )
-        .annotate(count=Count("annotations_customtaggeditem_items"))
-        .distinct()
-        .order_by(F("category").asc(nulls_first=True), "name")
-    )
-    available_languages, translatable_languages = _get_languages_for_chat(session)
-    has_missing_translations = False
-    translate_form_all = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
-    )
-    translate_form_remaining = TranslateMessagesForm(
-        team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
-    )
     default_message = "(message generated after last translation)"
 
     messages_queryset = (
@@ -604,6 +585,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     if selected_tags:
         messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
 
+    has_missing_translations = False
     if language:
         messages_queryset = messages_queryset.annotate(
             translation=Coalesce(
@@ -612,7 +594,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 output_field=CharField(),
             )
         )
-        has_missing_translations = messages_queryset.exclude(**{f"translations__{language}__isnull": False}).exists()
+        if not is_fragment_request:
+            has_missing_translations = messages_queryset.exclude(
+                **{f"translations__{language}__isnull": False}
+            ).exists()
     show_all = request.GET.get("show_all") == "on"
     page_size = 10
     if show_all:
@@ -648,23 +633,48 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "page_start_index": page_start_index,
         "selected_tags": selected_tags,
         "language": language,
-        "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
-        "translate_form_all": translate_form_all,
-        "translate_form_remaining": translate_form_remaining,
         "default_message": default_message,
-        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
-        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
-        "all_tags": all_tags,
         "highlight_message_id": highlight_message_id,
     }
+
+    # A scroll-triggered fragment only renders messages, not the control panel, so skip the
+    # translation forms and provider/model lookups that panel needs, they're real queries.
+    if not is_fragment_request:
+        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+        all_tags = (
+            Tag.objects.filter(
+                annotations_customtaggeditem_items__content_type=chat_message_content_type,
+                annotations_customtaggeditem_items__object_id__in=Subquery(
+                    ChatMessage.objects.filter(chat=session.chat).values("id")
+                ),
+            )
+            .annotate(count=Count("annotations_customtaggeditem_items"))
+            .distinct()
+            .order_by(F("category").asc(nulls_first=True), "name")
+        )
+        available_languages, translatable_languages = _get_languages_for_chat(session)
+        context.update(
+            {
+                "all_tags": all_tags,
+                "available_languages": available_languages,
+                "translate_form_all": TranslateMessagesForm(
+                    team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+                ),
+                "translate_form_remaining": TranslateMessagesForm(
+                    team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+                ),
+                "default_translation_models_by_providers": get_default_translation_models_by_provider(),
+                "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
+            }
+        )
 
     # Scrolling for more messages just needs the messages, not the whole page again.
     template_name = (
         "experiments/components/session_messages_list.html"
-        if request.GET.get("next_page")
+        if is_fragment_request
         else "experiments/components/session_messages.html"
     )
     return TemplateResponse(
