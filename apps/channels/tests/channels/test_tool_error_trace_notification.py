@@ -24,6 +24,7 @@ from apps.experiments.models import AgentTools
 from apps.ocs_notifications.models import NotificationEvent
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, llm_response_with_prompt_node, start_node
 from apps.service_providers.tracing import TracingService
+from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory, VersionedExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.tests.langchain import build_fake_llm_service
@@ -88,6 +89,7 @@ def test_tool_error_aborts_turn_and_creates_trace_linked_notification(
     pipeline = MessageProcessingPipeline(core_stages=[BotInteractionStage()], terminal_stages=[])
 
     before_ids = set(NotificationEvent.objects.filter(team=experiment.team).values_list("id", flat=True))
+    before_trace_ids = set(Trace.objects.values_list("id", flat=True))
 
     with bot.trace_service.trace("test-trace", session=session, inputs={}):
         with pytest.raises(ValueError, match="simulated tool failure"):
@@ -107,4 +109,9 @@ def test_tool_error_aborts_turn_and_creates_trace_linked_notification(
     )
     assert notification is not None
     assert notification.title.startswith("Tool Error Failed")
-    assert notification.links.get("View Trace")
+
+    # The link points at this run's own trace, not just any trace -- and that trace carries
+    # the tool's error, confirming the two are actually connected, not incidentally both present.
+    trace = Trace.objects.exclude(id__in=before_trace_ids).get()
+    assert notification.links.get("View Trace") == trace.get_absolute_url()
+    assert "simulated tool failure" in trace.error
