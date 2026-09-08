@@ -175,7 +175,7 @@ MIDDLEWARE = list(
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "apps.web.cache_control_middleware.SensitiveDataCacheControlMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
-            "apps.users.middleware.RequireMfaForStaffMiddleware",
+            "apps.users.middleware.RequireMfaMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -309,7 +309,7 @@ MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
 # Staff and superusers are confined to the MFA setup flow until they enrol
-# (apps.users.middleware.RequireMfaForStaffMiddleware). Off by default in development and under
+# (apps.users.middleware.RequireMfaMiddleware). Off by default in development and under
 # test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
 # to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
 REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
@@ -447,6 +447,9 @@ EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", defaul
 # Django sites
 
 SITE_ID = 1
+
+# https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024)
 
 # DRF config
 REST_FRAMEWORK = {
@@ -990,6 +993,15 @@ agent_models_low = env.list("SYSTEM_AGENT_MODELS_LOW", default=[])
 SYSTEM_AGENT_MODELS_HIGH = get_system_agent_models(agent_models_high, agent_api_keys)
 # 'low' models used for simple tasks
 SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_keys)
+
+# Operator-level Langfuse tracing for the system agent (apps/help/). Separate from a team's own
+# Trace Provider: the system agent has no Experiment/Session to attach one to, and its model
+# choice is already operator-configured above, not per-team.
+OCS_LANGFUSE_PUBLIC_KEY = env("OCS_LANGFUSE_PUBLIC_KEY", default="")
+OCS_LANGFUSE_SECRET_KEY = env("OCS_LANGFUSE_SECRET_KEY", default="")
+OCS_LANGFUSE_HOST = env("OCS_LANGFUSE_HOST", default="https://cloud.langfuse.com")
+# Fraction of system agent calls to trace, from 0.0 to 1.0. Leave unset to trace every call.
+OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 
 
 # Document Management

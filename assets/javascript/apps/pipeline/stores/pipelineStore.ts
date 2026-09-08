@@ -12,7 +12,7 @@ import {create, StateCreator} from "zustand";
 import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
 import {getNodeId} from "../utils";
-import {cloneDeep} from "lodash";
+import cloneDeep from "lodash/cloneDeep";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
