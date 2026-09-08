@@ -77,15 +77,17 @@ def async_create_experiment_version(
         Experiment.release_version_operation_lock(experiment_id)
 
 
-def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> bool:
+def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> str | None:
     """Dispatch async version creation under the version-operation lock.
 
     The lock is acquired before dispatch so a concurrent version operation is
-    rejected atomically. Returns False when another operation is already in flight.
+    rejected atomically. Returns the task id, or None when another operation is
+    already in flight. The one uuid is both the lock token and the Celery task id,
+    so a caller that has to report progress can hand it out as a poll handle.
     """
     task_id = str(uuid4())
     if not experiment.acquire_version_operation_lock(task_id):
-        return False
+        return None
     try:
         async_create_experiment_version.apply_async(
             kwargs={
@@ -98,7 +100,7 @@ def start_version_creation(experiment, version_description: str = "", make_defau
     except Exception:
         Experiment.release_version_operation_lock(experiment.id)
         raise
-    return True
+    return task_id
 
 
 @shared_task(bind=True, base=TaskbadgerTask, queue=Queues.CHAT)
