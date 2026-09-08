@@ -53,6 +53,21 @@ def test_set_require_mfa(client, is_admin, expected_status, expected_require_mfa
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("is_admin", "should_render"),
+    [pytest.param(True, True, id="admin_sees_toggle"), pytest.param(False, False, id="non_admin_does_not")],
+)
+def test_require_mfa_toggle_rendered_for_admins_only(client, is_admin, should_render):
+    team, admin = _team_with_admin()
+    user = admin if is_admin else next(m.user for m in team.membership_set.all() if not m.is_team_admin())
+    client.force_login(user)
+
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert (b'name="require_mfa"' in response.content) is should_render
+
+
+@pytest.mark.django_db()
 def test_admin_can_disable_require_mfa(client):
     """Enrolled first: an admin who isn't enrolled gets sent to MFA setup by their own
     requirement on the very next request -- see test_require_mfa_middleware.py. This test
