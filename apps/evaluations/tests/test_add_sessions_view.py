@@ -4,6 +4,7 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.evaluations.models import EvaluationDataset, EvaluationMode
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -192,3 +193,48 @@ def test_message_mode_all_matching_over_limit_is_rejected(client_with_user, team
 
     mock_delay.assert_not_called()
     assert any("limited to 1 session" in str(m) for m in response.context["messages"])
+
+
+@pytest.mark.django_db()
+def test_add_sessions_table_renders_session_id_and_tags(client_with_user, team_with_users, session_dataset):
+    """EvalDatasetSessionsTableView shares EvaluationSessionsSelectionTable (and its Session ID
+    and Tags columns) with the dataset-create flow, so it needs the same page-scoped tag
+    prefetch -- otherwise Chat.prefetched_tags_json has no live-query fallback and the cell
+    renders blank."""
+    session = ExperimentSessionFactory(team=team_with_users)
+    session.chat.create_and_add_tag("qa-review", team=team_with_users, tag_category="")
+
+    url = reverse("evaluations:dataset_add_sessions_table", args=[team_with_users.slug, session_dataset.pk])
+    response = client_with_user.get(url)
+
+    assert response.status_code == 200
+    assert str(session.external_id).encode() in response.content
+    assert b"qa-review" in response.content
+
+
+@pytest.mark.django_db()
+def test_add_sessions_table_tag_prefetch_is_bounded_to_current_page(client_with_user, team_with_users, session_dataset):
+    """Pins down the ordering requirement documented on ChatTagPrefetchTableMixin: the tag
+    prefetch must run after RequestConfig.configure() has already sliced the table to one page,
+    or it silently regresses into an unbounded, full-queryset lookup.
+
+    With more sessions than fit on a page, a correctly-ordered prefetch only ever sees the
+    page's rows -- so asserting on the length of what it was called with pins that ordering
+    down directly, independent of how the query itself is written.
+    """
+    per_page = 25
+    total_sessions = per_page + 5
+    for _ in range(total_sessions):
+        session = ExperimentSessionFactory(team=team_with_users)
+        session.chat.create_and_add_tag("qa-review", team=team_with_users, tag_category="")
+
+    url = reverse("evaluations:dataset_add_sessions_table", args=[team_with_users.slug, session_dataset.pk])
+    with patch(
+        "apps.evaluations.views.dataset_views.attach_chat_tagged_items", wraps=attach_chat_tagged_items
+    ) as mock_attach:
+        response = client_with_user.get(url)
+
+    assert response.status_code == 200
+    mock_attach.assert_called_once()
+    (rows,), _ = mock_attach.call_args
+    assert len(rows) == per_page

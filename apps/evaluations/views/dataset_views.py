@@ -253,7 +253,17 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         return response
 
 
-class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class ChatTagPrefetchTableMixin:
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
+
+
+class DatasetSessionsSelectionTableView(
+    ChatTagPrefetchTableMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView
+):  # ty: ignore[invalid-method-override]
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
@@ -266,18 +276,6 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionReq
         queryset = get_base_session_queryset(self.request)
         queryset = queryset.annotate(message_count=Coalesce(Count("chat__messages", distinct=True), 0))
         return queryset.select_related("team", "participant__user", "chat", "experiment").order_by("experiment__name")
-
-    def get_table(self, **kwargs):
-        """Configure the table, then attach the tag prefetch to the paginated page only.
-
-        Hooking after `RequestConfig.configure` ensures the underlying queryset is sliced
-        with LIMIT before we evaluate it — so both the page rows and the CustomTaggedItem
-        lookup are bounded to a single page, not the full filtered set.
-        """
-        table = super().get_table(**kwargs)
-        if getattr(table, "page", None) is not None:
-            attach_chat_tagged_items(table.page.object_list)
-        return table
 
 
 def get_base_session_queryset(request):
@@ -825,7 +823,9 @@ def dataset_sessions_count(request, team_slug: str, pk: int):
     return JsonResponse({"total": count})
 
 
-class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class EvalDatasetSessionsTableView(
+    ChatTagPrefetchTableMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView
+):  # ty: ignore[invalid-method-override]
     """Paginated session table for the 'Add sessions' sub-page."""
 
     model = ExperimentSession
