@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.annotations.models import UserComment
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.evaluations.models import EvaluationMessage
 from apps.experiments.management.commands.scrub_participant_data import (
@@ -106,17 +107,22 @@ def _add_evaluation_result(eval_message, *, team, generated_session=None):
     )
 
 
-def _generated_session(experiment, **kwargs):
+def _generated_session(experiment, *, on_working_version=False, **kwargs):
     """The throwaway session bot generation runs an evaluation message through.
 
-    Owned by the synthetic "evaluations" participant and attached to a version row, which is
-    what puts it beyond both the participant and the experiment filter.
+    Owned by the synthetic "evaluations" participant. An evaluation configured for a specific
+    or published version attaches it to that version row; one configured for the latest
+    working version attaches it to the working chatbot itself.
     """
-    version = ExperimentFactory.create(team=experiment.team, working_version=experiment, version_number=99)
+    target = experiment
+    if not on_working_version:
+        target = ExperimentFactory.create(team=experiment.team, working_version=experiment, version_number=99)
     return ExperimentSessionFactory.create(
-        experiment=version,
+        experiment=target,
         team=experiment.team,
+        platform=ChannelPlatform.EVALUATIONS,
         participant__identifier="evaluations",
+        participant__platform=ChannelPlatform.EVALUATIONS,
         participant__team=experiment.team,
         **kwargs,
     )
@@ -440,9 +446,10 @@ class TestSurfaceCoverage:
         # The fixture's own message brings the total to one past two full batches.
         assert f"messages: {CHUNK_SIZE + 2}" in output.getvalue()
 
-    def test_scrubs_the_messages_copied_into_a_generation_session(self, chatbot, monkeypatch):
+    @pytest.mark.parametrize("on_working_version", [False, True], ids=["on-a-version", "on-the-working-chatbot"])
+    def test_scrubs_the_messages_copied_into_a_generation_session(self, chatbot, monkeypatch, on_working_version):
         """Bot generation replays the participant's history into the throwaway session's chat."""
-        generated = _generated_session(chatbot["experiment"], state={})
+        generated = _generated_session(chatbot["experiment"], on_working_version=on_working_version, state={})
         copied = ChatMessage.objects.create(
             chat=generated.chat, message_type=ChatMessageType.HUMAN, content=f"{SECRET} again"
         )
@@ -644,6 +651,24 @@ class TestScope:
         )
 
         assert ExperimentSession.objects.get(id=theirs.id).state == {"last_caller": SECRET}
+
+    def test_the_evaluations_participants_own_sessions_are_never_matched(self, chatbot, monkeypatch):
+        """A generation session on the working chatbot is visible to the filter.
+
+        The synthetic participant owns every generation session of every evaluation run, and
+        those hold copies of whatever the dataset contained, from any chatbot in the team. An
+        empty filter must not select it; its sessions are reached only through the evaluator
+        result that links each one to the participant it copied.
+        """
+        theirs = _generated_session(
+            chatbot["experiment"], on_working_version=True, state={"name": "Someone Else", "last_caller": SECRET}
+        )
+        output = StringIO()
+
+        _scrub(chatbot["experiment"], monkeypatch, stdout=output)
+
+        assert ExperimentSession.objects.get(id=theirs.id).state == {"name": "Someone Else", "last_caller": SECRET}
+        assert "Participants: 1" in output.getvalue()
 
 
 @pytest.mark.django_db()
@@ -906,6 +931,19 @@ class TestFilterArgumentGuard:
     def test_a_filter_that_would_not_narrow_the_scrub_is_refused(self, chatbot, monkeypatch, filter_query, message):
         """An unknown column, operator or value narrows nothing, which would scrub everyone."""
         with pytest.raises(CommandError, match=message):
+            _scrub(chatbot["experiment"], monkeypatch, answers=[], filter_query=filter_query)
+
+        assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
+
+    def test_each_filter_must_narrow_on_its_own(self, chatbot, monkeypatch):
+        """A no-op filter hiding behind a real one would scrub more than the operator confirmed."""
+        _other_participant(chatbot["experiment"], identifier="user2@example.com")
+        filter_query = (
+            f"f_participant=user1&op_participant={Operators.CONTAINS}"
+            f"&f_last_message=yesterday&op_last_message={Operators.ON}"
+        )
+
+        with pytest.raises(CommandError, match='"last_message on yesterday" matched every session'):
             _scrub(chatbot["experiment"], monkeypatch, answers=[], filter_query=filter_query)
 
         assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"

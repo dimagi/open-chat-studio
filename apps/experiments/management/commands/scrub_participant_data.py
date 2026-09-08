@@ -31,6 +31,7 @@ from django.db.models import F, Prefetch, Q, QuerySet
 from django.db.models.functions import Coalesce
 from django.http import QueryDict
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 from apps.evaluations.models import EvaluationMessage, EvaluationResult
 from apps.experiments.filters import ExperimentSessionFilter
@@ -321,9 +322,8 @@ def _generated_session_plans(scope: Scope, plans: dict[int, ScrubPlan]) -> dict[
     """Map each throwaway generation session to the plan of the participant it copied.
 
     Bot generation copies the participant's session state and history into a session owned by
-    the synthetic "evaluations" participant, on a version row rather than the working version,
-    so neither the participant nor the experiment filter reaches it. The evaluator result the
-    generation fed is the only link back.
+    the synthetic "evaluations" participant, which the match deliberately leaves out. The
+    evaluator result the generation fed is the only link back.
     """
     rows = EvaluationResult.objects.filter(message__session__in=scope.sessions, session__isnull=False).values_list(
         "session_id", "message__session__participant_id"
@@ -614,19 +614,45 @@ class Command(BaseCommand):
                 )
 
     def _resolve_matched(self, working: Experiment, filter_params: FilterParams) -> tuple[int, list[int]]:
-        """Apply the filter and return how many sessions matched, and their participant ids."""
-        base = ExperimentSession.objects.get_table_queryset(working.team, working.id)
-        queryset = ExperimentSessionFilter().apply(base, filter_params=filter_params) if filter_params.filters else base
+        """Apply the filter and return how many sessions matched, and their participant ids.
+
+        Sessions owned by the synthetic evaluations participant are left out. Bot generation
+        runs every evaluation message through one, so together they hold copies of whatever
+        the team's datasets contain. The ones that copied a matched participant are reached
+        through their evaluator result instead.
+        """
+        base = ExperimentSession.objects.get_table_queryset(working.team, working.id).exclude(
+            participant__platform=ChannelPlatform.EVALUATIONS
+        )
+        if not filter_params.filters:
+            queryset = base
+        else:
+            self._refuse_filters_that_narrow_nothing(base, filter_params)
+            queryset = ExperimentSessionFilter().apply(base, filter_params=filter_params)
         matched_count = queryset.order_by().count()
-        if filter_params.filters and matched_count and matched_count == base.order_by().count():
-            # A filter can narrow nothing without erroring — TimestampFilter swallows an
-            # unparseable date, for one — and matching everything is the only signal.
-            raise CommandError(
-                "The filter matched every session of this chatbot, so it narrowed nothing. "
-                "If you really do mean every participant, pass an empty --filter."
-            )
         participant_ids = queryset.order_by().values_list("participant_id", flat=True).distinct()
         return matched_count, sorted(participant_ids)
+
+    def _refuse_filters_that_narrow_nothing(self, base: QuerySet, filter_params: FilterParams) -> None:
+        """Apply each filter on its own and refuse any that matches every session.
+
+        A filter can narrow nothing without erroring — TimestampFilter swallows an unparseable
+        date, a choice filter drops values it cannot parse — and matching everything is the
+        only signal. Each is checked alone, because a real filter beside it would hide the
+        no-op, and the scrub would reach more participants than the operator confirmed.
+        """
+        total = base.order_by().count()
+        if not total:
+            return
+        session_filter = ExperimentSessionFilter()
+        for filter_data in filter_params.filters:
+            alone = session_filter.apply(base, filter_params=FilterParams(column_filters=[filter_data]))
+            if alone.order_by().count() == total:
+                raise CommandError(
+                    f'The filter "{filter_data.column} {filter_data.operator} {filter_data.value}" matched '
+                    "every session of this chatbot, so it narrowed nothing. If you really do mean every "
+                    "participant, pass an empty --filter."
+                )
 
     def _discover_keys(self, working, participant_ids) -> tuple[Counter, Counter]:
         """Top-level participant-data keys, with counts only — never a value.
