@@ -122,7 +122,11 @@ class ChatbotVersionCreateView(APIView):
         # The cheaper question first: an unchanged chatbot is refused for having nothing to publish
         # without the graph also being walked to find fault with it.
         _check_there_is_something_to_publish(chatbot)
-        if chatbot.publish_goes_live(make_default=make_default):
+        # `create_new_version` grants default status unconditionally to a chatbot's first version
+        # -- one holding versions but no default would serve nothing -- so the gate covers that as
+        # well as an asked-for one. Read from the working row's own counter, which every publish
+        # increments, so archiving versions does not make a later publish look like a first one.
+        if make_default or chatbot.version_number == 1:
             _check_pipeline_can_go_live(chatbot)
         dispatched = start_version_creation(
             chatbot,
