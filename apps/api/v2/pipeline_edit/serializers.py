@@ -123,12 +123,18 @@ class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     )
 
 
-class PipelineWriteSerializer(serializers.Serializer):
-    """What every façade write reports back about the pipeline it just changed.
+class DeprecatedModelSerializer(serializers.Serializer):
+    """The model a node still points at, and what to move it to."""
 
-    The same three fields the `chatbot_inspect` endpoint publishes, so one shape is parsed across
-    read and write.
-    """
+    model = serializers.CharField(help_text="Name of the deprecated model the node references.")
+    replacement = serializers.CharField(
+        allow_null=True,
+        help_text="Name of the model to migrate to, or null where none is declared.",
+    )
+
+
+class PipelineWriteSerializer(serializers.Serializer):
+    """What every façade write reports back about the pipeline it just changed."""
 
     pipeline_valid = serializers.BooleanField(
         help_text="Whether the pipeline validates cleanly: all three error buckets empty, and nothing more."
@@ -140,6 +146,14 @@ class PipelineWriteSerializer(serializers.Serializer):
             "Advisory 'what still needs wiring' map, keyed by ``node_id``: every output handle with "
             "no outgoing edge and every implicit ``input`` handle with no incoming edge. Never an "
             "error and never blocks a publish."
+        ),
+    )
+    deprecated_models = serializers.DictField(
+        child=DeprecatedModelSerializer(),
+        help_text=(
+            "Advisory map, keyed by ``node_id``, of nodes referencing a deprecated LLM model. The "
+            "model keeps working until it is removed, so this is never an error and never blocks a "
+            "publish -- but a new node may not be pointed at one."
         ),
     )
 

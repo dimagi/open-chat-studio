@@ -17,7 +17,7 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.discovery.node_types import get_node_class
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
-from apps.pipelines.build_state import pipeline_build_state
+from apps.pipelines.build_state import deprecated_models, pipeline_build_state
 from apps.pipelines.flow import FlowEdge
 from apps.pipelines.models import Pipeline
 
@@ -449,10 +449,11 @@ class PipelineEdgeEditView(PipelineFacadeView):
 
 
 def pipeline_state(pipeline: Pipeline) -> dict:
-    """The three fields every façade write reports about the pipeline it has just changed."""
+    """The fields every façade write reports about the pipeline it has just changed."""
     state = pipeline_build_state(pipeline)
     return {
         "pipeline_valid": state["pipeline_valid"],
         "pipeline_errors": state["errors"],
         "unwired_handles": state["unwired_handles"],
+        "deprecated_models": deprecated_models(pipeline),
     }
