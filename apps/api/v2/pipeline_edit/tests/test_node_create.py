@@ -14,7 +14,7 @@ import pytest
 
 from apps.pipelines.models import Node
 
-from .conftest import add_edge, add_llm_node, nodes_url, stored_node_params
+from .conftest import add_edge, add_llm_node, boundary_node, inspect_url, nodes_url, stored_node_params
 
 
 @pytest.mark.django_db()
@@ -83,10 +83,10 @@ class TestNodeId:
             format="json",
         )
         router = created.json()["node"]["node_id"]
-        add_edge(chatbot.pipeline, chatbot.pipeline.node_set.get(type="StartNode").flow_id, router)
+        add_edge(chatbot.pipeline, boundary_node(chatbot, "StartNode"), router)
         add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_0")
 
-        response = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/")
+        response = client.get(inspect_url(chatbot))
 
         assert response.status_code == 200, response.content
 
@@ -99,7 +99,7 @@ class TestNodeId:
 
         # The first draw repeats the id already in the graph, the second is free.
         draws = [Mock(hex=f"{collision}0000000"), Mock(hex="abcde" + "0" * 27)]
-        with patch("apps.api.v2.pipeline_edit.graph_editor.uuid4", side_effect=draws):
+        with patch("apps.api.v2.pipeline_edit.ids.uuid4", side_effect=draws):
             response = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
 
         assert response.status_code == 201, response.content
@@ -112,7 +112,7 @@ class TestNodeId:
         created = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
         collision = created.json()["node"]["node_id"].removeprefix("CodeNode-")
 
-        with patch("apps.api.v2.pipeline_edit.graph_editor.uuid4", return_value=Mock(hex=f"{collision}{'0' * 27}")):
+        with patch("apps.api.v2.pipeline_edit.ids.uuid4", return_value=Mock(hex=f"{collision}{'0' * 27}")):
             response = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
 
         assert response.status_code == 201, response.content

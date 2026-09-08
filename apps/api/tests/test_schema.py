@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.test import Client
 
 from apps.api.schema import _swap_host
+from apps.api.v2.pipeline_edit.serializers import MAX_WIRES_PER_CALL
 
 VERSIONS = [pytest.param("v1", id="v1"), pytest.param("v2", id="v2"), pytest.param("export", id="export")]
 
@@ -95,6 +96,22 @@ def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
         _drop_oidc_scopes(new_schema)
 
     assert old_schema == new_schema
+
+
+def test_the_wire_body_publishes_the_limit_it_enforces(pytestconfig):
+    """The endpoint refuses a body naming more than `MAX_WIRES_PER_CALL` wires, so the schema has to
+    say so: the consumer this API is built for reads the schema rather than the prose.
+
+    Asserted against the committed file, and against the constant rather than a literal, so raising
+    the limit without regenerating fails here naming the limit -- where
+    `test_schema_is_up_to_date_and_valid` would only report that the file drifted.
+    """
+    with open(f"{pytestconfig.rootdir}/api-schemas/v2.yml") as f:
+        schema = yaml.safe_load(f)
+
+    wires = schema["components"]["schemas"]["WireBody"]["properties"]["wires"]
+
+    assert (wires["minItems"], wires["maxItems"]) == (1, MAX_WIRES_PER_CALL)
 
 
 def test_drop_oidc_scopes_only_removes_oidc_scopes():

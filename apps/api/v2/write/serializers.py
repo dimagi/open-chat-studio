@@ -1,8 +1,8 @@
 """Request and response serializers for the chatbot write endpoints (#4139).
 
 The write surface mirrors what the UI's own forms accept -- ``ChatbotForm`` for create and
-``ChatbotSettingsForm`` for update -- rather than the shape of ``GET /chatbots/{id}/inspect/``.
-Inspecting and editing are different jobs, so inspect returns plenty that is not writable
+``ChatbotSettingsForm`` for update -- rather than the shape the `chatbot_inspect` endpoint
+returns. Inspecting and editing are different jobs, so inspect returns plenty that is not writable
 (provider names, voice languages, resolved node parameters); anything not listed here is refused.
 
 Each field carries its form field's name, with references narrowed to ids under the same

@@ -100,7 +100,7 @@ class File(BaseTeamModel, VersionsMixin):
             # Doing so would create rows whose FileField is empty, which then
             # causes ValueError('The "file" attribute has no file associated
             # with it.') the next time anyone tries to open/serve the file.
-            # External references (e.g. OpenAI assistant files) are exempt
+            # External references (e.g. files pushed to OpenAI) are exempt
             # because the content lives at the external source.
             raise ValueError(f"Cannot create File '{filename}' with empty content")
 

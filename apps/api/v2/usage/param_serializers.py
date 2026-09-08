@@ -1,4 +1,4 @@
-"""Query-param validation for ``GET /api/v2/usage/``.
+"""Query-param validation for the `usage` endpoint.
 
 Kept separate from the response serializers (``serializers.py``) so the request contract and the
 response contract evolve independently, mirroring ``apps/api/v2/inspect``. The view derives its
@@ -50,7 +50,8 @@ class _WindowDateTimeField(serializers.DateTimeField):
 
 class UsageQuerySerializer(serializers.Serializer):
     # Repeat the param to request several metrics: ``?metric=messages&metric=sessions``. Returns a
-    # set, so duplicates collapse. MultipleChoiceField reads repeated query params via ``getlist``.
+    # list in the order supplied, with duplicates collapsed. MultipleChoiceField reads repeated query
+    # params via ``getlist``.
     metric = serializers.MultipleChoiceField(
         choices=sorted(SUPPORTED_METRICS),
         allow_empty=False,

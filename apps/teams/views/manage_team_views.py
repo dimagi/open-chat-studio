@@ -15,6 +15,7 @@ from apps.teams.forms import (
     InvitationForm,
     NotifyRecipientsForm,
     TeamChangeForm,
+    TeamMfaForm,
     TeamMigrationForm,
     TeamPublicKeyForm,
 )
@@ -199,20 +200,45 @@ def set_public_key(request, team_slug):
     )
 
 
-@require_POST
-@permission_required("teams.change_team", raise_exception=True)
-def set_migration_lock(request, team_slug):
-    form = TeamMigrationForm(request.POST, instance=request.team)
+def _set_team_boolean_field(request, form_class, field_name, *, enabled_message, disabled_message, error_message):
+    """Shared toggle-a-single-boolean-field flow for the team settings forms."""
+    form = form_class(request.POST, instance=request.team)
     if form.is_valid():
         form.save()
-        armed = form.cleaned_data["is_migrating"]
-        messages.success(request, _("Migration mode enabled.") if armed else _("Migration mode disabled."))
+        armed = form.cleaned_data[field_name]
+        messages.success(request, enabled_message if armed else disabled_message)
     else:
-        messages.error(request, _("Could not update migration mode."))
+        messages.error(request, error_message)
     return render(
         request,
         "teams/manage_team.html",
         _manage_team_context(request, request.team),
+    )
+
+
+@require_POST
+@permission_required("teams.change_team", raise_exception=True)
+def set_migration_lock(request, team_slug):
+    return _set_team_boolean_field(
+        request,
+        TeamMigrationForm,
+        "is_migrating",
+        enabled_message=_("Migration mode enabled."),
+        disabled_message=_("Migration mode disabled."),
+        error_message=_("Could not update migration mode."),
+    )
+
+
+@require_POST
+@permission_required("teams.change_team", raise_exception=True)
+def set_require_mfa(request, team_slug):
+    return _set_team_boolean_field(
+        request,
+        TeamMfaForm,
+        "require_mfa",
+        enabled_message=_("MFA requirement enabled."),
+        disabled_message=_("MFA requirement disabled."),
+        error_message=_("Could not update the MFA requirement."),
     )
 
 

@@ -29,7 +29,7 @@ The DAG of nodes that defines a Chatbot's runtime behaviour, edited in a visual 
 An immutable snapshot of a Pipeline. Each Chatbot Version owns exactly one Pipeline Version (snapshot-paired, 1:1). A Pipeline Version is **not** independently published — there is no Published Pipeline Version concept. Whichever Pipeline Version is paired with the Published Chatbot Version is the one external Channels execute.
 
 **Pipeline Node**:
-A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Assistant, Router, Custom Action, …) that determines its behaviour, plus a `params` JSON blob configured via the visual editor. Nodes are independently versioned alongside their Pipeline.
+A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Router, Custom Action, …) that determines its behaviour, plus a `params` JSON blob configured via the visual editor. Nodes are independently versioned alongside their Pipeline.
 
 **Version Selection Rule**:
 The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
@@ -54,14 +54,14 @@ So "this Chatbot has no Chat API Channel" means "no outside embedder can reach i
 
 A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
 
-- **Credential Mode** — the column exists (`ExperimentChannel.credential_mode`) but nothing reads it yet, so it is not admin-selectable and every Channel sits at `embed_key`. Once the OAuth path lands ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1) it is the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+- **Credential Mode** — the *admin's* choice of what an *external* caller must present: the **Embed Key** (`embed_key`, the default), or an OAuth token (`oauth`) (ADR-0059). (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
 - **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin requires.
 
 An admin's policy must never be switched on by a widget upgrade, which is why these are two separate settings and not rungs of one ladder.
 
-Once the OAuth mode exists, exposure will take **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
+Under the OAuth mode, exposure takes **two** admin acts that must agree (ADR-0059, ADR-0063): the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
 _Backed by_: `ChannelPlatform.EMBEDDED_WIDGET`, labelled **Chat Widget & API** — the stored value stays `embedded_widget` because it is also a `Participant.platform` value. `Credential Mode` is `ExperimentChannel.credential_mode`; `Widget Auth Level` is `ExperimentChannel.required_auth_level`.
-_Planned_: the OAuth path that gives `credential_mode` its meaning (`oauth-chat-widget.md` D1–D4) — until it lands the column is inert.
+_Decided in_: ADR-0059 (the mode), ADR-0060 (origin rule per credential), ADR-0061–0063 (how a token is admitted).
 _Avoid_: "the Embedded Widget channel" (the old label) when the channel is serving a server integration — say "Chat API Channel". "The widget channel" is fine when a widget really is the client.
 
 **Embed Key**:
@@ -113,8 +113,8 @@ A specific model offering a **Provider** can serve — e.g. `gpt-4o`, `claude-op
 Distinct from the **LLM Provider**: a Provider is the credentialed account, a Model is a catalogue entry. They are **independent rows joined by provider `type`, not a foreign key**, and a Pipeline Node selects *both* — a Provider and a Model. May be Team-scoped or a global (Team-less) catalogue row. The same Provider/Model split applies to embeddings (an **Embedding Provider Model** paired with a Provider).
 _Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosing both.
 
-**OpenAI Assistant**:
-A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. Pipelines invoke one via an `AssistantNode`.
+**OpenAI Assistant** _(removed)_:
+A Team-scoped wrapper around a resource in OpenAI's Assistants API, invoked from a pipeline via an `AssistantNode`. OpenAI retired that API on 26 August 2026 and the feature was removed in #4254; only the `OpenAiAssistant`/`ToolResources` models and their Django admin survive, pending a phase-2 data drop. A pipeline still holding an `AssistantNode` renders it as a **Removed Node** and cannot be built.
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
@@ -168,9 +168,9 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - A **Channel** stores an FK to a Chatbot's family head; at message-receipt time it routes to that Chatbot's **Published Version**, and the resulting Session is bound to that version. The web widget and API can override with an explicit version number, which is how teams "chat with the Working Version" for testing.
 - A **Participant** belongs to one **Team** and one platform; the same human across two platforms is two **Participants**.
 - An **Evaluation Run** generates outputs against one **Chatbot Version**, resolved from its **Evaluation Config** at run time and pinned on the Run. Same machinery as Channel routing — Working vs Published is decided per-Config.
-- A **Pipeline Node** of type `AssistantNode` references one **OpenAI Assistant**; pipelines also reference **Custom Action Operations** to make outbound HTTP calls.
+- A **Pipeline** references **Custom Action Operations** to make outbound HTTP calls.
 - **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
-- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **OpenAI Assistants**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
+- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
 
 ## Example dialogue
 

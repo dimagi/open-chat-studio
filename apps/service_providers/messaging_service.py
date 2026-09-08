@@ -38,6 +38,68 @@ logger = logging.getLogger("ocs.messaging")
 MEDIA_DOWNLOAD_TIMEOUT = 30
 
 
+def _utf16_len(text: str) -> int:
+    """Return the number of UTF-16 code units in `text`.
+
+    Twilio counts message length in UTF-16 code units, so emoji and other characters outside the
+    Basic Multilingual Plane (U+0000–U+FFFF) consume 2 units each. Python's ``len()`` counts code
+    points (1 per character regardless of plane), so using it to enforce Twilio's 1600 unit limit
+    can produce chunks that Twilio rejects (error 21617).
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _hard_split(segment: str, limit: int):
+    """Yield `segment` in character-boundary pieces of at most `limit` UTF-16 units."""
+    piece = ""
+    for char in segment:
+        if piece and _utf16_len(piece + char) > limit:
+            yield piece
+            piece = ""
+        piece += char
+    if piece:
+        yield piece
+
+
+def _split_pieces(text: str, limit: int):
+    """Yield `text` in pieces of at most `limit` UTF-16 units, preferring natural boundaries.
+
+    Lines are only broken into words when the line itself is over the limit, and words are only
+    broken mid-character when the word alone is over the limit.
+    """
+    for line in text.splitlines(keepends=True):
+        if _utf16_len(line) <= limit:
+            yield line
+            continue
+
+        words = line.split(" ")
+        for index, word in enumerate(words):
+            # Reattach the separator consumed by split(); the final word keeps whatever line
+            # ending splitlines(keepends=True) left on it.
+            piece = word if index == len(words) - 1 else word + " "
+            if _utf16_len(piece) <= limit:
+                yield piece
+            else:
+                yield from _hard_split(piece, limit)
+
+
+def utf16_aware_split(text: str, limit: int) -> list[str]:
+    """Split `text` into chunks of at most `limit` UTF-16 units, reconstructing it exactly."""
+    if _utf16_len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for piece in _split_pieces(text, limit):
+        if current and _utf16_len(current + piece) > limit:
+            chunks.append(current)
+            current = ""
+        current += piece
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 _TEMPLATE_PARAM_WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -341,7 +403,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
         """
         from_, to = self._parse_addressing_params(platform, from_=from_, to=to)
 
-        chunks = smart_split(message, chars_per_string=self.MESSAGE_CHARACTER_LIMIT)
+        chunks = utf16_aware_split(message, limit=self.MESSAGE_CHARACTER_LIMIT)
         num_chunks = len(chunks)
         for message_text in chunks:
             response: MessageInstance = self.client.messages.create(from_=from_, body=message_text, to=to)

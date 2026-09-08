@@ -39,6 +39,9 @@ const App = function (props: { team_slug: string, pipelineId: number | undefined
     if (props.pipelineId) {
       loadPipeline(props.pipelineId);
     }
+    // Deliberately mount-only: props.team_slug/pipelineId are set once when this app is
+    // mounted by Django and never change for the lifetime of the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
