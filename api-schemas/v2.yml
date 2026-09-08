@@ -1642,7 +1642,7 @@ components:
     AttachedChannel:
       type: object
       description: |-
-        One channel standing in the way, named the way the web app names it.
+        One channel standing in the way of archiving, named the way the web app names it.
 
         Enough for a client to tell a person which channels to go and detach; there is nothing here to
         address, because no endpoint takes a channel.
@@ -1718,7 +1718,7 @@ components:
       - name
     ChannelsAttached:
       type: object
-      description: 'The 409: why the archive was refused, and what a person has to
+      description: 'The archive 409: why it was refused, and what a person has to
         do about it.'
       properties:
         detail:

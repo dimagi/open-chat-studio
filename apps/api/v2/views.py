@@ -15,8 +15,10 @@ from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.lookups import get_working_chatbot, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
-from apps.api.v2.write.archive import ArchivedSerializer, ChannelsAttachedSerializer, archive_chatbot
+from apps.api.v2.write.archive import archive_chatbot
 from apps.api.v2.write.serializers import (
+    ArchivedSerializer,
+    ChannelsAttachedSerializer,
     ChatbotCreateSerializer,
     ChatbotDetailSerializer,
     ChatbotWriteSerializer,
