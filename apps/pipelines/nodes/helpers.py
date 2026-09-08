@@ -67,7 +67,7 @@ def _on_tool_error(exc: Exception, request: ToolCallRequest) -> str:
     notification before this runs, since that happens inside tool execution itself.
     """
     tool_name = request.tool_call["name"]
-    return f"The '{tool_name}' tool failed to run ({type(exc).__name__}). Let the user know something went wrong."
+    return f"The '{tool_name}' tool failed to run ({type(exc).__name__})."
 
 
 def get_agent_middleware(node, system_message: SystemMessage) -> list:
