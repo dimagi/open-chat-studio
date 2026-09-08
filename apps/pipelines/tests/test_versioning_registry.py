@@ -1,5 +1,7 @@
 import pytest
 
+from apps.documents.models import Collection
+from apps.experiments.models import SourceMaterial
 from apps.experiments.versioning import VersionsMixin
 from apps.pipelines.models import Node
 from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -8,6 +10,7 @@ from apps.pipelines.versioning import (
     ParamArchiving,
     ParamVersioning,
     VersionedParamSpec,
+    all_versioned_param_specs,
 )
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
@@ -20,6 +23,21 @@ ALL_SPECS = [
 ]
 
 assert ALL_SPECS, "Versioned param registry must not be empty"
+
+# Specs whose model participates in the shared "still in use?" in-use guard (Collection and
+# SourceMaterial's `get_related_nodes_queryset`) — currently everything except OpenAiAssistant,
+# which archives through its own separate mechanism.
+GUARD_FACTORIES = {
+    Collection: CollectionFactory,
+    SourceMaterial: SourceMaterialFactory,
+}
+GUARD_SPECS = [
+    pytest.param(spec, id=f"{spec.model_label}.{spec.param_name}")
+    for spec in all_versioned_param_specs()
+    if hasattr(spec.model_cls, "get_related_nodes_queryset")
+]
+
+assert GUARD_SPECS, "Expected at least one guard-participating spec"
 
 
 @pytest.mark.parametrize(("node_type", "spec"), ALL_SPECS)
@@ -84,3 +102,19 @@ def test_versioning_multi_id_params_is_unsupported():
             fk_field="collection_indexes",
             many=True,
         )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("spec", GUARD_SPECS)
+def test_in_use_guard_param_key_matches_registry(spec):
+    """The in-use guard (``Collection``/``SourceMaterial.get_related_nodes_queryset``) hardcodes
+    its node-param key as a literal string rather than reading it from this registry. This test
+    ties the two together: it creates a node whose params are keyed by the registry's
+    ``param_name`` and asserts the guard queryset finds it. If a ``param_name`` is ever renamed in
+    the registry without updating the guard's hardcoded string, this test fails instead of
+    silently reintroducing this exact ticket's original bug."""
+    instance = GUARD_FACTORIES[spec.model_cls].create()
+    value = [str(instance.id)] if spec.many else str(instance.id)
+    NodeFactory.create(params={spec.param_name: value})
+
+    assert instance.get_related_nodes_queryset().exists()

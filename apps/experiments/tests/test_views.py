@@ -443,6 +443,8 @@ class TestDeleteSourceMaterial:
         assert response.status_code == 200
         assert response["HX-Retarget"] == "body"
         assert response["HX-Reswap"] == "beforeend"
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
 
         # Case 2 - remove the direct reference; only the published version's node still uses it
         node.params = {}
@@ -452,6 +454,8 @@ class TestDeleteSourceMaterial:
         assert response.status_code == 200
         assert response["HX-Retarget"] == "body"
         assert response["HX-Reswap"] == "beforeend"
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
 
     def test_source_material_is_archived_when_unused(self, client):
         source_material = SourceMaterialFactory.create(team=TeamWithUsersFactory.create())

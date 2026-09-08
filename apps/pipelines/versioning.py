@@ -179,3 +179,8 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
 
 def get_versioned_param_specs(node_type: str) -> tuple[VersionedParamSpec, ...]:
     return _NODE_PARAM_SPECS.get(node_type, ())
+
+
+def all_versioned_param_specs() -> list[VersionedParamSpec]:
+    """Every spec across all node types, flattened."""
+    return [spec for specs in _NODE_PARAM_SPECS.values() for spec in specs]

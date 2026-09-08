@@ -117,7 +117,8 @@ class DeleteSourceMaterial(LoginAndTeamRequiredMixin, PermissionRequiredMixin, V
         ]
         experiment_chips = [
             Chip(
-                label=f"{experiment.name} {experiment.get_version_name()} [published]",
+                label=f"{experiment.name} {experiment.get_version_name()}"
+                + ("" if experiment.is_working_version else " [published]"),
                 url=experiment.get_absolute_url(),
             )
             for experiment in source_material.get_related_experiments_queryset()
