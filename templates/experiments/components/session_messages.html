@@ -134,15 +134,15 @@
                 {{ message.created_at|date:"DATETIME_FORMAT" }}
               </time>
             </span>
+            {% if message.is_ai_message %}
+              {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
+            {% endif %}
+            {% if perms.annotations.add_usercomment %}
+              {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable hover_reveal_edit=True %}
+            {% endif %}
             <div class="flex items-center gap-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
               {% include "experiments/chat/components/trace_icons.html" with trace_infos=message.trace_info %}
-              {% if message.is_ai_message %}
-                {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
-              {% endif %}
               {% include "experiments/chat/components/copy_message_link.html" with message=message session_detail_url=session_detail_url %}
-              {% if perms.annotations.add_usercomment %}
-                {% include "annotations/tag_ui.html" with object=message allow_edit=experiment.is_editable %}
-              {% endif %}
             </div>
             {% if perms.annotations.add_usercomment %}
               <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
