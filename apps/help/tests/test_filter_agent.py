@@ -208,3 +208,28 @@ class TestFilterAgentRun:
         agent.run()
 
         mock_team_cls.objects.get.assert_called_once_with(id=42)
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_passes_trace_config_and_team_id_metadata(self, mock_build, mock_team_cls, mock_get_tracer):
+        tracer = mock.Mock()
+        trace_cm = tracer.trace.return_value
+        trace_cm.__enter__ = mock.Mock(return_value=mock.Mock())
+        trace_cm.__exit__ = mock.Mock(return_value=False)
+        callback = mock.Mock()
+        tracer.get_langchain_callback.return_value = callback
+        mock_get_tracer.return_value = tracer
+
+        stub_output = FilterOutput(filters=[])
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": stub_output}
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = mock.Mock(id=42)
+
+        agent = FilterAgent(input=FilterInput(query="active sessions", filter_slug="session", team_id=42))
+        agent.run()
+
+        call_kwargs = mock_agent.invoke.call_args.kwargs
+        assert call_kwargs["config"]["callbacks"] == [callback]
+        assert tracer.trace.call_args.kwargs["metadata"] == {"team_id": "42"}

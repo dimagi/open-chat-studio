@@ -37,6 +37,13 @@ version section when a release is cut.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
+- `OCS_LANGFUSE_PUBLIC_KEY`, `OCS_LANGFUSE_SECRET_KEY`, `OCS_LANGFUSE_HOST`,
+  `OCS_LANGFUSE_SAMPLE_RATE`: new, optional. Trace the System Agent's LLM calls
+  (code generation, filter building) in Langfuse. Unset by default (no
+  tracing); this is separate from a team's own Trace Provider. (#4395)
+- `DATA_UPLOAD_MAX_MEMORY_SIZE`: new, optional, defaults to `10485760` (10 MB).
+  Caps the request body Django buffers in memory. See the
+  [configuration reference](docs/hosting/configuration.md#security). (#4411)
 - `PRELOGIN_CONTACT_EMAIL`, `HUBSPOT_FORM_REGION`, `HUBSPOT_FORM_PORTAL_ID`,
   `HUBSPOT_FORM_ID`, `PRELOGIN_DEMO_BOTS`: removed. The pre-login marketing
   pages that read them are gone (see Deployment below). Setting them is now a

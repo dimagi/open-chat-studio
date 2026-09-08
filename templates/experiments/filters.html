@@ -20,11 +20,11 @@
             x-cloak>x</button>
     <!-- Date Range dropdown filter -->
     <div class="dropdown">
-      <div tabindex="0" role="button" class="btn btn-outline btn-sm normal-case">
+      <button type="button" class="btn btn-outline btn-sm normal-case">
         <i class="fa-regular fa-clock"></i>
         <span x-text="selectedLabel || 'Date Range'" class="dropdown-label"></span>
         <i class="fa-solid fa-caret-down ml-1"></i>
-      </div>
+      </button>
       <ul tabindex="0"
           class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
         <template x-for="option in dateRangeOptions" :key="option.value">
@@ -77,12 +77,12 @@
             <!-- Column Selector -->
             <div class="relative">
               <div class="dropdown dropdown-bottom">
-                <label tabindex="0"
-                       class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
-                       style="height: 2rem">
+                <button type="button"
+                        class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                        style="height: 2rem">
                   <span x-text="filter.column ? filterData.columns[filter.column].label : 'Select column'"></span>
                   <i class="fa-solid fa-caret-down fa-sm"></i>
-                </label>
+                </button>
                 <ul tabindex="0"
                     class="dropdown-content z-1 menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                   <template x-for="(config, column) in filterData.columns" :key="column">
@@ -97,12 +97,12 @@
             <!-- Operator Selector -->
             <div x-show="filter.column" class="relative">
               <div class="dropdown dropdown-bottom">
-                <label tabindex="0"
-                       class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
-                       style="height: 2rem">
+                <button type="button"
+                        class="w-40 px-3 border border-base-200 rounded-lg bg-base-100 text-sm cursor-pointer flex justify-between items-center"
+                        style="height: 2rem">
                   <span x-text="filter.operator || 'Select operator'"></span>
                   <i class="fa-solid fa-caret-down fa-sm"></i>
-                </label>
+                </button>
                 <ul tabindex="0"
                     class="dropdown-content z-1 menu mt-1 p-2 bg-base-100 rounded-lg border border-base-200 w-40">
                   <template x-for="operator in filter.availableOperators" :key="operator">
