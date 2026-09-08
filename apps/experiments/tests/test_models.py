@@ -690,7 +690,7 @@ class TestSourceMaterialArchiving:
 
     def test_archive_fails_when_referenced_by_a_working_pipeline_node(self):
         source_material = SourceMaterialFactory.create()
-        pipeline = PipelineFactory.create()
+        pipeline = PipelineFactory.create(team=source_material.team)
         NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
@@ -703,13 +703,13 @@ class TestSourceMaterialArchiving:
 
     def test_archive_fails_when_a_published_experiment_still_uses_a_version(self):
         source_material = SourceMaterialFactory.create()
-        pipeline = PipelineFactory.create()
+        pipeline = PipelineFactory.create(team=source_material.team)
         node = NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={"source_material_id": str(source_material.id)},
         )
-        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         experiment.create_new_version()
 
         # Publishing doesn't rewrite the original working node's params; clear it so only the
@@ -723,13 +723,13 @@ class TestSourceMaterialArchiving:
 
     def test_archive_succeeds_once_the_referencing_experiment_is_archived(self):
         source_material = SourceMaterialFactory.create()
-        pipeline = PipelineFactory.create()
+        pipeline = PipelineFactory.create(team=source_material.team)
         node = NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={"source_material_id": str(source_material.id)},
         )
-        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         published = experiment.create_new_version()
 
         node.params = {}
@@ -743,13 +743,13 @@ class TestSourceMaterialArchiving:
     def test_archive_fails_when_a_non_default_published_experiment_still_has_a_live_node(self):
         """The direct-node tier catches this regardless of published/default status."""
         source_material = SourceMaterialFactory.create()
-        pipeline = PipelineFactory.create()
+        pipeline = PipelineFactory.create(team=source_material.team)
         node = NodeFactory.create(
             type=LLMResponseWithPrompt.__name__,
             pipeline=pipeline,
             params={"source_material_id": str(source_material.id)},
         )
-        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         published = experiment.create_new_version()
         published.is_default_version = False
         published.save()

@@ -14,7 +14,7 @@ from apps.pipelines.versioning import (
 )
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
-from apps.utils.factories.pipelines import NodeFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 ALL_SPECS = [
     pytest.param(node_type, spec, id=f"{node_type}.{spec.param_name}")
@@ -108,6 +108,6 @@ def test_in_use_guard_param_key_matches_registry(spec):
     """Guards against registry drift: the guard's hardcoded param key must match the registry."""
     instance = GUARD_FACTORIES[spec.model_cls].create()
     value = [str(instance.id)] if spec.many else str(instance.id)
-    NodeFactory.create(params={spec.param_name: value})
+    NodeFactory.create(pipeline=PipelineFactory.create(team=instance.team), params={spec.param_name: value})
 
     assert instance.get_related_nodes_queryset().exists()

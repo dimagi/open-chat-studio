@@ -417,11 +417,11 @@ def test_experiment_session_message_view_missing_message(delay_mock, experiment,
 class TestDeleteSourceMaterial:
     def test_user_cannot_delete_a_source_material_in_use(self, client, experiment):
         """Blocked both when a working node references it directly and when only a published version does."""
-        experiment.pipeline = PipelineFactory.create()
+        experiment.pipeline = PipelineFactory.create(team=experiment.team)
         experiment.save()
 
-        source_material = SourceMaterialFactory.create(team=TeamWithUsersFactory.create())
-        client.force_login(source_material.team.members.first())
+        source_material = SourceMaterialFactory.create(team=experiment.team)
+        client.force_login(experiment.team.members.first())
         node = NodeFactory.create(
             pipeline=experiment.pipeline,
             type=LLMResponseWithPrompt.__name__,
@@ -429,7 +429,7 @@ class TestDeleteSourceMaterial:
         )
         experiment.create_new_version()
 
-        url = reverse("experiments:source_material_delete", args=[source_material.team.slug, source_material.id])
+        url = reverse("experiments:source_material_delete", args=[experiment.team.slug, source_material.id])
         # Case 1 - the working pipeline node references it directly
         response = client.delete(url)
         assert response.status_code == 200
