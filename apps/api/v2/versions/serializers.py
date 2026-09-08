@@ -1,0 +1,67 @@
+"""Request and response shapes for the chatbot version endpoints (#4142)."""
+
+from django.db import models
+from rest_framework import serializers
+
+from apps.api.v2.inspect.serializers import PipelineBuildErrorsSerializer
+from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.v2.write.fields import OptionalTextField
+
+
+class VersionCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
+    """The version-create body: whether the snapshot goes live, and what to label it."""
+
+    make_default = serializers.BooleanField(
+        default=False,
+        help_text=(
+            "Whether the new version becomes the one participants are served, which takes effect "
+            "from the next message on. Left false, the version is a checkpoint that nothing serves "
+            "-- except a chatbot's first version, which is always the published one and so is "
+            "always held to the pipeline-validity gate."
+        ),
+    )
+    version_description = OptionalTextField(
+        default="",
+        help_text=(
+            "Free-text label for this version -- what changed since the last one. The "
+            "`chatbot_inspect` endpoint reads it back under the same name."
+        ),
+    )
+
+
+class VersionCreateRefusedSerializer(serializers.Serializer):
+    """The 422: why the chatbot's state made the request unanswerable."""
+
+    detail = serializers.CharField()
+    pipeline_errors = PipelineBuildErrorsSerializer(
+        required=False,
+        help_text=(
+            "The repair list, present only when going live was refused for a pipeline that does "
+            "not validate. Absent when the refusal is that there is nothing to snapshot."
+        ),
+    )
+
+
+class VersionStatus(models.TextChoices):
+    """The states a version poll reports. ``pending`` is not terminal; ``completed`` is.
+
+    ``TextChoices`` rather than a plain ``StrEnum`` for a set that backs no model column, because
+    ``ENUM_NAME_OVERRIDES`` (config/settings.py) is what gives this a stable name in the published
+    schema, and it matches on the ``(value, label)`` pairs a ``Choices`` class produces.
+    """
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+
+
+class VersionStatusSerializer(serializers.Serializer):
+    """A version poll's answer: whether an operation is running, and the newest version if not."""
+
+    status = serializers.ChoiceField(
+        choices=VersionStatus.choices,
+        help_text="`pending` while a version operation is running -- poll again. `completed` is terminal.",
+    )
+    version_number = serializers.IntegerField(
+        required=False,
+        help_text="The chatbot's newest version. Present on `completed` only.",
+    )

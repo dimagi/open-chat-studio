@@ -12,6 +12,7 @@ from apps.api.v2.discovery import (
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
 from apps.api.v2.usage.views import UsageView
+from apps.api.v2.versions.views import ChatbotVersionCreateView, ChatbotVersionStatusView
 
 app_name = "v2"
 
@@ -51,6 +52,16 @@ urlpatterns = [
         "chatbots/<str:id>/pipeline/edges/<str:edge_id>/",
         PipelineEdgeEditView.as_view(http_method_names=["delete", "options"]),
         name="pipeline-edge-delete",
+    ),
+    path(
+        "chatbots/<str:id>/versions/",
+        ChatbotVersionCreateView.as_view(),
+        name="chatbot-version-create",
+    ),
+    path(
+        "chatbots/<str:id>/versions/status/",
+        ChatbotVersionStatusView.as_view(),
+        name="chatbot-version-status",
     ),
     path("", include(router.urls)),
 ]

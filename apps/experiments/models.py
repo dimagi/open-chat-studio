@@ -863,6 +863,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def release_version_operation_lock(cls, experiment_id: int):
         cls.objects.get_all().filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
+    def publish_goes_live(self, *, make_default: bool) -> bool:
+        """Whether a version published from this row now would be the one participants are served.
+
+        ``make_default`` asks for it, and ``create_new_version`` grants it unconditionally to the
+        first version -- a chatbot holding versions but no default would serve nothing -- so a
+        caller gating on "will this go live" has to account for both. Read from the working row's
+        own ``version_number`` counter, which every publish increments, so archiving versions does
+        not make a later publish look like a first one.
+        """
+        return make_default or self.version_number == 1
+
     @transaction.atomic()
     def create_new_version(  # ty: ignore[invalid-method-override]
         self,

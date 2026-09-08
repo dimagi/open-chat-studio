@@ -756,6 +756,109 @@ paths:
         '409':
           description: The node is part of the pipeline's structure and cannot be
             deleted.
+  /api/v2/chatbots/{id}/versions/:
+    post:
+      operationId: chatbot_version_create
+      description: |-
+        Snapshot the chatbot's working (draft) version as a new, immutable version. Nothing writes to a version: read it back with the `chatbot_inspect` endpoint's `version` parameter, and every other write endpoint keeps targeting the working version.
+
+        A worker takes the snapshot, so the answer is `202` with no body. Poll the `chatbot_version_status` endpoint for the version number and the outcome.
+
+        One version operation runs at a time per chatbot, creating a version and reverting alike; a second is refused with `409`.
+      summary: Create a new version
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionCreate'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '202':
+          description: The version creation was accepted. Poll `chatbot_version_status`
+            for its outcome.
+        '400':
+          description: The body carries a key this endpoint does not accept.
+        '403':
+          description: 'The caller is authenticated but not authorised for this chatbot''s
+            versions: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: 'No such chatbot. Archived chatbots and existing versions are
+            both outside this endpoint''s reach: only a live working version can be
+            snapshotted.'
+        '409':
+          description: A version operation (another version creation, or a revert
+            started in the UI) is already running for this chatbot.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCreateRefused'
+          description: 'Either the pipeline has errors and this version would be served
+            to participants -- `make_default: true`, or a chatbot''s first version,
+            which is always the published one -- or the working version is identical
+            to the newest one, so the snapshot would record no change. Nothing is
+            snapshotted either way. Dangling handles are not errors: `unwired_handles`
+            is advisory.'
+  /api/v2/chatbots/{id}/versions/status/:
+    get:
+      operationId: chatbot_version_status
+      description: |-
+        Report where this chatbot's version history stands, which is how a version the `chatbot_version_create` endpoint accepted is followed to its end.
+
+        Poll this until `status` is terminal:
+
+        - **`pending`** — a version operation is still running. Poll again.
+        - **`completed`** — no operation is running and `version_number` names the chatbot's newest version. Read it back with the `chatbot_inspect` endpoint's `version` parameter to check what landed in it.
+
+        **`completed` is not a receipt for your request.** This reports the chatbot's own state, not one task's outcome, so it cannot say which request produced the version it names. A version creation the worker raised on releases the lock without snapshotting anything, and polling then reports `completed` on the version that was already there — so check `version_number` against the one you expected rather than reading `completed` as proof the snapshot landed.
+
+        A chatbot with no version at all has nothing to report and answers `404`.
+      summary: Version creation status
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionStatus'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised for this chatbot''s
+            versions: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot, or it has never created a version.
   /api/v2/me/:
     get:
       operationId: me
@@ -3683,6 +3786,67 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
+    VersionCreate:
+      type: object
+      description: 'The version-create body: whether the snapshot goes live, and what
+        to label it.'
+      properties:
+        make_default:
+          type: boolean
+          default: false
+          description: Whether the new version becomes the one participants are served,
+            which takes effect from the next message on. Left false, the version is
+            a checkpoint that nothing serves -- except a chatbot's first version,
+            which is always the published one and so is always held to the pipeline-validity
+            gate.
+        version_description:
+          type: string
+          nullable: true
+          default: ''
+          description: Free-text label for this version -- what changed since the
+            last one. The `chatbot_inspect` endpoint reads it back under the same
+            name.
+      additionalProperties: false
+    VersionCreateRefused:
+      type: object
+      description: 'The 422: why the chatbot''s state made the request unanswerable.'
+      properties:
+        detail:
+          type: string
+        pipeline_errors:
+          allOf:
+          - $ref: '#/components/schemas/PipelineBuildErrors'
+          description: The repair list, present only when going live was refused for
+            a pipeline that does not validate. Absent when the refusal is that there
+            is nothing to snapshot.
+      required:
+      - detail
+    VersionStatus:
+      type: object
+      description: 'A version poll''s answer: whether an operation is running, and
+        the newest version if not.'
+      properties:
+        status:
+          allOf:
+          - $ref: '#/components/schemas/VersionStatusEnum'
+          description: |-
+            `pending` while a version operation is running -- poll again. `completed` is terminal.
+
+            * `pending` - Pending
+            * `completed` - Completed
+        version_number:
+          type: integer
+          description: The chatbot's newest version. Present on `completed` only.
+      required:
+      - status
+    VersionStatusEnum:
+      enum:
+      - pending
+      - completed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `completed` - Completed
     VoiceResponseBehaviourEnum:
       enum:
       - always

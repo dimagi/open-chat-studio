@@ -503,6 +503,7 @@ SPECTACULAR_SETTINGS = {
         "EvaluationModeEnum": "apps.evaluations.models.EvaluationMode",
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
+        "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
