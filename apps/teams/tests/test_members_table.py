@@ -138,38 +138,40 @@ def test_members_table_pagination_request_returns_bare_table_only(client, team):
 
 
 @pytest.mark.django_db()
-def test_members_table_load_more_returns_next_page_with_control(client, team):
-    """The load-more row uses `hx-select="tbody > tr"` to pull just the new rows (and
-    the next load-more row) out of the normal full-container response -- htmx does
-    the filtering client-side, so the server keeps rendering the same container it
-    always has. A request for a page with more after it must include a fresh
-    load-more row alongside that page's own rows."""
+def test_members_table_initial_load_shows_first_page_only_with_load_all_control(client, team):
+    """The table pages at 5 by default. With more members than that, the initial
+    response must show only the first 5 and include a "Load all" control -- not the
+    rest of the members, and not silently truncate them with no way to see them."""
     admin = UserFactory(email="admin@example.org")
     make_user_team_owner(team, admin)
-    add_user_to_team(team, UserFactory(email="member-page2@example.org"))
-    add_user_to_team(team, UserFactory(email="member-page3@example.org"))
+    for i in range(5):
+        add_user_to_team(team, UserFactory(email=f"member{i}@example.org"))
     client.force_login(admin)
 
-    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "2", "per_page": "1"})
+    response = client.get(reverse("single_team:members_table", args=[team.slug]))
 
     assert response.status_code == 200
-    assert b"member-page2@example.org" in response.content
-    assert b'hx-select="tbody > tr"' in response.content
-    assert b'hx-target="closest tr"' in response.content
+    assert b"5 of 6" in response.content
+    assert b"admin@example.org" in response.content
+    assert b"member3@example.org" in response.content
+    assert b"member4@example.org" not in response.content
+    assert b"Load all" in response.content
 
 
 @pytest.mark.django_db()
-def test_members_table_load_more_omits_control_on_last_page(client, team):
-    """The load-more row has to vanish once there's nothing left to load, not sit
-    there disabled, or clicking it on the last page just re-requests the same page."""
+def test_members_table_load_all_returns_every_row_with_no_further_control(client, team):
+    """Clicking "Load all" asks for page 1 at a page size covering every row. The
+    response must contain every member, and since it's a single page now, the
+    "Load all" control must be gone -- there's nothing left to load."""
     admin = UserFactory(email="admin@example.org")
     make_user_team_owner(team, admin)
-    add_user_to_team(team, UserFactory(email="member-page2@example.org"))
-    add_user_to_team(team, UserFactory(email="member-page3@example.org"))
+    for i in range(5):
+        add_user_to_team(team, UserFactory(email=f"member{i}@example.org"))
     client.force_login(admin)
 
-    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "3", "per_page": "1"})
+    response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "1", "per_page": "6"})
 
     assert response.status_code == 200
-    assert b"member-page3@example.org" in response.content
-    assert b'hx-select="tbody > tr"' not in response.content
+    assert b"admin@example.org" in response.content
+    assert b"member4@example.org" in response.content
+    assert b"Load all" not in response.content
