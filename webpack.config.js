@@ -19,6 +19,7 @@ const config = {
     'tagRuleSelect': './assets/javascript/tag-rule-select.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
     'editors': './assets/javascript/editors.js',
+    'scrollProgress': './assets/javascript/scroll-progress.js',
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
     'evaluationTrends': './assets/javascript/apps/evaluations/trend-charts.js',
     'human_annotations': './assets/javascript/apps/human_annotations/session-selector.js',
