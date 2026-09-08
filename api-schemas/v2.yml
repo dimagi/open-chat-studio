@@ -870,6 +870,54 @@ paths:
         '404':
           description: No such chatbot, or it has no version under this number --
             an archived chatbot and an archived version included.
+    delete:
+      operationId: chatbot_version_archive
+      description: |-
+        Archive one of the chatbot's versions. This is a soft delete: the version and the pipeline snapshot it owns are hidden rather than destroyed, and a person can restore it in the web app. Nothing in this API reaches an archived version, so a repeat of this call answers `404` -- which makes it safe to retry after an answer you never saw.
+
+        **The published version is refused with `409`.** It is the version participants are served and a chatbot may hold only one, so archiving it would leave the chatbot with none; the `chatbot_version_publish` endpoint moves it to another version first.
+
+        The working (draft) version has no number and is not reachable here. Archiving the whole chatbot is the `chatbot_archive` endpoint, which takes the channel guard and the scheduled messages with it -- neither of which a single version has.
+      summary: Archive a chatbot version
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: version_number
+        schema:
+          type: integer
+        description: The version's number, as the `chatbot_inspect` endpoint reports
+          it.
+        required: true
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionArchived'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to archive
+            this chatbot''s versions: either its role lacks permission to delete chatbots,
+            or it is a machine (client-credentials) token whose application is not
+            authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or it has no version under this number --
+            an archived chatbot and an already-archived version included.
+        '409':
+          description: This is the chatbot's published version.
   /api/v2/chatbots/{id}/versions/status/:
     get:
       operationId: chatbot_version_status
@@ -3856,6 +3904,15 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
+    VersionArchived:
+      type: object
+      description: 'The version-archive response: that it happened.'
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - archived
     VersionCreate:
       type: object
       description: 'The version-create body: whether the snapshot goes live, and what

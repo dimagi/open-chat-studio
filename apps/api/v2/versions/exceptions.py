@@ -51,3 +51,18 @@ class NothingToPublish(APIException):
         "Write to the working version first, or read the newest version back with the "
         "`chatbot_inspect` endpoint's `version` parameter."
     )
+
+
+class VersionIsDefault(APIException):
+    """The version participants are served cannot be archived out from under them.
+
+    409 rather than 403: the caller may archive this chatbot's versions, and will be able to archive
+    this one, once it is no longer the default. Retrying without that changing will not help.
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "This is the published version, the one participants are served, and a chatbot may hold "
+        "only one -- so archiving it would leave the chatbot with none. Make another version the "
+        "published one first, with the `chatbot_version_publish` endpoint or in the web app."
+    )

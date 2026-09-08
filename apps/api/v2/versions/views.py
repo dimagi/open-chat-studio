@@ -16,7 +16,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES
+from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
 from apps.api.v2.lookups import get_working_chatbot
 from apps.api.v2.write.base import ChatbotCompositionPermission
 from apps.experiments.models import Experiment
@@ -24,9 +24,10 @@ from apps.experiments.tasks import start_version_creation
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.pipelines.build_state import pipeline_build_state
 
-from .exceptions import NothingToPublish, PipelineIsNotValid, VersionOperationInProgress
+from .exceptions import NothingToPublish, PipelineIsNotValid, VersionIsDefault, VersionOperationInProgress
 from .serializers import (
     PublishVersionSerializer,
+    VersionArchivedSerializer,
     VersionCreateRefusedSerializer,
     VersionCreateSerializer,
     VersionPublishedSerializer,
@@ -48,6 +49,13 @@ FORBIDDEN = OpenApiResponse(
         "The caller is authenticated but not authorised for this chatbot's versions: either its "
         "role lacks permission to change chatbots, or it is a machine (client-credentials) token "
         "whose application is not authorised for this chatbot."
+    )
+)
+FORBIDDEN_DELETE = OpenApiResponse(
+    description=(
+        "The caller is authenticated but not authorised to archive this chatbot's versions: either "
+        "its role lacks permission to delete chatbots, or it is a machine (client-credentials) "
+        "token whose application is not authorised for this chatbot."
     )
 )
 
@@ -206,11 +214,34 @@ class ChatbotVersionStatusView(APIView):
         return Response(_version_status(chatbot))
 
 
-class ChatbotVersionView(APIView):
-    """Make an existing version the one participants are served."""
+class ChatbotVersionDeletePermission(RequiresTeamPermission):
+    """Archiving a version really is a delete, so this one asks for ``delete_experiment``.
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    The other routes under ``/chatbots/{id}/`` deliberately do not: removing a pipeline node is a
+    change to the chatbot rather than a deletion of one. A version is an ``Experiment`` row of its
+    own, and this hides it.
+    """
+
+    required_permissions = ["experiments.delete_experiment"]
+
+
+class ChatbotVersionView(APIView):
+    """The two writes that address one published version: promote it, or archive it."""
+
+    # Set per verb by `get_permissions`; declared so a misconfiguration is a refusal, not an
+    # open door, if that override is ever removed.
+    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotVersionDeletePermission, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
+
+    def get_permissions(self):
+        """Archiving a version really is a delete; promoting one is a change to the chatbot.
+
+        The two verbs share a path, so the permission cannot be a class attribute: `delete_version`
+        would refuse a role that may edit chatbots but not delete them the right to choose which
+        version is served, and `change_experiment` alone would let it hide versions.
+        """
+        write = ChatbotVersionDeletePermission if self.request.method == "DELETE" else ChatbotCompositionPermission
+        return [permission() for permission in [*BASE_PERMISSION_CLASSES, write, TokenHasOAuthResourceScope]]
 
     @extend_schema(
         operation_id="chatbot_version_publish",
@@ -258,6 +289,52 @@ class ChatbotVersionView(APIView):
             version = get_object_or_404(chatbot.versions, version_number=version_number)
             _publish_existing_version(chatbot, version)
         return Response({"version_number": version.version_number, "is_published_version": True})
+
+    @extend_schema(
+        operation_id="chatbot_version_archive",
+        summary="Archive a chatbot version",
+        description=(
+            "Archive one of the chatbot's versions. This is a soft delete: the version and the pipeline "
+            "snapshot it owns are hidden rather than destroyed, and a person can restore it in the "
+            "web app. Nothing in this API reaches an archived version, so a repeat of this call "
+            "answers `404` -- which makes it safe to retry after an answer you never saw.\n\n"
+            "**The published version is refused with `409`.** It is the version participants are "
+            "served and a chatbot may hold only one, so archiving it would leave the chatbot with "
+            "none; the `chatbot_version_publish` endpoint moves it to another version first.\n\n"
+            "The working (draft) version has no number and is not reachable here. Archiving the "
+            "whole chatbot is the `chatbot_archive` endpoint, which takes the channel guard and "
+            "the scheduled messages with it -- neither of which a single version has."
+        ),
+        tags=["Chatbots"],
+        parameters=[CHATBOT_ID, VERSION_NUMBER],
+        request=None,
+        responses={
+            200: VersionArchivedSerializer,
+            403: FORBIDDEN_DELETE,
+            404: OpenApiResponse(
+                description=(
+                    "No such chatbot, or it has no version under this number -- an archived "
+                    "chatbot and an already-archived version included."
+                )
+            ),
+            409: OpenApiResponse(description="This is the chatbot's published version."),
+        },
+    )
+    def delete(self, request, id: str, version_number: int) -> Response:
+        # Resolution, the default-version rule and the archive share one transaction and one row
+        # lock on the working chatbot, so two archives of the same version cannot both read it as
+        # live. The second blocks, then re-resolves against the committed `is_archived` and 404s.
+        with transaction.atomic():
+            chatbot = get_working_chatbot(request.team, id, lock=True)
+            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # resolution because the allowlist is keyed on the chatbot, and before anything written.
+            enforce_application_chatbot_write(request, chatbot)
+            # `versions` excludes archived rows, so an already-archived version is a 404 here.
+            version = get_object_or_404(chatbot.versions, version_number=version_number)
+            if version.is_default_version:
+                raise VersionIsDefault()
+            version.archive()
+        return Response({"archived": True})
 
 
 def _publish_existing_version(chatbot: Experiment, version: Experiment) -> None:

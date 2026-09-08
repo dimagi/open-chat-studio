@@ -42,6 +42,12 @@ class VersionCreateRefusedSerializer(serializers.Serializer):
     )
 
 
+class VersionArchivedSerializer(serializers.Serializer):
+    """The version-archive response: that it happened."""
+
+    archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
+
+
 class PublishVersionSerializer(RejectsUnknownKeys, serializers.Serializer):
     """The PATCH body: make this version the one participants are served.
 
