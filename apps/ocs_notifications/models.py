@@ -140,7 +140,7 @@ class NotificationChannel(BaseTeamModel):
         related_name="notification_channels",
     )
     channel_name = models.CharField(max_length=255)
-    channel_id = models.CharField(  # noqa: DJ001 - nullable so the AddField migration won't break the running release
+    channel_id = models.CharField(  # noqa: DJ001 - optional; sends fall back to the channel name
         max_length=255,
         null=True,
         blank=True,

@@ -30,6 +30,15 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("channel_name", models.CharField(max_length=255)),
                 (
+                    "channel_id",
+                    models.CharField(
+                        blank=True,
+                        help_text="Resolved Slack channel ID (falls back to the channel name).",
+                        max_length=255,
+                        null=True,
+                    ),
+                ),
+                (
                     "level",
                     models.PositiveSmallIntegerField(
                         choices=[(0, "Info"), (1, "Warning"), (2, "Error")], default=1

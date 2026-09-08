@@ -1,7 +1,9 @@
 import pytest
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
+from apps.teams.flags import Flags
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -38,6 +40,32 @@ def test_data_nav_link_hidden_for_non_admin(client):
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
 
     assert b'href="#data"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_notifications_section_hidden_when_flag_off(client):
+    team = TeamFactory()
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+
+    client.force_login(admin)
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert b'href="#notifications"' not in response.content
+
+
+@pytest.mark.django_db()
+@override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True)
+def test_notifications_section_shown_when_flag_on(client):
+    team = TeamFactory()
+    admin = UserFactory(email="admin@example.org")
+    make_user_team_owner(team, admin)
+
+    client.force_login(admin)
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert b'href="#notifications"' in response.content
+    assert b"btn-add-notification-channel" in response.content
 
 
 @pytest.mark.django_db()

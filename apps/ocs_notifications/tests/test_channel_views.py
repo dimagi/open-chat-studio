@@ -2,9 +2,9 @@ from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.ocs_notifications.models import NotificationChannel
-from apps.ocs_notifications.tests.conftest import activate_flag_for_team
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.backends import TEAM_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.teams.flags import Flags
@@ -26,11 +26,11 @@ def _mock_slack_channel(channel_name):
 def admin_client(client):
     create_default_groups()
     team = TeamFactory.create()
-    activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team)
     user = UserFactory.create()
     add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
     client.force_login(user)
-    return client, team
+    with override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
+        yield client, team
 
 
 @pytest.mark.django_db()
@@ -111,12 +111,12 @@ class TestNotificationChannelViews:
     def test_permission_denied_for_non_admin(self, client):
         create_default_groups()
         team = TeamFactory.create()
-        activate_flag_for_team(Flags.SLACK_NOTIFICATIONS.slug, team)
         user = UserFactory.create()
         add_user_to_team(team, user)
         client.force_login(user)
 
-        response = client.get(reverse("ocs_notifications_channels:table", args=[team.slug]))
+        with override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
+            response = client.get(reverse("ocs_notifications_channels:table", args=[team.slug]))
 
         assert response.status_code == 403
 
