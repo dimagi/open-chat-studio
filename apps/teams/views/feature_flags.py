@@ -81,7 +81,9 @@ class FeatureFlagForm(forms.Form):
             self._all_flags = {flag.name: flag for flag in Flag.get_all()}
 
         if flag_name not in self._all_flags:
-            flag, _created = Flag.objects.get_or_create(name=flag_name, defaults={"everyone": False})
+            flag, _created = Flag.objects.get_or_create(
+                name=flag_name, defaults={"everyone": None, "superusers": False}
+            )
             self._all_flags[flag_name] = flag
         return self._all_flags[flag_name]
 

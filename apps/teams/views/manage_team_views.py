@@ -22,6 +22,8 @@ from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async, start_team_files_export
 from apps.teams.utils import current_team
+from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
+from apps.teams.views.members_views import ROLE_CHOICES
 from apps.web.forms import set_form_fields_disabled
 
 _ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
@@ -45,15 +47,26 @@ def _team_files_export_context(team):
 
 
 def _manage_team_context(request, team, *, team_form=None, public_key_form=None):
+    pending_invitations = Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at")
+    integration_rows = get_integration_rows(request, team)
     return {
         "team": team,
         "active_tab": "manage-team",
         "page_title": _("My Team | {team}").format(team=team),
         "team_form": team_form or TeamChangeForm(instance=team),
         "invitation_form": InvitationForm(team=team),
-        "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
+        "pending_invitations": pending_invitations,
         "notify_recipients_form": NotifyRecipientsForm,
         "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
+        "role_choices": ROLE_CHOICES,
+        "integration_new_choices": get_integration_new_choices(request, team),
+        "integrations_table_url": reverse("single_team:integrations_table", args=[team.slug]),
+        "members_table_url": reverse("single_team:members_table", args=[team.slug]),
+        "stats": {
+            "members": team.membership_set.count(),
+            "integrations": len(integration_rows),
+            "pending_invites": pending_invitations.count(),
+        },
         **_team_files_export_context(team),
     }
 
@@ -152,12 +165,11 @@ def send_invitation_view(request, team_slug):
         pass
     return render(
         request,
-        "teams/components/team_invitations.html",
+        "teams/components/members_section.html",
         {
             "invitation_form": form,
-            "pending_invitations": Invitation.objects.filter(team=request.team, is_accepted=False).order_by(
-                "-created_at"
-            ),
+            "members_table_url": reverse("single_team:members_table", args=[request.team.slug]),
+            "role_choices": ROLE_CHOICES,
         },
     )
 
@@ -165,12 +177,21 @@ def send_invitation_view(request, team_slug):
 @require_POST
 @permission_required("teams.change_team", raise_exception=True)
 def set_public_key(request, team_slug):
+    """Saves the public key and the migration-mode toggle together, matching the mockup's
+    single "Save key" action for the whole Migration public key card."""
     form = TeamPublicKeyForm(request.POST, instance=request.team)
     if form.is_valid():
         form.save()
         messages.success(request, _("Public key saved!"))
     else:
         messages.error(request, _("Could not save the public key."))
+        # ModelForm.is_valid() has already written the submitted (rejected) values onto
+        # request.team in memory via _post_clean(), even though nothing was saved. The
+        # migration-mode checkbox below reads request.team.is_migrating directly, so
+        # refresh the instance from the database to undo that in-memory mutation -- this
+        # doesn't touch form.errors, which is what still surfaces the "public_key" field
+        # error to the user.
+        request.team.refresh_from_db()
     return render(
         request,
         "teams/manage_team.html",

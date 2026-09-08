@@ -59,7 +59,7 @@ The chatbot model and the machinery that runs conversations.
 | `experiments` | The `Experiment` (a.k.a. Chatbot) model, versioning, sessions. Imported by 27 apps. |
 | `chatbots` | Chatbot-facing UI layer over `experiments`. |
 | `pipelines` | DAG workflow definition and runtime (LLM/router/custom-action nodes). |
-| `assistants` | OpenAI Assistants integration. |
+| `assistants` | Retired OpenAI Assistants integration (#4254). Models and Django admin only — no views, URLs, or runtime; dropped entirely in phase 2. |
 | `custom_actions` | HTTP API wrappers (OpenAPI schema) callable from pipelines. |
 | `service_providers` | Credentials + `LlmService`/`MessagingService` abstractions for LLM, messaging, voice, tracing. |
 | `chat` | `Chat`/message models and history. |
@@ -98,7 +98,7 @@ Top of the stack — nothing imports these; they wire the domain to the outside 
 | `web` | Server-rendered web UI (also foundational for shared chrome). |
 | `admin` | Staff-only admin area. |
 | `dashboard` | Analytics dashboard. |
-| `prelogin` | Public marketing pages. |
+| `prelogin` | Anonymous landing page at `/`, the shared frame for the logged-out auth pages, and permanent redirects for the marketing URLs that moved to `openchatstudio.dimagi.com`. |
 | `users` · `oauth` · `sso` | Authentication and account management. |
 
 ## Blast radius

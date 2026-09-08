@@ -52,7 +52,7 @@ These apply whether the connection comes from `DATABASE_URL` or the variables ab
 | `CRYPTOGRAPHY_SALT` | — | Additional salt for field encryption. |
 | `CSRF_TRUSTED_ORIGINS` | `[]` | Comma-separated list of trusted origins for CSRF, e.g. `https://yourdomain.com`. Required when behind a reverse proxy. |
 | `DJANGO_SECURE_SSL_REDIRECT` | `True` | Redirect HTTP to HTTPS. Set to `False` if TLS is terminated upstream and you want to disable the redirect in Django. |
-| `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required if you enable OAuth2 token issuance. |
+| `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required to register an OAuth2 application at all: the registration form signs every application with `RS256`, which django-oauth-toolkit rejects when this is unset. Setting it also enables OIDC, signs ID tokens, and adds the `openid`/`profile` scopes. |
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
 

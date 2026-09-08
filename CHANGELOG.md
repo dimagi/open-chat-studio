@@ -27,6 +27,9 @@ version section when a release is cut.
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
+- `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
+  get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
+  operator or team sets one. (#4371)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
@@ -34,6 +37,11 @@ version section when a release is cut.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
+- `PRELOGIN_CONTACT_EMAIL`, `HUBSPOT_FORM_REGION`, `HUBSPOT_FORM_PORTAL_ID`,
+  `HUBSPOT_FORM_ID`, `PRELOGIN_DEMO_BOTS`: removed. The pre-login marketing
+  pages that read them are gone (see Deployment below). Setting them is now a
+  no-op rather than an error, so no action is required, but they can be dropped
+  from your environment. (#4389)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
@@ -50,12 +58,32 @@ version section when a release is cut.
   13 to 15. Audio conversion was verified against ffmpeg 5.1 across the mp3,
   opus and wav paths. No action required if you pull the published image. (#4283)
 - Container images no longer contain the `.git` directory. (#4283)
+- The app no longer serves the marketing pages. `/` renders a small landing page
+  for anonymous visitors, and `/about/`, `/applications/`, `/contact/`,
+  `/open-opportunities/` and `/platform/` now `301` to
+  `PROJECT_METADATA["MARKETING_SITE_URL"]`, which defaults to Dimagi's marketing
+  site. A fork that wants those paths to point somewhere else — or to serve its
+  own pages there — should override that key in `config/settings.py`. (#4389)
 
 ### Deprecated
 <!-- Signals intent to remove. Every entry names the earliest version in which
      removal may land, and links its deprecation tracking issue. -->
 
 ### Removed
+- OpenAI Assistants are fully removed. A pipeline holding an assistant node
+  still opens in the editor — the node renders as a "Removed Node" — but the
+  pipeline no longer builds, so it cannot run. OpenAI retired the Assistants API
+  on 26 August 2026, so these pipelines were already failing at the provider.
+  No migration and no data loss: the `OpenAiAssistant` rows and their Django
+  admin survive this release, and a later phase drops the tables and the FK
+  columns. (#4372, #4254)
+- **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
+  key on a node, and the `AssistantNodeParams` component is gone from the node
+  params union. The key was already conditional — omitted for nodes not
+  declaring `assistant_id` — so only clients inspecting assistant-bearing
+  pipelines are affected; those nodes still render through the generic node
+  shape. `assistant_id` is suppressed rather than falling through to the
+  generic params, so no internal id is exposed. (#4357, #4254)
 - The OpenAI Assistants UI is gone: `/a/<team>/assistants/` and everything under
   it now 404s, the nav entry is removed, and `assistant_file:` links in
   historical chat messages render as plain text instead of downloads. OpenAI

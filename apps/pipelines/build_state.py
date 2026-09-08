@@ -12,6 +12,8 @@ Validation never flags an unwired node or branch (the build only checks reachabl
 never blocks anything.
 """
 
+from enum import StrEnum
+
 import pydantic
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
@@ -44,7 +46,7 @@ def unwired_handles(pipeline: Pipeline) -> dict:
     # Wiredness is judged purely from the stored edges: an edge pointing at a handle its source no
     # longer offers still marks that (source, handle) pair "wired" here — the stranded edge itself
     # is the errors.edge bucket's concern (and, like validation, only surfaces for reachable nodes).
-    wired_outputs = {(edge.source, edge.sourceHandle or STANDARD_OUTPUT_NAME) for edge in edges}
+    wired_outputs = {(edge.source, edge.source_handle_name) for edge in edges}
     wired_inputs = {edge.target for edge in edges}
 
     unwired = {}
@@ -56,36 +58,89 @@ def unwired_handles(pipeline: Pipeline) -> dict:
 
 def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tuple[str, str]]) -> list[dict]:
     """One node's unwired handles: the implicit input plus any output with no edge."""
-    dangling = []
-    if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
-        dangling.append({"handle": STANDARD_INPUT_NAME, "label": None})
+    unwired_inputs = [] if node.flow_id in wired_inputs else input_handles(node.type)
+    dangling = [{"handle": handle, "label": None} for handle in unwired_inputs]
     for handle in node_output_handles(node):
         if (node.flow_id, handle["handle"]) not in wired_outputs:
             dangling.append(handle)
     return dangling
 
 
+def input_handles(node_type: str) -> list[str]:
+    """The input handles a node of this type accepts an edge on.
+
+    Every type has one implicit ``input`` handle -- bar Start, which has none. A list rather than a
+    flag so a caller reads inputs and outputs the same way.
+    """
+    return [] if node_type == StartNode.__name__ else [STANDARD_INPUT_NAME]
+
+
 def node_output_handles(node: Node) -> list[dict]:
-    """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``.
+    """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``."""
+    return output_handles(node.type, node.params or {}, node.flow_id, django_node=node)
+
+
+class NoOutputHandles(StrEnum):
+    """Why a node offers none, for a caller that has to explain an empty :func:`output_handles`.
+
+    Beside ``output_handles`` because it reads that function's branches a second way: kept apart,
+    the two drift. Hence ``UNDETERMINED`` rather than a fall-through to ``TERMINAL``.
+    """
+
+    #: The End node. Nothing runs after the end of the pipeline, so nothing can be wired from it.
+    TERMINAL = "terminal"
+    #: A type naming no node class -- removed since, or never one. Its handles are unknowable.
+    UNKNOWN_TYPE = "unknown_type"
+    #: A router with no keywords yet: its handles *are* its branches, so it has none until they are set.
+    NO_BRANCHES = "no_branches"
+    #: Offers none for a reason this function does not recognise -- unreachable today.
+    UNDETERMINED = "undetermined"
+
+
+def why_no_output_handles(node_type: str) -> NoOutputHandles:
+    """Which of the empty cases applies. Only meaningful once :func:`output_handles` returned ``[]``.
+
+    Mirrors that function's branches in the same order, so the two are read together when a case is
+    added to either.
+    """
+    if node_type == EndNode.__name__:
+        return NoOutputHandles.TERMINAL
+    node_class = resolve_node_class(node_type)
+    if node_class is None:
+        return NoOutputHandles.UNKNOWN_TYPE
+    if issubclass(node_class, PipelineRouterNode):
+        return NoOutputHandles.NO_BRANCHES
+    return NoOutputHandles.UNDETERMINED
+
+
+def output_handles(node_type: str, params: dict, node_id: str, django_node: Node | None = None) -> list[dict]:
+    """The output handles a node of this type and these params offers, as ``{handle, label}``.
 
     Routers get one handle per branch from ``get_output_map()`` (``output_0``, ``output_1``, …,
     labelled with the branch keyword); plain nodes get the single standard output with no label;
     End has no outputs.
+
+    Takes the params rather than only a stored :class:`~apps.pipelines.models.Node` so a caller
+    holding an unwritten edit can ask what the node *would* offer. ``django_node`` is what the
+    row-backed caller passes for full validation; without it a router falls back to the unvalidated
+    path below, which is enough because no router's branches depend on its row.
     """
-    if node.type == EndNode.__name__:
+    if node_type == EndNode.__name__:
         return []
-    node_class = resolve_node_class(node.type)
+    node_class = resolve_node_class(node_type)
     if node_class is None:
         # A type naming no node class (removed since, or never one): validation reports it; we can't
         # know its handles.
         return []
     if issubclass(node_class, PipelineRouterNode):
-        output_map = _router_output_map(node_class, node)
+        output_map = _router_output_map(node_class, params, node_id, django_node)
         return [{"handle": handle, "label": label} for handle, label in output_map.items()]
     return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
 
 
-def _router_output_map(node_class: type[PipelineRouterNode], node: Node) -> dict:
+def _router_output_map(
+    node_class: type[PipelineRouterNode], params: dict, node_id: str, django_node: Node | None
+) -> dict:
     """A router's handle -> branch-label map, tolerant of invalid params.
 
     Prefer full validation so every field normalization applies — a router type whose
@@ -95,9 +150,8 @@ def _router_output_map(node_class: type[PipelineRouterNode], node: Node) -> dict
     ``PipelineNodeBuildError``), and must still report its handles, so fall back to an unvalidated
     instance with the keywords upper-cased to match ``RouterMixin.ensure_keywords_are_uppercase``.
     """
-    params = node.params or {}
     try:
-        instance = node_class.model_validate({**params, "node_id": node.flow_id, "django_node": node})
+        instance = node_class.model_validate({**params, "node_id": node_id, "django_node": django_node})
     except (pydantic.ValidationError, PipelineNodeBuildError):
         fallback = dict(params)
         if isinstance(fallback.get("keywords"), list):

@@ -17,6 +17,7 @@ from time_machine import travel
 
 from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
@@ -30,10 +31,18 @@ from apps.chatbots.views import (
 )
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    Experiment,
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
@@ -1174,6 +1183,51 @@ def test_session_view_only_links_http_embed_source(client, team_with_users, embe
 
 
 @pytest.mark.django_db()
+def test_session_view_shows_participant_data_for_published_version_session(client, team_with_users):
+    """ParticipantData is always keyed to the working version, but a session can run against a
+    published version whose id differs -- the lookup must resolve to the working version or it
+    silently shows no data even though some exists."""
+    team = team_with_users
+    user = team.members.first()
+    working_experiment = ExperimentFactory.create(team=team)
+    published_version = working_experiment.create_new_version()
+    session = ExperimentSessionFactory.create(experiment=published_version, team=team)
+    ParticipantData.objects.create(
+        team=team, experiment=working_experiment, participant=session.participant, data={"role": "docs-reader"}
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, published_version.public_id, session.external_id],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "docs-reader" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_session_view_disables_new_session_for_web_platform(client, team_with_users):
+    """The backend always rejects starting a new session from a web session, so the button must
+    be disabled rather than shown as a clickable dead end."""
+    team = team_with_users
+    user = team.members.first()
+    channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.WEB)
+    session = ExperimentSessionFactory.create(team=team, experiment=channel.experiment, experiment_channel=channel)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+    content = response.content.decode()
+    new_session_button = re.search(r"<button[^>]*>\s*<i[^>]*fa-plus[^>]*></i>\s*New Session\s*</button>", content)
+    assert new_session_button, "New Session button not found in response"
+    assert "disabled" in new_session_button.group(0)
+
+
+@pytest.mark.django_db()
 def test_session_view_shows_usage_summary(client, team_with_users):
     team = team_with_users
     user = team.members.first()
@@ -1331,3 +1385,49 @@ def test_settings_save_ignores_a_posted_allowlist(client, experiment):
     experiment.refresh_from_db()
     assert experiment.name == "Updated Chatbot Name"
     assert experiment.participant_allowlist == ["+27123456789"]
+
+
+@pytest.mark.django_db()
+def test_export_chatbot_session_messages(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+    ChatMessage.objects.create(
+        chat=session.chat, message_type=ChatMessageType.HUMAN, content="how do I populate a collection"
+    )
+    ChatMessage.objects.create(
+        chat=session.chat, message_type=ChatMessageType.AI, content="go to Collections and click Add new"
+    )
+
+    url = reverse(
+        "chatbots:export_chatbot_session_messages",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "text/csv"
+    assert f'filename="{session.external_id}_messages_export.csv"' in response["Content-Disposition"]
+    content = b"".join(response.streaming_content).decode("utf-8-sig")
+    assert "how do I populate a collection" in content
+    assert "go to Collections and click Add new" in content
+
+
+@pytest.mark.django_db()
+def test_export_chatbot_session_messages_requires_permission(client, team_with_users):
+    team = team_with_users
+    member = MembershipFactory(team=team, user=UserFactory())
+    member.groups.clear()
+    client.force_login(member.user)
+
+    session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+
+    url = reverse(
+        "chatbots:export_chatbot_session_messages",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 403

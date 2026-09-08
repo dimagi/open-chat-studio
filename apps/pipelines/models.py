@@ -1,12 +1,13 @@
 import contextlib
 import copy
+import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cached_property
 from uuid import uuid4
 
 import pydantic
-from django.db import models, transaction
+from django.db import DatabaseError, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -39,6 +40,8 @@ from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
+logger = logging.getLogger("ocs.pipelines")
+
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
     def get_queryset(self):
@@ -61,10 +64,10 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 
         return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
 
-    def assistant_nodes(self):
-        from apps.pipelines.nodes.nodes import AssistantNode  # noqa: PLC0415 - circular: nodes.nodes→models
 
-        return self.get_queryset().filter(type=AssistantNode.__name__)
+#: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
+#: these related rows per node, so ``flow_data`` is an N+1 without them.
+NODE_RESOURCE_PREFETCHES = ("node_set__collection_indexes", "node_set__custom_action_operations")
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):
@@ -201,14 +204,14 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         prefetched ``node_set`` and of ``flow_data``'s cache. A caller that reads either after
         reconciling must call this first or it sees the pre-reconcile graph.
 
-        The rows are re-prefetched with their ``collection_indexes`` rather than just dropped,
-        since every caller here reads ``flow_data`` next and that reads the M2M per node.
+        The rows are re-prefetched with their resource relations rather than just dropped, since
+        every caller here reads ``flow_data`` next and that reads them per node.
         """
         # No fields: clears the whole prefetch cache, node_set included.
         self.refresh_from_db()
         with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
             del self.flow_data
-        models.prefetch_related_objects([self], "node_set__collection_indexes")
+        models.prefetch_related_objects([self], *NODE_RESOURCE_PREFETCHES)
 
     def validate(self, full=True) -> ErrorReport:
         """Every problem with this pipeline. All three buckets empty means it is valid.
@@ -248,9 +251,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 graph.build_runnable()
             except PipelineBuildError as e:
                 report = error_report(errors, [e])
-            except PipelineNodeBuildError as e:
-                # Not a PipelineBuildError subclass, and carries no node id of its own.
-                report["pipeline"].append(str(e))
+            except PipelineNodeBuildError:
+                # Not a PipelineBuildError subclass, and carries no node id of its own. Every node
+                # validated cleanly above or this branch would not have run, so what lands here is a
+                # build-stage failure the node checks could not name — and its message may be a raw
+                # pydantic dump wrapped at the build site, naming the classes behind the node.
+                #
+                # Logged rather than reported, for the same reason as the catch-all in
+                # ``_node_validation_errors``: the report is served over the API.
+                logger.exception("Pipeline %s could not be built", self.id)
+                report["pipeline"].append("This pipeline could not be built. Check the values of its nodes' params.")
 
         return report
 
@@ -278,6 +288,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Raised from inside a validator for a broken resource reference (e.g. a deleted
             # provider model); pydantic doesn't wrap it, so fold it into the report here.
             return {"root": str(e)}
+        except DatabaseError:
+            # Never swallowed: inside an atomic block a caught database error leaves the transaction
+            # aborted, so reporting it as a node error would raise again on the next query.
+            raise
+        except Exception:  # noqa: BLE001 - a broken node must not take the whole read down
+            # Anything a validator raises before pydantic can wrap it — a wrong-typed param reaching
+            # a `mode="before"` validator, say. This runs on every read of a pipeline, so an
+            # unparseable node has to be reportable rather than 500 /inspect/ for good.
+            #
+            # Logged rather than reported: this branch catches anything at all, so the message is as
+            # likely to expose how the server is put together as to say something useful, and the
+            # report is served over the API.
+            logger.exception("Node %s of pipeline %s could not be validated", node.flow_id, node.pipeline_id)
+            return {"root": "This node could not be read. Check the values of its params."}
         return {}
 
     @property
@@ -301,8 +325,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
         # different fallback: that one returns the empty data as-is rather than rebuilding.
         flow = Flow(**(self.data or {"edges": []}))
-        # Each node reads its collection_indexes M2M (Node.resource_params), so callers fetch the
-        # pipeline with ``node_set__collection_indexes`` prefetched or this is an N+1.
+        # Each node reads related resource rows (Node.resource_params), so callers fetch the
+        # pipeline with ``NODE_RESOURCE_PREFETCHES`` prefetched or this is an N+1.
         flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
         return flow.model_dump()
 
@@ -345,8 +369,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         The version's stored ``data`` supplies the edges only.
         """
         node_data: dict[str, FlowNode | None] = {}
-        # to_flow_node reads each node's collection_indexes M2M — prefetch rather than query per row.
-        for version_node in version.node_set.prefetch_related("collection_indexes"):
+        # to_flow_node reads each node's resource relations — prefetch rather than query per row.
+        for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
             for spec in get_versioned_param_specs(version_node.type):
                 spec.revert_referenced_record(version_node, flow_node.data.params)
@@ -615,19 +639,37 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if isinstance(field, models.ForeignKey) and field.remote_field.on_delete is models.SET_NULL
         ]
 
-    def resource_params(self) -> dict:
-        """The ids of the resources this node references, read off its FK columns and M2M.
+    @classmethod
+    def resource_param_names(cls) -> frozenset[str]:
+        """The param names ``resource_params`` produces, whatever the node's type.
 
-        Params carries copies of these ids, but the columns are the constraint-backed mirror of
-        them (see ``_sync_resource_fk_fields``): deleting a resource nulls the column while the
-        stale id lingers in params. ``to_flow_node`` serves what this returns, so a dangling
-        reference reads as unset rather than as an id that no longer resolves.
+        ``to_flow_node`` merges all of these into every node's params, its type declaring them or
+        not, so a caller writing params back has to tell the mirrored ids from the declared ones.
+        """
+        return frozenset(
+            {f"{field_name}_id" for field_name in cls.resource_fk_fields()} | {"collection_index_ids", "custom_actions"}
+        )
+
+    def resource_params(self) -> dict:
+        """The resources this node references, read off its FK columns, its M2M and its related rows.
+
+        Params carries copies of these ids, but the rows are the constraint-backed mirror of them
+        (see ``_sync_resource_fk_fields`` and ``update_from_params``): deleting a resource nulls the
+        column or cascades the row away while the stale id lingers in params. ``to_flow_node`` serves
+        what this returns, so a dangling reference reads as unset rather than as an id that no longer
+        resolves.
         """
         resource_params = {
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
-        # sorted because the through rows have no ordering of their own and the read must be stable.
+        # sorted because the related rows have no ordering of their own and the read must be stable.
         resource_params["collection_index_ids"] = sorted(index.id for index in self.collection_indexes.all())
+        # ``CustomActionOperation`` rows are the mirror for ``custom_actions``: ``update_from_params``
+        # writes them, and deleting the action cascades them away. Read here in the param's own
+        # ``"<action id>:<operation id>"`` spelling.
+        resource_params["custom_actions"] = sorted(
+            operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all()
+        )
         return resource_params
 
     def _sync_resource_fk_fields(self):
@@ -670,8 +712,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def archive(self):
         """
-        Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
-        archived when the pipeline they belong to is archived.
+        Archiving a node also archives the versioned resources its params reference. The node's
+        versions will be archived when the pipeline they belong to is archived.
         """
         super().archive()
         if not self.is_a_version:

@@ -1,0 +1,86 @@
+"""DELETE /api/v2/chatbots/{id}/pipeline/nodes/{node_id}/ (#4140)."""
+
+import pytest
+
+from apps.pipelines.models import Node
+
+from .conftest import add_edge, add_llm_node, boundary_node, node_url
+
+
+@pytest.fixture()
+def wired_llm_node(client, chatbot, llm, start_node, end_node):
+    """An LLM node spliced between Start and End, so deleting it has edges to take with it."""
+    node_id = add_llm_node(client, chatbot, llm)
+    # Spliced, not added alongside: with the direct Start -> End edge still there, removing this
+    # node would leave a perfectly valid graph and prove nothing.
+    chatbot.pipeline.data["edges"] = []
+    add_edge(chatbot.pipeline, start_node, node_id)
+    add_edge(chatbot.pipeline, node_id, end_node)
+    return node_id
+
+
+@pytest.mark.django_db()
+def test_delete_removes_the_node_and_its_edges(client, chatbot, wired_llm_node):
+    """An edge left pointing at a node that no longer exists breaks cycle detection and reachability,
+    so culling them is the server's job rather than something the caller has to ask for."""
+    response = client.delete(node_url(chatbot, wired_llm_node))
+
+    assert response.status_code == 200, response.content
+    assert not Node.objects.filter(pipeline=chatbot.pipeline, flow_id=wired_llm_node).exists()
+    chatbot.pipeline.refresh_from_db()
+    endpoints = {end for edge in chatbot.pipeline.data["edges"] for end in (edge["source"], edge["target"])}
+    assert wired_llm_node not in endpoints
+
+
+@pytest.mark.django_db()
+def test_delete_reports_the_hole_it_leaves(client, chatbot, wired_llm_node):
+    """Lenient on structure: unsplicing a node breaks the path to End, which is reported rather
+    than refused so the agent can wire a replacement in."""
+    body = client.delete(node_url(chatbot, wired_llm_node)).json()
+
+    assert body["pipeline_valid"] is False
+    assert "node" not in body
+
+
+@pytest.mark.django_db()
+def test_delete_of_an_unknown_node_is_a_404(client, chatbot):
+    response = client.delete(node_url(chatbot, "LLMResponseWithPrompt-nope1"))
+
+    assert response.status_code == 404, response.content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("node_type", ["StartNode", "EndNode"])
+def test_delete_refuses_a_node_the_server_manages(client, chatbot, node_type):
+    """Start and End cannot be added back through the API — POST refuses those types — so a delete
+    would strand the chatbot in a state only the UI builder could repair."""
+    node_id = boundary_node(chatbot, node_type)
+
+    response = client.delete(node_url(chatbot, node_id))
+
+    assert response.status_code == 409, response.content
+    assert "cannot be edited or deleted" in response.json()["detail"]
+    assert Node.objects.filter(pipeline=chatbot.pipeline, flow_id=node_id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_allows_a_deprecated_node_type(client, chatbot):
+    """A type that can no longer be added can still be removed — that is how a pipeline gets off
+    a deprecated node."""
+    node = Node.objects.create(pipeline=chatbot.pipeline, flow_id="Passthrough-1", type="Passthrough", params={})
+
+    response = client.delete(node_url(chatbot, node.flow_id))
+
+    assert response.status_code == 200, response.content
+    assert not Node.objects.filter(pipeline=chatbot.pipeline, flow_id="Passthrough-1").exists()
+
+
+@pytest.mark.django_db()
+def test_deleting_a_node_leaves_the_other_rows_alone(client, chatbot, llm):
+    """`update_nodes_from_data` reads its mapping as the whole graph membership, so a diff that
+    named only the deleted node would reconcile every other node away."""
+    node_id = add_llm_node(client, chatbot, llm)
+
+    client.delete(node_url(chatbot, node_id))
+
+    assert set(chatbot.pipeline.node_set.values_list("type", flat=True)) == {"StartNode", "EndNode"}

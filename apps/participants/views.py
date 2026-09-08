@@ -220,7 +220,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
         participant = get_object_or_404(Participant, team=request.team, id=participant_id)
         error = ""
         new_data = None
-        raw_data = request.POST["participant-data"]
+        raw_data = request.POST.get("participant-data", "")
         try:
             new_data = json.loads(raw_data)
         except json.JSONDecodeError:
@@ -230,9 +230,10 @@ class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
                 error = "Data must be a valid JSON object"
 
         if not error:
+            working_experiment_id = experiment.working_version_id if experiment.is_a_version else experiment.id
             ParticipantData.objects.update_or_create(
                 participant=participant,
-                experiment_id=experiment_id,
+                experiment_id=working_experiment_id,
                 team=request.team,
                 defaults={"team": experiment.team, "data": new_data},
             )
@@ -244,6 +245,9 @@ class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
                 "participant": participant,
                 "participant_data": json.dumps(new_data, indent=4) if not error else raw_data,
                 "error": error,
+                "just_saved": not error,
+                "hide_submit_button": bool(request.POST.get("hide_submit_button")),
+                "show_validation_hint": bool(request.POST.get("show_validation_hint")),
             },
         )
 

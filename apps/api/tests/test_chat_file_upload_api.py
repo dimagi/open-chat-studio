@@ -208,6 +208,20 @@ class TestFileValidationAPI:
 
         assert response.status_code == status.HTTP_201_CREATED
 
+    def test_macro_enabled_workbook_upload_accepted(self, api_client, session):
+        """.xlsm is an ordinary spreadsheet to us: markitdown reads it as xlsx and macros never run."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file(
+            "workbook.xlsm",
+            b"PK\x03\x04",
+            content_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+        )
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["files"][0]["name"] == "workbook.xlsm"
+
     def test_second_bad_file_rejects_whole_upload(self, api_client, session):
         """Validation covers every file; no File rows are created on rejection."""
         url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})

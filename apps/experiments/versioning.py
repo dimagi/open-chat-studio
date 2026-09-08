@@ -63,11 +63,11 @@ class VersionField:
 
     @property
     def current_value(self):
-        return self.raw_value if self.raw_value else None
+        return self.raw_value
 
     @property
     def previous_value(self):
-        return self.previous_field_version.raw_value if self.previous_field_version.raw_value else None
+        return self.previous_field_version.raw_value
 
     @property
     def is_a_version(self):
@@ -101,7 +101,7 @@ class VersionField:
         to_display = self.to_display or default_to_display
         if self.queryset is not None:
             return to_display(self.queryset_results)
-        if self.current_value:
+        if self.current_value is not None:
             return to_display(self.current_value)
         return ""
 

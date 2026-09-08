@@ -36,6 +36,7 @@ class ServiceProviderType:
     slug: str
     label: str
     home_title: str
+    category: str
     model: models.Model
 
     """
@@ -57,6 +58,7 @@ class ServiceProvider(ServiceProviderType, Enum):
         const.LLM,
         "LLM Service Provider",
         "LLM and Embedding Model Service Providers",
+        "LLM & embedding",
         LlmProvider,
         LlmProviderTypes,
         ["name", "type"],
@@ -65,6 +67,7 @@ class ServiceProvider(ServiceProviderType, Enum):
         const.VOICE,
         "Speech Service Provider",
         "Speech Service Providers",
+        "Speech",
         VoiceProvider,
         VoiceProviderType,
         ["name", "type"],
@@ -73,6 +76,7 @@ class ServiceProvider(ServiceProviderType, Enum):
         const.MESSAGING,
         "Messaging Provider",
         "Messaging Providers",
+        "Messaging",
         MessagingProvider,
         MessagingProviderType,
         ["name", "type"],
@@ -81,11 +85,20 @@ class ServiceProvider(ServiceProviderType, Enum):
         const.AUTH,
         "Authentication Provider",
         "Authentication Providers",
+        "Authentication",
         AuthProvider,
         AuthProviderType,
         ["name", "type"],
     )
-    tracing = const.TRACING, "Tracing Provider", "Tracing Providers", TraceProvider, TraceProviderType, ["name", "type"]
+    tracing = (
+        const.TRACING,
+        "Tracing Provider",
+        "Tracing Providers",
+        "Tracing",
+        TraceProvider,
+        TraceProviderType,
+        ["name", "type"],
+    )
 
     @property
     def table(self) -> tables.Table:
@@ -183,7 +196,6 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
     for provider in team.llmprovider_set.all():
         providers[provider.id] = {
             "models": provider_models_by_type[provider.type],
-            "supports_assistants": provider.type_enum.supports_assistants,
         }
     return providers
 

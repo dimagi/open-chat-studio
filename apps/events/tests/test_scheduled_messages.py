@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.relativedelta import relativedelta
@@ -503,3 +504,86 @@ def test_scheduled_message_trace_info_success_and_failure(ad_hoc_bot_message, mo
     )
     assert failure_attempt.trace_info == {"trace_id": "fail456"}
     assert "Bot failed!" in failure_attempt.log_message
+
+
+def _create_scheduled_message_with_last_triggered_at(last_triggered_at):
+    session = ExperimentSessionFactory.create()
+    event_action, _params = _construct_event_action(
+        frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
+    )
+    return ScheduledMessageFactory.create(
+        participant=session.participant,
+        team=session.team,
+        action=event_action,
+        experiment=session.experiment,
+        last_triggered_at=last_triggered_at,
+    )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("as_timezone", "expected_offset"),
+    [
+        pytest.param("Australia/Sydney", timedelta(hours=10), id="valid-zone"),
+        pytest.param("America/Coyhaique", timedelta(hours=-4), id="zone-missing-from-older-tz-database"),
+    ],
+)
+def test_as_dict_converts_datetimes_into_requested_timezone(as_timezone, expected_offset):
+    with travel("2024-06-15", tick=False):
+        last_triggered_at = timezone.now() - relativedelta(days=1)
+        message = _create_scheduled_message_with_last_triggered_at(last_triggered_at)
+
+        result = message.as_dict(as_timezone=as_timezone)
+
+        assert result["next_trigger_date"].utcoffset() == expected_offset
+        assert result["last_triggered_at"].utcoffset() == expected_offset
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "as_timezone",
+    [
+        pytest.param("Mars/Phobos", id="unknown-zone-name"),
+        pytest.param("/etc/passwd", id="absolute-path-key"),
+        pytest.param("../../x", id="path-traversal-key"),
+        pytest.param(123, id="non-string-key"),
+    ],
+)
+def test_as_dict_leaves_datetimes_unconverted_for_unusable_timezone(as_timezone):
+    last_triggered_at = timezone.now() - relativedelta(days=1)
+    message = _create_scheduled_message_with_last_triggered_at(last_triggered_at)
+
+    result = message.as_dict(as_timezone=as_timezone)
+
+    assert result["next_trigger_date"] == message.next_trigger_date
+    assert result["next_trigger_date"].tzinfo == message.next_trigger_date.tzinfo
+    assert result["next_trigger_date"].utcoffset() == message.next_trigger_date.utcoffset()
+    assert result["last_triggered_at"] == last_triggered_at
+    assert result["last_triggered_at"].tzinfo == last_triggered_at.tzinfo
+    assert result["last_triggered_at"].utcoffset() == last_triggered_at.utcoffset()
+
+
+@pytest.mark.django_db()
+def test_as_dict_without_timezone_leaves_datetimes_unconverted():
+    last_triggered_at = timezone.now() - relativedelta(days=1)
+    message = _create_scheduled_message_with_last_triggered_at(last_triggered_at)
+
+    result = message.as_dict()
+
+    assert result["next_trigger_date"] == message.next_trigger_date
+    assert result["next_trigger_date"].tzinfo == message.next_trigger_date.tzinfo
+    assert result["next_trigger_date"].utcoffset() == message.next_trigger_date.utcoffset()
+    assert result["last_triggered_at"] == last_triggered_at
+    assert result["last_triggered_at"].tzinfo == last_triggered_at.tzinfo
+    assert result["last_triggered_at"].utcoffset() == last_triggered_at.utcoffset()
+
+
+@pytest.mark.django_db()
+def test_as_dict_with_no_last_triggered_at_converts_only_next_trigger_date():
+    message = _create_scheduled_message_with_last_triggered_at(None)
+
+    result = message.as_dict(as_timezone="America/Coyhaique")
+
+    expected_offset = message.next_trigger_date.astimezone(ZoneInfo("America/Coyhaique")).utcoffset()
+    assert result["next_trigger_date"].utcoffset() == expected_offset
+    assert result["last_triggered_at"] is None

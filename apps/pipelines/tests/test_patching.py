@@ -635,12 +635,13 @@ class TestPostEndpointBackwardCompatibility:
         assert "nodes" not in pipeline.data
         assert pipeline.node_set.get(flow_id="start").params == {"name": "start"}
         # the response still serves full nodes, reconstructed from the rows — the stored params
-        # plus the resource ids read off the FK columns, all unset for a start node
+        # plus the resources read off the FK columns and related rows, all unset for a start node
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}
         assert response_nodes["start"]["data"]["params"] == {
             "name": "start",
             **{f"{field_name}_id": None for field_name in Node.resource_fk_fields()},
             "collection_index_ids": [],
+            "custom_actions": [],
         }
 
     def test_post_without_nodes_key_is_rejected(self, authed_client, pipeline, team_with_users):

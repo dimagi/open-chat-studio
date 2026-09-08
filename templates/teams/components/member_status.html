@@ -1,0 +1,6 @@
+<div>
+  <span class="badge {% if record.status_kind == "invited" %}badge-warning{% else %}badge-success{% endif %} badge-sm whitespace-nowrap">{{ record.status_label }}</span>
+  {% if record.status_detail %}
+    <span class="block text-neutral-500 text-xs mt-1">{{ record.status_detail }}</span>
+  {% endif %}
+</div>

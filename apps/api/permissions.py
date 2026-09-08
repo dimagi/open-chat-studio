@@ -5,6 +5,7 @@ import logging
 from functools import wraps
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
@@ -207,6 +208,43 @@ class ReadOnlyAPIKeyPermission(BasePermission):
             return request.method in SAFE_METHODS
 
         return True
+
+
+class RequiresTeamPermission(BasePermission):
+    """Gate on a fixed ``required_permissions`` list, resolved against the credential's team.
+
+    For views where ``DjangoModelPermissionsWithView`` would ask the wrong question, because it
+    derives the permission from the HTTP verb and the view's queryset. Two cases: the verb does not
+    match the operation -- removing a node from a chatbot's pipeline is a change to the chatbot, so
+    the stock map's ``delete_experiment`` would refuse a role that may edit a chatbot but not delete
+    one -- or the queryset is not the thing being authorized, as on a sub-resource route whose
+    queryset exists only to satisfy ``GenericAPIView``. Declaring the permissions outright is then
+    the only way to say what the endpoint actually needs.
+
+    ``has_perms`` resolves against the credential's team because the auth layer calls
+    ``set_current_team``. Client-credentials (machine) tokens have no user and so no
+    membership-derived permissions; their authorization rests on the OAuth scope and the token's
+    pinned team.
+    """
+
+    # Annotation only, deliberately with no default: ``has_perms([])`` is ``all([])``, so an empty or
+    # absent list would turn this gate into an open door.
+    required_permissions: list[str]
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        # At import rather than at request time: a subclass that forgot this would otherwise be an
+        # open door that only shows itself when someone calls the endpoint it guards.
+        super().__init_subclass__(**kwargs)
+        if not getattr(cls, "required_permissions", None):
+            raise ImproperlyConfigured(
+                f"{cls.__name__} must declare a non-empty `required_permissions`; an empty one "
+                "grants access to everyone."
+            )
+
+    def has_permission(self, request, view) -> bool:
+        if is_client_credentials_request(request):
+            return True
+        return bool(request.user and request.user.has_perms(self.required_permissions))
 
 
 # The non-scope half of REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] (config/settings.py). Setting

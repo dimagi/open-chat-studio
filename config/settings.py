@@ -546,7 +546,10 @@ SPECTACULAR_SETTINGS = {
         },
         {
             "name": "Pipelines",
-            "description": "Discover the pipeline node types an agent may build and the resource ids it may reference.",
+            "description": (
+                "Discover the node types a pipeline may contain and the resource ids it may "
+                "reference, and edit a chatbot's pipeline a node at a time."
+            ),
         },
         {
             "name": "Usage",
@@ -707,6 +710,7 @@ PROJECT_METADATA = {
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
     "ACCEPTABLE_USE_POLICY_URL": env("ACCEPTABLE_USE_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
+    "MARKETING_SITE_URL": "https://openchatstudio.dimagi.com",
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
@@ -715,21 +719,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
-
-# Prelogin marketing pages
-# Optional contact email shown on the contact page. Leave unset to hide the email.
-PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
-# HubSpot contact form embed. Leave portal/form IDs unset to hide the form.
-HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
-HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
-HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
-# Chat widget config for the demo bots on the use cases page, keyed by the bot keys used in
-# templates/prelogin/applications.html. A bot without an entry renders as a static card with no chat.
-# The bots live on production, so the widget talks to production regardless of which deploy serves
-# the page, unless a bot sets "api_base_url" to test against another deploy. Format:
-# {"<bot key>": {"id": "<chatbot public id>", "embed_key": "<widget channel token>",
-#                "header_text": "<chat window title>", "api_base_url": "<optional other deploy>"}}
-PRELOGIN_DEMO_BOTS = env.json("PRELOGIN_DEMO_BOTS", default={})
 
 # Sentry setup
 
@@ -907,7 +896,6 @@ DOCUMENTATION_LINKS = {
     "node_llm": "/concepts/pipelines/nodes/#llm-node",
     "node_llm_router": "/concepts/pipelines/router_nodes/#llm-router-node",
     "node_static_router": "/concepts/pipelines/router_nodes/#static-router-node",
-    "node_assistant": "/concepts/pipelines/nodes/",
     "node_code": "/concepts/pipelines/nodes/#python-node",
     "node_template": "/concepts/pipelines/nodes/#template",
     "node_email": "/concepts/pipelines/nodes/#email-node",
@@ -916,7 +904,6 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "deploy_channels": "/how-to/deploy_to_different_channels/",
-    "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
 }
@@ -1027,8 +1014,8 @@ SUPPORTED_FILE_TYPES = {
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
     ),
     "collections": (
-        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,.html,.htm,"
-        ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
+        ".txt,.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.mp4,.mov,.avi,.mp3,.wav,"
+        ".html,.htm,.css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
     ),
 }
 
@@ -1137,6 +1124,10 @@ OAUTH2_PROVIDER = {
         "usage:read": "Read usage and activity data",
     },
 }
+OIDC_ONLY_SCOPES = {
+    "openid": "OpenID Connect scope",
+    "profile": "User Profile",
+}
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
     OAUTH2_PROVIDER.update(
         {
@@ -1144,12 +1135,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
             "OIDC_RSA_PRIVATE_KEY": OIDC_RSA_PRIVATE_KEY,
         }
     )
-    OAUTH2_PROVIDER["SCOPES"].update(
-        {
-            "openid": "OpenID Connect scope",
-            "profile": "User Profile",
-        }
-    )
+    OAUTH2_PROVIDER["SCOPES"].update(OIDC_ONLY_SCOPES)
 # Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
 # scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
 # machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.

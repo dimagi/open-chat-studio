@@ -39,14 +39,14 @@ repos:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.8.0'
+    rev: 'v10.9.1'
     hooks:
       - id: eslint
         # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
-          - eslint@10.8.0
+          - eslint@10.9.1
           - '@eslint/js@10.0.1'
-          - typescript-eslint@8.65.0
+          - typescript-eslint@8.68.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]

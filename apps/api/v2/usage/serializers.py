@@ -1,4 +1,4 @@
-"""Response serializers for ``GET /api/v2/usage/``. Render the plain aggregates from
+"""Response serializers for the `usage` endpoint. Render the plain aggregates from
 ``services.usage_query`` and provide the OpenAPI response schema."""
 
 from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema_field

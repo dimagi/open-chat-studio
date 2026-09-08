@@ -59,6 +59,7 @@ class ChatbotSettingsForm(forms.ModelForm):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider",
+            "trace_sample_rate",
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form",

@@ -12,6 +12,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
+from apps.channels.deduplication import connect_external_ids
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_commcare_connect_message
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -98,6 +99,25 @@ class TestHandleConnectMessageTask:
             assert call_kwargs["channel_id"] == commcare_connect_channel_id
             assert call_kwargs["message"] == "Hi human"
             assert call_kwargs["encryption_key"] == encryption_key
+
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_replayed_delivery_produces_one_message_and_one_reply(self, bot_process_input, experiment):
+        """Proves the write site (ChatMessageCreationStage) and the read site
+        (DuplicateDeliveryStage) agree across the Celery boundary."""
+        bot_process_input.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
+        commcare_connect_channel_id, encryption_key, _, data = _setup_participant(experiment)
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id, message_spec={1: "A", 2: "B"})
+        experiment.create_new_version(make_default=True)
+
+        with patch("apps.channels.connect_channel.CommCareConnectClient") as ConnectClientMock:
+            client_mock = ConnectClientMock.return_value
+            handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
+            handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
+
+            assert client_mock.send_message_to_user.call_count == 1
+
+        assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
 
 
 @pytest.mark.django_db()
@@ -191,3 +211,59 @@ class TestApiEndpoint:
         )
         assert response.status_code == 404
         assert response.json() == expected_response
+
+    def _post(self, client, payload):
+        return client.post(
+            reverse("channels:new_connect_message"),
+            json.dumps(payload),
+            headers=self._get_request_headers(payload),
+            content_type="application/json",
+        )
+
+    @patch("apps.channels.views.count_channel_delivery")
+    @patch("apps.channels.views.tasks.handle_commcare_connect_message")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_fully_replayed_batch_is_dropped_without_counting(
+        self, handle_message_mock, count_mock, client, experiment, record_delivery
+    ):
+        commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
+        payload = _build_user_message(encryption_key, commcare_connect_channel_id)
+        record_delivery(experiment.team, connect_external_ids(payload["messages"]))
+
+        response = self._post(client, payload)
+
+        assert response.status_code == 200
+        handle_message_mock.delay.assert_not_called()
+        count_mock.assert_not_called()
+
+    @patch("apps.channels.views.tasks.handle_commcare_connect_message")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_partially_recorded_batch_forwards_only_the_new_message(
+        self, handle_message_mock, client, experiment, record_delivery
+    ):
+        commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
+        payload = _build_user_message(
+            encryption_key, commcare_connect_channel_id, message_spec={1: "A", 2: "B", 3: "C"}
+        )
+        record_delivery(experiment.team, connect_external_ids(payload["messages"][:2]))
+
+        self._post(client, payload)
+
+        forwarded = handle_message_mock.delay.call_args.kwargs["messages"]
+        assert [m["message_id"] for m in forwarded] == [payload["messages"][2]["message_id"]]
+
+    @patch("apps.channels.views.tasks.handle_commcare_connect_message")
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_id_repeated_within_one_batch_is_forwarded_once(self, handle_message_mock, client, experiment):
+        """A duplicate inside one batch has no recorded delivery yet, so the recorded-id lookup
+        cannot catch it -- `unseen_connect_messages` discards each id as it forwards it."""
+        commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
+        built = _build_user_message(encryption_key, commcare_connect_channel_id, message_spec={1: "A"})
+        payload = {
+            "channel_id": commcare_connect_channel_id,
+            "messages": built["messages"] + built["messages"],
+        }
+
+        self._post(client, payload)
+
+        assert len(handle_message_mock.delay.call_args.kwargs["messages"]) == 1

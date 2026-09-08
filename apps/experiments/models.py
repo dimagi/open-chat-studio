@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models, transaction
 from django.db.models import (
     Case,
@@ -99,11 +99,6 @@ class VersionFieldDisplayFormatters:
         template = get_template("generic/chip.html")
         url = pipeline.get_absolute_url()
         return template.render({"chip": Chip(label=name, url=url)})
-
-    @staticmethod
-    def format_builtin_tools(tools: set) -> str:
-        """code_interpreter, file_search -> Code Interpreter, File Search"""
-        return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
     @staticmethod
     def format_custom_action_operation(op) -> str:
@@ -489,6 +484,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider",
+            "trace_sample_rate",
             "participant_allowlist",
             "debug_mode_enabled",
             "file_uploads_enabled",
@@ -574,6 +570,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
+    )
+    trace_sample_rate = models.FloatField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Overrides the trace provider's sample rate for this chatbot. Leave blank to use the "
+        "provider's own setting.",
     )
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
@@ -810,7 +813,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @property
     def trace_service(self):
         if self.trace_provider:
-            return self.trace_provider.get_service()
+            return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
 
     def get_api_url(self):
         if self.is_working_version:
@@ -941,8 +944,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @transaction.atomic()
     def archive(self):
         """
-        Archive the experiment and all versions in the case where this is the working version. The linked assistant and
-        pipeline for the working version should not be archived.
+        Archive the experiment and all versions in the case where this is the working version. The
+        linked pipeline for the working version should not be archived.
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
@@ -1039,6 +1042,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
+            VersionField(group_name="Tracing", name="trace_sample_rate", raw_value=self.trace_sample_rate),
             # Triggers
             VersionField(
                 group_name="Triggers",
@@ -1066,36 +1070,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             instance=self,
             fields=fields,
         )
-
-    def get_assistant(self):
-        """
-        Retrieves the assistant associated with the current instance.
-
-        This method attempts to find an assistant node within the pipeline associated with the current instance.
-        - If an assistant node is found, it retrieves the assistant ID from the node's parameters and returns the
-        corresponding OpenAiAssistant object.
-        - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
-        the instance.
-        """
-        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
-            OpenAiAssistant,
-        )
-        from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models imports experiments.models
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            AssistantNode,
-        )
-
-        if self.pipeline:
-            node_name = AssistantNode.__name__
-            # TODO: What about multiple assistant nodes?
-            assistant_id = (
-                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
-                .values_list("params__assistant_id", flat=True)
-                .first()
-            )
-            if assistant_id:
-                return OpenAiAssistant.objects.get(id=assistant_id)
-        return None
 
 
 class Participant(BaseTeamModel):
@@ -1745,7 +1719,7 @@ class ExperimentSession(BaseTeamModel):
     @cached_property
     def participant_data_from_experiment(self) -> dict:
         try:
-            return self.experiment.participantdata_set.get(participant=self.participant).data
+            return ParticipantData.objects.for_experiment(self.experiment).get(participant=self.participant).data
         except ParticipantData.DoesNotExist:
             return {}
 
@@ -1788,22 +1762,12 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
-            OpenAiAssistant,
-        )
         from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            AssistantNode,
             LLMResponseWithPrompt,
             RouterNode,
         )
 
         if self.experiment.pipeline:
-            assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
-            results = OpenAiAssistant.objects.filter(
-                id__in=assistant_ids, instructions__contains="{participant_data}"
-            ).exists()
-            if results:
-                return True
             llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts

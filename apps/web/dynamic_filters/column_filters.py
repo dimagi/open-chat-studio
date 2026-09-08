@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import pytz
 from django.db.models import Q, QuerySet
 
 from apps.experiments.models import Experiment, SessionStatus
@@ -88,8 +88,8 @@ class TimestampFilter(ColumnFilter):
         try:
             date_value = datetime.fromisoformat(value)
             # Convert date to UTC to compare it correctly with stored timestamps
-            return date_value.astimezone(pytz.UTC)
-        except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+            return date_value.astimezone(UTC)
+        except (ValueError, TypeError):
             # Filter values come from URL query params controlled by the user; an
             # invalid value should silently no-op (return the unfiltered queryset)
             # rather than 500 the page or spam logs.
@@ -125,7 +125,7 @@ class TimestampFilter(ColumnFilter):
         """Filter for relative time ranges like '1h', '7d'.
         For 1d 24h are subtracted i.e sessions in the range of 24h are shown not based on the date"""
         try:
-            client_tz = pytz.timezone(timezone) if timezone else pytz.UTC
+            client_tz = ZoneInfo(timezone) if timezone else UTC
             now_client = datetime.now(client_tz)
 
             if not value.endswith(("h", "d", "m")):
@@ -143,8 +143,8 @@ class TimestampFilter(ColumnFilter):
             else:
                 return queryset
 
-            range_starting_utc_time = (now_client - delta).astimezone(pytz.UTC)
+            range_starting_utc_time = (now_client - delta).astimezone(UTC)
             return self._filter_by_lookup(queryset, "gte", range_starting_utc_time)
-        except (ValueError, TypeError, pytz.UnknownTimeZoneError):
+        except (ValueError, TypeError, ZoneInfoNotFoundError):
             # User-controlled URL value; silent no-op is preferred over a 500.
             return queryset

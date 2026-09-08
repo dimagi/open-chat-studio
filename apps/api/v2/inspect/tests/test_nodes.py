@@ -32,10 +32,10 @@ def test_nodes_in_render_order_is_stable_whatever_order_the_db_returns():
     end = SimpleNamespace(type="EndNode", id=2)
     start = SimpleNamespace(type="StartNode", id=9)
     llm = SimpleNamespace(type="LLMResponseWithPrompt", id=7)
-    assistant = SimpleNamespace(type="AssistantNode", id=4)
+    router = SimpleNamespace(type="RouterNode", id=4)
 
-    expected = [start, assistant, llm, end]
-    for row_order in ([end, start, llm, assistant], [llm, assistant, end, start], expected):
+    expected = [start, router, llm, end]
+    for row_order in ([end, start, llm, router], [llm, router, end, start], expected):
         pipeline = SimpleNamespace(node_set=SimpleNamespace(all=lambda rows=row_order: rows))
         assert nodes_in_render_order(pipeline) == expected
 
