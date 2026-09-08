@@ -1,12 +1,14 @@
 """Regression coverage for dimagi/open-chat-studio#4420.
 
-Unit tests elsewhere prove the two halves in isolation: `CustomBaseTool._run` now lets
-exceptions propagate (apps/chat/tests/test_tools.py), and `OCSCallbackHandler.on_tool_error`
-records the error on the tracer (apps/service_providers/tests/test_ocs_tracer.py). Neither
-proves what actually happens during a real pipeline run. This does: a real `CustomBaseTool`
-raising inside a real agent turn now aborts the turn instead of being swallowed -- exercising
-the same pipeline catch-all an LLM/chain failure already uses -- and still produces a
-trace-linked notification via the pre-existing `on_tool_error` path, not a new mechanism.
+Unit tests elsewhere prove the pieces in isolation: `CustomBaseTool._run` lets exceptions
+propagate (apps/chat/tests/test_tools.py), `OCSCallbackHandler.on_tool_error` records the
+error on the tracer (apps/service_providers/tests/test_ocs_tracer.py), and
+`get_agent_middleware` attaches `ToolErrorMiddleware` (apps/pipelines/tests/test_node_helpers.py).
+Neither proves what happens during a real pipeline run. This does: a real `CustomBaseTool`
+raising inside a real agent turn is caught by `ToolErrorMiddleware` and turned into a
+soft-fail `ToolMessage`, so the turn completes normally instead of aborting -- while still
+producing a trace-linked notification via the pre-existing `on_tool_error` path, which fires
+during tool execution itself, before the middleware ever sees the exception.
 """
 
 from typing import ClassVar
@@ -35,17 +37,11 @@ def _tool_call(name, args):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.chat.bots.EventBot.get_user_message")
 @mock.patch("apps.pipelines.nodes.llm_node._get_configured_tools")
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_tool_error_aborts_turn_and_creates_trace_linked_notification(
-    get_llm_service, get_configured_tools, mock_event_bot_message
-):
+def test_tool_error_completes_turn_and_creates_trace_linked_notification(get_llm_service, get_configured_tools):
     provider = LlmProviderFactory.create()
     provider_model = LlmProviderModelFactory.create()
-    # Force the pipeline catch-all's EventBot path to fail over to its default text, so the
-    # assertion below doesn't depend on a second fake LLM call.
-    mock_event_bot_message.side_effect = RuntimeError("EventBot unavailable in test")
 
     class RaisingTool(tools.CustomBaseTool):
         name: str = AgentTools.UPDATE_PARTICIPANT_DATA
@@ -57,7 +53,10 @@ def test_tool_error_aborts_turn_and_creates_trace_linked_notification(
 
     get_configured_tools.return_value = [RaisingTool()]
     get_llm_service.return_value = build_fake_llm_service(
-        responses=[_tool_call(AgentTools.UPDATE_PARTICIPANT_DATA, {"key": "k", "value": "v"})]
+        responses=[
+            _tool_call(AgentTools.UPDATE_PARTICIPANT_DATA, {"key": "k", "value": "v"}),
+            AIMessage(content="Sorry, that didn't work."),
+        ]
     )
 
     # A published version -- trace-error notifications only fire for one (matches
@@ -92,12 +91,12 @@ def test_tool_error_aborts_turn_and_creates_trace_linked_notification(
     before_trace_ids = set(Trace.objects.values_list("id", flat=True))
 
     with bot.trace_service.trace("test-trace", session=session, inputs={}):
-        with pytest.raises(ValueError, match="simulated tool failure"):
-            pipeline.process(ctx)
+        pipeline.process(ctx)
 
-    # The pre-existing pipeline catch-all still delivered a graceful reply -- the turn aborts,
-    # but the user isn't left with a raw error.
-    assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+    # The turn completes normally -- ToolErrorMiddleware turned the exception into a soft-fail
+    # ToolMessage instead of letting it abort the run, so the pipeline's catch-all never engages.
+    assert ctx.early_exit_response is None
+    assert ctx.bot_response.content == "Sorry, that didn't work."
 
     # The failure still produced a trace-linked notification, the same mechanism pipeline/span
     # errors already use -- this is the actual behaviour #4420 asked for.

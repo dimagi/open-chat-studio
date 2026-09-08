@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from string import Formatter
 
 from django.db import transaction
+from langchain.agents.middleware import ToolCallRequest, ToolErrorMiddleware
 from langchain_core.messages import SystemMessage
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -60,11 +61,20 @@ def get_system_message(prompt_template: str, prompt_context: PromptTemplateConte
         raise PipelineNodeRunError(str(e)) from e
 
 
+def _on_tool_error(exc: Exception, request: ToolCallRequest) -> str:
+    """Turn a tool exception into a soft-fail ToolMessage so it doesn't abort the turn.
+    The tracer's on_tool_error callback still fires and creates a trace-linked
+    notification before this runs, since that happens inside tool execution itself.
+    """
+    tool_name = request.tool_call["name"]
+    return f"The '{tool_name}' tool failed to run ({type(exc).__name__}). Let the user know something went wrong."
+
+
 def get_agent_middleware(node, system_message: SystemMessage) -> list:
     """Returns the common agent middleware for nodes that build LLM agents:
-    history compression and provider prompt caching.
+    history compression, provider prompt caching, and graceful tool-error handling.
     """
-    middleware = []
+    middleware = [ToolErrorMiddleware(on_error=_on_tool_error)]
     if history_middleware := node.build_history_middleware(system_message=system_message):
         middleware.append(history_middleware)
     if caching_middleware := node.get_llm_service().get_prompt_caching_middleware():
