@@ -157,16 +157,9 @@ def _participant_data(chatbot):
 
 
 def _totals(printed: str) -> dict[str, int]:
-    """The per-surface counts from the command's closing totals block, as a dict.
-
-    Parsed rather than matched as substrings, so that a count printed for one surface cannot
-    stand in for another ("messages" is a substring of "evaluation_messages").
-    """
-    return {
-        label: int(count)
-        for label, _, count in (line.strip().partition(": ") for line in printed.splitlines())
-        if label in SURFACES
-    }
+    """Per-surface counts parsed from the printed totals block ("messages" also matches "evaluation_messages")."""
+    parsed = (line.strip().partition(": ") for line in printed.splitlines())
+    return {label: int(count) for label, _, count in parsed if label in SURFACES}
 
 
 def _other_participant(experiment, *, data=None, name=None, identifier=None, state=None):
