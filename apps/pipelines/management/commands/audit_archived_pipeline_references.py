@@ -4,18 +4,12 @@ from django.db.models import Q
 from apps.pipelines.models import Node
 from apps.pipelines.versioning import all_versioned_param_specs
 
-# The list-valued spec (`collection_index_ids`, mirrored onto the `collection_indexes` M2M) is
-# handled separately via its own `.filter(is_archived=True).exists()` check below.
+# collection_indexes (many=True) is handled separately as an M2M check below.
 _SCALAR_FK_FIELDS = tuple(dict.fromkeys(spec.fk_field for spec in all_versioned_param_specs() if not spec.many))
 
 
 class Command(BaseCommand):
-    help = (
-        "Read-only audit: list live pipeline nodes whose assistant, collection, or source material "
-        "reference has already been archived. A node like this is currently degraded — the "
-        "archived reference silently drops out of the bot's prompt instead of raising an error. "
-        "This command only reports; it does not modify any data."
-    )
+    help = "Read-only: list live pipeline nodes whose assistant/collection/source material reference is archived."
 
     def handle(self, *args, **options):
         degraded_nodes = list(

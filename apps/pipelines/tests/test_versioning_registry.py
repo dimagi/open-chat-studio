@@ -24,9 +24,7 @@ ALL_SPECS = [
 
 assert ALL_SPECS, "Versioned param registry must not be empty"
 
-# Specs whose model participates in the shared "still in use?" in-use guard (Collection and
-# SourceMaterial's `get_related_nodes_queryset`) — currently everything except OpenAiAssistant,
-# which archives through its own separate mechanism.
+# Specs whose model has a get_related_nodes_queryset guard (not OpenAiAssistant, which has its own).
 GUARD_FACTORIES = {
     Collection: CollectionFactory,
     SourceMaterial: SourceMaterialFactory,
@@ -107,12 +105,7 @@ def test_versioning_multi_id_params_is_unsupported():
 @pytest.mark.django_db()
 @pytest.mark.parametrize("spec", GUARD_SPECS)
 def test_in_use_guard_param_key_matches_registry(spec):
-    """The in-use guard (``Collection``/``SourceMaterial.get_related_nodes_queryset``) hardcodes
-    its node-param key as a literal string rather than reading it from this registry. This test
-    ties the two together: it creates a node whose params are keyed by the registry's
-    ``param_name`` and asserts the guard queryset finds it. If a ``param_name`` is ever renamed in
-    the registry without updating the guard's hardcoded string, this test fails instead of
-    silently reintroducing this exact ticket's original bug."""
+    """Guards against registry drift: the guard's hardcoded param key must match the registry."""
     instance = GUARD_FACTORIES[spec.model_cls].create()
     value = [str(instance.id)] if spec.many else str(instance.id)
     NodeFactory.create(params={spec.param_name: value})

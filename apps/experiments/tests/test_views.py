@@ -416,18 +416,10 @@ def test_experiment_session_message_view_missing_message(delay_mock, experiment,
 @pytest.mark.django_db()
 class TestDeleteSourceMaterial:
     def test_user_cannot_delete_a_source_material_in_use(self, client, experiment):
-        """
-        The user should not be able to delete source material if it's being used by a pipeline.
-        There are two cases:
-        1. The source material is being used directly by a working pipeline node.
-        2. The source material's version is being used by a pipeline version referenced by a
-           published experiment.
-        """
+        """Blocked both when a working node references it directly and when only a published version does."""
         experiment.pipeline = PipelineFactory.create()
         experiment.save()
 
-        # SourceMaterialFactory's default team (plain TeamFactory) has no members to log in as —
-        # override it with a team that has one, exactly as TestDeleteCollection.setup_collection does.
         source_material = SourceMaterialFactory.create(team=TeamWithUsersFactory.create())
         client.force_login(source_material.team.members.first())
         node = NodeFactory.create(

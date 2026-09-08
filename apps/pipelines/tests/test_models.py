@@ -346,10 +346,7 @@ class TestArchivingNodes:
         assert working_media.is_archived is False
 
     def test_archiving_one_node_version_leaves_a_shared_source_material_version_intact(self):
-        """REUSE_UNCHANGED means one SourceMaterial version can legitimately be referenced by more
-        than one separately-published node, when the content hasn't changed between publishes.
-        Archiving the node behind one reference must not archive the shared version while another
-        live node still needs it; archiving both must then archive it."""
+        """REUSE_UNCHANGED can leave one version shared by two separately-published nodes."""
         source_material = SourceMaterialFactory.create()
 
         pipeline_a = PipelineFactory.create()

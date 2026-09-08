@@ -417,9 +417,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         Get all experiments that reference this collection through a pipeline. This includes both published and working
         experiments — any experiment whose pipeline references this collection or any of its versions.
         """
-        # TODO: migrate apps.assistants.models.OpenAiAssistant onto this same shared helper — its
-        # own check only looks at working pipelines and the default published experiment version.
-        # Tracked separately; deliberately not part of the source-material archiving ticket.
+        # TODO: migrate OpenAiAssistant onto this same shared helper (tracked separately)
         return get_related_experiment_versions_queryset(self, "collection_id", "collection_index_ids")
 
     @transaction.atomic()

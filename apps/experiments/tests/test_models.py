@@ -717,10 +717,8 @@ class TestSourceMaterialArchiving:
         experiment = ExperimentFactory.create(pipeline=pipeline)
         experiment.create_new_version()
 
-        # Publishing rewrites the NEW node version's source_material_id to a fresh version, but
-        # never touches the original working node's own params — clear it so only the published
-        # version's node (pointing at that fresh version, not the working id) still needs the
-        # working record, isolating the experiment-rollup tier from the direct-node tier.
+        # Publishing doesn't rewrite the original working node's params; clear it so only the
+        # published version's node still references source_material.
         node.params = {}
         node.save()
 
@@ -739,27 +737,16 @@ class TestSourceMaterialArchiving:
         experiment = ExperimentFactory.create(pipeline=pipeline)
         published = experiment.create_new_version()
 
-        # Clear the working node's own reference (see the previous test's note) so only the
-        # published experiment still blocks archiving.
         node.params = {}
         node.save()
 
-        # Archive the PUBLISHED experiment, not the working one — Experiment.archive() deliberately
-        # never archives the working pipeline (only a published version's pipeline gets archived),
-        # matching the established pattern in apps/assistants/tests/test_delete.py::
-        # test_archive_assistant_fails_with_working_related_versioned_pipeline_and_working_experiment.
+        # Archiving the working experiment wouldn't touch the pipeline; archive the published one.
         published.archive()
 
         assert source_material.archive() is True
 
     def test_archive_fails_when_a_non_default_published_experiment_still_has_a_live_node(self):
-        """Proves parity with Collection: the direct-node-reference tier has no pipeline/experiment
-        status filtering, so it catches a live reference regardless of which experiment version it
-        belongs to. Unlike collection_id (LIVE_REFERENCE), source_material_id is REUSE_UNCHANGED —
-        publishing always rewrites the published node's param to a freshly-created version id, so
-        a non-default published node never references the raw working id. This is exercised by
-        archiving that specific VERSION directly instead, which is also the realistic case: the
-        node-archiving cascade always archives a version for this param, never the working record."""
+        """The direct-node tier catches this regardless of published/default status."""
         source_material = SourceMaterialFactory.create()
         pipeline = PipelineFactory.create()
         node = NodeFactory.create(
@@ -779,8 +766,6 @@ class TestSourceMaterialArchiving:
         assert shared_version.archive() is False
         shared_version.refresh_from_db()
         assert shared_version.is_archived is False
-        # Confirms the protection came from the direct-node tier, not the experiment-rollup tier —
-        # the published experiment is non-default, so it's excluded from get_related_experiments_queryset.
         assert not shared_version.get_related_experiments_queryset().exists()
 
 

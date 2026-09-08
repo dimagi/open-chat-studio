@@ -190,17 +190,11 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return get_related_pipeline_nodes_queryset(self, "source_material_id")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
-        """All experiments that reference this source material (or any of its versions) through a
-        pipeline — any live default-published or working experiment."""
         return get_related_experiment_versions_queryset(self, "source_material_id")
 
     @transaction.atomic()
     def archive(self):
-        """
-        Archive this source material only if no live pipeline node references this exact version,
-        and — when archiving the working version — none of its published versions are still
-        serving a live experiment either. Mirrors Collection.archive()'s in-use guard.
-        """
+        """Mirrors Collection.archive()'s in-use guard."""
         if has_related_pipeline_references(self, "source_material_id"):
             return False
         super().archive()
