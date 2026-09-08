@@ -1,5 +1,6 @@
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatMessageType
@@ -166,8 +167,9 @@ class TestTagFilterInSessionMessages:
 
         response = self._get(client, experiment, session, tag_filter="billing")
 
-        context_ids = {m.id for m in response.context["messages"] if m.is_tag_context}
-        assert context_ids == {messages[1].id}
+        assert {m.id for m in response.context["messages"]} == {messages[0].id, messages[1].id}
+        assert response.context["tag_match_count"] == 1
+        assert response.context["tag_context_count"] == 1
 
     def test_match_at_the_end_of_the_chat_has_no_after_neighbor(self, client, experiment):
         session = ExperimentSessionFactory.create(
@@ -182,8 +184,9 @@ class TestTagFilterInSessionMessages:
 
         response = self._get(client, experiment, session, tag_filter="billing")
 
-        context_ids = {m.id for m in response.context["messages"] if m.is_tag_context}
-        assert context_ids == {messages[1].id}
+        assert {m.id for m in response.context["messages"]} == {messages[1].id, messages[2].id}
+        assert response.context["tag_match_count"] == 1
+        assert response.context["tag_context_count"] == 1
 
     def test_adjacent_matches_dont_count_each_other_as_context(self, client, experiment):
         session = ExperimentSessionFactory.create(
@@ -208,9 +211,68 @@ class TestTagFilterInSessionMessages:
         session = ExperimentSessionFactory.create(
             experiment=experiment, participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner)
         )
-        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content="Plain message")
+        message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content="Plain message")
 
         response = self._get(client, experiment, session)
 
+        page_messages = response.context["messages"]
+        assert {m.id for m in page_messages} == {message.id}
+        assert not getattr(page_messages[0], "is_tag_context", False)
         assert response.context["tag_match_count"] == 0
         assert response.context["tag_context_count"] == 0
+
+    def test_tag_filter_narrows_the_queryset_before_pagination(self, client, experiment):
+        """Filtering must happen before Paginator runs, not after, so page counts reflect the
+        filtered set rather than the full chat."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment, participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner)
+        )
+        tag = Tag.objects.create(name="billing", team=experiment.team, category=TagCategories.BOT_RESPONSE)
+        messages = [
+            ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content=f"Message {i}")
+            for i in range(15)
+        ]
+        messages[2].add_tag(tag, team=experiment.team, added_by=None)
+        messages[10].add_tag(tag, team=experiment.team, added_by=None)
+
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+        client.force_login(experiment.owner)
+        response = client.get(url, {"tag_filter": "billing"})
+
+        assert response.context["total_pages"] == 1
+        assert {m.id for m in response.context["messages"]} == {
+            messages[1].id,
+            messages[2].id,
+            messages[3].id,
+            messages[9].id,
+            messages[10].id,
+            messages[11].id,
+        }
+
+    def test_tied_timestamps_use_id_as_a_deterministic_tiebreak(self, client, experiment):
+        """created_at alone doesn't guarantee row order when messages share a timestamp, so the
+        context lookup and the main queryset must agree by also ordering on id."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment, participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner)
+        )
+        tag = Tag.objects.create(name="billing", team=experiment.team, category=TagCategories.BOT_RESPONSE)
+        same_time = timezone.now()
+        messages = [
+            ChatMessageFactory.create(
+                chat=session.chat, message_type=ChatMessageType.AI, content=f"Message {i}", created_at=same_time
+            )
+            for i in range(4)
+        ]
+        messages[1].add_tag(tag, team=experiment.team, added_by=None)
+
+        response = self._get(client, experiment, session, tag_filter="billing")
+
+        assert {m.id for m in response.context["messages"]} == {messages[0].id, messages[1].id, messages[2].id}
+        assert response.context["tag_context_count"] == 2
