@@ -133,5 +133,5 @@ def test_members_table_pagination_request_returns_bare_table_only(client, team):
 
     response = client.get(reverse("single_team:members_table", args=[team.slug]), {"page": "1"})
     assert response.status_code == 200
-    assert b"overflow-x-auto" not in response.content
-    assert b'class="table-container"' in response.content
+    assert b'class="overflow-x-auto"' not in response.content
+    assert b"table-container" in response.content

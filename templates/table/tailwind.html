@@ -1,7 +1,7 @@
 {% extends "django_tables2/bootstrap5.html" %}
 {% load django_tables2 humanize i18n %}
 {% block table-wrapper %}
-    <div class="table-container">
+    <div class="table-container overflow-x-auto">
         {% block record_count %}
             {% if table.show_record_count %}
                 {% with total=table.paginator.count %}

@@ -132,8 +132,8 @@ def test_integrations_table_pagination_request_returns_bare_table_only(client, t
 
     response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"page": "1"})
     assert response.status_code == 200
-    assert b"overflow-x-auto" not in response.content
-    assert b'class="table-container"' in response.content
+    assert b'class="overflow-x-auto"' not in response.content
+    assert b"table-container" in response.content
 
 
 @pytest.mark.django_db()
