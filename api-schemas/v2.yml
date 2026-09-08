@@ -815,6 +815,61 @@ paths:
             to the newest one, so the snapshot would record no change. Nothing is
             snapshotted either way. Dangling handles are not errors: `unwired_handles`
             is advisory.'
+  /api/v2/chatbots/{id}/versions/{version_number}/:
+    patch:
+      operationId: chatbot_version_publish
+      description: |-
+        Make this version the one participants are served, without snapshotting anything.
+
+        Channels resolve the published version per message, so a live chatbot switches over from the next message on. The version that held it stops being served and is otherwise untouched -- a chatbot holds exactly one published version, so promoting one demotes the other.
+
+        This is how an already-published version is served again; the `chatbot_version_create` endpoint's `make_default` covers the other case, a snapshot that goes live as it is taken. Promoting a version this way creates nothing, so it is never refused for having no changes to record.
+      summary: Make chatbot version the published one
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: version_number
+        schema:
+          type: integer
+        description: The version's number, as the `chatbot_inspect` endpoint reports
+          it.
+        required: true
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublishVersion'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionPublished'
+          description: ''
+        '400':
+          description: The body carries a key this endpoint does not accept, or asks
+            to un-publish a version -- a chatbot always needs a published one.
+        '403':
+          description: 'The caller is authenticated but not authorised for this chatbot''s
+            versions: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot, or it has no version under this number --
+            an archived chatbot and an archived version included.
   /api/v2/chatbots/{id}/versions/status/:
     get:
       operationId: chatbot_version_status
@@ -3176,6 +3231,21 @@ components:
             does not declare is dropped rather than refused, and the response reports
             the params the node ended up holding.
       additionalProperties: false
+    PatchedPublishVersion:
+      type: object
+      description: |-
+        The PATCH body: make this version the one participants are served.
+
+        Named as ``chatbot_inspect`` reports it, so an agent that read
+        ``is_published_version: false`` writes back the same key.
+      properties:
+        is_published_version:
+          type: boolean
+          description: Must be `true`. A chatbot may hold only one published version
+            and always needs one, so this promotes a version; it cannot un-publish
+            one. Create a new version that goes live, or make a different version
+            the published one, to move it off.
+      additionalProperties: false
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -3821,6 +3891,19 @@ components:
             is nothing to snapshot.
       required:
       - detail
+    VersionPublished:
+      type: object
+      description: 'The PATCH response: which version participants are served now.'
+      properties:
+        version_number:
+          type: integer
+          description: The version now served to participants.
+        is_published_version:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - is_published_version
+      - version_number
     VersionStatus:
       type: object
       description: 'A version poll''s answer: whether an operation is running, and

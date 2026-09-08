@@ -42,6 +42,37 @@ class VersionCreateRefusedSerializer(serializers.Serializer):
     )
 
 
+class PublishVersionSerializer(RejectsUnknownKeys, serializers.Serializer):
+    """The PATCH body: make this version the one participants are served.
+
+    Named as ``chatbot_inspect`` reports it, so an agent that read
+    ``is_published_version: false`` writes back the same key.
+    """
+
+    is_published_version = serializers.BooleanField(
+        help_text=(
+            "Must be `true`. A chatbot may hold only one published version and always needs one, "
+            "so this promotes a version; it cannot un-publish one. Create a new version that goes "
+            "live, or make a different version the published one, to move it off."
+        )
+    )
+
+    def validate_is_published_version(self, value: bool) -> bool:
+        if not value:
+            raise serializers.ValidationError(
+                "Only `true` is accepted. A chatbot always needs a published version, so this "
+                "cannot un-publish one -- make a different version the published one instead."
+            )
+        return value
+
+
+class VersionPublishedSerializer(serializers.Serializer):
+    """The PATCH response: which version participants are served now."""
+
+    version_number = serializers.IntegerField(help_text="The version now served to participants.")
+    is_published_version = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
+
+
 class VersionStatus(models.TextChoices):
     """The states a version poll reports. ``pending`` is not terminal; ``completed`` is.
 

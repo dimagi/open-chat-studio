@@ -12,7 +12,11 @@ from apps.api.v2.discovery import (
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
 from apps.api.v2.usage.views import UsageView
-from apps.api.v2.versions.views import ChatbotVersionCreateView, ChatbotVersionStatusView
+from apps.api.v2.versions.views import (
+    ChatbotVersionCreateView,
+    ChatbotVersionStatusView,
+    ChatbotVersionView,
+)
 
 app_name = "v2"
 
@@ -62,6 +66,11 @@ urlpatterns = [
         "chatbots/<str:id>/versions/status/",
         ChatbotVersionStatusView.as_view(),
         name="chatbot-version-status",
+    ),
+    path(
+        "chatbots/<str:id>/versions/<int:version_number>/",
+        ChatbotVersionView.as_view(),
+        name="chatbot-version",
     ),
     path("", include(router.urls)),
 ]

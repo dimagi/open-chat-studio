@@ -6,10 +6,13 @@ it. A worker takes the snapshot, so the request answers `202` rather than with t
 second endpoint here reports the chatbot's version history as that version lands in it.
 """
 
+from django.db import transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from field_audit.models import AuditAction
 from rest_framework import status
 from rest_framework.exceptions import NotFound
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -23,14 +26,22 @@ from apps.pipelines.build_state import pipeline_build_state
 
 from .exceptions import NothingToPublish, PipelineIsNotValid, VersionOperationInProgress
 from .serializers import (
+    PublishVersionSerializer,
     VersionCreateRefusedSerializer,
     VersionCreateSerializer,
+    VersionPublishedSerializer,
     VersionStatus,
     VersionStatusSerializer,
 )
 
 CHATBOT_ID = OpenApiParameter(
     name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+)
+VERSION_NUMBER = OpenApiParameter(
+    name="version_number",
+    type=OpenApiTypes.INT,
+    location=OpenApiParameter.PATH,
+    description="The version's number, as the `chatbot_inspect` endpoint reports it.",
 )
 FORBIDDEN = OpenApiResponse(
     description=(
@@ -193,6 +204,75 @@ class ChatbotVersionStatusView(APIView):
         # has no publish of its own to follow.
         enforce_application_chatbot_write(request, chatbot)
         return Response(_version_status(chatbot))
+
+
+class ChatbotVersionView(APIView):
+    """Make an existing version the one participants are served."""
+
+    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    required_scopes = ["chatbots"]
+
+    @extend_schema(
+        operation_id="chatbot_version_publish",
+        summary="Make chatbot version the published one",
+        description=(
+            "Make this version the one participants are served, without snapshotting anything.\n\n"
+            "Channels resolve the published version per message, so a live chatbot switches over "
+            "from the next message on. The version that held it stops being served and is "
+            "otherwise untouched -- a chatbot holds exactly one published version, so promoting "
+            "one demotes the other.\n\n"
+            "This is how an already-published version is served again; the "
+            "`chatbot_version_create` endpoint's `make_default` covers the other case, a snapshot "
+            "that goes live as it is taken. Promoting a version this way creates nothing, so it is "
+            "never refused for having no changes to record."
+        ),
+        tags=["Chatbots"],
+        parameters=[CHATBOT_ID, VERSION_NUMBER],
+        request=PublishVersionSerializer,
+        responses={
+            200: VersionPublishedSerializer,
+            400: OpenApiResponse(
+                description=(
+                    "The body carries a key this endpoint does not accept, or asks to un-publish a "
+                    "version -- a chatbot always needs a published one."
+                )
+            ),
+            403: FORBIDDEN,
+            404: OpenApiResponse(
+                description=(
+                    "No such chatbot, or it has no version under this number -- an archived "
+                    "chatbot and an archived version included."
+                )
+            ),
+        },
+    )
+    def patch(self, request, id: str, version_number: int) -> Response:
+        body = PublishVersionSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        # One transaction and one row lock on the working chatbot, because demoting the incumbent
+        # and promoting this version have to land together: interleaved, two promotions could
+        # demote each other's winner and leave the chatbot with no published version at all.
+        with transaction.atomic():
+            chatbot = get_working_chatbot(request.team, id, lock=True)
+            enforce_application_chatbot_write(request, chatbot)
+            version = get_object_or_404(chatbot.versions, version_number=version_number)
+            _publish_existing_version(chatbot, version)
+        return Response({"version_number": version.version_number, "is_published_version": True})
+
+
+def _publish_existing_version(chatbot: Experiment, version: Experiment) -> None:
+    """Move the published flag onto ``version``, taking it off whichever version holds it.
+
+    A partial unique constraint allows one published version per family, so the incumbent is
+    demoted in the same statement-pair under the caller's row lock rather than left to collide.
+    Already-published is not an error: the request asked for a state that already holds.
+    """
+    chatbot.versions.filter(is_default_version=True).exclude(id=version.id).update(
+        is_default_version=False, audit_action=AuditAction.AUDIT
+    )
+    if not version.is_default_version:
+        version.is_default_version = True
+        version.save(update_fields=["is_default_version"])
 
 
 def _version_status(chatbot: Experiment) -> dict:

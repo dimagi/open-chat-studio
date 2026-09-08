@@ -63,3 +63,7 @@ def strand_the_end_node(chatbot) -> None:
 
 def status_url(chatbot) -> str:
     return f"/api/v2/chatbots/{chatbot.public_id}/versions/status/"
+
+
+def version_url(chatbot, version_number: int) -> str:
+    return f"/api/v2/chatbots/{chatbot.public_id}/versions/{version_number}/"
