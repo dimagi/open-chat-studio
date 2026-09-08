@@ -186,6 +186,50 @@ paths:
             a machine (client-credentials) token whose application is not authorised
             for this chatbot. Retrying will not help; the application''s chatbot list
             has to change.'
+    delete:
+      operationId: chatbot_archive
+      description: |-
+        Archive the chatbot. This is a soft delete: the chatbot and its versions are hidden rather than destroyed, and a person can restore it in the web app. Nothing in this API reaches an archived chatbot, so a repeat of this call answers `404` -- which makes it safe to retry after an answer you never saw.
+
+        **It is refused while a channel is attached.** Taking a chatbot off Telegram, WhatsApp or the chat widget removes its webhook at the provider, and this API cannot create a channel to put back, so detaching stays a person's job in the web app; the `409` names the channels to detach. The team-wide API, web and evaluations channels are not attachments and never stand in the way, so a chatbot created through this API archives freely.
+
+        **It cancels every scheduled message the chatbot has**, finished and already-cancelled ones included, and they cannot be recovered. That is the right consequence of archiving -- and there is no endpoint to drain them first -- so the response reports how many went, rather than refusing.
+      summary: Archive Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Archived'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to archive
+            this chatbot: either its role lacks permission to delete chatbots, or
+            it is a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelsAttached'
+          description: ''
   /api/v2/chatbots/{id}/inspect/:
     get:
       operationId: chatbot_inspect
@@ -1374,6 +1418,39 @@ components:
             type: string
       required:
       - paths
+    Archived:
+      type: object
+      description: 'The archive response: that it happened, and what it destroyed
+        on the way.'
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+        cancelled_scheduled_messages:
+          type: integer
+          description: How many of the chatbot's scheduled messages were deleted,
+            finished and already-cancelled ones included. They cannot be recovered.
+      required:
+      - archived
+      - cancelled_scheduled_messages
+    AttachedChannel:
+      type: object
+      description: |-
+        One channel standing in the way, named the way the web app names it.
+
+        Enough for a client to tell a person which channels to go and detach; there is nothing here to
+        address, because no endpoint takes a channel.
+      properties:
+        id:
+          type: integer
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+        name:
+          type: string
+      required:
+      - id
+      - name
+      - platform
     BooleanNodeParams:
       type: object
       properties:
@@ -1433,6 +1510,20 @@ components:
       required:
       - messaging_provider
       - name
+    ChannelsAttached:
+      type: object
+      description: 'The 409: why the archive was refused, and what a person has to
+        do about it.'
+      properties:
+        detail:
+          type: string
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachedChannel'
+      required:
+      - channels
+      - detail
     Chatbot:
       type: object
       description: |-

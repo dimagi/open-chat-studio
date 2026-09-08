@@ -15,6 +15,7 @@ from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.lookups import get_working_chatbot, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
+from apps.api.v2.write.archive import ArchivedSerializer, ChannelsAttachedSerializer, archive_chatbot
 from apps.api.v2.write.serializers import (
     ChatbotCreateSerializer,
     ChatbotDetailSerializer,
@@ -181,6 +182,60 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             serializer.is_valid(raise_exception=True)
             chatbot = serializer.save()
         return Response(ChatbotDetailSerializer(chatbot).data)
+
+    @extend_schema(
+        operation_id="chatbot_archive",
+        summary="Archive Chatbot",
+        description=(
+            "Archive the chatbot. This is a soft delete: the chatbot and its versions are hidden "
+            "rather than destroyed, and a person can restore it in the web app. Nothing in this "
+            "API reaches an archived chatbot, so a repeat of this call answers `404` -- which "
+            "makes it safe to retry after an answer you never saw.\n\n"
+            "**It is refused while a channel is attached.** Taking a chatbot off Telegram, "
+            "WhatsApp or the chat widget removes its webhook at the provider, and this API cannot "
+            "create a channel to put back, so detaching stays a person's job in the web app; the "
+            "`409` names the channels to detach. The team-wide API, web and evaluations channels "
+            "are not attachments and never stand in the way, so a chatbot created through this "
+            "API archives freely.\n\n"
+            "**It cancels every scheduled message the chatbot has**, finished and "
+            "already-cancelled ones included, and they cannot be recovered. That is the right "
+            "consequence of archiving -- and there is no endpoint to drain them first -- so the "
+            "response reports how many went, rather than refusing."
+        ),
+        tags=["Chatbots"],
+        parameters=[
+            OpenApiParameter(
+                name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+            ),
+        ],
+        request=None,
+        responses={
+            200: ArchivedSerializer,
+            403: OpenApiResponse(
+                description=(
+                    "The caller is authenticated but not authorised to archive this chatbot: "
+                    "either its role lacks permission to delete chatbots, or it is a machine "
+                    "(client-credentials) token whose application is not authorised for this "
+                    "chatbot."
+                )
+            ),
+            404: OpenApiResponse(description="No such chatbot, or it is archived already."),
+            409: ChannelsAttachedSerializer,
+        },
+    )
+    def destroy(self, request, *args, **kwargs) -> Response:
+        # Resolution, the channel guard and the archive share one transaction and one row lock,
+        # because the reported count is read before `archive()` deletes the rows it counts. Two
+        # unlocked archives would both count the same schedules and both report deleting them,
+        # when only the first did. Under the lock the second blocks, then re-evaluates the
+        # working-chatbot predicate against the committed `is_archived` and answers 404.
+        with transaction.atomic():
+            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
+            # A machine token reaches only the chatbots its application was pinned to. Checked
+            # after resolution because the allowlist is keyed on the chatbot, and before anything
+            # is written.
+            enforce_application_chatbot_write(request, chatbot)
+            return Response(archive_chatbot(chatbot))
 
 
 class MeView(APIView):
