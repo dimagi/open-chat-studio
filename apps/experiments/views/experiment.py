@@ -546,6 +546,25 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
+def _tag_filter_context_ids(chat, matched_ids: set[int]) -> set[int]:
+    """The message immediately before and after each match, so a reviewer can see what was
+    said around a tagged message rather than just the tagged message on its own.
+
+    IDs aren't guaranteed contiguous per chat, so this walks the chat's own ordered id list
+    rather than doing id +/- 1 arithmetic.
+    """
+    ordered_ids = list(ChatMessage.objects.filter(chat=chat).order_by("created_at").values_list("id", flat=True))
+    context_ids = set()
+    for index, message_id in enumerate(ordered_ids):
+        if message_id not in matched_ids:
+            continue
+        if index > 0:
+            context_ids.add(ordered_ids[index - 1])
+        if index < len(ordered_ids) - 1:
+            context_ids.add(ordered_ids[index + 1])
+    return context_ids - matched_ids
+
+
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -601,8 +620,14 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             ),
         )
     )
+    matched_ids: set[int] = set()
+    context_ids: set[int] = set()
     if selected_tags:
-        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
+        matched_ids = set(
+            messages_queryset.filter(tags__name__in=selected_tags).distinct().values_list("id", flat=True)
+        )
+        context_ids = _tag_filter_context_ids(session.chat, matched_ids)
+        messages_queryset = messages_queryset.filter(id__in=matched_ids | context_ids)
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -637,6 +662,10 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
 
+    if selected_tags:
+        for message in current_page_messages:
+            message.is_tag_context = message.id not in matched_ids
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -647,6 +676,8 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "page_size": page_size,
         "page_start_index": page_start_index,
         "selected_tags": selected_tags,
+        "tag_match_count": len(matched_ids),
+        "tag_context_count": len(context_ids),
         "language": language,
         "available_languages": available_languages,
         "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
