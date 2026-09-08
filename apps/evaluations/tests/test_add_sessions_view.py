@@ -208,7 +208,10 @@ def test_add_sessions_table_renders_session_id_and_tags(client_with_user, team_w
     response = client_with_user.get(url)
 
     assert response.status_code == 200
-    assert str(session.external_id).encode() in response.content
+    # external_id alone also appears in pre-existing markup (the selection checkbox value,
+    # the "View Session" chip URL) -- anchor on the copy chip's element id, which is unique
+    # to the Session ID column, so this actually exercises the new cell.
+    assert b"session-id-" + str(session.external_id).encode() in response.content
     assert b"qa-review" in response.content
 
 
