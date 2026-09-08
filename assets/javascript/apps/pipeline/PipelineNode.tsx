@@ -31,6 +31,8 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deleteNode = usePipelineStore((state) => state.deleteNode);
   const hasErrors = usePipelineStore((state) => state.nodeHasErrors(id));
   const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
   const updateParamValue = (
@@ -106,7 +108,10 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
         <NodeInput />
         <div className="px-4">
           <div>
-            {getWidgetsForNode({schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue})}
+            {getWidgetsForNode(
+              {schema: nodeSchema, nodeId: id, nodeData: data, updateParamValue: updateParamValue},
+              {getNodeFieldError, readOnly}
+            )}
           </div>
           <div className="mt-2">
             <button className="btn btn-sm btn-ghost w-full"
@@ -149,20 +154,21 @@ function NodeHeader({
   return (
       <div>
         <div className="dropdown dropdown-right absolute ml-2 mt-1 top-4 left-2">
-          <div
+          <button
+            type="button"
             className="text-primary/70 tooltip tooltip-top cursor-pointer"
             data-tip={nodeSchema["ui:label"] + " (Click to change node color)"}
-            tabIndex={0}
+            aria-label="Change node color"
           >
             <i className={icon}></i>
-          </div>
+          </button>
           <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
             <li className="menu-title">Select color</li>
-            {NODE_COLORS.map((color, index) => {
+            {NODE_COLORS.map((color) => {
               const isCurrentColor = color.value === currentColor;
 
               return (
-                <li key={index} onClick={(e) => handleColorSelect(e as unknown as MouseEvent, color.value)}>
+                <li key={color.value} onClick={(e) => handleColorSelect(e as unknown as MouseEvent, color.value)}>
                   <a className={`flex justify-between ${isCurrentColor ? 'bg-base-200' : ''}`}>
                     <span>{color.label}</span>
                     <span className={`w-6 h-6 rounded-full ${color.value} border`}></span>
@@ -175,6 +181,9 @@ function NodeHeader({
         </div>
         <div className="px-10 m-1 text-lg font-bold text-center align-middle">
           <DeprecationNotice nodeSchema={nodeSchema}/>
+          {nodeSchema["ui:removed"] && (
+            <span className="badge badge-warning badge-sm mr-2 align-middle">Removed</span>
+          )}
           {header}
           <p className="text-xs font-light text-gray-500 dark:text-gray-600">{nodeId}</p>
         </div>
@@ -187,16 +196,23 @@ function DeprecationNotice({nodeSchema}: {nodeSchema: JsonSchema}) {
   if (!nodeSchema["ui:deprecated"]) {
     return <></>;
   }
+  const removed = !!nodeSchema["ui:removed"];
   const customMessage = nodeSchema["ui:deprecation_message"] || "";
   return (
     <div className="dropdown">
       <div tabIndex={0} role="button" className="mr-2 text-warning inline-block tooltip hover:cursor-pointer"
-      data-tip="This node type has been deprecated. Click for details"><i className="fa-solid fa-exclamation-triangle"></i></div>
+      data-tip={`This node type has been ${removed ? "removed" : "deprecated"}. Click for details`}><i className="fa-solid fa-exclamation-triangle"></i></div>
       <div
         tabIndex={0}
         className="dropdown-content card card-sm bg-base-100 z-1 w-64 shadow-md">
         <div className="card-body">
-          <p>This node type has been deprecated and will be removed in future.</p>
+          <p>
+            {removed
+              // The graph still saves (the editor POSTs and gets the errors back); it is the
+              // build/run that the unknown node type blocks. Don't tell the user saving is off.
+              ? "This node type has been removed. The node no longer runs, and the pipeline will not run until it is deleted."
+              : "This node type has been deprecated and will be removed in future."}
+          </p>
           {customMessage && <p dangerouslySetInnerHTML={{__html: customMessage}}></p>}
         </div>
       </div>

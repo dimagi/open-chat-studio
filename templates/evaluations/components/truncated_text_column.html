@@ -1,0 +1,7 @@
+{% comment %}
+Clamps a cell's text to 2 lines so a long dataset input/output or generated response
+doesn't blow out the row height; `title` surfaces the full text on hover, and clicking
+the row (see EvaluationResultTableView.get_table_class) opens the detail panel for the
+untruncated version.
+{% endcomment %}
+<div class="line-clamp-2 max-w-md" title="{{ value }}">{{ value }}</div>

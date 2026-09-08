@@ -187,55 +187,10 @@ nav.primary {
   clip-path: polygon(0 60%, 30% 60%, 30% 30%, 60% 30%, 60% 0, 100% 0, 100% 100%, 0 100%);
   border-radius: 2px;
 }
-.nav-links {
-  display: flex; gap: 28px; align-items: center;
-  font-size: 14px; font-weight: 300;
-  letter-spacing: -0.005em;
-  margin-left: auto; margin-right: 36px;
-}
-.nav-links a { color: rgba(255,255,255,0.75); transition: color 120ms; }
-.nav-links a:hover { color: #fff; }
-.nav-links a:active { color: rgba(255,255,255,0.6); }
-.nav-links a.nav-active { color: #fff; font-weight: 500; }
 
 /* ---- SOLUTIONS INLINE GROUP ---- */
-.nav-sol-group {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  border-left: 1px solid rgba(255,255,255,0.18);
-  border-right: 1px solid rgba(255,255,255,0.18);
-  padding: 0 24px;
-}
-.nav-sol-label {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.4);
-  white-space: nowrap;
-  flex-shrink: 0;
-  text-decoration: none;
-  transition: color 120ms;
-}
-.nav-sol-label:hover { color: rgba(255,255,255,0.72); }
-.nav-links .nav-sol-label { color: rgba(255,255,255,0.4); }
-.nav-links .nav-sol-label:hover { color: rgba(255,255,255,0.72); }
 
 /* ---- NAV SECTION DIVIDERS ---- */
-.nav-links a.nav-sep {
-  position: relative;
-}
-.nav-links a.nav-sep::before {
-  content: '';
-  position: absolute;
-  left: -14px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 14px;
-  width: 1px;
-  background: rgba(255,255,255,0.3);
-}
 
 .nav-cta { display: flex; gap: 10px; align-items: center; }
 .nav-wrap .btn-ghost { color: #fff; border-color: rgba(255,255,255,0.45); }
@@ -244,31 +199,6 @@ nav.primary {
 .nav-wrap .btn-primary:hover { background: #0F0A45; transform: translateY(-1px); }
 
 /* ---- MOBILE NAV HAMBURGER ---- */
-.nav-hamburger {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 8px;
-  margin-left: 8px;
-  border-radius: 6px;
-}
-.nav-hamburger span {
-  display: block;
-  width: 22px;
-  height: 2px;
-  background: rgba(255,255,255,0.9);
-  border-radius: 2px;
-  transition: transform 0.22s ease, opacity 0.22s ease;
-  transform-origin: center;
-}
-.nav-hamburger.is-open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.nav-hamburger.is-open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
-.nav-hamburger.is-open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -2385,37 +2315,56 @@ h3.feature-title {
 .page--resources .hero.hero-dark .btn-ghost-on-dark:hover { border-color: var(--ink); }
 
 /* ---- FOOTER ---- */
+/* One compact line: logo, copyright, pipe-separated links. Replaced the tall
+   four-column marketing footer this frame was cut down from; the .footer-grid /
+   .footer-brand / .footer-col / .footer-bottom rules went with the markup that
+   used them. */
 footer {
   background: #009090;
   color: rgba(255,255,255,0.72);
-  padding: 96px 0 36px;
-  font-size: 14px;
+  padding: 22px 0;
+  font-size: 13px;
   border-top: none;
 }
-.footer-brand p { color: rgba(255,255,255,0.62); }
-.footer-col a { color: rgba(255,255,255,0.72); }
-.footer-bottom { color: rgba(255,255,255,0.55); }
-.footer-grid {
-  display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: 48px;
-  margin-bottom: 80px;
+.footer-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
 }
-.footer-brand { max-width: 320px; }
-.footer-brand .logo { color: var(--paper); margin-bottom: 20px; }
-.footer-brand .logo-img { height: 44px; }
-.footer-brand p { color: rgba(255,255,255,0.52); }
-.footer-col h2 {
-  color: var(--paper);
-  font-family: var(--mono);
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.16em;
-  margin: 0 0 22px;
+.footer-line-logo { height: 22px; width: auto; display: block; }
+.footer-line-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.footer-col ul { list-style: none; padding: 0; margin: 0; }
-.footer-col li { margin-bottom: 6px; }
-.footer-col a { color: rgba(255,255,255,0.65); transition: color 120ms; }
-.footer-col a:hover { color: var(--paper); }
-/* External-link marker: any footer link that opens a new tab gets a ↗ */
-.footer-col a[target="_blank"]::after { content: " \2197"; font-size: 0.82em; opacity: 0.6; }
+/* nowrap keeps a label and its trailing separator on the same line. */
+.footer-line-links li { display: flex; align-items: center; white-space: nowrap; }
+/* Separators live here rather than in the markup, so a suppressed Sign In (the
+   auth pages override that block) or an unset legal URL cannot leave an orphan.
+   :not(:last-child) works because the {% if %} gates omit the <li> entirely.
+   It is ::after, NOT `li + li::before`: CSS cannot ask whether an item begins a
+   line, so a leading separator lands at the START of a wrapped line as a dangling
+   pipe. Trailing it instead means a wrap ends a line with the separator, which
+   reads as a continuation. This bites at any width, since the item count changes
+   with the settings above — 4 links unset, 7 set — so it can't be fixed with a
+   breakpoint. */
+.footer-line-links li:not(:last-child)::after {
+  content: "|";
+  margin: 0 11px;
+  color: rgba(255,255,255,0.30);
+}
+.footer-line-links a { color: rgba(255,255,255,0.80); text-decoration: none; transition: color 120ms; }
+.footer-line-links a:hover { color: var(--paper); text-decoration: underline; }
+/* Stacked on mobile, where separators read as noise rather than structure. */
+@media (max-width: 860px) {
+  .footer-line-links { gap: 4px 16px; }
+  .footer-line-links li:not(:last-child)::after { content: none; margin: 0; }
+}
+
 .footer-badges {
   display: flex;
   flex-direction: row;
@@ -2439,14 +2388,6 @@ footer {
   font-size: 9.5px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.14em;
   margin: 20px 0 12px;
-}
-.footer-bottom {
-  border-top: 1px solid rgba(255,255,255,0.08);
-  padding-top: 28px;
-  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-  font-family: var(--mono);
-  font-size: 12px; letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.42);
 }
 
 /* ---- SOLUTIONS DYNAMIC STAGE ---- */
@@ -3425,33 +3366,7 @@ footer {
   .provider-points { grid-template-columns: 1fr; gap: 24px; }
   .feature-row { grid-template-columns: 1fr; gap: 40px; padding: 56px 0; }
   .feature-row.reverse > .feature-visual { order: 0; }
-  .footer-grid { grid-template-columns: 1fr 1fr; }
-  .nav-hamburger { display: flex; }
   .nav-wrap { position: sticky; }
-  .nav-links {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0; right: 0;
-    z-index: 200;
-    flex-direction: column;
-    gap: 0;
-    margin: 0;
-    background: #4d62c8;
-    border-top: 1px solid rgba(255,255,255,0.14);
-    box-shadow: 0 12px 32px -8px rgba(10,6,32,0.30);
-    padding: 8px 0 18px;
-  }
-  .nav-links.is-open { display: flex; }
-  .nav-links a {
-    padding: 13px 28px;
-    font-size: 15px;
-    font-weight: 400;
-    border-bottom: none;
-  }
-  .nav-links a.nav-active { font-weight: 500; }
-  .nav-sol-group { display: contents; }
-  .nav-sol-label { display: none; }
   .mock-floating.f1, .mock-floating.f2 { display: none; }
   .picker-result { padding: 36px 28px; }
   .picker-programs { grid-template-columns: 1fr 1fr; }
@@ -3503,7 +3418,6 @@ footer {
   .stats-grid { grid-template-columns: 1fr; }
   .picker-programs { grid-template-columns: 1fr; }
   .picker-result { padding: 28px 22px; }
-  .footer-grid { grid-template-columns: 1fr; gap: 32px; }
   .picker-teaser { padding: 28px 22px; }
   .pricing-grid { grid-template-columns: 1fr; }
   .support-grid { grid-template-columns: 1fr; }

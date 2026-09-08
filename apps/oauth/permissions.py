@@ -100,6 +100,18 @@ def token_allows_chatbot(token, experiment) -> bool:
     return token.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
 
 
+def applications_allowing_chatbot(experiment):
+    """The team's machine applications whose allowlist names `experiment` -- inverse of `token_allows_chatbot`.
+
+    Only client-credentials applications are listed.
+    """
+    return OAuth2Application.objects.filter(
+        team_id=experiment.team_id,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        allowed_chatbots=experiment.get_working_version_id(),
+    ).order_by("name")
+
+
 def application_allows_chatbot(request, experiment) -> bool:
     """True when the request may start a chat with `experiment`."""
     return token_allows_chatbot(getattr(request, "auth", None), experiment)

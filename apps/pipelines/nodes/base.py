@@ -23,6 +23,7 @@ from apps.pipelines.nodes.context import NodeContext
 
 if TYPE_CHECKING:
     from apps.pipelines.repository import ORMRepository
+    from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.pipelines")
 
@@ -476,7 +477,6 @@ class OptionsSource(StrEnum):
     llm_provider_id = "llm_provider_id"
     llm_provider_model_id = "llm_provider_model_id"
     source_material = "source_material"
-    assistant = "assistant"
     tools = "tools"
     custom_actions = "custom_actions"
     collection = "collection"
@@ -489,6 +489,24 @@ class OptionsSource(StrEnum):
     template_variables = "template_variables"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
+
+    def get_resolver(self) -> Callable[["Team", list], set]:
+        """The function answering "which of these values may this team actually use?" for this list.
+
+        Raises for a list that can deny nothing -- the prompt-variable lists, and the tool-config
+        lists that nest their options under provider types. Reaching here with one of those means
+        something asked to check a value against a list that cannot refuse it, which is a bug rather
+        than a permissive answer.
+
+        The resolvers themselves live in ``node_metadata``, beside the querysets the option lists are
+        built from, so what a client is offered and what a write accepts cannot come apart.
+        """
+        from apps.pipelines.nodes.node_metadata import RESOLVERS  # noqa: PLC0415 - circular: node_metadata→base
+
+        try:
+            return RESOLVERS[self]
+        except KeyError:
+            raise NotImplementedError(f"'{self}' has no resolver: it offers nothing a team could be denied.") from None
 
 
 class VisibleWhen(BaseModel):
@@ -566,6 +584,8 @@ class NodeSchema(BaseModel):
     can_add: bool | None = None
     deprecated: bool = False
     deprecation_message: str | None = None
+    removed: bool = False
+    """The node class is gone; this schema is a stub so stored nodes of the type still render."""
     documentation_link: str | None = None
     field_order: list[str] | None = Field(
         None,
@@ -584,7 +604,7 @@ class NodeSchema(BaseModel):
         if self.can_add is None:
             self.can_add = is_pipeline_node
 
-        if self.deprecated:
+        if self.deprecated or self.removed:
             self.can_add = False
         return self
 
@@ -594,6 +614,7 @@ class NodeSchema(BaseModel):
         schema["ui:can_delete"] = self.can_delete
         schema["ui:can_add"] = self.can_add
         schema["ui:deprecated"] = self.deprecated
+        schema["ui:removed"] = self.removed
         if self.deprecated and self.deprecation_message:
             schema["ui:deprecation_message"] = self.deprecation_message
         if self.field_order:

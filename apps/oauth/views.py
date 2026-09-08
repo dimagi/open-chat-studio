@@ -19,7 +19,7 @@ from apps.teams.models import Team
 from apps.teams.utils import set_current_team
 
 from .forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApplicationForm
-from .models import OAuth2Application
+from .models import OAuth2Application, manage_applications_url
 from .tables import GlobalOAuth2ApplicationTable, OAuth2ApplicationTable
 
 
@@ -118,12 +118,19 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         return super().form_valid(form)
 
 
-def _manage_team_url(team_slug: str) -> str:
-    """The team admin page, anchored on the OAuth applications section it is managed from.
+class TeamApplicationBreadcrumbsMixin:
+    """Name the list this form was reached from.
 
-    The anchor is the slugified section title rendered by `generic/object_home_content.html`.
+    The team-scoped and global application forms share a template but live in different URL
+    spaces, so each side supplies its own parent rather than the template guessing from a `team`
+    that a create view has no object to read it off.
     """
-    return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(**kwargs) | {
+            "breadcrumb_parent_url": manage_applications_url(self.request.team.slug),
+            "breadcrumb_parent_label": "OAuth Applications",
+        }
 
 
 class ApplicationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -154,7 +161,9 @@ class ApplicationTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, S
         return OAuth2Application.objects.filter(team=self.request.team).order_by("-created")
 
 
-class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateApplication(
+    TeamApplicationBreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView
+):
     """Register a new OAuth application for the current team."""
 
     model = OAuth2Application
@@ -179,7 +188,7 @@ class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
         return super().get_form_kwargs() | {"team": self.request.team}
 
     def get_success_url(self):
-        return _manage_team_url(self.request.team.slug)
+        return manage_applications_url(self.request.team.slug)
 
     def form_valid(self, form):
         form.instance.user = self.request.user
@@ -189,7 +198,7 @@ class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
         return super().form_valid(form)
 
 
-class EditApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditApplication(TeamApplicationBreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     """Update an OAuth application belonging to the current team."""
 
     model = OAuth2Application
@@ -209,7 +218,7 @@ class EditApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Update
         return super().get_form_kwargs() | {"team": self.request.team}
 
     def get_success_url(self):
-        return _manage_team_url(self.request.team.slug)
+        return manage_applications_url(self.request.team.slug)
 
 
 class DeleteApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -275,6 +284,8 @@ class CreateGlobalApplication(SuperuserRequiredMixin, CreateView):
     extra_context = {
         "title": "Register New Global Application",
         "button_text": "Register",
+        "breadcrumb_parent_url": reverse_lazy("oauth2_provider:global_application_home"),
+        "breadcrumb_parent_label": "Global OAuth Applications",
     }
 
     def get_initial(self):
@@ -299,6 +310,8 @@ class EditGlobalApplication(SuperuserRequiredMixin, UpdateView):
     extra_context = {
         "title": "Update Global Application",
         "button_text": "Update",
+        "breadcrumb_parent_url": reverse_lazy("oauth2_provider:global_application_home"),
+        "breadcrumb_parent_label": "Global OAuth Applications",
     }
 
     def get_queryset(self):

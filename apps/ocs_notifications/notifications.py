@@ -231,7 +231,6 @@ class AffectedResources:
 
     chatbots: dict[str, str]
     pipelines: dict[str, str]
-    assistants: dict[str, str]
     evaluators: dict[str, str]
 
     def summary_text(self) -> str:
@@ -258,7 +257,6 @@ class AffectedResources:
         return (
             ("chatbot", self.chatbots),
             ("pipeline", self.pipelines),
-            ("assistant", self.assistants),
             ("evaluator", self.evaluators),
         )
 

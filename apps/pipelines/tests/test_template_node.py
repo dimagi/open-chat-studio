@@ -1,7 +1,7 @@
 import pytest
 
 from apps.experiments.models import Participant
-from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import RenderTemplate
 from apps.pipelines.repository import InMemoryPipelineRepository
@@ -52,5 +52,5 @@ def test_render_template_undefined_variable_error():
     node = RenderTemplate(name="test", node_id="123", django_node=None, template_string="{{ nonexistent_var }}")
     config = {"configurable": {"repo": InMemoryPipelineRepository(session=experiment_session)}}
 
-    with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "template_string"'):
+    with pytest.raises(NodeUserConfigRunError, match=r'UndefinedError in field "template_string"'):
         node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)

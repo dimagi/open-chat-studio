@@ -11,7 +11,7 @@ FLAG_NAME = "flag_ai_cost_monitoring"
 
 def forwards(apps, schema_editor):
     Flag = apps.get_model("teams", "Flag")
-    Flag.objects.get_or_create(name=FLAG_NAME, defaults={"everyone": False})
+    Flag.objects.get_or_create(name=FLAG_NAME, defaults={"everyone": None, "superusers": False})
 
 
 def backwards(apps, schema_editor):

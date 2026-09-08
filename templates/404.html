@@ -9,6 +9,16 @@
   <h2 class="pg-subtitle">
     {% translate "If you think this page should exist, double-check that you are signed in as the right person." %}
   </h2>
+  {% if request.user.is_authenticated and exception == "PublicLinkWrongHost" %}
+    <div class="mt-4 alert">
+      <div class="prose">
+        <p>
+          Public links are served from <span class="font-bold">{{ server_url }}</span>.
+          You reached this one on <span class="font-bold">{{ request.get_host }}</span>.
+        </p>
+      </div>
+    </div>
+  {% endif %}
   {% if request.user.is_superuser and exception == "TeamAccessDenied" and request.resolver_match.kwargs.team_slug %}
     <div class="mt-4 alert">
       <div class="prose">

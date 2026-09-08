@@ -1,0 +1,24 @@
+<div class="card bg-base-200">
+  <div class="card-body">
+    <h3 class="card-title text-base"><i class="fa-solid fa-link me-1"></i> Public link</h3>
+    <div class="join w-full">
+      <input type="text" id="public_link_url" value="{{ widget.public_url }}"
+             class="input input-bordered join-item flex-1 font-mono text-sm" readonly>
+      <button class="btn btn-neutral join-item" type="button"
+              onclick="SiteJS.app.copyToClipboard(this, 'public_link_url')" title="Copy to clipboard">
+        <i class="fa-solid fa-copy"></i> Copy
+      </button>
+    </div>
+    <p class="text-sm opacity-70 mt-2">Anyone with this link can chat with the published version of this chatbot.</p>
+    <button type="button" class="btn btn-warning btn-sm mt-2 self-start"
+            hx-post="{{ widget.edit_url }}"
+            hx-include="closest form"
+            hx-vals='{"regenerate_link": "1"}'
+            hx-target="#channel_create_edit_modal_placeholder"
+            hx-swap="innerHTML"
+            hx-confirm="Regenerate the link? The current link stops working immediately and every live conversation on it is ended.">
+      <i class="fa-solid fa-rotate"></i> Regenerate link
+    </button>
+    <input type="hidden" name="{{ widget.name }}" value="{{ widget.value }}">
+  </div>
+</div>

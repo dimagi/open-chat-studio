@@ -26,7 +26,8 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import ServiceProviderConfigError
+from .exceptions import ConnectionTestNotSupportedError, NoTestableModelError, ServiceProviderConfigError
+from .whatsapp import WhatsAppProviderMixin
 
 if TYPE_CHECKING:
     from apps.service_providers import llm_service, messaging_service, speech_service, tracing
@@ -70,7 +71,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     openai = (
         "openai",
         _("OpenAI"),
-        {"supports_transcription": True, "supports_assistants": True, "max_vector_stores": 2},
+        {"supports_transcription": True, "max_vector_stores": 2},
     )
     azure = "azure", _("Azure OpenAI")
     anthropic = "anthropic", _("Anthropic")
@@ -78,6 +79,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
+    litellm = "litellm", _("LiteLLM")
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
@@ -95,13 +97,19 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return self.additional_config.get("supports_transcription", False)
 
     @property
-    def supports_assistants(self):
-        return self.additional_config.get("supports_assistants", False)
-
-    @property
     def max_vector_stores(self) -> int | None:
         """Returns the maximum number of vector stores supported per request, or None if unlimited."""
         return self.additional_config.get("max_vector_stores")
+
+    @property
+    def supports_connection_test(self) -> bool:
+        """Whether this type has a chat endpoint a credential check could reach.
+
+        Voyage AI is embeddings-only, so there is no request to send, nothing the user could
+        do to make it testable, and no verification state worth keeping for it. Lives on the
+        type rather than the row because the create page has a type and no row yet.
+        """
+        return self != LlmProviderTypes.voyage
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -116,6 +124,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AnthropicConfigForm
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return forms.OpenAIGenericConfigForm
+            case LlmProviderTypes.litellm:
+                return forms.LiteLLMConfigForm
             case LlmProviderTypes.deepseek:
                 return forms.DeepSeekConfigForm
             case LlmProviderTypes.google:
@@ -153,6 +163,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AnthropicLlmService(**config)
             case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.litellm:
+                return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:
                 return llm_service.DeepSeekLlmService(**config)
             case LlmProviderTypes.google:
@@ -164,6 +176,18 @@ class LlmProviderTypes(LlmProviderType, Enum):
         return None
 
 
+CONNECTION_TEST_TIMEOUT_SECONDS = 10
+# A provider is free to return a response of any size, and this is rendered on the page.
+CONNECTION_ERROR_DETAIL_LIMIT = 2000
+VERIFIED_CREDENTIALS_KEY = "verified_credentials"
+VERIFICATION_ERROR_KEY = "verification_error"
+
+
+def _error_detail(exc: Exception, limit: int = CONNECTION_ERROR_DETAIL_LIMIT) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
 class LlmProvider(BaseTeamModel, ProviderMixin):
     objects = LlmProviderObjectManagerObjectManager()
@@ -171,6 +195,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     type = models.CharField(max_length=255, choices=LlmProviderTypes.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True, null=True)
 
     class Meta:
         ordering = ("type", "name")
@@ -181,6 +206,29 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     @property
     def type_enum(self):
         return LlmProviderTypes[str(self.type)]
+
+    @property
+    def supports_connection_test(self) -> bool:
+        return self.type_enum.supports_connection_test
+
+    @property
+    def credentials_verified(self) -> bool:
+        """Whether the credentials currently saved here have passed a check.
+
+        A missing key and a stored False both mean no - never checked, and checked-and-rejected
+        both need the next save to check again.
+        """
+        return (self.extra_data or {}).get(VERIFIED_CREDENTIALS_KEY) is True
+
+    @property
+    def verification_error(self) -> str:
+        """What the provider said when it last rejected these credentials, if anything.
+
+        Kept beside the flag rather than flashed through the session: it explains the
+        credentials that are still saved here, so it has to be there when the user comes
+        back to the page rather than only on the redirect after the save.
+        """
+        return (self.extra_data or {}).get(VERIFICATION_ERROR_KEY, "")
 
     def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
@@ -201,6 +249,112 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         If file_ids are provided, they will be linked to the index.
         """
         return self.get_llm_service().create_remote_index(name, file_ids)
+
+    def test_connection(self) -> None:
+        """Send one minimal chat request to verify the provider's credentials work.
+
+        Raises `ConnectionTestNotSupportedError` for provider types, like Voyage AI, that
+        don't support chat completions at all; `NoTestableModelError` if the team has no
+        model configured to test with; `ServiceProviderConfigError` if the saved config is
+        invalid for a type that does support the test. Callers classify and report all three.
+        """
+        from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
+
+        # Local import: default_models imports LlmProviderModel/LlmProviderTypes from this
+        # module, so importing it at module level here would be circular.
+        from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
+
+        if not self.supports_connection_test:
+            raise ConnectionTestNotSupportedError(self.type)
+
+        # Prefer the provider type's registered default model (get_default_model, the same
+        # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
+        # model most likely to actually work; fall back to any other model the team has
+        # configured for this type if they don't have that one. A team-configured model
+        # wins over a global one, same priority as pricing-rule resolution elsewhere in
+        # this app.
+        team_models = (
+            LlmProviderModel.objects.for_team(self.team)
+            .filter(type=self.type)
+            .order_by(models.F("team_id").desc(nulls_last=True))
+        )
+        default_model = get_default_model(self.type)
+        model = team_models.filter(name=default_model.name).first() if default_model else None
+        if model is None:
+            model = team_models.first()
+        if model is None:
+            raise NoTestableModelError(self.type)
+
+        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+        chat_model.invoke([HumanMessage(content="Hello")])
+
+    def run_connection_test_hook(self) -> tuple[list[str], str]:
+        """Verify the saved credentials, record the outcome, and report what happened.
+
+        The caller runs this after the save's own transaction has already committed. No
+        transaction wraps this call: `test_connection()` makes a synchronous external LLM
+        request that can take several seconds, and holding a DB connection open for that
+        long (or letting it get repeated on a transaction retry/rollback) is exactly what
+        running this after commit, with no transaction of its own, avoids.
+
+        Returns (warnings, detail): short messages for Django's messages framework, and the
+        provider's own error text, which is too long for a flash message and belongs on the
+        page instead. Both empty on success.
+
+        A provider type that doesn't support this test at all (Voyage AI) stays silent -
+        there's nothing actionable to tell the user, and no world in which they can make it
+        testable. A missing model, on the other hand, produces its own warning: on a fresh
+        provider (or one whose models were all removed), credentials genuinely haven't been
+        verified yet, and "add a model, then save" is a real next step.
+
+        Everything else hands back the provider's own error rather than a category, because
+        the provider says why far more precisely than we can infer from a status code.
+        """
+        warnings: list[str] = []
+        detail = ""
+        verified = False
+        try:
+            self.test_connection()
+        except ConnectionTestNotSupportedError:
+            # No state to keep: an empty bag is what "this question does not apply" looks like.
+            return warnings, detail
+        except NoTestableModelError:
+            warnings.append(
+                "Provider saved, but there are no models configured to verify against yet. "
+                "Add one on the Models tab, then save again."
+            )
+        except Exception as exc:
+            log.exception("Could not verify credentials for LLM provider %s", self.pk)
+            warnings.append("Provider saved, but the credentials could not be verified.")
+            detail = _error_detail(exc)
+        else:
+            verified = True
+        self._record_connection_test(verified, detail)
+        return warnings, detail
+
+    def _record_connection_test(self, verified: bool, detail: str) -> None:
+        """Store the outcome so the next save knows whether it still has something to check,
+        and the page can say why the last check failed.
+
+        Merged into extra_data rather than assigned over it: the field is a general bag, and
+        the next thing stored beside these keys must not disappear on a retest. The stored
+        response describes the most recent check only, so a check that produced none - a pass,
+        or one that never reached the provider - clears it rather than leaving a stale reason.
+
+        The row is re-read under a lock rather than merged into the copy this instance was
+        loaded from: the check ahead of it makes a synchronous external request that can take
+        seconds, which is long enough for another save to have written here in the meantime.
+        """
+        with transaction.atomic():
+            provider = LlmProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = {**(provider.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
+            if detail:
+                extra_data[VERIFICATION_ERROR_KEY] = detail
+            else:
+                extra_data.pop(VERIFICATION_ERROR_KEY, None)
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
+        self.extra_data = extra_data
 
 
 class LlmProviderModelManager(models.Manager):
@@ -570,7 +724,7 @@ class MessagingProviderType(models.TextChoices):
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)
-class MessagingProvider(BaseTeamModel, ProviderMixin):
+class MessagingProvider(BaseTeamModel, ProviderMixin, WhatsAppProviderMixin):
     objects = MessagingProviderObjectManager()
     type = models.CharField(max_length=255, choices=MessagingProviderType.choices)
     name = models.CharField(max_length=255)
@@ -589,6 +743,49 @@ class MessagingProvider(BaseTeamModel, ProviderMixin):
 
     def get_messaging_service(self) -> "messaging_service.MessagingService":
         return self.type_enum.get_messaging_service(self.config)
+
+    def get_absolute_url(self) -> str:
+        return reverse(
+            "service_providers:edit",
+            kwargs={
+                "team_slug": get_slug_for_team(self.team_id),
+                "provider_type": const.MESSAGING,
+                "pk": self.id,
+            },
+        )
+
+    def resolve_number(self, number: str) -> dict | None:
+        """Confirm `number` belongs to this provider and return the channel config it implies.
+
+        Returns None when the provider does not have the number. The dict is merged into the
+        channel's ``extra_data``, so it carries whatever that platform needs to address the
+        number -- for Meta Cloud API that is the ``phone_number_id`` sends are addressed to.
+
+        Resolving lives here rather than on the service because the Meta numbers are cached on
+        the provider row, and the service is built from config alone.
+        """
+        if self.type_enum == MessagingProviderType.meta_cloud_api:
+            return self.resolve_whatsapp_number(number)
+        return {"number": number} if self.get_messaging_service().resolve_number(number) else None
+
+    def _update_extra_data(self, key: str, value) -> None:
+        """Set one key in ``extra_data`` without disturbing the others.
+
+        ``extra_data`` also holds the webhook verify token hash, which the config form writes,
+        so the row is re-read under a lock and only ``key`` is replaced.
+        """
+        with transaction.atomic():
+            provider = MessagingProvider.objects.select_for_update().get(pk=self.pk)
+            extra_data = provider.extra_data or {}
+            extra_data[key] = value
+            provider.extra_data = extra_data
+            provider.save(update_fields=["extra_data"])
+        self.extra_data = extra_data
+
+    def run_post_create_hook(self) -> None:
+        """Type-specific work to run once, after the provider is first created."""
+        if self.type == MessagingProviderType.meta_cloud_api.value:
+            self.queue_whatsapp_provider_sync()
 
 
 class AuthProviderType(models.TextChoices):
@@ -714,8 +911,24 @@ class TraceProvider(BaseTeamModel):
         host = (self.config.get("host") or "").rstrip("/")
         return f"{host}/project/{project_id}" if host else None
 
-    def get_service(self) -> "tracing.Tracer":
-        return self.type_enum.get_service(self.config)
+    def get_service(self, sample_rate: float | None = None) -> "tracing.Tracer | None":
+        """Build this provider's tracer.
+
+        ``sample_rate``, when given, overrides the provider's own configured sample rate (a
+        chatbot's per-experiment setting takes precedence over the team-wide default). See
+        ``tracing.langfuse.normalize_sample_rate`` for what an effective rate of ``0.0`` or
+        blank does; an effective rate of ``0.0`` returns ``None`` instead of a tracer.
+        """
+        from .tracing.langfuse import normalize_sample_rate  # noqa: PLC0415 - lazy: avoids loading langfuse at startup
+
+        config = self.config
+        if sample_rate is not None:
+            config = {**config, "sample_rate": sample_rate}
+        effective_rate = normalize_sample_rate(config.get("sample_rate"))
+        if effective_rate is None:
+            return None
+        config = {**config, "sample_rate": effective_rate}
+        return self.type_enum.get_service(config)
 
 
 class EmbeddingProviderModelManager(models.Manager):

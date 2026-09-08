@@ -1,5 +1,7 @@
 {% comment %}
-  Aggregates for a completed run.
+  Aggregates for a completed run. The "Aggregates" card title lives in the parent
+  template (evaluation_result_home.html), not here, so it survives the htmx swap below
+  untouched instead of flickering on every poll.
 
   Polls itself while the run is finalizing: a run's completion side effects run as their own
   task after the status commits (ADR-0047), so the results page can load before the
@@ -9,58 +11,78 @@
 <div id="run-aggregates"
      {% if finalizing %}hx-get="{{ aggregates_url }}" hx-trigger="load delay:2s" hx-swap="outerHTML"{% endif %}>
   {% if finalizing %}
-    <div class="mb-6 flex items-center gap-2 text-sm text-base-content/60">
+    <div class="flex items-center gap-2 text-sm text-base-content/60">
       <span class="loading loading-spinner loading-xs"></span>
       Computing aggregates…
     </div>
   {% elif aggregates %}
-    <div class="mb-6">
-      <h2 class="text-lg font-semibold mb-4">Aggregates</h2>
-      {% for agg in aggregates %}
-        <div class="card bg-base-100 shadow-sm mb-4">
-          <div class="card-body py-4">
-            <h3 class="card-title text-base">{{ agg.evaluator.name }}</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
-              {% for field_name, stats in agg.aggregates.items %}
-                <div class="border border-base-300 rounded-lg p-3">
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium">{{ field_name }}</span>
-                    <span class="text-xs text-base-content/60">n={{ stats.count }}</span>
-                  </div>
-                  {% if stats.type == "numeric" %}
-                    <div class="grid grid-cols-2 gap-1 text-sm">
-                      <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
-                      <div>median: <span class="font-mono">{{ stats.median }}</span></div>
-                      <div>min: <span class="font-mono">{{ stats.min }}</span></div>
-                      <div>max: <span class="font-mono">{{ stats.max }}</span></div>
+    {% for agg in aggregates %}
+      <div class="mb-4 last:mb-0">
+        <div class="text-xs text-base-content/60 mb-2">{{ agg.evaluator.name }}</div>
+        <div class="grid grid-cols-1 gap-3">
+          {% for field_name, stats in agg.aggregates.items %}
+            <div class="border border-base-300 rounded-lg p-3">
+              <div class="flex justify-between items-center mb-2">
+                <span class="font-medium">{{ field_name }}</span>
+                <span class="text-xs text-base-content/60">
+                  {% if stats.type == "categorical" %}mode <span class="text-base-content/80 font-medium">{{ stats.mode }}</span> ·{% endif %}
+                  n={{ stats.count }}
+                </span>
+              </div>
+              {% if stats.type == "numeric" %}
+                <div class="grid grid-cols-2 gap-1 text-sm">
+                  <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
+                  <div>median: <span class="font-mono">{{ stats.median }}</span></div>
+                  <div>min: <span class="font-mono">{{ stats.min }}</span></div>
+                  <div>max: <span class="font-mono">{{ stats.max }}</span></div>
+                </div>
+              {% elif stats.type == "categorical" %}
+                <div class="space-y-2">
+                  {% for value, pct in stats.distribution.items %}
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-base-content/70">{{ value }}</span>
+                        <span class="font-medium">{{ pct }}%</span>
+                      </div>
+                      <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+                        <div class="bg-primary h-full rounded-full" style="width: {{ pct }}%"></div>
+                      </div>
                     </div>
-                  {% elif stats.type == "categorical" %}
-                    <div class="text-sm mb-1">mode: <span class="font-medium">{{ stats.mode }}</span></div>
-                    <div class="flex flex-wrap gap-1">
-                      {% for value, pct in stats.distribution.items %}
-                        <span class="badge badge-sm badge-outline">{{ value }}: {{ pct }}%</span>
-                      {% endfor %}
+                  {% endfor %}
+                </div>
+              {% elif stats.type == "binary" %}
+                <div class="space-y-2">
+                  {% if stats.true_count is not None %}
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-base-content/70">{{ stats.true_label }}</span>
+                        <span class="font-medium">{% widthratio stats.true_count stats.count 100 %}%</span>
+                      </div>
+                      <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+                        <div class="bg-primary h-full rounded-full" style="width: {% widthratio stats.true_count stats.count 100 %}%"></div>
+                      </div>
                     </div>
-                  {% elif stats.type == "binary" %}
-                    <div class="grid grid-cols-2 gap-1 text-sm">
-                      {% if stats.mean is not None %}
-                        <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
-                      {% endif %}
-                      {% if stats.true_count is not None %}
-                        <div>{{ stats.true_label }}: <span class="font-mono">{{ stats.true_count }}/{{ stats.count }}</span></div>
-                        <div>{{ stats.false_label }}: <span class="font-mono">{{ stats.false_count }}/{{ stats.count }}</span></div>
-                      {% endif %}
-                      {% if stats.excluded_count %}
-                        <div class="col-span-2 text-base-content/60">excluded: <span class="font-mono">{{ stats.excluded_count }}</span></div>
-                      {% endif %}
+                    <div>
+                      <div class="flex justify-between text-xs mb-1">
+                        <span class="text-base-content/70">{{ stats.false_label }}</span>
+                        <span class="font-medium">{% widthratio stats.false_count stats.count 100 %}%</span>
+                      </div>
+                      <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+                        <div class="bg-primary h-full rounded-full" style="width: {% widthratio stats.false_count stats.count 100 %}%"></div>
+                      </div>
                     </div>
                   {% endif %}
+                  {% if stats.excluded_count %}
+                    <div class="text-xs text-base-content/60">excluded: <span class="font-mono">{{ stats.excluded_count }}</span></div>
+                  {% endif %}
                 </div>
-              {% endfor %}
+              {% endif %}
             </div>
-          </div>
+          {% endfor %}
         </div>
-      {% endfor %}
-    </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-sm text-base-content/60">No aggregate data for this run.</p>
   {% endif %}
 </div>

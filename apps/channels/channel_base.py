@@ -13,6 +13,7 @@ from apps.channels.stages.core import (
     ChatMessageCreationStage,
     ConsentCheckStage,
     ConsentFlowStage,
+    DuplicateDeliveryStage,
     MessageTypeValidationStage,
     ParticipantIdentifierStage,
     ParticipantResolverStage,
@@ -126,6 +127,9 @@ class ChannelBase(ABC):
         """
         return MessageProcessingPipeline(
             core_stages=[
+                # First, so a replayed delivery is dropped before it creates or touches
+                # a participant or session.
+                DuplicateDeliveryStage(),
                 ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),

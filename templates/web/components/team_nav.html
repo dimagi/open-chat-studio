@@ -106,14 +106,6 @@
     </a>
   </li>
   {% endif %}
-  {% if perms.assistants.view_openaiassistant %}
-  <li>
-    <a href="{% url 'assistants:home' request.team.slug %}" {% if active_tab == 'assistants' %}class="menu-active"{% endif %}>
-      <i class="fa-solid fa-robot"></i>
-      {% translate "Assistants" %}
-    </a>
-  </li>
-  {% endif %}
   {% if perms.pipelines.view_pipeline %}
   <li>
     <a href="{% url 'pipelines:home' request.team.slug %}" {% if active_tab == 'pipelines' %}class="menu-active"{% endif %}>

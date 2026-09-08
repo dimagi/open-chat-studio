@@ -1,0 +1,78 @@
+{% load i18n seconds_to_human %}
+{% if not event_triggers %}
+  <div class="app-card text-center text-base-content/60">
+    {% translate "No event triggers configured for this chatbot." %}
+  </div>
+{% else %}
+  <div class="app-card p-0 overflow-hidden">
+    <table class="table pg-table text-xs">
+      <thead>
+        <tr>
+          <th>{% translate "Event" %}</th>
+          <th>{% translate "Trigger" %}</th>
+          <th>{% translate "Fired at" %}</th>
+          <th>{% translate "Result" %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if has_event_logs %}
+          {% for item in event_triggers %}
+            {% with trigger=item.trigger event_logs=item.event_logs %}
+              {% for event_log in event_logs %}
+                <tr class="hover:bg-base-200 transition-colors">
+                  <td>{{ event_log.chat_message.content|default:"—"|truncatechars:60 }}</td>
+                  <td>
+                    {% if trigger.trigger_type == "TimeoutTrigger" %}
+                      {% translate "No response for" %} {{ trigger.delay|seconds_to_human }}
+                    {% else %}
+                      {{ trigger.get_type_display }}
+                    {% endif %}
+                    → {{ trigger.action.get_action_type_display }}
+                  </td>
+                  <td class="whitespace-nowrap">{{ event_log.created_at|date:"DATETIME_FORMAT" }}</td>
+                  <td>
+                    {% if event_log.status == "success" %}
+                      <span class="badge badge-success">{{ event_log.status|title }}</span>
+                    {% else %}
+                      <span class="badge badge-error">{{ event_log.status|title }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-right">
+                    <button class="btn btn-ghost btn-xs"
+                            onclick="document.getElementById('event-log-{{ event_log.id }}').showModal()">
+                      <i class="fa-solid fa-eye"></i> {% translate "Log" %}
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% endwith %}
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-base-content/60">{% translate "No events fired for this session yet." %}</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% for item in event_triggers %}
+    {% for event_log in item.event_logs %}
+      <dialog id="event-log-{{ event_log.id }}" class="modal">
+        <div class="modal-box">
+          <h3 class="font-bold text-lg">{% translate "Event log" %}</h3>
+          <p class="text-sm text-base-content/60 mt-1">{{ event_log.created_at|date:"DATETIME_FORMAT" }}</p>
+          <pre class="mt-4 p-3 bg-base-200 rounded text-sm whitespace-pre-wrap border border-base-300">{{ event_log.log|default:"—" }}</pre>
+          <div class="modal-action">
+            <form method="dialog">
+              <button class="btn">{% translate "Close" %}</button>
+            </form>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button>{% translate "close" %}</button>
+        </form>
+      </dialog>
+    {% endfor %}
+  {% endfor %}
+{% endif %}

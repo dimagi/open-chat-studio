@@ -1,0 +1,5 @@
+{% load render_table from django_tables2 %}
+<p class="text-neutral-500 text-sm mb-2">{{ table.rows|length }} of {{ total_count }}</p>
+<div class="overflow-x-auto">
+  {% render_table table "table/tailwind_js_pagination.html" %}
+</div>

@@ -76,6 +76,11 @@ def perplexity_credentials():
     return _credentials_or_skip(LlmProviderTypes.perplexity, "PERPLEXITY_API_KEY")
 
 
+@pytest.fixture()
+def litellm_credentials():
+    return _credentials_or_skip(LlmProviderTypes.litellm, "LITELLM_API_KEY and LITELLM_API_BASE")
+
+
 def _run_llm_pipeline_test(
     team_with_users,
     provider_type: LlmProviderTypes,
@@ -238,4 +243,23 @@ class TestPerplexityIntegration:
             team_with_users=team_with_users,
             provider_type=LlmProviderTypes.perplexity,
             provider_config=perplexity_credentials,
+        )
+
+
+@pytest.mark.django_db()
+class TestLiteLLMIntegration:
+    """Integration tests for LiteLLM. LiteLLM ships no default models (every backend
+    is install-specific), so unlike the fixed-catalog providers above, the model to
+    test against has to come from the environment too."""
+
+    def test_litellm_chat_completion(self, team_with_users, litellm_credentials):
+        """Test LiteLLM chat completion through pipeline against a real local proxy"""
+        model_name = os.environ.get("LITELLM_TEST_MODEL")
+        if not model_name:
+            pytest.skip("LITELLM_TEST_MODEL not set")
+        _run_llm_pipeline_test(
+            team_with_users=team_with_users,
+            provider_type=LlmProviderTypes.litellm,
+            provider_config=litellm_credentials,
+            model_name=model_name,
         )

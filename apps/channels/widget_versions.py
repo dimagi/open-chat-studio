@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
-LATEST_VERSION = "0.11.0"
+LATEST_VERSION = "0.12.0"
 
 # Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
 # header, so a missing/unparseable version is treated as older than everything.
@@ -74,13 +74,19 @@ def latest_deprecation() -> WidgetDeprecation | None:
     return max(DEPRECATIONS, key=lambda d: Version(d.below_version))
 
 
-def is_deprecated(version: str | None, deprecation: WidgetDeprecation) -> bool:
-    """Whether `version` falls under `deprecation`.
+def is_older_than(version: str | None, floor: str) -> bool:
+    """Whether `version` is below `floor`.
 
-    A missing or unparseable version is treated as older than everything.
+    A missing or unparseable version counts as older than everything: a widget that cannot
+    tell us its version cannot be assumed to meet a floor.
     """
     parsed = _parse(version)
-    return parsed is None or parsed < Version(deprecation.below_version)
+    return parsed is None or parsed < Version(floor)
+
+
+def is_deprecated(version: str | None, deprecation: WidgetDeprecation) -> bool:
+    """Whether `version` falls under `deprecation`."""
+    return is_older_than(version, deprecation.below_version)
 
 
 def get_deprecation(version: str | None) -> WidgetDeprecation | None:
@@ -138,6 +144,21 @@ AUTH_LEVEL_SESSION_TOKEN = 2
 # Widget releases that introduced each auth capability.
 EMBED_KEY_INTRODUCED = Version("0.5.1")
 SESSION_TOKEN_INTRODUCED = Version("0.9.0")
+
+# The release that ships the `authTokenProvider` prop. It exists so the
+# channel dialog and the docs can name the release an `oauth`-mode embed needs.
+MIN_OAUTH_WIDGET_VERSION = "0.12.0"
+
+# Widget release that collects consent in the composer (public channel design, D7). Consent is
+# enforced on the Chat API only for widgets from this release on: older widgets, 0.12.0 included,
+# treat every 403 as a dead session and would restart in a loop.
+CONSENT_INTRODUCED = Version("0.13.0")
+
+
+def widget_enforces_consent(version: str | None) -> bool:
+    """Whether a widget on `version` understands the `consent_required` refusal."""
+    parsed = _parse(version)
+    return parsed is not None and parsed >= CONSENT_INTRODUCED
 
 
 def level_for_version(version: str | None) -> int:

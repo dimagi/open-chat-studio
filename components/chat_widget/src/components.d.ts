@@ -94,10 +94,10 @@ export namespace Components {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default), `"true"`, or the bare attribute: `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`, `"false"`, `null`, `undefined`, or `0`: nothing is stored; a reload starts over. String values are trimmed and compared case-insensitively. Any other string (including `"0"`) resolves to `localStorage`. Ignored when `sessionId` is provided.
           * @default true
          */
-        "persistentSession": boolean;
+        "persistentSession": boolean | 'tab' | 'true' | 'false';
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
           * @default 60 * 24
@@ -162,7 +162,7 @@ declare global {
     }
 }
 declare namespace LocalJSX {
-    type OneOf<K extends string, PropT, AttrT = PropT> = { [P in K]: PropT } & { [P in `attr:${K}` | `prop:${K}`]?: never } | { [P in `attr:${K}`]: AttrT } & { [P in K | `prop:${K}`]?: never } | { [P in `prop:${K}`]: PropT } & { [P in K | `attr:${K}`]?: never };
+    type OneOf<K extends string, PropT, AttrT = PropT> = { [P in K]: PropT } & { [P in `attr:${K}`]?: never } | { [P in `attr:${K}`]: AttrT } & { [P in K]?: never };
 
     interface OpenChatStudioWidget {
         /**
@@ -246,10 +246,10 @@ declare namespace LocalJSX {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default), `"true"`, or the bare attribute: `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`, `"false"`, `null`, `undefined`, or `0`: nothing is stored; a reload starts over. String values are trimmed and compared case-insensitively. Any other string (including `"0"`) resolves to `localStorage`. Ignored when `sessionId` is provided.
           * @default true
          */
-        "persistentSession"?: boolean;
+        "persistentSession"?: boolean | 'tab' | 'true' | 'false';
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
           * @default 60 * 24
@@ -319,7 +319,7 @@ declare namespace LocalJSX {
         "starterQuestions": string;
         "userId": string;
         "userName": string;
-        "persistentSession": boolean;
+        "persistentSession": string;
         "persistentSessionExpire": number;
         "allowFullScreen": boolean;
         "allowAttachments": boolean;

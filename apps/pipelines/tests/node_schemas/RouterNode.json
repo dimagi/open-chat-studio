@@ -150,5 +150,6 @@
     "prompt",
     "keywords",
     "tag_output_message"
-  ]
+  ],
+  "ui:removed": false
 }

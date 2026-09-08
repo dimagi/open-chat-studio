@@ -135,16 +135,6 @@ class VersionedParamSpec:
 
 
 _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
-    "AssistantNode": (
-        VersionedParamSpec(
-            param_name="assistant_id",
-            model_label="assistants.OpenAiAssistant",
-            display_name="assistant",
-            versioning=ParamVersioning.NEW_VERSION,
-            archiving=ParamArchiving.ARCHIVE,
-            fk_field="assistant",
-        ),
-    ),
     "LLMResponseWithPrompt": (
         VersionedParamSpec(
             param_name="source_material_id",

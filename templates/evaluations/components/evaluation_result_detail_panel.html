@@ -1,0 +1,95 @@
+{% load cost_tracking humanize %}
+<div id="result-detail-panel-overlay"
+     class="fixed inset-0 z-50"
+     data-result-id="{{ message_id }}"
+     x-data="{ open: false, close() { this.open = false; setTimeout(() => { document.getElementById('result-detail-panel-overlay')?.remove(); window.syncEvalResultHighlight?.() }, 300) } }"
+     x-init="requestAnimationFrame(() => open = true)"
+     @keydown.escape.window="close()">
+  <div class="absolute inset-0 bg-black/40 transition-opacity duration-300 ease-out"
+       :class="open ? 'opacity-100' : 'opacity-0'"
+       @click="close()"></div>
+
+  <div class="absolute inset-y-0 right-0 h-full w-full max-w-xl bg-base-100 shadow-2xl flex flex-col
+              transition-transform duration-300 ease-out"
+       :class="open ? 'translate-x-0' : 'translate-x-full'">
+    <div class="flex items-start justify-between p-6 pb-0">
+      <div>
+        <div class="text-xs font-semibold text-base-content/60 tracking-wide">RESULT</div>
+        <div class="text-2xl font-bold">#{{ result_number }}</div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button type="button" class="btn btn-sm btn-square btn-ghost border border-base-300"
+                {% if prev_url %}hx-get="{{ prev_url }}" hx-target="#result-detail-panel" hx-swap="innerHTML"{% else %}disabled{% endif %}
+                title="Previous result">
+          <i class="fa-solid fa-chevron-up"></i>
+        </button>
+        <button type="button" class="btn btn-sm btn-square btn-ghost border border-base-300"
+                {% if next_url %}hx-get="{{ next_url }}" hx-target="#result-detail-panel" hx-swap="innerHTML"{% else %}disabled{% endif %}
+                title="Next result">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
+        <button type="button" class="btn btn-sm btn-square btn-ghost border border-base-300" @click="close()" title="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+      <div class="flex flex-wrap gap-2">
+        {% for badge in badges %}
+          {% if badge.polarity == "positive" %}
+            <span class="badge badge-success">{{ badge.label }}: {{ badge.value }}</span>
+          {% elif badge.polarity == "negative" %}
+            <span class="badge badge-error">{{ badge.label }}: {{ badge.value }}</span>
+          {% else %}
+            <span class="badge badge-outline">{{ badge.label }}: {{ badge.value }}</span>
+          {% endif %}
+        {% endfor %}
+        {% if tokens is not None %}
+          <span class="badge badge-ghost">
+            {{ tokens|intcomma }} tokens{% if cost is not None %} · ${{ cost|cost_display }}{% endif %}
+          </span>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">DATASET INPUT</div>
+        <div class="bg-base-200 rounded-lg p-3 text-sm whitespace-pre-wrap">{{ dataset_input|default:"—" }}</div>
+      </div>
+
+      {% if dataset_output %}
+        <div>
+          <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">DATASET OUTPUT (EXPECTED)</div>
+          <div class="bg-base-200 rounded-lg p-3 text-sm whitespace-pre-wrap">{{ dataset_output }}</div>
+        </div>
+      {% endif %}
+
+      <div>
+        <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">GENERATED RESPONSE</div>
+        <div class="bg-primary/10 rounded-lg p-3 text-sm whitespace-pre-wrap">{{ generated_response|default:"—" }}</div>
+      </div>
+
+      {% for field in text_fields %}
+        <div>
+          <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">{{ field.label|upper }}</div>
+          <div class="text-sm whitespace-pre-wrap">{{ field.value }}</div>
+        </div>
+      {% endfor %}
+
+      {% if session_url or trace_url %}
+        <div class="flex gap-2 pt-2">
+          {% if session_url %}
+            <a href="{{ session_url }}" class="btn btn-sm btn-outline" target="_blank" rel="noopener">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> View session
+            </a>
+          {% endif %}
+          {% if trace_url %}
+            <a href="{{ trace_url }}" class="btn btn-sm btn-outline" target="_blank" rel="noopener">
+              <i class="fa-solid fa-code-branch"></i> View trace
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>

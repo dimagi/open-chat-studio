@@ -1,4 +1,5 @@
 import textwrap
+from zoneinfo import available_timezones
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
@@ -334,6 +335,44 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    timezone = serializers.CharField(
+        label="Time zone",
+        required=False,
+        allow_blank=True,
+        help_text="Optional IANA time zone name of the participant's device (e.g. 'Africa/Johannesburg'), "
+        "recorded in the participant's data for this chatbot only. "
+        "Unrecognised time zone names are ignored.",
+    )
+
+    def validate_timezone(self, value):
+        # An unrecognised zone must not block the session start; drop it instead.
+        return value if value and value in available_timezones() else None
+
+
+class ChatConsentSerializer(serializers.Serializer):
+    required = serializers.BooleanField(
+        label="Consent required",
+        help_text="True until the participant accepts the chatbot's consent form. Send and upload return"
+        " `403 consent_required` while this is true; poll is never gated.",
+    )
+    form_version_id = serializers.IntegerField(
+        label="Consent form version ID",
+        allow_null=True,
+        help_text="Identifies the frozen consent form text. Post it back to `/consent/`. A changed form"
+        " gets a new id, and consent is required again until the participant accepts it.",
+    )
+    text = serializers.CharField(
+        label="Consent text",
+        allow_null=True,
+        help_text="Rendered HTML of the consent form. Present only while consent is required.",
+    )
+
+
+class ChatConsentRequest(serializers.Serializer):
+    form_version_id = serializers.IntegerField(
+        label="Consent form version ID",
+        help_text="The `form_version_id` from the start or poll response being accepted.",
+    )
 
 
 class ChatStartSessionResponse(serializers.Serializer):
@@ -347,6 +386,7 @@ class ChatStartSessionResponse(serializers.Serializer):
     )
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
+    consent = ChatConsentSerializer(read_only=True)
 
 
 class ChatSendMessageRequest(serializers.Serializer):
@@ -377,6 +417,7 @@ class ChatPollResponse(serializers.Serializer):
     session_status = serializers.ChoiceField(
         choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
     )
+    consent = ChatConsentSerializer(read_only=True)
 
 
 class TriggerBotMessageRequest(serializers.Serializer):

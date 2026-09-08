@@ -12,6 +12,11 @@ from django_tables2 import SingleTableView
 
 from apps.annotations.models import Tag
 from apps.evaluations import evaluators
+from apps.evaluations.const import (
+    EVALUATOR_PROMPT_VARIABLES,
+    evaluator_prompt_variable_hints,
+    evaluator_prompt_variable_names,
+)
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
@@ -118,6 +123,14 @@ class EvaluatorFormsetMixin:
             "evaluator_schemas": _evaluator_schemas(),
             "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
             "llm_provider_selection": _initial_llm_provider_selection(form, self.request.team),
+            # Both modes up front: the form switches between them client-side.
+            "prompt_variables_by_mode": {
+                mode: {
+                    "autocomplete": evaluator_prompt_variable_names(mode),
+                    "hints": evaluator_prompt_variable_hints(mode),
+                }
+                for mode in EVALUATOR_PROMPT_VARIABLES
+            },
         }
 
 

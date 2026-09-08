@@ -18,31 +18,35 @@ repos:
       - id: check-merge-conflict
       - id: no-commit-to-branch
         args: [--branch, main]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
   - repo: https://github.com/adamchainz/djade-pre-commit
     rev: '1.9.0'
     hooks:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+    rev: v0.16.4
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.43.2
+    rev: v1.44.2
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.8.0'
+    rev: 'v10.9.1'
     hooks:
       - id: eslint
         # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
-          - eslint@10.8.0
+          - eslint@10.9.1
           - '@eslint/js@10.0.1'
-          - typescript-eslint@8.65.0
+          - typescript-eslint@8.68.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]

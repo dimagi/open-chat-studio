@@ -28,7 +28,6 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.users.models import CustomUser
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -542,14 +541,10 @@ class TestExperimentSession:
             session = ExperimentSessionFactory.create(experiment__pipeline=pipeline)
             assert session.requires_participant_data() == participant_data_injected
 
-        # Case 3 - Pipeline Assistant Node
-        assistant = OpenAiAssistantFactory.create(instructions=prompt)
-        _test_pipline("AssistantNode", params={"assistant_id": assistant.id})
-
-        # Case 4 - Pipeline LLMResponseWithPrompt Node
+        # Case 3 - Pipeline LLMResponseWithPrompt Node
         _test_pipline("LLMResponseWithPrompt", params={"prompt": prompt})
 
-        # Case 5 - Pipeline Router Node
+        # Case 4 - Pipeline Router Node
         _test_pipline("RouterNode", params={"prompt": prompt})
 
     @pytest.mark.parametrize(
@@ -790,16 +785,6 @@ class TestExperimentModel:
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory.create(working_version=working_exp, team=team, version_number=2)
 
-    @pytest.mark.parametrize("assistant_id_populated", [True, False])
-    def test_get_assistant_from_pipeline(self, assistant_id_populated):
-        assistant = OpenAiAssistantFactory.create()
-        assistant_id = assistant.id if assistant_id_populated else None
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
-        experiment = ExperimentFactory.create(pipeline=pipeline)
-        expected_assistant_result = assistant if assistant_id_populated else None
-        assert experiment.get_assistant() == expected_assistant_result
-
     def _setup_original_experiment(self):
         experiment = ExperimentFactory.create()
         team = experiment.team
@@ -869,6 +854,23 @@ class TestExperimentModel:
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
+
+    def test_create_new_version_persists_the_frozen_consent_form(self):
+        experiment = self._setup_original_experiment()
+
+        version = experiment.create_new_version(make_default=True)
+
+        persisted_version = Experiment.objects.get(id=version.id)
+        assert persisted_version.consent_form_id != experiment.consent_form_id
+        assert persisted_version.consent_form.working_version_id == experiment.consent_form_id
+
+    def test_publishing_a_consent_form_chatbot_leaves_no_unreleased_changes(self):
+        experiment = self._setup_original_experiment()
+
+        experiment.create_new_version(make_default=True)
+
+        experiment.refresh_from_db()
+        assert experiment.compare_with_latest() is False
 
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
@@ -994,27 +996,19 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_with_pipeline(self, delete_openai_assistant_task):
-        assistant = OpenAiAssistantFactory.create()
+    def test_archive_with_pipeline(self):
         pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
         experiment = ExperimentFactory.create(pipeline=pipeline)
 
-        # For a version, the pipeline should be archived as well as the assistant that it references
+        # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        assert assistant.versions.count() == 1
-        assistant_version = assistant.versions.first()
         new_version.archive()
         self._assert_archived(new_version.pipeline, True)
-        self._assert_archived(assistant_version, True)
-        delete_openai_assistant_task.assert_called_with(assistant_version.id)
-        delete_openai_assistant_task.reset_mock()
 
+        # ...but archiving the working experiment leaves the working pipeline alone.
         experiment.archive()
         self._assert_archived(experiment.pipeline, False)
-        self._assert_archived(assistant, False)
 
     def _assert_archived(self, model_obj, archived: bool):
         model_obj.refresh_from_db(fields=["is_archived"])

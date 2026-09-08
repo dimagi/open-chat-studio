@@ -80,7 +80,7 @@ def _overview(team):
 
 def _api_results(team, metric_names):
     query = api_usage.resolve_query_filters(
-        api_usage.UsageQuery(team=team, metrics=set(metric_names), start=_START, end=_END, tz=_TZ)
+        api_usage.UsageQuery(team=team, metrics=list(metric_names), start=_START, end=_END, tz=_TZ)
     )
     return api_usage.usage_query(query).results
 

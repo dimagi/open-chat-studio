@@ -8,8 +8,10 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
+from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
 
 @pytest.fixture()
@@ -79,3 +81,47 @@ def test_channel_list_highlights_disabled_channels(telegram_channel, enabled, ex
 
     assert ("badge-warning" in html) is expect_badge
     assert ("Disabled" in html) is expect_badge
+
+
+@pytest.fixture()
+def whatsapp_channel(team_with_users):
+    """A channel on a Meta provider whose numbers have been synced."""
+    provider = MessagingProviderFactory(
+        team=team_with_users,
+        type=MessagingProviderType.meta_cloud_api,
+        config={"access_token": "token", "business_id": "biz"},
+        extra_data={
+            "whatsapp_numbers": {
+                "state": "ok",
+                "numbers": [
+                    {
+                        "phone_number_id": "111",
+                        "number": "+27647084804",
+                        "display": "+27 64 708 4804",
+                        "verified_name": "TenantHive",
+                    }
+                ],
+            }
+        },
+    )
+    experiment = ExperimentFactory(team=team_with_users)
+    return ExperimentChannelFactory(
+        team=team_with_users,
+        experiment=experiment,
+        platform=ChannelPlatform.WHATSAPP,
+        messaging_provider=provider,
+        extra_data={"number": "+27647084804", "phone_number_id": "111"},
+    )
+
+
+@pytest.mark.django_db()
+def test_whatsapp_dialog_renders_both_number_controls(client, team_with_users, whatsapp_channel):
+    """Both controls ship with the page so switching provider needs no request."""
+    response = _open_edit_dialog(client, team_with_users, whatsapp_channel)
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert '<select class="select w-full"' in content
+    assert 'id="id_number_free"' in content
+    assert "numbersByProvider" in content
+    assert "+27 64 708 4804 - TenantHive" in content

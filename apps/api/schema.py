@@ -1,11 +1,12 @@
 import copy
+from collections.abc import Iterator
 
 from django.conf import settings
 from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension, OpenApiSerializerFieldExtension
 from rest_framework.permissions import SAFE_METHODS
 
-from apps.api.v2.write.serializers import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 # Placeholder hosts baked into the schema: DRF hardcodes ``api.example.org`` in the cursor
@@ -71,7 +72,7 @@ def prune_unused_tags(result, **kwargs):
     return result
 
 
-def _closed_serializers(base):
+def _closed_serializers(base: type) -> Iterator[type]:
     """``base``'s subclasses, however deeply nested."""
     for cls in base.__subclasses__():
         yield cls
@@ -90,7 +91,7 @@ def mirror_unknown_key_rejection(result, **kwargs):
     drf-spectacular gives a PATCH body, so a new closed serializer needs no edit here. A
     postprocessing hook (signature: ``result`` -> ``result``).
     """
-    closed = set()
+    closed: set[str] = set()
     for cls in _closed_serializers(RejectsUnknownKeys):
         name = cls.__name__.removesuffix("Serializer")
         closed |= {name, f"Patched{name}"}

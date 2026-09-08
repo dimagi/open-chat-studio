@@ -10,13 +10,14 @@ from django.contrib.postgres.search import SearchVector
 from django.db import DatabaseError, transaction
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
 from apps.documents.models import Collection, CollectionFile, FileStatus, format_failure_reason
 from apps.documents.readers import FileReadException
 from apps.documents.retrieval import search_collection
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.llm_service.openai_files import create_files_remote
+from apps.utils.deletion import chunk_list
 
 logger = logging.getLogger("ocs.index_manager")
 
@@ -257,8 +258,6 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
             return False
 
     def upload_file_to_remote(self, file: File):
-        from apps.assistants.sync import create_files_remote  # noqa: PLC0415 - circular: assistants.sync→index_managers
-
         create_files_remote(self.client, files=[file])
 
     def delete_files(self, files: list[File]):

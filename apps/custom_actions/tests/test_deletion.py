@@ -184,7 +184,7 @@ def test_delete_view_does_not_block_when_only_archived_pipeline_references_actio
         team=team_with_users,
         data=_pipeline_data_referencing_action(action, llm_provider, llm_provider_model),
     )
-    # Archived pipelines/assistants/experiments are acceptable to break on cascade.
+    # Archived pipelines/experiments are acceptable to break on cascade.
     Pipeline.objects.filter(pk=pipeline.pk).update(is_archived=True)
 
     url = reverse("custom_actions:delete", kwargs={"team_slug": team_with_users.slug, "pk": action.pk})

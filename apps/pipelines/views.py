@@ -22,7 +22,7 @@ from apps.experiments.models import Experiment
 from apps.pipelines.exceptions import MissingNodeDataError
 from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
-from apps.pipelines.models import Pipeline
+from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
     get_node_parameter_values,
@@ -36,6 +36,7 @@ from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAME
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
@@ -112,7 +113,7 @@ def get_widget_page_context(pipeline, experiment=None):
         return {}
 
     # data_without_positions rebuilds every node from its row, reading the collection_indexes M2M.
-    prefetch_related_objects([pipeline], "node_set__collection_indexes")
+    prefetch_related_objects([pipeline], *NODE_RESOURCE_PREFETCHES)
     context = {
         "pipeline_structure": pipeline.data_without_positions,
     }
@@ -177,7 +178,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             ),
             "default_values": get_node_default_values(self.request.team),
             "allow_edit_name": True,
-            "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
+            "flags_enabled": [
+                name
+                for name in Flag.objects.values_list("name", flat=True)
+                if flag_is_active_for_team(self.request.team, name)
+            ],
             "read_only": pipeline.is_a_version,
             "widget_page_context": get_widget_page_context(pipeline),
             **llm_model_parameter_context(),
@@ -230,9 +235,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         return _handle_pipeline_patch(request, pk, team_slug)
 
     # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
-    pipeline = get_object_or_404(
-        Pipeline.objects.prefetch_related("node_set__collection_indexes"), pk=pk, team=request.team
-    )
+    pipeline = get_object_or_404(Pipeline.objects.prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team)
 
     return JsonResponse(
         {
@@ -256,7 +259,7 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
 
     with transaction.atomic():
         pipeline = get_object_or_404(
-            Pipeline.objects.prefetch_related("node_set__collection_indexes"), pk=pk, team=request.team
+            Pipeline.objects.prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team
         )
         pipeline.name = data.name
         edge_data, node_data = split_flow_data(data.data)
@@ -289,7 +292,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
 
     with transaction.atomic():
         pipeline = get_object_or_404(
-            Pipeline.objects.select_for_update().prefetch_related("node_set__collection_indexes"),
+            Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES),
             pk=pk,
             team=request.team,
         )

@@ -144,17 +144,12 @@
             <!-- Mode-specific variable hints -->
             <template x-if="getWidget(field) === 'text_editor_widget'">
                 <div class="mt-1">
-                    <template x-if="evaluationMode === 'session'">
-                        <p class="text-sm text-gray-500">
-                            {% translate "Available variables:" %} <code>{full_history}</code>, <code>{context.[param]}</code>
-                        </p>
-                    </template>
-                    <template x-if="evaluationMode !== 'session'">
-                        <p class="text-sm text-gray-500">
-                            {% translate "Available variables:" %} <code>{input.content}</code>, <code>{output.content}</code>,
-                            <code>{context.[param]}</code>, <code>{full_history}</code>, <code>{generated_response}</code>
-                        </p>
-                    </template>
+                    <p class="text-sm text-gray-500">
+                        {% translate "Available variables:" %}
+                        <template x-for="(hint, i) in promptVariableHints" :key="hint">
+                            <span><template x-if="i > 0"><span>, </span></template><code x-text="hint"></code></span>
+                        </template>
+                    </p>
                 </div>
             </template>
 
@@ -546,12 +541,14 @@
           onload="SiteJS.tagRuleSelect.bootstrapTagRuleSelects();"></script>
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
+  {{ prompt_variables_by_mode|json_script:"prompt-variables-by-mode" }}
   {% if object.params %}{{ object.params|json_script:"existing-params" }}{% elif form.params.value %}{{ form.params.value|json_script:"existing-params" }}{% endif %}
   <script>
     document.addEventListener('alpine:init', () => {
       Alpine.data('evaluatorForm', () => ({
         evaluatorSchemas: JSON.parse(document.getElementById("evaluator-schemas").textContent),
         parameterValues: JSON.parse(document.getElementById("parameter-values").textContent),
+        promptVariablesByMode: JSON.parse(document.getElementById("prompt-variables-by-mode").textContent),
         selectedType: '{% if object.type %}{{ object.type|escapejs }}{% else %}{{ form.type.value|default:"" }}{% endif %}',
         evaluationMode: '{{ form.evaluation_mode.value|default:"message" }}',
         llmProviderId: '{{ llm_provider_selection.llm_provider_id|default_if_none:""|escapejs }}',
@@ -568,6 +565,9 @@
           evalModeRadios.forEach(radio => {
               radio.addEventListener('change', (e) => {
                   this.evaluationMode = e.target.value;
+                  // data-autocomplete-vars is read once at construction, so the editor must be
+                  // rebuilt to pick up the new mode. Content survives via the hidden textarea.
+                  this.$nextTick(() => this.rebuildPromptEditors());
               });
           });
 
@@ -640,6 +640,12 @@
               }
             });
           }
+        },
+
+        rebuildPromptEditors() {
+          const create = window.SiteJS?.editors?.createPromptEditor;
+          if (!create) return;
+          document.querySelectorAll('.prompt-editor').forEach(el => create(el));
         },
 
         getWidget(field) {
@@ -842,10 +848,16 @@
           }
         },
 
+        get promptVariables() {
+          return this.promptVariablesByMode[this.evaluationMode] || this.promptVariablesByMode.message;
+        },
+
         get autocompleteVars() {
-          return this.evaluationMode === 'session'
-            ? JSON.stringify(['full_history', 'context'])
-            : JSON.stringify(['input.content', 'output.content', 'context', 'full_history', 'generated_response']);
+          return JSON.stringify(this.promptVariables.autocomplete);
+        },
+
+        get promptVariableHints() {
+          return this.promptVariables.hints;
         },
 
         get paramsJson() {

@@ -146,15 +146,19 @@ class TeamChangeForm(forms.ModelForm):
 class TeamPublicKeyForm(forms.ModelForm):
     class Meta:
         model = Team
-        fields = ("public_key",)
+        fields = ("public_key", "is_migrating")
         labels = {
             "public_key": _("Public Key"),
+            "is_migrating": _("Migration mode"),
         }
         help_texts = {
             "public_key": _("Public key used to seal data exported from this team."),
+            "is_migrating": _(
+                "Freeze this team's outbound message firing while its data is migrated to another server."
+            ),
         }
         widgets = {
-            "public_key": forms.Textarea(attrs={"rows": 4}),
+            "public_key": forms.Textarea(attrs={"rows": 4, "placeholder": "-----BEGIN PUBLIC KEY-----"}),
         }
 
     def clean_public_key(self):
@@ -177,6 +181,16 @@ class TeamMigrationForm(forms.ModelForm):
             "is_migrating": _(
                 "Freeze this team's outbound message firing while its data is migrated to another server."
             ),
+        }
+
+
+class TeamMfaForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("require_mfa",)
+        labels = {"require_mfa": _("Require two-factor authentication")}
+        help_texts = {
+            "require_mfa": _("Every member of this team must enrol in two-factor authentication to keep access."),
         }
 
 

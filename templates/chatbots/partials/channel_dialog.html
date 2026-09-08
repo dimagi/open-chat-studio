@@ -38,7 +38,11 @@
       </div>
       {% if extra_form %}
         <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
-          {% render_form_fields extra_form %}
+          {% if extra_form.custom_template %}
+            {% include extra_form.custom_template with form=extra_form %}
+          {% else %}
+            {% render_form_fields extra_form %}
+          {% endif %}
         </div>
       {% endif %}
       {% if success_message %}

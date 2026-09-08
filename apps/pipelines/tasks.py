@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 
 from apps.chat.bots import PipelineTestBot
 from apps.pipelines.exceptions import (
+    NodeUserConfigRunError,
     PipelineBuildError,
     PipelineNodeBuildError,
     PipelineNodeRunError,
@@ -39,5 +40,5 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
         return bot.process_input(message_text)
     except PipelineBuildError as e:
         return {"error": e.message}
-    except (GenerationError, PipelineNodeBuildError, PipelineNodeRunError) as e:
+    except (GenerationError, NodeUserConfigRunError, PipelineNodeBuildError, PipelineNodeRunError) as e:
         return {"error": str(e)}

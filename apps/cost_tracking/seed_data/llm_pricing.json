@@ -125,6 +125,28 @@
   },
   {
     "provider_type": "anthropic",
+    "model_name": "claude-fable-5-1",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.05"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00025"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.0125"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
     "model_name": "claude-fable-5",
     "rules": [
       {
@@ -614,6 +636,24 @@
     ]
   },
   {
+    "provider_type": "google",
+    "model_name": "gemini-3.8-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00075"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00375"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000075"
+      }
+    ]
+  },
+  {
     "provider_type": "google_vertex_ai",
     "model_name": "gemini-2.5-flash",
     "rules": [
@@ -760,6 +800,24 @@
   {
     "provider_type": "google_vertex_ai",
     "model_name": "gemini-3.7-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00075"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00375"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000075"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-3.8-flash",
     "rules": [
       {
         "service_kind": "llm_input",
@@ -1165,6 +1223,28 @@
   },
   {
     "provider_type": "openai",
+    "model_name": "gpt-6-astra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.05"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.0125"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
     "model_name": "o3",
     "rules": [
       {
@@ -1516,6 +1596,46 @@
       {
         "service_kind": "llm_output",
         "unit_price": "0.0012"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-3-5-haiku-latest",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0008"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.004"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00008"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.001"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "o4-mini-high",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0011"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0044"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000275"
       }
     ]
   }

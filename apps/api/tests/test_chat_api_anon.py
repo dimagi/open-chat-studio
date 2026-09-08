@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.files.models import FilePurpose
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -44,6 +44,11 @@ def test_start_chat_session(team_with_users, api_client, experiment):
             "versions": [],
         },
         "participant": {"identifier": mock.ANY, "remote_id": ""},
+        "consent": {
+            "required": True,
+            "form_version_id": experiment.consent_form_id,
+            "text": experiment.consent_form.get_rendered_content(),
+        },
     }
     assert response_json["session_token"]  # token must be non-null
     assert response_json["participant"]["identifier"].startswith("anon:")
@@ -147,7 +152,16 @@ def test_session_poll(api_client, session):
     url = reverse("api:chat:poll-response", kwargs={"session_id": session.external_id})
     response = api_client.get(url)
     response_json = response.json()
-    assert response_json == {"has_more": False, "messages": [], "session_status": "active"}
+    assert response_json == {
+        "has_more": False,
+        "messages": [],
+        "session_status": "active",
+        "consent": {
+            "required": True,
+            "form_version_id": session.experiment.consent_form_id,
+            "text": session.experiment.consent_form.get_rendered_content(),
+        },
+    }
 
 
 @pytest.mark.django_db()
@@ -188,10 +202,16 @@ def test_session_poll_with_messages(api_client, session):
             "tags": ["test"],
         },
     ]
+    expected_consent = {
+        "required": True,
+        "form_version_id": session.experiment.consent_form_id,
+        "text": session.experiment.consent_form.get_rendered_content(),
+    }
     assert response.json() == {
         "has_more": False,
         "messages": expected_messages,
         "session_status": "active",
+        "consent": expected_consent,
     }
 
     response = api_client.get(url, data={"limit": 1})
@@ -199,4 +219,44 @@ def test_session_poll_with_messages(api_client, session):
         "has_more": True,
         "messages": [expected_messages[0]],
         "session_status": "active",
+        "consent": expected_consent,
     }
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_records_timezone_in_participant_data(api_client, experiment):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "timezone": "Africa/Johannesburg"}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    participant_data = ParticipantData.objects.get(participant=session.participant, experiment=experiment)
+    assert participant_data.data["timezone"] == "Africa/Johannesburg"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "timezone_value",
+    [
+        pytest.param("Mars/Olympus_Mons", id="unrecognised-zone"),
+        pytest.param("", id="blank"),
+    ],
+)
+def test_start_chat_session_ignores_unknown_timezone(api_client, experiment, timezone_value):
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "timezone": timezone_value}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_without_timezone_records_none(api_client, experiment):
+    url = reverse("api:chat:start-session")
+    response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()

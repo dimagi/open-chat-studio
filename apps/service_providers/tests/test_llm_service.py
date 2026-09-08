@@ -14,10 +14,8 @@ from apps.service_providers.models import LlmProviderTypes
 
 def test_open_ai_service():
     assert LlmProviderTypes.openai.supports_transcription
-    assert LlmProviderTypes.openai.supports_assistants
     service = LlmProviderTypes.openai.get_llm_service({"openai_api_key": "test"})
     assert service.supports_transcription
-    assert service.supports_assistants
 
 
 def test_azure_ai_service():
@@ -56,6 +54,7 @@ def test_openai_service_uses_responses_api():
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
         (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
+        (LlmProviderTypes.litellm, {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"}),
     ],
 )
 def test_generic_openai_service_does_not_use_responses_api(provider_type, config):
@@ -79,11 +78,25 @@ def test_minimax_is_openai_compatible_chat_provider():
     assert service._use_responses_api is False
 
 
+def test_litellm_is_openai_compatible_chat_provider():
+    """LiteLLM exposes an OpenAI-compatible chat endpoint, so it is routed through
+    OpenAIGenericService with a user-supplied base URL (unlike groq/perplexity/minimax,
+    LiteLLM has no single canonical endpoint to hardcode in additional_config) and must
+    not use the OpenAI-specific Responses API."""
+    assert LlmProviderTypes.litellm.additional_config == {}
+    service = LlmProviderTypes.litellm.get_llm_service(
+        {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"}
+    )
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "litellm"
+    assert service._use_responses_api is False
+    assert service.openai_api_base == "https://proxy.example.com/v1"
+
+
 def test_voyage_ai_service():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     assert isinstance(service, VoyageAILlmService)
     assert not service.supports_transcription
-    assert not service.supports_assistants
 
 
 def test_voyage_ai_service_returns_local_index_manager():
@@ -105,6 +118,12 @@ def test_voyage_ai_service_returns_local_index_manager():
         pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
         pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
         pytest.param(LlmProviderTypes.minimax, {"openai_api_key": "test"}, "minimax", id="minimax"),
+        pytest.param(
+            LlmProviderTypes.litellm,
+            {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"},
+            "litellm",
+            id="litellm",
+        ),
     ],
 )
 def test_get_llm_service_sets_provider_type_post_construction(provider_type, config, expected_slug):

@@ -1,6 +1,5 @@
 import json
 from io import StringIO
-from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
@@ -9,9 +8,11 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from apps.custom_actions.models import CustomActionOperation
 from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -218,6 +219,35 @@ class TestFlowNodeReadsResourceFKs:
 
         assert node.to_flow_node().data.params["collection_index_ids"] == []
 
+    def test_custom_actions_come_from_the_operation_rows(self):
+        """Params carries no entries, so the served list can only have come off the
+        ``CustomActionOperation`` rows -- sorted, since they have no ordering of their own here."""
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm"})
+        action = CustomActionFactory.create(allowed_operations=["weather_get", "pollen_get"])
+        for operation_id in ("weather_get", "pollen_get"):
+            CustomActionOperationFactory.create(node=node, custom_action=action, operation_id=operation_id)
+
+        assert node.to_flow_node().data.params["custom_actions"] == sorted(
+            [f"{action.id}:weather_get", f"{action.id}:pollen_get"]
+        )
+
+    def test_deleted_custom_action_reads_as_empty(self):
+        """Deleting a CustomAction cascades the operation row away while the entry lingers in params.
+        The params copy must not be served -- the same correction the scalar FKs get."""
+        action = CustomActionFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"name": "llm", "custom_actions": [f"{action.id}:weather_get"]},
+        )
+        node.update_from_params()
+        assert node.custom_action_operations.exists()
+
+        action.delete()
+        node.refresh_from_db()
+        assert node.params["custom_actions"] != []
+
+        assert node.to_flow_node().data.params["custom_actions"] == []
+
     def test_every_resource_id_is_served_from_the_columns(self):
         """The columns, not params, decide what the flow node reports — so all of them are served,
         including the ones a node type never references."""
@@ -227,6 +257,7 @@ class TestFlowNodeReadsResourceFKs:
             "name": "start",
             **{f"{field_name}_id": None for field_name in Node.resource_fk_fields()},
             "collection_index_ids": [],
+            "custom_actions": [],
         }
 
     def test_stored_params_are_left_alone(self):
@@ -357,26 +388,31 @@ class TestEditorEndpointServesResourceFKs:
             pytest.param(6, id="six_nodes"),
         ],
     )
-    def test_editor_load_reads_the_indexes_once(self, authed_client, team_with_users, llm_node_count):
-        """The prefetch lives at the endpoint, so serving the graph hits the collection_indexes
-        through table once however many nodes there are — not once per node."""
+    def test_editor_load_reads_each_resource_table_once(self, authed_client, team_with_users, llm_node_count):
+        """The prefetch lives at the endpoint, so serving the graph hits each table the resource
+        mirror reads once however many nodes there are — not once per node."""
         index = CollectionFactory.create(team=team_with_users, is_index=True)
+        action = CustomActionFactory.create(team=team_with_users)
         pipeline = PipelineFactory.create(team=team_with_users)
         for position in range(llm_node_count):
             NodeFactory.create(
                 pipeline=pipeline,
                 type="LLMResponseWithPrompt",
                 flow_id=f"llm-{position}",
-                params={"name": f"llm-{position}", "collection_index_ids": [index.id]},
+                params={
+                    "name": f"llm-{position}",
+                    "collection_index_ids": [index.id],
+                    "custom_actions": [f"{action.id}:weather_get"],
+                },
             ).update_from_params()
 
         with CaptureQueriesContext(connection) as captured:
             response = authed_client.get(self._url(team_with_users.slug, pipeline.id))
         assert response.status_code == 200
 
-        through_table = Node.collection_indexes.through._meta.db_table
-        index_reads = [query for query in captured.captured_queries if through_table in query["sql"]]
-        assert len(index_reads) == 1, f"{len(index_reads)} reads of {through_table} for {llm_node_count} nodes"
+        for table in (Node.collection_indexes.through._meta.db_table, CustomActionOperation._meta.db_table):
+            reads = [query for query in captured.captured_queries if table in query["sql"]]
+            assert len(reads) == 1, f"{len(reads)} reads of {table} for {llm_node_count} nodes"
 
 
 @pytest.mark.django_db()
@@ -443,21 +479,6 @@ class TestVersioningPopulatesNodeFKFields:
         assert set(new_version.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
         # original unchanged
         assert set(node.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
-
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_assistant_fk_repointed_after_versioning(self):
-        """NEW_VERSION strategy: after versioning, the FK on the new node version
-        points at the versioned assistant, matching the updated params mirror."""
-        assistant = OpenAiAssistantFactory.create()
-        node = NodeFactory.create(
-            type="AssistantNode",
-            params={"assistant_id": assistant.id},
-            assistant=assistant,
-        )
-        new_node_version = node.create_new_version()
-        # FK must reflect the repointed params
-        assert str(new_node_version.assistant_id) == new_node_version.params.get("assistant_id")
-        assert new_node_version.assistant.is_a_version
 
 
 @pytest.mark.django_db()

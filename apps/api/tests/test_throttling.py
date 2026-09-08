@@ -156,9 +156,7 @@ def test_api_over_limit_logs_would_block_in_log_only_mode(experiment, caplog):
 @pytest.mark.django_db()
 def test_exempt_team_is_never_blocked(experiment):
     """The flag_ignore_rate_limiting flag bypasses enforcement."""
-    flag, _ = get_waffle_flag_model().objects.update_or_create(
-        name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": False}
-    )
+    flag, _ = get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": None})
     flag.teams.add(experiment.team)
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
@@ -258,3 +256,25 @@ def test_chat_api_throttle_buckets_an_oauth_caller_on_its_channel(experiment):
 
     assert response.status_code == 201, response.json()
     assert [call.args[1:] for call in checked.call_args_list] == [("channel", str(channel.pk))]
+
+
+@pytest.mark.django_db()
+def test_chat_api_throttle_keys_a_public_start_on_the_visitor_ip(experiment):
+    channel = ExperimentChannelFactory.create(
+        experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": "tok"}
+    )
+    request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
+    request.auth = channel
+    view = _view_stub()
+    assert ChatAPIRateThrottle().identity(request, view) == ("ip", "203.0.113.9")
+
+
+@pytest.mark.django_db()
+def test_chat_api_throttle_still_keys_an_embed_start_on_the_channel(experiment):
+    channel = ExperimentChannelFactory.create(
+        experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "tok"}
+    )
+    request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
+    request.auth = channel
+    view = _view_stub()
+    assert ChatAPIRateThrottle().identity(request, view) == ("channel", str(channel.pk))

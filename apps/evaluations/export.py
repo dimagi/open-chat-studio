@@ -8,8 +8,22 @@ code paths.
 """
 
 from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+
+if TYPE_CHECKING:
+    from apps.evaluations.models import Evaluator
+
+# Acronyms .title() would otherwise mangle ("Suspected Ai" instead of "Suspected AI")
+# when deriving a column header from a field name.
+_LABEL_ACRONYMS = {"ai", "id", "url", "llm", "api"}
+
+
+def _field_label(field_name: str) -> str:
+    words = field_name.replace("_", " ").split()
+    return " ".join(word.upper() if word.lower() in _LABEL_ACRONYMS else word.capitalize() for word in words)
 
 
 def _populate_message_row_fixed_fields(row_data: OrderedDict, result, include_ids: bool = False) -> None:
@@ -67,6 +81,89 @@ def build_evaluation_table_data(results, include_ids: bool = False) -> list[dict
         row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
 
     return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
+
+
+@dataclass(frozen=True)
+class CategoricalValue:
+    """One possible value of a categorical/binary evaluator output field, as a
+    (raw, label) pair. `raw` is what a row's dynamic-column value stringifies to —
+    a choice field stores the choice string itself, a binary field stores 0/1.
+
+    `polarity` ("positive"/"negative"/"neutral") drives the results table's badge
+    color. There is no schema concept of which choice is "good", so it defaults to the
+    first-listed value being positive and the second negative - a real signal for a
+    field like ["Acceptable", "Unacceptable"] or a binary field's true/false, but not
+    something that generalizes past two values (three or more choices has no obvious
+    polarity, so those stay neutral).
+    """
+
+    raw: str
+    label: str
+    polarity: str = "neutral"
+
+
+@dataclass(frozen=True)
+class CategoricalColumn:
+    """One evaluator output field whose values are enumerable (choice/binary), keyed by
+    the same composite string `build_evaluation_table_data` uses for that column
+    (`"{field_name} ({evaluator.name})"`), so it matches straight against a row dict's
+    keys for both filtering and badge rendering."""
+
+    column_key: str
+    field_label: str
+    values: list[CategoricalValue]
+
+
+def categorical_columns_for_evaluators(evaluators: "list[Evaluator]") -> list[CategoricalColumn]:
+    """Every choice/binary output field across *evaluators*, in evaluator then field order.
+
+    Evaluators with no `output_schema` (Python evaluators) contribute nothing.
+    """
+    result = []
+    for evaluator in evaluators:
+        schema = (evaluator.params or {}).get("output_schema") or {}
+        for field_name, field_def in schema.items():
+            field_type = (field_def or {}).get("type")
+            if field_type == "choice":
+                choices = field_def.get("choices") or []
+                if len(choices) == 2:
+                    values = [
+                        CategoricalValue(raw=choices[0], label=choices[0], polarity="positive"),
+                        CategoricalValue(raw=choices[1], label=choices[1], polarity="negative"),
+                    ]
+                else:
+                    values = [CategoricalValue(raw=choice, label=choice) for choice in choices]
+            elif field_type == "binary":
+                values = [
+                    CategoricalValue(raw="1", label=field_def.get("true_label", "True"), polarity="positive"),
+                    CategoricalValue(raw="0", label=field_def.get("false_label", "False"), polarity="negative"),
+                ]
+            else:
+                continue
+            if not values:
+                continue
+            result.append(
+                CategoricalColumn(
+                    column_key=f"{field_name} ({evaluator.name})",
+                    field_label=_field_label(field_name),
+                    values=values,
+                )
+            )
+    return result
+
+
+def evaluator_output_columns(evaluators: "list[Evaluator]") -> list[tuple[str, str]]:
+    """(column_key, label) for every evaluator output field, any type, in evaluator/field
+    order - the results table's curated column set is "one column per output field",
+    not "one column per (evaluator, field) pair", so the evaluator name that
+    disambiguates `column_key` is dropped from the display label.
+    """
+    columns = []
+    for evaluator in evaluators:
+        schema = (evaluator.params or {}).get("output_schema") or {}
+        for field_name in schema:
+            columns.append((f"{field_name} ({evaluator.name})", _field_label(field_name)))
+    return columns
 
 
 def write_evaluation_csv(writer, table_data: list[dict]) -> None:

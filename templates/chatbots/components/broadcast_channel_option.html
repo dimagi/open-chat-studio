@@ -1,0 +1,13 @@
+{% load i18n %}
+{% if widget.attrs.disabled %}
+  <span class="tooltip" data-tip="{% translate 'This channel is disabled' %}">
+    <label class="label opacity-50 cursor-not-allowed"
+           {% if widget.attrs.id %}for="{{ widget.attrs.id }}"{% endif %}>
+      {% include "django/forms/widgets/input.html" %} {{ widget.label }}
+    </label>
+  </span>
+{% else %}
+  <label class="label cursor-pointer" {% if widget.attrs.id %}for="{{ widget.attrs.id }}"{% endif %}>
+    {% include "django/forms/widgets/input.html" %} {{ widget.label }}
+  </label>
+{% endif %}

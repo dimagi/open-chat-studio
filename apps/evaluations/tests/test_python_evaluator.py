@@ -144,3 +144,21 @@ def test_python_evaluator_with_missing_output():
 
     evaluator_output = evaluator.run(message, "")
     assert evaluator_output.result == {"has_output": False, "output_value": "NO OUTPUT"}
+
+
+@pytest.mark.django_db()
+def test_python_evaluator_receives_participant_data_and_session_state():
+    """These reach main() through **kwargs, so the existing signature stays valid."""
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {
+                "name": kwargs["participant_data"]["name"],
+                "step": kwargs["session_state"]["current_step"],
+            }
+        """)
+    evaluator = PythonEvaluator(code=code)
+    message = EvaluationMessageFactory.create(
+        participant_data={"name": "Ada"},
+        session_state={"current_step": "onboarding"},
+    )
+    assert evaluator.run(message, "").result == {"name": "Ada", "step": "onboarding"}

@@ -7,9 +7,20 @@ import sentry_sdk
 from django.core.cache import cache
 from django.utils.functional import LazyObject, empty
 
-from apps.teams.models import Team
+from apps.teams.models import Flag, Team
 
 log = logging.getLogger("ocs.teams")
+
+
+def flag_is_active_for_team(team, flag_name):
+    """The team-scoped counterpart of `waffle.flag_is_active(request, flag_name)`.
+
+    A set `everyone` wins either way (on or off for every team); `None` defers to the
+    flag's team M2M.
+    """
+    return Flag.get(flag_name).is_active_for_team(team)
+
+
 _context = ContextVar("team")
 
 

@@ -5,7 +5,7 @@ from telebot import types
 from apps.channels.datamodels import TelegramMessage
 
 
-def text_message(chat_id: int = 123, message_text: str = "Hi there") -> TelegramMessage:
+def text_message(chat_id: int = 123, message_text: str = "Hi there", chatbot_id: int = 1) -> TelegramMessage:
     message_data = {
         "update_id": 432101234,
         "message": {
@@ -31,10 +31,10 @@ def text_message(chat_id: int = 123, message_text: str = "Hi there") -> Telegram
     }
     json_data = json.dumps(message_data)
     update = types.Update.de_json(json_data)
-    return TelegramMessage.parse(update)
+    return TelegramMessage.parse(update, chatbot_id=chatbot_id)
 
 
-def photo_message(chat_id: int = 123) -> TelegramMessage:
+def photo_message(chat_id: int = 123, chatbot_id: int = 1) -> TelegramMessage:
     message_data = {
         "update_id": 432101234,
         "message": {
@@ -62,10 +62,10 @@ def photo_message(chat_id: int = 123) -> TelegramMessage:
     }
     json_data = json.dumps(message_data)
     update = types.Update.de_json(json_data)
-    return TelegramMessage.parse(update)
+    return TelegramMessage.parse(update, chatbot_id=chatbot_id)
 
 
-def audio_message(chat_id: int = 123) -> TelegramMessage:
+def audio_message(chat_id: int = 123, chatbot_id: int = 1) -> TelegramMessage:
     message_data = {
         "update_id": 1223145,
         "message": {
@@ -91,4 +91,4 @@ def audio_message(chat_id: int = 123) -> TelegramMessage:
     }
     json_data = json.dumps(message_data)
     update = types.Update.de_json(json_data)
-    return TelegramMessage.parse(update)
+    return TelegramMessage.parse(update, chatbot_id=chatbot_id)

@@ -38,7 +38,7 @@ class Command(IdempotentCommand):
 
         # For each deprecated model, find affected teams
         # Structure: {db_model_id: (teams_data, model_name, replacement)}
-        # teams_data: {team_id: {"chatbots": set, "pipelines": set, "assistants": set}}
+        # teams_data: {team_id: {"chatbots": set, "pipelines": set}}
         affected_by_model = {}
 
         for db_model, _model_name, replacement in db_models:
@@ -60,7 +60,6 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"    Team: {teams[team_id].name}")
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
-                    self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
                     self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
@@ -80,7 +79,6 @@ class Command(IdempotentCommand):
                     affected=AffectedResources(
                         chatbots=data["chatbots"],
                         pipelines=data["pipelines"],
-                        assistants=data["assistants"],
                         evaluators=data["evaluators"],
                     ),
                 )

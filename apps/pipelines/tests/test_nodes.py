@@ -6,7 +6,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
-from apps.pipelines.exceptions import PipelineNodeRunError
+from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
@@ -570,7 +570,7 @@ class TestSendEmailDynamicRendering:
         )
         state = self._make_state(experiment_session, temp_state={"bad_email": "not-an-email"})
         config = {"configurable": {"repo": ORMRepository(session=experiment_session)}}
-        with pytest.raises(PipelineNodeRunError, match="Invalid email address"):
+        with pytest.raises(NodeUserConfigRunError, match="Invalid email address"):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=state, config=config)
 
     def test_body_template_renders(self, experiment_session, participant):
@@ -631,7 +631,7 @@ class TestSendEmailRuntimeErrors:
             recipient_list="test@example.com",
             subject="{{ nonexistent }}",
         )
-        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "subject"'):
+        with pytest.raises(NodeUserConfigRunError, match=r'UndefinedError in field "subject"'):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
 
     def test_body_undefined_error(self):
@@ -643,7 +643,7 @@ class TestSendEmailRuntimeErrors:
             subject="Hi",
             body="{{ missing_var }}",
         )
-        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "body"'):
+        with pytest.raises(NodeUserConfigRunError, match=r'UndefinedError in field "body"'):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
 
     def test_recipient_list_undefined_error(self):
@@ -654,5 +654,5 @@ class TestSendEmailRuntimeErrors:
             recipient_list="{{ missing_var }}",
             subject="Hi",
         )
-        with pytest.raises(PipelineNodeRunError, match=r'UndefinedError in field "recipient_list"'):
+        with pytest.raises(NodeUserConfigRunError, match=r'UndefinedError in field "recipient_list"'):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())

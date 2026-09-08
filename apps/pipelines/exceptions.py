@@ -86,6 +86,17 @@ class CodeNodeRunError(Exception):
     pass
 
 
+class NodeUserConfigRunError(Exception):
+    """Raised when a pipeline node fails at runtime because of how the user configured it.
+
+    Examples: Jinja2 template rendering errors (UndefinedError, TemplateSyntaxError)
+    or invalid rendered email addresses in SendEmail / RenderTemplate nodes.
+
+    """
+
+    pass
+
+
 class WaitForNextInput(Exception):
     """Exception to raise when a node is waiting for input from specific upstream nodes.
 

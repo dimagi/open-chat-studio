@@ -7,7 +7,7 @@ resolves the request identity and translates the result into DRF semantics.
 from rest_framework.throttling import BaseThrottle
 
 from apps.api.models import UserAPIKey
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.oauth.models import OAuth2AccessToken
 from apps.utils.rate_limit import check, client_ip, is_exempt
 
@@ -68,5 +68,9 @@ class ChatAPIRateThrottle(APIRateThrottle):
             return "session", str(session_id)
         auth = getattr(request, "auth", None)
         if isinstance(auth, ExperimentChannel):
+            if auth.platform == ChannelPlatform.PUBLIC:
+                # A shared link cannot pool every visitor in one bucket: any holder could lock
+                # the rest out, and each admitted start creates a participant and a session.
+                return "ip", client_ip(request)
             return "channel", str(auth.pk)
         return "ip", client_ip(request)

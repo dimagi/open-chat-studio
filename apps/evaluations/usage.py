@@ -46,6 +46,11 @@ class EvaluatorUsageContext:
     evaluator's spend); it lands in `extra` rather than as a UsageRecord FK because
     there is no per-record evaluator column, and a queryable column wasn't worth a
     migration for one report.
+
+    `message_id` attributes spend to the specific dataset message a judge call scored
+    (or a generation produced), for the results table's per-row Tokens column. Same
+    `extra`-not-FK reasoning as `evaluator_id` — this is a read for one report, not
+    something worth a schema change for.
     """
 
     team_id: int
@@ -54,16 +59,24 @@ class EvaluatorUsageContext:
     experiment_id: int | None = None
     session_id: int | None = None
     evaluator_id: int | None = None
+    message_id: int | None = None
 
 
-def generation_usage_tracer(experiment: "Experiment", evaluation_run: "EvaluationRun") -> UsageOnlyTracer:
+def generation_usage_tracer(
+    experiment: "Experiment", evaluation_run: "EvaluationRun", *, message_id: int | None = None
+) -> UsageOnlyTracer:
     """The tracer that bills the bot generation an evaluation run drives.
 
     `experiment` is resolved to its working version, matching how OCSTracer attributes
     chat traffic and how `_usage_context_for` attributes the judge calls scoring this
     generation, so both halves of a run's spend land on one chatbot. The session is
-    filled in by the tracer once the trace opens.
+    filled in by the tracer once the trace opens. `message_id` is the dataset message
+    this generation is producing a response for, so the results table can attribute its
+    tokens to that row alongside the judge calls that scored it.
     """
+    event_extra = {"evaluation_run_id": evaluation_run.id}
+    if message_id is not None:
+        event_extra["message_id"] = message_id
     return UsageOnlyTracer(
         UsageContext(
             team_id=evaluation_run.team_id,
@@ -71,7 +84,7 @@ def generation_usage_tracer(experiment: "Experiment", evaluation_run: "Evaluatio
             experiment_id=experiment.get_working_version_id(),
             evaluation_config_id=evaluation_run.config_id,
         ),
-        event_extra={"evaluation_run_id": evaluation_run.id},
+        event_extra=event_extra,
     )
 
 
@@ -108,6 +121,8 @@ def _record(collector: MetricsCollector, context: EvaluatorUsageContext) -> None
             event.extra = {**(event.extra or {}), "evaluation_run_id": context.evaluation_run_id}
             if context.evaluator_id is not None:
                 event.extra["evaluator_id"] = context.evaluator_id
+            if context.message_id is not None:
+                event.extra["message_id"] = context.message_id
         record_usage_bulk(
             events,
             UsageContext(

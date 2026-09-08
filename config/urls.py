@@ -25,6 +25,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
+from apps.chatbots.public_link import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
@@ -50,7 +51,6 @@ team_urlpatterns = [
     path("team/", include(single_team_urls)),
     path("experiments/", include("apps.experiments.urls")),
     path("service_providers/", include("apps.service_providers.urls")),
-    path("assistants/", include("apps.assistants.urls")),
     path("actions/", include("apps.custom_actions.urls")),
     path("pipelines/", include("apps.pipelines.urls")),
     path("files/", include("apps.files.urls")),
@@ -86,6 +86,7 @@ urlpatterns = [
         name="django.contrib.sitemaps.views.sitemap",
     ),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
+    path("c/<slug:token>/", public_link_page, name="public_link"),
     path("notifications/", include("apps.ocs_notifications.urls")),
     path("", include("apps.sso.urls")),  # must be before allauth urls since it uses the same paths
     path("accounts/", include("allauth.urls")),  # MFA URLs included automatically

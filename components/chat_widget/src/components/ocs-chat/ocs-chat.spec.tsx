@@ -888,5 +888,9 @@ describe('ocs-chat', () => {
     it('keeps the supported image formats', () => {
       expect(extensions).toEqual(expect.arrayContaining(['.jpg', '.jpeg', '.png', '.gif', '.webp']));
     });
+
+    it('includes the spreadsheet formats', () => {
+      expect(extensions).toEqual(expect.arrayContaining(['.xls', '.xlsx', '.xlsm', '.csv', '.tsv']));
+    });
   });
 });

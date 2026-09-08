@@ -98,7 +98,7 @@ class TestPricingLookup:
 
         result = _pricing_lookup(team, [model])
 
-        # `primary` / `has_team_override` synthetic keys are part of the shape
+        # `primary` / `can_revert` synthetic keys are part of the shape
         # but only the service-kind rates carry pricing data.
         expected_kinds = {
             ServiceKind.LLM_INPUT.value,
@@ -132,3 +132,44 @@ class TestPricingLookup:
         result = _pricing_lookup(team, [model])
 
         assert model.id not in result
+
+    def test_no_revert_offered_without_a_global_rate_to_fall_back_to(self):
+        """A custom model has no global rule, so closing the team rules leaves it unpriced."""
+        team = TeamFactory.create()
+        model = _model(team, name="test-model-h")
+        PricingRuleFactory.create(
+            team=team,
+            model_name="test-model-h",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.00100",
+            source=PricingSource.MANUAL,
+        )
+
+        result = _pricing_lookup(team, [model])
+
+        assert result[model.id]["can_revert"] is False
+
+    def test_revert_offered_when_a_global_rate_exists(self):
+        team = TeamFactory.create()
+        model = _model(team, name="test-model-i")
+        _rule(team=None, name="test-model-i", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        PricingRuleFactory.create(
+            team=team,
+            model_name="test-model-i",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.00100",
+            source=PricingSource.MANUAL,
+        )
+
+        result = _pricing_lookup(team, [model])
+
+        assert result[model.id]["can_revert"] is True
+
+    def test_no_revert_offered_when_only_a_global_rate_exists(self):
+        team = TeamFactory.create()
+        model = _model(team, name="test-model-j")
+        _rule(team=None, name="test-model-j", kind=ServiceKind.LLM_INPUT, price="0.00250")
+
+        result = _pricing_lookup(team, [model])
+
+        assert result[model.id]["can_revert"] is False

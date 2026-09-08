@@ -1,8 +1,8 @@
 """Request and response serializers for the chatbot write endpoints (#4139).
 
 The write surface mirrors what the UI's own forms accept -- ``ChatbotForm`` for create and
-``ChatbotSettingsForm`` for update -- rather than the shape of ``GET /chatbots/{id}/inspect/``.
-Inspecting and editing are different jobs, so inspect returns plenty that is not writable
+``ChatbotSettingsForm`` for update -- rather than the shape the `chatbot_inspect` endpoint
+returns. Inspecting and editing are different jobs, so inspect returns plenty that is not writable
 (provider names, voice languages, resolved node parameters); anything not listed here is refused.
 
 Each field carries its form field's name, with references narrowed to ids under the same
@@ -10,39 +10,19 @@ Each field carries its form field's name, with references narrowed to ids under 
 discovery. The body is flat, so the key an agent writes is the key it reads back.
 """
 
+from typing import Any
+
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
+from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
 from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import TraceProvider, VoiceProvider
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
-
-
-class RejectsUnknownKeys:
-    """Refuse a request body carrying keys this serializer does not declare.
-
-    DRF's default is to drop them silently, which for a human is a typo they spot in the echoed
-    response and for an agent is a 200 that wrote nothing. The consumer here is an agent, so a
-    misspelled key has to be an error it can act on.
-
-    Hooked into ``to_internal_value`` rather than ``validate`` because that is where a serializer
-    sees its own raw input wherever it is mounted. A ``validate``-based check would have to read
-    ``initial_data``, which DRF sets on the root serializer alone.
-    """
-
-    def to_internal_value(self, data):
-        if isinstance(data, dict):
-            unknown = sorted(set(data) - set(self.fields))
-            if unknown:
-                accepted = ", ".join(sorted(self.fields))
-                raise serializers.ValidationError(
-                    {key: f"Unrecognised field. Accepted here: {accepted}." for key in unknown}
-                )
-        return super().to_internal_value(data)
 
 
 class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
@@ -52,7 +32,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
     description = OptionalTextField(default="")
 
     @transaction.atomic()
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> Experiment:
         # Reimplements the ~10 lines of ChatbotForm.save that cannot be reused because they take a
         # request. Unlike the UI's CreateChatbot this deliberately does not publish a version.
         request = self.context["request"]
@@ -142,6 +122,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider_id",
+            "trace_sample_rate",
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
@@ -149,7 +130,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
             "file_uploads_enabled",
         ]
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
         if not supplied:
             # Neither half was sent. The stored pair is deliberately not re-checked here: a row
@@ -172,7 +153,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
         return attrs
 
     @staticmethod
-    def _voice_pair_error(provider, voice) -> str | None:
+    def _voice_pair_error(provider: VoiceProvider | None, voice: SyntheticVoice | None) -> str | None:
         """Why this (provider, voice) pair cannot be spoken, or None if it can.
 
         Both-null is a valid pair: it means the chatbot has no voice.
@@ -223,6 +204,7 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_provider_id",
+            "trace_sample_rate",
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
@@ -237,6 +219,7 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "description",
             "voice_response_behaviour",
             "echo_transcript",
+            "trace_sample_rate",
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "seed_message",

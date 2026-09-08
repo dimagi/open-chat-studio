@@ -15,6 +15,9 @@ from markdown.inlinepatterns import (
     ShortReferenceInlineProcessor,
 )
 
+# Prefix used by the OpenAI assistants file downloads that this codebase no longer serves.
+LEGACY_ASSISTANT_FILE_PREFIX = "assistant_file"
+
 
 class LinkProcessorMixin:
     def handleMatch(self, m, data):
@@ -51,35 +54,49 @@ class OcsShortImageReferenceInlineProcessor(LinkProcessorMixin, ShortImageRefere
 
 
 def _update_href(el):
+    """Rewrite `file:` hrefs to their download URL, returning the updated element.
+
+    Legacy `assistant_file:` hrefs are returned as their plain link/alt text instead: the
+    assistants UI and its download view were removed (#4254), so there is nothing left to
+    link to and the raw href would otherwise survive sanitisation as a dead-scheme link.
+    """
     if el is None:
         return el
 
     el = copy(el)
-    if el.tag == "img":
-        tag = "src"
-    elif el.tag == "a":
-        tag = "href"
+    attr = _url_attr(el)
+    if attr is None:
+        return el
+    if el.tag == "a":
         el.set("target", "_blank")
-    else:
-        return el
 
-    href = el.get(tag)
-    if not href or href.split(":", 1)[0] not in ("file", "assistant_file"):
-        return el
+    href = el.get(attr) or ""
+    if href.startswith(f"{LEGACY_ASSISTANT_FILE_PREFIX}:"):
+        return _link_text(el)
 
-    parts = href.split(":")
-    if len(parts) != 4:
-        return el
-    prefix, team_slug, owner_id, file_id = parts
-    url_name = {
-        "file": "experiments:download_file",
-        "assistant_file": "assistants:download_file",
-    }.get(prefix)
-    if url_name is None:
-        return el
-    relative_url = reverse(url_name, args=[team_slug, owner_id, file_id])
-    el.set(tag, relative_url)
+    download_url = _file_download_url(href)
+    if download_url:
+        el.set(attr, download_url)
     return el
+
+
+def _url_attr(el):
+    """Return the attribute holding `el`'s URL, or None if it isn't a link or an image."""
+    return {"a": "href", "img": "src"}.get(el.tag)
+
+
+def _link_text(el):
+    """The text a link or image shows once it is stripped of its href."""
+    return el.text or el.get("alt") or ""
+
+
+def _file_download_url(href):
+    """Return the download URL for a `file:team:owner:file` href, or None for anything else."""
+    parts = href.split(":")
+    if len(parts) != 4 or parts[0] != "file":
+        return None
+    _, team_slug, owner_id, file_id = parts
+    return reverse("experiments:download_file", args=[team_slug, owner_id, file_id])
 
 
 class FileExtension(markdown.Extension):
