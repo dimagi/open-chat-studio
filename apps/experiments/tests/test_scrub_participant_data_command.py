@@ -156,6 +156,19 @@ def _participant_data(chatbot):
     return ParticipantData.objects.get(participant=chatbot["participant"], experiment=chatbot["experiment"])
 
 
+def _totals(printed: str) -> dict[str, int]:
+    """The per-surface counts from the command's closing totals block, as a dict.
+
+    Parsed rather than matched as substrings, so that a count printed for one surface cannot
+    stand in for another ("messages" is a substring of "evaluation_messages").
+    """
+    return {
+        label: int(count)
+        for label, _, count in (line.strip().partition(": ") for line in printed.splitlines())
+        if label in SURFACES
+    }
+
+
 def _other_participant(experiment, *, data=None, name=None, identifier=None, state=None):
     """A second participant of ``experiment``, with their own data, name and session state."""
     session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team, state=state or {})
@@ -358,8 +371,7 @@ class TestSurfaceCoverage:
         assert _participant_data(chatbot).data == {"name": "[REDACTED]", "age": ""}
 
         printed = output.getvalue()
-        for label in SURFACES:
-            assert f"{label}: 1" in printed
+        assert _totals(printed) == dict.fromkeys(SURFACES, 1)
 
     def test_a_participant_name_holding_another_keys_value_is_text_scanned(self, chatbot, monkeypatch):
         """The name is replaced wholesale when "name" is selected, and scanned otherwise."""
@@ -444,7 +456,7 @@ class TestSurfaceCoverage:
 
         assert not ChatMessage.objects.filter(content__icontains=SECRET).exists()
         # The fixture's own message brings the total to one past two full batches.
-        assert f"messages: {CHUNK_SIZE + 2}" in output.getvalue()
+        assert _totals(output.getvalue())["messages"] == CHUNK_SIZE + 2
 
     @pytest.mark.parametrize("on_working_version", [False, True], ids=["on-a-version", "on-the-working-chatbot"])
     def test_scrubs_the_messages_copied_into_a_generation_session(self, chatbot, monkeypatch, on_working_version):
@@ -961,7 +973,7 @@ class TestSafety:
 
         printed = output.getvalue()
         assert "nothing was written" in printed
-        assert "messages: 1" in printed
+        assert _totals(printed)["messages"] == 1
 
         assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
         assert ExperimentSession.objects.get(id=chatbot["session"].id).state == {"last_caller": SECRET, "age": 7}
@@ -975,8 +987,7 @@ class TestSafety:
         _scrub(chatbot["experiment"], monkeypatch, stdout=output)
 
         printed = output.getvalue()
-        for label in SURFACES:
-            assert f"{label}: 0" in printed
+        assert _totals(printed) == dict.fromkeys(SURFACES, 0)
         assert _participant_data(chatbot).data == {"name": "[REDACTED]", "age": ""}
 
     def test_the_run_is_logged_without_any_values(self, chatbot, monkeypatch, caplog):
