@@ -122,6 +122,11 @@
               </div>
             </div>
           </div>
+          {% if selected_tags %}
+            <p class="text-xs text-gray-500">
+              {{ tag_match_count }} {% translate "match" %}{{ tag_match_count|pluralize:"es" }}{% if tag_context_count %}, {{ tag_context_count }} {% translate "for context" %}{% endif %}
+            </p>
+          {% endif %}
         {% endif %}
       </div>
 
