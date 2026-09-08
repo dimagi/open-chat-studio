@@ -27,7 +27,11 @@ function removeTag (name, el, objectInfo) {
   };
 }
 
-function configureTomSelect() {
+/**
+ * Only focus the editor htmx just swapped in. Focusing any other newly-found one
+ * would steal focus from an editor the user is already typing in.
+ */
+function configureTomSelect(swapTarget) {
   const filter = '.tag-multiselect:not(.tomselected):not(.ts-wrapper)';
   document.querySelectorAll(filter).forEach((el) => {
     let objectInfo = el.getAttribute("data-info");
@@ -51,11 +55,37 @@ function configureTomSelect() {
       }
     });
     controlInstances.push(control);
-    control.focus();
+    if (!swapTarget || swapTarget.contains(el)) {
+      control.focus();
+    }
+  });
+}
+
+/**
+ * htmx swaps out a tag editor's DOM directly, so TomSelect's own destroy() never
+ * runs and its document-level mousedown listener leaks. Checking wrapper.isConnected
+ * catches this regardless of swap style or whether a swap even completed, which a
+ * beforehand guess at the swap target can't.
+ */
+function pruneDetachedControls() {
+  controlInstances = controlInstances.filter((control) => {
+    if (!control.wrapper.isConnected) {
+      control.destroy();
+      return false;
+    }
+    return true;
   });
 }
 
 export const setupTagSelects = () => {
   configureTomSelect();
-  htmx.on("htmx:afterSwap", () => { configureTomSelect() });
+  htmx.on("htmx:afterSwap", (evt) => {
+    pruneDetachedControls();
+    /**
+     * evt.detail.target is the pre-swap target and goes stale on an outerHTML swap
+     * (the element it points to gets replaced); evt.target is the live post-swap
+     * element htmx actually dispatches the event on.
+     */
+    configureTomSelect(evt.target);
+  });
 }

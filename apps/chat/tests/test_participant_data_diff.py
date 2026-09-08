@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatMessageType
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
@@ -68,3 +69,42 @@ class TestParticipantDataDiffInSessionMessages:
         assert page_messages[2].participant_data_diff_from_trace is None
         assert page_messages[3].participant_data_diff_from_trace == diff_2
         assert page_messages[4].participant_data_diff_from_trace is None
+
+
+@pytest.mark.django_db()
+class TestTagFilterInSessionMessages:
+    def test_selecting_multiple_tags_keeps_all_of_them(self, client, experiment):
+        """The tag_filter checkboxes all share the same field name, so multiple selections arrive
+        as repeated query params. Reading it with QueryDict.get() silently keeps only the last one.
+        """
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        billing_tag = Tag.objects.create(name="billing", team=experiment.team, category=TagCategories.BOT_RESPONSE)
+        urgent_tag = Tag.objects.create(name="urgent", team=experiment.team, category=TagCategories.BOT_RESPONSE)
+
+        billing_message = ChatMessageFactory.create(
+            chat=session.chat, message_type=ChatMessageType.AI, content="Billing message"
+        )
+        billing_message.add_tag(billing_tag, team=experiment.team, added_by=None)
+        urgent_message = ChatMessageFactory.create(
+            chat=session.chat, message_type=ChatMessageType.AI, content="Urgent message"
+        )
+        urgent_message.add_tag(urgent_tag, team=experiment.team, added_by=None)
+        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content="Untagged message")
+
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+        response = client.get(f"{url}?show_all=on&tag_filter=billing&tag_filter=urgent")
+        assert response.status_code == 200
+        page_messages = response.context["messages"]
+
+        assert {message.id for message in page_messages} == {billing_message.id, urgent_message.id}

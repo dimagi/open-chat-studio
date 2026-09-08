@@ -710,6 +710,7 @@ PROJECT_METADATA = {
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
     "ACCEPTABLE_USE_POLICY_URL": env("ACCEPTABLE_USE_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
+    "MARKETING_SITE_URL": "https://openchatstudio.dimagi.com",
 }
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
@@ -718,21 +719,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
-
-# Prelogin marketing pages
-# Optional contact email shown on the contact page. Leave unset to hide the email.
-PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
-# HubSpot contact form embed. Leave portal/form IDs unset to hide the form.
-HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
-HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
-HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
-# Chat widget config for the demo bots on the use cases page, keyed by the bot keys used in
-# templates/prelogin/applications.html. A bot without an entry renders as a static card with no chat.
-# The bots live on production, so the widget talks to production regardless of which deploy serves
-# the page, unless a bot sets "api_base_url" to test against another deploy. Format:
-# {"<bot key>": {"id": "<chatbot public id>", "embed_key": "<widget channel token>",
-#                "header_text": "<chat window title>", "api_base_url": "<optional other deploy>"}}
-PRELOGIN_DEMO_BOTS = env.json("PRELOGIN_DEMO_BOTS", default={})
 
 # Sentry setup
 
@@ -910,7 +896,6 @@ DOCUMENTATION_LINKS = {
     "node_llm": "/concepts/pipelines/nodes/#llm-node",
     "node_llm_router": "/concepts/pipelines/router_nodes/#llm-router-node",
     "node_static_router": "/concepts/pipelines/router_nodes/#static-router-node",
-    "node_assistant": "/concepts/pipelines/nodes/",
     "node_code": "/concepts/pipelines/nodes/#python-node",
     "node_template": "/concepts/pipelines/nodes/#template",
     "node_email": "/concepts/pipelines/nodes/#email-node",
@@ -919,7 +904,6 @@ DOCUMENTATION_LINKS = {
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
     "deploy_channels": "/how-to/deploy_to_different_channels/",
-    "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
 }
@@ -1005,6 +989,15 @@ agent_models_low = env.list("SYSTEM_AGENT_MODELS_LOW", default=[])
 SYSTEM_AGENT_MODELS_HIGH = get_system_agent_models(agent_models_high, agent_api_keys)
 # 'low' models used for simple tasks
 SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_keys)
+
+# Operator-level Langfuse tracing for the system agent (apps/help/). Separate from a team's own
+# Trace Provider: the system agent has no Experiment/Session to attach one to, and its model
+# choice is already operator-configured above, not per-team.
+OCS_LANGFUSE_PUBLIC_KEY = env("OCS_LANGFUSE_PUBLIC_KEY", default="")
+OCS_LANGFUSE_SECRET_KEY = env("OCS_LANGFUSE_SECRET_KEY", default="")
+OCS_LANGFUSE_HOST = env("OCS_LANGFUSE_HOST", default="https://cloud.langfuse.com")
+# Fraction of system agent calls to trace, from 0.0 to 1.0. Leave unset to trace every call.
+OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 
 
 # Document Management

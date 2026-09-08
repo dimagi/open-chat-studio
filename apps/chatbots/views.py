@@ -8,7 +8,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -34,6 +34,7 @@ from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTrigg
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
+from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -673,8 +674,19 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
         session_id,
         active_tab="chatbots",
         template_path="chatbots/chatbot_session_view.html",
-        session_type="Chatbot",
     )
+
+
+@login_and_team_required
+@permission_required("experiments.download_chats", raise_exception=True)
+def export_chatbot_session_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    session = get_object_or_404(
+        ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=request.team
+    )
+    rows = generate_export_rows(session.experiment, ExperimentSession.objects.filter(id=session.id))
+    response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{session.external_id}_messages_export.csv"'
+    return response
 
 
 @require_POST

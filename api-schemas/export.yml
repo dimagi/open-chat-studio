@@ -4407,6 +4407,8 @@ components:
         name:
           type: string
           maxLength: 255
+        extra_data:
+          nullable: true
       required:
       - config
       - created_at

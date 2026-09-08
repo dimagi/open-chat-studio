@@ -82,7 +82,7 @@ def resolve_fk(field: models.ForeignKey, source_pk: int | None, store: FKTransla
         return None
     target_label = field.related_model._meta.label_lower
     if target_label not in MANIFEST_LABELS:
-        return None  # deliberately not synced (e.g. assistant, collection); left null by design
+        return None  # deliberately not synced (e.g. collection); left null by design
     target = store.get_target(target_label, source_pk)
     if target is not None:
         return target

@@ -34,6 +34,14 @@ class GPT52ReasoningEffortParameter(TextChoices):
     XHIGH = "xhigh", "XHigh"
 
 
+class GPT6ReasoningEffortParameter(TextChoices):
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    XHIGH = "xhigh", "XHigh"
+    MAX = "max", "Max"
+
+
 class Claude46EffortParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -177,6 +185,17 @@ class GPT55Parameters(GPT52Parameters):
     # gpt-5.5 shares the same parameter schema as GPT52Parameters:
     # reasoning.effort supports none, low, medium (default), high, xhigh
     pass
+
+
+class GPT6Parameters(LLMModelParamBase):
+    # The GPT-6 migration guide drops `none`/`minimal` effort and rejects temperature, top_p and
+    # top_logprobs, so none of the GPT-5 parameter classes apply. `verbosity` is undocumented for
+    # this family, so it is left out rather than sent speculatively.
+    effort: GPT6ReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT6ReasoningEffortParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT6ReasoningEffortParameter.labels),
+    )
 
 
 class GPT5ProParameters(LLMModelParamBase):

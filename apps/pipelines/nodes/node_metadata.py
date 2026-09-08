@@ -13,7 +13,6 @@ from django.db.models import QuerySet
 from django.db.models.functions import Lower
 from django.urls import reverse
 
-from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
@@ -69,11 +68,6 @@ def usable_llm_provider_models(team: Team) -> QuerySet:
 def team_source_materials(team: Team, include_versions: bool = False) -> QuerySet:
     """The source material `team` may reference."""
     return SourceMaterial.objects.filter(**_resource_filters(team, include_versions))
-
-
-def team_assistants(team: Team, include_versions: bool = False) -> QuerySet:
-    """The assistants `team` may reference."""
-    return OpenAiAssistant.objects.filter(**_resource_filters(team, include_versions))
 
 
 def team_collections(team: Team, include_versions: bool = False) -> QuerySet:
@@ -149,7 +143,6 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
 def _team_resource_options(team: Team, include_versions: bool) -> dict:
     """The team's referenceable resources, each with a link into the UI for the builder's edit button."""
     source_materials = team_source_materials(team, include_versions).values("id", "topic")
-    assistants = team_assistants(team, include_versions).values("id", "name")
     collections = team_collections(team, include_versions).values("id", "name")
     collection_indexes = team_collection_indexes(team, include_versions).values("id", "name", "is_remote_index")
 
@@ -160,16 +153,6 @@ def _team_resource_options(team: Team, include_versions: bool) -> dict:
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
-        ),
-        OptionsSource.assistant: (
-            [_option("", "Select an Assistant")]
-            + [
-                # No edit_url: the assistants UI is gone, so there is no page to link to. The
-                # list itself stays until AssistantNode does, because the node still declares this
-                # source and a declared source with no list breaks the builder.
-                _option(value=assistant["id"], label=assistant["name"])
-                for assistant in assistants
-            ]
         ),
         OptionsSource.collection: (
             [_option("", "Select a Collection")]
@@ -291,7 +274,11 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
 # for the type. The stub is built here rather than from a node class, which is the point:
 # resolve_node_class still returns None, so Pipeline.validate keeps reporting "Unknown node type"
 # and the pipeline cannot build. See issue #4254.
-REMOVED_NODE_TYPES: dict[str, str] = {}
+REMOVED_NODE_TYPES: dict[str, str] = {
+    "AssistantNode": (
+        "OpenAI retired the Assistants API on 26 August 2026. Delete this node and use an LLM node instead."
+    ),
+}
 
 
 def get_node_schemas() -> list[dict]:
@@ -370,10 +357,6 @@ def reachable_source_materials(team: Team, values: list) -> set:
     return _rows_named_by(team_source_materials(team), values)
 
 
-def reachable_assistants(team: Team, values: list) -> set:
-    return _rows_named_by(team_assistants(team), values)
-
-
 def reachable_collections(team: Team, values: list) -> set:
     return _rows_named_by(team_collections(team), values)
 
@@ -446,7 +429,6 @@ RESOLVERS: dict[OptionsSource, Callable[[Team, list], set]] = {
     OptionsSource.llm_provider_id: reachable_llm_providers,
     OptionsSource.llm_provider_model_id: reachable_llm_provider_models,
     OptionsSource.source_material: reachable_source_materials,
-    OptionsSource.assistant: reachable_assistants,
     OptionsSource.collection: reachable_collections,
     OptionsSource.collection_index: reachable_collection_indexes,
     OptionsSource.synthetic_voice_id: reachable_synthetic_voices,

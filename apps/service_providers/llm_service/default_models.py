@@ -16,6 +16,7 @@ from apps.service_providers.llm_service.model_parameters import (
     ClaudeSonnet46Parameters,
     GPT5Parameters,
     GPT5ProParameters,
+    GPT6Parameters,
     GPT51Parameters,
     GPT52Parameters,
     GPT55Parameters,
@@ -102,6 +103,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.6-terra", 1100000, parameters=GPT52Parameters),
         Model("gpt-5.6-sol", 1100000, parameters=GPT52Parameters),
         Model("gpt-5.6-luna", 1100000, parameters=GPT52Parameters),
+        Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.4-mini", parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), deprecated=True, replacement="gpt-5.4-nano", parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
@@ -142,6 +144,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("MiniMax-M2", 200000),
     ],
     "google": [
+        Model("gemini-3.8-flash", 1048576),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
         Model("gemini-3.5-flash", 1048576),
@@ -151,6 +154,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
+        Model("gemini-3.8-flash", 1048576),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576, is_translation_default=True),
         Model("gemini-3.5-flash", 1048576, is_default=True),
