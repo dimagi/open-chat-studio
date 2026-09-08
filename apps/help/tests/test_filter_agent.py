@@ -157,21 +157,24 @@ class TestMakeGetOptionsTool:
 
         assert "error" in result
 
-    def test_prepare_is_called_with_team(self):
-        """prepare(team) must be called so DB-backed filters load options."""
+    def test_prepare_is_called_with_team_and_its_return_value_is_used(self):
+        """prepare(team) must be called, and the filter it *returns* (not the original instance)
+        must supply the options -- prepare() no longer mutates in place. See #4363."""
         choice_filter = mock.Mock(spec=ChoiceColumnFilter)
         choice_filter.query_param = "experiment"
-        choice_filter.options = [{"id": 99, "label": "Mocked"}]
-        # model_copy(deep=True) should return the mock itself for simplicity
-        choice_filter.model_copy.return_value = choice_filter
+        prepared = mock.Mock(spec=ChoiceColumnFilter)
+        prepared.options = [{"id": 99, "label": "Mocked"}]
+        choice_filter.prepare.return_value = prepared
 
         filter_class = self._make_filter_class([choice_filter])
         team = mock.Mock()
 
         tool_fn = make_get_options_tool(filter_class, team)
-        tool_fn.invoke({"param": "experiment"})
+        result = tool_fn.invoke({"param": "experiment"})
 
         choice_filter.prepare.assert_called_once_with(team)
+        choice_filter.model_copy.assert_not_called()
+        assert result["options"] == [{"id": 99, "label": "Mocked"}]
 
 
 class TestFilterAgentRun:
