@@ -243,6 +243,48 @@ class TestPipelineBuildState:
             "unwired_handles": {},
         }
 
+    @pytest.mark.parametrize(
+        ("model_id", "expected"),
+        [
+            pytest.param(
+                0,
+                {"llm_provider_model_id": "LLM provider model with id 0 not found"},
+                id="falsy-id-reaches-the-after-validator",
+            ),
+            pytest.param(
+                999999,
+                {"root": "LLM provider model with id 999999 does not exist"},
+                id="absent-id-is-caught-before-it",
+            ),
+        ],
+    )
+    def test_a_bad_model_id_is_reported_against_the_model_field(self, model_id, expected):
+        """Which validator catches it decides where it lands, and the two differ.
+
+        ``ensure_default_parameters`` runs ``mode="before"`` and raises for an id it cannot look up,
+        so the ordinary dangling reference never reaches ``validate_llm_model`` and reports under
+        ``root``. A falsy-but-present id skips that lookup and does reach it -- the one path on which
+        the ``invalid_model`` error is raised, and it names the model field, not the provider field.
+        """
+        start, end = start_node(), end_node()
+        llm = {
+            "id": "llm-1",
+            "type": "LLMResponseWithPrompt",
+            "params": {
+                "name": "llm-1",
+                "prompt": "hi",
+                "llm_provider_id": 1,
+                "llm_provider_model_id": model_id,
+            },
+        }
+        edges = [
+            {"id": "e1", "source": start["id"], "target": "llm-1"},
+            {"id": "e2", "source": "llm-1", "target": end["id"]},
+        ]
+        pipeline = create_pipeline_model([start, llm, end], edges)
+
+        assert pipeline_build_state(pipeline)["errors"]["node"] == {"llm-1": expected}
+
     def test_node_build_error_is_reported_generically_rather_than_verbatim(self, monkeypatch, caplog):
         """A build-stage node error can wrap a raw pydantic error naming the classes behind the node.
         The report is served over the API, so it carries a generic line and the detail is logged."""
