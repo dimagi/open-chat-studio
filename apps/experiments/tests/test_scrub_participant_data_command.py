@@ -143,7 +143,7 @@ def _scrub(experiment, monkeypatch, *, answers=None, filter_query="", **kwargs):
     """Run the command, answering its prompts from ``answers`` in order."""
     responses = iter(SCRUB_BOTH_KEYS if answers is None else answers)
     monkeypatch.setattr("builtins.input", lambda *_args: next(responses))
-    call_command("scrub_participant_data", str(experiment.id), filter=filter_query, **kwargs)
+    call_command("scrub_participant_data", experiment.team.slug, str(experiment.id), filter=filter_query, **kwargs)
 
 
 def _participant_data(chatbot):
@@ -773,7 +773,7 @@ class TestPromptFlow:
         monkeypatch.setattr("builtins.input", no_answer)
 
         with pytest.raises(CommandError, match="answered interactively"):
-            call_command("scrub_participant_data", str(chatbot["experiment"].id))
+            call_command("scrub_participant_data", chatbot["experiment"].team.slug, str(chatbot["experiment"].id))
 
         assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
 
@@ -838,7 +838,17 @@ class TestPromptFlow:
         monkeypatch.setattr("builtins.input", lambda *_args: "")
 
         with pytest.raises(CommandError, match="No chatbot with id"):
-            call_command("scrub_participant_data", "123456789")
+            call_command("scrub_participant_data", "some-team", "123456789")
+
+    def test_a_chatbot_in_another_team_is_refused(self, chatbot, monkeypatch):
+        """A mistyped id names a real chatbot somewhere else; the team slug catches that."""
+        monkeypatch.setattr("builtins.input", lambda *_args: "")
+
+        with pytest.raises(CommandError, match="in team 'not-this-team'"):
+            call_command("scrub_participant_data", "not-this-team", str(chatbot["experiment"].id))
+
+        assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
+        assert _participant_data(chatbot).data == {"name": SECRET, "age": 7}
 
 
 class TestFilterArgumentParsing:

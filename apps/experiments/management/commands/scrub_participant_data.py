@@ -445,7 +445,7 @@ def _participant_chunks(working: Experiment, participant_ids: list[int]):
     """
     for start in range(0, len(participant_ids), CHUNK_SIZE):
         yield list(
-            Participant.objects.filter(id__in=participant_ids[start : start + CHUNK_SIZE])
+            Participant.objects.filter(team=working.team, id__in=participant_ids[start : start + CHUNK_SIZE])
             .order_by("id")
             .prefetch_related(
                 Prefetch(
@@ -497,6 +497,7 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
+        parser.add_argument("team_slug", help="The slug of the team the chatbot belongs to, as it appears in its URL")
         parser.add_argument("experiment_id", type=int, help="The chatbot's numeric ID, as it appears in its URL")
         parser.add_argument(
             "--filter",
@@ -512,7 +513,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Resolve the targets, ask what to replace, confirm, then scrub."""
         dry_run = options["dry_run"]
-        experiment = self._get_experiment(options["experiment_id"])
+        experiment = self._get_experiment(options["team_slug"], options["experiment_id"])
         working = experiment.get_working_version()
         filter_params = self._parse_filter(options["filter"])
 
@@ -523,7 +524,7 @@ class Command(BaseCommand):
 
         experiment_ids = _version_family_ids(working)
         sessions = ExperimentSession.objects.filter(
-            experiment_id__in=experiment_ids, participant_id__in=participant_ids
+            team=working.team, experiment_id__in=experiment_ids, participant_id__in=participant_ids
         )
         key_counts, unscannable_counts = self._discover_keys(working, participant_ids)
 
@@ -568,11 +569,15 @@ class Command(BaseCommand):
         )
         self._report_totals(totals, dry_run=dry_run)
 
-    def _get_experiment(self, experiment_id: int) -> Experiment:
-        """Load the chatbot by id, including an archived one."""
-        experiment = Experiment.objects.get_all().filter(id=experiment_id).first()
+    def _get_experiment(self, team_slug: str, experiment_id: int) -> Experiment:
+        """Load the chatbot by team and id, including an archived one.
+
+        The id alone is a bare number, and a mistyped one names a real chatbot somewhere else.
+        The team is part of the lookup, so a typo finds nothing rather than a stranger's chatbot.
+        """
+        experiment = Experiment.objects.get_all().filter(id=experiment_id, team__slug=team_slug).first()
         if experiment is None:
-            raise CommandError(f"No chatbot with id={experiment_id}")
+            raise CommandError(f"No chatbot with id={experiment_id} in team {team_slug!r}")
         return experiment
 
     def _parse_filter(self, raw: str) -> FilterParams:
@@ -750,7 +755,7 @@ class Command(BaseCommand):
                 )
             scope = Scope(
                 sessions=ExperimentSession.objects.filter(
-                    experiment_id__in=experiment_ids, participant_id__in=list(plans)
+                    team=working.team, experiment_id__in=experiment_ids, participant_id__in=list(plans)
                 ),
                 participant_ids=list(plans),
                 experiment_ids=experiment_ids,
