@@ -11,9 +11,9 @@ from django.utils import timezone
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
-from django_tables2 import RequestConfig, SingleTableView
+from django_tables2 import SingleTableView
 
-from apps.annotations.prefetch import chat_tagged_items_prefetch
+from apps.annotations.prefetch import attach_chat_tagged_items, chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
 from apps.channels.models import ChannelPlatform
@@ -53,17 +53,12 @@ def single_participant_home_context(
     context["active_tab"] = "participants"
     context["participant"] = participant
     context["experiments"] = participant.get_experiments_for_display()
-    sessions = []
 
     if experiment_id:
-        sessions = (
-            ExperimentSession.objects.get_table_queryset(team, experiment_id)
-            .filter(participant=participant)
-            .prefetch_related(chat_tagged_items_prefetch())
+        context["session_table_url"] = reverse(
+            "participants:participant-sessions-table",
+            args=[team.slug, participant.id, experiment_id],
         )
-        table = ChatbotSessionsTable(sessions, exclude=["participant"])
-        # set request (no pagination) so the chatbot chip can permission-gate its link
-        context["session_table"] = RequestConfig(request, paginate=False).configure(table)
         context["selected_experiment_id"] = experiment_id
         data = participant.get_data_for_experiment(experiment_id)
         context["participant_data"] = json.dumps(data, indent=4)
@@ -75,6 +70,36 @@ def single_participant_home_context(
     if participant.platform not in ChannelPlatform.team_global_platforms():
         context["trigger_bot_form"] = TriggerBotForm(participant=participant)
     return context
+
+
+class ParticipantSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+    """Paginated sessions table for one participant on one chatbot.
+
+    A dedicated fragment view, not inline context building, because the pagination links
+    django-tables2 renders target `request.path_info`. They only resolve correctly if that
+    path already points at a fragment-only response.
+    """
+
+    model = ExperimentSession
+    table_class = ChatbotSessionsTable
+    template_name = "table/single_table.html"
+    permission_required = "experiments.view_experimentsession"
+    paginate_by = 10
+
+    def get_queryset(self):
+        participant = get_object_or_404(Participant, pk=self.kwargs["participant_id"], team=self.request.team)
+        return (
+            ExperimentSession.objects.get_table_queryset(self.request.team, self.kwargs["experiment_id"])
+            .filter(participant=participant)
+            .prefetch_related(chat_tagged_items_prefetch())
+        )
+
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        table.exclude = ("chatbot", "participant")
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
 
 
 class ParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

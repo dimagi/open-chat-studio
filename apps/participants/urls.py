@@ -21,6 +21,11 @@ urlpatterns = [
         views.EditParticipantData.as_view(),
         name="edit-participant-data",
     ),
+    path(
+        "<int:participant_id>/e/<int:experiment_id>/sessions-table/",
+        views.ParticipantSessionsTableView.as_view(),
+        name="participant-sessions-table",
+    ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
     path(
         "participants/<int:participant_id>/cancel_schedule/<str:schedule_id>/",
