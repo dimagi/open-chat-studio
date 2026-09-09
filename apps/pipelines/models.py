@@ -229,7 +229,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:
-            name_to_flow_id[node.params.get("name")].append(node.flow_id)
+            name_to_flow_id[node.name].append(node.flow_id)
 
         for _name, flow_ids in name_to_flow_id.items():
             if len(flow_ids) > 1:
@@ -441,12 +441,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        def node_name(node):
-            name = node.params.get("name")
-            if name == node.flow_id:
-                return node.type
-            return name
-
         return VersionDetails(
             instance=self,
             fields=[
@@ -454,7 +448,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 VersionField(
                     name="nodes",
                     queryset=self.node_set.exclude(type__in=server_managed_node_types()),
-                    to_display=node_name,
+                    to_display=lambda node: node.display_name,
                 ),
             ],
         )
@@ -533,6 +527,28 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     @property
     def name(self):
         return self.params.get("name", None)
+
+    @property
+    def display_name(self) -> str:
+        """What to call this node in front of a person: its name, falling back to its type.
+
+        A node with no name of its own is named after its flow id by the builder, which is an
+        address rather than anything someone chose, so it reads here as no name at all.
+        """
+        name = self.name
+        if name is None or name == self.flow_id:
+            return self.type
+        return name
+
+    @property
+    def tool_names(self) -> list[str]:
+        """The built-in tools this node has selected."""
+        return self.params.get("tools") or []
+
+    @property
+    def mcp_tool_refs(self) -> list[str]:
+        """The MCP tools this node has selected, each as ``"<server id>:<tool name>"``."""
+        return self.params.get("mcp_tools", [])
 
     @property
     def node_type(self) -> NodeType:
@@ -730,9 +746,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def _get_version_details(self) -> VersionDetails:
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
-        node_name = self.params.get("name", self.type)
-        if node_name == self.flow_id:
-            node_name = self.type
+        node_name = self.display_name
 
         specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
         param_versions = []
