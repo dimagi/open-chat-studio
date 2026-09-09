@@ -102,8 +102,7 @@ def test_edit_participant_data_with_missing_field_does_not_500(client, team_with
 
 @pytest.mark.django_db()
 def test_single_participant_home_with_experiment_renders_session_table(client, team_with_users):
-    """Regression: this page builds ChatbotSessionsTable without RequestConfig, so render_chatbot
-    must not assume self.request is set."""
+    """Regression: the Continue Chat button needs the chat widget launcher partial on the page."""
     participant = ParticipantFactory.create(team=team_with_users)
     session = ExperimentSessionFactory.create(
         participant=participant, team=team_with_users, experiment__team=team_with_users
@@ -127,6 +126,44 @@ def test_single_participant_home_with_experiment_renders_session_table(client, t
 
 
 @pytest.mark.django_db()
+def test_single_participant_home_lazy_loads_the_sessions_table(client, team_with_users):
+    """Regression for #4452: the Sessions tab used to render every session inline, unpaginated."""
+    participant = ParticipantFactory.create(team=team_with_users)
+    experiment = ExperimentFactory.create(team=team_with_users)
+    sessions = ExperimentSessionFactory.create_batch(
+        3, team=team_with_users, experiment=experiment, participant=participant
+    )
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # None of the session rows are in the initial HTML -- the table fetches them separately.
+    for session in sessions:
+        assert str(session.external_id) not in content
+    assert reverse("chatbots:participant_sessions_list", args=[team_with_users.slug, participant.id]) in content
+
+
+@pytest.mark.django_db()
+def test_sessions_panel_forwards_the_chatbot_filter_to_the_lazy_load_url(client, team_with_users):
+    """Pill clicks don't remount the Alpine filter widget, so this panel must forward `?chatbot=` itself."""
+    participant = ParticipantFactory.create(team=team_with_users)
+    experiment = ExperimentFactory.create(team=team_with_users)
+    ExperimentSessionFactory.create(team=team_with_users, experiment=experiment, participant=participant)
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse("participants:sessions-panel", args=[team_with_users.slug, participant.id])
+    response = client.get(url, {"chatbot": experiment.id})
+
+    assert response.status_code == 200
+    assert f"chatbot={experiment.id}" in response.content.decode()
+
+
+@pytest.mark.django_db()
 class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
     """A chatbot-pill click re-renders one tab. The context builder used to be shared and
     unconditionally built the session table, aggregated every schedule, and loaded
@@ -143,7 +180,7 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
         response = client.get(url)
 
         assert response.status_code == 200
-        assert "session_table" in response.context
+        assert "df_filter_data_source_url" in response.context
         assert "participant_schedules" not in response.context
         assert "selected_data_experiment" not in response.context
         assert "participant_data" not in response.context
@@ -158,7 +195,7 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
 
         assert response.status_code == 200
         assert "participant_schedules" in response.context
-        assert "session_table" not in response.context
+        assert "df_filter_data_source_url" not in response.context
         assert "selected_data_experiment" not in response.context
         assert "participant_data" not in response.context
 
@@ -172,7 +209,7 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
 
         assert response.status_code == 200
         assert "participant_data" in response.context
-        assert "session_table" not in response.context
+        assert "df_filter_data_source_url" not in response.context
         assert "participant_schedules" not in response.context
 
     def test_full_page_still_carries_every_tab_and_the_header(self, client, team_with_users):
@@ -184,7 +221,7 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
         response = client.get(url)
 
         assert response.status_code == 200
-        for key in ("session_table", "participant_schedules", "participant_data", "message_trend"):
+        for key in ("df_filter_data_source_url", "participant_schedules", "participant_data", "message_trend"):
             assert key in response.context, key
 
 
