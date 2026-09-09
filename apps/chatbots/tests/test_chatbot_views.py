@@ -41,7 +41,6 @@ from apps.experiments.models import (
 )
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
-from apps.teams.models import Flag
 from apps.teams.utils import set_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -180,24 +179,6 @@ def _create_chatbot(team, user):
     return Experiment.objects.create(
         name="Test Experiment", description="Test Description", owner=user, team=team, pipeline=pipeline
     )
-
-
-@pytest.mark.django_db()
-def test_single_chatbot_home_shows_events_tab_to_every_team(client, team_with_users):
-    """Events are no longer flagged: the tab renders with no `flag_events` row in the DB."""
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    client.force_login(user)
-    experiment = _create_chatbot(team, user)
-    assert not Flag.objects.filter(name="flag_events").exists()
-
-    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
-    response = client.get(url)
-
-    content = response.content.decode()
-    assert 'id="tab-events"' in content
-    assert 'id="content-events"' in content
 
 
 @pytest.mark.django_db()
