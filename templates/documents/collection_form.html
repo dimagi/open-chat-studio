@@ -2,7 +2,7 @@
 {% load form_tags %}
 
 {% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+  <div class="text-sm breadcrumbs max-w-2xl mx-auto" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'documents:collection_home' request.team.slug %}">Collections</a></li>
       {% if collection.id %}

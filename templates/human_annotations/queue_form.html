@@ -2,7 +2,7 @@
 {% load form_tags i18n %}
 
 {% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+  <div class="text-sm breadcrumbs max-w-2xl mx-auto" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'human_annotations:queue_home' request.team.slug %}">Annotation Queues</a></li>
       <li class="pg-breadcrumb-active" aria-current="page">{{ title }}</li>

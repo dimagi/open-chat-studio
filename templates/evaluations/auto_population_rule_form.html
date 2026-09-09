@@ -2,7 +2,7 @@
 {% load form_tags i18n %}
 
 {% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+  <div class="text-sm breadcrumbs max-w-2xl mx-auto" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
       <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.id %}">{{ dataset.name }}</a></li>

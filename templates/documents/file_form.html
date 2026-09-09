@@ -2,7 +2,7 @@
 {% load form_tags %}
 
 {% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+  <div class="text-sm breadcrumbs max-w-2xl mx-auto" aria-label="breadcrumbs">
     <ul>
       <li><a href="{% url 'files:file_table' request.team.slug %}">Files</a></li>
       {% if object.id %}
