@@ -8,6 +8,7 @@ from apps.annotations.models import Tag
 from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.cost_tracking.services.reporting import session_usage
 from apps.events.models import StaticTrigger, StaticTriggerType
+from apps.events.tables import SchedulesTable
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
@@ -40,6 +41,12 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
         }
         for trigger in experiment.event_triggers
     ]
+    participant_schedules = session.participant.get_schedules_for_experiments(
+        experiment.id, as_dict=True, include_inactive=True
+    )
+    schedules_table = SchedulesTable(participant_schedules)
+    schedules_table.exclude = ("experiment",)
+    schedules_table.empty_text = "No schedules for this session."
     return TemplateResponse(
         request,
         template_path,
@@ -65,9 +72,8 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             "event_triggers": event_triggers,
             "has_event_logs": any(item["event_logs"] for item in event_triggers),
-            "participant_schedules": session.participant.get_schedules_for_experiments(
-                experiment.id, as_dict=True, include_inactive=True
-            ),
+            "participant_schedules": participant_schedules,
+            "schedules_table": schedules_table,
             "participant_id": session.participant_id,
             "participant": participant,
             "has_conversation_end_events": StaticTrigger.objects.filter(
