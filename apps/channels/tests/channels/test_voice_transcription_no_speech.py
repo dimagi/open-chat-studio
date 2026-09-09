@@ -141,6 +141,10 @@ def test_no_speech_records_the_turn_and_links_it_to_the_trace(mock_event_bot_cls
     assert trace.input_message_id == human.id
     assert trace.output_message_id == ai.id
 
+    # The UI renders the trace icon from the AI message's own metadata, not the FK,
+    # so the FK alone leaves the icon disabled with "No trace recorded".
+    assert [info["trace_id"] for info in ai.trace_info] == [trace.id]
+
 
 @pytest.mark.django_db()
 @patch("apps.channels.pipeline.EventBot")

@@ -6,7 +6,7 @@ import pytest
 from apps.channels.stages.terminal import PersistenceStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -127,6 +127,24 @@ class TestPersistenceStageDB:
 
         ai_message = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.AI)
         ctx.trace_service.set_output_message_id.assert_called_once_with(ai_message.id)
+
+    def test_early_exit_ai_message_carries_trace_metadata(self):
+        """The message renders its own trace icon from this, so the FK alone is not enough."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            early_exit_response="Not allowed",
+        )
+        ctx.trace_service.get_trace_metadata.return_value = {
+            ChatMessageMetadataKeys.TRACE_INFO: [{"trace_id": 7, "trace_provider": "ocs"}]
+        }
+
+        self.stage(ctx)
+
+        ai_message = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.AI)
+        assert [info["trace_id"] for info in ai_message.trace_info] == [7]
 
     def test_no_trace_link_when_the_bot_already_replied(self):
         """bot.process_input() linked its own message; PersistenceStage must not overwrite it."""
