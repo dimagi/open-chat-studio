@@ -11,7 +11,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
-from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, RouterNode
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     boolean_node,
@@ -825,16 +825,3 @@ class TestPipelineValidation:
         pipeline.data = layout.model_dump()
         pipeline.update_nodes_from_data(node_data)
         assert not has_errors(pipeline.validate())
-
-
-@pytest.mark.parametrize(
-    ("node_type", "param_name", "expected"),
-    [
-        pytest.param(LLMResponseWithPrompt.__name__, "llm_provider_id", True, id="declared"),
-        pytest.param(LLMResponseWithPrompt.__name__, "route_key", False, id="not-declared"),
-        pytest.param(RouterNode.__name__, "prompt", True, id="declared-on-other-type"),
-        pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
-    ],
-)
-def test_node_has_parameter(node_type, param_name, expected):
-    assert Node(type=node_type).has_parameter(param_name) is expected

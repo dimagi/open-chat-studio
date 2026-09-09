@@ -166,7 +166,3 @@ NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
         ),
     ),
 }
-
-
-def get_versioned_param_specs(node_type: str) -> tuple[VersionedParamSpec, ...]:
-    return NODE_PARAM_SPECS.get(node_type, ())

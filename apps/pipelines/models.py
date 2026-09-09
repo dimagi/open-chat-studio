@@ -30,10 +30,9 @@ from apps.pipelines.flow import (
     FlowNodeData,
     FlowWithoutNodes,
     node_position_fields,
-    react_flow_node_type,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.versioning import get_versioned_param_specs
+from apps.pipelines.node_type import NodeType, server_managed_node_types
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -267,9 +266,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @staticmethod
     def _node_validation_errors(node) -> dict:
         """Field -> message errors for one node's params; non-field failures land under "root"."""
-        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
-
-        node_class = resolve_node_class(node.type)
+        node_class = node.node_type.node_class
         if node_class is None:
             # A type naming no node class — removed since, or never one — must be reported, not crash
             # validation.
@@ -372,7 +369,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # to_flow_node reads each node's resource relations — prefetch rather than query per row.
         for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
-            for spec in get_versioned_param_specs(version_node.type):
+            for spec in version_node.node_type.versioned_param_specs:
                 spec.revert_referenced_record(version_node, flow_node.data.params)
             node_data[version_node.flow_id] = flow_node
 
@@ -444,8 +441,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        reserved_types = ["StartNode", "EndNode"]
-
         def node_name(node):
             name = node.params.get("name")
             if name == node.flow_id:
@@ -458,7 +453,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 VersionField(name="name", raw_value=self.name),
                 VersionField(
                     name="nodes",
-                    queryset=self.node_set.exclude(type__in=reserved_types),
+                    queryset=self.node_set.exclude(type__in=server_managed_node_types()),
                     to_display=node_name,
                 ),
             ],
@@ -540,6 +535,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return self.params.get("name", None)
 
     @property
+    def node_type(self) -> NodeType:
+        """What this row's type decides, as opposed to what the row itself holds."""
+        return NodeType(self.type)
+
+    @property
     def position(self) -> dict | None:
         """The react-flow position, or None when the row has not been backfilled yet."""
         if self.position_x is None or self.position_y is None:
@@ -558,7 +558,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return FlowNode(
             id=self.flow_id,
             position=self.position or {"x": 0, "y": 0},
-            type=react_flow_node_type(self.type),
+            type=self.node_type.react_flow_type,
             data=FlowNodeData(
                 id=self.flow_id,
                 type=self.type,
@@ -569,10 +569,15 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
-        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
+        return self.node_type.declares(param_name)
 
-        node_class = resolve_node_class(self.type)
-        return node_class is not None and param_name in node_class.model_fields
+    def output_handles(self) -> list[dict]:
+        """The output handles this row offers, as ``{handle, label}``.
+
+        The type decides; this supplies the row. ``django_node`` goes along so a router's branches
+        derive from a fully validated instance.
+        """
+        return self.node_type.output_handles(self.params or {}, self.flow_id, django_node=self)
 
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
@@ -587,11 +592,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
             new_version.flow_id = new_flow_id
-            if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
+            if not self.node_type.is_server_managed and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
         if not is_copy:
-            for spec in get_versioned_param_specs(self.type):
+            for spec in self.node_type.versioned_param_specs:
                 spec.version_referenced_record(new_version.params)
 
         if pipeline is not None:
@@ -729,7 +734,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if node_name == self.flow_id:
             node_name = self.type
 
-        specs_by_param = {spec.param_name: spec for spec in get_versioned_param_specs(self.type)}
+        specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
         param_versions = []
         for name, value in self.params.items():
             display_formatter = None
@@ -774,7 +779,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         Archive related params that were also versioned along with this node
         """
-        for spec in get_versioned_param_specs(self.type):
+        for spec in self.node_type.versioned_param_specs:
             spec.archive_referenced_record(self.params)
 
 

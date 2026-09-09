@@ -5,9 +5,10 @@ import pytest
 from langgraph.graph.state import CompiledStateGraph
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, react_flow_node_type, split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, split_flow_data
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
+from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes import nodes
 from apps.pipelines.nodes.nodes import ToolConfigModel
 from apps.utils.factories.pipelines import PipelineFactory
@@ -100,7 +101,7 @@ def content_flow_node(
     """A content-carrying ``FlowNode``, ready to pass to ``Pipeline.update_nodes_from_data``."""
     return FlowNode(
         id=flow_id,
-        type=react_flow_node_type(node_type),
+        type=NodeType(node_type).react_flow_type,
         position=position or {},
         data=FlowNodeData(id=flow_id, type=node_type, label=label, params=params or {}),
     )

@@ -15,8 +15,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
-from apps.pipelines.build_state import NoOutputHandles, input_handles, output_handles, why_no_output_handles
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData
+from apps.pipelines.node_type import NoOutputHandles
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
@@ -205,7 +205,7 @@ class SourceSide(Side):
 
     @classmethod
     def handles_offered(cls, content: FlowNodeData) -> list[str]:
-        return [handle["handle"] for handle in output_handles(content.type, content.params, content.id)]
+        return [handle["handle"] for handle in content.node_type.output_handles(content.params, content.id)]
 
     @classmethod
     def no_handles_message(cls, content: FlowNodeData) -> str:
@@ -216,10 +216,11 @@ class SourceSide(Side):
         keywords, so the one node type ``source_handle`` exists for arrives unwirable. Handed the End
         node's answer instead, an agent would delete the node when the fix is one PATCH away.
 
-        Held as a lookup on :func:`~apps.pipelines.build_state.why_no_output_handles`, so a case
+        Held as a lookup on :meth:`~apps.pipelines.node_type.NodeType.why_no_output_handles`, so a case
         added there raises ``KeyError`` here instead of quietly inheriting the End node's answer.
         """
-        return _NO_OUTPUT_HANDLES_MESSAGES[why_no_output_handles(content.type)].format(id=content.id, type=content.type)
+        reason = content.node_type.why_no_output_handles()
+        return _NO_OUTPUT_HANDLES_MESSAGES[reason].format(id=content.id, type=content.type)
 
 
 class TargetSide(Side):
@@ -236,7 +237,7 @@ class TargetSide(Side):
 
     @classmethod
     def handles_offered(cls, content: FlowNodeData) -> list[str]:
-        return input_handles(content.type)
+        return content.node_type.input_handles()
 
     @classmethod
     def no_handles_message(cls, content: FlowNodeData) -> str:
