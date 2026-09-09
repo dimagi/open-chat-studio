@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException
+from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -156,13 +156,30 @@ class MessageProcessingPipeline:
        DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is logged as
        a warning WITHOUT being re-raised (which would report it to Sentry
        and fail the task with no useful retry).
-    4. Unexpected Exception -- catch-all generates an error message
+    4. NoSpeechDetected -- the transcriber found no speech in the
+       participant's voice note. Replies with a message generated from
+       NO_SPEECH_PROMPTS via EventBot, falls back to
+       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is NOT
+       re-raised: it is user input, not a fault.
+    5. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
        RE-RAISES so the caller knows processing failed.
     """
 
     DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
+
+    # Fed to the error bot, which turns them into advice in the participant's language.
+    NO_SPEECH_PROMPTS = {
+        NoSpeechReason.SILENCE: (
+            "Tell the user that no speech could be heard in the voice message they sent"
+            " and that they should try recording it again."
+        ),
+        NoSpeechReason.NOT_UNDERSTOOD: (
+            "Tell the user that the speech in the voice message they sent could not be made out"
+            " and that they should try recording it again, speaking clearly."
+        ),
+    }
 
     def __init__(
         self,
@@ -189,10 +206,13 @@ class MessageProcessingPipeline:
            error text, log a warning, and set ctx.early_exit_response --
            but do NOT re-raise (misconfiguration is not a bug worth
            reporting).
-        5. If any raises an unexpected exception, generate an error message
+        5. If any raises NoSpeechDetected, reply with a message generated
+           from the reason and set ctx.early_exit_response -- but do NOT
+           re-raise (silence is user input, not a bug).
+        6. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        6. Run terminal stages unconditionally (they always fire).
-        7. If there was an unexpected exception, re-raise it after terminal
+        7. Run terminal stages unconditionally (they always fire).
+        8. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         try:
@@ -248,6 +268,9 @@ class MessageProcessingPipeline:
             logger.warning("Node user config error: %s", e)
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
+        except NoSpeechDetected as e:
+            logger.info("No speech detected in voice message: %s", e.reason)
+            ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
         except Exception as e:
             ctx.early_exit_response = self._generate_error_message(ctx, e)
             ctx.processing_errors.append(str(e))
@@ -264,7 +287,6 @@ class MessageProcessingPipeline:
         Maps to the old _inform_user_of_error() but WITHOUT sending --
         sending is ResponseSendingStage's responsibility.
         """
-        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
         prompt = (
             "Tell the user that something went wrong while processing their message"
             " and that they should try again later."
@@ -275,7 +297,11 @@ class MessageProcessingPipeline:
                 f"they should try again later or adjust the message type or contents "
                 f"according to the following error message: {exception}"
             )
+        return self._user_message(ctx, prompt, exception)
 
+    def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
+        """Ask EventBot for a participant-facing message, falling back to the canned reply."""
+        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
         event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
         try:
             return event_bot.get_user_message(prompt)

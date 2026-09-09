@@ -14,7 +14,13 @@ from openai import OpenAI
 from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
-from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
+from apps.chat.exceptions import (
+    AudioSynthesizeException,
+    AudioTranscriptionException,
+    NoSpeechDetected,
+    NoSpeechReason,
+    UserReportableError,
+)
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.intron import INTRON_BASE_URL
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL, MINIMAX_BASE_URL
@@ -61,10 +67,18 @@ class SpeechService(pydantic.BaseModel):
 
     def transcribe_audio(self, audio: IO[bytes]) -> str:
         try:
-            return self._transcribe_audio(audio)
+            transcript = self._transcribe_audio(audio)
+        except NoSpeechDetected:
+            raise
         except Exception as e:
             log.exception(e)
             raise UserReportableError("Unable to transcribe audio") from e
+
+        # Azure reports silence outright; the rest return an empty transcript.
+        if not (transcript or "").strip():
+            log.info("No transcript returned by %s; treating as silence", self._type)
+            raise NoSpeechDetected(NoSpeechReason.SILENCE)
+        return transcript
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         raise NotImplementedError
@@ -199,7 +213,12 @@ class AzureSpeechService(SpeechService):
             return result.text
         elif result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
-            raise AudioTranscriptionException(f"No speech could be recognized: {reason}")
+            log.info("Azure recognized no speech in the audio: %s", reason)
+            # NotRecognized is the only reason that means speech was heard. The rest cover
+            # silence or noise, so an unrecognized future reason gets the safer message.
+            if reason == speechsdk.NoMatchReason.NotRecognized:
+                raise NoSpeechDetected(NoSpeechReason.NOT_UNDERSTOOD)
+            raise NoSpeechDetected(NoSpeechReason.SILENCE)
         elif result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
             msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"

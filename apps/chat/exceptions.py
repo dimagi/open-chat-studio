@@ -1,3 +1,6 @@
+from enum import StrEnum
+
+
 class ChatException(Exception):
     def __init__(self, message=""):
         self.message = message
@@ -10,6 +13,25 @@ class AudioSynthesizeException(ChatException):
 
 class AudioTranscriptionException(ChatException):
     pass
+
+
+class NoSpeechReason(StrEnum):
+    """Why a transcriber produced no words."""
+
+    SILENCE = "silence"
+    NOT_UNDERSTOOD = "not_understood"
+
+
+class NoSpeechDetected(AudioTranscriptionException):
+    """The transcriber found no speech in the audio: a silent or unintelligible voice note.
+
+    The pipeline answers the participant instead of notifying the team, so each reason
+    needs participant-facing wording in MessageProcessingPipeline.NO_SPEECH_PROMPTS.
+    """
+
+    def __init__(self, reason: NoSpeechReason):
+        self.reason = reason
+        super().__init__(reason.value)
 
 
 class ChannelException(ChatException):

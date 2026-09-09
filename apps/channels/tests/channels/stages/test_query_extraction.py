@@ -5,6 +5,12 @@ import pytest
 from apps.channels.stages.core import QueryExtractionStage
 from apps.channels.tests.channels.conftest import StubCallbacks, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
+from apps.chat.exceptions import NoSpeechDetected, NoSpeechReason
+
+
+def _span(ctx):
+    """The span mock the stage wrote to, as entered by ProcessingStage.__call__."""
+    return ctx.trace_service.span.return_value.__enter__.return_value
 
 
 class TestQueryExtractionStage:
@@ -77,3 +83,25 @@ class TestQueryExtractionStage:
 
         mock_notification.assert_called_once()
         assert any("Voice transcription failed" in e for e in ctx.processing_errors)
+        # The raise tears the span down, which is what marks the trace as errored.
+        assert not _span(ctx).set_outputs.called
+
+    @patch("apps.channels.stages.core.audio_transcription_failure_notification")
+    def test_no_speech_is_neither_notified_nor_recorded_as_an_error(self, mock_notification):
+        msg = audio_message()
+        experiment = MagicMock()
+        experiment.voice_provider.get_speech_service.return_value.supports_transcription = True
+        experiment.voice_provider.get_speech_service.return_value.transcribe_audio.side_effect = NoSpeechDetected(
+            NoSpeechReason.SILENCE
+        )
+        ctx = make_context(message=msg, callbacks=StubCallbacks(), experiment=experiment)
+
+        with pytest.raises(NoSpeechDetected):
+            self.stage(ctx)
+
+        mock_notification.assert_not_called()
+        assert ctx.processing_errors == []
+        # Treated as a control-flow signal, so the span closes cleanly and the
+        # trace is not counted on the operator error-rate charts.
+        assert _span(ctx).set_outputs.called
+        _span(ctx).mark_span_as_error.assert_not_called()

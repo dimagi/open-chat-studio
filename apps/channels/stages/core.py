@@ -17,7 +17,7 @@ from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
+from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserReportableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -571,6 +571,10 @@ class QueryExtractionStage(ProcessingStage):
         if ctx.message.content_type == MESSAGE_TYPES.VOICE:
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
+            except NoSpeechDetected:
+                # The pipeline answers the participant for this one: no team
+                # notification and no processing error recorded against the trace.
+                raise
             except Exception as e:
                 # Stage handles its own error
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
