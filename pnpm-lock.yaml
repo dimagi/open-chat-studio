@@ -80,6 +80,9 @@ importers:
       htmx.org:
         specifier: ^2.0.8
         version: 2.0.10
+      idiomorph:
+        specifier: ^0.8.0
+        version: 0.8.0
       immer:
         specifier: ^11.1.18
         version: 11.1.18
@@ -2468,6 +2471,9 @@ packages:
     engines: {node: ^10 || ^12 || >= 14}
     peerDependencies:
       postcss: ^8.1.0
+
+  idiomorph@0.8.0:
+    resolution: {integrity: sha512-R47JBL+6jHDQvcnbppIUtXXcxi5h6+wuCEEZXnRhUltsgzPFKzThL5PuHppP9ypJuy+7WawcY1TsSBD/iQbMhw==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -6331,6 +6337,8 @@ snapshots:
   icss-utils@5.1.0(postcss@8.5.26):
     dependencies:
       postcss: 8.5.26
+
+  idiomorph@0.8.0: {}
 
   ignore@5.3.2: {}
 
