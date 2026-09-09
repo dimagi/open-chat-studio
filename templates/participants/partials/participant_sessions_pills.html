@@ -19,6 +19,4 @@
        class="btn btn-sm rounded-lg no-animation transition-none shadow-none border border-base-300 focus:outline-none focus-visible:outline-none active:outline-none
               {% if selected_experiment_id == experiment.id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
   {% endfor %}
-  <div class="flex-1"></div>
-  <span class="pg-help">{{ session_table.rows|length }} {% translate "of" %} {{ total_session_count }} {% translate "sessions" %}</span>
 </div>

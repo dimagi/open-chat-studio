@@ -1,4 +1,7 @@
 {% include "participants/partials/participant_sessions_pills.html" %}
 <div id="participant-sessions-table" hx-swap-oob="true">
-  {% include "table/single_table.html" with table=session_table %}
+  {% comment %}Pills don't remount the Alpine filter widget, so fetch the table explicitly.{% endcomment %}
+  <div hx-get="{{ df_filter_data_source_url }}{% querystring %}"
+       hx-trigger="load"
+       hx-swap="outerHTML">{% include "table/table_placeholder.html" %}</div>
 </div>
