@@ -117,28 +117,18 @@ def _perplexity() -> ProviderCredentials | None:
 def _openrouter() -> ProviderCredentials | None:
     """Load OpenRouter credentials from environment variables.
 
-    The ``HTTP-Referer`` and ``X-Title`` headers are recommended by OpenRouter
-    so that requests are attributed to this application in the OpenRouter
-    dashboard and rate-limit tiers. Without them requests appear anonymous.
+    Attribution headers (HTTP-Referer / X-Title) are injected automatically
+    by ``OpenRouterLlmService`` at construction time, so they appear on every
+    request regardless of which code path created the provider.
     """
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         return None
 
-    from django.contrib.sites.models import Site  # noqa: PLC0415 - local import to avoid circular dep at module load
-
-    from apps.web.meta import get_server_root  # noqa: PLC0415 - local import to avoid circular dep at module load
-
     return ProviderCredentials(
         LlmProviderTypes.openrouter,
         "OpenRouter",
-        {
-            "openai_api_key": api_key,
-            "default_headers": {
-                "HTTP-Referer": get_server_root(),
-                "X-Title": Site.objects.get_current().name,
-            },
-        },
+        {"openai_api_key": api_key},
     )
 
 

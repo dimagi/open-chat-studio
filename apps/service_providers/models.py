@@ -171,9 +171,10 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 LlmProviderTypes.groq
                 | LlmProviderTypes.perplexity
                 | LlmProviderTypes.minimax
-                | LlmProviderTypes.openrouter
             ):
                 return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.openrouter:
+                return llm_service.OpenRouterLlmService(**config)
             case LlmProviderTypes.litellm:
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:

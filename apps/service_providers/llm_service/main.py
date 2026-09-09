@@ -230,6 +230,33 @@ class OpenAIGenericService(LlmService):
         return []
 
 
+class OpenRouterLlmService(OpenAIGenericService):
+    """OpenAI-compatible service for OpenRouter with automatic attribution headers.
+
+    OpenRouter recommends sending ``HTTP-Referer`` and ``X-Title`` on every
+    request so that traffic is attributed to this application in the OpenRouter
+    dashboard and rate-limit tiers.  These headers must be injected on every
+    code path (UI, API, bootstrap) — not only during ``bootstrap_data`` seeding.
+    """
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        """Inject attribution headers from the current Django Site into every chat request."""
+        model_kwargs = super()._get_model_kwargs(**kwargs)
+        # Only derive from Site when the caller didn't supply explicit headers.
+        # ``super()._get_model_kwargs`` already merges ``self.default_headers`` when set.
+        if "default_headers" not in model_kwargs:
+            from django.contrib.sites.models import Site  # noqa: PLC0415
+
+            from apps.web.meta import get_server_root  # noqa: PLC0415
+
+            site = Site.objects.get_current()
+            model_kwargs["default_headers"] = {
+                "HTTP-Referer": get_server_root(),
+                "X-Title": site.name,
+            }
+        return model_kwargs
+
+
 class OpenAILlmService(OpenAIGenericService):
     openai_api_base: str | None = None
     openai_organization: str | None = None
