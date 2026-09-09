@@ -26,7 +26,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
 from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
-from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
+from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable, ParticipantSessionsTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
@@ -639,9 +639,14 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
 
+    def extra_filters(self) -> Q:
+        """Extra constraints applied to the base queryset, on top of the dynamic filter widget."""
+        return Q()
+
     def get_queryset(self):
         experiment_id = self.kwargs.get("experiment_id")
         query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
+        query_set = query_set.filter(self.extra_filters())
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
         query_set = session_filter.apply(
@@ -662,6 +667,30 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         if self.kwargs.get("experiment_id"):
             table.exclude = ("chatbot",)
         return table
+
+
+class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):
+    """Sessions table scoped to one participant, with an optional `?chatbot=` quick filter.
+
+    A dedicated view rather than a `participant_id` branch in the base view: the participant
+    details page renders a different column set (Started, single Version, "View" instead of
+    "Session Details"), so it needs its own table class, not a runtime check on a kwarg.
+    """
+
+    table_class = ParticipantSessionsTable
+
+    def extra_filters(self) -> Q:
+        filters = Q(participant_id=self.kwargs.get("participant_id"))
+        # The chatbot quick-filter pills aren't a dynamic filter column, just a `?chatbot=`
+        # param on the page's own URL -- the filter widget's own fetch forwards it here
+        # alongside its f_/op_ params (see triggerFilterChange), so honor it.
+        try:
+            chatbot_id = int(self.request.GET.get("chatbot", ""))
+        except ValueError:
+            chatbot_id = None
+        if chatbot_id:
+            filters &= Q(experiment_id=chatbot_id)
+        return filters
 
 
 @experiment_session_view()

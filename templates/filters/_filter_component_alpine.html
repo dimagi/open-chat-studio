@@ -334,10 +334,20 @@
           }
         };
         if (dataSourceUrl && dataSourceContainerId) {
+          // A caller page can carry its own scoping outside the f_/op_ filter params (e.g. the
+          // participant page's `?chatbot=` quick-filter pill) -- forward it here too, or it
+          // silently drops from the table the moment any dynamic filter changes.
+          const requestValues = { ...filterParams };
+          for (const [key, value] of new URLSearchParams(window.location.search)) {
+            if (key.startsWith('f_') || key.startsWith('op_')) {
+              continue;
+            }
+            (requestValues[key] ??= []).push(value);
+          }
           htmx.ajax('GET', dataSourceUrl, {
             target: "#" + dataSourceContainerId,
             swap: 'innerHTML',
-            values: filterParams
+            values: requestValues
           }).finally(finalize);
         } else {
           finalize();
