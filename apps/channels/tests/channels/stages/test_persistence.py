@@ -112,3 +112,33 @@ class TestPersistenceStageDB:
         bot_msg.refresh_from_db()
         tag_names = list(bot_msg.tags.values_list("name", flat=True))
         assert "voice" in tag_names
+
+    def test_early_exit_ai_message_is_linked_to_the_trace(self):
+        """Only PersistenceStage knows this message exists, so only it can link it."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            early_exit_response="Not allowed",
+        )
+
+        self.stage(ctx)
+
+        ai_message = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.AI)
+        ctx.trace_service.set_output_message_id.assert_called_once_with(ai_message.id)
+
+    def test_no_trace_link_when_the_bot_already_replied(self):
+        """bot.process_input() linked its own message; PersistenceStage must not overwrite it."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            early_exit_response="seed message response",
+            bot_response=MagicMock(),
+        )
+
+        self.stage(ctx)
+
+        ctx.trace_service.set_output_message_id.assert_not_called()

@@ -291,11 +291,15 @@ class PersistenceStage(ProcessingStage):
         #    persisted the AI message (e.g. when the catch-all error handler
         #    set early_exit_response after BotInteractionStage succeeded).
         if ctx.early_exit_response is not None and ctx.bot_response is None:
-            ChatMessage.objects.create(
+            ai_message = ChatMessage.objects.create(
                 chat=ctx.experiment_session.chat,
                 message_type=ChatMessageType.AI,
                 content=ctx.early_exit_response,
             )
+            # Nothing else links this one: the bot path sets it from process_input,
+            # which never ran. Without it the trace has no message to navigate from.
+            if ctx.trace_service:
+                ctx.trace_service.set_output_message_id(ai_message.id)
 
         # 3. Tag and save voice attachment on bot response
         if ctx.voice_audio is not None and ctx.bot_response is not None:
