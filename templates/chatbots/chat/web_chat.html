@@ -9,7 +9,12 @@
         {% endblock sidebar-nav %}
       </div>
     {% endif %}
-    <div class="w-full h-screen flex flex-col">
+    {% comment %}
+      min-w-0 lets this column shrink below its content's intrinsic width. Without it a flex item's
+      automatic minimum size pins the column to its widest child, so a wide message or rendered code
+      block pushes the whole page into horizontal overflow instead of scrolling within the column.
+    {% endcomment %}
+    <div class="w-full min-w-0 h-screen flex flex-col">
       {% if not experiment_version.is_default_version %}
         <div class="flex flex-row items-center justify-between bg-yellow-200 p-2 text-warning-content">
           <div class="flex flex-row items-center">

@@ -14,7 +14,12 @@
                 {% endblock sidebar-nav %}
             </div>
         {% endif %}
-        <div class="w-full h-screen flex flex-row py-4">
+        {% comment %}
+          min-w-0 lets this column shrink below its content's intrinsic width. Without it a flex item's
+          automatic minimum size pins the column to its widest child, so a wide message or rendered code
+          block pushes the whole page into horizontal overflow instead of scrolling within the column.
+        {% endcomment %}
+        <div class="w-full min-w-0 h-screen flex flex-row py-4">
         <!-- History sidebar -->
             <div class="w-1/4 flex" x-show="$store.promptBuilder.visibleSidebar === 'history'" x-cloak>
                 {% include "experiments/components/prompt_builder_history_sidebar.html" %}
