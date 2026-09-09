@@ -1205,7 +1205,7 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
-    def get_schedules_for_experiment(
+    def get_schedules_for_experiments(
         self, experiment_id=None, as_dict=False, as_timezone: str | None = None, include_inactive=False
     ):
         """Scheduled messages for this participant, optionally narrowed to one experiment.

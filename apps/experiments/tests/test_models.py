@@ -169,7 +169,7 @@ class TestExperimentSession:
             action=None,
         )
 
-        assert len(participant.get_schedules_for_experiment(experiment.id)) == 2
+        assert len(participant.get_schedules_for_experiments(experiment.id)) == 2
 
         def _make_string(message, is_system):
             return (
@@ -178,7 +178,7 @@ class TestExperimentSession:
                 f"{' (System)' if is_system else ''}"
             )
 
-        scheduled_messages_str = participant.get_schedules_for_experiment(experiment.id)
+        scheduled_messages_str = participant.get_schedules_for_experiments(experiment.id)
         assert scheduled_messages_str[0] == _make_string(message1, True)
         assert scheduled_messages_str[1] == _make_string(message2, False)
 
@@ -203,7 +203,7 @@ class TestExperimentSession:
             _make_expected_dict(message1.external_id),
             _make_expected_dict(message2.external_id),
         ]
-        assert participant.get_schedules_for_experiment(experiment.id, as_dict=True) == expected_dict_version
+        assert participant.get_schedules_for_experiments(experiment.id, as_dict=True) == expected_dict_version
 
     @travel("2024-01-01", tick=False)
     def test_get_schedules_for_all_experiments_aggregates_across_chatbots(self):
@@ -228,7 +228,7 @@ class TestExperimentSession:
             experiment=experiment_b, team=participant.team, participant=participant, action=event_action_b
         )
 
-        schedules = participant.get_schedules_for_experiment(as_dict=True)
+        schedules = participant.get_schedules_for_experiments(as_dict=True)
         assert len(schedules) == 2
         assert {s["experiment"] for s in schedules} == {experiment_a, experiment_b}
 
@@ -266,7 +266,7 @@ class TestExperimentSession:
             (1, 1, 0),
         ],
     )
-    def test_get_schedules_for_experiment_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
+    def test_get_schedules_for_experiments_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
         session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
@@ -282,7 +282,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=True)
+        schedules = participant.get_schedules_for_experiments(experiment.id, as_dict=True)
 
         assert len(schedules) == 1
         schedule = schedules[0]
@@ -344,7 +344,7 @@ class TestExperimentSession:
             ),
         ],
     )
-    def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
+    def test_get_schedules_for_experiments_as_string(self, time_period, repetitions, total_triggers, expected):
         session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
@@ -360,7 +360,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=False)
+        schedules = participant.get_schedules_for_experiments(experiment.id, as_dict=False)
 
         assert len(schedules) == 1
         schedule = schedules[0]
