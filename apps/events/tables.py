@@ -158,7 +158,7 @@ class SchedulesTable(tables.Table):
         orderable = False
         empty_text = "No schedules."
         row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
             "id": lambda record: f"schedule_{record['external_id']}",
-            "class": "hover:bg-base-200 transition-colors",
         }
         sequence = ("name", "experiment", "next_trigger_date", "cadence", "status", "manage")
