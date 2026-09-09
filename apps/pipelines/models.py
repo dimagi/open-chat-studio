@@ -630,6 +630,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
+        elif self.custom_action_operations.exists():
+            # A type change (#1452) can leave this node no longer LLMResponseWithPrompt while its
+            # old CustomActionOperation rows still exist -- the branch above that would normally
+            # keep them in sync with `params` never runs for a type it doesn't recognise.
+            set_custom_actions(self, [])
 
     @classmethod
     def resource_fk_fields(cls):
