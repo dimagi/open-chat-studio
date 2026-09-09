@@ -786,8 +786,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def requires_attachment_tool(self) -> bool:
-        """When a collection is linked, the attachment tool is required"""
-        return self.params.get("collection_id") is not None
+        """When a collection is linked, the attachment tool is required.
+
+        Read off the FK column, which ``resource_params`` documents as the constraint-backed mirror
+        of the id in params: a deleted collection nulls the column while the stale id lingers in the
+        JSON, and everything else that serves this reference reads the column.
+        """
+        return self.collection_id is not None
 
     def _archive_related_params(self):
         """
