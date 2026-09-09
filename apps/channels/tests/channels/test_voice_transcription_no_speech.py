@@ -6,18 +6,24 @@ side of this one each mock one of those boundaries.
 """
 
 from contextlib import contextmanager
+from io import BytesIO
 from unittest.mock import patch
 
 import azure.cognitiveservices.speech as speechsdk
 import pytest
 
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.datamodels import BaseMessage, MediaCache
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.tests.message_examples import base_messages
 from apps.chat.exceptions import NoSpeechReason, UserReportableError
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.ocs_notifications.models import NotificationEvent
 from apps.service_providers.models import VoiceProviderType
+from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 from .conftest import StubChannel, make_trace_service
 
@@ -38,6 +44,16 @@ def _channel(session):
     channel = StubChannel(session.experiment, session.experiment_channel, session)
     channel.trace_service = make_trace_service()
     return channel
+
+
+def _voice_message(audio: bytes = b"opus-bytes"):
+    """A voice note carrying real bytes, so the attachment is not skipped as zero-length."""
+    return BaseMessage(
+        participant_id="123",
+        message_text="",
+        content_type=MESSAGE_TYPES.VOICE,
+        cached_media_data=MediaCache(content_type="audio/ogg", data=BytesIO(audio)),
+    )
 
 
 @contextmanager
@@ -94,3 +110,48 @@ def test_real_transcription_failure_still_raises_and_notifies(mock_event_bot_cls
         channel.new_user_message(base_messages.audio_message())
 
     assert NotificationEvent.objects.filter(title="Audio Transcription Failed").exists()
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.pipeline.EventBot")
+def test_no_speech_records_the_turn_and_links_it_to_the_trace(mock_event_bot_cls, azure_voice_session):
+    """The turn must be visible in chat history and reachable from the trace both ways.
+
+    Uses the real tracing service rather than the mock, since the linking being asserted
+    is what writes Trace.input_message and Trace.output_message.
+    """
+    mock_event_bot_cls.return_value.get_user_message.return_value = "I could not hear anything"
+    channel = StubChannel(azure_voice_session.experiment, azure_voice_session.experiment_channel, azure_voice_session)
+
+    with _azure_no_match(speechsdk.NoMatchReason.InitialSilenceTimeout):
+        channel.new_user_message(_voice_message())
+
+    chat = azure_voice_session.chat
+    human = ChatMessage.objects.get(chat=chat, message_type=ChatMessageType.HUMAN)
+    ai = ChatMessage.objects.get(chat=chat, message_type=ChatMessageType.AI)
+
+    # The voice note is the content, so the text stays empty rather than becoming the
+    # placeholder -- same rule as an attachment-only message with no caption.
+    assert human.content == ""
+    assert human.get_attached_files().count() == 1
+    assert "voice" in {tag.name for tag in human.tags.all()}
+    assert ai.content == "I could not hear anything"
+
+    trace = Trace.objects.get(session=azure_voice_session)
+    assert trace.input_message_id == human.id
+    assert trace.output_message_id == ai.id
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.pipeline.EventBot")
+def test_no_speech_without_usable_audio_stores_the_placeholder(mock_event_bot_cls, azure_voice_session):
+    """With no attachment to carry the content, empty text would poison later turns."""
+    mock_event_bot_cls.return_value.get_user_message.return_value = "I could not hear anything"
+    channel = _channel(azure_voice_session)
+
+    with _azure_no_match(speechsdk.NoMatchReason.InitialSilenceTimeout):
+        channel.new_user_message(_voice_message(audio=b""))
+
+    human = ChatMessage.objects.get(chat=azure_voice_session.chat, message_type=ChatMessageType.HUMAN)
+    assert human.content == EMPTY_MESSAGE_PLACEHOLDER
+    assert human.get_attached_files().count() == 0

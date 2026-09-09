@@ -571,10 +571,14 @@ class QueryExtractionStage(ProcessingStage):
         if ctx.message.content_type == MESSAGE_TYPES.VOICE:
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
-            except NoSpeechDetected:
-                # The pipeline answers the participant for this one: no team
-                # notification and no processing error recorded against the trace.
-                raise
+            except NoSpeechDetected as e:
+                # Defer to NoSpeechGuardStage so ChatMessageCreationStage records the
+                # turn first: the voice note is real input and belongs in the history
+                # and on the trace, even though there are no words in it. The empty
+                # query is what makes that stage keep the text empty and let the
+                # attachment carry the content.
+                ctx.user_query = ""
+                ctx.no_speech_reason = e.reason
             except Exception as e:
                 # Stage handles its own error
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
@@ -696,6 +700,29 @@ class ChatMessageCreationStage(ProcessingStage):
         )
         ctx.experiment_session.chat.attach_files("voice_message", [file])
         return [file.id]
+
+
+# ---------------------------------------------------------------------------
+# NoSpeechGuardStage
+# ---------------------------------------------------------------------------
+
+
+class NoSpeechGuardStage(ProcessingStage):
+    """Stops a voice note that held no speech, once the turn has been recorded.
+
+    Sits after ChatMessageCreationStage because QueryExtractionStage cannot both
+    record the turn and halt the pipeline. The pipeline answers the participant
+    from the reason.
+    """
+
+    span_input_fields = ("no_speech_reason",)
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.no_speech_reason is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        assert ctx.no_speech_reason is not None
+        raise NoSpeechDetected(ctx.no_speech_reason)
 
 
 # ---------------------------------------------------------------------------

@@ -84,6 +84,12 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
+    # Set by QueryExtractionStage when a voice note held no speech. It defers the
+    # signal rather than raising so ChatMessageCreationStage still records the turn;
+    # NoSpeechGuardStage raises once it has. An empty user_query cannot carry this
+    # on its own -- an attachment-only message with no caption looks identical.
+    no_speech_reason: NoSpeechReason | None = None
+
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,
     # or file). SendingErrorHandlerStage processes each one for notifications
