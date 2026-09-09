@@ -290,8 +290,6 @@ class PersistenceStage(ProcessingStage):
         #    Skip when ctx.bot_response exists -- bot.process_input() already
         #    persisted the AI message (e.g. when the catch-all error handler
         #    set early_exit_response after BotInteractionStage succeeded).
-        print(f"ctx.early_exit_response: {ctx.early_exit_response}")
-        print(f"ctx.bot_response: {ctx.bot_response}")
         if ctx.early_exit_response is not None and ctx.bot_response is None:
             # Both halves of the link, as the bot path does when it saves a response:
             # the FK so the trace points at the message, and the metadata the message
