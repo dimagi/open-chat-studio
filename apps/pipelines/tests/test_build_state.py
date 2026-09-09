@@ -18,6 +18,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.tests.utils import (
+    NON_NODE_ATTRIBUTES,
     create_pipeline_model,
     end_node,
     llm_response_node,
@@ -29,18 +30,6 @@ from apps.service_providers.llm_service import default_models
 from apps.service_providers.llm_service.default_models import Model
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-
-# ``Node.type`` is graph data, so it can name any module-level attribute of
-# ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
-# each must be reported like a removed type rather than crashing whatever the resolved object is
-# then handed to.
-NON_NODE_ATTRIBUTES = [
-    pytest.param("logger", id="module-level-instance"),
-    pytest.param("json", id="imported-module"),
-    pytest.param("send_email_from_pipeline", id="module-level-function"),
-    pytest.param("BaseModel", id="class-that-is-not-a-node"),
-    pytest.param("END", id="string-constant"),
-]
 
 
 class TestNodeValidationErrors:

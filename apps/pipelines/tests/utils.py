@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from langgraph.graph.state import CompiledStateGraph
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
@@ -10,6 +11,18 @@ from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
 from apps.pipelines.nodes.nodes import ToolConfigModel
 from apps.utils.factories.pipelines import PipelineFactory
+
+# ``Node.type`` is graph data, so it can name any module-level attribute of
+# ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
+# each must be reported like a removed type rather than crashing whatever the resolved object is
+# then handed to.
+NON_NODE_ATTRIBUTES = [
+    pytest.param("logger", id="module-level-instance"),
+    pytest.param("json", id="imported-module"),
+    pytest.param("send_email_from_pipeline", id="module-level-function"),
+    pytest.param("BaseModel", id="class-that-is-not-a-node"),
+    pytest.param("END", id="string-constant"),
+]
 
 
 def _make_edges(nodes) -> list[dict]:

@@ -134,7 +134,7 @@ class VersionedParamSpec:
         return self.model_cls.objects.filter(id=value).first()
 
 
-_NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
+NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
     "LLMResponseWithPrompt": (
         VersionedParamSpec(
             param_name="source_material_id",
@@ -169,4 +169,4 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
 
 
 def get_versioned_param_specs(node_type: str) -> tuple[VersionedParamSpec, ...]:
-    return _NODE_PARAM_SPECS.get(node_type, ())
+    return NODE_PARAM_SPECS.get(node_type, ())
