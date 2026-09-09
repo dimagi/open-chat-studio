@@ -1,7 +1,7 @@
 import React from "react"
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues, Option} from "./types/nodeParameterValues";
-import {JsonSchema, PropertySchema} from "./types/nodeParams";
+import {JsonSchema, NodeParams, PropertySchema} from "./types/nodeParams";
 
 declare global {
   interface Window {
@@ -75,6 +75,39 @@ export function getDocumentationLink(schema: JsonSchema) {
   return documentationLink;
 }
 
+
+/**
+ * The param values a fresh node of this schema starts with: each property's own default,
+ * falling back to the team's cached default-values map, or null when neither has one.
+ */
+export function getDefaultParamValues(schema: JsonSchema): NodeParams {
+  const {defaultValues} = getCachedData();
+  const defaults: NodeParams = {name: ""};
+  for (const name in schema.properties) {
+    const property = schema.properties[name];
+    defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
+  }
+  return defaults;
+}
+
+/**
+ * The param values a node keeps when its type changes to `newSchema` (#1452).
+ *
+ * Every type-specific param resets to the new type's own defaults, never carried across by
+ * matching field names -- a name shared between two schemas is not proof it means the same
+ * thing in both (see `NodeUpdateSerializer` on the v2 API, which refuses a type change in place
+ * for exactly this reason). `name` and `color` are the only survivors: `name` is UI identity
+ * every schema declares, and `color` is UI-only state that is not a schema field on any node
+ * type at all, so it is carried separately rather than lost to the reset.
+ */
+export function buildTypeChangeParams(newSchema: JsonSchema, currentParams: NodeParams): NodeParams {
+  const params = getDefaultParamValues(newSchema);
+  params.name = currentParams.name;
+  if (currentParams.color !== undefined) {
+    params.color = currentParams.color;
+  }
+  return params;
+}
 
 export function concatenate(value: string | string[] | null | undefined): string {
   if (!value) return "";
