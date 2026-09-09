@@ -2,7 +2,8 @@ import pytest
 from django.urls import reverse
 
 from apps.annotations.models import Tag, TagCategories
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessageMetadataKeys, ChatMessageType
+from apps.pipelines.models import PipelineChatHistoryModes
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
     ExperimentSessionFactory,
@@ -108,3 +109,103 @@ class TestTagFilterInSessionMessages:
         page_messages = response.context["messages"]
 
         assert {message.id for message in page_messages} == {billing_message.id, urgent_message.id}
+
+
+@pytest.mark.django_db()
+class TestCompressionCheckpointsInSessionMessages:
+    def _url(self, experiment, session):
+        return reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+
+    def test_summarize_checkpoint_shows_the_summary_text(self, client, experiment):
+        """A real summarize checkpoint only ever sets `summary` -- `compression_marker` is reserved
+        for the synthetic, unsaved message `ChatMessage.save()` refuses to persist (see
+        `save_compression_checkpoint` in apps/pipelines/repository.py)."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Earlier message")
+        ChatMessageFactory.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="Later message",
+            summary="The user asked about billing and was told to check the invoices page.",
+        )
+
+        client.force_login(experiment.owner)
+        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "History summarized here" in content
+        assert "The user asked about billing and was told to check the invoices page." in content
+        assert "History truncated here" not in content
+
+    @pytest.mark.parametrize(
+        "mode",
+        [
+            pytest.param(PipelineChatHistoryModes.TRUNCATE_TOKENS, id="truncate_tokens"),
+            pytest.param(PipelineChatHistoryModes.MAX_HISTORY_LENGTH, id="max_history_length"),
+        ],
+    )
+    def test_truncation_checkpoint_shows_a_plain_separator(self, client, experiment, mode):
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="Later message",
+            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: mode},
+        )
+
+        client.force_login(experiment.owner)
+        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "History truncated here" in content
+        assert "History summarized here" not in content
+
+    def test_no_checkpoint_indicator_without_compression(self, client, experiment):
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Plain message")
+
+        client.force_login(experiment.owner)
+        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "History summarized here" not in content
+        assert "History truncated here" not in content
+
+    def test_checkpoint_shows_on_the_default_paginated_response(self, client, experiment):
+        """The checkpoint indicator is rendered per-message, not derived from adjacent messages
+        like time_gap_text is -- confirm it still shows up without `show_all=on`."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="Later message",
+            summary="The user asked about billing.",
+        )
+
+        client.force_login(experiment.owner)
+        response = client.get(self._url(experiment, session))
+
+        assert response.status_code == 200
+        assert "History summarized here" in response.content.decode()

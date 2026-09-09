@@ -18,6 +18,23 @@
           <span class="badge badge-success">{{ message.time_gap_text }}</span>
         </div>
       {% endif %}
+      {% if message.summary or message.compression_marker %}
+        <div class="px-5 py-3 border-b border-base-300">
+          {% if message.summary %}
+            <div class="collapse collapse-arrow bg-base-200/50 rounded-lg">
+              <input type="checkbox" />
+              <div class="collapse-title text-sm font-medium text-base-content/70 flex items-center gap-2 min-h-0 py-2">
+                <i class="fa-solid fa-note-sticky"></i> History summarized here
+              </div>
+              <div class="collapse-content text-sm text-base-content/80">
+                <p>{{ message.summary }}</p>
+              </div>
+            </div>
+          {% else %}
+            <div class="text-center text-xs text-base-content/50 uppercase tracking-wide">History truncated here</div>
+          {% endif %}
+        </div>
+      {% endif %}
       <div
         class="group flex gap-3.5 px-5 py-4 border-b border-base-300 {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
         x-data="{
