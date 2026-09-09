@@ -9,16 +9,20 @@ Override pagination and sorting in base template to use htmx
         <thead {{ table.attrs.thead.as_html }}>
             <tr>
                 {% for column in table.columns %}
-                    <th {{ column.attrs.th.as_html }} scope="col"
+                    <th {{ column.attrs.th.as_html }} scope="col">
                         {% if column.orderable %}
-                            hx-get="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
-                            hx-trigger="click"
-                            hx-target="closest div.table-container"
-                            hx-ext="morph"
-                            hx-swap="morph"
-                            style="cursor: pointer;"
-                        {% endif %}>
-                        {{ column.header }}
+                            <a href="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
+                               hx-get="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
+                               hx-trigger="click"
+                               hx-target="closest div.table-container"
+                               hx-ext="morph"
+                               hx-swap="morph"
+                               class="block w-full h-full cursor-pointer">
+                                {{ column.header }}
+                            </a>
+                        {% else %}
+                            {{ column.header }}
+                        {% endif %}
                     </th>
                 {% endfor %}
             </tr>
@@ -27,6 +31,7 @@ Override pagination and sorting in base template to use htmx
 {% endblock table.thead %}
 
 {% block prev-page-link-attr %}
+    href="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
     hx-trigger="click"
     hx-target="closest div.table-container"
@@ -35,6 +40,7 @@ Override pagination and sorting in base template to use htmx
 {% endblock prev-page-link-attr %}
 
 {% block next-page-link-attr %}
+    href="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
     hx-trigger="click"
     hx-target="closest div.table-container"

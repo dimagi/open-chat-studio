@@ -111,10 +111,15 @@ class MembersTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignor
 
     def get_template_names(self):
         table = self._table
-        if table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET:
-            # Pagination/sort links target `closest div.table-container` with an
-            # outerHTML swap (see table/tailwind_js_pagination.html), so the response
-            # must be exactly that container -- not the count text and wrapper around
-            # it, or each click nests another copy of them inside the last one.
+        wants_fragment = (
+            table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET
+        )
+        if wants_fragment and self.request.htmx:
+            # Pagination/sort links target `closest div.table-container` with a morph
+            # swap (see table/tailwind_js_pagination.html), so an htmx request must get
+            # exactly that container -- not the count text and wrapper around it, or
+            # each click nests another copy of them inside the last one. They also carry
+            # a real href now, so a modified click (Ctrl/Cmd-click, middle-click) opens
+            # the same URL as a genuine non-htmx navigation, which needs the full page.
             return ["table/single_table.html"]
         return [self.template_name]

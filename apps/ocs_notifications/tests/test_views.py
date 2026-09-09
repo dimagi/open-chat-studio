@@ -808,9 +808,10 @@ class TestNotificationButtonsUseMorphSwap:
         """`table/tailwind_js_pagination.html` backs every table's sort headers and
         pagination links, self-swapping `closest div.table-container` the same way the
         three buttons above self-swap their own trigger -- same bug, shared template.
-        Scoped to a `<th>` tag specifically, since the buttons above (already migrated,
-        rendered `<td>` content on this same page) would trivially satisfy a page-wide
-        `hx-swap="morph"` check regardless of whether the sort header itself changed."""
+        A sort header wraps its text in a real `<a href>` (see #4463, so the control is
+        keyboard-focusable), so this is scoped to `<th> <a ...>` specifically -- a bare
+        page-wide `hx-swap="morph"` check would trivially match the mute button's own
+        `<a>` duration links (already migrated) elsewhere on this same page."""
         user = team_with_users.members.first()
         _create_notification(user=user, team=team_with_users)
         client.force_login(user)
@@ -821,5 +822,5 @@ class TestNotificationButtonsUseMorphSwap:
         response = client.get(reverse("ocs_notifications:notifications_table"))
 
         assert response.status_code == 200
-        assert re.search(rb"<th[^>]*hx-ext=\"morph\"", response.content)
-        assert re.search(rb"<th[^>]*hx-swap=\"morph\"", response.content)
+        assert re.search(rb"<th[^>]*>\s*<a[^>]*hx-ext=\"morph\"", response.content)
+        assert re.search(rb"<th[^>]*>\s*<a[^>]*hx-swap=\"morph\"", response.content)
