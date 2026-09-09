@@ -1,6 +1,6 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent, MouseEvent} from "react";
-import {concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
+import {buildTypeChangeParams, concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
@@ -61,6 +61,23 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     }));
   };
 
+  // Other user-addable types this node could become (#1452). Start/End/Passthrough are never
+  // offered, in either direction: a node whose own schema isn't `ui:can_add` gets no control at
+  // all, and this list excludes them as targets the same way ComponentList's palette does.
+  const changeableTypes = nodeSchema["ui:can_add"]
+    ? Array.from(getCachedData().nodeSchemas.values())
+        .filter((schema) => schema["ui:can_add"] && schema.title !== data.type)
+        .sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]))
+    : [];
+
+  const changeNodeType = (newSchema: JsonSchema) => {
+    setNode(id, produce((next) => {
+      next.data.type = newSchema.title;
+      next.data.label = newSchema["ui:label"];
+      next.data.params = buildTypeChangeParams(newSchema, data.params);
+    }));
+  };
+
   const currentColor = data.params["color"] || NODE_COLORS[0].value;
   const nodeClasses = `${nodeBorderClass(hasErrors, selected)} ${currentColor}`;
 
@@ -77,6 +94,21 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
               <button className="btn btn-xs join-item" onClick={() => editNode()}>
                   <i className="fa fa-pencil"></i>
               </button>
+            )}
+            {changeableTypes.length > 0 && (
+              <div className="dropdown dropdown-top">
+                  <button className="btn btn-xs join-item" aria-label="Change node type">
+                      <i className="fa-solid fa-right-left"></i>
+                  </button>
+                  <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 max-h-60 overflow-y-auto">
+                    <li className="menu-title">Change type</li>
+                    {changeableTypes.map((schema) => (
+                      <li key={schema.title}>
+                        <a onClick={() => changeNodeType(schema)}>{schema["ui:label"]}</a>
+                      </li>
+                    ))}
+                  </ul>
+              </div>
             )}
             {nodeDocs && (
               <div className="dropdown dropdown-right">
