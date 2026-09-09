@@ -10,7 +10,7 @@ from apps.pipelines.const import REACT_FLOW_END_TYPE
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
+from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 from apps.teams.models import Team
 
 from .facade import PipelineEdit, graph_diff
@@ -46,19 +46,21 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     the request body, so nothing here has to wait on the graph.
     """
     # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
-    # and
-    # `get_node_type_schema` has already refused any other name, so this cannot come back None.
-    node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
+    # and `get_node_type_schema` has already refused any other name, so neither of these can come
+    # back None.
+    resolved = NodeType(node_type)
+    node_class = cast(type[BasePipelineNode], resolved.node_class)
+    schema = cast(NodeSchema, resolved.schema)
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
     node = FlowNode(
         id=node_id,
-        type=NodeType(node_type).react_flow_type,
+        type=resolved.react_flow_type,
         position=position,
         data=FlowNodeData(
             id=node_id,
             type=node_type,
-            label=label if label is not None else node_schema(node_class).label,
+            label=label if label is not None else schema.label,
             params=initial_params(node_class, node_id, params),
         ),
     )
@@ -108,15 +110,8 @@ def plan_delete(flow: Flow, node_id: str) -> PipelineEdit:
 
 
 def refuse_if_server_managed(node_type: str) -> None:
-    """Refuse to touch a node the server owns — Start and End, the two the API will not create.
-
-    ``can_delete`` is the UI builder's own flag for this and is False for exactly those two, so the
-    API withholds the same nodes rather than keeping a list of its own.
-    """
-    node_class = resolve_node_class(node_type)
-    # A type naming no node class -- removed since, or never one -- has no flag to consult, and is
-    # exactly the sort of node a pipeline has to be able to shed. So it is not withheld.
-    if node_class is not None and not node_schema(node_class).can_delete:
+    """Refuse to touch a node the server owns — Start and End, the two the API will not create."""
+    if NodeType(node_type).is_server_managed:
         raise NodeIsServerManaged(
             f"'{node_type}' is part of the pipeline's structure: it cannot be edited or deleted through the API."
         )
@@ -144,8 +139,7 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
     shows a ``CodeNode`` carrying ``llm_provider_id`` and others it does not declare. Merging those
     back would write them to the row on any edit, label-only ones included.
     """
-    node_class = resolve_node_class(content.type)
-    declared = set(node_class.model_fields) if node_class is not None else set()
+    declared = content.node_type.declared_params
     mirrored = Node.resource_param_names()
     return {name: value for name, value in content.params.items() if name in declared or name not in mirrored}
 
@@ -192,13 +186,6 @@ def parking_position(flow: Flow) -> dict:
     placed = [node for node in flow.nodes if node.type != REACT_FLOW_END_TYPE]
     rightmost = max((node.position.get("x") or 0 for node in placed), default=0)
     return {"x": rightmost + PARKING_STEP_X, "y": PARKING_Y}
-
-
-def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
-    """A node class's ``NodeSchema``: its display label, and whether it can be added or deleted."""
-    # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
-    # node class here stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
-    return cast(NodeSchema, node_class.model_config["json_schema_extra"])
 
 
 def _unused_node_id(flow: Flow, node_type: str) -> str:
