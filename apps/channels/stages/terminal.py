@@ -281,54 +281,69 @@ class PersistenceStage(ProcessingStage):
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        # 1. Apply human message tags set by earlier stages
-        if ctx.human_message and ctx.human_message_tags:
-            for tag_name, tag_category in ctx.human_message_tags:
-                ctx.human_message.create_and_add_tag(tag_name, ctx.experiment.team, tag_category)
+        self._apply_human_message_tags(ctx)
+        self._persist_early_exit_response(ctx)
+        self._attach_voice_audio(ctx)
 
-        # 2. Persist early exit response to chat history.
-        #    Skip when ctx.bot_response exists -- bot.process_input() already
-        #    persisted the AI message (e.g. when the catch-all error handler
-        #    set early_exit_response after BotInteractionStage succeeded).
-        if ctx.early_exit_response is not None and ctx.bot_response is None:
-            # Both halves of the link, as the bot path does when it saves a response:
-            # the FK so the trace points at the message, and the metadata the message
-            # renders its own trace icon from. The bot path never ran, so nothing else
-            # sets either.
-            trace_metadata = ctx.trace_service.get_trace_metadata() if ctx.trace_service else {}
-            ai_message = ChatMessage.objects.create(
-                chat=ctx.experiment_session.chat,
-                message_type=ChatMessageType.AI,
-                content=ctx.early_exit_response,
-                metadata=trace_metadata,
+    def _apply_human_message_tags(self, ctx: MessageProcessingContext) -> None:
+        """Apply the tags earlier stages set on the inbound message."""
+        if not (ctx.human_message and ctx.human_message_tags):
+            return
+
+        for tag_name, tag_category in ctx.human_message_tags:
+            ctx.human_message.create_and_add_tag(tag_name, ctx.experiment.team, tag_category)
+
+    def _persist_early_exit_response(self, ctx: MessageProcessingContext) -> None:
+        """Record the early exit response as an AI message.
+
+        Skipped when ctx.bot_response exists -- bot.process_input() already
+        persisted the AI message (e.g. when the catch-all error handler
+        set early_exit_response after BotInteractionStage succeeded).
+        """
+        if ctx.early_exit_response is None or ctx.bot_response is not None:
+            return
+
+        # Both halves of the link, as the bot path does when it saves a response:
+        # the FK so the trace points at the message, and the metadata the message
+        # renders its own trace icon from. The bot path never ran, so nothing else
+        # sets either.
+        trace_metadata = ctx.trace_service.get_trace_metadata() if ctx.trace_service else {}
+        ai_message = ChatMessage.objects.create(
+            chat=ctx.experiment_session.chat,
+            message_type=ChatMessageType.AI,
+            content=ctx.early_exit_response,
+            metadata=trace_metadata,
+        )
+        if ctx.trace_service:
+            ctx.trace_service.set_output_message_id(ai_message.id)
+
+    def _attach_voice_audio(self, ctx: MessageProcessingContext) -> None:
+        """Tag the bot response as voice and attach the synthesized audio."""
+        if ctx.voice_audio is None or ctx.bot_response is None:
+            return
+
+        ctx.bot_response.create_and_add_tag("voice", ctx.experiment.team, TagCategories.MEDIA_TYPE)
+        ctx.voice_audio.audio.seek(0)
+        # Guard against zero-byte / exhausted audio streams. Persisting a
+        # File row without storage leads to ValueError later when the
+        # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
+        if not ctx.voice_audio.audio.read():
+            logger.warning(
+                "Skipping voice_note.ogg attachment for experiment=%s session=%s: empty audio stream",
+                ctx.experiment.id,
+                getattr(ctx.experiment_session, "id", None),
             )
-            if ctx.trace_service:
-                ctx.trace_service.set_output_message_id(ai_message.id)
+            return
 
-        # 3. Tag and save voice attachment on bot response
-        if ctx.voice_audio is not None and ctx.bot_response is not None:
-            ctx.bot_response.create_and_add_tag("voice", ctx.experiment.team, TagCategories.MEDIA_TYPE)
-            ctx.voice_audio.audio.seek(0)
-            # Guard against zero-byte / exhausted audio streams. Persisting a
-            # File row without storage leads to ValueError later when the
-            # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
-            audio_bytes = ctx.voice_audio.audio.read()
-            if not audio_bytes:
-                logger.warning(
-                    "Skipping voice_note.ogg attachment for experiment=%s session=%s: empty audio stream",
-                    ctx.experiment.id,
-                    getattr(ctx.experiment_session, "id", None),
-                )
-            else:
-                ctx.voice_audio.audio.seek(0)
-                file = File.create(
-                    "voice_note.ogg",
-                    ctx.voice_audio.audio,
-                    ctx.experiment.team_id,
-                    purpose=FilePurpose.MESSAGE_MEDIA,
-                    content_type=ctx.voice_audio.content_type,
-                )
-                ctx.bot_response.add_attachment_id(file.id)
+        ctx.voice_audio.audio.seek(0)
+        file = File.create(
+            "voice_note.ogg",
+            ctx.voice_audio.audio,
+            ctx.experiment.team_id,
+            purpose=FilePurpose.MESSAGE_MEDIA,
+            content_type=ctx.voice_audio.content_type,
+        )
+        ctx.bot_response.add_attachment_id(file.id)
 
 
 # ---------------------------------------------------------------------------

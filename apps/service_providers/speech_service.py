@@ -120,6 +120,17 @@ class AWSSpeechService(SpeechService):
             return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
 
 
+def _azure_cancellation_message(prefix: str, cancellation_details) -> str:
+    """Azure's cancellation reason, with the error details when it carries them."""
+    # keep heavy imports inline
+    import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
+
+    msg = f"{prefix}: {cancellation_details.reason.name}"
+    if cancellation_details.reason == speechsdk.CancellationReason.Error and cancellation_details.error_details:
+        msg += f". Error details: {cancellation_details.error_details}"
+    return msg
+
+
 class AzureSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.Azure
     supports_transcription: ClassVar[bool] = True
@@ -182,12 +193,9 @@ class AzureSpeechService(SpeechService):
 
                 return SynthesizedAudio(audio=BytesIO(file_content), duration=duration_seconds, format="wav")
             elif result.reason == speechsdk.ResultReason.Canceled:
-                cancellation_details = result.cancellation_details
-                msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
-                if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                    if cancellation_details.error_details:
-                        msg += f". Error details: {cancellation_details.error_details}"
-                raise AudioSynthesizeException(msg)
+                raise AudioSynthesizeException(
+                    _azure_cancellation_message("Azure speech synthesis failed", result.cancellation_details)
+                )
             raise AudioSynthesizeException(f"Unexpected result: {result}")
         finally:
             if os.path.exists(temp_file_name):
@@ -209,9 +217,16 @@ class AzureSpeechService(SpeechService):
             speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
             result = speech_recognizer.recognize_once_async().get()
 
+        return self._transcript_from_result(result)
+
+    def _transcript_from_result(self, result) -> str:
+        """The recognized text, or the exception saying why there is none."""
+        # keep heavy imports inline
+        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
+
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             return result.text
-        elif result.reason == speechsdk.ResultReason.NoMatch:
+        if result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
             log.info("Azure recognized no speech in the audio: %s", reason)
             # NotRecognized is the only reason that means speech was heard. The rest cover
@@ -219,13 +234,10 @@ class AzureSpeechService(SpeechService):
             if reason == speechsdk.NoMatchReason.NotRecognized:
                 raise NoSpeechDetected(NoSpeechReason.NOT_UNDERSTOOD)
             raise NoSpeechDetected(NoSpeechReason.SILENCE)
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation_details = result.cancellation_details
-            msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
-            if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                if cancellation_details.error_details:
-                    msg += f". Error details: {cancellation_details.error_details}"
-            raise AudioTranscriptionException(msg)
+        if result.reason == speechsdk.ResultReason.Canceled:
+            raise AudioTranscriptionException(
+                _azure_cancellation_message("Azure speech transcription failed", result.cancellation_details)
+            )
         raise AudioTranscriptionException(f"Unexpected result: {result}")
 
 

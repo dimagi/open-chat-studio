@@ -156,12 +156,12 @@ class MessageProcessingPipeline:
     2. EarlyAbort -- silent halt; no message, no terminal stages.
        Used when reporting back to the user would be wrong (e.g. platform
        consent withdrawn).
-    3. Pipeline build error -- the pipeline is misconfigured (e.g. a
-       deprecated model, an unreachable node). This is a user
-       configuration problem, not a bug, so it replies with the generic
-       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is logged as
-       a warning WITHOUT being re-raised (which would report it to Sentry
-       and fail the task with no useful retry).
+    3. Configuration error -- the chatbot is misconfigured (e.g. a
+       deprecated model, an unreachable node, a broken template, code that
+       raised). This is a user configuration problem, not a bug, so it
+       replies with the generic DEFAULT_ERROR_RESPONSE_TEXT, runs terminal
+       stages, and is logged as a warning WITHOUT being re-raised (which
+       would report it to Sentry and fail the task with no useful retry).
     4. NoSpeechDetected -- the transcriber found no speech in the
        participant's voice note. Replies with a message generated from
        NO_SPEECH_PROMPTS via EventBot, falls back to
@@ -174,6 +174,10 @@ class MessageProcessingPipeline:
     """
 
     DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
+
+    # Errors in how the chatbot was configured, not bugs: they get the canned reply
+    # and are never re-raised.
+    CONFIGURATION_EXCEPTIONS = (PipelineBuildError, PipelineNodeBuildError, CodeNodeRunError, NodeUserConfigRunError)
 
     # Fed to the error bot, which turns them into advice in the participant's language.
     NO_SPEECH_PROMPTS = {
@@ -208,7 +212,7 @@ class MessageProcessingPipeline:
            handling, no terminal stages, no user-facing response.
         3. If any raises a passthrough exception, re-raise immediately
            without error handling or terminal stages.
-        4. If any raises a pipeline build error, reply with the generic
+        4. If any raises a configuration error, reply with the generic
            error text, log a warning, and set ctx.early_exit_response --
            but do NOT re-raise (misconfiguration is not a bug worth
            reporting).
@@ -256,22 +260,16 @@ class MessageProcessingPipeline:
             # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
             # no error message generation, no terminal stages.
             raise
-        except (PipelineBuildError, PipelineNodeBuildError) as e:
-            # The pipeline is misconfigured (e.g. a deprecated model). Reply
-            # with the generic message and run terminal stages, but do NOT
-            # re-raise: this is a configuration problem, not a bug, and
-            # re-raising would report it to Sentry and fail the task with no
-            # useful retry. Skip LLM-based message generation -- the LLM may be
-            # the thing that is misconfigured, and a canned reply is enough.
-            logger.warning("Pipeline build error (node=%s): %s", getattr(e, "node_id", None), e)
-            ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
-            ctx.processing_errors.append(str(e))
-        except (CodeNodeRunError, NodeUserConfigRunError) as e:
-            # User-authored code or user-configured template/email raised an error.
-            # This is a user configuration problem, not a system bug.
-            # Log a warning and return a canned reply without re-raising so that
-            # Sentry does not receive a spurious error report.
-            logger.warning("Node user config error: %s", e)
+        except self.CONFIGURATION_EXCEPTIONS as e:
+            # The chatbot is misconfigured (a deprecated model, a broken template,
+            # user-authored code that raised). Reply with the canned message and run
+            # terminal stages, but do NOT re-raise: this is a configuration problem,
+            # not a bug, and re-raising would report it to Sentry and fail the task
+            # with no useful retry. Skip LLM-based message generation too -- the LLM
+            # may be the thing that is misconfigured.
+            logger.warning(
+                "Chatbot configuration error (%s, node=%s): %s", type(e).__name__, getattr(e, "node_id", None), e
+            )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
         except NoSpeechDetected as e:
