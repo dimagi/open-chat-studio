@@ -5,6 +5,7 @@ Never touches the database directly — the caller (the PATCH view) is responsib
 for persisting the merged graph and calling update_nodes_from_data().
 """
 
+from apps.pipelines.build_state import output_handle_labels, rewired_edges_for_node
 from apps.pipelines.flow import (
     EdgeDiff,
     Flow,
@@ -52,9 +53,11 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
     for node_id in diff.delete:
         node_map.pop(node_id, None)
 
-    # Update: replace in-place
+    # Update: replace in-place, following or dropping edges whose output handles moved
     for updated in diff.update:
+        previous = node_map.get(updated.id)
         node_map[updated.id] = updated
+        _rewire_edges_for_update(flow, updated.id, previous, updated)
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:
@@ -67,6 +70,27 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
     deleted_ids = set(diff.delete)
     if deleted_ids:
         flow.edges = [edge for edge in flow.edges if edge.source not in deleted_ids and edge.target not in deleted_ids]
+
+
+def _rewire_edges_for_update(flow: Flow, node_id: str, previous: FlowNode | None, updated: FlowNode) -> None:
+    """Follow or drop ``node_id``'s outgoing edges when this update changes its output handles.
+
+    Covers a param edit that changes a router's branches (the pre-existing gap this closes) and a
+    type change (#1452) the same way, since both are just an update whose handles differ before
+    and after -- neither is special-cased.
+    """
+    if previous is None or previous.data is None or updated.data is None:
+        return
+    before = output_handle_labels(previous.data)
+    after = output_handle_labels(updated.data)
+    if before == after:
+        return
+    changed, deleted_ids = rewired_edges_for_node(flow.edges, node_id, before, after)
+    if not changed and not deleted_ids:
+        return
+    changed_by_id = {edge.id: edge for edge in changed}
+    deleted = set(deleted_ids)
+    flow.edges = [changed_by_id.get(edge.id, edge) for edge in flow.edges if edge.id not in deleted]
 
 
 def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
