@@ -350,9 +350,7 @@ class TestNodeUpdateRewiresHandles:
             {"name": "llm"},
             edges=[make_flow_edge("e0", "src", "t0", source_handle="output")],
         )
-        updated = make_flow_node(
-            "src", LLMResponseWithPrompt.__name__, params={"name": "llm", "prompt": "Be terse."}
-        )
+        updated = make_flow_node("src", LLMResponseWithPrompt.__name__, params={"name": "llm", "prompt": "Be terse."})
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
 
         edge_data, _ = apply_pipeline_patch(graph, patch)
