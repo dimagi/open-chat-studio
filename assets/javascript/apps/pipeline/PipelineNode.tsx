@@ -32,6 +32,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const hasErrors = usePipelineStore((state) => state.nodeHasErrors(id));
   const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const deprecatedModel = usePipelineStore((state) => state.getNodeDeprecatedModel(id));
   const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
 
@@ -62,7 +63,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   };
 
   const currentColor = data.params["color"] || NODE_COLORS[0].value;
-  const nodeClasses = `${nodeBorderClass(hasErrors, selected)} ${currentColor}`;
+  const nodeClasses = `${nodeBorderClass(hasErrors, selected, !!deprecatedModel)} ${currentColor}`;
 
   return (
     <>
