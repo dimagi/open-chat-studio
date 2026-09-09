@@ -10,6 +10,8 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   const closeEditor = useEditorStore((state) => state.closeEditor);
   const getNode = usePipelineStore((state) => state.getNode);
   const setNode = usePipelineStore((state) => state.setNode);
+  const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
+  const readOnly = usePipelineStore((state) => state.readOnly);
 
   const [expanded, setExpanded] = useState(false);
 
@@ -64,7 +66,10 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
             {schemaProperties.length === 0 && (
               <p className="pg-text-muted">No parameters to edit</p>
             )}
-            {getWidgets({schema: nodeSchema, nodeId: id!, nodeData: data, updateParamValue})}
+            {getWidgets(
+              {schema: nodeSchema, nodeId: id!, nodeData: data, updateParamValue},
+              {getNodeFieldError, readOnly}
+            )}
           </div>
         </>
       </OverlayPanel>

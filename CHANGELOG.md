@@ -30,6 +30,8 @@ version section when a release is cut.
 - `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
   get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
   operator or team sets one. (#4371)
+- `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
+  rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
@@ -37,6 +39,13 @@ version section when a release is cut.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)
+- `OCS_LANGFUSE_PUBLIC_KEY`, `OCS_LANGFUSE_SECRET_KEY`, `OCS_LANGFUSE_HOST`,
+  `OCS_LANGFUSE_SAMPLE_RATE`: new, optional. Trace the System Agent's LLM calls
+  (code generation, filter building) in Langfuse. Unset by default (no
+  tracing); this is separate from a team's own Trace Provider. (#4395)
+- `DATA_UPLOAD_MAX_MEMORY_SIZE`: new, optional, defaults to `10485760` (10 MB).
+  Caps the request body Django buffers in memory. See the
+  [configuration reference](docs/hosting/configuration.md#security). (#4411)
 - `PRELOGIN_CONTACT_EMAIL`, `HUBSPOT_FORM_REGION`, `HUBSPOT_FORM_PORTAL_ID`,
   `HUBSPOT_FORM_ID`, `PRELOGIN_DEMO_BOTS`: removed. The pre-login marketing
   pages that read them are gone (see Deployment below). Setting them is now a
@@ -70,6 +79,20 @@ version section when a release is cut.
      removal may land, and links its deprecation tracking issue. -->
 
 ### Removed
+- OpenAI Assistants are fully removed. A pipeline holding an assistant node
+  still opens in the editor — the node renders as a "Removed Node" — but the
+  pipeline no longer builds, so it cannot run. OpenAI retired the Assistants API
+  on 26 August 2026, so these pipelines were already failing at the provider.
+  No migration and no data loss: the `OpenAiAssistant` rows and their Django
+  admin survive this release, and a later phase drops the tables and the FK
+  columns. (#4372, #4254)
+- **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
+  key on a node, and the `AssistantNodeParams` component is gone from the node
+  params union. The key was already conditional — omitted for nodes not
+  declaring `assistant_id` — so only clients inspecting assistant-bearing
+  pipelines are affected; those nodes still render through the generic node
+  shape. `assistant_id` is suppressed rather than falling through to the
+  generic params, so no internal id is exposed. (#4357, #4254)
 - The OpenAI Assistants UI is gone: `/a/<team>/assistants/` and everything under
   it now 404s, the nav entry is removed, and `assistant_file:` links in
   historical chat messages render as plain text instead of downloads. OpenAI

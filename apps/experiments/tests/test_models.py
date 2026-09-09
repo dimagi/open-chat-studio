@@ -26,7 +26,6 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.users.models import CustomUser
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
@@ -46,6 +45,7 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
 from apps.utils.tests.langchain import build_fake_llm_service
 
 
@@ -169,7 +169,7 @@ class TestExperimentSession:
             action=None,
         )
 
-        assert len(participant.get_schedules_for_experiment(experiment.id)) == 2
+        assert len(participant.get_schedules_for_experiments(experiment.id)) == 2
 
         def _make_string(message, is_system):
             return (
@@ -178,7 +178,7 @@ class TestExperimentSession:
                 f"{' (System)' if is_system else ''}"
             )
 
-        scheduled_messages_str = participant.get_schedules_for_experiment(experiment.id)
+        scheduled_messages_str = participant.get_schedules_for_experiments(experiment.id)
         assert scheduled_messages_str[0] == _make_string(message1, True)
         assert scheduled_messages_str[1] == _make_string(message2, False)
 
@@ -203,7 +203,59 @@ class TestExperimentSession:
             _make_expected_dict(message1.external_id),
             _make_expected_dict(message2.external_id),
         ]
-        assert participant.get_schedules_for_experiment(experiment.id, as_dict=True) == expected_dict_version
+        assert participant.get_schedules_for_experiments(experiment.id, as_dict=True) == expected_dict_version
+
+    @travel("2024-01-01", tick=False)
+    def test_get_schedules_for_all_experiments_aggregates_across_chatbots(self):
+        """The participant details page shows schedules from every chatbot the participant has
+        used, not just one -- this is the query that aggregation relies on."""
+        session_a = ExperimentSessionFactory.create()
+        participant = session_a.participant
+        experiment_a = session_a.experiment
+        experiment_b = ExperimentFactory.create(team=participant.team)
+        ExperimentSessionFactory.create(participant=participant, experiment=experiment_b, team=participant.team)
+
+        event_action_a, params_a = self._construct_event_action(
+            time_period=TimePeriod.DAYS, experiment_id=experiment_a.id
+        )
+        event_action_b, params_b = self._construct_event_action(
+            time_period=TimePeriod.DAYS, experiment_id=experiment_b.id
+        )
+        ScheduledMessageFactory.create(
+            experiment=experiment_a, team=participant.team, participant=participant, action=event_action_a
+        )
+        ScheduledMessageFactory.create(
+            experiment=experiment_b, team=participant.team, participant=participant, action=event_action_b
+        )
+
+        schedules = participant.get_schedules_for_experiments(as_dict=True)
+        assert len(schedules) == 2
+        assert {s["experiment"] for s in schedules} == {experiment_a, experiment_b}
+
+    @travel("2024-01-03 12:00:00", tick=False)
+    def test_get_message_trend_zero_fills_and_aggregates_across_chatbots(self):
+        """Trace counts must come from every chatbot the participant has used, and days with no
+        traces must appear as zero rather than being omitted, or a sparkline can't align bars."""
+        session_a = ExperimentSessionFactory.create()
+        participant = session_a.participant
+        experiment_b = ExperimentFactory.create(team=participant.team)
+        session_b = ExperimentSessionFactory.create(
+            participant=participant, experiment=experiment_b, team=participant.team
+        )
+
+        now = timezone.now()
+        TraceFactory.create(team=participant.team, participant=participant, session=session_a, at=now)
+        TraceFactory.create(team=participant.team, participant=participant, session=session_b, at=now)
+        two_days_ago = now - timezone.timedelta(days=2)
+        TraceFactory.create(team=participant.team, participant=participant, session=session_a, at=two_days_ago)
+
+        # A trace for a different participant must not leak into this participant's trend.
+        other_participant = ExperimentSessionFactory.create(team=participant.team).participant
+        TraceFactory.create(team=participant.team, participant=other_participant, at=now)
+
+        trend = participant.get_message_trend(days=3)
+        assert len(trend) == 3
+        assert trend == [1, 0, 2]
 
     @pytest.mark.parametrize(
         ("repetitions", "total_triggers", "expected_triggers_remaining"),
@@ -214,7 +266,7 @@ class TestExperimentSession:
             (1, 1, 0),
         ],
     )
-    def test_get_schedules_for_experiment_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
+    def test_get_schedules_for_experiments_as_dict(self, repetitions, total_triggers, expected_triggers_remaining):
         session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
@@ -230,7 +282,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=True)
+        schedules = participant.get_schedules_for_experiments(experiment.id, as_dict=True)
 
         assert len(schedules) == 1
         schedule = schedules[0]
@@ -292,7 +344,7 @@ class TestExperimentSession:
             ),
         ],
     )
-    def test_get_schedules_for_experiment_as_string(self, time_period, repetitions, total_triggers, expected):
+    def test_get_schedules_for_experiments_as_string(self, time_period, repetitions, total_triggers, expected):
         session = ExperimentSessionFactory.create()
         experiment = session.experiment
         participant = session.participant
@@ -308,7 +360,7 @@ class TestExperimentSession:
             custom_schedule_params=self._get_params(experiment.id, repetitions=repetitions, time_period=time_period),
         )
 
-        schedules = participant.get_schedules_for_experiment(experiment.id, as_dict=False)
+        schedules = participant.get_schedules_for_experiments(experiment.id, as_dict=False)
 
         assert len(schedules) == 1
         schedule = schedules[0]
@@ -540,14 +592,10 @@ class TestExperimentSession:
             session = ExperimentSessionFactory.create(experiment__pipeline=pipeline)
             assert session.requires_participant_data() == participant_data_injected
 
-        # Case 3 - Pipeline Assistant Node
-        assistant = OpenAiAssistantFactory.create(instructions=prompt)
-        _test_pipline("AssistantNode", params={"assistant_id": assistant.id})
-
-        # Case 4 - Pipeline LLMResponseWithPrompt Node
+        # Case 3 - Pipeline LLMResponseWithPrompt Node
         _test_pipline("LLMResponseWithPrompt", params={"prompt": prompt})
 
-        # Case 5 - Pipeline Router Node
+        # Case 4 - Pipeline Router Node
         _test_pipline("RouterNode", params={"prompt": prompt})
 
     @pytest.mark.parametrize(
@@ -703,16 +751,6 @@ class TestExperimentModel:
         ExperimentFactory.create(working_version=working_exp, team=team, version_number=2)
         with pytest.raises(IntegrityError, match=r'.*"unique_version_number_per_experiment".*'):
             ExperimentFactory.create(working_version=working_exp, team=team, version_number=2)
-
-    @pytest.mark.parametrize("assistant_id_populated", [True, False])
-    def test_get_assistant_from_pipeline(self, assistant_id_populated):
-        assistant = OpenAiAssistantFactory.create()
-        assistant_id = assistant.id if assistant_id_populated else None
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant_id})
-        experiment = ExperimentFactory.create(pipeline=pipeline)
-        expected_assistant_result = assistant if assistant_id_populated else None
-        assert experiment.get_assistant() == expected_assistant_result
 
     def _setup_original_experiment(self):
         experiment = ExperimentFactory.create()
@@ -925,27 +963,19 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-    @patch("apps.assistants.tasks.delete_openai_assistant_task.delay")
-    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    def test_archive_with_pipeline(self, delete_openai_assistant_task):
-        assistant = OpenAiAssistantFactory.create()
+    def test_archive_with_pipeline(self):
         pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="AssistantNode", params={"assistant_id": assistant.id})
+        NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
         experiment = ExperimentFactory.create(pipeline=pipeline)
 
-        # For a version, the pipeline should be archived as well as the assistant that it references
+        # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        assert assistant.versions.count() == 1
-        assistant_version = assistant.versions.first()
         new_version.archive()
         self._assert_archived(new_version.pipeline, True)
-        self._assert_archived(assistant_version, True)
-        delete_openai_assistant_task.assert_called_with(assistant_version.id)
-        delete_openai_assistant_task.reset_mock()
 
+        # ...but archiving the working experiment leaves the working pipeline alone.
         experiment.archive()
         self._assert_archived(experiment.pipeline, False)
-        self._assert_archived(assistant, False)
 
     def _assert_archived(self, model_obj, archived: bool):
         model_obj.refresh_from_db(fields=["is_archived"])

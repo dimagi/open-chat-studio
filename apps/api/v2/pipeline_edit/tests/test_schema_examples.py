@@ -1,4 +1,4 @@
-"""The documented request examples are real request bodies (#4140).
+"""The documented request examples are real request bodies (#4140, #4141).
 
 ``params`` is a free-form object in the schema, so these examples are the only place the API says
 what a body for a given node type looks like -- documentation nothing would otherwise check.

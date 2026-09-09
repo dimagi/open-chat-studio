@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags humanize static team_tags waffle_tags %}
+{% load django_tables2 form_tags humanize static team_tags %}
 
 {% block page_head %}
   {{ block.super }}
@@ -59,9 +59,9 @@
           {% if experiment.is_editable %}
             <div class="tooltip" data-tip="Chat to the bot">
               <div class="dropdown dropdown-hover">
-                <div tabindex="0" role="button" class="btn btn-primary join-item btn-sm rounded-l-full!">
+                <button type="button" class="btn btn-primary join-item btn-sm rounded-l-full!" aria-label="Chat to the bot">
                   <i class="fas fa-comment"></i><i class="fa-solid fa-caret-down fa-sm"></i>
-                </div>
+                </button>
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
                     <button type="button"
@@ -112,9 +112,9 @@
             <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
           </button>
           <div class="dropdown dropdown-hover">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case!">
+            <button type="button" class="btn btn-ghost btn-sm normal-case!">
               <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
-            </div>
+            </button>
             <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
               <li onclick="sharing_modal.showModal()">
                 <span><i class="fa-solid fa-share-nodes"></i> Share</span>
@@ -163,9 +163,7 @@
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" {% if not highlight_version_id %}checked{% endif %}/>
       {% endif %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" {% if highlight_version_id %}checked{% endif %}/>
-      {% flag "flag_events" %}
-        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
-      {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Settings" id="tab-settings" />
     </div>
 
@@ -221,7 +219,7 @@
           {% endif %}
         </div>
       </div>
-    {% endflag %}
+    </div>
 
     <div role="tabpanel" class="tab-content" id="content-settings">
       <div class="app-card">

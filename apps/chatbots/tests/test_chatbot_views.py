@@ -19,7 +19,7 @@ from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.chatbots.tables import ChatbotSessionsTable
+from apps.chatbots.tables import ChatbotSessionsTable, ParticipantSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
     ChatbotSessionsTableView,
@@ -44,7 +44,7 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
 
@@ -501,6 +501,69 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_uses_the_participant_table(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    other_participant = ParticipantFactory.create(team=team)
+    own_session = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=participant)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, participant=other_participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert isinstance(response.context_data["table"], ParticipantSessionsTable)
+    assert list(response.context_data["table"].data.data) == [own_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_chatbot_quick_filter(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    participant = ParticipantFactory.create(team=team)
+    matching_experiment = ExperimentFactory.create(team=team)
+    other_experiment = ExperimentFactory.create(team=team)
+    matching_session = ExperimentSessionFactory.create(
+        team=team, experiment=matching_experiment, participant=participant
+    )
+    ExperimentSessionFactory.create(team=team, experiment=other_experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"chatbot": matching_experiment.id})
+
+    assert list(response.context_data["table"].data.data) == [matching_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_ignores_a_non_numeric_chatbot_param(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    participant = ParticipantFactory.create(team=team)
+    experiment = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"chatbot": "not-a-number"})
+
+    assert response.status_code == 200
+    assert list(response.context_data["table"].data.data) == [session]
 
 
 @pytest.mark.django_db()
