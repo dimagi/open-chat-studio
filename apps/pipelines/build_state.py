@@ -208,5 +208,10 @@ def _router_output_map(
         fallback = dict(params)
         if isinstance(fallback.get("keywords"), list):
             fallback["keywords"] = [str(keyword).upper() for keyword in fallback["keywords"]]
+        else:
+            # Anything else -- missing, or explicitly None (what a type change (#1452) sends,
+            # since the frontend has no static default to offer for a default_factory field) --
+            # is "no keywords yet", not a value get_output_map() can enumerate().
+            fallback["keywords"] = []
         instance = node_class.model_construct(**fallback)
     return instance.get_output_map()
