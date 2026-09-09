@@ -864,8 +864,11 @@ class TestAttachMediaTool(BaseTestAgentTool):
 
 
 @pytest.mark.django_db()
-class TestNotificationOnToolError:
-    def test_tool_error_triggers_notification(self, team):
+class TestToolErrorPropagation:
+    def test_tool_error_propagates_instead_of_being_swallowed(self, team):
+        """CustomBaseTool._run must not catch tool exceptions itself -- BaseTool.run() needs
+        the real exception to reach it so it can fire on_tool_error (the same trace-capture
+        path pipeline/span errors use) before ToolNode turns it into an error ToolMessage."""
         set_current_team(team)
 
         class CustomBaseTool(tools.CustomBaseTool):
@@ -874,13 +877,12 @@ class TestNotificationOnToolError:
             requires_callbacks: ClassVar[bool] = False
 
             def action(self, *args, **kwargs):
-                raise Exception("Test error")
+                raise ValueError("Test error")
 
         tool = CustomBaseTool()
 
-        with mock.patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
+        with pytest.raises(ValueError, match="Test error"):
             tool.run(tool_input="tool_input")
-            mock_create_notification.assert_called_once()
 
 
 def _get_tool_schema_cls(tool_cls):
