@@ -14,7 +14,8 @@ Override pagination and sorting in base template to use htmx
                             hx-get="{{ request.path_info }}{% querystring table.prefixed_order_by_field=column.order_by_alias.next %}"
                             hx-trigger="click"
                             hx-target="closest div.table-container"
-                            hx-swap="outerHTML"
+                            hx-ext="morph"
+                            hx-swap="morph"
                             style="cursor: pointer;"
                         {% endif %}>
                         {{ column.header }}
@@ -29,12 +30,14 @@ Override pagination and sorting in base template to use htmx
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
     hx-trigger="click"
     hx-target="closest div.table-container"
-    hx-swap="outerHTML"
+    hx-ext="morph"
+    hx-swap="morph"
 {% endblock prev-page-link-attr %}
 
 {% block next-page-link-attr %}
     hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=table.page.next_page_number %}"
     hx-trigger="click"
     hx-target="closest div.table-container"
-    hx-swap="outerHTML"
+    hx-ext="morph"
+    hx-swap="morph"
 {% endblock next-page-link-attr %}

@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 from urllib.parse import urlencode
 
@@ -802,3 +803,23 @@ class TestNotificationButtonsUseMorphSwap:
         assert response.status_code == 200
         assert b'hx-ext="morph"' in response.content
         assert b'hx-swap="morph"' in response.content
+
+    def test_table_sort_header_uses_morph_swap(self, client, team_with_users):
+        """`table/tailwind_js_pagination.html` backs every table's sort headers and
+        pagination links, self-swapping `closest div.table-container` the same way the
+        three buttons above self-swap their own trigger -- same bug, shared template.
+        Scoped to a `<th>` tag specifically, since the buttons above (already migrated,
+        rendered `<td>` content on this same page) would trivially satisfy a page-wide
+        `hx-swap="morph"` check regardless of whether the sort header itself changed."""
+        user = team_with_users.members.first()
+        _create_notification(user=user, team=team_with_users)
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        assert re.search(rb"<th[^>]*hx-ext=\"morph\"", response.content)
+        assert re.search(rb"<th[^>]*hx-swap=\"morph\"", response.content)
