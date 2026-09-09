@@ -1,0 +1,42 @@
+{% load i18n %}
+<tr id="schedule_{{ schedule.external_id }}"
+    class="hover:bg-base-200 transition-colors">
+  <td class="text-xs">
+    <div class="font-medium">{{ schedule.name }}</div>
+  </td>
+  <td class="text-xs">{{ schedule.experiment }}</td>
+  <td class="text-xs whitespace-nowrap">
+    {% if schedule.is_complete or schedule.is_cancelled %}
+      -
+    {% elif schedule.next_trigger_date %}
+      <time datetime="{{ schedule.next_trigger_date.isoformat }}"
+            title="{{ schedule.next_trigger_date.isoformat }}">
+        {{ schedule.next_trigger_date|date:"DATETIME_FORMAT" }}
+      </time>
+    {% else %}
+      -
+    {% endif %}
+  </td>
+  <td class="text-xs">
+    {% if schedule.repetitions %}
+      {% translate "Every" %} {{ schedule.frequency }} {{ schedule.time_period }}, {{ schedule.repetitions }} {% translate "times" %}
+    {% else %}
+      {% translate "One-off" %}
+    {% endif %}
+  </td>
+  <td class="text-xs">
+    {% if schedule.is_cancelled %}
+      <span class="badge badge-ghost">{% translate "Cancelled" %}</span>
+    {% elif schedule.is_complete %}
+      <span class="badge badge-ghost">{% translate "Completed" %}</span>
+    {% else %}
+      <span class="badge badge-ghost">{% translate "Active" %}</span>
+    {% endif %}
+  </td>
+  <td class="text-xs">
+    <button class="btn btn-sm btn-ghost"
+            onclick="document.getElementById('schedule-logs-{{ schedule.external_id }}').showModal()">
+      <i class="fa-solid fa-gear"></i> {% translate "Manage" %}
+    </button>
+  </td>
+</tr>
