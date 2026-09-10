@@ -1,9 +1,10 @@
 """Renewing a session token with the host's client-credentials token.
 
 The session token is the visitor's credential and expires on its own clock. `POST chat/<id>/token/`
-lets the host's backend mint a replacement, under the same admission as `chat/start/`: an
-`oauth`-mode channel, a `chat:start` machine token for the session's chatbot, and the channel's
-origin rule. Every refusal looks the same.
+mints a replacement under the same admission as `chat/start/`: an `oauth`-mode channel, a
+`chat:start` machine token for the session's chatbot, and the channel's origin rule -- so on a
+browser-facing channel the widget calls it with a fresh token from the host, and on a server-only
+channel the host's backend may. Every refusal looks the same.
 """
 
 import uuid
@@ -115,25 +116,17 @@ def test_server_integration_needs_no_origin(chatbot):
 
 
 @pytest.mark.django_db()
-def test_browser_facing_channel_refuses_an_originless_request(chatbot, session):
+@pytest.mark.parametrize(
+    "origin",
+    [
+        pytest.param(None, id="originless"),
+        pytest.param("https://evil.example", id="unlisted-origin"),
+    ],
+)
+def test_browser_facing_channel_refuses_a_bad_origin(chatbot, session, origin):
     client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
 
-    response = _renew(client, session.external_id, origin=None)
-
-    assert response.status_code == 401
-    assert response.json() == DENIED
-
-
-@pytest.mark.django_db()
-def test_disallowed_origin_is_refused(chatbot, session):
-    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
-
-    assert _renew(client, session.external_id, origin="https://evil.example").status_code == 401
-
-
-@pytest.mark.django_db()
-def test_no_token_is_refused(session):
-    response = _renew(APIClient(), session.external_id)
+    response = _renew(client, session.external_id, origin=origin)
 
     assert response.status_code == 401
     assert response.json() == DENIED
@@ -145,6 +138,7 @@ def test_the_session_token_itself_does_not_renew(session):
     response = _renew(APIClient(), session.external_id, HTTP_X_SESSION_TOKEN=issue_session_token(session))
 
     assert response.status_code == 401
+    assert response.json() == DENIED
 
 
 @pytest.mark.django_db()
@@ -168,7 +162,10 @@ def test_token_without_chat_start_scope_is_refused(chatbot, session, scopes):
 def test_machine_token_for_another_team_is_refused(chatbot, session):
     client = _machine_client(TeamFactory.create(), allowed_chatbots=[chatbot])
 
-    assert _renew(client, session.external_id).status_code == 401
+    response = _renew(client, session.external_id)
+
+    assert response.status_code == 401
+    assert response.json() == DENIED
 
 
 @pytest.mark.django_db()
@@ -199,7 +196,49 @@ def test_session_without_a_channel_is_refused(chatbot):
     session = ExperimentSessionFactory.create(experiment=chatbot, experiment_channel=None, platform=ChannelPlatform.WEB)
     client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
 
-    assert _renew(client, session.external_id).status_code == 401
+    response = _renew(client, session.external_id)
+
+    assert response.status_code == 401
+    assert response.json() == DENIED
+
+
+def _disable(channel):
+    channel.enabled = False
+    channel.save()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "switch_off",
+    [
+        pytest.param(lambda channel: channel.soft_delete(), id="deleted"),
+        pytest.param(_disable, id="disabled"),
+    ],
+)
+def test_channel_switched_off_after_the_session_started_is_refused(chatbot, channel, session, switch_off):
+    """The channel is re-read at renewal, so the cached session's snapshot of it does not admit."""
+    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
+    assert _poll(session, issue_session_token(session)).status_code == 200  # primes the session cache
+
+    switch_off(channel)
+    response = _renew(client, session.external_id)
+
+    assert response.status_code == 401
+    assert response.json() == DENIED
+
+
+@pytest.mark.django_db()
+def test_renewed_token_takes_the_channel_lifetime_as_it_stands(chatbot, channel, session):
+    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
+    assert _poll(session, issue_session_token(session)).status_code == 200  # primes the session cache
+
+    channel.session_token_lifetime = timedelta(minutes=15)
+    channel.save()
+    with time_machine.travel(timezone.now(), tick=False):
+        body = _renew(client, session.external_id).json()
+        expected = (timezone.now() + timedelta(minutes=15)).replace(microsecond=0)
+
+    assert datetime.fromisoformat(body["expires_at"]) == expected
 
 
 @pytest.mark.django_db()

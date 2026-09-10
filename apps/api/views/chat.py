@@ -681,9 +681,12 @@ def chat_start_session(request):
     summary="Renew a chat session's token",
     description=(
         "Issue a fresh session token for an existing session, so the widget can keep the conversation"
-        " once its current token has expired. Called by the host's backend, not the widget: it takes the"
-        " same client-credentials token with the `chat:start` scope that starts a session, and the"
-        " chatbot's Chat API Channel must be in OAuth token mode."
+        " once its current token has expired. Admitted exactly as `POST /api/chat/start/` is: a"
+        " client-credentials token with the `chat:start` scope for the session's chatbot, a Chat API"
+        " Channel in OAuth token mode, and the channel's origin rule. On a browser-facing channel"
+        " (allowed domains set) the call must come from a listed origin, so the widget makes it with a"
+        " fresh token from the host; a server-only channel (no allowed domains) may be called from the"
+        " host's backend."
     ),
     tags=["Chat"],
     request=None,
@@ -702,8 +705,8 @@ def chat_start_session(request):
 @authentication_classes([ChatSessionOAuthAuthentication])
 @permission_classes([])
 def chat_renew_session_token(request, session_id):
-    """Mint a new session token; `ChatSessionOAuthAuthentication` has already admitted the caller."""
-    session = get_experiment_session_cached(session_id)
+    """Mint a new session token for the session `ChatSessionOAuthAuthentication` admitted."""
+    session = request.chat_session
     token, expires_at = issue_session_token_with_expiry(session)
     response_data = {"session_id": session.external_id, "session_token": token, "expires_at": expires_at}
     return Response(ChatSessionTokenResponse(response_data).data)

@@ -8,6 +8,7 @@ from apps.api.exceptions import ChatApiAccessDenied
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.experiments.models import Experiment
+from apps.oauth.models import OAuth2AccessToken
 from apps.oauth.permissions import validated_machine_token
 from apps.teams.utils import set_current_team
 from apps.web.meta import canonical_hostname
@@ -167,14 +168,22 @@ def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
 
 
 class ChatOAuthAuthenticationBase(authentication.BaseAuthentication):
-    """A chat door that admits the host's client-credentials token; the schema documents them as one credential."""
+    """Shared admission for the endpoints that take the host's client-credentials token."""
 
-    # drf-spectacular keys a security scheme by authenticator class and warns when two classes
-    # publish under one name. Sharing the `chatOAuth2` name is the point, so the warning is noise.
+    # Both subclasses publish as the `chatOAuth2` security scheme.
     _spectacular_annotation = {"suppress_collision_warning": True}
 
     def authenticate_header(self, request):
         return 'Bearer realm="api"'
+
+    @staticmethod
+    def _admit(request, experiment, channel: ExperimentChannel) -> OAuth2AccessToken:
+        """The validated machine token, once the origin rule holds; the team is set as a side effect."""
+        token = validated_machine_token(request, experiment)
+        check_oauth_channel_origin(request, channel)
+        request.team = token.team
+        set_current_team(token.team)
+        return token
 
 
 class ChatOAuthAuthentication(ChatOAuthAuthenticationBase):
@@ -220,10 +229,7 @@ class ChatOAuthAuthentication(ChatOAuthAuthenticationBase):
             # exposed this chatbot in `oauth` mode.
             raise ChatApiAccessDenied()
 
-        token = validated_machine_token(request, experiment)
-        check_oauth_channel_origin(request, channel)
-        request.team = token.team
-        set_current_team(token.team)
+        self._admit(request, experiment, channel)
         return (AnonymousUser(), channel)
 
     @staticmethod
@@ -240,15 +246,10 @@ class ChatOAuthAuthentication(ChatOAuthAuthenticationBase):
 
 
 class ChatSessionOAuthAuthentication(ChatOAuthAuthenticationBase):
-    """Admit a client-credentials token to a session-bound endpoint that acts for the host, not the visitor.
+    """Admit a client-credentials token to a session-bound endpoint, resolving the chatbot from the session in the URL.
 
-    The session token is the visitor's credential (ADR-0039); this is the host's. It applies the
-    same admission as `ChatOAuthAuthentication` -- `oauth`-mode channel, valid `chat:start` machine
-    token for the session's chatbot, origin rule -- but resolves the chatbot through the session in
-    the URL rather than a `chatbot_id` in the body. It is the only credential on the endpoints that
-    carry it, so a missing token is a refusal rather than a hand-off to another authenticator, and
-    `request.auth` holds the access token, never an `ExperimentChannel`: nothing here must read as
-    "an embed key was presented" to `SessionAccessPermission`.
+    The only credential on its endpoints, so a missing token is a refusal rather than a hand-off.
+    Returns `(AnonymousUser(), token)` and leaves the admitted session on `request.chat_session`.
     """
 
     def authenticate(self, request):
@@ -256,27 +257,38 @@ class ChatSessionOAuthAuthentication(ChatOAuthAuthenticationBase):
             raise ChatApiAccessDenied()
         session = get_experiment_session_cached(request.parser_context["kwargs"].get("session_id"))
         if session is None:
-            # Uniform with every other refusal: a token from another team must not learn which
-            # session ids exist.
+            # Uniform with every other refusal: a token holder must not learn which session ids exist.
             raise ChatApiAccessDenied()
-        channel = session.experiment_channel
-        if channel is None or channel.credential_mode != CredentialMode.OAUTH:
+        channel = self._live_oauth_channel(session)
+        if channel is None:
             raise ChatApiAccessDenied()
-        token = validated_machine_token(request, session.experiment)
-        check_oauth_channel_origin(request, channel)
-        request.team = token.team
-        set_current_team(token.team)
+        token = self._admit(request, session.experiment, channel)
+        # The cached session carries a channel snapshot up to WIDGET_SESSION_CACHE_TTL old; the
+        # token minted downstream must take its lifetime from the row as it stands.
+        session.experiment_channel = channel
+        request.chat_session = session
         return (AnonymousUser(), token)
+
+    @staticmethod
+    def _live_oauth_channel(session) -> ExperimentChannel | None:
+        """The session's channel, re-read through the default manager so a deleted or disabled one refuses."""
+        if session.experiment_channel_id is None:
+            return None
+        channel = (
+            ExperimentChannel.objects.select_related("team")
+            .filter(pk=session.experiment_channel_id, credential_mode=CredentialMode.OAUTH)
+            .first()
+        )
+        if channel is None or channel.is_disabled:
+            return None
+        return channel
 
 
 def check_oauth_channel_origin(request, channel: ExperimentChannel) -> None:
-    """Each credential validates its own origin, and here the domain list decides.
+    """Apply the channel's domain list to the request origin (ADR-0060).
 
-    A blank list means server-only: an originless request is the honest shape for a machine
-    integration, and any browser request is refused. A non-blank list declares the channel
-    browser-facing, so an originless request is refused exactly as it is under `embed_key` --
-    which is what stops a token leaked from a page being replayed from `curl`, the protection
-    the dropped embed-key-*and*-token mode used to provide.
+    A blank list means server-only: an originless request passes and any browser request is
+    refused. A non-blank list means browser-facing: the origin must be present and listed.
     """
     allowed_domains = channel.extra_data.get("allowed_domains", [])
     origin_domain = extract_domain_from_headers(request)

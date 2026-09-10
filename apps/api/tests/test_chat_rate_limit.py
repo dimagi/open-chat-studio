@@ -1,5 +1,7 @@
 """Rate limiting behaviour for the embedded widget chat endpoints."""
 
+from types import SimpleNamespace
+
 import pytest
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
@@ -11,10 +13,12 @@ from apps.api.throttling import ChatAPIRateThrottle
 from apps.api.views.chat import (
     chat_poll_response,
     chat_poll_task_response,
+    chat_renew_session_token,
     chat_send_message,
     chat_start_session,
     chat_upload_file,
 )
+from apps.oauth.models import OAuth2AccessToken
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 TINY_LIMITS = {"chat_api": {"rate": "2/5m", "fail_open": True}}
@@ -25,6 +29,7 @@ CHAT_VIEWS = [
     pytest.param(chat_poll_response, id="poll-response"),
     pytest.param(chat_poll_task_response, id="poll-task-response"),
     pytest.param(chat_upload_file, id="upload-file"),
+    pytest.param(chat_renew_session_token, id="renew-session-token"),
 ]
 
 
@@ -81,3 +86,11 @@ def test_log_only_mode_keeps_serving_the_conversation(api_client, widget_session
 
     assert response.status_code != 429
     assert response["X-RateLimit-Limit"] == "2"
+
+
+def test_host_renewals_do_not_share_the_visitor_bucket():
+    """The host's OAuth client is the principal on a renewal, not the session in the URL."""
+    request = SimpleNamespace(auth=OAuth2AccessToken(application_id=42), team=None)
+    view = SimpleNamespace(kwargs={"session_id": "abc"})
+
+    assert ChatAPIRateThrottle().identity(request, view) == ("oauth_client", "42")

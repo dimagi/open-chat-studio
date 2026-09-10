@@ -10,13 +10,7 @@ SESSION_TOKEN_SALT = "ocs.chat.session-token"
 
 
 def session_token_lifetime(session: ExperimentSession) -> timedelta:
-    """How long a token issued for `session` lives.
-
-    The session's channel may override the global, because the modes want different
-    values: a mid-conversation restart on a public widget is pure UX cost, while a
-    channel exposed for abuse-resistance wants it tight. Null means "use the global" —
-    there is no "off", since without the lifetime a session would never expire at all.
-    """
+    """How long a token issued for `session` lives: the channel's override, else the global."""
     channel = session.experiment_channel
     lifetime = channel.session_token_lifetime if channel else None
     if lifetime is None:
@@ -27,9 +21,8 @@ def session_token_lifetime(session: ExperimentSession) -> timedelta:
 def issue_session_token(session: ExperimentSession) -> str:
     """Mint a signed token proving possession of `session`, expiring `session_token_lifetime` from now.
 
-    Stateless: the token can be re-derived for any session at any time by trusted
-    server-side code (e.g. for bound-session pages), and re-deriving it is how a
-    session's access is renewed.
+    Stateless: trusted server-side code (bound-session pages, the renewal endpoint) re-derives
+    it for any session at any time, and each re-derivation starts a fresh lifetime.
     """
     token, _expires_at = issue_session_token_with_expiry(session)
     return token
@@ -59,23 +52,14 @@ def parse_session_token(token: str, session_external_id: str) -> dict | None:
     return payload
 
 
-def validate_session_token(token: str, session_external_id: str) -> bool:
-    """Check `token`'s signature and that it was issued for this session."""
-    return parse_session_token(token, session_external_id) is not None
+def session_token_expired(session: ExperimentSession, token_payload: dict) -> bool:
+    """Whether the token behind `token_payload` has lapsed.
 
-
-def session_token_expired(session: ExperimentSession, token_payload: dict | None = None) -> bool:
-    """Whether the caller's access to `session` has lapsed.
-
-    The lifetime is absolute: activity does not extend it, so an admitted caller's
-    access is bounded no matter how much they talk. Once it fires the caller must
-    start a new session and be re-admitted under whatever rules apply then.
-
-    A token carrying an `exp` claim expires at that instant. Tokens issued before the
-    claim existed have none, and for those the session's age against its lifetime
-    stands in.
+    Fixed at issuance: activity does not extend a token, and a later change to the channel's
+    lifetime does not shorten one already out. The `exp` claim decides; a payload without one
+    (minted before the claim was added) falls back to the session's age against the lifetime.
     """
-    exp = (token_payload or {}).get("exp")
+    exp = token_payload.get("exp")
     if exp is not None:
         return timezone.now().timestamp() > exp
     return timezone.now() - session.created_at > session_token_lifetime(session)

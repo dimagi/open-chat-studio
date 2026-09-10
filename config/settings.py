@@ -1009,8 +1009,8 @@ MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
 
-# How long after a chat session was created its token remains usable. Absolute:
-# activity does not extend it.
+# How long a chat session token remains usable from issuance. Absolute: activity does not
+# extend it; renewal issues a new token.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
 

@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
+from apps.oauth.token_lifetime import access_token_expire_seconds
 from apps.oauth.validator import APIScopedValidator
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -125,3 +126,20 @@ def test_token_lifetime_depends_on_requested_scopes(client, client_credentials_a
         <= token.expires
         <= timezone.now() + timedelta(seconds=expected_seconds)
     )
+
+
+@pytest.mark.parametrize(
+    ("grant_type", "scopes", "expected_seconds"),
+    [
+        pytest.param("client_credentials", ["chat:start"], 120, id="machine-chat-start-alone"),
+        pytest.param("authorization_code", ["chat:start"], 7200, id="authorization-code-keeps-default"),
+        pytest.param("refresh_token", ["chat:start"], 7200, id="refresh-keeps-default"),
+        pytest.param("client_credentials", ["chat:start", "sessions:read"], 7200, id="broader-machine-token"),
+    ],
+)
+def test_short_lifetime_applies_only_to_machine_tokens(settings, grant_type, scopes, expected_seconds):
+    settings.OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS = 7200
+    settings.OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS = 120
+    request = SimpleNamespace(grant_type=grant_type, scopes=scopes)
+
+    assert access_token_expire_seconds(request) == expected_seconds
