@@ -15,7 +15,7 @@ from apps.documents.models import Collection, CollectionFile, FileStatus, format
 from apps.documents.readers import FileReadException
 from apps.documents.retrieval import search_collection
 from apps.files.models import File, FileChunkEmbedding
-from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.exceptions import UnableToLinkFileException, provider_error_message
 from apps.service_providers.llm_service.openai_files import create_files_remote
 from apps.utils.deletion import chunk_list
 
@@ -141,6 +141,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
         chunk_overlap: int | None = None,
     ):
         uploaded_files: list[File] = []
+        uploaded_row_ids: list[int] = []
         for collection_file in collection_files:
             file = collection_file.file
             if _reads_as_empty(file):
@@ -153,6 +154,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
             try:
                 self._ensure_remote_file_exists(file)
                 uploaded_files.append(file)
+                uploaded_row_ids.append(collection_file.pk)
             except FileUploadError as e:
                 self._fail(collection_file, e)
 
@@ -162,14 +164,14 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
             )
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+            CollectionFile.objects.filter(pk__in=uploaded_row_ids).update(
                 # A reason left by an earlier attempt describes an outcome that no longer holds.
                 status=FileStatus.COMPLETED,
                 failure_reason="",
             )
         except UnableToLinkFileException as e:
             logger.exception("Failed to link files to remote index")
-            CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
+            CollectionFile.objects.filter(pk__in=uploaded_row_ids).update(
                 status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
             )
 
@@ -184,7 +186,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
             if not (file.external_id and self.file_exists_at_remote(file)):
                 file.external_id = None  # ty: ignore[invalid-assignment]
                 self.upload_file_to_remote(file)
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "Failed to upload file to the remote index",
                 extra={
@@ -192,7 +194,7 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                     "team": file.team.slug,
                 },
             )
-            raise FileUploadError() from None
+            raise FileUploadError(provider_error_message(e)) from None
 
 
 class OpenAIRemoteIndexManager(RemoteIndexManager):
@@ -248,7 +250,7 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
                 "Failed to link files to OpenAI vector store",
                 extra={"vector_store_id": self.index_id, "chunking_strategy": chunking_strategy},
             )
-            raise UnableToLinkFileException("Failed to link files to OpenAI vector store") from e
+            raise UnableToLinkFileException(provider_error_message(e)) from e
 
     def file_exists_at_remote(self, file: File) -> bool:
         try:

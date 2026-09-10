@@ -47,6 +47,12 @@ class TestEditCollection:
         new_vector_store_id = "new-store-123"
         create_remote_index.return_value = new_vector_store_id
 
+        collection_file = CollectionFileFactory.create(
+            collection=collection,
+            status=FileStatus.FAILED,
+            failure_reason="FileUploadError: Incorrect API key provided: sk-abc",
+        )
+
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
 
@@ -65,8 +71,11 @@ class TestEditCollection:
         assert collection.llm_provider == new_llm_provider
         assert collection.openai_vector_store_id == new_vector_store_id
 
-        # Verify that files are marked for reprocessing
-        CollectionFile.objects.filter(collection=collection).update(status=FileStatus.PENDING)
+        # A reason describing the previous provider does not apply to the new one, and the row
+        # is no longer failed.
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.PENDING
+        assert collection_file.failure_reason == ""
 
         # Verify migration task was called
         migrate_mock.assert_called_once_with(
