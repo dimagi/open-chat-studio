@@ -144,12 +144,6 @@
           </div>
         {% endif %}
 
-        {% if total_pages > 1 %}
-          <div>
-            {% include "experiments/components/pagination_buttons.html" %}
-          </div>
-        {% endif %}
-
         {% if perms.experiments.download_chats %}
           <a class="btn btn-sm" href="{% url 'chatbots:export_chatbot_session_messages' request.team.slug experiment.public_id experiment_session.external_id %}">
             <i class="fa-solid fa-download"></i> {% translate "Export" %}

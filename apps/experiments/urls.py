@@ -122,6 +122,11 @@ urlpatterns = [
         views.experiment_session_messages_view,
         name="experiment_session_messages_view",
     ),
+    path(
+        "e/<uuid:experiment_id>/s/<str:session_id>/messages/fragment/",
+        views.experiment_session_messages_fragment_view,
+        name="experiment_session_messages_fragment_view",
+    ),
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.

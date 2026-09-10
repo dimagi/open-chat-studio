@@ -259,6 +259,21 @@ def test_options_llm_models_are_filtered_by_team_provider_type(team_with_resourc
 
 
 @pytest.mark.django_db()
+def test_the_builder_flags_the_deprecated_models_it_offers(team):
+    """The builder offers deprecated models so an existing node renders its selection; the flag is
+    what lets the node warn about the one it has selected without waiting for a save."""
+    LlmProviderFactory.create(team=team, type="openai")
+    deprecated = LlmProviderModelFactory.create(team=team, type="openai", deprecated=True)
+    live = LlmProviderModelFactory.create(team=team, type="openai")
+
+    options = {option["value"]: option for option in get_node_parameter_values(team)["llm_provider_model_id"]}
+
+    assert options[deprecated.id]["deprecated"] is True
+    # Absent rather than false, so the payload only carries the flag where it means something.
+    assert "deprecated" not in options[live.id]
+
+
+@pytest.mark.django_db()
 def test_options_omit_deprecated_llm_models(team_with_resources):
     """Absent rather than flagged, the same as a deprecated node type. The builder still shows these
     so an existing node keeps rendering; this list is only what a client may build with."""
