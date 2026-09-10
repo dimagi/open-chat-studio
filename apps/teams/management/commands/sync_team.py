@@ -197,7 +197,7 @@ def _committed_team(store) -> Team | None:
     return team
 
 
-def load_team(importer, client, store, write):
+def load_team(importer, client, store):
     """Set the importer's target team, doing the least work needed to anchor the sync.
 
     Three cases, by where the team is already known:
@@ -222,7 +222,6 @@ def load_team(importer, client, store, write):
         )
     importer.import_rows(TEAM_MODEL, [team_row])
     _enable_target_migration_mode(importer.target_team)
-    write("synced team")
 
 
 def _enable_target_migration_mode(team: Team) -> None:
@@ -255,7 +254,7 @@ def run_sync(
     )
     try:
         with mute_signals():
-            load_team(importer, client, store, write)
+            load_team(importer, client, store)
             for entry in manifest["entries"]:
                 model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
                 model = entry_model(model_label)
