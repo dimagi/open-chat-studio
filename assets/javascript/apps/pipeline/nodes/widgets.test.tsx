@@ -1,6 +1,6 @@
 import {beforeAll, describe, expect, it, vi} from 'vitest';
 import {render, fireEvent} from '@testing-library/react';
-import {getWidget as getWidgetUntyped} from './widgets';
+import {getWidget as getWidgetUntyped, InputField} from './widgets';
 import type {WidgetParams} from './widgets';
 import type {ComponentType} from 'react';
 import type {PropertySchema} from '../types/nodeParams';
@@ -132,5 +132,27 @@ describe('BuiltInToolsWidget', () => {
       />,
     );
     expect(checkbox.checked).toBe(true);
+  });
+});
+
+describe('InputField warning slot', () => {
+  it('shows an advisory note under the field', () => {
+    const {container} = render(
+      <InputField label="LLM Model" help_text="" inputWarning="gpt-5 is deprecated">
+        <input />
+      </InputField>,
+    );
+    expect(container.textContent).toContain('gpt-5 is deprecated');
+  });
+
+  it('suppresses the warning while there is an error', () => {
+    // One message per field, and the error is the one that has to be acted on first.
+    const {container} = render(
+      <InputField label="LLM Model" help_text="" inputError="This field is required." inputWarning="gpt-5 is deprecated">
+        <input />
+      </InputField>,
+    );
+    expect(container.textContent).toContain('This field is required.');
+    expect(container.textContent).not.toContain('deprecated');
   });
 });

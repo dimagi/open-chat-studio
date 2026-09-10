@@ -115,21 +115,14 @@ class LLMResponseMixin(BaseModel):
 
     @model_validator(mode="after")
     def validate_llm_model(self):
-        # Ensure model is not deprecated
         try:
             model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
         except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
                 str(e),
-                {"field": "llm_provider_id"},
+                {"field": "llm_provider_model_id"},
             ) from None
-        if model.deprecated:
-            raise PydanticCustomError(
-                "deprecated_model",
-                f"LLM provider model '{model.name}' is deprecated.",
-                {"field": "llm_provider_id"},
-            )
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
