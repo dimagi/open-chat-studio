@@ -9,7 +9,6 @@ import datetime
 import email.message
 import io
 import json
-import math
 import textwrap
 import urllib.error
 import urllib.parse
@@ -29,23 +28,22 @@ from reconcile_models import (
     REQUIRED_SERVICE_KINDS,
     Candidate,
     MissingPricingEntry,
-    QuotaExceeded,
     RateChange,
-    _api_get,
     _commit_price_changes,
     _fmt,
     _get_json,
-    _idempotency_key,
     _next_migration_number,
     _per_token_to_per_1k,
     _ReconcileResults,
     apply_changes,
+    audit_deprecated_upstream,
     audit_missing_pricing,
     backfill_missing_from_litellm,
     build_pricing_entries,
     compute_changes,
     diffable_models,
-    fetch_catalog,
+    eligible_models,
+    fetch_baseline,
     generate_migration,
     load_active_default_models,
     load_priced_models,
@@ -58,7 +56,6 @@ from reconcile_models import (
     resolve_pricing_from_litellm,
     seed_index,
     select_candidates,
-    token_limit_from_litellm,
 )
 
 # Unit-conversion helpers
@@ -429,36 +426,33 @@ def test_load_priced_models(repo_root):
 # process_candidates
 
 
-def _litellm(model_id, tokens=128000):
-    """A LiteLLM price-table entry, the only pricing source now."""
+def _litellm(key, tokens=128000, **extra):
+    """A LiteLLM price-table entry - the only upstream source now."""
     return {
-        model_id: {
+        key: {
+            "litellm_provider": extra.pop("litellm_provider", "openai"),
+            "mode": extra.pop("mode", "chat"),
             "input_cost_per_token": 0.0000025,
             "output_cost_per_token": 0.00001,
             "max_input_tokens": tokens,
+            **extra,
         }
     }
 
 
-def _candidate(model_id, org, context_window=128000, details=None):
-    """Build a minimal candidate dict for use in process_candidates tests."""
+def _candidate(model_id, providers=("openai", "azure"), keys=None, recent=True):
+    """A merged record as `eligible_models` produces it."""
     return {
         "id": model_id,
-        "organization": {"id": org},
-        "model_type": "llm",
-        "context_window": context_window,
-        "details": details
-        or {
-            "input_price": 2.5,
-            "output_price": 10.0,
-            "url": f"https://llm-stats.com/models/{model_id}",
-            "sources": {},
-        },
+        "providers": list(providers),
+        "keys": keys or {p: model_id for p in providers},
+        "deprecation_date": None,
+        "recently_published": recent,
     }
 
 
 def test_process_new_model_with_pricing():
-    candidates = [_candidate("gpt-new", "openai")]
+    candidates = [_candidate("gpt-new")]
     registered = {"openai": set(), "azure": set()}
     result = process_candidates(candidates, registered, set(), _litellm("gpt-new"))
 
@@ -473,7 +467,7 @@ def test_process_new_model_with_pricing():
 
 
 def test_process_fully_registered_model_is_skipped():
-    candidates = [_candidate("gpt-4o", "openai")]
+    candidates = [_candidate("gpt-4o")]
     registered = {"openai": {"gpt-4o"}, "azure": {"gpt-4o"}}
     result = process_candidates(candidates, registered, set(), {})
     assert len(result["new_models"]) == 0
@@ -483,25 +477,21 @@ def test_process_fully_registered_model_is_skipped():
 
 def test_process_partially_registered_model_still_processed():
     """Registered in openai but not azure -> still a new_model."""
-    candidates = [_candidate("gpt-4o", "openai")]
+    candidates = [_candidate("gpt-4o")]
     registered = {"openai": {"gpt-4o"}, "azure": set()}
     result = process_candidates(candidates, registered, set(), {})
     assert len(result["new_models"]) == 1
 
 
 def test_process_unpriced_model_flagged():
-    candidate = _candidate(
-        "mystery-model",
-        "deepseek",
-        details={"url": "https://llm-stats.com/models/mystery-model", "sources": {}},
-    )
+    candidate = _candidate("mystery-model", providers=("deepseek",))
     result = process_candidates([candidate], {"deepseek": set()}, set(), {})
     assert len(result["unpriced_models"]) == 1
     assert result["new_models"][0]["pricing"]["has_pricing"] is False
 
 
 def test_process_already_priced_providers_excluded():
-    candidates = [_candidate("gpt-4o", "openai")]
+    candidates = [_candidate("gpt-4o")]
     registered = {"openai": set(), "azure": set()}
     priced = {("openai", "gpt-4o")}
     result = process_candidates(candidates, registered, priced, _litellm("gpt-4o"))
@@ -514,8 +504,8 @@ def test_process_already_priced_providers_excluded():
 def test_process_pricing_entries_flat_list():
     """anthropic: 1 provider, google: 2 providers -> 3 pricing entries total."""
     candidates = [
-        _candidate("model-a", "anthropic"),
-        _candidate("model-b", "google"),
+        _candidate("model-a", providers=("anthropic",)),
+        _candidate("model-b", providers=("google", "google_vertex_ai")),
     ]
     registered = {"anthropic": set(), "google": set(), "google_vertex_ai": set()}
     litellm_data = {**_litellm("model-a"), **_litellm("model-b")}
@@ -780,6 +770,7 @@ def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_
     results = _ReconcileResults(
         candidates=[],
         backlog=[],
+        deprecated_upstream=[],
         classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
@@ -833,6 +824,7 @@ def test_commit_price_changes_backfill_does_not_overwrite_curated_prices(repo_ro
     results = _ReconcileResults(
         candidates=[],
         backlog=[],
+        deprecated_upstream=[],
         classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
@@ -955,27 +947,18 @@ class TestBackfillMissingFromLitellm:  # noqa: D101
 # resolve_pricing — provider forwarding to litellm
 
 
-def test_resolve_pricing_passes_org_as_provider_to_litellm():
-    """resolve_pricing() forwards candidate.org so provider-namespaced litellm
-    keys (e.g. ``groq/gemma-7b-it``) are found via the prefix fallback.
-    """
+def test_resolve_pricing_uses_the_key_discovery_matched():
+    """A candidate carries the exact price-table key it was found under, so a
+    namespaced entry like `groq/gemma-7b-it` is read directly."""
     candidate = Candidate(
-        {
-            "id": "gemma-7b-it",
-            "organization": {"id": "groq"},
-            "details_error": "HTTP 404: Not Found",  # force litellm path
-        }
+        {"id": "gemma-7b-it", "providers": ["groq"], "keys": {"groq": "groq/gemma-7b-it"}},
     )
-    litellm_data = {
-        "groq/gemma-7b-it": {
-            "input_cost_per_token": 5e-08,
-            "output_cost_per_token": 8e-08,
-        }
-    }
+    litellm_data = {"groq/gemma-7b-it": {"input_cost_per_token": 5e-08, "output_cost_per_token": 8e-08}}
+
     result = resolve_pricing(candidate, litellm_data)
-    assert result.rates is not None
+
     assert result.source == "litellm"
-    assert result.rates["llm_input"] == "0.00005"
+    assert result.rates == {"llm_input": "0.00005", "llm_output": "0.00008"}
 
 
 # audit_missing_pricing
@@ -1049,49 +1032,37 @@ def test_render_missing_pricing_issue_body_one_row_per_entry():
 # Upstream request budget
 #
 # Every HTTP request goes through `_get_json`, so patching it gives an exact
-# per-run call count. llm-stats is now used for discovery only - one paged
-# catalogue sweep - and LiteLLM supplies pricing and token limits, so the
-# per-seed-model request loop that used to dominate the run is gone.
-
-UPSTREAM_CATALOG_SIZE = 389  # `total` reported by /v1/models on 2026-09-10
+# per-run call count. There is one upstream now - LiteLLM's price table - so a
+# run costs the current file, the baseline file, and the commit lookup that
+# finds the baseline. No credentials, no metered API, no per-model requests.
 
 
-def _catalog_model(model_id: str, org: str = "openai", release_date: str = "2026-09-01") -> dict:
-    return {
-        "id": model_id,
-        "organization": {"id": org},
-        "model_type": "llm",
-        "release_date": release_date,
-        "context_window": None,
-        "providers": [],
-        "url": f"https://llm-stats.com/models/{model_id}",
-    }
+def _entry(key, provider="openai", mode="chat", **extra):
+    return {key: {"litellm_provider": provider, "mode": mode, "max_input_tokens": 128000, **extra}}
 
 
 class _CallRecorder:
-    """Stand-in for `reconcile_models._get_json` that records every URL and
-    serves the catalogue one page at a time, as the real endpoint does."""
+    """Stand-in for `reconcile_models._get_json` that records every URL."""
 
-    def __init__(self, catalog: list[dict] | None = None, litellm: dict | None = None):
+    def __init__(self, current: dict | None = None, baseline: dict | None = None, sha: str = "abc123"):
         self.urls: list[str] = []
-        self._catalog = catalog if catalog is not None else []
-        self._litellm = litellm if litellm is not None else {}
+        self._current = current or {}
+        self._baseline = baseline if baseline is not None else {}
+        self._sha = sha
 
-    def __call__(self, url: str, headers: dict[str, str] | None = None, pacer=None):
+    def __call__(self, url: str, headers: dict[str, str] | None = None):
         self.urls.append(url)
-        if url == reconcile_models.LITELLM_PRICING_URL:
-            return dict(self._litellm)
-        offset = int(urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("cursor", ["0"])[0])
-        page = self._catalog[offset : offset + reconcile_models.CATALOG_PAGE_SIZE]
-        nxt = offset + reconcile_models.CATALOG_PAGE_SIZE
-        return {"models": page, "next_cursor": str(nxt) if nxt < len(self._catalog) else None}
+        if url.startswith("https://api.github.com/"):
+            return [{"sha": self._sha}] if self._sha else []
+        if self._sha and self._sha in url:
+            return dict(self._baseline)
+        return dict(self._current)
 
     @property
     def counts(self) -> dict[str, int]:
-        catalog_prefix = reconcile_models.LLM_STATS_CATALOG_URL.split("?")[0]
         return {
-            "litellm": sum(1 for u in self.urls if u == reconcile_models.LITELLM_PRICING_URL),
-            "stats_catalog": sum(1 for u in self.urls if u.startswith(catalog_prefix)),
+            "github_api": sum(1 for u in self.urls if u.startswith("https://api.github.com/")),
+            "raw_files": sum(1 for u in self.urls if u.startswith("https://raw.githubusercontent.com/")),
             "total": len(self.urls),
         }
 
@@ -1107,20 +1078,17 @@ def recorder(monkeypatch):
 
 
 def test_call_budget_formula(recorder, repo_root):
-    """One run = 1 LiteLLM file + one request per catalogue page. Nothing is
-    fetched per model, per candidate, or per seed entry."""
-    catalog = [_catalog_model(f"gpt-{i}") for i in range(250)]
-    rec = recorder(catalog=catalog)
+    """One run = 1 commit lookup + the current file + the baseline file."""
+    rec = recorder(current=_entry("gpt-new"), baseline={})
 
-    reconcile_models._run_reconciliation(repo_root, "token")
+    reconcile_models._run_reconciliation(repo_root)
 
-    expected_pages = math.ceil(len(catalog) / reconcile_models.CATALOG_PAGE_SIZE)
-    assert rec.counts == {"litellm": 1, "stats_catalog": expected_pages, "total": 1 + expected_pages}
+    assert rec.counts == {"github_api": 1, "raw_files": 2, "total": 3}
 
 
 def test_call_budget_is_independent_of_seed_size(recorder, repo_root):
-    """The old diff step cost one request per diffable seed model. Growing the
-    seed must now cost nothing."""
+    """The old diff cost one request per diffable seed model. Growing the seed
+    must cost nothing."""
     (repo_root / reconcile_models.LLM_PRICING_REL_PATH).write_text(
         json.dumps(
             [
@@ -1133,157 +1101,183 @@ def test_call_budget_is_independent_of_seed_size(recorder, repo_root):
             ]
         )
     )
-    rec = recorder(catalog=[_catalog_model("gpt-4o")])
+    rec = recorder(current=_entry("gpt-4o"))
 
-    reconcile_models._run_reconciliation(repo_root, "token")
+    reconcile_models._run_reconciliation(repo_root)
 
-    assert rec.counts == {"litellm": 1, "stats_catalog": 1, "total": 2}
-
-
-def test_catalog_paging_follows_the_cursor(recorder, repo_root):
-    """Every page is collected, not just the first."""
-    catalog = [_catalog_model(f"gpt-{i}") for i in range(reconcile_models.CATALOG_PAGE_SIZE * 2 + 1)]
-    recorder(catalog=catalog)
-
-    assert len(fetch_catalog("token")) == len(catalog)
+    assert rec.counts["total"] == 3
 
 
-def test_catalog_paging_is_bounded(monkeypatch, recorder):
-    """A cursor that never terminates must not spin forever."""
-    monkeypatch.setattr(
-        reconcile_models, "_get_json", lambda *_a, **_k: {"models": [_catalog_model("x")], "next_cursor": "more"}
-    )
+def test_run_survives_an_unreachable_commit_history(recorder, repo_root, capsys):
+    """Ordering is a nicety. If GitHub can't be reached the run continues with
+    everything treated as equally recent."""
+    rec = recorder(current=_entry("gpt-new"), sha="")
 
-    assert len(fetch_catalog("token")) == reconcile_models.MAX_CATALOG_PAGES
+    results = reconcile_models._run_reconciliation(repo_root)
 
-
-# What the scheduled run costs against the real seed
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-# zeroeval "community" plan limits, from GET /stats/v1/account. The docs quote
-# 60/min and 500/day for community; this account reports 50 and 250, so the
-# account endpoint - not the docs - is the number to trust.
-BURST_PER_MINUTE = 50
-DAILY_QUOTA = 250
+    assert [c["id"] for c in results.candidates] == ["gpt-new"]
+    assert rec.counts["github_api"] == 1
 
 
-def _measure_scheduled_run(recorder, capsys) -> int:
-    """Requests a real daily run sends to api.zeroeval.com, against the repo's
-    own seed and a catalogue the size of the live one."""
-    rec = recorder(catalog=[_catalog_model(f"model-{i}") for i in range(UPSTREAM_CATALOG_SIZE)])
-    reconcile_models._run_reconciliation(REPO_ROOT, "token")
-    counts = rec.counts
-    with capsys.disabled():
-        print(f"\n  zeroeval Stats API requests per run: {counts['stats_catalog']}")
-        print(f"  (catalogue pages={counts['stats_catalog']}, litellm={counts['litellm']})")
-    return counts["stats_catalog"]
+def test_no_credentialed_requests(recorder, repo_root):
+    """The bearer token is gone; nothing should reach a metered API."""
+    rec = recorder(current=_entry("gpt-new"))
+
+    reconcile_models._run_reconciliation(repo_root)
+
+    assert all(u.startswith(("https://raw.githubusercontent.com/", "https://api.github.com/")) for u in rec.urls)
 
 
-def test_scheduled_run_stays_within_burst_limit(recorder, capsys):
-    """This is what the rework buys: the run no longer sends more requests per
-    minute than the plan allows, so it cannot 429 under its own weight."""
-    assert _measure_scheduled_run(recorder, capsys) <= BURST_PER_MINUTE
+# eligible_models
 
 
-def test_scheduled_run_stays_within_daily_quota(recorder, capsys):
-    """With this much headroom the workflow can be re-run freely in a day."""
-    assert _measure_scheduled_run(recorder, capsys) <= DAILY_QUOTA
+def test_eligible_models_merges_providers_for_one_model():
+    """`gpt-4o` on openai and azure is one candidate offered to two providers,
+    read from the data rather than a hardcoded org mapping."""
+    data = {**_entry("gpt-4o"), **_entry("azure/gpt-4o", provider="azure")}
 
+    merged = eligible_models(data)
 
-# Candidate selection
-
-
-def test_select_candidates_is_state_based_not_time_windowed(repo_root):
-    """A model released long ago but never registered is still a candidate.
-    This is what heals a day the workflow was broken."""
-    catalog = [_catalog_model("ancient-model", release_date="2023-01-01")]
-
-    candidates, backlog = select_candidates(catalog, load_registered_models(repo_root))
-
-    assert [c["id"] for c in candidates] == ["ancient-model"]
-    assert backlog == []
-
-
-def test_select_candidates_skips_registered_and_deleted(repo_root):
-    """`load_registered_models` folds in DELETED_MODELS, so a model we removed
-    on purpose does not come back every day."""
-    catalog = [_catalog_model("gpt-4o"), _catalog_model("gpt-4", org="openai")]
-
-    candidates, _ = select_candidates(catalog, load_registered_models(repo_root))
-
-    assert [c["id"] for c in candidates] == ["gpt-4o"]
-
-
-def test_select_candidates_skips_other_orgs_and_non_llm():
-    catalog = [
-        _catalog_model("some-embedding", org="openai") | {"model_type": "embedding"},
-        _catalog_model("mistral-large", org="mistral"),
-        _catalog_model("gpt-new"),
-    ]
-
-    candidates, _ = select_candidates(catalog, {})
-
-    assert [c["id"] for c in candidates] == ["gpt-new"]
-
-
-def test_select_candidates_caps_the_run_and_backlogs_the_rest():
-    catalog = [_catalog_model(f"gpt-{i:03d}", release_date=f"2026-01-{i % 28 + 1:02d}") for i in range(40)]
-
-    candidates, backlog = select_candidates(catalog, {})
-
-    assert len(candidates) == MAX_NEW_MODELS_PER_RUN
-    assert len(backlog) == 40 - MAX_NEW_MODELS_PER_RUN
-
-
-def test_select_candidates_takes_the_newest_first():
-    catalog = [
-        _catalog_model("old", release_date="2024-01-01"),
-        _catalog_model("newest", release_date="2026-09-01"),
-        _catalog_model("middle", release_date="2025-05-01"),
-    ]
-
-    candidates, _ = select_candidates(catalog, {})
-
-    assert [c["id"] for c in candidates] == ["newest", "middle", "old"]
-
-
-def test_select_candidates_tolerates_a_missing_release_date():
-    catalog = [_catalog_model("dated"), _catalog_model("undated") | {"release_date": None}]
-
-    candidates, _ = select_candidates(catalog, {})
-
-    assert {c["id"] for c in candidates} == {"dated", "undated"}
-
-
-# token_limit_from_litellm
-
-
-def test_token_limit_prefers_max_input_tokens():
-    data = {"gpt-4o": {"max_input_tokens": 128000, "max_tokens": 16384}}
-    assert token_limit_from_litellm("gpt-4o", data) == 128000
-
-
-def test_token_limit_falls_back_to_max_tokens():
-    assert token_limit_from_litellm("gpt-4o", {"gpt-4o": {"max_tokens": 8192}}) == 8192
-
-
-def test_token_limit_tries_the_provider_namespaced_key():
-    data = {"groq/gemma2-9b-it": {"max_input_tokens": 8192}}
-    assert token_limit_from_litellm("gemma2-9b-it", data, provider="groq") == 8192
+    assert merged["gpt-4o"]["providers"] == ["azure", "openai"]
+    assert merged["gpt-4o"]["keys"] == {"openai": "gpt-4o", "azure": "azure/gpt-4o"}
 
 
 @pytest.mark.parametrize(
     ("data", "reason"),
     [
-        pytest.param({}, "absent", id="no_entry"),
-        pytest.param({"gpt-4o": {}}, "no fields", id="entry_without_limits"),
-        pytest.param({"gpt-4o": {"max_input_tokens": 0}}, "zero", id="zero_is_not_a_limit"),
-        pytest.param({"gpt-4o": "not-a-dict"}, "malformed", id="malformed_entry"),
+        pytest.param(_entry("dall-e-3", mode="image_generation"), "image", id="image_generation"),
+        pytest.param(_entry("ada-002", mode="embedding"), "embedding", id="embedding"),
+        pytest.param(_entry("whisper", mode="audio_transcription"), "audio", id="audio"),
+        pytest.param(_entry("mistral-large", provider="mistral"), "provider", id="unsupported_provider"),
     ],
 )
-def test_token_limit_returns_none(data, reason):
-    assert token_limit_from_litellm("gpt-4o", data) is None
+def test_eligible_models_excludes(data, reason):
+    assert eligible_models(data) == {}
+
+
+def test_eligible_models_excludes_audio_only_output():
+    """Google's lyria music models are tagged mode `chat` but only emit audio."""
+    data = _entry("lyria-3.5", provider="gemini", supported_output_modalities=["audio"])
+    assert eligible_models(data) == {}
+
+
+def test_eligible_models_keeps_text_output():
+    data = _entry("gemini-3-pro", provider="gemini", supported_output_modalities=["text", "audio"])
+    assert "gemini-3-pro" in eligible_models(data)
+
+
+def test_eligible_models_keeps_the_responses_mode():
+    """Four models OCS already registers are listed with mode `responses`."""
+    assert "gpt-5-pro" in eligible_models(_entry("gpt-5-pro", mode="responses"))
+
+
+def test_eligible_models_excludes_already_deprecated():
+    """No point proposing a model upstream has already retired."""
+    data = _entry("gpt-old", deprecation_date="2020-01-01")
+    assert eligible_models(data, today=datetime.date(2026, 9, 10)) == {}
+
+
+def test_eligible_models_keeps_a_future_deprecation():
+    data = _entry("gpt-soon", deprecation_date="2027-01-01")
+    assert "gpt-soon" in eligible_models(data, today=datetime.date(2026, 9, 10))
+
+
+def test_eligible_models_strips_region_prefixes():
+    assert "gpt-6-astra" in eligible_models(_entry("azure/us/gpt-6-astra", provider="azure"))
+
+
+# select_candidates
+
+
+def test_select_candidates_is_state_based_not_time_windowed():
+    """A model that predates the baseline but was never registered is still a
+    candidate. This is what heals a day the workflow was broken."""
+    data = _entry("long-standing-model")
+
+    candidates, backlog = select_candidates(data, baseline=data, registered={})
+
+    assert [c["id"] for c in candidates] == ["long-standing-model"]
+    assert candidates[0]["recently_published"] is False
+    assert backlog == []
+
+
+def test_select_candidates_offers_newly_published_first():
+    data = {**_entry("old-model"), **_entry("brand-new")}
+
+    candidates, _ = select_candidates(data, baseline=_entry("old-model"), registered={})
+
+    assert [c["id"] for c in candidates] == ["brand-new", "old-model"]
+
+
+def test_select_candidates_skips_fully_registered():
+    data = {**_entry("gpt-4o"), **_entry("gpt-new")}
+    registered = {"openai": {"gpt-4o"}}
+
+    candidates, _ = select_candidates(data, baseline={}, registered=registered)
+
+    assert [c["id"] for c in candidates] == ["gpt-new"]
+
+
+def test_select_candidates_keeps_a_partially_registered_model():
+    """Registered on openai but not azure - still worth offering for azure."""
+    data = {**_entry("gpt-4o"), **_entry("azure/gpt-4o", provider="azure")}
+
+    candidates, _ = select_candidates(data, baseline={}, registered={"openai": {"gpt-4o"}})
+
+    assert [c["id"] for c in candidates] == ["gpt-4o"]
+
+
+def test_select_candidates_caps_the_run_and_backlogs_the_rest():
+    data = {}
+    for i in range(MAX_NEW_MODELS_PER_RUN + 15):
+        data.update(_entry(f"gpt-{i:03d}"))
+
+    candidates, backlog = select_candidates(data, baseline={}, registered={})
+
+    assert len(candidates) == MAX_NEW_MODELS_PER_RUN
+    assert len(backlog) == 15
+
+
+# audit_deprecated_upstream
+
+
+def test_audit_deprecated_flags_active_models_past_their_date():
+    active = {("openai", "gpt-old"), ("openai", "gpt-current")}
+    data = {**_entry("gpt-old", deprecation_date="2026-02-17"), **_entry("gpt-current")}
+
+    result = audit_deprecated_upstream(active, data, today=datetime.date(2026, 9, 10))
+
+    assert result == [{"provider_type": "openai", "model_name": "gpt-old", "deprecation_date": "2026-02-17"}]
+
+
+def test_audit_deprecated_ignores_future_dates():
+    active = {("openai", "gpt-soon")}
+    data = _entry("gpt-soon", deprecation_date="2027-01-01")
+
+    assert audit_deprecated_upstream(active, data, today=datetime.date(2026, 9, 10)) == []
+
+
+def test_audit_deprecated_tolerates_a_malformed_date():
+    active = {("openai", "gpt-odd")}
+    data = _entry("gpt-odd", deprecation_date="soon-ish")
+
+    assert audit_deprecated_upstream(active, data, today=datetime.date(2026, 9, 10)) == []
+
+
+# fetch_baseline
+
+
+def test_fetch_baseline_asks_for_the_commit_before_the_cutoff(recorder):
+    rec = recorder(baseline=_entry("old-model"))
+
+    fetch_baseline(7, today=datetime.date(2026, 9, 10))
+
+    assert "until=2026-09-03T00:00:00Z" in rec.urls[0]
+
+
+def test_fetch_baseline_is_empty_when_history_is_unavailable(recorder):
+    recorder(sha="")
+    assert fetch_baseline(7, today=datetime.date(2026, 9, 10)) == {}
 
 
 # 429 handling
@@ -1295,12 +1289,15 @@ def test_token_limit_returns_none(data, reason):
 # does not.
 
 
+RAW_URL = "https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/x.json"
+
+
 def _http_error(status: int, retry_after: str | None = None, limit_type: str | None = None) -> urllib.error.HTTPError:
     body = json.dumps({"error": {"limit_type": limit_type}} if limit_type else {}).encode()
     headers = email.message.Message()
     if retry_after is not None:
         headers["Retry-After"] = retry_after
-    return urllib.error.HTTPError("https://api.zeroeval.com/x", status, "Too Many Requests", headers, io.BytesIO(body))
+    return urllib.error.HTTPError(RAW_URL, status, "Too Many Requests", headers, io.BytesIO(body))
 
 
 @pytest.fixture()
@@ -1331,7 +1328,7 @@ def urlopen(monkeypatch):
 def test_burst_429_is_retried_after_retry_after_seconds(urlopen):
     sleeps, _ = urlopen(_http_error(429, "7", "rate_limit_exceeded"), {"ok": True})
 
-    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert _get_json(RAW_URL) == {"ok": True}
     assert sleeps == [7.0]
 
 
@@ -1339,21 +1336,22 @@ def test_burst_429_sleep_gets_jitter(monkeypatch, urlopen):
     sleeps, _ = urlopen(_http_error(429, "7", "rate_limit_exceeded"), {"ok": True})
     monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, b: b)
 
-    _get_json("https://api.zeroeval.com/x")
+    _get_json(RAW_URL)
 
     assert sleeps == [7.0 + RATE_LIMIT_JITTER_SECONDS]
 
 
-def test_burst_429_without_retry_after_backs_off_exponentially(urlopen):
-    """The header is documented as always present on a 429, but a missing or
-    unparseable value must not turn into a zero-delay retry loop."""
+def test_backoff_window_doubles_per_consecutive_miss(urlopen, monkeypatch):
+    """An unparseable Retry-After is treated as absent, and the window the
+    jitter is drawn from doubles so a bad header can't spin a tight loop."""
     sleeps, _ = urlopen(
-        _http_error(429, None, "rate_limit_exceeded"),
-        _http_error(429, "not-a-number", "rate_limit_exceeded"),
+        _http_error(429, None),
+        _http_error(429, "not-a-number"),
         {"ok": True},
     )
+    monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, b: b)
 
-    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert _get_json(RAW_URL) == {"ok": True}
     assert sleeps == [DEFAULT_RETRY_AFTER_SECONDS, DEFAULT_RETRY_AFTER_SECONDS * 2]
 
 
@@ -1362,7 +1360,7 @@ def test_retry_after_is_capped(urlopen):
     CI job for no benefit."""
     sleeps, _ = urlopen(_http_error(429, "3600", "rate_limit_exceeded"), {"ok": True})
 
-    _get_json("https://api.zeroeval.com/x")
+    _get_json(RAW_URL)
 
     assert sleeps == [MAX_RETRY_AFTER_SECONDS]
 
@@ -1372,7 +1370,7 @@ def test_burst_429_is_retried_for_as_long_as_it_takes(urlopen):
     through it rather than failing - there is no retry ceiling."""
     sleeps, _ = urlopen(*[_http_error(429, "5", "rate_limit_exceeded")] * 30, {"ok": True})
 
-    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert _get_json(RAW_URL) == {"ok": True}
     assert sleeps == [5.0] * 30
 
 
@@ -1381,29 +1379,9 @@ def test_burst_retry_stops_at_the_total_wait_budget(urlopen):
     sleeps, _ = urlopen(*[_http_error(429, "60", "rate_limit_exceeded")] * 1000)
 
     with pytest.raises(urllib.error.HTTPError):
-        _get_json("https://api.zeroeval.com/x")
+        _get_json(RAW_URL)
 
     assert sum(sleeps) >= MAX_TOTAL_BURST_WAIT_SECONDS
-
-
-def test_quota_429_exits_immediately(urlopen):
-    """The daily quota resets at UTC midnight - sleeping through it is not an
-    option, so fail loudly instead of burning the remaining burst."""
-    sleeps, _ = urlopen(_http_error(429, "60", "quota_exceeded"))
-
-    with pytest.raises(QuotaExceeded):
-        _get_json("https://api.zeroeval.com/x")
-
-    assert sleeps == []
-
-
-def test_unlabelled_429_is_treated_as_burst(urlopen):
-    """No `limit_type` in the body - sleep rather than kill the run, since
-    burst is the limit a run actually pushes against."""
-    sleeps, _ = urlopen(_http_error(429, "4"), {"ok": True})
-
-    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
-    assert sleeps == [4.0]
 
 
 @pytest.mark.parametrize("status", [404, 500, 503], ids=["not-found", "server-error", "unavailable"])
@@ -1412,85 +1390,7 @@ def test_non_429_errors_are_not_retried(urlopen, status):
     sleeps, _ = urlopen(_http_error(status))
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _get_json("https://api.zeroeval.com/x")
+        _get_json(RAW_URL)
 
     assert exc_info.value.code == status
     assert sleeps == []
-
-
-def test_main_exits_nonzero_on_quota_exhaustion(monkeypatch, tmp_path, capsys):
-    """Quota exhaustion is the one limit that ends the run."""
-
-    def _boom(*_args, **_kwargs):
-        raise QuotaExceeded("Daily llm-stats quota exhausted")
-
-    monkeypatch.setattr(reconcile_models, "_run_reconciliation", _boom)
-
-    exit_code = reconcile_models.main(
-        ["--bearer-token", "token", "--repo-root", str(tmp_path), "--output", str(tmp_path / "out.json")]
-    )
-
-    assert exit_code == 1
-    assert "quota exhausted" in capsys.readouterr().out
-
-
-# Idempotency-Key
-#
-# The docs recommend it so a retried request costs one quota unit rather than
-# two. Keyed by URL + UTC day, so a same-day re-run of the workflow replays
-# the same keys instead of spending the quota again.
-
-
-def test_api_get_sends_an_idempotency_key(urlopen):
-    _, requests = urlopen({"ok": True})
-
-    _api_get("https://api.zeroeval.com/stats/v1/models/gpt-4o", "token")
-
-    assert requests[0].get_header("Idempotency-key")
-
-
-def test_idempotency_key_is_unchanged_across_retries(urlopen):
-    """The point of the header: the retry must not cost a second quota unit."""
-    _, requests = urlopen(_http_error(429, "1", "rate_limit_exceeded"), {"ok": True})
-
-    _api_get("https://api.zeroeval.com/stats/v1/models/gpt-4o", "token")
-
-    assert len({r.get_header("Idempotency-key") for r in requests}) == 1
-    assert len(requests) == 2
-
-
-def test_idempotency_key_differs_per_url():
-    keys = {_idempotency_key(f"https://api.zeroeval.com/stats/v1/models/gpt-{i}") for i in range(5)}
-    assert len(keys) == 5
-
-
-def test_idempotency_key_is_stable_within_a_utc_day():
-    url = "https://api.zeroeval.com/stats/v1/models/gpt-4o"
-    assert _idempotency_key(url) == _idempotency_key(url)
-
-
-def test_idempotency_key_rotates_daily(monkeypatch):
-    url = "https://api.zeroeval.com/stats/v1/models/gpt-4o"
-
-    class _FrozenDay(datetime.datetime):
-        day_offset = 0
-
-        @classmethod
-        def now(cls, tz=None):
-            return datetime.datetime(2026, 9, 10, tzinfo=tz) + datetime.timedelta(days=cls.day_offset)
-
-    monkeypatch.setattr(reconcile_models.datetime, "datetime", _FrozenDay)
-    today = _idempotency_key(url)
-    _FrozenDay.day_offset = 1
-
-    assert _idempotency_key(url) != today
-
-
-def test_litellm_fetch_carries_no_bearer_or_idempotency_key(urlopen):
-    """LiteLLM is a raw GitHub file, not a quota-metered zeroeval endpoint."""
-    _, requests = urlopen({})
-
-    reconcile_models._load_litellm()
-
-    assert requests[0].get_header("Idempotency-key") is None
-    assert requests[0].get_header("Authorization") is None

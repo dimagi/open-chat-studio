@@ -1,13 +1,14 @@
 # Auto Update LLM Models Workflow
 #
-# Daily reconciliation of the in-repo model catalogue and pricing seed.
-# scripts/reconcile_models.py sweeps the whole llm-stats.com catalogue (via
-# the zeroeval Stats API) for discovery, and reads pricing and token limits
-# from the LiteLLM price table. It produces three signals:
+# Daily reconciliation of the in-repo model catalogue and pricing seed against
+# LiteLLM's model_prices_and_context_window.json, which carries pricing, token
+# limits, provider, model kind and deprecation dates for ~3900 models and needs
+# no credentials. scripts/reconcile_models.py produces four signals:
 #
 #   - new_models      candidates not yet registered in OCS
 #   - price_changes   existing seed entries whose upstream rate has moved
 #   - missing_pricing OCS-managed (default_models) models with no seed entry
+#   - deprecated_upstream  active OCS models past their upstream end-of-life
 #
 # Job 1 (reconcile) runs the script. The price-change side effects (rewrite
 # seed + emit migration) are deterministic, so the same job opens the
@@ -16,15 +17,14 @@
 # judgement calls (which providers, which params class, deprecations) per
 # docs/developer_guides/managing_models.md.
 #
-# Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
-# Pricing and token limits come from the LiteLLM price table.
-#
-# The catalogue is swept whole rather than as a time-windowed delta, so a run
-# that fails - or a model missed while it was broken - heals on the next run.
+# Discovery works by diffing the price table against its own git history: a
+# key present today and absent a week ago is newly published. Candidates are
+# still selected by state (upstream has it, OCS does not), so a run that fails
+# - or a model missed while it was broken - heals on the next run.
 #
 # Triggered on: daily schedule, or manual dispatch
-# Requirements: LLM_STATS_BEARER_TOKEN secret (job 1, reconcile);
-#   ANTHROPIC_API_KEY secret (job 2, new-models-pr)
+# Requirements: ANTHROPIC_API_KEY secret (job 2, new-models-pr). Job 1 needs no
+#   credentials - both upstream files are public.
 #
 # Notes:
 # - The new-model PR (job 2) gets the `claude` and `auto-models` labels.
@@ -79,13 +79,9 @@ jobs:
 
       - name: Reconcile upstream model catalogue and pricing seed
         id: reconcile
-        env:
-          LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
         run: |
           # Stdlib-only - no dependency install needed.
-          python3 scripts/reconcile_models.py \
-            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
-            --output reconciliation.json
+          python3 scripts/reconcile_models.py --output reconciliation.json
 
       - name: Upload reconciliation payload
         if: steps.reconcile.outputs.has_new_models == 'true'
@@ -252,23 +248,23 @@ jobs:
             You are adding newly released LLM models to Open Chat Studio.
 
             ## Input
-            `scripts/reconcile_models.py` has already swept the llm-stats
-            catalogue, removed models already registered in OCS, and resolved
-            per-1K-token pricing and token limits from the LiteLLM price table.
-            Its output is at `./reconciliation.json`. Do NOT re-fetch, re-dedup,
-            or re-derive pricing - that work is done and unit-tested. You only
-            care about the `new_models[]` section of the payload here; the
+            `scripts/reconcile_models.py` has already read the LiteLLM price
+            table, removed models already registered in OCS, and resolved
+            per-1K-token pricing and token limits. Its output is at
+            `./reconciliation.json`. Do NOT re-fetch, re-dedup, or re-derive
+            pricing - that work is done and unit-tested. You only care about
+            the `new_models[]` and `deprecated_upstream[]` sections here; the
             `price_changes` and `missing_pricing` sections are handled in a
             separate job and are not your concern.
 
             Candidates are selected by state, not by date: anything upstream
-            that OCS has not registered is eligible, newest first, capped per
-            run. Key fields:
-            - `new_models[]` - candidates to consider. Each has: `id`, `org`,
-              `token_limit` (from LiteLLM; may be null), `release_date`,
-              `ocs_providers` (the default OCS provider mapping),
-              `already_registered_providers`, `already_priced_providers`,
-              `source_url`, and `pricing`.
+            that OCS has not registered is eligible, with recently-published
+            models offered first and the rest capped into `backlog`. Key fields:
+            - `new_models[]` - candidates to consider. Each has: `id`,
+              `token_limit` (from LiteLLM; may be null), `recently_published`,
+              `deprecation_date`, `ocs_providers` (the providers LiteLLM says
+              actually serve this model), `already_registered_providers`,
+              `already_priced_providers`, `source_url`, and `pricing`.
             - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
               `pricing.source` (`litellm`) / `pricing.llm_pricing_entries` -
               ready-to-paste `llm_pricing.json` entries, one per provider that
@@ -277,6 +273,8 @@ jobs:
             - `unpriced_models[]` - models the script could not price.
             - `backlog[]` - unregistered models that did not fit this run's cap.
               Not your concern; the next run will surface them.
+            - `deprecated_upstream[]` - models OCS still lists as active whose
+              upstream deprecation date has passed.
 
             ${{ needs.reconcile.outputs.new_model_count }} new model(s):
             ${{ needs.reconcile.outputs.new_model_ids }}
@@ -287,10 +285,9 @@ jobs:
             2. For each model in `new_models`, decide whether to add it:
                - Skip models that don't make sense for OCS (embedding-only,
                  image-only, or preview models already superseded).
-               - Use `ocs_providers` as the default provider mapping. Apply
-                 judgement: for an `openai` model keep `azure` only if it is
-                 generally available on Azure OpenAI - otherwise drop `azure` and
-                 add to `openai` only. Skip any provider already in
+               - `ocs_providers` comes from LiteLLM's own provider tagging, so
+                 it reflects which providers actually serve the model rather
+                 than a guess. Skip any provider already in
                  `already_registered_providers`.
             3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
                - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using the payload's
@@ -301,7 +298,11 @@ jobs:
                - Strip `llm_model_migration()` (and any `notify_deprecated_models` /
                  `remove_deprecated_models` data migrations) from earlier migrations
                  in `apps/service_providers/migrations/` so they only run once.
-            4. Apply pricing: for each model you add, append its
+            4. For each entry in `deprecated_upstream[]`, mark that model
+               `deprecated=True` in `default_models.py` if it isn't already,
+               and set `replacement=` where an obvious successor exists. If the
+               file already marks it, leave it alone and say so in the report.
+            5. Apply pricing: for each model you add, append its
                `pricing.llm_pricing_entries` to
                `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
                providers you actually registered. Trust the unit conversion but
@@ -309,19 +310,19 @@ jobs:
                `unpriced_models` (or a provider with no generated entry) goes under
                `## Needs follow-up` instead. After editing, confirm the file is
                still valid JSON.
-            5. If `token_limit` is null, LiteLLM had no entry for the model -
+            6. If `token_limit` is null, LiteLLM had no entry for the model -
                consult `source_url` with WebFetch, or use what you know about the
                family. If you still can't determine it, add the model with a
                conservative placeholder (e.g. 128000) and a
                `# TODO: verify token_limit` comment, and flag it under
                `## Needs follow-up`.
-            6. Lint and test the changed files:
+            7. Lint and test the changed files:
                - `uv run ruff check apps/ --fix`
                - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
                - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
                Lint/test any other files your migration touched.
-            7. Commit the changes with a descriptive message.
-            8. Push the branch and open a PR against `main` using the repo's PR
+            8. Commit the changes with a descriptive message.
+            9. Push the branch and open a PR against `main` using the repo's PR
                template (`.github/pull_request_template.md`).
                - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
                  (today's UTC date).
@@ -336,10 +337,10 @@ jobs:
                  * Check the "The migrations are backwards compatible" box -
                    `llm_model_migration()` is additive (only seeds new rows) so
                    these migrations are inherently backwards-compatible.
-            9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after review there is nothing to add, do NOT open an empty PR -
+            10. Apply the `claude` and `auto-models` labels to the PR if they exist.
+            11. If after review there is nothing to add, do NOT open an empty PR -
                 print a short summary to stdout and exit.
-            11. ALWAYS write a decision report to `./decision_report.md` before
+            12. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
 
