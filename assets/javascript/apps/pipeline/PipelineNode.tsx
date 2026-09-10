@@ -104,7 +104,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                     <li className="menu-title">Change type</li>
                     {changeableTypes.map((schema) => (
                       <li key={schema.title}>
-                        <a onClick={() => changeNodeType(schema)}>{schema["ui:label"]}</a>
+                        <button type="button" onClick={() => changeNodeType(schema)}>{schema["ui:label"]}</button>
                       </li>
                     ))}
                   </ul>

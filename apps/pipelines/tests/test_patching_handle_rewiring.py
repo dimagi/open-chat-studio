@@ -4,7 +4,7 @@ same way ``apps/api/v2/pipeline_edit`` already does it for a param-only edit --
 ``apply_pipeline_patch`` never did, for any update, until now.
 """
 
-from apps.pipelines.flow import FlowEdge, FlowNode, FlowNodeData, NodeDiff, PipelineDiffPayload
+from apps.pipelines.flow import EdgeDiff, FlowEdge, FlowNode, FlowNodeData, NodeDiff, PipelineDiffPayload
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, StaticRouterNode
 from apps.pipelines.patching import apply_pipeline_patch
 
@@ -156,3 +156,34 @@ class TestNodeUpdateRewiresHandles:
 
         assert node_data["src"].data.params["name"] == "llm"
         assert edge_data.edges == []
+
+    def test_an_explicit_edge_update_in_the_same_patch_does_not_resurrect_a_rewired_edge(self):
+        """A combined patch can update a node and, in the same request, explicitly update one of
+        that node's own edges -- e.g. a client that computed its edge diff against the pre-update
+        handle set. The node-update rewiring must have the final say: an edge it drops for a
+        handle that no longer exists must not come back because the edge diff also named it,
+        carrying the now-invalid handle forward.
+        """
+        graph = self._graph(
+            StaticRouterNode.__name__,
+            {"name": "router", "route_key": "k", "keywords": ["a", "b"]},
+            edges=[
+                make_flow_edge("e0", "src", "t0", source_handle="output_0"),
+                make_flow_edge("e1", "src", "t1", source_handle="output_1"),
+            ],
+        )
+        updated_node = make_flow_node(
+            "src", StaticRouterNode.__name__, params={"name": "router", "route_key": "k", "keywords": ["a"]}
+        )
+        # The client's edge diff still carries the pre-update handle for e1 -- output_1 is gone
+        # once the node update above lands.
+        stale_edge_update = make_flow_edge("e1", "src", "t1", source_handle="output_1")
+        patch = PipelineDiffPayload(
+            base_revision=0,
+            nodes=NodeDiff(update=[updated_node]),
+            edges=EdgeDiff(update=[stale_edge_update]),
+        )
+
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+
+        assert {edge.id for edge in edge_data.edges} == {"e0"}

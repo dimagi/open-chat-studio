@@ -61,6 +61,17 @@ describe('getDefaultParamValues', () => {
     expect(getDefaultParamValues(templateSchema).name).toBe('');
   });
 
+  it('keeps name empty even when the schema itself declares a name property', () => {
+    // Every real node schema declares "name" (apps/pipelines/nodes/base.py's BasePipelineNode
+    // field), so the defaults loop iterates over it like any other property -- it must not let
+    // that overwrite the empty starting value with a schema/cached default or null.
+    const schema: JsonSchema = {
+      ...templateSchema,
+      properties: {...templateSchema.properties, name: {type: 'string', default: 'Untitled'}},
+    };
+    expect(getDefaultParamValues(schema).name).toBe('');
+  });
+
   it("uses a property's own default when it has one", () => {
     expect(getDefaultParamValues(templateSchema).template_string).toBe('hello');
   });

@@ -84,6 +84,10 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
   const {defaultValues} = getCachedData();
   const defaults: NodeParams = {name: ""};
   for (const name in schema.properties) {
+    // Every real node schema declares "name" as one of its own properties (it's a field on the
+    // shared base node), but it's never given a schema or cached default here -- it's set by
+    // the caller (a generated id on add, the preserved name on a type change).
+    if (name === "name") continue;
     const property = schema.properties[name];
     defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
   }

@@ -56,12 +56,8 @@ describe('getWidgets', () => {
 
 describe('getWidgets with a frozen params object (#1452)', () => {
   it('does not throw when the node has no keywords param and params is frozen', () => {
-    // A type change (#1452) replaces data.params with a fresh object inside an immer
-    // produce() call, which auto-freezes it. baseSchema has no "keywords" property (most
-    // node types don't), so a widget-rendering path that unconditionally writes
-    // params.keywords -- regardless of the schema -- crashes on the very first render of
-    // any type that never had that key. The widget itself already tolerates a missing
-    // keywords array (falls back to length 1 / []), so nothing needs to lazily add it here.
+    // A type change (#1452) hands this an already-frozen params object -- immer's produce()
+    // auto-freezes its result -- with no "keywords" key, since baseSchema doesn't declare one.
     const frozenParams = Object.freeze({name: 'x', greeting: 'hi'});
 
     expect(() =>

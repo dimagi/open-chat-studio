@@ -77,7 +77,10 @@ def _rewire_edges_for_update(flow: Flow, node_id: str, previous: FlowNode | None
 
     Covers a param edit that changes a router's branches (the pre-existing gap this closes) and a
     type change (#1452) the same way, since both are just an update whose handles differ before
-    and after -- neither is special-cased.
+    and after -- neither is special-cased. Runs before the edge diff below, so a caller that also
+    sends its own correct edge diff for the same node (the v2 API always does) just re-applies the
+    same values afterward -- harmless. A deleted edge is the one thing that step must not bring
+    back; see _apply_edge_diff.
     """
     previous_data = previous.data if previous else None
     if previous_data is None or updated.data is None:
@@ -101,9 +104,13 @@ def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
     for edge_id in diff.delete:
         edge_map.pop(edge_id, None)
 
-    # Update: replace in-place
+    # Update: replace in-place -- but never resurrect an id the node-update rewiring above
+    # already dropped from this same flow (a caller's edge diff can carry a stale value for
+    # an edge whose handle no longer exists once the node update lands; see
+    # _rewire_edges_for_update).
     for updated in diff.update:
-        edge_map[updated.id] = updated
+        if updated.id in edge_map:
+            edge_map[updated.id] = updated
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:
