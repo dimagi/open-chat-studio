@@ -96,8 +96,9 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     type: str = TYPE_CHOICE
     description: str = "Filter by tags on sessions or messages"
 
-    def prepare(self, team, **_):
-        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+    def prepare(self, team, **_) -> "ChatMessageTagsFilter":
+        options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+        return self.model_copy(update={"options": options})
 
     def _chat_or_message_tag_exists(self, tag_names):
         """Match outer rows whose chat, or any of the chat's messages, carries one of ``tag_names``.
@@ -161,8 +162,9 @@ class MessageTagsFilter(ChoiceColumnFilter):
     type: str = TYPE_CHOICE
     description: str = "Filter by tags on messages"
 
-    def prepare(self, team, **_):
-        self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+    def prepare(self, team, **_) -> "MessageTagsFilter":
+        options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
+        return self.model_copy(update={"options": options})
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(_message_tag_exists(value))
@@ -181,9 +183,10 @@ class VersionsFilter(ChoiceColumnFilter):
     label: str = "Versions"
     description: str = "Filter by chatbot version (e.g. v1, v2)"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **kwargs) -> "VersionsFilter":
         single_experiment = kwargs.get("single_experiment")
-        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)  # ty: ignore[invalid-assignment]
+        options = Experiment.objects.get_version_names(team, working_version=single_experiment)
+        return self.model_copy(update={"options": options})
 
     def _get_version_numbers(self, version_names):
         """Convert version names to numbers removing the 'v' prefix from 'v1'."""
@@ -214,9 +217,10 @@ class MessageVersionsFilter(ChoiceColumnFilter):
     label: str = "Versions"
     description: str = "Filter by message version"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **kwargs) -> "MessageVersionsFilter":
         single_experiment = kwargs.get("single_experiment")
-        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)  # ty: ignore[invalid-assignment]
+        options = Experiment.objects.get_version_names(team, working_version=single_experiment)
+        return self.model_copy(update={"options": options})
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))
@@ -237,12 +241,12 @@ class ChannelsFilter(ChoiceColumnFilter):
     description: str = "Filter by messaging platform/channel"
     exclude_platforms: list[str] = []
 
-    def prepare(self, team, **_):
+    def prepare(self, team, **_) -> "ChannelsFilter":
         options = ChannelPlatform.for_filter(team)
         if self.exclude_platforms:
             excluded_labels = {ChannelPlatform(p).label for p in self.exclude_platforms}
             options = [o for o in options if o not in excluded_labels]
-        self.options = options  # ty: ignore[invalid-assignment]
+        return self.model_copy(update={"options": options})
 
     def parse_query_value(self, query_value) -> any:
         selected_display_names = self.values_list(query_value)
