@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 from urllib.parse import urlencode
 
@@ -738,3 +739,88 @@ class TestCancelDoNotDisturbView:
         response = client.post(url)
 
         assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+class TestNotificationButtonsUseMorphSwap:
+    """Read, mute, and Do Not Disturb pill controls all `hx-get`/`hx-post` on themselves with
+    `hx-swap="outerHTML"`, destroying the node holding the trigger and dropping keyboard focus
+    to <body> on every click. Morph-based swapping (Idiomorph, via
+    `idiomorph/dist/idiomorph-ext.js`) patches the DOM in place instead, so focus survives
+    without per-control code."""
+
+    def test_read_button_uses_morph_swap(self, client, team_with_users):
+        user = team_with_users.members.first()
+        _create_notification(user=user, team=team_with_users)
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        assert b'hx-ext="morph"' in response.content
+        assert b'hx-swap="morph"' in response.content
+
+    def test_mute_button_uses_morph_swap_for_every_duration_link(self, client, team_with_users):
+        user = team_with_users.members.first()
+        _create_notification(user=user, team=team_with_users)
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        # one duration link each for 8h/1d/1w/1m/forever, all self-swapping the same container
+        assert response.content.count(b'hx-swap="morph"') >= 5
+
+    def test_mute_button_uses_morph_swap_when_already_muted(self, client, team_with_users):
+        user = team_with_users.members.first()
+        notification = _create_notification(user=user, team=team_with_users)
+        notification.muted_until = timezone.now() + timezone.timedelta(hours=1)
+        notification.save()
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        assert b"Unmute Now" in response.content
+        assert b'hx-swap="morph"' in response.content
+
+    def test_do_not_disturb_pills_use_morph_swap(self, client, team_with_users):
+        user = team_with_users.members.first()
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:set_do_not_disturb")
+        response = client.post(url, data={"teams": [team_with_users.id], "duration": "8h"})
+
+        assert response.status_code == 200
+        assert b'hx-ext="morph"' in response.content
+        assert b'hx-swap="morph"' in response.content
+
+    def test_table_sort_header_uses_morph_swap(self, client, team_with_users):
+        """`table/tailwind_js_pagination.html` backs every table's sort headers and
+        pagination links, self-swapping `closest div.table-container` the same way the
+        three buttons above self-swap their own trigger -- same bug, shared template.
+        A sort header wraps its text in a real `<a href>` (see #4463, so the control is
+        keyboard-focusable), so this is scoped to `<th> <a ...>` specifically -- a bare
+        page-wide `hx-swap="morph"` check would trivially match the mute button's own
+        `<a>` duration links (already migrated) elsewhere on this same page."""
+        user = team_with_users.members.first()
+        _create_notification(user=user, team=team_with_users)
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        assert re.search(rb"<th[^>]*>\s*<a[^>]*hx-ext=\"morph\"", response.content)
+        assert re.search(rb"<th[^>]*>\s*<a[^>]*hx-swap=\"morph\"", response.content)

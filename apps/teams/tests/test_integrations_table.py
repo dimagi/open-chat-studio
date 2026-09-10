@@ -130,10 +130,29 @@ def test_integrations_table_pagination_request_returns_bare_table_only(client, t
     LlmProviderFactory(team=team, name="OpenAI Prod")
     client.force_login(admin)
 
-    response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"page": "1"})
+    response = client.get(
+        reverse("single_team:integrations_table", args=[team.slug]), {"page": "1"}, headers={"HX-Request": "true"}
+    )
     assert response.status_code == 200
     assert b"overflow-x-auto" not in response.content
     assert b'class="table-container"' in response.content
+
+
+@pytest.mark.django_db()
+def test_integrations_table_non_htmx_pagination_request_returns_full_page(client, team):
+    """The pagination link now carries a real `href` (see #4463), so a modified click
+    (Ctrl/Cmd-click, middle-click) opens `?page=` as a genuine full-page navigation, not
+    an htmx request. `get_template_names` branched on the query string alone, so a request
+    like this used to get the bare fragment instead of the full page it actually needs."""
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    LlmProviderFactory(team=team, name="OpenAI Prod")
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"page": "1"})
+
+    assert response.status_code == 200
+    assert b"overflow-x-auto" in response.content
 
 
 @pytest.mark.django_db()
