@@ -1009,8 +1009,7 @@ MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
 
-# How long a chat session token remains usable from issuance. Absolute: activity does not
-# extend it; renewal issues a new token.
+# How long a chat session token remains usable from issuance. Activity does not extend it.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
 
@@ -1175,8 +1174,7 @@ CHAT_API_SCOPE = "chat:start"
 
 # Access token lifetimes, chosen per request by apps.oauth.token_lifetime.access_token_expire_seconds.
 OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS = env.int("OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS", default=36000)
-# A token requested with CHAT_API_SCOPE alone is destined for a browser, so it lives only long enough
-# for the widget to spend it on /api/chat/start/.
+# Lifetime of a client-credentials token requested with CHAT_API_SCOPE alone: a widget token, spent immediately.
 OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS = env.int("OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS", default=60)
 
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"

@@ -89,8 +89,7 @@ CONSENT_REQUIRED_RESPONSE = inline_serializer(
     },
 )
 
-# Every admission failure at the OAuth doors shares one body and one code, so a caller probing for
-# which check failed learns nothing.
+# One body for every admission failure, so a caller cannot tell which check failed.
 CHAT_ACCESS_DENIED_RESPONSE = inline_serializer(
     "ChatAccessDenied",
     {
@@ -680,13 +679,11 @@ def chat_start_session(request):
     operation_id="chat_renew_session_token",
     summary="Renew a chat session's token",
     description=(
-        "Issue a fresh session token for an existing session, so the widget can keep the conversation"
-        " once its current token has expired. Admitted exactly as `POST /api/chat/start/` is: a"
-        " client-credentials token with the `chat:start` scope for the session's chatbot, a Chat API"
-        " Channel in OAuth token mode, and the channel's origin rule. On a browser-facing channel"
-        " (allowed domains set) the call must come from a listed origin, so the widget makes it with a"
-        " fresh token from the host; a server-only channel (no allowed domains) may be called from the"
-        " host's backend."
+        "Issue a new session token for an existing session, so the widget can continue the conversation"
+        " after its current token expires. Called by the widget with a fresh client-credentials token from"
+        " the host, the same `chat:start` token used for `POST /api/chat/start/`. Admission matches session"
+        " start: the token must be for the session's chatbot, the Chat API Channel must be in OAuth token"
+        " mode, and the channel's origin rule applies."
     ),
     tags=["Chat"],
     request=None,

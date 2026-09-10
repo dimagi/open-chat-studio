@@ -1,10 +1,7 @@
-"""Renewing a session token with the host's client-credentials token.
+"""Renewing a session token.
 
-The session token is the visitor's credential and expires on its own clock. `POST chat/<id>/token/`
-mints a replacement under the same admission as `chat/start/`: an `oauth`-mode channel, a
-`chat:start` machine token for the session's chatbot, and the channel's origin rule -- so on a
-browser-facing channel the widget calls it with a fresh token from the host, and on a server-only
-channel the host's backend may. Every refusal looks the same.
+The widget calls `POST chat/<id>/token/` with a fresh `chat:start` machine token from the host, under
+the same admission as `chat/start/`. Every refusal looks the same.
 """
 
 import uuid
@@ -81,7 +78,7 @@ def test_machine_token_renews_an_expired_session_token(chatbot, session):
     old_token = issue_session_token(session)
 
     with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
-        # Minted now: the host fetches a fresh machine token before each renewal.
+        # The test client's machine token lives one day, so mint it inside the travelled window.
         client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
         assert _poll(session, old_token).status_code == 403
 

@@ -797,8 +797,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         label="Session lifetime",
         required=False,
         help_text=(
-            "How long each session token stays usable from when it is issued. Activity does not extend "
-            "it; a token can be renewed by the host. "
+            "How long each session token stays usable from when it is issued. Activity does not extend it. "
             "Leave blank to use the system default. Format <code>HH:MM:SS</code>, or "
             "<code>D HH:MM:SS</code> for days — e.g. <code>12:00:00</code> or <code>2 00:00:00</code>."
         ),

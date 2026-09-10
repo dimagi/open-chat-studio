@@ -178,7 +178,7 @@ class ChatOAuthAuthenticationBase(authentication.BaseAuthentication):
 
     @staticmethod
     def _admit(request, experiment, channel: ExperimentChannel) -> OAuth2AccessToken:
-        """The validated machine token, once the origin rule holds; the team is set as a side effect."""
+        """Validate the machine token and origin, and set the request team."""
         token = validated_machine_token(request, experiment)
         check_oauth_channel_origin(request, channel)
         request.team = token.team
@@ -246,10 +246,9 @@ class ChatOAuthAuthentication(ChatOAuthAuthenticationBase):
 
 
 class ChatSessionOAuthAuthentication(ChatOAuthAuthenticationBase):
-    """Admit a client-credentials token to a session-bound endpoint, resolving the chatbot from the session in the URL.
+    """Admit a client-credentials token to a session-bound endpoint; the chatbot comes from the session in the URL.
 
-    The only credential on its endpoints, so a missing token is a refusal rather than a hand-off.
-    Returns `(AnonymousUser(), token)` and leaves the admitted session on `request.chat_session`.
+    Sets `request.chat_session` to the admitted session.
     """
 
     def authenticate(self, request):
@@ -263,15 +262,14 @@ class ChatSessionOAuthAuthentication(ChatOAuthAuthenticationBase):
         if channel is None:
             raise ChatApiAccessDenied()
         token = self._admit(request, session.experiment, channel)
-        # The cached session carries a channel snapshot up to WIDGET_SESSION_CACHE_TTL old; the
-        # token minted downstream must take its lifetime from the row as it stands.
+        # The cached session holds a stale channel snapshot; the token lifetime must come from the live row.
         session.experiment_channel = channel
         request.chat_session = session
         return (AnonymousUser(), token)
 
     @staticmethod
     def _live_oauth_channel(session) -> ExperimentChannel | None:
-        """The session's channel, re-read through the default manager so a deleted or disabled one refuses."""
+        """The session's OAuth-mode channel from the DB, or None when missing, deleted or disabled."""
         if session.experiment_channel_id is None:
             return None
         channel = (
