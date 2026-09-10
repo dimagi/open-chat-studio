@@ -69,22 +69,24 @@ Pricing unit conventions
 from __future__ import annotations
 
 import argparse
-import ast
 import datetime
 import enum
 import io
 import json
 import os
-import random
 import sys
-import time
-import urllib.error
-import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from reconcile_catalogue import (
+    load_active_default_models,
+    load_ignored_models,
+    load_registered_models,
+)
+from reconcile_http import _get_json, _github_headers
 
 # Constants
 
@@ -161,7 +163,6 @@ LITELLM_SOURCE_URL = f"https://github.com/{LITELLM_REPO}/blob/main/{LITELLM_PRIC
 LITELLM_COMMITS_URL = (
     f"https://api.github.com/repos/{LITELLM_REPO}/commits?path={LITELLM_PRICING_PATH}&until={{until}}&per_page=1"
 )
-GITHUB_USER_AGENT = "ocs-reconcile-models-script/1.0"
 
 # How far back to look for "newly published". Only affects ordering: an older
 # model OCS never registered is still a candidate, just behind the recent ones.
@@ -172,197 +173,10 @@ DEFAULT_BASELINE_DAYS = 7
 # small because each candidate is a judgement call for a human to check.
 MAX_NEW_MODELS_PER_RUN = 10
 
-DEFAULT_MODELS_REL_PATH = "apps/service_providers/llm_service/default_models.py"
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 MIGRATIONS_DIR_REL_PATH = "apps/cost_tracking/migrations"
-IGNORED_MODELS_REL_PATH = "scripts/reconcile_ignored_models.json"
 
 NO_PRICING_REASON = "No pricing data found in the LiteLLM price table"
-
-# Rate limiting
-#
-# raw.githubusercontent.com and the GitHub API both rate-limit. GitHub reports
-# its own limits as 403 as often as 429, so both codes are inspected.
-
-# Used when a rate limit arrives without a usable Retry-After. Doubles per
-# consecutive miss so a misbehaving server can't spin us in a tight loop.
-DEFAULT_RETRY_AFTER_SECONDS = 5.0
-
-# Ceiling on the self-chosen backoff window. An explicit Retry-After is not
-# capped by it - see _retry_delay_seconds.
-MAX_BACKOFF_SECONDS = 120.0
-
-# Spread the retry so concurrent clients don't re-collide when the window opens.
-RATE_LIMIT_JITTER_SECONDS = 1.0
-
-# Backstop against a server that 429s forever, so a CI job cannot hang.
-MAX_TOTAL_BURST_WAIT_SECONDS = 900.0
-
-
-# HTTP helpers
-
-
-def _full_jitter(cap: float) -> float:
-    """AWS "full jitter": sleep uniformly over the whole window rather than a
-    fixed delay, so separate clients spread out instead of re-colliding."""
-    return random.uniform(0, max(cap, 0.0))
-
-
-def _retry_delay_seconds(exc: urllib.error.HTTPError, backoff: float) -> float:
-    """How long to sleep before retrying a rate-limited request, jitter included.
-
-    An explicit Retry-After is honoured in full: GitHub extends a secondary
-    rate limit when a client retries before the window it asked for. With no
-    usable header there is nothing to honour, so the delay is full jitter over
-    the backoff window.
-    """
-    try:
-        seconds = float((exc.headers or {}).get("Retry-After", ""))
-    except (TypeError, ValueError):
-        seconds = 0.0
-    if seconds <= 0:
-        return _full_jitter(min(backoff, MAX_BACKOFF_SECONDS))
-    return seconds + _full_jitter(RATE_LIMIT_JITTER_SECONDS)
-
-
-def _is_rate_limited(exc: urllib.error.HTTPError) -> bool:
-    """429 always; 403 only when GitHub attributes it to a rate limit.
-
-    GitHub answers both its hourly limit and its secondary abuse limits with
-    403, so a 403 that carries neither signal is a permission error and must
-    surface immediately rather than being slept on.
-    """
-    if exc.code == 429:
-        return True
-    if exc.code != 403:
-        return False
-    headers = exc.headers or {}
-    return bool(headers.get("Retry-After")) or headers.get("x-ratelimit-remaining") == "0"
-
-
-def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
-    """GET and parse JSON, sleeping through rate limits."""
-    backoff = DEFAULT_RETRY_AFTER_SECONDS
-    waited = 0.0
-    while True:
-        req = urllib.request.Request(url, headers=headers or {})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.load(resp)
-        except urllib.error.HTTPError as exc:
-            if not _is_rate_limited(exc):
-                raise
-            delay = _retry_delay_seconds(exc, backoff)
-            if waited + delay > MAX_TOTAL_BURST_WAIT_SECONDS:
-                print(f"  (!) rate limited beyond the {MAX_TOTAL_BURST_WAIT_SECONDS:.0f}s budget; giving up on {url}")
-                raise
-            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
-            print(f"  (!) rate limited; sleeping {delay:.0f}s before retrying {url}")
-            time.sleep(delay)
-            waited += delay
-
-
-def _github_headers() -> dict[str, str]:
-    """Headers for api.github.com, authenticated when a token is in the env.
-
-    Unauthenticated requests share 60 per hour per IP with everything else on
-    the runner; a token raises that to 5 000 for the repository.
-    """
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": GITHUB_USER_AGENT}
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    return headers
-
-
-# default_models.py parsing - pure AST, no Django import
-
-
-def _model_call_name(node: ast.expr) -> str | None:
-    if isinstance(node, ast.Call) and node.args:
-        first = node.args[0]
-        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-            return first.value
-    return None
-
-
-def _const_str(node: ast.expr) -> str | None:
-    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
-
-
-def _default_model_pairs(dict_node: ast.Dict) -> Iterator[tuple[str, str]]:
-    for key_node, value_node in zip(dict_node.keys, dict_node.values, strict=True):
-        provider = _const_str(key_node) if key_node is not None else None
-        if provider is None or not isinstance(value_node, ast.List):
-            continue
-        for name in filter(None, map(_model_call_name, value_node.elts)):
-            yield provider, name
-
-
-def _deleted_model_pairs(list_node: ast.List) -> Iterator[tuple[str, str]]:
-    for elt in list_node.elts:
-        if not (isinstance(elt, ast.Tuple) and len(elt.elts) >= 2):
-            continue
-        provider, model = _const_str(elt.elts[0]), _const_str(elt.elts[1])
-        if provider is not None and model is not None:
-            yield provider, model
-
-
-def _assignment_pairs(node: ast.stmt) -> Iterator[tuple[str, str]]:
-    if not isinstance(node, ast.Assign):
-        return
-    targets = {t.id for t in node.targets if isinstance(t, ast.Name)}
-    if "DEFAULT_LLM_PROVIDER_MODELS" in targets and isinstance(node.value, ast.Dict):
-        yield from _default_model_pairs(node.value)
-    elif "DELETED_MODELS" in targets and isinstance(node.value, ast.List):
-        yield from _deleted_model_pairs(node.value)
-
-
-def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
-    """Parse ``default_models.py`` and return ``{provider: {model_name, ...}}``.
-
-    DELETED_MODELS entries are folded in so re-adding a deleted model is
-    flagged for review rather than silently re-registered.
-    """
-    tree = ast.parse((repo_root / DEFAULT_MODELS_REL_PATH).read_text())
-    registered: dict[str, set[str]] = {}
-    for node in tree.body:
-        for provider, model in _assignment_pairs(node):
-            registered.setdefault(provider, set()).add(model)
-    return registered
-
-
-def load_ignored_models(repo_root: Path) -> dict[str, set[str]]:
-    """Models a reviewer looked at and chose not to register, per provider.
-
-    Candidates are selected by state, so this ledger is what retires one: it
-    keeps a rejected model out of later runs and leaves the slot to the backlog.
-    """
-    path = repo_root / IGNORED_MODELS_REL_PATH
-    if not path.exists():
-        return {}
-    ignored: dict[str, set[str]] = {}
-    for entry in json.loads(path.read_text()):
-        ignored.setdefault(entry["provider_type"], set()).add(entry["model_name"])
-    return ignored
-
-
-def load_active_default_models(repo_root: Path) -> set[tuple[str, str]]:
-    """``(provider, model)`` pairs in ``DEFAULT_LLM_PROVIDER_MODELS`` only.
-
-    The missing-pricing audit consumes this. DELETED_MODELS are deliberately
-    excluded - the audit only flags coverage gaps for *active* OCS models.
-    """
-    tree = ast.parse((repo_root / DEFAULT_MODELS_REL_PATH).read_text())
-    active: set[tuple[str, str]] = set()
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        targets = {t.id for t in node.targets if isinstance(t, ast.Name)}
-        if "DEFAULT_LLM_PROVIDER_MODELS" in targets and isinstance(node.value, ast.Dict):
-            active.update(_default_model_pairs(node.value))
-    return active
-
 
 # Seed I/O
 

@@ -1,4 +1,4 @@
-"""Unit tests for scripts/reconcile_models.py.
+"""Unit tests for the reconcile_models script and its reconcile_* helper modules.
 
 Run with:  pytest scripts/test_reconcile_models.py -v
 """
@@ -16,21 +16,30 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import reconcile_http
 import reconcile_models
-from reconcile_models import (
+from reconcile_catalogue import (
+    IGNORED_MODELS_REL_PATH,
+    load_active_default_models,
+    load_ignored_models,
+    load_registered_models,
+)
+from reconcile_http import (
     DEFAULT_RETRY_AFTER_SECONDS,
-    LITELLM_SOURCE_URL,
     MAX_BACKOFF_SECONDS,
-    MAX_NEW_MODELS_PER_RUN,
     MAX_TOTAL_BURST_WAIT_SECONDS,
     RATE_LIMIT_JITTER_SECONDS,
+    _get_json,
+)
+from reconcile_models import (
+    LITELLM_SOURCE_URL,
+    MAX_NEW_MODELS_PER_RUN,
     REQUIRED_SERVICE_KINDS,
     Candidate,
     MissingPricingEntry,
     RateChange,
     _commit_price_changes,
     _fmt,
-    _get_json,
     _key_for_provider,
     _litellm_entry,
     _next_migration_number,
@@ -46,9 +55,6 @@ from reconcile_models import (
     eligible_models,
     fetch_baseline,
     generate_migration,
-    load_active_default_models,
-    load_ignored_models,
-    load_registered_models,
     load_seed,
     process_candidates,
     render_missing_pricing_issue_body,
@@ -1613,7 +1619,7 @@ def test_select_candidates_still_offers_a_model_ignored_for_another_provider():
 
 def test_load_ignored_models_reads_the_file(tmp_path):
     (tmp_path / "scripts").mkdir()
-    (tmp_path / reconcile_models.IGNORED_MODELS_REL_PATH).write_text(
+    (tmp_path / IGNORED_MODELS_REL_PATH).write_text(
         json.dumps(
             [
                 {"provider_type": "perplexity", "model_name": "sonar-x", "reason": "preset, not a model"},
@@ -1729,9 +1735,9 @@ def urlopen(monkeypatch):
                 raise item
             return io.BytesIO(json.dumps(item).encode())
 
-        monkeypatch.setattr(reconcile_models.urllib.request, "urlopen", _fake_urlopen)
-        monkeypatch.setattr(reconcile_models.time, "sleep", sleeps.append)
-        monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, _b: 0.0)
+        monkeypatch.setattr(reconcile_http.urllib.request, "urlopen", _fake_urlopen)
+        monkeypatch.setattr(reconcile_http.time, "sleep", sleeps.append)
+        monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, _b: 0.0)
         return sleeps, requests
 
     return _install
@@ -1746,7 +1752,7 @@ def test_burst_429_is_retried_after_retry_after_seconds(urlopen):
 
 def test_burst_429_sleep_gets_jitter(monkeypatch, urlopen):
     sleeps, _ = urlopen(_http_error(429, "7"), {"ok": True})
-    monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, b: b)
+    monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, b: b)
 
     _get_json(RAW_URL)
 
@@ -1761,7 +1767,7 @@ def test_backoff_window_doubles_per_consecutive_miss(urlopen, monkeypatch):
         _http_error(429, "not-a-number"),
         {"ok": True},
     )
-    monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, b: b)
+    monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, b: b)
 
     assert _get_json(RAW_URL) == {"ok": True}
     assert sleeps == [DEFAULT_RETRY_AFTER_SECONDS, DEFAULT_RETRY_AFTER_SECONDS * 2]
