@@ -548,9 +548,8 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
 
 def _build_session_messages_context(request, session, experiment, *, full_page: bool) -> dict:
     """Shared context for a session's message list, at either the full page or the
-    scroll-fragment endpoint. `full_page` controls the parts only the full page needs:
-    the missing-translations check and the control panel's tags/translation-form/provider
-    data, both real queries a scroll-triggered fragment fetch shouldn't pay for.
+    scroll-fragment endpoint. `full_page` gates the missing-translations check, a real
+    query a scroll-triggered fragment fetch shouldn't pay for.
     """
     page = int(request.GET.get("page", 1))
     selected_tags = list(filter(None, request.GET.getlist("tag_filter")))
@@ -639,43 +638,48 @@ def _build_session_messages_context(request, session, experiment, *, full_page: 
         "highlight_message_id": highlight_message_id,
     }
 
-    if full_page:
-        chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
-        all_tags = (
-            Tag.objects.filter(
-                annotations_customtaggeditem_items__content_type=chat_message_content_type,
-                annotations_customtaggeditem_items__object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat=session.chat).values("id")
-                ),
-            )
-            .annotate(count=Count("annotations_customtaggeditem_items"))
-            .distinct()
-            .order_by(F("category").asc(nulls_first=True), "name")
-        )
-        available_languages, translatable_languages = _get_languages_for_chat(session)
-        context.update(
-            {
-                "all_tags": all_tags,
-                "available_languages": available_languages,
-                "translate_form_all": TranslateMessagesForm(
-                    team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
-                ),
-                "translate_form_remaining": TranslateMessagesForm(
-                    team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
-                ),
-                "default_translation_models_by_providers": get_default_translation_models_by_provider(),
-                "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
-            }
-        )
-
     return context
+
+
+def _build_session_message_translation_context(request, session) -> dict:
+    """The control panel's tag list, translation forms, and provider/model lookups. Only the
+    full session transcript page renders that panel, so this is called from there alone, not
+    from `_build_session_messages_context`, which stays focused on the message list itself.
+    """
+    chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    all_tags = (
+        Tag.objects.filter(
+            annotations_customtaggeditem_items__content_type=chat_message_content_type,
+            annotations_customtaggeditem_items__object_id__in=Subquery(
+                ChatMessage.objects.filter(chat=session.chat).values("id")
+            ),
+        )
+        .annotate(count=Count("annotations_customtaggeditem_items"))
+        .distinct()
+        .order_by(F("category").asc(nulls_first=True), "name")
+    )
+    available_languages, translatable_languages = _get_languages_for_chat(session)
+    return {
+        "all_tags": all_tags,
+        "available_languages": available_languages,
+        "translate_form_all": TranslateMessagesForm(
+            team=request.team, translatable_languages=translatable_languages, is_translate_all_form=True
+        ),
+        "translate_form_remaining": TranslateMessagesForm(
+            team=request.team, translatable_languages=translatable_languages, is_translate_all_form=False
+        ),
+        "default_translation_models_by_providers": get_default_translation_models_by_provider(),
+        "llm_provider_models_dict": get_models_by_team_grouped_by_provider(request.team),
+    }
 
 
 @experiment_session_view()
 @verify_session_access_cookie
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     """Full session transcript page."""
-    context = _build_session_messages_context(request, request.experiment_session, request.experiment, full_page=True)
+    session = request.experiment_session
+    context = _build_session_messages_context(request, session, request.experiment, full_page=True)
+    context.update(_build_session_message_translation_context(request, session))
     return TemplateResponse(request, "experiments/components/session_messages.html", context)
 
 
