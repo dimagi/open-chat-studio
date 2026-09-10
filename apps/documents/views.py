@@ -10,14 +10,14 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
-from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, ListView, TemplateView, UpdateView
 from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
@@ -27,7 +27,6 @@ from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.forms import (
     CollectionForm,
     ConfluenceDocumentSourceForm,
-    CreateCollectionFromAssistantForm,
     DocumentSourceForm,
     GithubDocumentSourceForm,
     JSONCollectionDocumentSourceForm,
@@ -45,7 +44,6 @@ from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
 from apps.documents.utils import delete_collection_file
 from apps.files.models import File, FileChunkEmbedding, FilePurpose
-from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
 from apps.generics.referenced_objects import render_referenced_objects_modal
@@ -80,15 +78,6 @@ class CollectionHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
             "table_url": reverse("documents:collection_table", args=[team_slug]),
             "enable_search": True,
             "button_style": "btn-primary",
-            "actions": [
-                actions.Action(
-                    "documents:create_from_assistant",
-                    label="Create from assistant",
-                    icon_class="fa-solid fa-robot",
-                    title="Create an indexed collection from an OpenAI assistant's file search tools",
-                    required_permissions=["documents.add_collection"],
-                )
-            ],
         }
 
 
@@ -703,7 +692,9 @@ class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Collect
             with transaction.atomic():
                 collection.openai_vector_store_id = None  # Reset the vector store ID
                 collection.ensure_remote_index_created()
-                CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
+                CollectionFile.objects.filter(collection_id=collection.id).update(
+                    status=FileStatus.PENDING, failure_reason=""
+                )
 
             tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
@@ -800,45 +791,6 @@ def create_collection_version(request, team_slug: str, pk: int):
 def collection_snapshots(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection, id=pk, team=request.team)
     return _render_collection_snapshots(request, collection)
-
-
-class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
-    form_class = CreateCollectionFromAssistantForm
-    template_name = "documents/create_from_assistant_form.html"
-    permission_required = "documents.add_collection"
-    extra_context = {
-        "title": "Create Collection from Assistant",
-        "button_text": "Create Collection",
-        "active_tab": "collections",
-        "title_help_content": render_help_with_link("", "migrate_from_assistant"),
-    }
-    object = None
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["request"] = self.request
-        return kwargs
-
-    def get_success_url(self):
-        return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
-
-    def form_valid(self, form):
-        with transaction.atomic():
-            assistant = form.cleaned_data["assistant"]
-            collection_name = form.cleaned_data["collection_name"]
-            collection = Collection.objects.create(
-                team=self.request.team,
-                name=collection_name,
-                is_index=True,
-                is_remote_index=True,
-                llm_provider=assistant.llm_provider,
-            )
-            self.object = collection
-        tasks.create_collection_from_assistant_task.delay(
-            collection_id=collection.id,
-            assistant_id=assistant.id,
-        )
-        return HttpResponseRedirect(self.get_success_url())
 
 
 class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, ListView):

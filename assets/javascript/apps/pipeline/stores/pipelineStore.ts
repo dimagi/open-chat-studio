@@ -12,7 +12,7 @@ import {create, StateCreator} from "zustand";
 import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
 import {getNodeId} from "../utils";
-import {cloneDeep} from "lodash";
+import cloneDeep from "lodash/cloneDeep";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
@@ -280,6 +280,7 @@ const createPipelineManagerStore: StateCreator<
   isSaving: false,
   isLoading: true,
   errors: {},
+  deprecatedModels: {},
   conflictDetected: false,
   currentRevision: 0,
   dismissConflict: () => {
@@ -297,7 +298,7 @@ const createPipelineManagerStore: StateCreator<
           currentPipelineId: pipelineId,
           currentRevision: pipeline.edit_revision ?? 0,
         });
-        set({errors: pipeline.errors});
+        set({errors: pipeline.errors, deprecatedModels: pipeline.deprecated_models ?? {}});
         set({isLoading: false});
         if (get().reactFlowInstance) {
           get().resetFlow({
@@ -380,7 +381,10 @@ const createPipelineManagerStore: StateCreator<
               dirty: false,
               currentRevision: saveResponse.edit_revision,
             });
-            set({errors: saveResponse.errors as ErrorsType});
+            set({
+              errors: saveResponse.errors as ErrorsType,
+              deprecatedModels: saveResponse.deprecated_models ?? {},
+            });
             if (get().reactFlowInstance && saveResponse.errors) {
               set({
                 edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
@@ -414,6 +418,7 @@ const createPipelineManagerStore: StateCreator<
         set({
           currentRevision: response.edit_revision,
           errors: response.errors as ErrorsType,
+          deprecatedModels: response.deprecated_models ?? {},
           dirty: false,
         });
         if (edges) {
@@ -461,6 +466,9 @@ const createPipelineManagerStore: StateCreator<
   },
   getPipelineError: () => {
     return get().errors["pipeline"] ?? NO_PIPELINE_ERRORS;
+  },
+  getNodeDeprecatedModel: (nodeId: string) => {
+    return get().deprecatedModels[nodeId];
   },
 })
 

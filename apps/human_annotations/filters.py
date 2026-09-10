@@ -41,7 +41,7 @@ class ReviewerFilter(ChoiceColumnFilter):
     label: str = "Reviewer"
     description: str = "Filter by reviewer who annotated the item"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **kwargs) -> "ReviewerFilter":
         reviewers = (
             User.objects.filter(
                 annotations__item__queue__team=team,
@@ -50,10 +50,11 @@ class ReviewerFilter(ChoiceColumnFilter):
             .distinct()
             .values("id", "username", "first_name", "last_name")
         )
-        self.options = [
+        options = [
             {"id": str(r["id"]), "label": r["first_name"] + " " + r["last_name"] if r["first_name"] else r["username"]}
             for r in reviewers
         ]
+        return self.model_copy(update={"options": options})
 
     def parse_query_value(self, query_value):
         values = self.values_list(query_value)
