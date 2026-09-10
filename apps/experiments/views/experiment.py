@@ -546,17 +546,16 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
-@experiment_session_view()
-@verify_session_access_cookie
-def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """View for loading a session's messages with HTMX, one page at a time via scroll."""
-    session = request.experiment_session
-    experiment = request.experiment
+def _build_session_messages_context(request, session, experiment, *, full_page: bool) -> dict:
+    """Shared context for a session's message list, at either the full page or the
+    scroll-fragment endpoint. `full_page` controls the parts only the full page needs:
+    the missing-translations check and the control panel's tags/translation-form/provider
+    data, both real queries a scroll-triggered fragment fetch shouldn't pay for.
+    """
     page = int(request.GET.get("page", 1))
     selected_tags = list(filter(None, request.GET.getlist("tag_filter")))
     language = request.GET.get("language", "")
     show_original_translation = request.GET.get("show_original_translation") == "on" and language
-    is_fragment_request = bool(request.GET.get("next_page"))
     try:
         highlight_message_id = int(request.GET.get("message_id"))
     except (ValueError, TypeError):
@@ -594,7 +593,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
                 output_field=CharField(),
             )
         )
-        if not is_fragment_request:
+        if full_page:
             has_missing_translations = messages_queryset.exclude(
                 **{f"translations__{language}__isnull": False}
             ).exists()
@@ -640,9 +639,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "highlight_message_id": highlight_message_id,
     }
 
-    # A scroll-triggered fragment only renders messages, not the control panel, so skip the
-    # translation forms and provider/model lookups that panel needs, they're real queries.
-    if not is_fragment_request:
+    if full_page:
         chat_message_content_type = ContentType.objects.get_for_model(ChatMessage)
         all_tags = (
             Tag.objects.filter(
@@ -671,17 +668,26 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
             }
         )
 
-    # Scrolling for more messages just needs the messages, not the whole page again.
-    template_name = (
-        "experiments/components/session_messages_list.html"
-        if is_fragment_request
-        else "experiments/components/session_messages.html"
-    )
-    return TemplateResponse(
-        request,
-        template_name,
-        context,
-    )
+    return context
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Full session transcript page."""
+    context = _build_session_messages_context(request, request.experiment_session, request.experiment, full_page=True)
+    return TemplateResponse(request, "experiments/components/session_messages.html", context)
+
+
+@experiment_session_view()
+@verify_session_access_cookie
+def experiment_session_messages_fragment_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Scroll-triggered fetch of the next page of messages. Own endpoint rather than a flag on
+    the full page view, since it renders a different template with a smaller context, and needs
+    none of the control panel's tags/translation-form/provider queries the full page pays for.
+    """
+    context = _build_session_messages_context(request, request.experiment_session, request.experiment, full_page=False)
+    return TemplateResponse(request, "experiments/components/session_messages_list.html", context)
 
 
 @experiment_session_view()
