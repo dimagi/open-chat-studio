@@ -3,6 +3,7 @@ from .chat import (
     chat_poll_response,
     chat_poll_task_response,
     chat_record_consent,
+    chat_renew_session_token,
     chat_send_message,
     chat_start_session,
     chat_upload_file,
@@ -28,5 +29,6 @@ __all__ = [
     "chat_poll_task_response",
     "chat_poll_response",
     "chat_record_consent",
+    "chat_renew_session_token",
     "chat_upload_file",
 ]

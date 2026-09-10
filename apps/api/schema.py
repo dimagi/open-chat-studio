@@ -247,7 +247,7 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
 
 
 class ChatOAuthScheme(OpenApiAuthenticationExtension):
-    """Security scheme for the bearer credential at ``/api/chat/start/``.
+    """Security scheme for the host's bearer credential at ``/api/chat/start/`` and ``/api/chat/<id>/token/``.
 
     A separate scheme from ``OAuth2TeamsScheme`` rather than a reuse of it: this door accepts
     client-credentials tokens only (and only ``CHAT_API_SCOPE``), where that scheme documents the
@@ -258,7 +258,7 @@ class ChatOAuthScheme(OpenApiAuthenticationExtension):
     itself rather than through a permission class.
     """
 
-    target_class = "apps.api.authentication.ChatOAuthAuthentication"
+    target_class = "apps.api.authentication.ChatOAuthAuthenticationBase"
     name = "chatOAuth2"
     match_subclasses = True
     priority = -1

@@ -389,6 +389,16 @@ class ChatStartSessionResponse(serializers.Serializer):
     consent = ChatConsentSerializer(read_only=True)
 
 
+class ChatSessionTokenResponse(serializers.Serializer):
+    session_id = serializers.UUIDField(label="Session ID")
+    session_token = serializers.CharField(
+        label="Session token",
+        help_text="Replaces the previous token. Send as the `X-Session-Token` header on subsequent requests for"
+        " this session.",
+    )
+    expires_at = serializers.DateTimeField(label="Expires at", help_text="When the token stops working.")
+
+
 class ChatSendMessageRequest(serializers.Serializer):
     message = serializers.CharField(label="Message content")
     context = serializers.DictField(

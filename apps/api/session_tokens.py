@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core import signing
@@ -31,8 +31,17 @@ def issue_session_token(session: ExperimentSession) -> str:
     server-side code (e.g. for bound-session pages), and re-deriving it is how a
     session's access is renewed.
     """
+    token, _expires_at = issue_session_token_with_expiry(session)
+    return token
+
+
+def issue_session_token_with_expiry(session: ExperimentSession) -> tuple[str, datetime]:
+    """`issue_session_token`, also returning the instant the token stops working."""
     expires_at = timezone.now() + session_token_lifetime(session)
-    return signing.dumps({"sid": str(session.external_id), "exp": int(expires_at.timestamp())}, salt=SESSION_TOKEN_SALT)
+    # Whole seconds in the claim, so the returned instant is exactly what the claim says.
+    expires_at = expires_at.replace(microsecond=0)
+    payload = {"sid": str(session.external_id), "exp": int(expires_at.timestamp())}
+    return signing.dumps(payload, salt=SESSION_TOKEN_SALT), expires_at
 
 
 def parse_session_token(token: str, session_external_id: str) -> dict | None:

@@ -22,6 +22,7 @@ from rest_framework.response import Response
 
 from apps.api.authentication import (
     ChatOAuthAuthentication,
+    ChatSessionOAuthAuthentication,
     EmbeddedWidgetAuthentication,
     get_embed_key_channel,
     oauth_resolved_channel,
@@ -35,11 +36,12 @@ from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
     ChatSendMessageResponse,
+    ChatSessionTokenResponse,
     ChatStartSessionRequest,
     ChatStartSessionResponse,
     MessageSerializer,
 )
-from apps.api.session_tokens import issue_session_token
+from apps.api.session_tokens import issue_session_token, issue_session_token_with_expiry
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
@@ -84,6 +86,16 @@ CONSENT_REQUIRED_RESPONSE = inline_serializer(
         "error": serializers.CharField(),
         "code": serializers.CharField(help_text="`consent_required`."),
         "consent": ChatConsentSerializer(),
+    },
+)
+
+# Every admission failure at the OAuth doors shares one body and one code, so a caller probing for
+# which check failed learns nothing.
+CHAT_ACCESS_DENIED_RESPONSE = inline_serializer(
+    "ChatAccessDenied",
+    {
+        "error": serializers.CharField(),
+        "code": serializers.CharField(help_text="Always `chat_access_denied`."),
     },
 )
 
@@ -486,16 +498,9 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
     request=ChatStartSessionRequest,
     responses={
         201: ChatStartSessionResponse,
-        # Every admission failure at this door shares one body and one code, so a caller probing
-        # for which check failed learns nothing. Session-authenticated callers keep their 403
-        # (ADR-0053); a 401 at an authenticated caller would read as a broken session.
-        401: inline_serializer(
-            "ChatAccessDenied",
-            {
-                "error": serializers.CharField(),
-                "code": serializers.CharField(help_text="Always `chat_access_denied`."),
-            },
-        ),
+        # Session-authenticated callers keep their 403 (ADR-0053); a 401 at an authenticated
+        # caller would read as a broken session.
+        401: CHAT_ACCESS_DENIED_RESPONSE,
         # Public-channel admission: the chatbot has no published version yet.
         409: inline_serializer(
             "ChatStartSessionRefused",
@@ -668,6 +673,39 @@ def chat_start_session(request):
 
     serialized_response = ChatStartSessionResponse(response_data, context={"request": request})
     return Response(serialized_response.data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    operation_id="chat_renew_session_token",
+    summary="Renew a chat session's token",
+    description=(
+        "Issue a fresh session token for an existing session, so the widget can keep the conversation"
+        " once its current token has expired. Called by the host's backend, not the widget: it takes the"
+        " same client-credentials token with the `chat:start` scope that starts a session, and the"
+        " chatbot's Chat API Channel must be in OAuth token mode."
+    ),
+    tags=["Chat"],
+    request=None,
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.UUID,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+    ],
+    responses={200: ChatSessionTokenResponse, 401: CHAT_ACCESS_DENIED_RESPONSE},
+)
+@api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
+@authentication_classes([ChatSessionOAuthAuthentication])
+@permission_classes([])
+def chat_renew_session_token(request, session_id):
+    """Mint a new session token; `ChatSessionOAuthAuthentication` has already admitted the caller."""
+    session = get_experiment_session_cached(session_id)
+    token, expires_at = issue_session_token_with_expiry(session)
+    response_data = {"session_id": session.external_id, "session_token": token, "expires_at": expires_at}
+    return Response(ChatSessionTokenResponse(response_data).data)
 
 
 class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
