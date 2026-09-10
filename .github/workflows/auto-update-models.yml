@@ -1,7 +1,9 @@
 # Auto Update LLM Models Workflow
 #
-# Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
-# scripts/reconcile_models.py runs once and produces three signals:
+# Daily reconciliation of the in-repo model catalogue and pricing seed.
+# scripts/reconcile_models.py sweeps the whole llm-stats.com catalogue (via
+# the zeroeval Stats API) for discovery, and reads pricing and token limits
+# from the LiteLLM price table. It produces three signals:
 #
 #   - new_models      candidates not yet registered in OCS
 #   - price_changes   existing seed entries whose upstream rate has moved
@@ -15,6 +17,10 @@
 # docs/developer_guides/managing_models.md.
 #
 # Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
+# Pricing and token limits come from the LiteLLM price table.
+#
+# The catalogue is swept whole rather than as a time-windowed delta, so a run
+# that fails - or a model missed while it was broken - heals on the next run.
 #
 # Triggered on: daily schedule, or manual dispatch
 # Requirements: LLM_STATS_BEARER_TOKEN secret (job 1, reconcile);
@@ -34,12 +40,6 @@ on:
   schedule:
     - cron: '0 4 * * *'  # Daily at 04:00 UTC
   workflow_dispatch:
-    inputs:
-      days:
-        description: 'Lookback window in days (max 30)'
-        required: false
-        default: '1'
-        type: string
 
 concurrency:
   group: auto-update-models
@@ -85,7 +85,6 @@ jobs:
           # Stdlib-only - no dependency install needed.
           python3 scripts/reconcile_models.py \
             --bearer-token "$LLM_STATS_BEARER_TOKEN" \
-            --days "${{ inputs.days || '1' }}" \
             --output reconciliation.json
 
       - name: Upload reconciliation payload
@@ -253,25 +252,31 @@ jobs:
             You are adding newly released LLM models to Open Chat Studio.
 
             ## Input
-            `scripts/reconcile_models.py` has already fetched candidates from
-            llm-stats.com, removed models already registered in OCS, and resolved
-            per-1K-token pricing. Its output is at `./reconciliation.json`. Do
-            NOT re-fetch, re-dedup, or re-derive pricing - that work is done and
-            unit-tested. You only care about the `new_models[]` section of the
-            payload here; the `price_changes` and `missing_pricing` sections are
-            handled in a separate job and are not your concern.
+            `scripts/reconcile_models.py` has already swept the llm-stats
+            catalogue, removed models already registered in OCS, and resolved
+            per-1K-token pricing and token limits from the LiteLLM price table.
+            Its output is at `./reconciliation.json`. Do NOT re-fetch, re-dedup,
+            or re-derive pricing - that work is done and unit-tested. You only
+            care about the `new_models[]` section of the payload here; the
+            `price_changes` and `missing_pricing` sections are handled in a
+            separate job and are not your concern.
 
-            The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
+            Candidates are selected by state, not by date: anything upstream
+            that OCS has not registered is eligible, newest first, capped per
+            run. Key fields:
             - `new_models[]` - candidates to consider. Each has: `id`, `org`,
-              `context_window`, `ocs_providers` (the default OCS provider mapping),
+              `token_limit` (from LiteLLM; may be null), `release_date`,
+              `ocs_providers` (the default OCS provider mapping),
               `already_registered_providers`, `already_priced_providers`,
-              `source_url`, `sources`, `details_error`, and `pricing`.
+              `source_url`, and `pricing`.
             - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
-              `pricing.source` (`llm_stats` or `litellm`) /
-              `pricing.llm_pricing_entries` - ready-to-paste `llm_pricing.json`
-              entries, one per provider that still needs pricing.
+              `pricing.source` (`litellm`) / `pricing.llm_pricing_entries` -
+              ready-to-paste `llm_pricing.json` entries, one per provider that
+              still needs pricing.
             - `pricing_entries` - flat list of all generated pricing entries.
             - `unpriced_models[]` - models the script could not price.
+            - `backlog[]` - unregistered models that did not fit this run's cap.
+              Not your concern; the next run will surface them.
 
             ${{ needs.reconcile.outputs.new_model_count }} new model(s):
             ${{ needs.reconcile.outputs.new_model_ids }}
@@ -288,8 +293,8 @@ jobs:
                  add to `openai` only. Skip any provider already in
                  `already_registered_providers`.
             3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using `context_window`
-                 as `token_limit`.
+               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using the payload's
+                 `token_limit`.
                - Pick an existing parameters class that matches the model family;
                  only create a new one if none fits.
                - Create a new Django migration that calls `llm_model_migration()`.
@@ -304,13 +309,12 @@ jobs:
                `unpriced_models` (or a provider with no generated entry) goes under
                `## Needs follow-up` instead. After editing, confirm the file is
                still valid JSON.
-            5. If `context_window` or other essential info is missing, consult
-               `sources` / `source_url` with WebFetch. If a model has a
-               `details_error`, the detail fetch failed - use the top-level fields
-               and what you know about the family. If you still can't determine
-               `token_limit`, add the model with a conservative placeholder
-               (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
-               it under `## Needs follow-up`.
+            5. If `token_limit` is null, LiteLLM had no entry for the model -
+               consult `source_url` with WebFetch, or use what you know about the
+               family. If you still can't determine it, add the model with a
+               conservative placeholder (e.g. 128000) and a
+               `# TODO: verify token_limit` comment, and flag it under
+               `## Needs follow-up`.
             6. Lint and test the changed files:
                - `uv run ruff check apps/ --fix`
                - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
@@ -325,7 +329,8 @@ jobs:
                  * List each added model with its `source_url`.
                  * Include the line: `Model metadata sourced from
                    [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
-                   API.`
+                   API; pricing and token limits from the
+                   [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
                  * Include a `## Needs follow-up` section for any unpriced models or
                    missing info.
                  * Check the "The migrations are backwards compatible" box -

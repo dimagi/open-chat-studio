@@ -9,8 +9,10 @@ import datetime
 import email.message
 import io
 import json
+import math
 import textwrap
 import urllib.error
+import urllib.parse
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,8 @@ import pytest
 import reconcile_models
 from reconcile_models import (
     DEFAULT_RETRY_AFTER_SECONDS,
+    LITELLM_SOURCE_URL,
+    MAX_NEW_MODELS_PER_RUN,
     MAX_RETRY_AFTER_SECONDS,
     MAX_TOTAL_BURST_WAIT_SECONDS,
     RATE_LIMIT_JITTER_SECONDS,
@@ -29,13 +33,10 @@ from reconcile_models import (
     RateChange,
     _api_get,
     _commit_price_changes,
-    _enrich_model,
     _fmt,
-    _format_per_1k,
     _get_json,
     _idempotency_key,
     _next_migration_number,
-    _per_million_to_per_1k,
     _per_token_to_per_1k,
     _ReconcileResults,
     apply_changes,
@@ -44,32 +45,23 @@ from reconcile_models import (
     build_pricing_entries,
     compute_changes,
     diffable_models,
-    fetch_detail,
+    fetch_catalog,
     generate_migration,
     load_active_default_models,
     load_priced_models,
     load_registered_models,
     load_seed,
     process_candidates,
-    rates_from_detail,
     render_missing_pricing_issue_body,
     render_pr_body,
     resolve_pricing,
     resolve_pricing_from_litellm,
-    resolve_pricing_from_llm_stats,
     seed_index,
+    select_candidates,
+    token_limit_from_litellm,
 )
 
 # Unit-conversion helpers
-
-
-def test_per_million_to_per_1k():
-    """$2.50 per million -> $0.0025 per 1K."""
-    assert _per_million_to_per_1k(2.5) == pytest.approx(0.0025)
-
-
-def test_per_million_to_per_1k_none():
-    assert _per_million_to_per_1k(None) is None
 
 
 def test_per_token_to_per_1k():
@@ -81,19 +73,6 @@ def test_per_token_to_per_1k_none():
     assert _per_token_to_per_1k(None) is None
 
 
-@pytest.mark.parametrize(
-    ("per_million", "expected"),
-    [
-        pytest.param(2.5, "0.0025", id="dollar-per-million"),
-        pytest.param(0.15, "0.00015", id="cent-per-million"),
-        pytest.param(0.0, "0", id="zero"),
-        pytest.param(0.075, "0.000075", id="sub-cent"),
-    ],
-)
-def test_format_per_1k(per_million, expected):
-    assert _format_per_1k(per_million) == expected
-
-
 # _fmt
 
 
@@ -103,8 +82,8 @@ def test_format_per_1k(per_million, expected):
         pytest.param(None, None, id="none"),
         pytest.param(0.00250, "0.0025", id="strips_trailing_zeros"),
         pytest.param(0.000075, "0.000075", id="small_value"),
-        pytest.param(_per_million_to_per_1k(2.5), "0.0025", id="gpt4o_input_price"),
-        pytest.param(_per_million_to_per_1k(10.0), "0.01", id="gpt4o_output_price"),
+        pytest.param(_per_token_to_per_1k(0.0000025), "0.0025", id="gpt4o_input_price"),
+        pytest.param(_per_token_to_per_1k(0.00001), "0.01", id="gpt4o_output_price"),
     ],
 )
 def test_fmt(value, expected):
@@ -116,67 +95,6 @@ def test_fmt_decimal_roundtrip():
     val = _fmt(_per_token_to_per_1k(0.000000075))
     assert val is not None
     assert Decimal(val) > 0
-
-
-# resolve_pricing_from_llm_stats
-
-
-def test_resolve_llm_stats_full_pricing():
-    details = {
-        "input_price": 2.5,
-        "output_price": 10.0,
-        "cached_input_price": 1.25,
-        "cache_write_price": 3.75,
-    }
-    result = resolve_pricing_from_llm_stats(details)
-    assert result is not None
-    assert result["llm_input"] == "0.0025"
-    assert result["llm_output"] == "0.01"
-    assert result["llm_cached_input"] == "0.00125"
-    assert result["llm_cache_write"] == "0.00375"
-
-
-def test_resolve_llm_stats_partial_pricing_no_output():
-    """Input present, output missing - still returns a result."""
-    result = resolve_pricing_from_llm_stats({"input_price": 1.0})
-    assert result is not None
-    assert "llm_input" in result
-    assert "llm_output" not in result
-
-
-def test_resolve_llm_stats_unit_conversion():
-    """claude-sonnet-4-6: $3/M input, $15/M output."""
-    result = resolve_pricing_from_llm_stats({"input_price": 3.0, "output_price": 15.0})
-    assert result is not None
-    assert result["llm_input"] == "0.003"
-    assert result["llm_output"] == "0.015"
-
-
-@pytest.mark.parametrize(
-    "details",
-    [
-        pytest.param({}, id="empty_payload"),
-        pytest.param({"cached_input_price": 0.5}, id="only_cached_no_input_output"),
-    ],
-)
-def test_resolve_llm_stats_returns_none(details):
-    """Returns None when both input and output prices are absent."""
-    assert resolve_pricing_from_llm_stats(details) is None
-
-
-def test_rates_from_detail_extracts_known_kinds():
-    detail = {
-        "input_price": 2.5,
-        "output_price": 10.0,
-        "cached_input_price": 1.25,
-        "cache_write_price": None,
-        "unrelated_field": "ignored",
-    }
-    assert rates_from_detail(detail) == {
-        "llm_input": "0.0025",
-        "llm_output": "0.01",
-        "llm_cached_input": "0.00125",
-    }
 
 
 # resolve_pricing_from_litellm
@@ -511,6 +429,17 @@ def test_load_priced_models(repo_root):
 # process_candidates
 
 
+def _litellm(model_id, tokens=128000):
+    """A LiteLLM price-table entry, the only pricing source now."""
+    return {
+        model_id: {
+            "input_cost_per_token": 0.0000025,
+            "output_cost_per_token": 0.00001,
+            "max_input_tokens": tokens,
+        }
+    }
+
+
 def _candidate(model_id, org, context_window=128000, details=None):
     """Build a minimal candidate dict for use in process_candidates tests."""
     return {
@@ -531,13 +460,14 @@ def _candidate(model_id, org, context_window=128000, details=None):
 def test_process_new_model_with_pricing():
     candidates = [_candidate("gpt-new", "openai")]
     registered = {"openai": set(), "azure": set()}
-    result = process_candidates(candidates, registered, set(), {})
+    result = process_candidates(candidates, registered, set(), _litellm("gpt-new"))
 
     assert len(result["new_models"]) == 1
     assert len(result["already_registered"]) == 0
     m = result["new_models"][0]
     assert m["pricing"]["has_pricing"] is True
-    assert m["pricing"]["source"] == "llm_stats"
+    assert m["pricing"]["source"] == "litellm"
+    assert m["token_limit"] == 128000
     entry_providers = {e["provider_type"] for e in m["pricing"]["llm_pricing_entries"]}
     assert entry_providers == {"openai", "azure"}
 
@@ -570,30 +500,11 @@ def test_process_unpriced_model_flagged():
     assert result["new_models"][0]["pricing"]["has_pricing"] is False
 
 
-def test_process_litellm_fallback_used_when_llm_stats_missing():
-    candidate = _candidate(
-        "claude-3",
-        "anthropic",
-        details={"url": "https://llm-stats.com/models/claude-3", "sources": {}},
-    )
-    litellm_data = {
-        "claude-3": {
-            "input_cost_per_token": 0.000003,
-            "output_cost_per_token": 0.000015,
-        }
-    }
-    result = process_candidates([candidate], {"anthropic": set()}, set(), litellm_data)
-    m = result["new_models"][0]
-    assert m["pricing"]["has_pricing"] is True
-    assert m["pricing"]["source"] == "litellm"
-    assert m["pricing"]["rates"]["llm_input"] == "0.003"
-
-
 def test_process_already_priced_providers_excluded():
     candidates = [_candidate("gpt-4o", "openai")]
     registered = {"openai": set(), "azure": set()}
     priced = {("openai", "gpt-4o")}
-    result = process_candidates(candidates, registered, priced, {})
+    result = process_candidates(candidates, registered, priced, _litellm("gpt-4o"))
     m = result["new_models"][0]
     assert m["already_priced_providers"] == ["openai"]
     entry_providers = {e["provider_type"] for e in m["pricing"]["llm_pricing_entries"]}
@@ -607,28 +518,9 @@ def test_process_pricing_entries_flat_list():
         _candidate("model-b", "google"),
     ]
     registered = {"anthropic": set(), "google": set(), "google_vertex_ai": set()}
-    result = process_candidates(candidates, registered, set(), {})
+    litellm_data = {**_litellm("model-a"), **_litellm("model-b")}
+    result = process_candidates(candidates, registered, set(), litellm_data)
     assert len(result["pricing_entries"]) == 3
-
-
-def test_process_details_error_falls_back_to_litellm():
-    candidate = {
-        "id": "errored-model",
-        "organization": {"id": "openai"},
-        "model_type": "llm",
-        "context_window": 128000,
-        "details_error": "HTTP 404: Not Found",
-    }
-    litellm_data = {
-        "errored-model": {
-            "input_cost_per_token": 0.0000025,
-            "output_cost_per_token": 0.00001,
-        }
-    }
-    result = process_candidates([candidate], {"openai": set(), "azure": set()}, set(), litellm_data)
-    m = result["new_models"][0]
-    assert m["pricing"]["has_pricing"] is True
-    assert m["pricing"]["source"] == "litellm"
 
 
 # seed_index + diffable_models
@@ -665,25 +557,21 @@ def test_diffable_models_skips_non_upstream_providers():
 # compute_changes
 
 
-def _detail(rates: dict[str, float]) -> dict:
-    """llm-stats detail-shaped dict with `*_price` keys (per million)."""
+def _price_table(model: str, **per_1k: float) -> dict:
+    """A LiteLLM price-table entry, expressed in the per-1K rates we compare."""
     keys = {
-        "llm_input": "input_price",
-        "llm_output": "output_price",
-        "llm_cached_input": "cached_input_price",
-        "llm_cache_write": "cache_write_price",
+        "llm_input": "input_cost_per_token",
+        "llm_output": "output_cost_per_token",
+        "llm_cached_input": "cache_read_input_token_cost",
     }
-    return {**{keys[k]: v for k, v in rates.items()}, "url": "https://llm-stats.com/models/test"}
+    return {model: {keys[k]: v / 1000 for k, v in per_1k.items()}}
 
 
 class TestComputeChanges:
     def test_returns_change_when_rate_differs(self):
-        index = {
-            ("openai", "gpt-4o"): {"llm_input": "0.0025"},
-        }
-        fetcher = lambda _m: _detail({"llm_input": 5.0})  # $5/M = $0.005/1K  # noqa: E731
+        index = {("openai", "gpt-4o"): {"llm_input": "0.0025"}}
 
-        changes, unmatched = compute_changes(index, fetcher)
+        changes, unmatched = compute_changes(index, _price_table("gpt-4o", llm_input=0.005))
 
         assert unmatched == set()
         assert changes == [
@@ -693,49 +581,55 @@ class TestComputeChanges:
                 service_kind="llm_input",
                 old_price="0.0025",
                 new_price="0.005",
-                source_url="https://llm-stats.com/models/test",
+                source_url=LITELLM_SOURCE_URL,
             )
         ]
 
     def test_no_change_when_rate_matches(self):
         index = {("openai", "gpt-4o"): {"llm_input": "0.0025"}}
-        fetcher = lambda _m: _detail({"llm_input": 2.5})  # noqa: E731
 
-        changes, unmatched = compute_changes(index, fetcher)
+        changes, unmatched = compute_changes(index, _price_table("gpt-4o", llm_input=0.0025))
 
         assert changes == []
         assert unmatched == set()
 
-    def test_records_unmatched_when_fetcher_returns_none(self):
+    def test_records_unmatched_when_litellm_has_no_entry(self):
         index = {("openai", "ghost-model"): {"llm_input": "0.0025"}}
-        fetcher = lambda _m: None  # noqa: E731
 
-        changes, unmatched = compute_changes(index, fetcher)
+        changes, unmatched = compute_changes(index, {})
 
         assert changes == []
         assert unmatched == {"ghost-model"}
 
     def test_change_applied_to_each_diffable_provider(self):
-        """One llm-stats rate change applies to every OCS provider wrapping
-        that upstream (openai + azure both consume the same gpt-4o pricing)."""
+        """One upstream rate change applies to every OCS provider wrapping it
+        (openai + azure both consume the same gpt-4o pricing)."""
         index = {
             ("openai", "gpt-4o"): {"llm_input": "0.0025"},
             ("azure", "gpt-4o"): {"llm_input": "0.0025"},
         }
-        fetcher = lambda _m: _detail({"llm_input": 5.0})  # noqa: E731
 
-        changes, _ = compute_changes(index, fetcher)
+        changes, _ = compute_changes(index, _price_table("gpt-4o", llm_input=0.005))
 
         providers = {c.provider_type for c in changes}
         assert providers == {"openai", "azure"}
 
-    def test_skips_non_diffable_provider(self):
-        """Groq isn't an llm-stats-tracked upstream - its seed rows aren't
-        diffed regardless of what the fetcher would return."""
-        index = {("groq", "gemma2-9b-it"): {"llm_input": "0.0002"}}
-        fetcher = lambda _m: _detail({"llm_input": 99.0})  # noqa: E731
+    def test_makes_no_network_calls(self, urlopen):
+        """The diff reads the price table already in memory. This is the whole
+        point of the rework - it used to be one request per seed model."""
+        _, requests = urlopen()
+        index = {("openai", "gpt-4o"): {"llm_input": "0.0025"}}
 
-        changes, unmatched = compute_changes(index, fetcher)
+        compute_changes(index, _price_table("gpt-4o", llm_input=0.005))
+
+        assert requests == []
+
+    def test_skips_non_diffable_provider(self):
+        """Groq seed rows aren't under automated rewrite, whatever LiteLLM
+        says about them."""
+        index = {("groq", "gemma2-9b-it"): {"llm_input": "0.0002"}}
+
+        changes, unmatched = compute_changes(index, _price_table("gemma2-9b-it", llm_input=99.0))
 
         assert changes == []
         assert unmatched == set()
@@ -885,6 +779,7 @@ def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_
     ]
     results = _ReconcileResults(
         candidates=[],
+        backlog=[],
         classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
@@ -937,6 +832,7 @@ def test_commit_price_changes_backfill_does_not_overwrite_curated_prices(repo_ro
     ]
     results = _ReconcileResults(
         candidates=[],
+        backlog=[],
         classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
@@ -1153,44 +1049,51 @@ def test_render_missing_pricing_issue_body_one_row_per_entry():
 # Upstream request budget
 #
 # Every HTTP request goes through `_get_json`, so patching it gives an exact
-# per-run call count. The zeroeval Stats API rate-limits and the 2026-09-10
-# scheduled run died with HTTP 429, so what a run costs is worth pinning.
+# per-run call count. llm-stats is now used for discovery only - one paged
+# catalogue sweep - and LiteLLM supplies pricing and token limits, so the
+# per-seed-model request loop that used to dominate the run is gone.
+
+UPSTREAM_CATALOG_SIZE = 389  # `total` reported by /v1/models on 2026-09-10
+
+
+def _catalog_model(model_id: str, org: str = "openai", release_date: str = "2026-09-01") -> dict:
+    return {
+        "id": model_id,
+        "organization": {"id": org},
+        "model_type": "llm",
+        "release_date": release_date,
+        "context_window": None,
+        "providers": [],
+        "url": f"https://llm-stats.com/models/{model_id}",
+    }
 
 
 class _CallRecorder:
-    """Stand-in for `reconcile_models._get_json` that records every URL."""
+    """Stand-in for `reconcile_models._get_json` that records every URL and
+    serves the catalogue one page at a time, as the real endpoint does."""
 
-    def __init__(self, updates_models: list[dict] | None = None, detail: dict | None = None):
+    def __init__(self, catalog: list[dict] | None = None, litellm: dict | None = None):
         self.urls: list[str] = []
-        self._updates_models = updates_models or []
-        self._detail = detail if detail is not None else {"input_price": 1.0, "output_price": 2.0}
+        self._catalog = catalog if catalog is not None else []
+        self._litellm = litellm if litellm is not None else {}
 
-    def __call__(self, url: str, headers: dict[str, str] | None = None):
+    def __call__(self, url: str, headers: dict[str, str] | None = None, pacer=None):
         self.urls.append(url)
         if url == reconcile_models.LITELLM_PRICING_URL:
-            return {}
-        if url.startswith(reconcile_models.LLM_STATS_UPDATES_URL.split("?")[0]):
-            return {"models": self._updates_models}
-        return dict(self._detail)
+            return dict(self._litellm)
+        offset = int(urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get("cursor", ["0"])[0])
+        page = self._catalog[offset : offset + reconcile_models.CATALOG_PAGE_SIZE]
+        nxt = offset + reconcile_models.CATALOG_PAGE_SIZE
+        return {"models": page, "next_cursor": str(nxt) if nxt < len(self._catalog) else None}
 
     @property
     def counts(self) -> dict[str, int]:
-        detail_prefix = reconcile_models.LLM_STATS_DETAIL_URL.split("{")[0]
-        updates_prefix = reconcile_models.LLM_STATS_UPDATES_URL.split("?")[0]
+        catalog_prefix = reconcile_models.LLM_STATS_CATALOG_URL.split("?")[0]
         return {
             "litellm": sum(1 for u in self.urls if u == reconcile_models.LITELLM_PRICING_URL),
-            "stats_updates": sum(1 for u in self.urls if u.startswith(updates_prefix)),
-            "stats_detail": sum(1 for u in self.urls if u.startswith(detail_prefix)),
+            "stats_catalog": sum(1 for u in self.urls if u.startswith(catalog_prefix)),
             "total": len(self.urls),
         }
-
-    @property
-    def duplicate_urls(self) -> list[str]:
-        return sorted({u for u in self.urls if self.urls.count(u) > 1})
-
-
-def _candidate_payload(model_id: str, org: str = "openai") -> dict:
-    return {"id": model_id, "organization": {"id": org}, "model_type": "llm", "context_window": 128000}
 
 
 @pytest.fixture()
@@ -1204,25 +1107,20 @@ def recorder(monkeypatch):
 
 
 def test_call_budget_formula(recorder, repo_root):
-    """One run = 1 LiteLLM + 1 updates + 1 detail per candidate + 1 detail per
-    diffable seed model. Nothing is cached or batched."""
-    rec = recorder(updates_models=[_candidate_payload("gpt-5-nano"), _candidate_payload("gpt-5-pico")])
+    """One run = 1 LiteLLM file + one request per catalogue page. Nothing is
+    fetched per model, per candidate, or per seed entry."""
+    catalog = [_catalog_model(f"gpt-{i}") for i in range(250)]
+    rec = recorder(catalog=catalog)
 
-    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+    reconcile_models._run_reconciliation(repo_root, "token")
 
-    index = seed_index(load_seed(repo_root / reconcile_models.LLM_PRICING_REL_PATH))
-    n_diffable = len(diffable_models(index))
-    assert rec.counts == {
-        "litellm": 1,
-        "stats_updates": 1,
-        "stats_detail": 2 + n_diffable,
-        "total": 4 + n_diffable,
-    }
+    expected_pages = math.ceil(len(catalog) / reconcile_models.CATALOG_PAGE_SIZE)
+    assert rec.counts == {"litellm": 1, "stats_catalog": expected_pages, "total": 1 + expected_pages}
 
 
-def test_call_budget_scales_with_seed_size(recorder, repo_root):
-    """The diff step is the term that grows: one request per diffable model in
-    llm_pricing.json, every day, whether or not its price moved."""
+def test_call_budget_is_independent_of_seed_size(recorder, repo_root):
+    """The old diff step cost one request per diffable seed model. Growing the
+    seed must now cost nothing."""
     (repo_root / reconcile_models.LLM_PRICING_REL_PATH).write_text(
         json.dumps(
             [
@@ -1231,25 +1129,32 @@ def test_call_budget_scales_with_seed_size(recorder, repo_root):
                     "model_name": f"gpt-{i}",
                     "rules": [{"service_kind": "llm_input", "unit_price": "0.001"}],
                 }
-                for i in range(40)
+                for i in range(200)
             ]
         )
     )
-    rec = recorder()
+    rec = recorder(catalog=[_catalog_model("gpt-4o")])
 
-    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+    reconcile_models._run_reconciliation(repo_root, "token")
 
-    assert rec.counts["stats_detail"] == 40
+    assert rec.counts == {"litellm": 1, "stats_catalog": 1, "total": 2}
 
 
-def test_candidate_detail_is_refetched_by_the_diff_step(recorder, repo_root):
-    """A candidate already in the pricing seed is fetched twice from the same
-    URL - once to enrich it, once to diff its rate."""
-    rec = recorder(updates_models=[_candidate_payload("gpt-4o")])
+def test_catalog_paging_follows_the_cursor(recorder, repo_root):
+    """Every page is collected, not just the first."""
+    catalog = [_catalog_model(f"gpt-{i}") for i in range(reconcile_models.CATALOG_PAGE_SIZE * 2 + 1)]
+    recorder(catalog=catalog)
 
-    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+    assert len(fetch_catalog("token")) == len(catalog)
 
-    assert rec.duplicate_urls == [reconcile_models.LLM_STATS_DETAIL_URL.format(model_id="gpt-4o")]
+
+def test_catalog_paging_is_bounded(monkeypatch, recorder):
+    """A cursor that never terminates must not spin forever."""
+    monkeypatch.setattr(
+        reconcile_models, "_get_json", lambda *_a, **_k: {"models": [_catalog_model("x")], "next_cursor": "more"}
+    )
+
+    assert len(fetch_catalog("token")) == reconcile_models.MAX_CATALOG_PAGES
 
 
 # What the scheduled run costs against the real seed
@@ -1257,34 +1162,128 @@ def test_candidate_detail_is_refetched_by_the_diff_step(recorder, repo_root):
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # zeroeval "community" plan limits, from GET /stats/v1/account. The docs quote
-# 60/min for community; this account reports 50, so the account endpoint - not
-# the docs - is the number to trust.
+# 60/min and 500/day for community; this account reports 50 and 250, so the
+# account endpoint - not the docs - is the number to trust.
 BURST_PER_MINUTE = 50
 DAILY_QUOTA = 250
 
 
 def _measure_scheduled_run(recorder, capsys) -> int:
-    """Requests a real daily run sends to api.zeroeval.com. Reads the repo's
-    own llm_pricing.json, so the number tracks the seed as it grows."""
-    rec = recorder()
-    reconcile_models._run_reconciliation(REPO_ROOT, "token", days=1)
+    """Requests a real daily run sends to api.zeroeval.com, against the repo's
+    own seed and a catalogue the size of the live one."""
+    rec = recorder(catalog=[_catalog_model(f"model-{i}") for i in range(UPSTREAM_CATALOG_SIZE)])
+    reconcile_models._run_reconciliation(REPO_ROOT, "token")
     counts = rec.counts
     with capsys.disabled():
-        print(f"\n  zeroeval Stats API requests per run: {counts['stats_updates'] + counts['stats_detail']}")
-        print(f"  (updates={counts['stats_updates']}, detail={counts['stats_detail']}, litellm={counts['litellm']})")
-    return counts["stats_updates"] + counts["stats_detail"]
+        print(f"\n  zeroeval Stats API requests per run: {counts['stats_catalog']}")
+        print(f"  (catalogue pages={counts['stats_catalog']}, litellm={counts['litellm']})")
+    return counts["stats_catalog"]
 
 
-def test_scheduled_run_exceeds_the_burst_limit(recorder, capsys):
-    """The run sends everything back to back, so its per-run total is also its
-    per-minute total - and that total passed 50. This is why the run 429s; it
-    now sleeps through it rather than failing, at the cost of wall-clock."""
-    assert _measure_scheduled_run(recorder, capsys) > BURST_PER_MINUTE
+def test_scheduled_run_stays_within_burst_limit(recorder, capsys):
+    """This is what the rework buys: the run no longer sends more requests per
+    minute than the plan allows, so it cannot 429 under its own weight."""
+    assert _measure_scheduled_run(recorder, capsys) <= BURST_PER_MINUTE
 
 
 def test_scheduled_run_stays_within_daily_quota(recorder, capsys):
-    """One scheduled run plus a few manual re-runs has to fit in a day."""
+    """With this much headroom the workflow can be re-run freely in a day."""
     assert _measure_scheduled_run(recorder, capsys) <= DAILY_QUOTA
+
+
+# Candidate selection
+
+
+def test_select_candidates_is_state_based_not_time_windowed(repo_root):
+    """A model released long ago but never registered is still a candidate.
+    This is what heals a day the workflow was broken."""
+    catalog = [_catalog_model("ancient-model", release_date="2023-01-01")]
+
+    candidates, backlog = select_candidates(catalog, load_registered_models(repo_root))
+
+    assert [c["id"] for c in candidates] == ["ancient-model"]
+    assert backlog == []
+
+
+def test_select_candidates_skips_registered_and_deleted(repo_root):
+    """`load_registered_models` folds in DELETED_MODELS, so a model we removed
+    on purpose does not come back every day."""
+    catalog = [_catalog_model("gpt-4o"), _catalog_model("gpt-4", org="openai")]
+
+    candidates, _ = select_candidates(catalog, load_registered_models(repo_root))
+
+    assert [c["id"] for c in candidates] == ["gpt-4o"]
+
+
+def test_select_candidates_skips_other_orgs_and_non_llm():
+    catalog = [
+        _catalog_model("some-embedding", org="openai") | {"model_type": "embedding"},
+        _catalog_model("mistral-large", org="mistral"),
+        _catalog_model("gpt-new"),
+    ]
+
+    candidates, _ = select_candidates(catalog, {})
+
+    assert [c["id"] for c in candidates] == ["gpt-new"]
+
+
+def test_select_candidates_caps_the_run_and_backlogs_the_rest():
+    catalog = [_catalog_model(f"gpt-{i:03d}", release_date=f"2026-01-{i % 28 + 1:02d}") for i in range(40)]
+
+    candidates, backlog = select_candidates(catalog, {})
+
+    assert len(candidates) == MAX_NEW_MODELS_PER_RUN
+    assert len(backlog) == 40 - MAX_NEW_MODELS_PER_RUN
+
+
+def test_select_candidates_takes_the_newest_first():
+    catalog = [
+        _catalog_model("old", release_date="2024-01-01"),
+        _catalog_model("newest", release_date="2026-09-01"),
+        _catalog_model("middle", release_date="2025-05-01"),
+    ]
+
+    candidates, _ = select_candidates(catalog, {})
+
+    assert [c["id"] for c in candidates] == ["newest", "middle", "old"]
+
+
+def test_select_candidates_tolerates_a_missing_release_date():
+    catalog = [_catalog_model("dated"), _catalog_model("undated") | {"release_date": None}]
+
+    candidates, _ = select_candidates(catalog, {})
+
+    assert {c["id"] for c in candidates} == {"dated", "undated"}
+
+
+# token_limit_from_litellm
+
+
+def test_token_limit_prefers_max_input_tokens():
+    data = {"gpt-4o": {"max_input_tokens": 128000, "max_tokens": 16384}}
+    assert token_limit_from_litellm("gpt-4o", data) == 128000
+
+
+def test_token_limit_falls_back_to_max_tokens():
+    assert token_limit_from_litellm("gpt-4o", {"gpt-4o": {"max_tokens": 8192}}) == 8192
+
+
+def test_token_limit_tries_the_provider_namespaced_key():
+    data = {"groq/gemma2-9b-it": {"max_input_tokens": 8192}}
+    assert token_limit_from_litellm("gemma2-9b-it", data, provider="groq") == 8192
+
+
+@pytest.mark.parametrize(
+    ("data", "reason"),
+    [
+        pytest.param({}, "absent", id="no_entry"),
+        pytest.param({"gpt-4o": {}}, "no fields", id="entry_without_limits"),
+        pytest.param({"gpt-4o": {"max_input_tokens": 0}}, "zero", id="zero_is_not_a_limit"),
+        pytest.param({"gpt-4o": "not-a-dict"}, "malformed", id="malformed_entry"),
+    ],
+)
+def test_token_limit_returns_none(data, reason):
+    assert token_limit_from_litellm("gpt-4o", data) is None
 
 
 # 429 handling
@@ -1409,7 +1408,7 @@ def test_unlabelled_429_is_treated_as_burst(urlopen):
 
 @pytest.mark.parametrize("status", [404, 500, 503], ids=["not-found", "server-error", "unavailable"])
 def test_non_429_errors_are_not_retried(urlopen, status):
-    """404 in particular is load-bearing: `fetch_detail` maps it to None."""
+    """A non-429 error must surface rather than be slept on."""
     sleeps, _ = urlopen(_http_error(status))
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
@@ -1417,30 +1416,6 @@ def test_non_429_errors_are_not_retried(urlopen, status):
 
     assert exc_info.value.code == status
     assert sleeps == []
-
-
-def test_fetch_detail_still_maps_404_to_none(urlopen):
-    urlopen(_http_error(404))
-
-    assert fetch_detail("ghost-model", "token") is None
-
-
-def test_fetch_detail_retries_through_a_burst_429(urlopen):
-    sleeps, _ = urlopen(_http_error(429, "3", "rate_limit_exceeded"), {"input_price": 1.0})
-
-    assert fetch_detail("gpt-4o", "token") == {"input_price": 1.0}
-    assert sleeps == [3.0]
-
-
-def test_enrich_model_no_longer_swallows_a_burst_429(urlopen):
-    """A 429 used to land in `details_error` and be reported as a model whose
-    details were unavailable, hiding the rate limit entirely."""
-    urlopen(_http_error(429, "2", "rate_limit_exceeded"), {"context_window": 128000})
-
-    model = _enrich_model({"id": "gpt-4o"}, "token")
-
-    assert "details_error" not in model
-    assert model["context_window"] == 128000
 
 
 def test_main_exits_nonzero_on_quota_exhaustion(monkeypatch, tmp_path, capsys):
