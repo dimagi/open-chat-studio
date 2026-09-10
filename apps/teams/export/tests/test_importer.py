@@ -1063,3 +1063,22 @@ def test_every_manifest_entry_imports(store, keypair):
             not_imported.append(f"{entry.model}: target {target} not in the database")
     assert not not_imported, "Manifest entries that failed to import:\n" + "\n".join(not_imported)
     assert store.has_unfilled_targets() is False
+
+
+def test_a_failing_on_user_created_hook_is_recorded_rather_than_aborting_the_import(store):
+    """A rejected reset email must not take the sync down with it. The user row is committed before
+    the hook runs, so raising would strand an imported user that a rerun then skips."""
+
+    def reject(user):
+        raise RuntimeError("Email address is not verified")
+
+    importer = Importer(store, on_user_created=reject)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("users.customuser", [_user_row(51, "one@example.com"), _user_row(52, "two@example.com")])
+
+    assert CustomUser.objects.filter(username__in=["one@example.com", "two@example.com"]).count() == 2
+    assert importer.notification_failures == [
+        ("one@example.com", "Email address is not verified"),
+        ("two@example.com", "Email address is not verified"),
+    ]

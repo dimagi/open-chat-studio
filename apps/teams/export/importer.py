@@ -206,6 +206,8 @@ class Importer:
         self.on_user_created = on_user_created
         self.fetch_file_content = fetch_file_content
         self.missing_files: list[str] = []
+        # (user identifier, error) for every on_user_created call that raised -- see safe_on_user_created.
+        self.notification_failures: list[tuple[str, str]] = []
         # The single team every resource is imported into. Captured from the team row (first in the
         # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
         self.target_team = None
@@ -245,11 +247,23 @@ class Importer:
         # filled last: if anything before it fails, the row rolls back with it.
         instance, created = self._import_team_owned_row(model_label, model, source_pk, row)
 
-        if created:
-            if model_label == "users.customuser" and self.on_user_created:
-                self.on_user_created(instance)
+        if created and model_label == "users.customuser":
+            self.safe_on_user_created(instance)
         if model_label == "teams.team":
             self.set_target_team(instance)
+
+    def safe_on_user_created(self, user) -> None:
+        """Run the new-user hook, collecting a failure instead of raising it.
+
+        The user row and its checkpoint are committed before the hook runs, so raising here aborts
+        the sync on a row a rerun then skips -- the user stays imported and is never notified, with
+        nothing recording it. The collected failures are listed in the sync report instead."""
+        if self.on_user_created is None:
+            return
+        try:
+            self.on_user_created(user)
+        except Exception as exc:
+            self.notification_failures.append((user.email or user.username, str(exc)))
 
     def set_target_team(self, team) -> None:
         """Adopt ``team`` as the anchor every team-scoped row is reassigned to, and make it the current

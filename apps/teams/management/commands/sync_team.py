@@ -5,6 +5,10 @@
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 
+Every user the sync creates is sent a password-reset email, since passwords are hashed and never
+migrated. A failed send doesn't stop the sync; the addresses are listed in the sync report instead,
+to be followed up by hand.
+
 Run this against the latest code on both the source and target servers. Compatibility is verified
 by comparing checksums of the two servers' export OpenAPI schemas -- the exact shape of the data
 being transferred -- rather than their migration history, which is a poor proxy (a squash or rename
@@ -346,6 +350,7 @@ class Command(BaseCommand):
             team_slug=options["team_slug"],
             duration=duration,
             missing_files=importer.missing_files,
+            notification_failures=importer.notification_failures,
         )
 
     def _run_force_delete(self, options):
@@ -365,6 +370,7 @@ class Command(BaseCommand):
         team_slug: str,
         duration: timedelta | None = None,
         missing_files: Sequence[str] = (),
+        notification_failures: Sequence[tuple[str, str]] = (),
     ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
         which resources need manual setup, which files the source had no content for, whether the sync
@@ -387,6 +393,15 @@ class Command(BaseCommand):
             )
             for name in missing_files:
                 self.stdout.write(f"  - {name}")
+
+        if notification_failures:
+            self.stdout.write("")
+            self.stdout.write(
+                self.style.WARNING(f"{len(notification_failures)} user(s) could not be sent a password-reset email:")
+            )
+            for identifier, error in notification_failures:
+                self.stdout.write(f"  - {identifier}: {error}")
+            self.stdout.write("  They were imported, and a rerun won't retry the email; send theirs by hand.")
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
