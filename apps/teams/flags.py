@@ -35,8 +35,6 @@ class Flags(FlagInfo, Enum):
 
     SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting")
 
-    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "events", [], True)
-
     SSO_LOGIN = ("flag_sso_login", "Enables Single Sign-On authentication integration", "")
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")

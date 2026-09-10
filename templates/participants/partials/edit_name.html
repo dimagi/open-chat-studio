@@ -1,10 +1,23 @@
+{% load i18n %}
 {% url "participants:edit_name" request.team.slug participant.id as update_url %}
-<form
-  hx-post="{{ update_url }}"
-  hx-swap="innerHTML"
-  hx-target="#participant-name"
->
-  <input class="input input-xs" type="text" name="name" value="{{ participant.name }}"/>
-  <button class="btn btn-xs btn-success btn-outline"><i class="fa-solid fa-check"></i></button>
-  <button class="btn btn-xs btn-error btn-outline" hx-post="{{ update_url }}" hx-params="none"><i class="fa-solid fa-xmark"></i></button>
+<form class="flex items-center gap-1 flex-nowrap"
+      hx-post="{{ update_url }}"
+      hx-swap="innerHTML"
+      hx-target="#participant-name">
+  <input class="input input-xs w-40"
+         type="text"
+         name="name"
+         value="{{ participant.name }}" />
+  <button class="btn btn-xs btn-success"
+          title="{% translate 'Save' %}"
+          aria-label="{% translate 'Save' %}">
+    <i class="fa-solid fa-check"></i>
+  </button>
+  <button class="btn btn-xs btn-error"
+          title="{% translate 'Cancel' %}"
+          aria-label="{% translate 'Cancel' %}"
+          hx-post="{{ update_url }}"
+          hx-params="none">
+    <i class="fa-solid fa-xmark"></i>
+  </button>
 </form>

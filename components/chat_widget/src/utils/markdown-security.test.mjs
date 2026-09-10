@@ -34,13 +34,36 @@ const SANITIZE_CONFIG = {
 const { window } = new JSDOM('');
 const DOMPurify = createDOMPurify(window);
 
-function sanitizeMarkdown(content) {
-  const html = marked.parse(content, { async: false });
-  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+// Mirror of postProcessMarkdownHTML from markdown.ts — keep in sync!
+const EXTERNAL_HREF = /^(https?:)?\/\//;
+
+function postProcessMarkdownHTML(html) {
+  const div = window.document.createElement('div');
+  div.innerHTML = html;
+  div.querySelectorAll('a[href]').forEach(link => {
+    const href = link.getAttribute('href')?.trim().toLowerCase() ?? '';
+    if (EXTERNAL_HREF.test(href)) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return div.innerHTML;
 }
 
+function sanitizeMarkdown(content) {
+  const html = marked.parse(content, { async: false });
+  return postProcessMarkdownHTML(DOMPurify.sanitize(html, SANITIZE_CONFIG));
+}
+
+// Both stages of the production sanitizeHTML: DOMPurify, then the link post-processing.
 function sanitizeHTML(content) {
-  return DOMPurify.sanitize(content, SANITIZE_CONFIG);
+  return postProcessMarkdownHTML(DOMPurify.sanitize(content, SANITIZE_CONFIG));
+}
+
+/** An anchor that opens a new tab must carry rel="noopener noreferrer". */
+function assertNoTargetWithoutRel(result) {
+  const opensNewTab = /target="_blank"/.test(result);
+  assert.ok(!opensNewTab || /rel="noopener noreferrer"/.test(result), `Expected "${result}" to pair target="_blank" with rel="noopener noreferrer"`);
 }
 
 function assertNotContains(result, substring, msg) {
@@ -232,5 +255,41 @@ describe('safe content is preserved', () => {
     const result = sanitizeMarkdown('- item 1\n- item 2');
     assertContains(result, '<ul>');
     assertContains(result, '<li>');
+  });
+});
+
+describe('consent form HTML', () => {
+  it('keeps the form markup and strips scripts', () => {
+    const result = sanitizeHTML('<p>Please <strong>agree</strong></p><script>alert(1)</script>');
+    assertContains(result, '<strong>agree</strong>');
+    assertNotContains(result, '<script>');
+  });
+});
+
+describe('external links opening a new tab', () => {
+  it('adds rel to an ordinary external link', () => {
+    const result = sanitizeHTML('<a href="https://example.com">x</a>');
+    assertContains(result, 'rel="noopener noreferrer"');
+    assertNoTargetWithoutRel(result);
+  });
+
+  it('adds rel to a protocol-relative link that already asks for a new tab', () => {
+    const result = sanitizeHTML('<a href="//evil.example" target="_blank">x</a>');
+    assertNoTargetWithoutRel(result);
+  });
+
+  it('adds rel when the scheme is upper case', () => {
+    const result = sanitizeHTML('<a href="HTTPS://evil.example" target="_blank">x</a>');
+    assertNoTargetWithoutRel(result);
+  });
+
+  it('adds rel when the href is padded with whitespace', () => {
+    const result = sanitizeHTML('<a href=" https://evil.example" target="_blank">x</a>');
+    assertNoTargetWithoutRel(result);
+  });
+
+  it('leaves a relative link alone', () => {
+    const result = sanitizeHTML('<a href="/local/page">x</a>');
+    assertNotContains(result, 'target="_blank"');
   });
 });

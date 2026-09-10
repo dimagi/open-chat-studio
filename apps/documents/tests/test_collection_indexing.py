@@ -6,12 +6,9 @@ from django.db.models import QuerySet
 
 from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
-    create_collection_from_assistant_task,
     index_collection_files,
     index_collection_files_task,
 )
-from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileFactory
 
 
@@ -34,85 +31,6 @@ def test_index_collection_files_clears_the_failure_reason(add_files_to_index_moc
     collection_file.refresh_from_db()
     assert collection_file.status == FileStatus.IN_PROGRESS
     assert collection_file.failure_reason == ""
-
-
-@pytest.fixture()
-def assistant_with_remote_file(remote_collection_index):
-    assistant = OpenAiAssistantFactory.create(team=remote_collection_index.team)
-    file = FileFactory.create(team=remote_collection_index.team, external_id="ext-file-1")
-    resource = assistant.tool_resources.create(tool_type="file_search")
-    resource.files.add(file)
-    return assistant
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.models.Collection.ensure_remote_index_created")
-@patch("apps.documents.models.Collection.get_index_manager")
-def test_create_collection_from_assistant_records_the_failure_reason(
-    get_index_manager, ensure_remote_index_created, remote_collection_index, assistant_with_remote_file
-):
-    """Linking is the only remote call on this path, so its explanation is the whole of what
-    the badge can say about why the file did not index."""
-    get_index_manager.return_value.link_files_to_remote_index.side_effect = ValueError(
-        "Error code: 401 - Incorrect API key provided"
-    )
-
-    create_collection_from_assistant_task(remote_collection_index.id, assistant_with_remote_file.id)
-
-    collection_file = CollectionFile.objects.get(collection=remote_collection_index)
-    assert collection_file.status == FileStatus.FAILED
-    assert collection_file.failure_reason == "ValueError: Error code: 401 - Incorrect API key provided"
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.models.Collection.ensure_remote_index_created")
-@patch("apps.documents.models.Collection.get_index_manager")
-def test_create_collection_from_assistant_clears_the_failure_reason(
-    get_index_manager, ensure_remote_index_created, remote_collection_index, assistant_with_remote_file
-):
-    """A row can already carry a reason. (collection, file) has no uniqueness constraint, so a
-    collection can be built from the same assistant more than once."""
-    file = assistant_with_remote_file.tool_resources.first().files.first()
-    CollectionFile.objects.create(
-        collection=remote_collection_index,
-        file=file,
-        status=FileStatus.FAILED,
-        failure_reason="ValueError: stale reason from the previous attempt",
-    )
-
-    create_collection_from_assistant_task(remote_collection_index.id, assistant_with_remote_file.id)
-
-    rows = list(CollectionFile.objects.filter(collection=remote_collection_index))
-    assert rows
-    assert all(row.status == FileStatus.COMPLETED for row in rows)
-    assert all(row.failure_reason == "" for row in rows)
-
-
-@pytest.mark.django_db()
-@patch("apps.documents.tasks.index_collection_files_task")
-@patch("apps.documents.models.Collection.ensure_remote_index_created")
-@patch("apps.documents.models.Collection.get_index_manager")
-def test_create_collection_from_assistant_indexes_only_its_own_rows(
-    get_index_manager, ensure_remote_index_created, index_collection_files_task_mock, remote_collection_index
-):
-    """A File with no external id can carry a row in more than one collection, and indexing
-    takes its target vector store from the first row it is handed. Rows from another collection
-    in that list index into the wrong store."""
-    # embedding_provider_model shares a per-team unique key, so leave it unset to keep this
-    # Collection out of that constraint.
-    other_collection = CollectionFactory.create(
-        is_index=True, is_remote_index=True, team=remote_collection_index.team, embedding_provider_model=None
-    )
-    file = FileFactory.create(team=remote_collection_index.team)
-    assistant = OpenAiAssistantFactory.create(team=remote_collection_index.team)
-    assistant.tool_resources.create(tool_type="file_search").files.add(file)
-    other_row = CollectionFile.objects.create(collection=other_collection, file=file, status=FileStatus.PENDING)
-
-    create_collection_from_assistant_task(remote_collection_index.id, assistant.id)
-
-    this_row = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-    index_collection_files_task_mock.assert_called_once_with(collection_file_ids=[this_row.id])
-    assert other_row.id not in index_collection_files_task_mock.call_args.kwargs["collection_file_ids"]
 
 
 @pytest.mark.django_db()

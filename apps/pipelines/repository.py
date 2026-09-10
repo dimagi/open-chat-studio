@@ -228,7 +228,7 @@ class ORMRepository:
 
     def get_participant_schedules(self, **kwargs) -> list:
         """Get scheduled messages for the current participant and experiment."""
-        return self.participant.get_schedules_for_experiment(self.session.experiment_id, **kwargs)
+        return self.participant.get_schedules_for_experiments(self.session.experiment_id, **kwargs)
 
 
 class InMemoryPipelineRepository(ORMRepository):

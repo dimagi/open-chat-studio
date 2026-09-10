@@ -3,7 +3,7 @@ import logging
 import time
 
 from django.conf import settings
-from django.core.exceptions import MiddlewareNotUsed
+from django.core.exceptions import MiddlewareNotUsed, RequestDataTooBig
 from django.http import RawPostDataException
 
 from apps.audit.transaction import get_audit_transaction_id
@@ -46,7 +46,10 @@ class RequestLoggingMiddleware:
             if isinstance(parsed_data, dict):
                 return parsed_data
             return {}
-        except (json.JSONDecodeError, ValueError, RawPostDataException):
+        except (json.JSONDecodeError, ValueError, RawPostDataException, RequestDataTooBig):
+            # RequestDataTooBig: the body is over DATA_UPLOAD_MAX_MEMORY_SIZE, and ``request.body``
+            # raises before caching ``_body`` -- so it raises again here even though the view has
+            # already answered. Logging runs after the response, so it must never replace one.
             return {}
 
     def _get_field(self, view_kwargs: dict, post_data: dict, *keys: str) -> str | None:

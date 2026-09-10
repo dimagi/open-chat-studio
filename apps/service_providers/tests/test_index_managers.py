@@ -456,8 +456,7 @@ class TestRemoteIndexManager:
         assert collection_file.failure_reason == "UnableToLinkFileException: Link failed"
 
     def test_linking_failure_does_not_reach_another_collection(self, remote_collection_index, index_manager):
-        """Two collections can share a File: (collection, file) has no uniqueness constraint,
-        and a collection can be built from the same assistant twice."""
+        """Two collections can share a File: (collection, file) has no uniqueness constraint."""
         # embedding_provider_model shares a per-team unique key, so leave it unset to keep
         # this Collection out of that constraint.
         other_collection = CollectionFactory.create(
