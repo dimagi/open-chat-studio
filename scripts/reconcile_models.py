@@ -544,7 +544,10 @@ def _model_names(litellm_data: dict[str, Any]) -> set[str]:
     return names
 
 
-def _emits_text(entry: dict) -> bool:
+def _serves_chat(entry: Any) -> bool:
+    """A price-table entry OCS could run as a chatbot."""
+    if not isinstance(entry, dict) or entry.get("mode") not in CHAT_MODES:
+        return False
     modalities = entry.get("supported_output_modalities")
     return TEXT_MODALITY in modalities if isinstance(modalities, list) else True
 
@@ -569,21 +572,26 @@ def eligible_models(litellm_data: dict[str, Any], today: datetime.date | None = 
     today = today or datetime.datetime.now(datetime.UTC).date()
     merged: dict[str, dict] = {}
     for key, entry in litellm_data.items():
-        if not isinstance(entry, dict) or entry.get("mode") not in CHAT_MODES or not _emits_text(entry):
+        if not _serves_chat(entry) or _is_deprecated(entry, today):
             continue
         mapped = _key_for_provider(key, entry.get("litellm_provider"))
-        if mapped is None or _is_deprecated(entry, today):
+        if mapped is None:
             continue
         ocs_provider, name = mapped
         record = merged.setdefault(name, {"id": name, "providers": [], "keys": {}, "deprecation_date": None})
-        if ocs_provider not in record["providers"]:
-            record["providers"].append(ocs_provider)
-        if _prefers_key(key, record["keys"].get(ocs_provider), ocs_provider):
-            record["keys"][ocs_provider] = key
-        record["deprecation_date"] = record["deprecation_date"] or entry.get("deprecation_date")
+        _merge_provider_key(record, key, entry, ocs_provider)
     for record in merged.values():
         record["providers"].sort()
     return merged
+
+
+def _merge_provider_key(record: dict, key: str, entry: dict, ocs_provider: str) -> None:
+    """Fold one price-table key into the record for the model name it maps to."""
+    if ocs_provider not in record["providers"]:
+        record["providers"].append(ocs_provider)
+    if _prefers_key(key, record["keys"].get(ocs_provider), ocs_provider):
+        record["keys"][ocs_provider] = key
+    record["deprecation_date"] = record["deprecation_date"] or entry.get("deprecation_date")
 
 
 def _prefers_key(key: str, incumbent: str | None, ocs_provider: str) -> bool:
@@ -1278,32 +1286,35 @@ def _commit_price_changes(
         )
         return None
     seed_path = repo_root / LLM_PRICING_REL_PATH
-    seed = load_seed(seed_path)
-    updated = apply_changes(seed, results.changes)
-    if results.backfilled:
-        # Merge backfilled entries into the seed.  A model may already have a
-        # partial entry (e.g. only llm_cached_input); in that case we update its
-        # rules in place rather than silently skipping the backfilled data.
-        entry_index: dict[tuple[str, str], int] = {
-            (e["provider_type"], e["model_name"]): i for i, e in enumerate(updated)
-        }
-        for bf_entry in results.backfilled:
-            key = (bf_entry["provider_type"], bf_entry["model_name"])
-            if key in entry_index:
-                existing = updated[entry_index[key]]
-                rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
-                for rule in bf_entry["rules"]:
-                    # Only fill gaps; never overwrite prices already curated in the seed.
-                    rules_by_kind.setdefault(rule["service_kind"], rule)
-                existing["rules"] = list(rules_by_kind.values())
-            else:
-                updated.append(bf_entry)
+    updated = apply_changes(load_seed(seed_path), results.changes)
+    updated = _merge_backfilled(updated, results.backfilled)
     seed_path.write_text(json.dumps(updated, indent=2) + "\n")
     migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
     print(f"  -> wrote {migration_path.name} + updated seed")
     body_path = output_path.with_name(output_path.stem + ".pricing-body.md")
     body_path.write_text(render_pr_body(results.changes, results.unmatched_diff, results.backfilled))
     return body_path
+
+
+def _merge_backfilled(seed: list[dict], backfilled: list[dict]) -> list[dict]:
+    """Add LiteLLM-backfilled entries to the seed, filling gaps only.
+
+    A model may already have a partial entry (e.g. only llm_cached_input); its
+    rules are updated in place rather than the backfilled data being dropped.
+    Prices already curated in the seed are never overwritten.
+    """
+    entry_index = {(e["provider_type"], e["model_name"]): i for i, e in enumerate(seed)}
+    for bf_entry in backfilled:
+        key = (bf_entry["provider_type"], bf_entry["model_name"])
+        if key not in entry_index:
+            seed.append(bf_entry)
+            continue
+        existing = seed[entry_index[key]]
+        rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
+        for rule in bf_entry["rules"]:
+            rules_by_kind.setdefault(rule["service_kind"], rule)
+        existing["rules"] = list(rules_by_kind.values())
+    return seed
 
 
 def _write_missing_body(results: _ReconcileResults, output_path: Path) -> Path | None:
