@@ -240,7 +240,3 @@ def _is_overtaken_end_node(node: FlowNode, new_node_x: float) -> bool:
     if node.type != REACT_FLOW_END_TYPE:
         return False
     return (node.position.get("x") or 0) <= new_node_x
-
-
-#: Moved to ``apps.pipelines.build_state`` (``output_handle_labels``, ``rewired_edges_for_node``)
-#: so ``patching.py``'s node-update path can rewire edges the same way, for #1452.
