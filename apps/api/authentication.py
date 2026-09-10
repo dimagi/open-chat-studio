@@ -274,7 +274,11 @@ class ChatSessionOAuthAuthentication(ChatOAuthAuthenticationBase):
             return None
         channel = (
             ExperimentChannel.objects.select_related("team")
-            .filter(pk=session.experiment_channel_id, credential_mode=CredentialMode.OAUTH)
+            .filter(
+                pk=session.experiment_channel_id,
+                credential_mode=CredentialMode.OAUTH,
+                platform=ChannelPlatform.EMBEDDED_WIDGET,
+            )
             .first()
         )
         if channel is None or channel.is_disabled:
