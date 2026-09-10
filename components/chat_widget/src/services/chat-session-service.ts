@@ -88,9 +88,10 @@ export interface ChatConsent {
 
 export interface ChatStartSessionResponse {
   session_id: string;
-  session_token?: string | null;
-  /** When `session_token` stops working (ISO 8601). Null when no token was issued; older backends omit it. */
-  expires_at?: string | null;
+  /** Null when the channel does not protect sessions with a token. */
+  session_token: string | null;
+  /** When `session_token` stops working (ISO 8601). Null when no token was issued. */
+  expires_at: string | null;
   chatbot: unknown;
   participant: unknown;
   consent?: ChatConsent;
