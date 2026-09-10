@@ -27,6 +27,7 @@ from functools import cached_property
 from itertools import batched
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F, Prefetch, Q, QuerySet
 from django.db.models.functions import Coalesce
@@ -480,14 +481,80 @@ def resolve_selection(answer: str, keys: list[str]) -> list[str]:
     return selected
 
 
+def _query_string_from(raw: str) -> str:
+    """The query part of what was pasted: a bare query string, or a URL with or without a scheme.
+
+    A URL copied without its scheme still carries a path, and reading that path as a query
+    string turns the first filter in it into an unrecognised key.
+    """
+    if "://" in raw:
+        return urlparse(raw).query
+    head, separator, query = raw.partition("?")
+    return query if separator else head
+
+
+def _plural(number: int, noun: str) -> str:
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def _refuse_unreadable_filters(query_params: QueryDict) -> int:
+    """Refuse a query string whose filters cannot be read back as pasted; count the pairs.
+
+    ``FilterParams`` drops a filter whose value or operator is missing rather than raising,
+    and a dropped filter widens the scrub instead of narrowing it.
+    """
+    columns = {key[2:] for key in query_params if key.startswith("f_") and key != "f_"}
+    for key in query_params:
+        if key.startswith("op_") and key[3:] not in columns:
+            raise CommandError(
+                f'"{key}" names an operator with no value to apply it to, so that filter would be '
+                "dropped and the scrub would be wider than the one you copied."
+            )
+    pairs = 0
+    for column in sorted(columns):
+        values = len(query_params.getlist(f"f_{column}"))
+        operators = len(query_params.getlist(f"op_{column}"))
+        if not operators:
+            raise CommandError(
+                f'The "{column}" filter has a value with no operator, so it would be dropped and '
+                "the scrub would be wider than the one you copied."
+            )
+        if values != operators:
+            raise CommandError(
+                f'The "{column}" filter has {_plural(values, "value")} but '
+                f"{_plural(operators, 'operator')}, so part of it would be dropped and the scrub "
+                "would be wider than the one you copied."
+            )
+        pairs += values
+    return pairs
+
+
 def parse_filter_query_string(raw: str) -> FilterParams:
-    """Parse a filter query string, tolerating a whole URL or a leading "?"."""
+    """Parse a filter query string, tolerating a whole URL, a scheme-less URL or a leading "?".
+
+    Every filter in the string has to survive the parse. Anything that would silently drop one
+    is refused instead: the operator confirms a scope based on what the sessions table showed
+    them, and a filter lost in transit widens that scope irreversibly.
+    """
     raw = (raw or "").strip()
     if not raw:
         return FilterParams()
-    if "://" in raw:
-        raw = urlparse(raw).query
-    return FilterParams(QueryDict(raw.lstrip("?")))
+    if "&amp;" in raw:
+        raise CommandError(
+            'The filter contains "&amp;", so it came from a rendered link rather than the address '
+            "bar and its separators are escaped. Every filter after the first would be dropped. "
+            "Copy the URL from the browser's address bar instead."
+        )
+    query_params = QueryDict(_query_string_from(raw))
+    pairs = _refuse_unreadable_filters(query_params)
+    filter_params = FilterParams(query_params)
+    if len(filter_params.filters) != pairs:
+        raise CommandError(
+            f"Only {len(filter_params.filters)} of the {pairs} filters in this string could be "
+            f"read (at most {settings.MAX_FILTER_PARAMS} apply, and a filter needs a non-empty "
+            "value). Narrow the selection in the UI and copy the URL again."
+        )
+    return filter_params
 
 
 class Command(BaseCommand):
@@ -587,7 +654,9 @@ class Command(BaseCommand):
     def _parse_filter(self, raw: str) -> FilterParams:
         """Parse --filter, refusing anything the session filter would not actually apply."""
         filter_params = parse_filter_query_string(raw)
-        if raw.strip() and not filter_params.filters:
+        # `raw` rather than `raw.strip()`: only a genuinely empty --filter means every
+        # participant, so a value that arrived as whitespace is a mangled paste, not a choice.
+        if raw and not filter_params.filters:
             raise CommandError(
                 f"The filter {raw!r} produced no usable filters. Pass an empty --filter to mean "
                 "every session, rather than risking a scrub that is wider than you intended."

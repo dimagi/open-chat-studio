@@ -893,6 +893,14 @@ class TestFilterArgumentParsing:
                 "http://localhost:8000/a/team/chatbots/36/?f_participant=bob&op_participant=contains",
                 id="whole-url",
             ),
+            pytest.param(
+                "/a/team/chatbots/36/?f_participant=bob&op_participant=contains",
+                id="url-without-a-scheme",
+            ),
+            pytest.param(
+                "localhost:8000/a/team/chatbots/36/?f_participant=bob&op_participant=contains",
+                id="url-without-a-protocol",
+            ),
         ],
     )
     def test_equivalent_forms_produce_the_same_filter(self, raw):
@@ -907,6 +915,40 @@ class TestFilterArgumentParsing:
     )
     def test_an_empty_string_means_no_filter(self, raw):
         assert parse_filter_query_string(raw).filters == []
+
+    def test_every_filter_in_a_pasted_url_survives(self):
+        """A dropped filter widens the scrub, so losing one silently is the dangerous case."""
+        raw = "/a/team/chatbots/36/?f_participant=bob&op_participant=contains&f_state=active&op_state=any of"
+
+        filters = parse_filter_query_string(raw).filters
+
+        assert [(item.column, item.operator) for item in filters] == [
+            ("participant", "contains"),
+            ("state", "any of"),
+        ]
+
+    @pytest.mark.parametrize(
+        ("raw", "message"),
+        [
+            pytest.param(
+                "f_tags=x&op_tags=any of&amp;f_participant=bob&amp;op_participant=contains",
+                "separators are escaped",
+                id="html-escaped-separator",
+            ),
+            pytest.param("f_participant=user1", "with no operator", id="operator-missing"),
+            pytest.param("op_participant=equals", "with no value", id="value-missing"),
+            pytest.param(
+                "f_first_message=2026-01-01&op_first_message=after&f_first_message=2026-02-01",
+                "2 values but 1 operator",
+                id="mismatched-pair-counts",
+            ),
+            pytest.param("f_participant=&op_participant=equals", "Only 0 of the 1 filters", id="empty-value"),
+        ],
+    )
+    def test_a_filter_string_that_cannot_be_read_faithfully_is_refused(self, raw, message):
+        """Refusing beats guessing: every one of these silently drops a filter."""
+        with pytest.raises(CommandError, match=message):
+            parse_filter_query_string(raw)
 
 
 @pytest.mark.django_db()
@@ -939,6 +981,38 @@ class TestFilterArgumentGuard:
             _scrub(chatbot["experiment"], monkeypatch, answers=[], filter_query=filter_query)
 
         assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
+
+    @pytest.mark.parametrize(
+        "filter_query",
+        [
+            pytest.param("f_participant=user1&amp;op_participant=equals", id="html-escaped-separator"),
+            pytest.param("f_participant=user1", id="operator-missing"),
+            pytest.param("   ", id="whitespace-only"),
+        ],
+    )
+    def test_a_filter_string_that_did_not_survive_being_copied_writes_nothing(self, chatbot, monkeypatch, filter_query):
+        """Each of these would otherwise run with a wider filter than the operator pasted."""
+        with pytest.raises(CommandError):
+            _scrub(chatbot["experiment"], monkeypatch, answers=[], filter_query=filter_query)
+
+        assert ChatMessage.objects.get(id=chatbot["message"].id).content == f"Hi, {SECRET} here"
+
+    def test_a_pasted_url_narrows_to_the_participant_it_names(self, chatbot, monkeypatch):
+        """The end-to-end form: a scheme-less URL must not lose its first filter."""
+        other = _other_participant(chatbot["experiment"], identifier="user2@example.com", data={"name": SECRET})
+        other_records = _add_records(other)
+
+        _scrub(
+            chatbot["experiment"],
+            monkeypatch,
+            filter_query=(
+                f"/a/{chatbot['experiment'].team.slug}/chatbots/{chatbot['experiment'].id}/"
+                f"?f_participant=user1&op_participant={Operators.CONTAINS}"
+            ),
+        )
+
+        assert ChatMessage.objects.get(id=chatbot["message"].id).content == "Hi, [REDACTED] here"
+        assert ChatMessage.objects.get(id=other_records["message"].id).content == f"Hi, {SECRET} here"
 
     def test_each_filter_must_narrow_on_its_own(self, chatbot, monkeypatch):
         """A no-op filter hiding behind a real one would scrub more than the operator confirmed."""
