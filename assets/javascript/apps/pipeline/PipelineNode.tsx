@@ -96,7 +96,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
               </button>
             )}
             {changeableTypes.length > 0 && (
-              <div className="dropdown dropdown-top">
+              <div className="dropdown dropdown-bottom">
                   <button className="btn btn-xs join-item" aria-label="Change node type">
                       <i className="fa-solid fa-right-left"></i>
                   </button>
