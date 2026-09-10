@@ -13,8 +13,8 @@
 # Job 1 (reconcile) runs the script. The price-change side effects (rewrite
 # seed + emit migration) are deterministic, so the same job opens the
 # "Pricing update" PR and the "missing pricing" issue. Job 2 (new-models-pr)
-# only runs when there are candidates and invokes Claude Code for the
-# judgement calls (which providers, which params class, deprecations) per
+# runs when there are candidates or expired models, and invokes Claude Code for
+# the judgement calls (which providers, which params class, deprecations) per
 # docs/developer_guides/managing_models.md.
 #
 # Discovery works by diffing the price table against its own git history: a
@@ -55,10 +55,13 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+    timeout-minutes: 30
     outputs:
       has_new_models: ${{ steps.reconcile.outputs.has_new_models }}
       new_model_count: ${{ steps.reconcile.outputs.new_model_count }}
       new_model_ids: ${{ steps.reconcile.outputs.new_model_ids }}
+      has_deprecated_upstream: ${{ steps.reconcile.outputs.has_deprecated_upstream }}
+      deprecated_upstream_count: ${{ steps.reconcile.outputs.deprecated_upstream_count }}
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.
@@ -79,12 +82,16 @@ jobs:
 
       - name: Reconcile upstream model catalogue and pricing seed
         id: reconcile
+        env:
+          # Lifts the commit lookup off the 60-per-hour unauthenticated limit
+          # that every job sharing the runner's IP draws on.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Stdlib-only - no dependency install needed.
           python3 scripts/reconcile_models.py --output reconciliation.json
 
       - name: Upload reconciliation payload
-        if: steps.reconcile.outputs.has_new_models == 'true'
+        if: steps.reconcile.outputs.has_new_models == 'true' || steps.reconcile.outputs.has_deprecated_upstream == 'true'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: reconciliation-payload
@@ -150,8 +157,9 @@ jobs:
 
   new-models-pr:
     needs: reconcile
-    if: needs.reconcile.outputs.has_new_models == 'true'
+    if: needs.reconcile.outputs.has_new_models == 'true' || needs.reconcile.outputs.has_deprecated_upstream == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
@@ -261,23 +269,35 @@ jobs:
             that OCS has not registered is eligible, with recently-published
             models offered first and the rest capped into `backlog`. Key fields:
             - `new_models[]` - candidates to consider. Each has: `id`,
-              `token_limit` (from LiteLLM; may be null), `recently_published`,
-              `deprecation_date`, `ocs_providers` (the providers LiteLLM says
-              actually serve this model), `already_registered_providers`,
+              `token_limit_by_provider` (context window per provider, from
+              LiteLLM; a value may be null), `recently_published`
+              (null when the upstream history could not be read),
+              `deprecation_date`, `ocs_providers` (the providers LiteLLM tags
+              as serving this model), `already_registered_providers`,
               `already_priced_providers`, `source_url`, and `pricing`.
-            - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
-              `pricing.source` (`litellm`) / `pricing.llm_pricing_entries` -
-              ready-to-paste `llm_pricing.json` entries, one per provider that
-              still needs pricing.
+            - `pricing.has_pricing` / `pricing.source` (`litellm`) /
+              `pricing.rates_by_provider` - per-1K-token rates keyed by
+              provider, because a reseller charges its own rate and Azure's
+              differs from OpenAI's for the same model.
+            - `pricing.unpriced_providers` - providers serving the model that
+              LiteLLM had no rate for. Never copy another provider's rate
+              across; these go under `## Needs follow-up`.
+            - `pricing.llm_pricing_entries` - ready-to-paste
+              `llm_pricing.json` entries, one per provider that still needs
+              pricing, each already carrying that provider's own rates.
             - `pricing_entries` - flat list of all generated pricing entries.
-            - `unpriced_models[]` - models the script could not price.
+            - `unpriced_models[]` - models the script could not price at all.
             - `backlog[]` - unregistered models that did not fit this run's cap.
               Not your concern; the next run will surface them.
             - `deprecated_upstream[]` - models OCS still lists as active whose
-              upstream deprecation date has passed.
+              upstream deprecation date has passed. This list can be non-empty
+              on a run with no new models at all, which is reason enough to
+              open a PR.
 
             ${{ needs.reconcile.outputs.new_model_count }} new model(s):
             ${{ needs.reconcile.outputs.new_model_ids }}
+            ${{ needs.reconcile.outputs.deprecated_upstream_count }} model(s)
+            past their upstream deprecation date.
 
             ## Your task (judgement + applying the generated output)
             1. Read `reconciliation.json` and
@@ -285,13 +305,23 @@ jobs:
             2. For each model in `new_models`, decide whether to add it:
                - Skip models that don't make sense for OCS (embedding-only,
                  image-only, or preview models already superseded).
-               - `ocs_providers` comes from LiteLLM's own provider tagging, so
-                 it reflects which providers actually serve the model rather
-                 than a guess. Skip any provider already in
-                 `already_registered_providers`.
+               - `ocs_providers` comes from LiteLLM's provider tagging. It is
+                 usually right but it is still upstream metadata: check each
+                 provider actually serves the model under that exact name
+                 before registering it, and drop any that doesn't. Skip any
+                 provider already in `already_registered_providers`.
+               - When you deliberately skip a model, append it to
+                 `scripts/reconcile_ignored_models.json` as
+                 `{"provider_type": ..., "model_name": ..., "reason": ...}`.
+                 Candidates are selected by state, so a skip you don't record
+                 is re-offered on every future run and holds a slot ahead of
+                 the backlog. Record it once, in the same PR.
             3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using the payload's
-                 `token_limit`.
+               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using that
+                 provider's own entry in `token_limit_by_provider`. The limit
+                 lives on each provider's `Model(...)`, and resellers differ -
+                 Azure serves gpt-5-pro at 272k where OpenAI serves 400k - so
+                 do not reuse one provider's number for another.
                - Pick an existing parameters class that matches the model family;
                  only create a new one if none fits.
                - Create a new Django migration that calls `llm_model_migration()`.
@@ -305,17 +335,19 @@ jobs:
             5. Apply pricing: for each model you add, append its
                `pricing.llm_pricing_entries` to
                `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
-               providers you actually registered. Trust the unit conversion but
-               sanity-check the magnitudes. Do NOT invent prices - any model in
-               `unpriced_models` (or a provider with no generated entry) goes under
+               providers you actually registered. Each entry already carries its
+               own provider's rates - do not merge or share rates between
+               providers. Trust the unit conversion but sanity-check the
+               magnitudes. Do NOT invent prices: any model in `unpriced_models`,
+               and any provider in `pricing.unpriced_providers`, goes under
                `## Needs follow-up` instead. After editing, confirm the file is
                still valid JSON.
-            6. If `token_limit` is null, LiteLLM had no entry for the model -
-               consult `source_url` with WebFetch, or use what you know about the
-               family. If you still can't determine it, add the model with a
-               conservative placeholder (e.g. 128000) and a
-               `# TODO: verify token_limit` comment, and flag it under
-               `## Needs follow-up`.
+            6. If a provider's `token_limit_by_provider` value is null, LiteLLM
+               had no context window for it - consult `source_url` with WebFetch,
+               or use what you know about the family. If you still can't
+               determine it, add the model with a conservative placeholder
+               (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
+               it under `## Needs follow-up`.
             7. Lint and test the changed files:
                - `uv run ruff check apps/ --fix`
                - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
@@ -324,22 +356,24 @@ jobs:
             8. Commit the changes with a descriptive message.
             9. Push the branch and open a PR against `main` using the repo's PR
                template (`.github/pull_request_template.md`).
-               - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
+               - PR title: `Auto: update LLM model catalogue (YYYY-MM-DD)`
                  (today's UTC date).
                - The PR description MUST:
                  * List each added model with its `source_url`.
-                 * Include the line: `Model metadata sourced from
-                   [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
-                   API; pricing and token limits from the
+                 * Include the line: `Model metadata, pricing and token limits
+                   from the
                    [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
-                 * Include a `## Needs follow-up` section for any unpriced models or
-                   missing info.
+                 * Include a `## Needs follow-up` section for any unpriced
+                   models, unpriced providers, or missing info.
                  * Check the "The migrations are backwards compatible" box -
                    `llm_model_migration()` is additive (only seeds new rows) so
                    these migrations are inherently backwards-compatible.
             10. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            11. If after review there is nothing to add, do NOT open an empty PR -
-                print a short summary to stdout and exit.
+            11. A run can reach you with an empty `new_models` and a non-empty
+                `deprecated_upstream` - the deprecation edits from step 4 are
+                then the whole PR. If after review there is nothing to add and
+                nothing to deprecate, do NOT open an empty PR - print a short
+                summary to stdout and exit.
             12. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
@@ -354,12 +388,15 @@ jobs:
 
                 ## Per-model decisions
 
-                ### `<model-id>` (org: `<org>`)
+                ### `<model-id>`
                 - **Verdict:** Added | Skipped | Needs follow-up
                 - **Mapped providers:** <e.g. openai, azure>  (if added)
-                - **Pricing:** <source: llm_stats | litellm | unpriced>
+                - **Pricing:** <litellm | partial | unpriced>  (name the
+                  providers left unpriced, if any)
                 - **Reason:** <one-sentence rationale - why added/skipped, or
                   what info was missing>
+                - **Skip recorded:** <yes, in reconcile_ignored_models.json |
+                  n/a>
                 - **Source:** <source_url>
 
                 <repeat for every model in new_models>
