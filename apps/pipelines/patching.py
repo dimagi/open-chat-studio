@@ -79,9 +79,10 @@ def _rewire_edges_for_update(flow: Flow, node_id: str, previous: FlowNode | None
     type change (#1452) the same way, since both are just an update whose handles differ before
     and after -- neither is special-cased.
     """
-    if previous is None or previous.data is None or updated.data is None:
+    previous_data = previous.data if previous else None
+    if previous_data is None or updated.data is None:
         return
-    before = output_handle_labels(previous.data)
+    before = output_handle_labels(previous_data)
     after = output_handle_labels(updated.data)
     if before == after:
         return
