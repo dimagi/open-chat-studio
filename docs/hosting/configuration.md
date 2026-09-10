@@ -55,6 +55,7 @@ These apply whether the connection comes from `DATABASE_URL` or the variables ab
 | `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required to register an OAuth2 application at all: the registration form signs every application with `RS256`, which django-oauth-toolkit rejects when this is unset. Setting it also enables OIDC, signs ID tokens, and adds the `openid`/`profile` scopes. |
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
+| `DATA_UPLOAD_MAX_MEMORY_SIZE` | `10485760` (10 MB) | Largest request body Django will buffer in memory, bounding the JSON API, web-UI form posts and channel webhooks alike. See the [Django docs](https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size). |
 
 ## Rate Limiting
 

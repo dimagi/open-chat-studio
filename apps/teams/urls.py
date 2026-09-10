@@ -24,6 +24,7 @@ team_urlpatterns = (
         path("members/table/", views.MembersTableView.as_view(), name="members_table"),
         path("public-key/", views.set_public_key, name="set_public_key"),
         path("migration-lock/", views.set_migration_lock, name="set_migration_lock"),
+        path("require-mfa/", views.set_require_mfa, name="set_require_mfa"),
         path("files/download/", views.download_team_files, name="download_team_files"),
         path("flags/", views.feature_flags, name="feature_flags"),
         path("internal-metadata/", views.internal_metadata, name="internal_metadata"),

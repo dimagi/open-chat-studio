@@ -140,14 +140,14 @@
       {% endif %}
     </div>
 
-    <div class="flex flex-wrap gap-8 mt-4">
-      <div>
-        <div class="text-2xl font-bold leading-none">{{ message_count }}</div>
+    <div class="grid grid-rows-2 grid-flow-col auto-cols-max gap-x-8 gap-y-1 mt-4">
+      <div class="grid grid-rows-subgrid row-span-2 gap-1">
+        <div class="text-2xl font-bold leading-none self-end">{{ message_count }}</div>
         <div class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Messages" %}</div>
       </div>
       {% if show_usage_summary %}
-        <div data-testid="session-usage-summary">
-          <div class="text-2xl font-bold leading-none flex items-center gap-1">
+        <div class="grid grid-rows-subgrid row-span-2 gap-1" data-testid="session-usage-summary">
+          <div class="text-2xl font-bold leading-none flex items-center gap-1 self-end">
             {% if usage_summary.by_model %}
               {{ usage_summary.total_tokens|intcomma }}
             {% else %}
@@ -164,14 +164,14 @@
           </div>
         </div>
       {% endif %}
-      <div>
-        <div class="text-2xl font-bold leading-none">{{ session_duration_display }}</div>
+      <div class="grid grid-rows-subgrid row-span-2 gap-1">
+        <div class="text-2xl font-bold leading-none self-end">{{ session_duration_display }}</div>
         <div class="text-xs uppercase tracking-wide text-base-content/60">
           {% translate "Duration" %} · {% if experiment_session.ended_at %}{% translate "Ended" %}{% else %}{% translate "Still open" %}{% endif %}
         </div>
       </div>
-      <div>
-        <div class="flex items-center gap-2 h-8">
+      <div class="grid grid-rows-subgrid row-span-2 gap-1">
+        <div class="flex items-center gap-2 h-8 self-end">
           {% include "annotations/tag_ui.html" with object=experiment_session.chat allow_edit=experiment.is_editable label_text="Add tag" %}
         </div>
         <div class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Tags" %}</div>

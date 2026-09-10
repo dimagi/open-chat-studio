@@ -92,10 +92,7 @@ class MultiColumnFilter:
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:
-        # Create per-call copies to avoid mutating shared instances
-        instances = [f.model_copy(deep=True) for f in cls.filters]
-        for filter_component in instances:
-            filter_component.prepare(team, **kwargs)
+        instances = [f.prepare(team, **kwargs) for f in cls.filters]
         return {filter_component.query_param: filter_component.model_dump() for filter_component in instances}
 
     def prepare_queryset(self, queryset):
@@ -147,8 +144,10 @@ class ColumnFilter(BaseModel):
     def operators(self) -> list[Operators]:
         return FIELD_TYPE_FILTERS[self.type]
 
-    def prepare(self, team, **kwargs):
-        pass
+    def prepare(self, team, **kwargs) -> ColumnFilter:
+        """Return this filter, or a copy with options set -- `filters` lists on
+        MultiColumnFilter subclasses are shared, so a subclass must not mutate `self` here."""
+        return self
 
     def values_list(self, json_value: str) -> list[str]:
         try:

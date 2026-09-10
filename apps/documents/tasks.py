@@ -12,7 +12,7 @@ from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
@@ -28,6 +28,7 @@ from apps.documents.models import (
     CollectionFile,
     DocumentSource,
     FileStatus,
+    format_failure_reason,
 )
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
@@ -75,22 +76,42 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
     previous_remote_file_ids = []
 
     default_chunking_strategy = ChunkingStrategy(chunk_size=800, chunk_overlap=400)
-    strategy_groups = groupby(
-        collection_files_queryset.select_related("file").iterator(100),
-        lambda cf: cf.chunking_strategy or default_chunking_strategy,
-    )
+    file_iterator = collection_files_queryset.select_related("file").iterator(100)
+    try:
+        strategy_groups = groupby(
+            file_iterator,
+            lambda cf: cf.chunking_strategy or default_chunking_strategy,
+        )
 
-    for strategy, collection_files_group in strategy_groups:
-        ids = []
-        for collection_file in collection_files_group:
-            ids.append(collection_file.id)
-            if collection_file.file.external_id:
-                previous_remote_file_ids.append(collection_file.file.external_id)
+        for strategy, collection_files_group in strategy_groups:
+            ids = []
+            for collection_file in collection_files_group:
+                ids.append(collection_file.id)
+                if collection_file.file.external_id:
+                    previous_remote_file_ids.append(collection_file.file.external_id)
 
-        # Every re-index route funnels through here, so this is where a reason from a previous
-        # attempt stops applying.
-        CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
+            _index_strategy_group(collection, ids, strategy)
+    finally:
+        # The iterator holds a server-side cursor, and closing it here keeps that point
+        # deterministic. A close against a connection whose transaction has already failed
+        # raises in turn, and that is not the failure worth propagating. The close is not
+        # routed through Django's error wrapper, so it surfaces a raw psycopg error rather
+        # than a DatabaseError.
+        try:
+            file_iterator.close()
+        except Exception:
+            logger.warning("Could not close the collection files cursor", exc_info=True)
 
+    return previous_remote_file_ids
+
+
+def _index_strategy_group(collection: Collection, ids: list[int], strategy: ChunkingStrategy) -> None:
+    """Index one chunking strategy group, leaving it in a terminal status if indexing raises."""
+    # Every re-index route funnels through here, so this is where a reason from a previous
+    # attempt stops applying.
+    CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
+
+    try:
         collection.add_files_to_index(
             # `collection` is select_related because indexing reads the collection's search
             # language per file to build the lexical vectors; without it that is a query per file.
@@ -100,8 +121,21 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
         )
-
-    return previous_remote_file_ids
+    except Exception as e:
+        # IN_PROGRESS renders as a spinner for as long as the row exists, so the group needs a
+        # terminal status here. The IN_PROGRESS filter leaves rows that add_files already failed
+        # carrying their own reason, which names the stage that failed. A caller that holds a
+        # transaction around this call cannot accept the write once it has aborted.
+        try:
+            CollectionFile.objects.filter(id__in=ids, status=FileStatus.IN_PROGRESS).update(
+                status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
+            )
+        except DatabaseError:
+            logger.exception(
+                "Could not record the indexing failure against the collection files",
+                extra={"collection_file_ids": ids},
+            )
+        raise
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):

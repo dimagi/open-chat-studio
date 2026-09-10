@@ -173,8 +173,9 @@ MIDDLEWARE = list(
             "django.middleware.common.CommonMiddleware",
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
+            "apps.web.cache_control_middleware.SensitiveDataCacheControlMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
-            "apps.users.middleware.RequireMfaForStaffMiddleware",
+            "apps.users.middleware.RequireMfaMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -308,7 +309,7 @@ MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
 # Staff and superusers are confined to the MFA setup flow until they enrol
-# (apps.users.middleware.RequireMfaForStaffMiddleware). Off by default in development and under
+# (apps.users.middleware.RequireMfaMiddleware). Off by default in development and under
 # test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
 # to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
 REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
@@ -446,6 +447,9 @@ EMAIL_CHANNEL_ALLOWED_DOMAINS = env.list("EMAIL_CHANNEL_ALLOWED_DOMAINS", defaul
 # Django sites
 
 SITE_ID = 1
+
+# https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=10 * 1024 * 1024)
 
 # DRF config
 REST_FRAMEWORK = {

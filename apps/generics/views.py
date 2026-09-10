@@ -65,7 +65,7 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             "event_triggers": event_triggers,
             "has_event_logs": any(item["event_logs"] for item in event_triggers),
-            "participant_schedules": session.participant.get_schedules_for_experiment(
+            "participant_schedules": session.participant.get_schedules_for_experiments(
                 experiment.id, as_dict=True, include_inactive=True
             ),
             "participant_id": session.participant_id,

@@ -10,7 +10,7 @@
     class="group flex gap-3.5 px-5 py-4 border-b border-base-300 {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
     x-data="{
             tags: {{ message.all_tag_names|to_json|force_escape }},
-            get isSelected() { return commentsRow === {{ forloop.counter }} },
+            get isSelected() { return commentsRow === {{ message.id }} },
             }"
     {% if highlight_message_id == message.id %}
       id="{{ message.id }}"
@@ -129,7 +129,7 @@
           {% include "experiments/chat/components/copy_message_link.html" with message=message session_detail_url=session_detail_url %}
         </div>
         {% if perms.annotations.add_usercomment %}
-          <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs" @click="commentsRow = (commentsRow === {{ forloop.counter }} ? null : {{ forloop.counter }})">
+          <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs" @click="commentsRow = (commentsRow === {{ message.id }} ? null : {{ message.id }})">
             <i class="fa-regular fa-comment"></i>
             <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
           </button>
@@ -137,7 +137,7 @@
       </div>
       {% if perms.annotations.add_usercomment %}
         <div
-          x-show="commentsRow === {{ forloop.counter }}"
+          x-show="commentsRow === {{ message.id }}"
           x-cloak>
           <div class="flex justify-between">
             <h3 class="font-medium">Message Comments</h3>
@@ -161,7 +161,7 @@
 {% endfor %}
 {% if page < total_pages %}
   <div
-    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' next_page=1 %}"
+    hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
     hx-trigger="intersect once"
     hx-target="this"
     hx-swap="outerHTML"
