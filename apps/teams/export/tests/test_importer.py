@@ -1082,3 +1082,20 @@ def test_a_failing_on_user_created_hook_is_recorded_rather_than_aborting_the_imp
         ("one@example.com", "Email address is not verified"),
         ("two@example.com", "Email address is not verified"),
     ]
+
+
+def test_a_failing_on_user_created_hook_is_announced_as_it_happens(store, capsys):
+    """The collected failures reach the operator only if the whole sync finishes, so the address is
+    printed at the point of failure too -- an abort in a later resource would otherwise take it."""
+
+    def reject(user):
+        raise RuntimeError("Email address is not verified")
+
+    importer = Importer(store, on_user_created=reject)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("users.customuser", [_user_row(51, "one@example.com")])
+
+    output = capsys.readouterr().out
+    assert "one@example.com" in output
+    assert "Email address is not verified" in output

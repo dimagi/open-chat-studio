@@ -253,17 +253,21 @@ class Importer:
             self.set_target_team(instance)
 
     def safe_on_user_created(self, user) -> None:
-        """Run the new-user hook, collecting a failure instead of raising it.
+        """Run the new-user hook, reporting a failure instead of raising it.
 
         The user row and its checkpoint are committed before the hook runs, so raising here aborts
         the sync on a row a rerun then skips -- the user stays imported and is never notified, with
-        nothing recording it. The collected failures are listed in the sync report instead."""
+        nothing recording it. The failure is printed as it happens as well as collected: the sync
+        report is only reached once every resource has been imported, so an abort in a later one
+        would otherwise take the collected addresses with it."""
         if self.on_user_created is None:
             return
         try:
             self.on_user_created(user)
         except Exception as exc:
-            self.notification_failures.append((user.email or user.username, str(exc)))
+            identifier = user.email or user.username
+            print(f"could not send a password-reset email to {identifier}: {exc}")
+            self.notification_failures.append((identifier, str(exc)))
 
     def set_target_team(self, team) -> None:
         """Adopt ``team`` as the anchor every team-scoped row is reassigned to, and make it the current
