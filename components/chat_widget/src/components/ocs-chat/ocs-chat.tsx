@@ -41,6 +41,14 @@ interface SessionStorageData {
 
 type PersistenceMode = 'off' | 'local' | 'tab';
 
+function setOrRemoveItem(storage: Storage, key: string, value?: string): void {
+  if (value) {
+    storage.setItem(key, value);
+  } else {
+    storage.removeItem(key);
+  }
+}
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
@@ -468,11 +476,9 @@ export class OcsChat {
   }
 
   /** The service renewed the token itself; record it so a reload resumes with the live one. */
-  private handleSessionTokenRenewed(sessionId: string, token: string, expiresAt: string): void {
-    if (sessionId !== this.activeSessionId) return;
-    this.currentSessionToken = token;
-    this.currentSessionTokenExpiresAt = expiresAt;
-    this.saveSessionToStorage();
+  private handleSessionTokenRenewed(token: string, expiresAt: string): void {
+    this.applySessionToken(token, expiresAt);
+    this.saveSessionTokenToStorage();
   }
 
   private getChatService(): ChatSessionService {
@@ -487,7 +493,7 @@ export class OcsChat {
         sessionToken: this.currentSessionToken,
         sessionTokenExpiresAt: this.currentSessionTokenExpiresAt,
         authTokenProvider: this.authTokenProvider,
-        onSessionTokenRenewed: (sessionId, token, expiresAt) => this.handleSessionTokenRenewed(sessionId, token, expiresAt),
+        onSessionTokenRenewed: (token, expiresAt) => this.handleSessionTokenRenewed(token, expiresAt),
       });
     }
     return this.chatService;
@@ -837,14 +843,14 @@ export class OcsChat {
 
     this.isUploadingFiles = true;
     try {
-      // Uploads bypass the service's request path, so renew here before reading its headers.
-      await this.getChatService().refreshSessionTokenIfExpiring(this.activeSessionId);
+      const service = this.getChatService();
+      const sessionId = this.activeSessionId;
       const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
         apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
-        sessionId: this.activeSessionId,
+        sessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
-        headers: this.getChatService().getUploadHeaders(),
+        send: (url, body) => service.sessionFetch(sessionId, url, () => ({ method: 'POST', headers: service.getUploadHeaders(), body })),
       });
       this.selectedFiles = uploadResult.selectedFiles;
       if (uploadResult.consent) {
@@ -1904,21 +1910,31 @@ export class OcsChat {
       if (this.activeSessionId) {
         storage.setItem(keys.sessionId, this.activeSessionId);
         storage.setItem(keys.lastActivity, new Date().toISOString());
-        if (this.currentSessionToken) {
-          storage.setItem(keys.sessionToken, this.currentSessionToken);
-        } else {
-          storage.removeItem(keys.sessionToken);
-        }
-        if (this.currentSessionTokenExpiresAt) {
-          storage.setItem(keys.sessionTokenExpiresAt, this.currentSessionTokenExpiresAt);
-        } else {
-          storage.removeItem(keys.sessionTokenExpiresAt);
-        }
+        this.writeSessionTokenKeys(storage);
       }
       storage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
       console.warn('Failed to save chat session to storage:', error);
     }
+  }
+
+  /** Persist only the token pair: a renewal is not activity and must not touch `lastActivity`. */
+  private saveSessionTokenToStorage(): void {
+    const storage = this.getStorage();
+    if (!storage || this.isSessionBound() || !this.activeSessionId) {
+      return;
+    }
+    try {
+      this.writeSessionTokenKeys(storage);
+    } catch (error) {
+      console.warn('Failed to save chat session to storage:', error);
+    }
+  }
+
+  private writeSessionTokenKeys(storage: Storage): void {
+    const keys = this.getStorageKeys();
+    setOrRemoveItem(storage, keys.sessionToken, this.currentSessionToken);
+    setOrRemoveItem(storage, keys.sessionTokenExpiresAt, this.currentSessionTokenExpiresAt);
   }
 
   private loadSessionFromStorage(): SessionStorageData {

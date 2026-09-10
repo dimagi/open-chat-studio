@@ -57,7 +57,7 @@ export class ConsentRequiredError extends Error {
 export type AuthTokenProvider = (context: { forceRefresh: boolean }) => string | undefined | Promise<string | undefined>;
 
 /** Called when the service has renewed the session token, so the host can persist the new one. */
-export type SessionTokenRenewedCallback = (sessionId: string, token: string, expiresAt: string) => void;
+export type SessionTokenRenewedCallback = (token: string, expiresAt: string) => void;
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 
@@ -96,7 +96,7 @@ export interface ChatStartSessionResponse {
   consent?: ChatConsent;
 }
 
-export interface ChatSessionTokenResponse {
+interface ChatSessionTokenResponse {
   session_id: string;
   session_token: string;
   expires_at: string;
@@ -182,6 +182,8 @@ export class ChatSessionService {
   private authTokenProvider?: AuthTokenProvider;
   private readonly onSessionTokenRenewed?: SessionTokenRenewedCallback;
   private renewalInFlight?: Promise<boolean>;
+  /** Earliest time the next renewal may start, so a renewal that keeps failing (or keeps looking due, on a fast client clock) is not repeated on every request. */
+  private renewalNotBefore = 0;
   private readonly csrfTokenProvider: (apiBaseUrl: string) => string | undefined;
   private readonly taskPollingIntervalMs: number;
   private readonly taskPollingMaxAttempts: number;
@@ -195,6 +197,7 @@ export class ChatSessionService {
    * `session_expired` refusal.
    */
   private static readonly SESSION_TOKEN_RENEW_LEAD_MS = 60_000;
+  private static readonly SESSION_TOKEN_RENEW_RETRY_MS = 30_000;
 
   constructor(options: ChatSessionServiceOptions) {
     this.apiBaseUrl = options.apiBaseUrl;
@@ -227,10 +230,11 @@ export class ChatSessionService {
 
   /**
    * Replace the session token with a fresh one from `chat/<id>/token/`, which
-   * admits the same bearer credential as `chat/start/`. The new token is applied
-   * to this service and reported through `onSessionTokenRenewed`.
+   * admits the same bearer credential as `chat/start/`. Resolves to whether the
+   * new token was applied: a session cleared or replaced while the renewal was
+   * in flight keeps its own token.
    */
-  async renewSessionToken(sessionId: string): Promise<ChatSessionTokenResponse> {
+  private async renewSessionToken(sessionId: string): Promise<boolean> {
     const tokenBeforeRenewal = this.sessionToken;
     const response = await this.requestWithBearer(authToken =>
       this.request(`${this.apiBaseUrl}/api/chat/${sessionId}/token/`, {
@@ -244,47 +248,42 @@ export class ChatSessionService {
     }
 
     const data = (await response.json()) as ChatSessionTokenResponse;
-    // A session cleared or replaced while the renewal was in flight keeps its own token.
-    if (this.sessionToken === tokenBeforeRenewal) {
-      this.setSessionToken(data.session_token, data.expires_at);
-      this.onSessionTokenRenewed?.(sessionId, data.session_token, data.expires_at);
+    if (this.sessionToken !== tokenBeforeRenewal) {
+      return false;
     }
-    return data;
-  }
-
-  /**
-   * Renew the session token if it is about to expire and a provider can supply the
-   * bearer credential. Resolves either way: a failed renewal is logged, and the
-   * request that follows is refused by the server if the token really has lapsed,
-   * which then takes the `session_expired` recovery path.
-   */
-  async refreshSessionTokenIfExpiring(sessionId: string): Promise<void> {
-    if (this.sessionTokenExpiring()) {
-      await this.tryRenewSessionToken(sessionId);
-    }
+    this.setSessionToken(data.session_token, data.expires_at);
+    this.onSessionTokenRenewed?.(data.session_token, data.expires_at);
+    return true;
   }
 
   private sessionTokenExpiring(): boolean {
-    if (!this.canRenewSessionToken() || this.sessionTokenExpiresAt === undefined) {
+    if (this.sessionTokenExpiresAt === undefined) {
       return false;
     }
     return this.sessionTokenExpiresAt - Date.now() <= ChatSessionService.SESSION_TOKEN_RENEW_LEAD_MS;
   }
 
-  private canRenewSessionToken(): boolean {
-    return Boolean(this.authTokenProvider && this.sessionToken);
-  }
-
-  /** Renew once for however many requests notice the expiry at the same time. */
+  /**
+   * Renew the session token when a provider can supply the bearer credential,
+   * once for however many requests ask at the same time, and no sooner than
+   * `SESSION_TOKEN_RENEW_RETRY_MS` after the previous attempt. Resolves to
+   * whether a new token is in place; a failed renewal is logged, not thrown.
+   */
   private tryRenewSessionToken(sessionId: string): Promise<boolean> {
+    if (!this.authTokenProvider || !this.sessionToken) {
+      return Promise.resolve(false);
+    }
     if (!this.renewalInFlight) {
+      if (Date.now() < this.renewalNotBefore) {
+        return Promise.resolve(false);
+      }
       this.renewalInFlight = this.renewSessionToken(sessionId)
-        .then(() => true)
         .catch(error => {
           console.warn('[open-chat-studio-widget] session token renewal failed', error);
           return false;
         })
         .finally(() => {
+          this.renewalNotBefore = Date.now() + ChatSessionService.SESSION_TOKEN_RENEW_RETRY_MS;
           this.renewalInFlight = undefined;
         });
     }
@@ -295,23 +294,32 @@ export class ChatSessionService {
    * Send a request authorised by the session token, renewing that token first
    * when it is due, and once more if the server reports it expired anyway.
    * `init` is a factory so the retry picks up the renewed token's headers.
+   * Returns the final response, refused or not.
    */
-  private async sessionRequest(sessionId: string, url: string, init: () => RequestInit, fallbackPrefix: string): Promise<Response> {
-    await this.refreshSessionTokenIfExpiring(sessionId);
+  async sessionFetch(sessionId: string, url: string, init: () => RequestInit): Promise<Response> {
+    if (this.sessionTokenExpiring()) {
+      await this.tryRenewSessionToken(sessionId);
+    }
+    const tokenSent = this.sessionToken;
     const response = await this.request(url, init());
-    if (response.ok) {
+    if (response.ok || response.status !== 403 || (await this.refusalCode(response)) !== SESSION_EXPIRED_CODE) {
       return response;
     }
 
-    const body = await this.readErrorBody(response, fallbackPrefix);
-    if (response.status === 403 && body.code === SESSION_EXPIRED_CODE && this.canRenewSessionToken() && (await this.tryRenewSessionToken(sessionId))) {
-      const retried = await this.request(url, init());
-      if (!retried.ok) {
-        await this.raiseForStatus(retried, fallbackPrefix);
-      }
-      return retried;
+    // Another request may already have renewed the token this one was refused with.
+    const tokenReplaced = Boolean(this.sessionToken) && this.sessionToken !== tokenSent;
+    if (tokenReplaced || (await this.tryRenewSessionToken(sessionId))) {
+      return this.request(url, init());
     }
-    throw this.errorFor(response.status, body);
+    return response;
+  }
+
+  private async sessionRequest(sessionId: string, url: string, init: () => RequestInit, fallbackPrefix: string): Promise<Response> {
+    const response = await this.sessionFetch(sessionId, url, init);
+    if (!response.ok) {
+      await this.raiseForStatus(response, fallbackPrefix);
+    }
+    return response;
   }
 
   async sendMessage(sessionId: string, payload: Record<string, unknown>): Promise<ChatSendMessageResponse> {
@@ -499,8 +507,7 @@ export class ChatSessionService {
   /** `expiresAt` is ISO 8601; leave it out when the expiry is unknown, and renewal waits for a refusal. */
   setSessionToken(token?: string, expiresAt?: string | null): void {
     this.sessionToken = token;
-    const parsed = token && expiresAt ? Date.parse(expiresAt) : NaN;
-    this.sessionTokenExpiresAt = Number.isNaN(parsed) ? undefined : parsed;
+    this.sessionTokenExpiresAt = token ? this.parseDate(expiresAt)?.getTime() : undefined;
   }
 
   private async request(input: string, init?: RequestInit): Promise<Response> {
@@ -524,8 +531,8 @@ export class ChatSessionService {
       return;
     }
 
-    const sunsetAt = this.parseSunsetDate(headers.get('Sunset'));
-    const pastSunset = sunsetAt !== null && Date.now() >= sunsetAt.getTime();
+    const sunsetAt = this.parseDate(headers.get('Sunset'));
+    const pastSunset = sunsetAt !== undefined && Date.now() >= sunsetAt.getTime();
     const level: 'warn' | 'error' = pastSunset ? 'error' : 'warn';
     if (this.loggedSunsetLevel === level) {
       return;
@@ -542,12 +549,12 @@ export class ChatSessionService {
     }
   }
 
-  private parseSunsetDate(sunset: string | null): Date | null {
-    if (!sunset) {
-      return null;
+  private parseDate(value: string | null | undefined): Date | undefined {
+    if (!value) {
+      return undefined;
     }
-    const parsed = new Date(sunset);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
   private parseSuccessorUrl(link: string | null): string | undefined {
@@ -571,6 +578,12 @@ export class ChatSessionService {
       return new ChatAuthError(status, code, message);
     }
     return new Error(message);
+  }
+
+  /** The refusal code from the body, read from a copy so the response stays readable for the caller. */
+  private async refusalCode(response: Response): Promise<string | undefined> {
+    const { code } = await this.readErrorBody(typeof response.clone === 'function' ? response.clone() : response, '');
+    return code;
   }
 
   /** The server's error wording and codes, falling back to the status text on a non-JSON body. */

@@ -924,7 +924,7 @@ describe('ChatSessionService session token renewal', () => {
     const onSessionTokenRenewed = jest.fn();
     await service({ sessionTokenExpiresAt: secondsFromNow(30), onSessionTokenRenewed }).sendMessage('s-1', { message: 'hi' });
 
-    expect(onSessionTokenRenewed).toHaveBeenCalledWith('s-1', 'sess-new', secondsFromNow(3600));
+    expect(onSessionTokenRenewed).toHaveBeenCalledWith('sess-new', secondsFromNow(3600));
   });
 
   it('tracks the renewed expiry so the next request does not renew again', async () => {
@@ -1039,5 +1039,77 @@ describe('ChatSessionService session token renewal', () => {
 
     expect(svc['sessionToken']).toBeUndefined();
     expect(onSessionTokenRenewed).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a refusal when the renewal landed on a cleared token', async () => {
+    expiredRefusals = 1;
+    const svc = service();
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/token/')) {
+        svc.setSessionToken(undefined);
+      }
+      return Promise.resolve(router(url));
+    });
+
+    await expect(svc.sendMessage('s-1', { message: 'hi' })).rejects.toMatchObject({ code: 'session_expired' });
+    expect(urlsCalled()).toEqual([messageUrl, renewUrl]);
+  });
+
+  it('retries without renewing when another request already replaced the refused token', async () => {
+    const svc = service();
+    fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if ((init.headers as Record<string, string>)['X-Session-Token'] === 'sess-old') {
+        svc.setSessionToken('sess-new', secondsFromNow(3600));
+        return Promise.resolve(response(403, { error: 'Session has expired', code: 'session_expired' }));
+      }
+      return Promise.resolve(router(url));
+    });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([messageUrl, messageUrl]);
+    expect(headersOf(messageUrl, 1)['X-Session-Token']).toBe('sess-new');
+  });
+
+  it('waits before renewing again after a failed renewal', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url.includes('/token/') ? response(500) : router(url)));
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+    await svc.sendMessage('s-1', { message: 'again' });
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
+
+    (Date.now as jest.Mock).mockReturnValue(now + 30_000);
+    await svc.sendMessage('s-1', { message: 'later' });
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl, renewUrl, messageUrl]);
+  });
+
+  it('renews once per retry window when the renewed token still looks due on a fast clock', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.includes('/token/') ? response(200, { session_id: 's-1', session_token: 'sess-new', expires_at: secondsFromNow(30) }) : router(url)),
+    );
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+    await svc.sendMessage('s-1', { message: 'again' });
+
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
+  });
+
+  it('sessionFetch renews and retries a refused upload, and hands back any other refusal', async () => {
+    const uploadUrl = 'https://example.com/api/chat/s-1/upload/';
+    const svc = service();
+    const init = () => ({ method: 'POST', headers: svc.getUploadHeaders(), body: new FormData() });
+
+    expiredRefusals = 1;
+    const renewed = await svc.sessionFetch('s-1', uploadUrl, init);
+    expect(renewed.ok).toBe(true);
+    expect(urlsCalled()).toEqual([uploadUrl, renewUrl, uploadUrl]);
+    expect(headersOf(uploadUrl, 1)['X-Session-Token']).toBe('sess-new');
+
+    fetchMock.mockResolvedValue(response(403, { error: 'Consent is required', code: 'consent_required' }));
+    const refused = await svc.sessionFetch('s-1', uploadUrl, init);
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toMatchObject({ code: 'consent_required' });
   });
 });

@@ -8,30 +8,28 @@ function makeFile(name = 'a.txt') {
   return new File(['hello'], name, { type: 'text/plain' });
 }
 
-describe('FileAttachmentManager request headers', () => {
+describe('FileAttachmentManager upload transport', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('forwards the provided headers on upload', async () => {
+  it('sends through the provided transport with the upload url and form data', async () => {
     const manager = makeManager();
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+    const send = jest.fn().mockResolvedValue({
       ok: true,
       status: 201,
       json: () => Promise.resolve({ files: [{ id: 1, name: 'a.txt', size: 5, content_type: 'text/plain' }] }),
     } as Response);
 
-    await manager.uploadPendingFiles([{ file: makeFile() }], {
+    const result = await manager.uploadPendingFiles([{ file: makeFile() }], {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      headers: { 'X-Session-Token': 'tok-123', 'X-CSRFToken': 'csrf-456', 'x-ocs-widget-version': '1.0.0' },
+      send,
     });
 
-    const headers = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
-    expect(headers['X-Session-Token']).toBe('tok-123');
-    expect(headers['X-CSRFToken']).toBe('csrf-456');
-    expect(headers['x-ocs-widget-version']).toBe('1.0.0');
+    expect(send).toHaveBeenCalledWith('https://example.com/api/chat/s1/upload/', expect.any(FormData));
+    expect(result.uploadedIds).toEqual([1]);
   });
 
   it('flags tokenRejected on a 403 upload response', async () => {
@@ -46,7 +44,6 @@ describe('FileAttachmentManager request headers', () => {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      headers: { 'X-Session-Token': 'tok-123' },
     });
 
     expect(result.tokenRejected).toBe(true);
@@ -66,7 +63,6 @@ describe('FileAttachmentManager request headers', () => {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      headers: { 'X-Session-Token': 'tok-123' },
     });
 
     expect(result.tokenRejected).toBe(false);
@@ -86,7 +82,6 @@ describe('FileAttachmentManager request headers', () => {
       apiBaseUrl: 'https://example.com',
       sessionId: 's1',
       participantId: 'p1',
-      headers: { 'X-Session-Token': 'tok-123' },
     });
 
     // Not a token rejection: the file error stops the send instead.
@@ -95,7 +90,7 @@ describe('FileAttachmentManager request headers', () => {
     expect(result.selectedFiles[0].error).toBe('Consent is required');
   });
 
-  it('sends no auth headers when none are provided', async () => {
+  it('posts with fetch and no auth headers when no transport is provided', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

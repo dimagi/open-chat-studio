@@ -10,6 +10,8 @@ describe('ocs-chat auth token provider', () => {
   let fetchMock: jest.Mock;
   let startDenied: boolean;
   let renewDenied: boolean;
+  /** Uploads refused with `session_expired` before one is accepted. */
+  let uploadRefusals: number;
   /** `expires_at` on the start response; a near expiry makes the first session-bound request renew. */
   let tokenLifetimeSeconds: number;
 
@@ -38,6 +40,13 @@ describe('ocs-chat auth token provider', () => {
         return jsonResponse(401, { error: 'Authentication required to chat with this chatbot', code: 'chat_access_denied' });
       }
       return jsonResponse(200, { session_id: 'session-1', session_token: 'sess-tok-2', expires_at: secondsFromNow(3600) });
+    }
+    if (url.includes('/upload/')) {
+      if (uploadRefusals > 0) {
+        uploadRefusals -= 1;
+        return jsonResponse(403, { error: 'Session has expired', code: 'session_expired' });
+      }
+      return jsonResponse(201, { files: [{ id: 42, name: 'a.txt', size: 5, content_type: 'text/plain' }] });
     }
     if (url.includes('/message/')) {
       return jsonResponse(200, { task_id: 'task-1', status: 'processing' });
@@ -74,6 +83,7 @@ describe('ocs-chat auth token provider', () => {
   beforeEach(() => {
     startDenied = false;
     renewDenied = false;
+    uploadRefusals = 0;
     tokenLifetimeSeconds = 3600;
     fetchMock = jest.fn((url: string) => Promise.resolve(router(url)));
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -245,6 +255,24 @@ describe('ocs-chat auth token provider', () => {
     expect(storedValue('ocs-chat-token-bot-1')).toBe('sess-tok-2');
     expect(Date.parse(storedValue('ocs-chat-token-expires-bot-1'))).toBeGreaterThan(Date.now() + 3000 * 1000);
     expect(page.rootInstance['currentSessionToken']).toBe('sess-tok-2');
+  });
+
+  it('renews and retries an upload the server refuses as expired', async () => {
+    // The token does not look due to the widget, so only the server's refusal can trigger renewal.
+    const page = await widget('<open-chat-studio-widget chatbot-id="bot-1" allow-attachments="true"></open-chat-studio-widget>');
+    await installProvider(page, () => 'tok-abc');
+    await send(page);
+    page.rootInstance['selectedFiles'] = [{ file: new File(['hello'], 'a.txt', { type: 'text/plain' }) }];
+    uploadRefusals = 1;
+
+    await send(page, 'with a file');
+
+    const callsTo = (path: string) => fetchMock.mock.calls.filter(([url]) => String(url).includes(path)).map(([, init]) => init);
+    expect(callsTo('/upload/').map(init => init.headers['X-Session-Token'])).toEqual(['sess-tok', 'sess-tok-2']);
+    expect(headersOf('/token/')['Authorization']).toBe('Bearer tok-abc');
+    expect(JSON.parse(callsTo('/message/')[1].body).attachment_ids).toEqual([42]);
+    expect(page.rootInstance.activeSessionId).toBe('session-1');
+    expect(page.rootInstance.messages.filter(m => m.role === 'system')).toEqual([]);
   });
 
   it('does not renew a token that still has time left', async () => {
