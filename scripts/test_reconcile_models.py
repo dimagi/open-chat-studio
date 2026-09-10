@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+import reconcile_models
 from reconcile_models import (
     REQUIRED_SERVICE_KINDS,
     Candidate,
@@ -1133,3 +1134,140 @@ def test_render_missing_pricing_issue_body_one_row_per_entry():
     assert "| openai | gpt-mystery | llm_input, llm_output |" in body
     assert "| anthropic | claude-mystery | llm_output |" in body
     assert "backfill_pricing_seed" in body
+
+
+# Upstream request budget
+#
+# Every HTTP request goes through `_get_json`, so patching it gives an exact
+# per-run call count. The zeroeval Stats API rate-limits and the 2026-09-10
+# scheduled run died with HTTP 429, so what a run costs is worth pinning.
+
+
+class _CallRecorder:
+    """Stand-in for `reconcile_models._get_json` that records every URL."""
+
+    def __init__(self, updates_models: list[dict] | None = None, detail: dict | None = None):
+        self.urls: list[str] = []
+        self._updates_models = updates_models or []
+        self._detail = detail if detail is not None else {"input_price": 1.0, "output_price": 2.0}
+
+    def __call__(self, url: str, headers: dict[str, str] | None = None):
+        self.urls.append(url)
+        if url == reconcile_models.LITELLM_PRICING_URL:
+            return {}
+        if url.startswith(reconcile_models.LLM_STATS_UPDATES_URL.split("?")[0]):
+            return {"models": self._updates_models}
+        return dict(self._detail)
+
+    @property
+    def counts(self) -> dict[str, int]:
+        detail_prefix = reconcile_models.LLM_STATS_DETAIL_URL.split("{")[0]
+        updates_prefix = reconcile_models.LLM_STATS_UPDATES_URL.split("?")[0]
+        return {
+            "litellm": sum(1 for u in self.urls if u == reconcile_models.LITELLM_PRICING_URL),
+            "stats_updates": sum(1 for u in self.urls if u.startswith(updates_prefix)),
+            "stats_detail": sum(1 for u in self.urls if u.startswith(detail_prefix)),
+            "total": len(self.urls),
+        }
+
+    @property
+    def duplicate_urls(self) -> list[str]:
+        return sorted({u for u in self.urls if self.urls.count(u) > 1})
+
+
+def _candidate_payload(model_id: str, org: str = "openai") -> dict:
+    return {"id": model_id, "organization": {"id": org}, "model_type": "llm", "context_window": 128000}
+
+
+@pytest.fixture()
+def recorder(monkeypatch):
+    def _make(**kwargs):
+        rec = _CallRecorder(**kwargs)
+        monkeypatch.setattr(reconcile_models, "_get_json", rec)
+        return rec
+
+    return _make
+
+
+def test_call_budget_formula(recorder, repo_root):
+    """One run = 1 LiteLLM + 1 updates + 1 detail per candidate + 1 detail per
+    diffable seed model. Nothing is cached or batched."""
+    rec = recorder(updates_models=[_candidate_payload("gpt-5-nano"), _candidate_payload("gpt-5-pico")])
+
+    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+
+    index = seed_index(load_seed(repo_root / reconcile_models.LLM_PRICING_REL_PATH))
+    n_diffable = len(diffable_models(index))
+    assert rec.counts == {
+        "litellm": 1,
+        "stats_updates": 1,
+        "stats_detail": 2 + n_diffable,
+        "total": 4 + n_diffable,
+    }
+
+
+def test_call_budget_scales_with_seed_size(recorder, repo_root):
+    """The diff step is the term that grows: one request per diffable model in
+    llm_pricing.json, every day, whether or not its price moved."""
+    (repo_root / reconcile_models.LLM_PRICING_REL_PATH).write_text(
+        json.dumps(
+            [
+                {
+                    "provider_type": "openai",
+                    "model_name": f"gpt-{i}",
+                    "rules": [{"service_kind": "llm_input", "unit_price": "0.001"}],
+                }
+                for i in range(40)
+            ]
+        )
+    )
+    rec = recorder()
+
+    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+
+    assert rec.counts["stats_detail"] == 40
+
+
+def test_candidate_detail_is_refetched_by_the_diff_step(recorder, repo_root):
+    """A candidate already in the pricing seed is fetched twice from the same
+    URL - once to enrich it, once to diff its rate."""
+    rec = recorder(updates_models=[_candidate_payload("gpt-4o")])
+
+    reconcile_models._run_reconciliation(repo_root, "token", days=1)
+
+    assert rec.duplicate_urls == [reconcile_models.LLM_STATS_DETAIL_URL.format(model_id="gpt-4o")]
+
+
+# What the scheduled run costs against the real seed
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# zeroeval "community" plan limits, from GET /stats/v1/account. The docs quote
+# 60/min for community; this account reports 50, so the account endpoint - not
+# the docs - is the number to trust.
+BURST_PER_MINUTE = 50
+DAILY_QUOTA = 250
+
+
+def _measure_scheduled_run(recorder, capsys) -> int:
+    """Requests a real daily run sends to api.zeroeval.com. Reads the repo's
+    own llm_pricing.json, so the number tracks the seed as it grows."""
+    rec = recorder()
+    reconcile_models._run_reconciliation(REPO_ROOT, "token", days=1)
+    counts = rec.counts
+    with capsys.disabled():
+        print(f"\n  zeroeval Stats API requests per run: {counts['stats_updates'] + counts['stats_detail']}")
+        print(f"  (updates={counts['stats_updates']}, detail={counts['stats_detail']}, litellm={counts['litellm']})")
+    return counts["stats_updates"] + counts["stats_detail"]
+
+
+def test_scheduled_run_exceeds_the_burst_limit(recorder, capsys):
+    """The run sends everything back to back, so its per-run total is also its
+    per-minute total - and that total passed 50. This is why the run 429s; it
+    now sleeps through it rather than failing, at the cost of wall-clock."""
+    assert _measure_scheduled_run(recorder, capsys) > BURST_PER_MINUTE
+
+
+def test_scheduled_run_stays_within_daily_quota(recorder, capsys):
+    """One scheduled run plus a few manual re-runs has to fit in a day."""
+    assert _measure_scheduled_run(recorder, capsys) <= DAILY_QUOTA
