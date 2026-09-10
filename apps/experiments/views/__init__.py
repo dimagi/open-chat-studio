@@ -17,6 +17,7 @@ from .experiment import (  # noqa: F401
     experiment_complete,
     experiment_review,
     experiment_session_message,
+    experiment_session_messages_fragment_view,
     experiment_session_messages_view,
     generate_chat_export,
     get_experiment_version_names,
