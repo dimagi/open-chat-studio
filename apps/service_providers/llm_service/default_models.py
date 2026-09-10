@@ -128,8 +128,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [
-        # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
-        # api.deepseek.com only serves the undated alias, which is what we have to send.
+        # Upstream catalogues list this model under its dated open-weights name
+        # (deepseek-v4-flash-0731), but api.deepseek.com only serves the undated alias,
+        # which is what we have to send.
         Model("deepseek-v4-flash", 1000000, is_default=True),
         Model("deepseek-v4-pro", 1000000, is_translation_default=True),
         # Experimental vision variant of deepseek-v4-flash. Same 1M context and text rates as
