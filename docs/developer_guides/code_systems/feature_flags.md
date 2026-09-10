@@ -136,7 +136,14 @@ When a feature is stable and should be on for all users, remove the flag entirel
 2. Remove all `flag_is_active` / `{% flag %}` / `override_flag` guards, keeping the guarded code.
 3. Delete the `Flags` enum entry from `apps/teams/flags.py`.
 4. Update or remove tests that used `override_flag` for this flag — test the behavior unconditionally.
-5. The flag row in the database becomes orphaned and can be deleted via the Django admin.
+5. The flag row in the database becomes orphaned. Delete it via the Django admin, or from a
+   data migration with `apps.teams.migration_utils.delete_waffle_flag`, which also clears the
+   flag's cache entry:
+
+```python
+def forwards(apps, schema_editor):
+    delete_waffle_flag(flag_model=apps.get_model("teams", "Flag"), flag_name="flag_my_feature")
+```
 
 ## Management Commands
 
