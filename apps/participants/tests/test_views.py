@@ -4,8 +4,10 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from django.db import connection
 from django.http import QueryDict
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -435,3 +437,44 @@ class TestParticipantTableCostColumn:
         response = self._get_table(client, team_with_users)
 
         assert "$0.00" in response.content.decode()
+
+
+@pytest.mark.django_db()
+class TestParticipantPageQueryCount:
+    """Regression for #4475: the participant page took ~70s in production because
+    Participant.get_experiments_queryset() LEFT JOINed across every session on each
+    chatbot the participant used, and a correlated last_message subquery ran once per
+    surviving joined row (once per session on the whole chatbot, not once per experiment).
+    That pathology lived inside one query's execution plan, not in the query count, so this
+    guards the new shape instead: a small, fixed number of simple queries that doesn't grow
+    with how many other participants use the same chatbot.
+    """
+
+    def test_query_count_does_not_scale_with_unrelated_sessions(self, client, team_with_users):
+        experiment = ExperimentFactory.create(team=team_with_users)
+        participant = ParticipantFactory.create(team=team_with_users)
+        ExperimentSessionFactory.create(participant=participant, experiment=experiment)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
+        client.get(url)  # settle per-process caches (Site lookup, permissions)
+
+        with CaptureQueriesContext(connection) as ctx_few:
+            client.get(url)
+        queries_few = len(ctx_few.captured_queries)
+
+        # Unrelated sessions from other participants on the same chatbot -- the shape of the
+        # actual production case (one participant, a chatbot with many others).
+        for _ in range(30):
+            ExperimentSessionFactory.create(team=team_with_users, experiment=experiment)
+
+        with CaptureQueriesContext(connection) as ctx_many:
+            client.get(url)
+        queries_many = len(ctx_many.captured_queries)
+
+        assert queries_many == queries_few, (
+            f"Query count grew with unrelated sessions on the same chatbot: "
+            f"{queries_few} -> {queries_many}. This is the #4475 regression shape: a join or "
+            f"correlated subquery scaling with the whole chatbot's sessions, not this "
+            f"participant's own."
+        )
