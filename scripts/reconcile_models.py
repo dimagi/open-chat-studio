@@ -54,8 +54,13 @@ from __future__ import annotations
 import argparse
 import ast
 import datetime
+import hashlib
+import io
 import json
 import os
+import random
+import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
@@ -104,13 +109,97 @@ _DETAIL_PRICE_FIELDS = {
 
 NO_PRICING_REASON = "No pricing data found in llm_stats or LiteLLM"
 
+# Rate limiting. See https://docs.llm-stats.com/api-reference/rate-limits-and-headers
+#
+# The Stats API enforces two independent limits and says which one a 429 hit
+# in `error.limit_type`. Burst is a rolling 60-second window, so it always
+# clears on its own - a run sleeps through it. The daily quota resets at UTC
+# midnight, which no run can wait for, so that one ends the run.
+BURST_LIMIT_TYPE = "rate_limit_exceeded"
+QUOTA_LIMIT_TYPE = "quota_exceeded"
+
+# Used only when a 429 arrives without a usable Retry-After. Doubles per
+# consecutive miss so a misbehaving server can't spin us in a tight loop -
+# and a tight loop would itself consume burst.
+DEFAULT_RETRY_AFTER_SECONDS = 5.0
+
+# Burst clears within 60s, so anything beyond this is the server being odd;
+# honouring it verbatim would outlive the CI job for no benefit.
+MAX_RETRY_AFTER_SECONDS = 120.0
+
+# Spread the retry so concurrent clients don't re-collide the instant the
+# window opens.
+RATE_LIMIT_JITTER_SECONDS = 1.0
+
+# Backstop against a server that 429s forever. Reaching it means something is
+# wrong beyond ordinary burst pressure, so the run fails rather than hangs.
+MAX_TOTAL_BURST_WAIT_SECONDS = 900.0
+
+
+class QuotaExceeded(RuntimeError):
+    """The daily quota is spent. It resets at UTC midnight, so retrying now
+    cannot help - the caller should stop making data requests."""
+
+
 # HTTP helpers
 
 
+def _error_limit_type(exc: urllib.error.HTTPError) -> str:
+    """Which limit a 429 hit. Unlabelled 429s are treated as burst: burst is
+    what a run pushes against, and sleeping is the recoverable guess."""
+    try:
+        body = json.loads(exc.read() or b"{}")
+    except (ValueError, OSError):
+        return BURST_LIMIT_TYPE
+    limit_type = (body.get("error") or {}).get("limit_type")
+    return limit_type if limit_type in (BURST_LIMIT_TYPE, QUOTA_LIMIT_TYPE) else BURST_LIMIT_TYPE
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError, fallback: float) -> float:
+    """Retry-After is documented as seconds and present on every 429, but a
+    missing or unparseable value must not become a zero-delay retry."""
+    try:
+        seconds = float(exc.headers.get("Retry-After", ""))
+    except (TypeError, ValueError):
+        seconds = fallback
+    if seconds <= 0:
+        seconds = fallback
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
 def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
-    req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
+    """GET and parse JSON, sleeping through burst rate limits.
+
+    Retries carry the caller's headers unchanged, so an Idempotency-Key set by
+    `_api_get` makes a retried request cost one quota unit rather than two.
+    """
+    backoff = DEFAULT_RETRY_AFTER_SECONDS
+    waited = 0.0
+    while True:
+        req = urllib.request.Request(url, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429:
+                raise
+            if _error_limit_type(exc) == QUOTA_LIMIT_TYPE:
+                raise QuotaExceeded(f"Daily llm-stats quota exhausted while fetching {url}") from exc
+            if waited >= MAX_TOTAL_BURST_WAIT_SECONDS:
+                raise
+            delay = _retry_after_seconds(exc, backoff)
+            backoff = min(backoff * 2, MAX_RETRY_AFTER_SECONDS)
+            print(f"  (!) burst rate limit; sleeping {delay:.0f}s before retrying {url}")
+            time.sleep(delay + random.uniform(0, RATE_LIMIT_JITTER_SECONDS))
+            waited += delay
+
+
+def _idempotency_key(url: str) -> str:
+    """Stable for a given URL within a UTC day, which is the window the quota
+    is counted over. Re-running the workflow the same day therefore replays
+    the same keys and costs no additional quota."""
+    day = datetime.datetime.now(datetime.UTC).date().isoformat()
+    return hashlib.sha256(f"{url}|{day}".encode()).hexdigest()
 
 
 def _api_get(url: str, bearer: str) -> Any:
@@ -120,6 +209,7 @@ def _api_get(url: str, bearer: str) -> Any:
             "Authorization": f"Bearer {bearer}",
             "User-Agent": "ocs-reconcile-models-script/1.0",
             "Accept": "application/json",
+            "Idempotency-Key": _idempotency_key(url),
         },
     )
 
@@ -1016,9 +1106,19 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     repo_root: Path = args.repo_root.resolve()
     today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+    # Unbuffered, so the CI log interleaves progress with rate-limit sleeps in
+    # real time. Block-buffered output flushes at exit and reads as if every
+    # step ran in the same millisecond.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     print(f"[reconcile-models] repo_root={repo_root}")
 
-    results = _run_reconciliation(repo_root, args.bearer_token, args.days)
+    try:
+        results = _run_reconciliation(repo_root, args.bearer_token, args.days)
+    except QuotaExceeded as exc:
+        print(f"[reconcile-models] {exc}")
+        print("  The llm-stats daily quota resets at UTC midnight; the next scheduled run will retry.")
+        return 1
     pricing_body_path = _commit_price_changes(results, repo_root, args.output, today)
     missing_body_path = _write_missing_body(results, args.output)
 

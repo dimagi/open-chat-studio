@@ -6,21 +6,34 @@ Run with:  pytest scripts/test_reconcile_models.py -v
 from __future__ import annotations
 
 import datetime
+import email.message
+import io
 import json
 import textwrap
+import urllib.error
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 import reconcile_models
 from reconcile_models import (
+    DEFAULT_RETRY_AFTER_SECONDS,
+    MAX_RETRY_AFTER_SECONDS,
+    MAX_TOTAL_BURST_WAIT_SECONDS,
+    RATE_LIMIT_JITTER_SECONDS,
     REQUIRED_SERVICE_KINDS,
     Candidate,
     MissingPricingEntry,
+    QuotaExceeded,
     RateChange,
+    _api_get,
     _commit_price_changes,
+    _enrich_model,
     _fmt,
     _format_per_1k,
+    _get_json,
+    _idempotency_key,
     _next_migration_number,
     _per_million_to_per_1k,
     _per_token_to_per_1k,
@@ -31,6 +44,7 @@ from reconcile_models import (
     build_pricing_entries,
     compute_changes,
     diffable_models,
+    fetch_detail,
     generate_migration,
     load_active_default_models,
     load_priced_models,
@@ -1271,3 +1285,237 @@ def test_scheduled_run_exceeds_the_burst_limit(recorder, capsys):
 def test_scheduled_run_stays_within_daily_quota(recorder, capsys):
     """One scheduled run plus a few manual re-runs has to fit in a day."""
     assert _measure_scheduled_run(recorder, capsys) <= DAILY_QUOTA
+
+
+# 429 handling
+#
+# https://docs.llm-stats.com/api-reference/rate-limits-and-headers
+# Retry-After is in seconds and present only on a 429. `error.limit_type`
+# says which limit was hit: `rate_limit_exceeded` is the rolling-60s burst
+# window and clears on its own; `quota_exceeded` is the UTC-day quota and
+# does not.
+
+
+def _http_error(status: int, retry_after: str | None = None, limit_type: str | None = None) -> urllib.error.HTTPError:
+    body = json.dumps({"error": {"limit_type": limit_type}} if limit_type else {}).encode()
+    headers = email.message.Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError("https://api.zeroeval.com/x", status, "Too Many Requests", headers, io.BytesIO(body))
+
+
+@pytest.fixture()
+def urlopen(monkeypatch):
+    """Queue responses for `_get_json`. Returns a `(sleeps, requests)` pair of
+    the durations slept and the `urllib.request.Request` objects sent."""
+    sleeps: list[float] = []
+    requests: list[Any] = []
+
+    def _install(*responses):
+        queue = list(responses)
+
+        def _fake_urlopen(req, timeout=None):
+            requests.append(req)
+            item = queue.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return io.BytesIO(json.dumps(item).encode())
+
+        monkeypatch.setattr(reconcile_models.urllib.request, "urlopen", _fake_urlopen)
+        monkeypatch.setattr(reconcile_models.time, "sleep", sleeps.append)
+        monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, _b: 0.0)
+        return sleeps, requests
+
+    return _install
+
+
+def test_burst_429_is_retried_after_retry_after_seconds(urlopen):
+    sleeps, _ = urlopen(_http_error(429, "7", "rate_limit_exceeded"), {"ok": True})
+
+    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert sleeps == [7.0]
+
+
+def test_burst_429_sleep_gets_jitter(monkeypatch, urlopen):
+    sleeps, _ = urlopen(_http_error(429, "7", "rate_limit_exceeded"), {"ok": True})
+    monkeypatch.setattr(reconcile_models.random, "uniform", lambda _a, b: b)
+
+    _get_json("https://api.zeroeval.com/x")
+
+    assert sleeps == [7.0 + RATE_LIMIT_JITTER_SECONDS]
+
+
+def test_burst_429_without_retry_after_backs_off_exponentially(urlopen):
+    """The header is documented as always present on a 429, but a missing or
+    unparseable value must not turn into a zero-delay retry loop."""
+    sleeps, _ = urlopen(
+        _http_error(429, None, "rate_limit_exceeded"),
+        _http_error(429, "not-a-number", "rate_limit_exceeded"),
+        {"ok": True},
+    )
+
+    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert sleeps == [DEFAULT_RETRY_AFTER_SECONDS, DEFAULT_RETRY_AFTER_SECONDS * 2]
+
+
+def test_retry_after_is_capped(urlopen):
+    """Burst clears within 60s, so an hour-long Retry-After would outlive the
+    CI job for no benefit."""
+    sleeps, _ = urlopen(_http_error(429, "3600", "rate_limit_exceeded"), {"ok": True})
+
+    _get_json("https://api.zeroeval.com/x")
+
+    assert sleeps == [MAX_RETRY_AFTER_SECONDS]
+
+
+def test_burst_429_is_retried_for_as_long_as_it_takes(urlopen):
+    """Burst is a rolling 60s window, so it always clears. A run sleeps
+    through it rather than failing - there is no retry ceiling."""
+    sleeps, _ = urlopen(*[_http_error(429, "5", "rate_limit_exceeded")] * 30, {"ok": True})
+
+    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert sleeps == [5.0] * 30
+
+
+def test_burst_retry_stops_at_the_total_wait_budget(urlopen):
+    """Backstop for a server that 429s forever - a CI job must not hang."""
+    sleeps, _ = urlopen(*[_http_error(429, "60", "rate_limit_exceeded")] * 1000)
+
+    with pytest.raises(urllib.error.HTTPError):
+        _get_json("https://api.zeroeval.com/x")
+
+    assert sum(sleeps) >= MAX_TOTAL_BURST_WAIT_SECONDS
+
+
+def test_quota_429_exits_immediately(urlopen):
+    """The daily quota resets at UTC midnight - sleeping through it is not an
+    option, so fail loudly instead of burning the remaining burst."""
+    sleeps, _ = urlopen(_http_error(429, "60", "quota_exceeded"))
+
+    with pytest.raises(QuotaExceeded):
+        _get_json("https://api.zeroeval.com/x")
+
+    assert sleeps == []
+
+
+def test_unlabelled_429_is_treated_as_burst(urlopen):
+    """No `limit_type` in the body - sleep rather than kill the run, since
+    burst is the limit a run actually pushes against."""
+    sleeps, _ = urlopen(_http_error(429, "4"), {"ok": True})
+
+    assert _get_json("https://api.zeroeval.com/x") == {"ok": True}
+    assert sleeps == [4.0]
+
+
+@pytest.mark.parametrize("status", [404, 500, 503], ids=["not-found", "server-error", "unavailable"])
+def test_non_429_errors_are_not_retried(urlopen, status):
+    """404 in particular is load-bearing: `fetch_detail` maps it to None."""
+    sleeps, _ = urlopen(_http_error(status))
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        _get_json("https://api.zeroeval.com/x")
+
+    assert exc_info.value.code == status
+    assert sleeps == []
+
+
+def test_fetch_detail_still_maps_404_to_none(urlopen):
+    urlopen(_http_error(404))
+
+    assert fetch_detail("ghost-model", "token") is None
+
+
+def test_fetch_detail_retries_through_a_burst_429(urlopen):
+    sleeps, _ = urlopen(_http_error(429, "3", "rate_limit_exceeded"), {"input_price": 1.0})
+
+    assert fetch_detail("gpt-4o", "token") == {"input_price": 1.0}
+    assert sleeps == [3.0]
+
+
+def test_enrich_model_no_longer_swallows_a_burst_429(urlopen):
+    """A 429 used to land in `details_error` and be reported as a model whose
+    details were unavailable, hiding the rate limit entirely."""
+    urlopen(_http_error(429, "2", "rate_limit_exceeded"), {"context_window": 128000})
+
+    model = _enrich_model({"id": "gpt-4o"}, "token")
+
+    assert "details_error" not in model
+    assert model["context_window"] == 128000
+
+
+def test_main_exits_nonzero_on_quota_exhaustion(monkeypatch, tmp_path, capsys):
+    """Quota exhaustion is the one limit that ends the run."""
+
+    def _boom(*_args, **_kwargs):
+        raise QuotaExceeded("Daily llm-stats quota exhausted")
+
+    monkeypatch.setattr(reconcile_models, "_run_reconciliation", _boom)
+
+    exit_code = reconcile_models.main(
+        ["--bearer-token", "token", "--repo-root", str(tmp_path), "--output", str(tmp_path / "out.json")]
+    )
+
+    assert exit_code == 1
+    assert "quota exhausted" in capsys.readouterr().out
+
+
+# Idempotency-Key
+#
+# The docs recommend it so a retried request costs one quota unit rather than
+# two. Keyed by URL + UTC day, so a same-day re-run of the workflow replays
+# the same keys instead of spending the quota again.
+
+
+def test_api_get_sends_an_idempotency_key(urlopen):
+    _, requests = urlopen({"ok": True})
+
+    _api_get("https://api.zeroeval.com/stats/v1/models/gpt-4o", "token")
+
+    assert requests[0].get_header("Idempotency-key")
+
+
+def test_idempotency_key_is_unchanged_across_retries(urlopen):
+    """The point of the header: the retry must not cost a second quota unit."""
+    _, requests = urlopen(_http_error(429, "1", "rate_limit_exceeded"), {"ok": True})
+
+    _api_get("https://api.zeroeval.com/stats/v1/models/gpt-4o", "token")
+
+    assert len({r.get_header("Idempotency-key") for r in requests}) == 1
+    assert len(requests) == 2
+
+
+def test_idempotency_key_differs_per_url():
+    keys = {_idempotency_key(f"https://api.zeroeval.com/stats/v1/models/gpt-{i}") for i in range(5)}
+    assert len(keys) == 5
+
+
+def test_idempotency_key_is_stable_within_a_utc_day():
+    url = "https://api.zeroeval.com/stats/v1/models/gpt-4o"
+    assert _idempotency_key(url) == _idempotency_key(url)
+
+
+def test_idempotency_key_rotates_daily(monkeypatch):
+    url = "https://api.zeroeval.com/stats/v1/models/gpt-4o"
+
+    class _FrozenDay(datetime.datetime):
+        day_offset = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.datetime(2026, 9, 10, tzinfo=tz) + datetime.timedelta(days=cls.day_offset)
+
+    monkeypatch.setattr(reconcile_models.datetime, "datetime", _FrozenDay)
+    today = _idempotency_key(url)
+    _FrozenDay.day_offset = 1
+
+    assert _idempotency_key(url) != today
+
+
+def test_litellm_fetch_carries_no_bearer_or_idempotency_key(urlopen):
+    """LiteLLM is a raw GitHub file, not a quota-metered zeroeval endpoint."""
+    _, requests = urlopen({})
+
+    reconcile_models._load_litellm()
+
+    assert requests[0].get_header("Idempotency-key") is None
+    assert requests[0].get_header("Authorization") is None
