@@ -2381,7 +2381,11 @@ export class OcsChat {
                           message.role === 'user' ? 'message-bubble-user' : message.role === 'assistant' ? 'message-bubble-assistant' : 'message-bubble-system'
                         }`}
                       >
-                        <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>
+                        {message.role === 'user' ? (
+                          <div class="chat-plain-text">{message.content}</div>
+                        ) : (
+                          <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>
+                        )}
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
