@@ -22,6 +22,7 @@ from django.utils.translation import gettext_lazy
 from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
 
+from apps.oauth.token_lifetime import access_token_expire_seconds
 from apps.utils.celery import Queues
 from config.db import get_database_config
 
@@ -1122,6 +1123,7 @@ def SILKY_INTERCEPT_FUNC(request):  # noqa
 # API
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": env.bool("OAUTH_PKCE_REQUIRED", default=True),
+    "ACCESS_TOKEN_EXPIRE_SECONDS": access_token_expire_seconds,
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
         "chatbots:read": "List and Retrieve Chatbot Data",
@@ -1170,6 +1172,12 @@ OAUTH_CLIENT_CREDENTIALS_SCOPES = [
 # exclusively is what makes the narrowing real: a host cannot reach for the broad token it already
 # has. It authorises exactly this endpoint; the session-bound endpoints keep their session token.
 CHAT_API_SCOPE = "chat:start"
+
+# Access token lifetimes, chosen per request by apps.oauth.token_lifetime.access_token_expire_seconds.
+OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS = env.int("OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS", default=36000)
+# A token requested with CHAT_API_SCOPE alone is destined for a browser, so it lives only long enough
+# for the widget to spend it on /api/chat/start/.
+OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS = env.int("OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS", default=60)
 
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
