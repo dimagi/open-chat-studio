@@ -81,9 +81,9 @@ Global applications use the same provider configuration as every other OAuth app
 
 - `OIDC_RSA_PRIVATE_KEY` must be set for token issuance to work at all.
 - `OAUTH_PKCE_REQUIRED` defaults to `True`.
-- `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS` sets how long an access token lives. A token requested with
-  `chat:start` alone uses the shorter `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS`, because it is meant for
-  the chat widget in a browser.
+- `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS` sets how long an access token lives. A client-credentials token
+  requested with `chat:start` alone uses the shorter `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS`, because
+  it is meant for the chat widget in a browser.
 - Available scopes are listed under `OAUTH2_PROVIDER["SCOPES"]`; the `openid` and `profile` scopes
   exist only when OIDC is enabled.
 
