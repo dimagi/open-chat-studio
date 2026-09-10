@@ -3,11 +3,12 @@ from unittest import mock
 
 import pytest
 import time_machine
+from django.core import signing
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.api.session_tokens import issue_session_token
+from apps.api.session_tokens import SESSION_TOKEN_SALT, issue_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
@@ -77,6 +78,25 @@ def test_session_expired_past_lifetime(api_client, session, token):
         ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
         traveller.shift(timedelta(minutes=1))
         response = api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=token)
+    assert response.status_code == 403
+    assert response.json()["code"] == "session_expired"
+
+
+@pytest.mark.django_db()
+def test_reissued_token_renews_access_to_an_old_session(api_client, session, token):
+    """The expiry rides in the token, so a token minted later for the same session is a refresh."""
+    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
+        assert api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=token).status_code == 403
+        fresh = issue_session_token(session)
+        assert api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=fresh).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_token_without_expiry_claim_expires_with_the_session_age(api_client, session):
+    legacy = signing.dumps({"sid": str(session.external_id)}, salt=SESSION_TOKEN_SALT)
+    assert api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=legacy).status_code == 200
+    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
+        response = api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=legacy)
     assert response.status_code == 403
     assert response.json()["code"] == "session_expired"
 

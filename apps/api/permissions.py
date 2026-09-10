@@ -14,7 +14,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModel
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel, oauth_resolved_channel
-from apps.api.session_tokens import session_token_expired, validate_session_token
+from apps.api.session_tokens import parse_session_token, session_token_expired
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.oauth.permissions import is_client_credentials_request
@@ -129,11 +129,12 @@ class SessionAccessPermission(BasePermission):
             raise exceptions.PermissionDenied(
                 detail={"error": "Session token required", "code": "session_token_required"}
             )
-        if not validate_session_token(token, session.external_id):
+        payload = parse_session_token(token, session.external_id)
+        if payload is None:
             raise exceptions.PermissionDenied(
                 detail={"error": "Invalid session token", "code": "session_token_invalid"}
             )
-        if session_token_expired(session):
+        if session_token_expired(session, payload):
             raise exceptions.PermissionDenied(detail={"error": "Session has expired", "code": "session_expired"})
         return True
 
