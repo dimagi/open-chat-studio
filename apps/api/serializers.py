@@ -380,14 +380,12 @@ class ChatStartSessionResponse(serializers.Serializer):
     session_token = serializers.CharField(
         label="Session token",
         allow_null=True,
-        required=False,
         help_text="Present when the session is token-protected. Send as the `X-Session-Token` header on all"
         " subsequent requests for this session.",
     )
     expires_at = serializers.DateTimeField(
         label="Expires at",
         allow_null=True,
-        required=False,
         help_text="When the session token stops working. Null when no token was issued.",
     )
     chatbot = ExperimentSerializer(read_only=True)

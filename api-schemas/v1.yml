@@ -1448,8 +1448,10 @@ components:
       required:
       - chatbot
       - consent
+      - expires_at
       - participant
       - session_id
+      - session_token
     ChatTaskPoll:
       type: object
       properties:
