@@ -24,6 +24,7 @@ Extracted 2026-09-02. The decisions from this document are recorded as:
 - [ADR-0062](../adr/0062-uniform-401-for-anonymous-admission-failures.md) — anonymous admission failures at session start return one uniform 401
 - [ADR-0063](../adr/0063-session-start-requires-a-chat-start-machine-token.md) — session start requires a client-credentials token with the `chat:start` scope
 - [ADR-0064](../adr/0064-per-channel-session-token-lifetime-override.md) — channels may override the session token lifetime
+- [ADR-0065](../adr/0065-session-tokens-carry-their-expiry-and-renew-in-place.md) — session tokens carry their expiry and are renewed in place
 
 Decisions this document depended on that are recorded elsewhere:
 

@@ -75,7 +75,7 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0051](0051-usage-activity-metric-definitions.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | One set of activity-metric definitions across usage surfaces |
 | [0052](0052-app-layer-rate-limiting-mechanism.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | App-layer rate limiting via an in-house fixed-window core |
 | [0053](0053-chat-session-start-requires-membership-or-embed-key.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Starting a chat session requires team membership or the embed key |
-| [0054](0054-chat-session-tokens-expire-on-absolute-age.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Chat session tokens expire on absolute age, not inactivity |
+| [0054](0054-chat-session-tokens-expire-on-absolute-age.md) | <span class="adr-status adr-status-superseded">SUPERSEDED</span> | Chat session tokens expire on absolute age, not inactivity |
 | [0055](0055-binary-field-type-extends-the-field-definition-union.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Binary field type extends the field definition union |
 | [0056](0056-client-credentials-applications-name-their-chatbots.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Client-credentials applications name the chatbots they may reach |
 | [0057](0057-remove-the-participant-allowlist.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Remove the participant allowlist |
@@ -86,3 +86,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0062](0062-uniform-401-for-anonymous-admission-failures.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Anonymous admission failures at session start return one uniform 401 |
 | [0063](0063-session-start-requires-a-chat-start-machine-token.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Session start requires a client-credentials token with the `chat:start` scope |
 | [0064](0064-per-channel-session-token-lifetime-override.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Channels may override the session token lifetime |
+| [0065](0065-session-tokens-carry-their-expiry-and-renew-in-place.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Session tokens carry their expiry and are renewed in place |
