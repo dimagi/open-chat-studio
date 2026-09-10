@@ -9,6 +9,9 @@ import { OcsChat } from './ocs-chat';
 describe('ocs-chat auth token provider', () => {
   let fetchMock: jest.Mock;
   let startDenied: boolean;
+  let renewDenied: boolean;
+  /** `expires_at` on the start response; a near expiry makes the first session-bound request renew. */
+  let tokenLifetimeSeconds: number;
 
   function jsonResponse(status: number, body: unknown) {
     return {
@@ -20,13 +23,21 @@ describe('ocs-chat auth token provider', () => {
     } as unknown as Response;
   }
 
+  const secondsFromNow = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
+
   /** Requests the widget makes when the user sends the first message. */
   function router(url: string) {
     if (url.includes('/api/chat/start/')) {
       if (startDenied) {
         return jsonResponse(401, { error: 'Authentication required to chat with this chatbot', code: 'chat_access_denied' });
       }
-      return jsonResponse(201, { session_id: 'session-1', session_token: 'sess-tok', chatbot: {}, participant: {} });
+      return jsonResponse(201, { session_id: 'session-1', session_token: 'sess-tok', expires_at: secondsFromNow(tokenLifetimeSeconds), chatbot: {}, participant: {} });
+    }
+    if (url.includes('/token/')) {
+      if (renewDenied) {
+        return jsonResponse(401, { error: 'Authentication required to chat with this chatbot', code: 'chat_access_denied' });
+      }
+      return jsonResponse(200, { session_id: 'session-1', session_token: 'sess-tok-2', expires_at: secondsFromNow(3600) });
     }
     if (url.includes('/message/')) {
       return jsonResponse(200, { task_id: 'task-1', status: 'processing' });
@@ -36,8 +47,17 @@ describe('ocs-chat auth token provider', () => {
 
   /** Headers of the nth call to `chat/start/`. */
   function startHeaders(n = 0): Record<string, string> {
-    const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/chat/start/'));
+    return headersOf('/api/chat/start/', n);
+  }
+
+  function headersOf(path: string, n = 0): Record<string, string> {
+    const calls = fetchMock.mock.calls.filter(([url]) => String(url).includes(path));
     return calls[n]?.[1]?.headers;
+  }
+
+  function storedValue(key: string): string | undefined {
+    const writes = (window.localStorage.setItem as jest.Mock).mock.calls.filter(([k]) => k === key);
+    return writes.at(-1)?.[1];
   }
 
   async function widget(html: string) {
@@ -53,6 +73,8 @@ describe('ocs-chat auth token provider', () => {
 
   beforeEach(() => {
     startDenied = false;
+    renewDenied = false;
+    tokenLifetimeSeconds = 3600;
     fetchMock = jest.fn((url: string) => Promise.resolve(router(url)));
     global.fetch = fetchMock as unknown as typeof fetch;
     Object.defineProperty(window, 'localStorage', {
@@ -166,8 +188,10 @@ describe('ocs-chat auth token provider', () => {
     // starts a fresh session, which is the point of the bounded lifetime -- the
     // credential is checked again rather than passed once.
     let sessionExpired = false;
+    renewDenied = true;
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     fetchMock.mockImplementation((url: string) => {
-      if (sessionExpired && !url.includes('/api/chat/start/')) {
+      if (sessionExpired && !url.includes('/api/chat/start/') && !url.includes('/token/')) {
         return Promise.resolve(jsonResponse(403, { error: 'Session expired', code: 'session_expired' }));
       }
       return Promise.resolve(router(url));
@@ -181,6 +205,7 @@ describe('ocs-chat auth token provider', () => {
 
     sessionExpired = true;
     await send(page, 'still here?');
+    expect(headersOf('/token/')['Authorization']).toBe('Bearer tok-1');
     expect(page.rootInstance.activeSessionId).toBeUndefined();
 
     // The resend after the expiry notice asks the host for a token again.
@@ -193,10 +218,51 @@ describe('ocs-chat auth token provider', () => {
     expect(page.rootInstance.activeSessionId).toBe('session-1');
   });
 
+  it('renews the session token through the provider before it expires', async () => {
+    tokenLifetimeSeconds = 30;
+    const provider = jest.fn().mockResolvedValue('tok-abc');
+    const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
+    await installProvider(page, provider);
+    await send(page);
+
+    // The start response's token is inside the renewal lead, so the first
+    // session-bound request renews it and carries the replacement.
+    expect(headersOf('/token/')['Authorization']).toBe('Bearer tok-abc');
+    expect(headersOf('/message/')['X-Session-Token']).toBe('sess-tok-2');
+    expect(provider.mock.calls).toEqual([[{ forceRefresh: false }], [{ forceRefresh: false }]]);
+
+    // The conversation continues on the same session, with no expiry notice.
+    expect(page.rootInstance.activeSessionId).toBe('session-1');
+    expect(page.rootInstance.messages.filter(m => m.role === 'system')).toEqual([]);
+  });
+
+  it('persists the renewed token and expiry so a reload resumes with them', async () => {
+    tokenLifetimeSeconds = 30;
+    const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
+    await installProvider(page, () => 'tok-abc');
+    await send(page);
+
+    expect(storedValue('ocs-chat-token-bot-1')).toBe('sess-tok-2');
+    expect(Date.parse(storedValue('ocs-chat-token-expires-bot-1'))).toBeGreaterThan(Date.now() + 3000 * 1000);
+    expect(page.rootInstance['currentSessionToken']).toBe('sess-tok-2');
+  });
+
+  it('does not renew a token that still has time left', async () => {
+    const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
+    await installProvider(page, () => 'tok-abc');
+    await send(page);
+
+    expect(headersOf('/token/')).toBeUndefined();
+    expect(headersOf('/message/')['X-Session-Token']).toBe('sess-tok');
+  });
+
   it('never writes the auth token to local storage', async () => {
+    tokenLifetimeSeconds = 30;
     const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
     await installProvider(page, () => 'tok-secret');
     await send(page);
+
+    expect(headersOf('/token/')['Authorization']).toBe('Bearer tok-secret');
 
     const setItem = window.localStorage.setItem as jest.Mock;
     expect(setItem).toHaveBeenCalled();
