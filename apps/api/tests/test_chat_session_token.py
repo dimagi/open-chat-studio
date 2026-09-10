@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest import mock
 
 import pytest
@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.api.session_tokens import SESSION_TOKEN_SALT, issue_session_token
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -208,6 +208,34 @@ def test_start_session_issues_token_by_default(api_client, experiment):
     # the issued token grants access
     url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
     assert api_client.get(url, HTTP_X_SESSION_TOKEN=body["session_token"]).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_start_session_reports_when_the_token_expires(api_client, experiment, settings):
+    settings.CHAT_SESSION_TOKEN_LIFETIME = timedelta(hours=4)
+    with time_machine.travel(timezone.now(), tick=False):
+        body = start_session(api_client, experiment).json()
+        expected = (timezone.now() + timedelta(hours=4)).replace(microsecond=0)
+    assert datetime.fromisoformat(body["expires_at"]) == expected
+
+
+@pytest.mark.django_db()
+def test_start_session_without_a_token_has_no_expiry(api_client, experiment):
+    channel = ExperimentChannelFactory.create(
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        required_auth_level=WidgetAuthLevel.EMBED_KEY,
+        extra_data={"widget_token": "test_widget_token_123456789012", "allowed_domains": ["example.com"]},
+    )
+    body = start_session(
+        api_client,
+        experiment,
+        {"session_data": {"source": "widget"}},
+        HTTP_X_EMBED_KEY=channel.extra_data["widget_token"],
+        HTTP_ORIGIN="https://example.com",
+    ).json()
+    assert body["session_token"] is None
+    assert body["expires_at"] is None
 
 
 @pytest.mark.django_db()

@@ -41,7 +41,7 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
-from apps.api.session_tokens import issue_session_token, issue_session_token_with_expiry
+from apps.api.session_tokens import issue_session_token_with_expiry
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
@@ -256,7 +256,7 @@ def chat_upload_file(request, session_id):
 def _opt_out_session_token(session):
     session.session_token_required = False
     session.save(update_fields=["session_token_required"])
-    return None
+    return None, None
 
 
 def _issue_or_opt_out_session_token(session, channel):
@@ -268,11 +268,11 @@ def _issue_or_opt_out_session_token(session, channel):
       - EMBED_KEY / NONE → opt out (the embed key, if required, is enforced by the
         permission classes)
 
-    Returns the token, or None when opted out.
+    Returns the token and its expiry, or (None, None) when opted out.
     """
     level = channel.widget_auth_level
     if level is None or level == WidgetAuthLevel.SESSION_TOKEN:
-        return issue_session_token(session)
+        return issue_session_token_with_expiry(session)
     return _opt_out_session_token(session)
 
 
@@ -660,12 +660,13 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    session_token = _issue_or_opt_out_session_token(session, experiment_channel)
+    session_token, expires_at = _issue_or_opt_out_session_token(session, experiment_channel)
 
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
         "session_token": session_token,
+        "expires_at": expires_at,
         "chatbot": experiment_version or experiment,
         "participant": participant,
         "consent": session_consent_block(session),
