@@ -22,6 +22,7 @@ from django.db.models import (
     Count,
     F,
     Max,
+    Min,
     OuterRef,
     Q,
     Subquery,
@@ -1181,33 +1182,36 @@ class Participant(BaseTeamModel):
         """Used by the html templates to display various stats about the participant's participation.
 
         Each returned `Experiment` carries two extra attributes: `joined_on` (this participant's
-        single earliest session, the same value on every experiment, not per-experiment) and
-        `last_message` (their latest human message on that specific experiment, or `None`).
+        earliest session on that specific experiment, or `None`) and `last_message` (the most
+        recent of `ExperimentSession.last_activity_at` across their sessions on that experiment,
+        or `None`). `last_activity_at` is only ever written from a human message (see
+        `apps.channels.signals.update_session_last_activity`), so this stays equivalent to "last
+        human message on this experiment" without a second query against `ChatMessage`. Uses the
+        raw field rather than `last_activity_expression()`'s `created_at` fallback, so a session
+        with no human message yet still reads as `None` rather than its own creation time.
 
-        Computed as three small, independently-indexed queries (which experiments, joined_on,
-        last_message per experiment) rather than one query joined across every session on each
-        chatbot. That join let one `id__in` participant-data match keep every session row of the
-        whole chatbot alive as a join partner, so a correlated per-row subquery for `last_message`
-        ran once per session on the chatbot instead of once per experiment (#4475).
+        Computed as two small, independently-indexed queries (which experiments, then joined_on/
+        last_message together per experiment) rather than one query joined across every session
+        on each chatbot. That join let one `id__in` participant-data match keep every session row
+        of the whole chatbot alive as a join partner, so a correlated per-row subquery ran once
+        per session on the chatbot instead of once per experiment (#4475).
         """
         experiments = list(self.get_experiments_queryset(include_archived=True))
         if not experiments:
             return experiments
 
-        joined_on = self.experimentsession_set.order_by("created_at").values_list("created_at", flat=True).first()
-        last_message_by_experiment = dict(
-            ChatMessage.objects.filter(
-                chat__experiment_session__participant=self,
-                message_type="human",
-                chat__experiment_session__experiment_id__in=[e.id for e in experiments],
+        experiment_ids = [e.id for e in experiments]
+        session_stats_by_experiment = {
+            experiment_id: (joined_on, last_message)
+            for experiment_id, joined_on, last_message in (
+                self.experimentsession_set.filter(experiment_id__in=experiment_ids)
+                .values("experiment_id")
+                .annotate(joined_on=Min("created_at"), last_message=Max("last_activity_at"))
+                .values_list("experiment_id", "joined_on", "last_message")
             )
-            .values("chat__experiment_session__experiment_id")
-            .annotate(last_message=Max("created_at"))
-            .values_list("chat__experiment_session__experiment_id", "last_message")
-        )
+        }
         for experiment in experiments:
-            experiment.joined_on = joined_on
-            experiment.last_message = last_message_by_experiment.get(experiment.id)
+            experiment.joined_on, experiment.last_message = session_stats_by_experiment.get(experiment.id, (None, None))
         return experiments
 
     def get_experiments_queryset(self, include_archived=False):

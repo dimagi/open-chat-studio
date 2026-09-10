@@ -9,11 +9,12 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 def test_get_experiments_for_display():
     participant = ParticipantFactory.create()
     session = ExperimentSessionFactory.create(participant=participant)
-    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+    session.refresh_from_db()
 
     experiment = participant.get_experiments_for_display()[0]
     assert experiment.joined_on == session.created_at
-    assert experiment.last_message == message.created_at
+    assert experiment.last_message == session.last_activity_at
 
 
 @pytest.mark.django_db()
