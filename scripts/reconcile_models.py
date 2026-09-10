@@ -324,13 +324,16 @@ def _litellm_entry(model_id: str, litellm_data: dict[str, Any], provider: str | 
 
     OCS stores bare model names; LiteLLM namespaces many keys by the provider
     that serves them, and the two names for a provider differ (OCS "google" is
-    LiteLLM "gemini"). Without a provider only the bare key is tried, so a
-    lookup can't silently pick up another provider's rate.
+    LiteLLM "gemini"). Namespaced keys are tried before the bare key, because a
+    reseller charges its own rate for a model it did not originate and LiteLLM's
+    bare key holds the originating vendor's rate. Without a provider only the
+    bare key is tried, so a lookup can't silently pick up another provider's rate.
     """
-    keys = [model_id]
+    keys = []
     if provider:
         keys += [f"{litellm_id}/{model_id}" for litellm_id, ocs in LITELLM_PROVIDER_TO_OCS.items() if ocs == provider]
         keys.append(f"{provider}/{model_id}")
+    keys.append(model_id)
     for key in keys:
         entry = litellm_data.get(key)
         if isinstance(entry, dict):

@@ -155,8 +155,8 @@ def test_resolve_litellm_provider_prefix_fallback():
     assert result["llm_output"] == "0.00008"
 
 
-def test_resolve_litellm_bare_name_takes_priority_over_prefix():
-    """If both bare and prefixed keys exist, bare wins."""
+def test_resolve_litellm_provider_prefix_takes_priority_over_bare_name():
+    """If both bare and prefixed keys exist, the provider-prefixed key wins."""
     litellm_data = {
         "some-model": {
             "input_cost_per_token": 0.000001,
@@ -169,7 +169,28 @@ def test_resolve_litellm_bare_name_takes_priority_over_prefix():
     }
     result = resolve_pricing_from_litellm("some-model", litellm_data, provider="openai")
     assert result is not None
-    assert result["llm_input"] == "0.001"  # bare: 0.000001 * 1000
+    assert result["llm_input"] == "0.009"  # openai/some-model: 0.000009 * 1000
+
+
+def test_resolve_litellm_azure_rate_not_shadowed_by_bare_openai_key():
+    """Azure resells OpenAI models at its own rates, and LiteLLM's bare key
+    holds OpenAI's. Reading the bare key for an azure lookup bills Azure usage
+    at OpenAI's price.
+    """
+    litellm_data = {
+        "gpt-4o-mini": {
+            "input_cost_per_token": 1.5e-07,
+            "output_cost_per_token": 6e-07,
+        },
+        "azure/gpt-4o-mini": {
+            "input_cost_per_token": 1.65e-07,
+            "output_cost_per_token": 6.6e-07,
+        },
+    }
+    result = resolve_pricing_from_litellm("gpt-4o-mini", litellm_data, provider="azure")
+    assert result is not None
+    assert result["llm_input"] == "0.000165"
+    assert result["llm_output"] == "0.00066"
 
 
 def test_resolve_litellm_no_provider_ignores_prefix():
