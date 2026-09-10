@@ -187,6 +187,68 @@ def test_participant_sessions_table_view_paginates(client, team_with_users):
 
 
 @pytest.mark.django_db()
+class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
+    """A chatbot-pill click re-renders one tab. The context builder used to be shared and
+    unconditionally built the session table, aggregated every schedule, and loaded
+    participant data on every panel request regardless of which tab asked -- each panel
+    below should now only carry its own tab's keys.
+    """
+
+    def test_sessions_panel_excludes_schedules_and_data_keys(self, client, team_with_users):
+        participant = ParticipantFactory.create(team=team_with_users)
+        user = team_with_users.members.first()
+        client.login(username=user.username, password="password")
+
+        url = reverse("participants:sessions-panel", args=[team_with_users.slug, participant.id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert "session_table" in response.context
+        assert "participant_schedules" not in response.context
+        assert "selected_data_experiment" not in response.context
+        assert "participant_data" not in response.context
+
+    def test_schedules_panel_excludes_sessions_and_data_keys(self, client, team_with_users):
+        participant = ParticipantFactory.create(team=team_with_users)
+        user = team_with_users.members.first()
+        client.login(username=user.username, password="password")
+
+        url = reverse("participants:schedules-panel", args=[team_with_users.slug, participant.id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert "participant_schedules" in response.context
+        assert "session_table" not in response.context
+        assert "selected_data_experiment" not in response.context
+        assert "participant_data" not in response.context
+
+    def test_data_panel_excludes_sessions_and_schedules_keys(self, client, team_with_users):
+        participant = ParticipantFactory.create(team=team_with_users)
+        user = team_with_users.members.first()
+        client.login(username=user.username, password="password")
+
+        url = reverse("participants:data-panel", args=[team_with_users.slug, participant.id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert "participant_data" in response.context
+        assert "session_table" not in response.context
+        assert "participant_schedules" not in response.context
+
+    def test_full_page_still_carries_every_tab_and_the_header(self, client, team_with_users):
+        participant = ParticipantFactory.create(team=team_with_users)
+        user = team_with_users.members.first()
+        client.login(username=user.username, password="password")
+
+        url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        for key in ("session_table", "participant_schedules", "participant_data", "message_trend"):
+            assert key in response.context, key
+
+
+@pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 @patch.object(ExperimentSession, "ad_hoc_bot_message", autospec=True)
 def test_trigger_bot(mock_ad_hoc_bot_message, client, team_with_users, django_capture_on_commit_callbacks):

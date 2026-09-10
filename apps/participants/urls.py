@@ -22,9 +22,19 @@ urlpatterns = [
         name="edit-participant-data",
     ),
     path(
-        "<int:participant_id>/e/<int:experiment_id>/sessions-table/",
-        views.ParticipantSessionsTableView.as_view(),
-        name="participant-sessions-table",
+        "<int:participant_id>/sessions-panel",
+        views.ParticipantSessionsPanel.as_view(),
+        name="sessions-panel",
+    ),
+    path(
+        "<int:participant_id>/schedules-panel",
+        views.ParticipantSchedulesPanel.as_view(),
+        name="schedules-panel",
+    ),
+    path(
+        "<int:participant_id>/data-panel",
+        views.ParticipantDataPanel.as_view(),
+        name="data-panel",
     ),
     path("participants/<int:pk>/edit_name/", views.edit_name, name="edit_name"),
     path(

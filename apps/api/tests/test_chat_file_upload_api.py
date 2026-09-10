@@ -147,6 +147,17 @@ class TestFileValidationAPI:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "exceeds maximum size" in response.json()["error"]
 
+    def test_upload_over_the_json_body_limit_still_succeeds(self, api_client, session, settings):
+        """Multipart bodies stream to disk, so DATA_UPLOAD_MAX_MEMORY_SIZE does not bound uploads."""
+        settings.DATA_UPLOAD_MAX_MEMORY_SIZE = 1024
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        big_file = create_test_file("big.txt", b"x" * (2 * 1024 * 1024))
+
+        response = api_client.post(url, {"files": big_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["files"][0]["size"] == 2 * 1024 * 1024
+
     def test_total_file_size_limit(self, api_client, session):
         """Test API rejects uploads exceeding total size limit (50MB)"""
         url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
