@@ -5,7 +5,11 @@ from typing import Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.api.v2.inspect.serializers import OutputHandleSerializer, PipelineBuildErrorsSerializer
+from apps.api.v2.inspect.serializers import (
+    DeprecatedModelSerializer,
+    OutputHandleSerializer,
+    PipelineBuildErrorsSerializer,
+)
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.pipelines.build_state import node_output_handles
 from apps.pipelines.models import Node
@@ -120,16 +124,6 @@ class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
         required=False,
         default=dict,
         help_text="The params to change; the ones you leave out are left as they are. " + PARAM_NAMES,
-    )
-
-
-class DeprecatedModelSerializer(serializers.Serializer):
-    """The model a node still points at, and what to move it to."""
-
-    model = serializers.CharField(help_text="Name of the deprecated model the node references.")
-    replacement = serializers.CharField(
-        allow_null=True,
-        help_text="Name of the model to migrate to, or null where none is declared.",
     )
 
 

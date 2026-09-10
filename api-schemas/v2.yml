@@ -1676,11 +1676,20 @@ components:
             every output handle with no outgoing edge and every implicit ``input``
             handle with no incoming edge. Never an error and never blocks a publish.'
           readOnly: true
+        deprecated_models:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/DeprecatedModel'
+          description: Advisory map, keyed by ``node_id``, of nodes referencing a
+            deprecated LLM model. The model keeps working until it is removed, so
+            this is never an error and never blocks a publish.
+          readOnly: true
         events:
           $ref: '#/components/schemas/InspectEvents'
       required:
       - channels
       - consent_form
+      - deprecated_models
       - events
       - id
       - is_published_version

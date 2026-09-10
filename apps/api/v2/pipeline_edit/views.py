@@ -17,7 +17,7 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.discovery.node_types import get_node_class
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
-from apps.pipelines.build_state import deprecated_models, pipeline_build_state
+from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.flow import FlowEdge
 from apps.pipelines.models import Pipeline
 
@@ -455,5 +455,5 @@ def pipeline_state(pipeline: Pipeline) -> dict:
         "pipeline_valid": state["pipeline_valid"],
         "pipeline_errors": state["errors"],
         "unwired_handles": state["unwired_handles"],
-        "deprecated_models": deprecated_models(pipeline),
+        "deprecated_models": state["deprecated_models"],
     }

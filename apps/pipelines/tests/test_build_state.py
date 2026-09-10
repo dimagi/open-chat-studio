@@ -152,6 +152,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_dangling_router_branch_is_advisory_not_an_error(self):
@@ -170,6 +171,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {router["id"]: [{"handle": "output_1", "label": "B"}]},
+            "deprecated_models": {},
         }
 
     def test_off_graph_island_reports_input_and_output_unwired(self):
@@ -185,6 +187,7 @@ class TestPipelineBuildState:
             "unwired_handles": {
                 island["id"]: [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
             },
+            "deprecated_models": {},
         }
 
     def test_start_input_and_end_output_are_never_reported(self):
@@ -220,6 +223,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_dangling_provider_model_reference_reports_node_error_instead_of_raising(self):
@@ -252,6 +256,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     @pytest.mark.parametrize(
@@ -318,6 +323,7 @@ class TestPipelineBuildState:
                 "pipeline": ["This pipeline could not be built. Check the values of its nodes' params."],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
         assert "SecretInternalNode" not in str(state)
         assert "SecretInternalNode" in caplog.text
@@ -347,6 +353,7 @@ class TestPipelineBuildState:
                 ghost["id"]: [{"handle": "input", "label": None}],
                 end["id"]: [{"handle": "input", "label": None}],
             },
+            "deprecated_models": {},
         }
 
     def test_removed_node_type_with_a_named_handle_edge_does_not_raise(self):
@@ -370,6 +377,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
@@ -395,6 +403,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_stranded_router_edge_lands_in_edge_bucket_without_raising(self):
@@ -420,6 +429,7 @@ class TestPipelineBuildState:
                 "pipeline": ["One or more edges reference a router output that no longer exists"],
             },
             "unwired_handles": {router["id"]: [{"handle": "output_0", "label": "A"}]},
+            "deprecated_models": {},
         }
 
     def test_stranded_edge_on_unreachable_router_does_not_block_the_build(self):
@@ -455,6 +465,7 @@ class TestPipelineBuildState:
                 ],
                 island_target["id"]: [{"handle": "output", "label": None}],
             },
+            "deprecated_models": {},
         }
 
     def test_node_and_graph_errors_are_reported_together(self):
@@ -500,6 +511,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_invalid_router_does_not_have_its_edges_called_stranded(self):
@@ -540,6 +552,7 @@ class TestPipelineBuildState:
                 island["id"]: [{"handle": "output", "label": None}],
                 end["id"]: [{"handle": "input", "label": None}],
             },
+            "deprecated_models": {},
         }
 
 
@@ -578,7 +591,7 @@ class TestDeprecatedModels:
 
         assert state["pipeline_valid"] is True
         assert state["errors"] == {"node": {}, "edge": [], "pipeline": []}
-        assert deprecated_models(pipeline) == {node_id: {"model": "old-model", "replacement": "live-model"}}
+        assert state["deprecated_models"] == {node_id: {"model": "old-model", "replacement": "live-model"}}
 
     @pytest.mark.parametrize(
         "name",

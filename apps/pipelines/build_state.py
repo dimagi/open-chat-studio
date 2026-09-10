@@ -8,8 +8,8 @@ this passes through unchanged::
 ``pipeline_valid`` is exactly "all three buckets empty" — nothing more.
 
 Validation never flags an unwired node or branch (the build only checks reachable nodes), so
-:func:`unwired_handles` reports those separately as an advisory "what still needs wiring" map. It
-never blocks anything.
+:func:`unwired_handles` reports those separately as an advisory "what still needs wiring" map, and
+:func:`deprecated_models` reports the models on their way out the same way. Neither blocks anything.
 """
 
 from enum import StrEnum
@@ -27,12 +27,13 @@ from apps.service_providers.models import LlmProviderModel
 
 
 def pipeline_build_state(pipeline: Pipeline) -> dict:
-    """``pipeline_valid`` + ``errors`` + advisory ``unwired_handles`` for a pipeline."""
+    """``pipeline_valid`` + ``errors`` + the advisory ``unwired_handles`` and ``deprecated_models``."""
     errors = pipeline.validate()
     return {
         "pipeline_valid": not has_errors(errors),
         "errors": errors,
         "unwired_handles": unwired_handles(pipeline),
+        "deprecated_models": deprecated_models(pipeline),
     }
 
 
