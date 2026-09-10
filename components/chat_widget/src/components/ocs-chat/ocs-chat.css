@@ -92,9 +92,6 @@
     * @prop --banner-error-text-color: Error banner text color (#991b1b)
     * @prop --banner-error-border-color: Error banner border color (#fecaca)
     *
-    * @prop --code-bg-user-color: Code background in user messages (--message-user-bg-color + 20% white)
-    * @prop --code-text-user-color: Code text color in user messages (--message-user-text-color)
-    * @prop --code-border-user-color: Code border in user messages (--message-user-bg-color + 20% black)
     * @prop --code-bg-assistant-color: Code background in assistant messages (--message-assistant-bg-color + 50% white)
     * @prop --code-text-assistant-color: Code text color in assistant messages (--message-assistant-text-color)
     * @prop --code-border-assistant-color: Code border in assistant messages (--message-assistant-bg-color + 10% black)
@@ -236,9 +233,6 @@
     --banner-error-border-color: #fecaca;
 
     /* Markdown code variables */
-    --code-bg-user-color: color-mix(in srgb, var(--message-user-bg-color) 80%, white 20%);
-    --code-text-user-color: var(--message-user-text-color);
-    --code-border-user-color: color-mix(in srgb, var(--message-user-bg-color) 90%, black 10%);
     --code-bg-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 50%, white 50%);
     --code-text-assistant-color: var(--message-assistant-text-color);
     --code-border-assistant-color: color-mix(in srgb, var(--message-assistant-bg-color) 90%, black 10%);
