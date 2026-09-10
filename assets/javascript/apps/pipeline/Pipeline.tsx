@@ -1,9 +1,11 @@
 import "reactflow/dist/style.css";
 import "./styles.css"
 import React, {useCallback, useState, useEffect} from "react";
+import {useStore} from "zustand";
 import ReactFlow, {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   EdgeTypes,
   FitViewOptions,
@@ -55,6 +57,8 @@ export default function Pipeline() {
   const currentPipeline = usePipelineStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineStore((state) => state.autoSaveCurrentPipline);
   const savePipeline = usePipelineStore((state) => state.savePipeline);
+  const canUndo = useStore(usePipelineStore.temporal, (state) => state.pastStates.length > 0);
+  const canRedo = useStore(usePipelineStore.temporal, (state) => state.futureStates.length > 0);
   const { nodeSchemas } = getCachedData();
 
   const editingNode = useEditorStore((state) => state.currentNode);
@@ -130,6 +134,14 @@ export default function Pipeline() {
 
   useHotkeys(["backspace", "delete"], handleDelete);
   useHotkeys("ctrl+s", () => manualSaveCurrentPipeline(), {preventDefault: true});
+  useHotkeys(["ctrl+z", "meta+z"], () => {
+    if (readOnly) return;
+    usePipelineStore.temporal.getState().undo();
+  }, {preventDefault: true});
+  useHotkeys(["ctrl+shift+z", "meta+shift+z", "ctrl+y"], () => {
+    if (readOnly) return;
+    usePipelineStore.temporal.getState().redo();
+  }, {preventDefault: true});
 
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
@@ -190,7 +202,26 @@ export default function Pipeline() {
           </>
         )}
         {editingNode && <EditPanel key={editingNode.id} nodeId={editingNode.id} />}
-        <Controls showZoom showFitView showInteractive position="bottom-left"/>
+        <Controls showZoom showFitView showInteractive position="bottom-left">
+          {!readOnly && (
+            <>
+              <ControlButton
+                title="Undo"
+                disabled={!canUndo}
+                onClick={() => usePipelineStore.temporal.getState().undo()}
+              >
+                <i className="fa-solid fa-rotate-left"></i>
+              </ControlButton>
+              <ControlButton
+                title="Redo"
+                disabled={!canRedo}
+                onClick={() => usePipelineStore.temporal.getState().redo()}
+              >
+                <i className="fa-solid fa-rotate-right"></i>
+              </ControlButton>
+            </>
+          )}
+        </Controls>
         <Background
           variant={BackgroundVariant.Dots}
           gap={12}
