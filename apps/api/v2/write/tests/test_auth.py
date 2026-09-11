@@ -24,10 +24,11 @@ def team_with_roles(db):
         unset_current_team(token)
 
 
-# The two shipped endpoints are gated by `DjangoModelPermissionsWithView` on `ChatbotViewSet`. Team
-# membership alone must not be enough to write: the caller's role has to hold the same model
-# permissions the chatbot UI requires. Chat Viewer holds neither add_experiment nor
-# change_experiment; Chatbot Admin holds both.
+# The top-level chatbot endpoints are gated by `DjangoModelPermissionsWithView` on
+# `ChatbotViewSet`, which derives the permission from the verb -- so each verb is exercised
+# separately. Team membership alone must not be enough to write: the caller's role has to hold the
+# same model permissions the chatbot UI requires. Chatbot Admin holds the whole experiments app;
+# Chat Viewer holds nothing in it beyond viewing sessions.
 ROLE_CASES = [
     pytest.param(CHATBOT_ADMIN_GROUP, True, id="chatbot-admin-may-write"),
     pytest.param(CHAT_VIEWER_GROUP, False, id="chat-viewer-may-not"),
@@ -60,6 +61,20 @@ def test_patch_requires_change_experiment(team_with_roles, group, allowed):
     assert response.status_code == (200 if allowed else 403), response.content
 
 
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("group", "allowed"), ROLE_CASES)
+def test_archive_requires_delete_experiment(team_with_roles, group, allowed):
+    """Archiving is the one write on this viewset that really is a delete, so unlike the pipeline
+    façade -- where the verb map would ask the wrong question -- the stock `delete_experiment` is
+    exactly right here."""
+    chatbot = ChatbotFactory.create(team=team_with_roles)
+    response = _client_for_role(team_with_roles, group).delete(f"/api/v2/chatbots/{chatbot.public_id}/")
+
+    assert response.status_code == (200 if allowed else 403), response.content
+    chatbot.refresh_from_db()
+    assert chatbot.is_archived is allowed
+
+
 def _machine_write_client(team, allowed_chatbots=None):
     """A machine (client-credentials) client holding chatbots:write.
 
@@ -89,6 +104,18 @@ def test_patch_refuses_an_unlisted_chatbot(team_with_roles):
     assert response.status_code == 403, response.content
     chatbot.refresh_from_db()
     assert chatbot.name != "Nope"
+
+
+@pytest.mark.django_db()
+def test_archive_refuses_an_unlisted_chatbot(team_with_roles):
+    chatbot = ChatbotFactory.create(team=team_with_roles)
+    client = _machine_write_client(team_with_roles, allowed_chatbots=[])
+
+    response = client.delete(f"/api/v2/chatbots/{chatbot.public_id}/")
+
+    assert response.status_code == 403, response.content
+    chatbot.refresh_from_db()
+    assert chatbot.is_archived is False
 
 
 @pytest.mark.django_db()

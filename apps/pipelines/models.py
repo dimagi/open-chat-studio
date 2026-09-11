@@ -334,6 +334,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
+    @property
+    def wiring(self) -> set[tuple[str, str, str, str]]:
+        """This graph's wiring as ``(source, source handle, target, target handle)`` tuples.
+
+        Read through ``FlowEdge`` so a null handle and the standard name it stands for compare as
+        one wire -- a seeded or imported graph would otherwise read as different from an equivalent
+        one the builder made. Edge ids stay out: they are client-generated, so deleting a wire and
+        drawing the same one again would otherwise look like a change.
+        """
+        return {edge.wiring for edge in FlowWithoutNodes(**(self.data or {"edges": []})).edges}
+
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         version_number = 1 if is_copy else self.version_number
@@ -460,6 +471,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     name="nodes",
                     queryset=self.node_set.exclude(type__in=reserved_types),
                     to_display=node_name,
+                ),
+                # Edges live in ``data`` rather than in a row of their own (ADR-0049), so without
+                # this a version that only rewires the graph reports no changes.
+                VersionField(
+                    name="edges",
+                    raw_value=self.wiring,
+                    to_display=VersionFieldDisplayFormatters.format_wiring,
                 ),
             ],
         )

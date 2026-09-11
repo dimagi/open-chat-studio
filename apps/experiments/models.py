@@ -101,6 +101,15 @@ class VersionFieldDisplayFormatters:
         return template.render({"chip": Chip(label=name, url=url)})
 
     @staticmethod
+    def format_wiring(wiring: set[tuple[str, str, str, str]]) -> str:
+        """A pipeline's wires as ``source.handle -> target.handle`` lines, one per wire.
+
+        Sorted, because the wiring is a set and the comparison UI diffs these strings: an
+        unstable order would show every wire as changed whenever any one of them did.
+        """
+        return "\n".join(sorted(f"{source}.{out} -> {target}.{into}" for source, out, target, into in wiring))
+
+    @staticmethod
     def format_custom_action_operation(op) -> str:
         action = op.custom_action
         op_details = action.get_operations_by_id().get(op.operation_id)
