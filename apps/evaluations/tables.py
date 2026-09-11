@@ -312,7 +312,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     )
     session_id = TemplateColumn(
         verbose_name="Session ID",
-        template_name="evaluations/session_id_column.html",
+        template_code='{% include "generic/session_id_chip.html" with external_id=record.external_id %}',
         orderable=False,
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
