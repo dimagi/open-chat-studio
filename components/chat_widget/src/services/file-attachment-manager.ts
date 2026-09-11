@@ -24,8 +24,8 @@ export interface UploadContext {
   sessionId: string;
   participantId: string;
   participantName?: string;
-  /** Auth headers (session token, CSRF, widget version) — see ChatSessionService.getUploadHeaders. */
-  headers?: Record<string, string>;
+  /** Sends the upload request; `fetch` with no headers when omitted. The widget passes `ChatSessionService.sessionFetch` so the upload carries the session token and renews it. */
+  send?: (url: string, body: FormData) => Promise<Response>;
 }
 
 export interface UploadResult {
@@ -115,11 +115,8 @@ export class FileAttachmentManager {
     }
 
     try {
-      const response = await fetch(`${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`, {
-        method: 'POST',
-        headers: context.headers ?? {},
-        body: formData,
-      });
+      const url = `${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`;
+      const response = context.send ? await context.send(url, formData) : await fetch(url, { method: 'POST', headers: {}, body: formData });
 
       if (!response.ok) {
         const errorData = await this.safeJson(response);

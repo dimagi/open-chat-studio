@@ -708,6 +708,7 @@ describe('ocs-chat persistent-session modes', () => {
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-messages-test-bot');
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-token-test-bot');
+    expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-token-expires-test-bot');
     expect(localStorageMock.removeItem).not.toHaveBeenCalled();
     expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('other-page-session');
   });
@@ -853,6 +854,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
     expect(setItemKeys).not.toContain('ocs-chat-messages-test-bot');
     expect(setItemKeys).not.toContain('ocs-chat-activity-test-bot');
     expect(setItemKeys).not.toContain('ocs-chat-token-test-bot');
+    expect(setItemKeys).not.toContain('ocs-chat-token-expires-test-bot');
   });
 
   it('does not persist visible state in kiosk mode', async () => {
@@ -991,7 +993,7 @@ describe('ocs-chat session tokens', () => {
       if (url.includes('/api/chat/start/')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ session_id: 'test-session-id', session_token: sessionToken, chatbot: {}, participant: {} }),
+          json: () => Promise.resolve({ session_id: 'test-session-id', session_token: sessionToken, expires_at: '2030-01-01T00:00:00Z', chatbot: {}, participant: {} }),
         } as Response);
       }
       if (url.includes('/api/chat/send/')) {
@@ -1054,8 +1056,9 @@ describe('ocs-chat session tokens', () => {
 
     const startCall = (global.fetch as jest.Mock).mock.calls.find(call => call[0].includes('/api/chat/start/'));
     expect(startCall).toBeDefined();
-    expect(setSessionTokenSpy).toHaveBeenCalledWith('tok-1');
+    expect(setSessionTokenSpy).toHaveBeenCalledWith('tok-1', '2030-01-01T00:00:00Z');
     expect(window.localStorage.setItem).toHaveBeenCalledWith('ocs-chat-token-test-bot', 'tok-1');
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('ocs-chat-token-expires-test-bot', '2030-01-01T00:00:00Z');
   });
 
   it('restores a persisted token for an unbound session on load', async () => {
@@ -1063,6 +1066,7 @@ describe('ocs-chat session tokens', () => {
       if (key === 'ocs-chat-session-test-bot') return 'stored-session';
       if (key === 'ocs-chat-messages-test-bot') return JSON.stringify([]);
       if (key === 'ocs-chat-token-test-bot') return 'stored-tok';
+      if (key === 'ocs-chat-token-expires-test-bot') return '2030-01-01T00:00:00Z';
       return null;
     });
 
@@ -1076,6 +1080,7 @@ describe('ocs-chat session tokens', () => {
     // The stored token is held on the component and handed to the service on creation.
     expect(page.rootInstance['currentSessionToken']).toBe('stored-tok');
     expect(page.rootInstance['getChatService']()['sessionToken']).toBe('stored-tok');
+    expect(page.rootInstance['getChatService']()['sessionTokenExpiresAt']).toBe(Date.parse('2030-01-01T00:00:00Z'));
   });
 
   it('uses the session-token prop for a bound session and never persists it', async () => {
