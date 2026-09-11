@@ -504,12 +504,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "indexed_collections": ("collection_index_ids",),
     }
     _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
-    # ``assistant_id`` is suppressed rather than lifted: ``_RESOURCE_PARAM_KEYS`` is derived from
-    # ``_CONDITIONAL_KEY_PARAMS`` and no render key claims it, so hiding it keeps an internal id
-    # out of the generic ``params`` payload. Stripping it from the stored rows instead needs
-    # ``Node.assistant`` gone -- ``Node._sync_resource_fk_fields`` re-derives the id from that
-    # column -- so it waits for the data-model removal in #4254.
-    _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS | {"assistant_id"}
+    _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
