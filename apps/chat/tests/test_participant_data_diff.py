@@ -108,3 +108,52 @@ class TestTagFilterInSessionMessages:
         page_messages = response.context["messages"]
 
         assert {message.id for message in page_messages} == {billing_message.id, urgent_message.id}
+
+
+@pytest.mark.django_db()
+class TestPushUrlInSessionMessages:
+    def test_htmx_request_pushes_the_full_session_page_url(self, client, experiment):
+        """This view only ever renders the messages fragment. Letting htmx push its own URL
+        would leave a refresh pointing at that bare fragment instead of the full page, so the
+        view has to push the full page's URL (with the same filters) itself.
+        """
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+        expected_page_url = reverse(
+            "chatbots:chatbot_session_view",
+            args=[experiment.team.slug, experiment.public_id, session.external_id],
+        )
+
+        response = client.get(f"{url}?tag_filter=billing", headers={"HX-Request": "true"})
+
+        assert response["HX-Push-Url"] == f"{expected_page_url}?tag_filter=billing"
+
+    def test_non_htmx_request_does_not_set_the_header(self, client, experiment):
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+
+        response = client.get(url)
+
+        assert "HX-Push-Url" not in response

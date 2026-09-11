@@ -546,6 +546,21 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
+def _set_messages_view_push_url(response, request, team_slug, experiment, session_id):
+    """The control panel's own filter controls (tag/language) hit `experiment_session_messages_view`
+    via htmx, targeting `#messages-container`, not a full navigation. A plain hx-push-url there
+    would point the address bar at this component view's own URL, not the session page, so a
+    refresh would lose the surrounding page. Push the full session page's URL instead, with the
+    same querystring: its own `#messages-container` re-fetches this view on load, so a refresh
+    lands back on the same filtered/translated state.
+    """
+    if not request.htmx:
+        return
+    session_url = reverse("chatbots:chatbot_session_view", args=[team_slug, experiment.public_id, session_id])
+    querystring = request.GET.urlencode()
+    response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -683,9 +698,12 @@ def _build_full_page_message_context(request, session, messages_queryset, langua
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     """Full session transcript page."""
     session = request.experiment_session
-    context, messages_queryset = _build_session_messages_context(request, session, request.experiment)
+    experiment = request.experiment
+    context, messages_queryset = _build_session_messages_context(request, session, experiment)
     context.update(_build_full_page_message_context(request, session, messages_queryset, context["language"]))
-    return TemplateResponse(request, "experiments/components/session_messages.html", context)
+    response = TemplateResponse(request, "experiments/components/session_messages.html", context)
+    _set_messages_view_push_url(response, request, team_slug, experiment, session_id)
+    return response
 
 
 @experiment_session_view()
