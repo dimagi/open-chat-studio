@@ -1,5 +1,6 @@
-<dialog id="toggleEventModal-{{ event.id }}" class="modal">
-  <form method="dialog" class="modal-box">
+<dialog id="toggleEventModal-{{ event.type }}-{{ event.id }}" class="modal">
+  <form method="post" action="{{ toggle_active_flag_url }}" class="modal-box">
+    {% csrf_token %}
     <h3 class="font-bold text-lg">Confirm Toggle</h3>
     <p class="py-2">
       Enabling or disabling an event will affect ALL versions of the chatbot, not just the working version.
@@ -10,8 +11,8 @@
       </p>
     {% endif %}
     <div class="modal-action">
-      <button type="button" class="btn btn-sm" onclick="document.getElementById('toggleEventModal-{{ event.id }}').close()">Cancel</button>
-      <a href="{{ toggle_active_flag_url }}" class="btn btn-sm btn-primary">Confirm</a>
+      <button type="button" class="btn btn-sm" onclick="document.getElementById('toggleEventModal-{{ event.type }}-{{ event.id }}').close()">Cancel</button>
+      <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
     </div>
   </form>
 </dialog>

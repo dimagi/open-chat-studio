@@ -15,7 +15,10 @@ class ActionsColumn(tables.Column):
 
     def render(self, value, record):  # ty: ignore[invalid-method-override]
         namespace = "chatbots"
-        trigger_type = "timeout" if record["type"] == "__timeout__" else "static"
+        trigger_type = {
+            "__timeout__": "timeout",
+            "__scheduled__": "scheduled",
+        }.get(record["type"], "static")
         view_log_url = reverse(
             f"{namespace}:events:{trigger_type}_logs_view",
             kwargs={
@@ -81,6 +84,8 @@ class EventsTable(tables.Table):
     def render_type(self, value, record):
         if value == "__timeout__":
             return f"No response for {seconds_to_human(record['delay'])}"
+        elif value == "__scheduled__":
+            return f"{record['trigger_date']} {record['trigger_time']} ({record['timezone']})"
         else:
             return StaticTriggerType(value).label
 

@@ -1,5 +1,12 @@
 import pytest
+from django.template.loader import get_template
 from django.urls import reverse
+
+from apps.events.models import EventLogStatusChoices
+from apps.teams.backends import SUPER_ADMIN_GROUP, add_user_to_team, create_default_groups
+from apps.utils.factories.events import ScheduledTriggerFactory
+from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.user import UserFactory
 
 
 @pytest.fixture()
@@ -7,6 +14,49 @@ def authed_client(team_with_users, client):
     user = team_with_users.members.first()
     client.force_login(user)
     return client
+
+
+def _super_admin_client(client, team):
+    create_default_groups()
+    user = UserFactory.create()
+    add_user_to_team(team, user, groups=[SUPER_ADMIN_GROUP])
+    client.force_login(user)
+    return client
+
+
+@pytest.mark.django_db()
+def test_create_scheduled_event_view_creates_trigger(experiment, client, team_with_users):
+    _super_admin_client(client, team_with_users)
+    future_date = "2099-01-01"
+    url = reverse(
+        "chatbots:events:scheduled_event_new",
+        args=[experiment.team.slug, experiment.id],
+    )
+    response = client.post(
+        url,
+        {"action_type": "log", "trigger_date": future_date, "trigger_time": "09:00", "timezone": "UTC"},
+    )
+    assert response.status_code == 302
+    trigger = experiment.scheduled_triggers.get()
+    assert str(trigger.trigger_date) == future_date
+    assert str(trigger.trigger_time) == "09:00:00"
+    assert trigger.timezone == "UTC"
+
+
+@pytest.mark.django_db()
+def test_create_scheduled_event_view_rejects_past_date(experiment, client, team_with_users):
+    _super_admin_client(client, team_with_users)
+    url = reverse(
+        "chatbots:events:scheduled_event_new",
+        args=[experiment.team.slug, experiment.id],
+    )
+    response = client.post(
+        url,
+        {"action_type": "log", "trigger_date": "2020-01-01", "trigger_time": "09:00", "timezone": "UTC"},
+    )
+    assert response.status_code == 200
+    assert not experiment.scheduled_triggers.exists()
+    assert b"The scheduled time must be in the future" in response.content
 
 
 @pytest.mark.parametrize(
@@ -31,3 +81,21 @@ def test_action_params_form_view_400_for_invalid_action_type(experiment, authed_
     )
     response = authed_client.get(url, {"action_type": "bogus"})
     assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+def test_event_logs_template_renders_without_session(client, team_with_users):
+    trigger = ScheduledTriggerFactory.create(experiment=ExperimentFactory.create(team=team_with_users))
+    trigger.event_logs.create(status=EventLogStatusChoices.SUCCESS, log="ok")
+
+    template = get_template("events/components/event_logs.html")
+    html = template.render(
+        {
+            "trigger": trigger,
+            "event_logs": trigger.event_logs.all(),
+            "team": team_with_users,
+            "include_session": True,
+        }
+    )
+    assert "No session" in html
+    assert "Session Details" not in html

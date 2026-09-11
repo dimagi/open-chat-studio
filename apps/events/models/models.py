@@ -4,8 +4,7 @@ from functools import cached_property
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.relativedelta import relativedelta
-from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models, transaction
 from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functions
 from django.utils import timezone
@@ -24,7 +23,10 @@ from apps.utils.models import BaseModel
 from apps.utils.slug import get_next_unique_id
 from apps.utils.time import pretty_date
 
+from .event_log import EventLog, EventLogStatusChoices
+
 logger = logging.getLogger("ocs.events")
+
 
 ACTION_HANDLERS = {
     "end_conversation": actions.EndConversationAction,
@@ -74,30 +76,6 @@ class EventAction(BaseModel, VersionsMixin):
                 handler = handler_cls()
                 handler.event_action_updated(self)
             return res
-
-
-class EventLogStatusChoices(models.TextChoices):
-    SUCCESS = "success"
-    FAILURE = "failure"
-
-
-class EventLog(BaseModel):
-    # StaticTrigger or TimeoutTrigger
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveBigIntegerField()
-    content_object = GenericForeignKey("content_type", "object_id")
-
-    session = models.ForeignKey(ExperimentSession, on_delete=models.CASCADE, related_name="event_logs")
-    chat_message = models.ForeignKey(
-        ChatMessage, on_delete=models.CASCADE, related_name="event_logs", null=True, blank=True
-    )
-    status = models.CharField(choices=EventLogStatusChoices.choices)
-    log = models.TextField(blank=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["content_type", "object_id"]),
-        ]
 
 
 class StaticTriggerType(models.TextChoices):
