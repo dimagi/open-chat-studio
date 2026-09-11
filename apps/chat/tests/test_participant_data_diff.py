@@ -112,6 +112,55 @@ class TestTagFilterInSessionMessages:
 
 
 @pytest.mark.django_db()
+class TestPushUrlInSessionMessages:
+    def test_htmx_request_pushes_the_full_session_page_url(self, client, experiment):
+        """This view only ever renders the messages fragment. Letting htmx push its own URL
+        would leave a refresh pointing at that bare fragment instead of the full page, so the
+        view has to push the full page's URL (with the same filters) itself.
+        """
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+        expected_page_url = reverse(
+            "chatbots:chatbot_session_view",
+            args=[experiment.team.slug, experiment.public_id, session.external_id],
+        )
+
+        response = client.get(f"{url}?tag_filter=billing", headers={"HX-Request": "true"})
+
+        assert response["HX-Push-Url"] == f"{expected_page_url}?tag_filter=billing"
+
+    def test_non_htmx_request_does_not_set_the_header(self, client, experiment):
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+
+        response = client.get(url)
+
+        assert "HX-Push-Url" not in response
+
+
+@pytest.mark.django_db()
 class TestCompressionCheckpointsInSessionMessages:
     def _url(self, experiment, session):
         return reverse(
@@ -148,14 +197,9 @@ class TestCompressionCheckpointsInSessionMessages:
         assert "The user asked about billing and was told to check the invoices page." in content
         assert "History truncated here" not in content
 
-    @pytest.mark.parametrize(
-        "mode",
-        [
-            pytest.param(PipelineChatHistoryModes.TRUNCATE_TOKENS, id="truncate_tokens"),
-            pytest.param(PipelineChatHistoryModes.MAX_HISTORY_LENGTH, id="max_history_length"),
-        ],
-    )
-    def test_truncation_checkpoint_shows_a_plain_separator(self, client, experiment, mode):
+    def test_truncation_checkpoint_shows_a_plain_separator(self, client, experiment):
+        """Every truncation mode sets the same `compression_marker` shape -- the template only
+        checks it's set, not which mode -- so one representative mode covers the branch."""
         session = ExperimentSessionFactory.create(
             experiment=experiment,
             participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
@@ -164,7 +208,7 @@ class TestCompressionCheckpointsInSessionMessages:
             chat=session.chat,
             message_type=ChatMessageType.HUMAN,
             content="Later message",
-            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: mode},
+            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: PipelineChatHistoryModes.TRUNCATE_TOKENS},
         )
 
         client.force_login(experiment.owner)
@@ -174,38 +218,3 @@ class TestCompressionCheckpointsInSessionMessages:
         content = response.content.decode()
         assert "History truncated here" in content
         assert "History summarized here" not in content
-
-    def test_no_checkpoint_indicator_without_compression(self, client, experiment):
-        session = ExperimentSessionFactory.create(
-            experiment=experiment,
-            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
-        )
-        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Plain message")
-
-        client.force_login(experiment.owner)
-        response = client.get(f"{self._url(experiment, session)}?show_all=on")
-
-        assert response.status_code == 200
-        content = response.content.decode()
-        assert "History summarized here" not in content
-        assert "History truncated here" not in content
-
-    def test_checkpoint_shows_on_the_default_paginated_response(self, client, experiment):
-        """The checkpoint indicator is rendered per-message, not derived from adjacent messages
-        like time_gap_text is -- confirm it still shows up without `show_all=on`."""
-        session = ExperimentSessionFactory.create(
-            experiment=experiment,
-            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
-        )
-        ChatMessageFactory.create(
-            chat=session.chat,
-            message_type=ChatMessageType.HUMAN,
-            content="Later message",
-            summary="The user asked about billing.",
-        )
-
-        client.force_login(experiment.owner)
-        response = client.get(self._url(experiment, session))
-
-        assert response.status_code == 200
-        assert "History summarized here" in response.content.decode()

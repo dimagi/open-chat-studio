@@ -98,6 +98,7 @@ def filter_member_rows(rows: list[dict], params) -> list[dict]:
 class MembersTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     table_class = MembersTable
     template_name = "teams/components/members_table.html"
+    paginate_by = 5
 
     def get_queryset(self):
         self.all_rows = get_member_rows(self.request.team)
@@ -112,9 +113,10 @@ class MembersTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignor
     def get_template_names(self):
         table = self._table
         if table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET:
-            # Pagination/sort links target `closest div.table-container` with an
-            # outerHTML swap (see table/tailwind_js_pagination.html), so the response
-            # must be exactly that container -- not the count text and wrapper around
-            # it, or each click nests another copy of them inside the last one.
+            # Pagination, sort, and "Load all" links all target `closest
+            # div.table-container` with an outerHTML swap (see
+            # table/tailwind_js_pagination_loadall.html), so the response must be
+            # exactly that container -- not the count text and wrapper around it, or
+            # each click nests another copy of them inside the last one.
             return ["table/single_table.html"]
         return [self.template_name]

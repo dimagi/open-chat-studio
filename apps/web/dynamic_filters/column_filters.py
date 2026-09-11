@@ -24,11 +24,12 @@ class ExperimentFilter(ChoiceColumnFilter):
         "to look up the ID for a chatbot name. Do NOT use the chatbot name string as a value."
     )
 
-    def prepare(self, team, **_):
+    def prepare(self, team, **_) -> "ExperimentFilter":
         experiments = (
             Experiment.objects.working_versions_queryset().filter(team=team).values("id", "name").order_by("name")
         )
-        self.options = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
+        options = [{"id": exp["id"], "label": exp["name"]} for exp in experiments]
+        return self.model_copy(update={"options": options})
 
     def parse_query_value(self, value) -> list[int]:  # ty: ignore[invalid-method-override]
         values = []

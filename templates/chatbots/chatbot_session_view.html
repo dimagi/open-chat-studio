@@ -187,9 +187,8 @@
         <dl class="grid grid-cols-2 lg:grid-cols-5 gap-6">
           <div>
             <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Session ID" %}</dt>
-            <dd class="text-sm mt-1 flex items-center gap-1">
-              <code class="truncate max-w-32 inline-block" title="{{ experiment_session.external_id }}">{{ experiment_session.external_id }}</code>
-              {% include "generic/copy_chip.html" with copy_element_id="session-external-id" copy_value=experiment_session.external_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+            <dd class="text-sm mt-1">
+              {% include "generic/session_id_chip.html" with external_id=experiment_session.external_id id_prefix="session-external-id" %}
             </dd>
           </div>
           {% for label, chip in details %}

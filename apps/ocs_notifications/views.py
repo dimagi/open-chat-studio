@@ -47,11 +47,10 @@ def get_notification_toggle_context(request) -> dict:
     # response (for the out-of-band button refresh), and the pushed URL must always be the
     # notifications page, not wherever the request that built it happened to land.
     context = {"notifications_home_url": reverse("ocs_notifications:notifications_home")}
-    level_filter = SeverityLevelFilter().model_copy(deep=True)
+    level_filter = SeverityLevelFilter()
     context["level_toggle_options"] = build_toggle_options(level_filter, request)
 
-    team_filter = TeamFilter().model_copy(deep=True)
-    team_filter.prepare(request.team, user=request.user)
+    team_filter = TeamFilter().prepare(request.team, user=request.user)
     if len(team_filter.options) < TEAM_TOGGLE_BUTTON_THRESHOLD:
         context["team_toggle_options"] = build_toggle_options(team_filter, request)
 

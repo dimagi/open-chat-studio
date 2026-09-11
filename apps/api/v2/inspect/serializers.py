@@ -741,6 +741,16 @@ class PipelineBuildErrorsSerializer(serializers.Serializer):
     )
 
 
+class DeprecatedModelSerializer(serializers.Serializer):
+    """The model a node still points at, and what to move it to."""
+
+    model = serializers.CharField(help_text="Name of the deprecated model the node references.")
+    replacement = serializers.CharField(
+        allow_null=True,
+        help_text="Name of the model to migrate to, or null where none is declared.",
+    )
+
+
 class ChatbotInspectSerializer(serializers.ModelSerializer):
     """The whole chatbot configuration in one read-only response (ADR-0024).
 
@@ -770,6 +780,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     pipeline_valid = serializers.SerializerMethodField(help_text=("Whether this chatbot's pipeline validates cleanly"))
     pipeline_errors = serializers.SerializerMethodField()
     unwired_handles = serializers.SerializerMethodField()
+    deprecated_models = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
 
     class Meta:
@@ -793,6 +804,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "pipeline_valid",
             "pipeline_errors",
             "unwired_handles",
+            "deprecated_models",
             "events",
         ]
 
@@ -834,6 +846,19 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     )
     def get_unwired_handles(self, experiment) -> dict:
         return self._build_state(experiment)["unwired_handles"]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=DeprecatedModelSerializer(),
+            help_text=(
+                "Advisory map, keyed by ``node_id``, of nodes referencing a deprecated LLM model. "
+                "The model keeps working until it is removed, so this is never an error and never "
+                "blocks a publish."
+            ),
+        )
+    )
+    def get_deprecated_models(self, experiment) -> dict:
+        return self._build_state(experiment)["deprecated_models"]
 
 
 # ── Schema extensions ──────────────────────────────────────────────────────────────────────────
