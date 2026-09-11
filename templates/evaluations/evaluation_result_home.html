@@ -142,19 +142,21 @@
                 {% endfor %}
               </div>
             </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Generation chatbot</div>
-              {% if evaluation_run.generation_experiment %}
-                <div class="flex items-center gap-1">
-                  {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
-                  {% if evaluation_run.generation_experiment.version_display %}
-                    <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
-                  {% endif %}
-                </div>
-              {% else %}
-                <span class="text-sm text-base-content/40">None configured</span>
-              {% endif %}
-            </div>
+            {% if not is_session_mode %}
+              <div>
+                <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Generation chatbot</div>
+                {% if evaluation_run.generation_experiment %}
+                  <div class="flex items-center gap-1">
+                    {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
+                    {% if evaluation_run.generation_experiment.version_display %}
+                      <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <span class="text-sm text-base-content/40">None configured</span>
+                {% endif %}
+              </div>
+            {% endif %}
             {% if evaluation_run.error_message %}
               <div class="w-full">
                 <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Error</div>

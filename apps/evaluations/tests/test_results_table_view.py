@@ -14,10 +14,13 @@ from apps.evaluations.views.evaluation_config_views import ResultFilterPill, _bu
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
+    EvaluationDatasetFactory,
+    EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
 )
+from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
 def _sentiment_result(run, evaluator, *, sentiment):
@@ -307,3 +310,99 @@ class TestResultsTableCuratedColumns:
 
         assert response.status_code == 200
         assert "$1.50" in response.content.decode()
+
+
+@pytest.mark.django_db()
+class TestResultsTableSessionMode:
+    """A session-mode dataset's results table swaps Dataset Input/Generated Response for
+    a Links column (Session/Message) and a session-history preview - there's no single
+    message to show input/output/generated-response for.
+    """
+
+    def _build_session_mode_run(self, team):
+        session = ExperimentSessionFactory.create(team=team)
+        message = EvaluationMessageFactory.create(
+            session=session,
+            input={},
+            output={},
+            history=[
+                {"message_type": "human", "content": "hi there"},
+                {"message_type": "ai", "content": "hello!"},
+            ],
+        )
+        dataset = EvaluationDatasetFactory.create(team=team, evaluation_mode="session", messages=[message])
+        evaluator = EvaluatorFactory.create(team=team, name="Sentiment Judge")
+        config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team, config=config, evaluator_ids=[evaluator.id])
+        output = EvaluatorResult(
+            message={
+                "input": {},
+                "output": {},
+                "context": {},
+                "history": message.history,
+                "metadata": {},
+            },
+            result={"sentiment": "positive"},
+            generated_response="",
+        ).model_dump()
+        EvaluationResultFactory.create(output=output, team=team, run=run, evaluator=evaluator, message=message)
+        return session, run, config
+
+    def test_column_set_swaps_message_columns_for_links_and_preview(self, client, team_with_users):
+        session, run, config = self._build_session_mode_run(team_with_users)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
+        response = client.get(url)
+
+        column_names = list(response.context["table"].columns.columns)
+        assert column_names == [
+            "#",
+            "Links",
+            "Session Preview",
+            f"score ({config.evaluators.first().name})",
+            f"sentiment ({config.evaluators.first().name})",
+            "Cost",
+        ]
+
+    def test_session_chip_enabled_message_chip_disabled(self, client, team_with_users):
+        session, run, config = self._build_session_mode_run(team_with_users)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
+        response = client.get(url)
+        content = response.content.decode()
+
+        session_url = reverse(
+            "chatbots:chatbot_session_view",
+            args=[team_with_users.slug, session.experiment.public_id, session.external_id],
+        )
+        assert f'href="{session_url}"' in content
+        assert "Session" in content
+        assert "Message" in content
+        # The Message chip is always disabled for a session-mode row.
+        assert 'aria-disabled="true"' in content
+
+    def test_links_column_stops_click_bubbling_to_the_row(self, client, team_with_users):
+        """Every row has its own hx-get (opens the detail panel on click, see
+        `_row_hx_get_factory`). Without stopping propagation here, clicking a chip in the
+        Links column would bubble up and trigger that too, on top of the chip's own
+        navigation."""
+        session, run, config = self._build_session_mode_run(team_with_users)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
+        response = client.get(url)
+        content = response.content.decode()
+
+        assert 'onclick="event.stopPropagation()"' in content
+
+    def test_preview_shows_session_history(self, client, team_with_users):
+        session, run, config = self._build_session_mode_run(team_with_users)
+        client.force_login(team_with_users.members.first())
+
+        url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
+        response = client.get(url)
+
+        assert "user: hi there" in response.content.decode()
+        assert "assistant: hello!" in response.content.decode()
