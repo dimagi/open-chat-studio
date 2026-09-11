@@ -5,11 +5,7 @@ GROUP_NAME = "Assistant Admin"
 
 
 def delete_assistant_admin_group(apps, schema_editor):
-    """Delete the group and every m2m row referencing it, leaving the memberships themselves.
-
-    Raw SQL rather than an ORM delete, as in 0009: a cascade from auth_group reaches waffle's
-    swapped-out default flag tables, which 0008 dropped from the database but not from state.
-    """
+    """Delete the group and every m2m row referencing it, leaving the memberships themselves."""
     group = apps.get_model("auth", "Group").objects.filter(name=GROUP_NAME).first()
     if group is None:
         return
