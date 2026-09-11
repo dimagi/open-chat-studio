@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.ocs_notifications.models import (
+    NotificationChannel,
     NotificationEvent,
 )
 from apps.utils.celery import Queues
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.notifications")
 
 
-@shared_task(queue=Queues.BACKGROUND)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def send_notification_email_async(user_ids, notification_event_id):
     from apps.users.models import (  # noqa: PLC0415 - circular: users.models → ocs_notifications.utils → ocs_notifications.tasks
         CustomUser,
@@ -88,6 +89,28 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
                 from_email=None,
                 recipient_list=[user.email],
             )
+
+
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
+def send_slack_notification_async(notification_channel_id, notification_event_id):
+    from apps.ocs_notifications.slack import (  # noqa: PLC0415 - circular: slack imports channels.models
+        send_slack_notification,
+    )
+
+    try:
+        notification_channel = NotificationChannel.objects.select_related("messaging_provider").get(
+            id=notification_channel_id
+        )
+        notification_event = NotificationEvent.objects.select_related("event_type", "team").get(
+            id=notification_event_id
+        )
+        send_slack_notification(notification_channel, notification_event)
+    except NotificationChannel.DoesNotExist:
+        logger.warning("Skipped Slack notification: notification channel %s no longer exists", notification_channel_id)
+    except NotificationEvent.DoesNotExist:
+        logger.warning("Skipped Slack notification: notification event %s no longer exists", notification_event_id)
+    except Exception:
+        logger.exception("Failed to send Slack notification async")
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)

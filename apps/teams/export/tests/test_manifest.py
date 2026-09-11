@@ -46,6 +46,7 @@ IGNORED_MODELS = frozenset(
         "experiments.promptbuilderhistory",
         "filters.filterset",
         "mcp_integrations.mcpserver",
+        "ocs_notifications.notificationchannel",
         "oauth.oauth2accesstoken",
         "oauth.oauth2application",
         "oauth.oauth2grant",
