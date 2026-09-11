@@ -6,7 +6,7 @@ from unittest import mock
 import azure.cognitiveservices.speech as speechsdk
 import pytest
 
-from apps.chat.exceptions import NoSpeechDetected, NoSpeechReason, UserReportableError
+from apps.chat.exceptions import AudioTranscriptionException, NoSpeechDetected, NoSpeechReason
 from apps.service_providers.speech_service import (
     AzureSpeechService,
     ElevenLabsSpeechService,
@@ -89,7 +89,7 @@ class TestAzureNoMatch:
         result.cancellation_details.reason = speechsdk.CancellationReason.Error
         result.cancellation_details.error_details = "Invalid subscription key"
 
-        with _azure_returning(result), pytest.raises(UserReportableError, match="Unable to transcribe audio"):
+        with _azure_returning(result), pytest.raises(AudioTranscriptionException, match="Unable to transcribe audio"):
             _azure_service().transcribe_audio(BytesIO(b"audio"))
 
 
@@ -154,7 +154,7 @@ class TestTranscribeAudioErrorPolicy:
     def test_other_failures_are_still_flattened(self):
         service = StubSpeechService(result=RuntimeError("connection reset"))
 
-        with pytest.raises(UserReportableError, match="Unable to transcribe audio"):
+        with pytest.raises(AudioTranscriptionException, match="Unable to transcribe audio"):
             service.transcribe_audio(BytesIO(b"audio"))
 
     def test_transcript_is_returned_unchanged(self):

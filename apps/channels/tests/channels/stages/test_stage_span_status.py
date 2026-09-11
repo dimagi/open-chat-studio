@@ -2,7 +2,8 @@
 
 Verifies that a stage's trace span honestly reflects what happened:
 - genuine failures (raised or recorded on the context) mark the span as errored,
-- control-flow signals (early exit / abort / cancellation) do not.
+- control-flow signals (early exit / abort / cancellation / a participant-fixable
+  error) do not.
 """
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.terminal import MessageDeliveryFailure
+from apps.chat.exceptions import UserReportableError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 
 from ..conftest import make_context, make_trace_service
@@ -103,8 +105,9 @@ class TestControlFlowSignalsDoNotMarkSpan:
             EarlyExitResponse("done"),
             EarlyAbort(),
             GenerationCancelled("cancelled"),
+            UserReportableError("that image type is not supported"),
         ],
-        ids=["early_exit", "early_abort", "generation_cancelled"],
+        ids=["early_exit", "early_abort", "generation_cancelled", "user_reportable"],
     )
     def test_signal_is_reraised_without_marking_span(self, signal):
         trace_service = make_trace_service()

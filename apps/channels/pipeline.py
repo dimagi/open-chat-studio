@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason
+from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason, UserReportableError
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -219,10 +219,13 @@ class MessageProcessingPipeline:
         5. If any raises NoSpeechDetected, reply with a message generated
            from the reason and set ctx.early_exit_response -- but do NOT
            re-raise (silence is user input, not a bug).
-        6. If any raises an unexpected exception, generate an error message
+        6. If any raises UserReportableError, reply with a message generated
+           from the error and set ctx.early_exit_response -- but do NOT
+           re-raise (the participant can act on it, so it is not a bug).
+        7. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        7. Run terminal stages unconditionally (they always fire).
-        8. If there was an unexpected exception, re-raise it after terminal
+        8. Run terminal stages unconditionally (they always fire).
+        9. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         try:
@@ -275,6 +278,13 @@ class MessageProcessingPipeline:
         except NoSpeechDetected as e:
             logger.info("No speech detected in voice message: %s", e.reason)
             ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
+        except UserReportableError as e:
+            # The participant can act on this -- an unsupported attachment, a voice note
+            # on a chatbot that cannot transcribe. Answer them with the generated message
+            # and do NOT re-raise: the fix is theirs to make, so it must not fail the task
+            # or reach Sentry.
+            logger.info("Participant-actionable error: %s", e)
+            ctx.early_exit_response = self._generate_error_message(ctx, e)
         except Exception as e:
             ctx.early_exit_response = self._generate_error_message(ctx, e)
             ctx.processing_errors.append(str(e))

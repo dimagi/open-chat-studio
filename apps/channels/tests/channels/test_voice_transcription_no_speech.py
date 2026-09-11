@@ -16,7 +16,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import BaseMessage, MediaCache
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.tests.message_examples import base_messages
-from apps.chat.exceptions import NoSpeechReason, UserReportableError
+from apps.chat.exceptions import AudioTranscriptionException, NoSpeechReason
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.ocs_notifications.models import NotificationEvent
 from apps.service_providers.models import VoiceProviderType
@@ -105,7 +105,7 @@ def test_real_transcription_failure_still_raises_and_notifies(mock_event_bot_cls
 
     with (
         patch.object(speechsdk, "SpeechConfig", side_effect=RuntimeError("invalid subscription key")),
-        pytest.raises(UserReportableError, match="Unable to transcribe audio"),
+        pytest.raises(AudioTranscriptionException, match="Unable to transcribe audio"),
     ):
         channel.new_user_message(base_messages.audio_message())
 

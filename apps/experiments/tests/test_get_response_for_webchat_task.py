@@ -42,12 +42,17 @@ def test_get_response_for_webchat_task(session):
 
 
 @pytest.mark.django_db()
-def test_user_reportable_error_sets_user_facing_error(session):
+def test_user_reportable_error_is_not_special_cased(session):
+    """The pipeline answers these itself, so one reaching the task is an ordinary failure.
+
+    Re-adding a catch here would resurrect the bug it used to cause: the participant
+    was shown the raw exception while the generated reply was persisted but never sent.
+    """
     with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserReportableError("nope")):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
     assert response["error"] == "nope"
-    assert response["user_facing_error"] is True
+    assert not response.get("user_facing_error")
     assert response["response"] is None
 
 
