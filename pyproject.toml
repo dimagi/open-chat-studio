@@ -169,6 +169,8 @@ banned-module-level-imports = [
     "markitdown",
     "transformers",
     "pandas",
+    # Imports transformers (already banned above) on the way in; 1.2s cumulative.
+    "voyageai",
 ]
 
 [dependency-groups]

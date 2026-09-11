@@ -2552,6 +2552,21 @@ components:
           minimum: 1
           description: How many candidates to retrieve from each of the dense and
             lexical searches before fusing them.
+        enable_reranking:
+          type: boolean
+          description: If enabled, retrieval candidates are rescored against the query
+            by a reranker before the best of them are returned.
+        rerank_model:
+          type: string
+          description: Reranker model, named as the provider names it. A model the
+            provider does not recognise leaves retrieval on its un-reranked ranking.
+          maxLength: 255
+        rerank_top_n:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: How many retrieval candidates to rescore. This is what bounds
+            the per-query cost of reranking, since the reranker is charged per candidate.
         create_version_task_id:
           type: string
           maxLength: 128
@@ -2574,6 +2589,11 @@ components:
           nullable: true
           description: The LLM provider used with contextualizer_llm_model to generate
             context headers.
+        reranker_provider:
+          type: integer
+          nullable: true
+          description: Provider whose credentials are used for reranking. Only Voyage
+            AI offers a rerank endpoint.
       required:
       - created_at
       - id
