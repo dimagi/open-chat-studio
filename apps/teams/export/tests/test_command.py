@@ -1,8 +1,11 @@
+import io
+
 import pytest
 import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
+from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management.base import CommandError
 
 from apps.api.export.serializers import build_resource_serializer
@@ -21,6 +24,7 @@ from apps.teams.management.commands.sync_team import (
     run_sync,
 )
 from apps.teams.models import Team
+from apps.users.models import CustomUser
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
@@ -220,7 +224,8 @@ def test_files_confirmation_fails_cleanly_without_a_terminal(tmp_path, keypair, 
         check_sync_preconditions(FakeClient(*_scenario(keypair[0])), keypair[1], store=store)
 
 
-def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
+def _new_user_scenario():
+    """A manifest and rows whose only entry is a single user the target does not have yet."""
     entries = [
         {"model": "users.customuser", "resource": "user", "cursor": "pk", "secret": False},
     ]
@@ -252,12 +257,40 @@ def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
             }
         ],
     }
+    return entries, rows
+
+
+def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
+    entries, rows = _new_user_scenario()
     store = FKTranslationStore(tmp_path / "t.sqlite")
     mail.outbox.clear()
 
     run_sync(FakeClient(_manifest(entries), rows), store, keypair[1])
 
     assert any("added@example.com" in message.to for message in mail.outbox)
+
+
+class _RejectingEmailBackend(BaseEmailBackend):
+    """Stands in for SES in sandbox mode, which refuses any recipient it hasn't verified."""
+
+    def send_messages(self, email_messages):
+        raise RuntimeError("Email address is not verified")
+
+
+def test_a_rejected_password_reset_email_is_reported_instead_of_aborting_the_sync(tmp_path, monkeypatch, settings):
+    """A recipient the mail provider rejects must not take the sync down; the run finishes and the
+    report names them so the reset can be sent by hand."""
+    entries, rows = _new_user_scenario()
+    settings.EMAIL_BACKEND = f"{__name__}._RejectingEmailBackend"
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(_manifest(entries), rows))
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
+    report = io.StringIO()
+
+    Command(stdout=report).handle(**_sync_options(tmp_path))
+
+    assert CustomUser.objects.filter(email="added@example.com").exists()
+    assert "added@example.com" in report.getvalue()
+    assert "Email address is not verified" in report.getvalue()
 
 
 def test_run_sync_builds_team_and_resolves_secret_provider(tmp_path, keypair):
@@ -482,7 +515,7 @@ def test_force_delete_team_is_a_no_op_when_team_missing(tmp_path):
     force_delete_team("never-synced", tmp_path)  # no team, no state DB -- must not raise
 
 
-def _force_delete_options(tmp_path, **overrides):
+def _sync_options(tmp_path, **overrides):
     options = {
         "source_url": "http://src",
         "api_key": "k",
@@ -491,10 +524,14 @@ def _force_delete_options(tmp_path, **overrides):
         "state_dir": str(tmp_path),
         "limit": 100,
         "skip_schema_check": False,
-        "force_delete": True,
+        "force_delete": False,
     }
     options.update(overrides)
     return options
+
+
+def _force_delete_options(tmp_path, **overrides):
+    return _sync_options(tmp_path, force_delete=True, **overrides)
 
 
 def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
