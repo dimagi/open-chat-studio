@@ -107,7 +107,7 @@ class TestControlFlowSignalsDoNotMarkSpan:
             GenerationCancelled("cancelled"),
             UserActionableError("that image type is not supported"),
         ],
-        ids=["early_exit", "early_abort", "generation_cancelled", "user_reportable"],
+        ids=["early_exit", "early_abort", "generation_cancelled", "user_actionable"],
     )
     def test_signal_is_reraised_without_marking_span(self, signal):
         trace_service = make_trace_service()

@@ -46,7 +46,7 @@ class _RaisesUserActionableError(ProcessingStage):
 
 @pytest.mark.django_db()
 @patch.object(MessageProcessingPipeline, "_generate_error_message")
-def test_user_reportable_error_closes_trace_without_error(mock_generate):
+def test_user_actionable_error_closes_trace_without_error(mock_generate):
     """An error the participant can fix is answered, not reported as a broken trace.
 
     The pipeline already generates the participant-facing message, so new_user_message

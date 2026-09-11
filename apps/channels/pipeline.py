@@ -279,10 +279,7 @@ class MessageProcessingPipeline:
             logger.info("No speech detected in voice message: %s", e.reason)
             ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
         except UserActionableError as e:
-            # The participant can act on this -- an unsupported attachment, a voice note
-            # on a chatbot that cannot transcribe. Answer them with the generated message
-            # and do NOT re-raise: the fix is theirs to make, so it must not fail the task
-            # or reach Sentry.
+            # Answered, never re-raised -- see ADR-0065.
             logger.info("Participant-actionable error: %s", e)
             ctx.early_exit_response = self._generate_error_message(ctx, e)
         except Exception as e:

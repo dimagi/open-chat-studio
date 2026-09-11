@@ -308,7 +308,7 @@ class TestFormatMultimodalInput:
             pytest.param("image/tiff", id="tiff"),
         ],
     )
-    def test_unsupported_image_type_raises_user_reportable_error(self, content_type):
+    def test_unsupported_image_type_raises_user_actionable_error(self, content_type):
         attachment = Mock()
         attachment.size = 1024
         attachment.content_type = content_type

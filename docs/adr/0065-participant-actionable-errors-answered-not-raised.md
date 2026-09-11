@@ -16,11 +16,12 @@ The name was also the wrong axis. "Reportable" described where the message was s
 
 ## Decision
 
-We will treat `UserActionableError` as pipeline control flow, alongside `EarlyExitResponse` and `EarlyAbort`.
+We will treat `UserActionableError` as control flow rather than failure, the way `EarlyExitResponse` already is.
 
 - Raise it when the participant can fix what went wrong by changing what they send. That is the whole test: not whether the message is safe to show, but whether the participant has an action available.
 - The pipeline generates a participant-facing message from it via `EventBot`, sets `ctx.early_exit_response`, runs terminal stages and returns normally. It is never re-raised.
-- It is a control-flow signal in `ProcessingStage.__call__`, so a stage's span is not marked as errored and the occurrence does not count on operator error-rate charts.
+- No span it crosses is marked as errored, and the trace stays `SUCCESS`, so the occurrence does not count on operator error-rate charts and fires no trace-error notification. This is enforced in three places, because the exception can be raised at any depth: `ProcessingStage.__call__` for the stage's own span, `TracingService.span` for the spans opened inside the bot run, and `OCSCallbackHandler._capture_error` for LangChain's chain/LLM/tool error callbacks.
+- The stage that raises it must not report a failure either: `VoiceTranscriptionStage` skips its team notification for this class, since nothing was tried and failed.
 - Its message text is written for the participant, because it is fed to the LLM that composes their reply.
 - Anything the participant cannot act on — a provider outage, a revoked key, a bug — must use a different exception and keep the catch-all's re-raise.
 
@@ -28,10 +29,11 @@ A chatbot with no transcription provider is in scope: the participant's action i
 
 ## Consequences
 
-- One participant-facing reply per occurrence, sent and persisted by the terminal stages on every channel, instead of a channel-specific error string.
+- One participant-facing reply per occurrence, generated once and delivered by the terminal stages each channel has, instead of a channel-specific error string. `EvaluationChannel` has no persistence or sending stage, and `ApiChannel` and `WebChannel` persist but return the reply rather than sending it.
 - These stop failing Celery tasks and reaching Sentry, so an operator loses the error-rate signal for a rising number of rejected attachments; team notifications and span outputs remain.
 - Callers no longer need to catch it. The webchat task's `user_facing_error` flag lost its only producer.
-- Misclassifying a genuine fault as `UserActionableError` now hides it. The exception's docstring carries the rule.
+- Misclassifying a genuine fault as `UserActionableError` now hides it completely: no Sentry event, no errored trace, no notification. The exception's docstring carries the rule.
+- `invoke_with_image_error_translation` is the sharpest instance of that risk. It reads provider codes that describe the bytes the provider fetched from our own `download_link`, so a storage or permissions fault on our side can present as a rejected image and be reported to the participant as their problem.
 
 ## Alternatives considered
 

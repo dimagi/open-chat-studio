@@ -111,7 +111,7 @@ class TestCurrentDatetimeCachePreservation:
 
 
 class TestExecuteSubAgentImageErrorWiring:
-    def test_provider_invalid_image_error_surfaces_as_user_reportable(self, monkeypatch):
+    def test_provider_invalid_image_error_surfaces_as_user_actionable(self, monkeypatch):
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
         error = openai.BadRequestError(
             "bad image", response=httpx.Response(400, request=request), body={"code": "invalid_image_format"}
