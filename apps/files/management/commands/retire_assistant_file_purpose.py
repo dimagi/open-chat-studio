@@ -64,7 +64,7 @@ class Command(IdempotentCommand):
         return total
 
     def _delete_unreferenced(self, dry_run) -> int:
-        candidates = list(File.objects.filter(UNREFERENCED, purpose=ASSISTANT_PURPOSE).select_related("team"))
+        candidates = list(File.objects.filter(UNREFERENCED, purpose=ASSISTANT_PURPOSE))
 
         # Belt-and-braces: UNREFERENCED only knows the relations it names, so re-check every
         # candidate generically and drop anything referenced by one it missed.
