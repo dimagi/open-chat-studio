@@ -22,6 +22,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
+from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chat.models import ChatMessage
 from apps.evaluations.dataset_clone import (
     MESSAGE_MODE_ALL_MATCHING_LIMIT,
@@ -252,7 +253,17 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         return response
 
 
-class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class ChatTagPrefetchTableMixin:
+    def get_table(self, **kwargs):
+        table = super().get_table(**kwargs)
+        if getattr(table, "page", None) is not None:
+            attach_chat_tagged_items(table.page.object_list)
+        return table
+
+
+class DatasetSessionsSelectionTableView(
+    ChatTagPrefetchTableMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView
+):  # ty: ignore[invalid-method-override]
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
@@ -812,7 +823,9 @@ def dataset_sessions_count(request, team_slug: str, pk: int):
     return JsonResponse({"total": count})
 
 
-class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class EvalDatasetSessionsTableView(
+    ChatTagPrefetchTableMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView
+):  # ty: ignore[invalid-method-override]
     """Paginated session table for the 'Add sessions' sub-page."""
 
     model = ExperimentSession

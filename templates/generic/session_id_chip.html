@@ -1,0 +1,6 @@
+{% with id_str=external_id|stringformat:"s" %}
+  <span class="inline-flex items-center gap-1">
+    <code class="truncate max-w-32 inline-block" title="{{ external_id }}">{{ external_id }}</code>
+    {% include "generic/copy_chip.html" with copy_element_id=id_prefix|default:"session-id"|add:"-"|add:id_str copy_value=external_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+  </span>
+{% endwith %}
