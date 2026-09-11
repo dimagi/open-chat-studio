@@ -47,8 +47,9 @@ class TeamBackend(ModelBackend):
 
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
-    # No group grants these any more (#4254); the entry keeps the models permission-covered
-    # until they are dropped, which test_missing_content_types enforces.
+    # Only Super Admin grants these now (#4254), via the CONTENT_TYPES fan-out below; the entry
+    # keeps the models permission-covered until they are dropped, which test_missing_content_types
+    # enforces.
     "assistants": ["openaiassistant", "toolresources"],
     "banners": ["banner"],
     "bot_channels": ["experimentchannel"],

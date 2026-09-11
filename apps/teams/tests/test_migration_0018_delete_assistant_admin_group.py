@@ -1,6 +1,7 @@
 import importlib
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import connection
 from django.db.migrations.loader import MigrationLoader
@@ -92,3 +93,15 @@ def test_is_a_noop_when_the_group_is_already_gone():
     _run()
 
     assert not Group.objects.filter(name="Assistant Admin").exists()
+
+
+@pytest.mark.django_db()
+def test_detaches_the_group_from_users(assistant_admin):
+    """Staff can assign the group directly through the Django admin's user form."""
+    user = UserFactory.create()
+    user.groups.add(assistant_admin)
+
+    _run()
+
+    through = get_user_model().groups.through
+    assert not through.objects.filter(group_id=assistant_admin.id).exists()
