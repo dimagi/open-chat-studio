@@ -12,7 +12,7 @@ from apps.chat.exceptions import (
     ChatException,
     NoSpeechDetected,
     NoSpeechReason,
-    UserReportableError,
+    UserActionableError,
 )
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
@@ -317,13 +317,13 @@ class TestNoSpeechDetected:
         t1.assert_called_once()
 
 
-class TestUserReportableError:
+class TestUserActionableError:
     """An error the participant can act on is answered, not reported as a fault."""
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_replies_with_the_generated_message_and_does_not_reraise(self, mock_gen):
         mock_gen.return_value = "That image type is not supported -- try a PNG."
-        error = UserReportableError("`x.bmp` is not a supported image type")
+        error = UserActionableError("`x.bmp` is not a supported image type")
         s1 = _make_stage(side_effect=error)
         t1 = _make_stage()
 
@@ -340,7 +340,7 @@ class TestUserReportableError:
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_is_not_recorded_as_a_processing_error(self, mock_gen):
         mock_gen.return_value = "That image type is not supported -- try a PNG."
-        s1 = _make_stage(side_effect=UserReportableError("`x.bmp` is not a supported image type"))
+        s1 = _make_stage(side_effect=UserActionableError("`x.bmp` is not a supported image type"))
 
         ctx = make_context()
         _pipeline(core=[s1], terminal=[_make_stage()]).process(ctx)

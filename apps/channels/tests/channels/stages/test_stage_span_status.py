@@ -11,7 +11,7 @@ import pytest
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.terminal import MessageDeliveryFailure
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 
 from ..conftest import make_context, make_trace_service
@@ -105,7 +105,7 @@ class TestControlFlowSignalsDoNotMarkSpan:
             EarlyExitResponse("done"),
             EarlyAbort(),
             GenerationCancelled("cancelled"),
-            UserReportableError("that image type is not supported"),
+            UserActionableError("that image type is not supported"),
         ],
         ids=["early_exit", "early_abort", "generation_cancelled", "user_reportable"],
     )

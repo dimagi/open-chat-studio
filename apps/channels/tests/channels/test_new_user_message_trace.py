@@ -7,7 +7,7 @@ import pytest
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.tests.message_examples import base_messages
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.chat.models import ChatMessage
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -39,9 +39,9 @@ def test_generation_cancelled_closes_trace_without_error():
     trace_cm.set_outputs.assert_called_once_with({"response": "", "cancelled": True})
 
 
-class _RaisesUserReportableError(ProcessingStage):
+class _RaisesUserActionableError(ProcessingStage):
     def process(self, ctx):
-        raise UserReportableError("`x.bmp` is not a supported image type")
+        raise UserActionableError("`x.bmp` is not a supported image type")
 
 
 @pytest.mark.django_db()
@@ -58,7 +58,7 @@ def test_user_reportable_error_closes_trace_without_error(mock_generate):
     trace_service = make_trace_service()
     channel.trace_service = trace_service
     trace_cm = trace_service.trace.return_value
-    pipeline = MessageProcessingPipeline(core_stages=[_RaisesUserReportableError()], terminal_stages=[])
+    pipeline = MessageProcessingPipeline(core_stages=[_RaisesUserActionableError()], terminal_stages=[])
 
     with patch.object(StubChannel, "_build_pipeline", return_value=pipeline):
         response = channel.new_user_message(base_messages.text_message())

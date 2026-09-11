@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -48,7 +48,7 @@ def test_user_reportable_error_is_not_special_cased(session):
     Re-adding a catch here would resurrect the bug it used to cause: the participant
     was shown the raw exception while the generated reply was persisted but never sent.
     """
-    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserReportableError("nope")):
+    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserActionableError("nope")):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
     assert response["error"] == "nope"

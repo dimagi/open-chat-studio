@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.db.models import Model
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
-from apps.chat.exceptions import NoSpeechDetected, UserReportableError
+from apps.chat.exceptions import NoSpeechDetected, UserActionableError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ _CONTROL_FLOW_SIGNALS = (
     EarlyAbort,
     GenerationCancelled,
     NoSpeechDetected,
-    UserReportableError,
+    UserActionableError,
 )
 
 # Bounds for span-value serialization -- keep trace payloads small and cheap.

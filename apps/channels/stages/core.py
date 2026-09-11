@@ -17,7 +17,7 @@ from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserReportableError
+from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserActionableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -604,7 +604,7 @@ class QueryExtractionStage(ProcessingStage):
             speech_service = ctx.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        raise UserReportableError("Voice transcription is not available for this chatbot")
+        raise UserActionableError("Voice transcription is not available for this chatbot")
 
 
 # ---------------------------------------------------------------------------

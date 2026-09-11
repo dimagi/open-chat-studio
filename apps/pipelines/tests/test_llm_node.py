@@ -5,7 +5,7 @@ import openai
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.pipelines.nodes import llm_node
 from apps.pipelines.nodes.helpers import get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.llm_node import (
@@ -131,5 +131,5 @@ class TestExecuteSubAgentImageErrorWiring:
         context.state.participant_data = {}
         context.state.session_state = {}
 
-        with pytest.raises(UserReportableError):
+        with pytest.raises(UserActionableError):
             llm_node.execute_sub_agent(node, context)
