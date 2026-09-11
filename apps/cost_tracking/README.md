@@ -36,11 +36,14 @@ Reads split on one rule ([ADR-0048](../../docs/adr/0048-evaluation-spend-is-team
 
 The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens, one entry per `(provider_type, model_name)`). Migration `0002_seed_pricing.py` and any subsequent `NNNN_rate_update_*.py` migrations load it via `load_pricing_data()` from `migration_utils.py`, which calls the `load_ai_pricing` management command. The loader is idempotent and handles supersession on rate changes.
 
-`.github/workflows/auto-update-models.yml` runs `scripts/reconcile_models.py` daily; one upstream pass produces three signals that the workflow acts on:
+`.github/workflows/auto-update-models.yml` runs `scripts/reconcile_models.py` daily; one pass over LiteLLM's `model_prices_and_context_window.json` produces four signals that the workflow acts on:
 
-- `new_models` - candidates not yet in `default_models.py`. Claude Code opens a PR to register them following `docs/developer_guides/managing_models.md`.
+- `new_models` - candidates not yet in `default_models.py`. Claude Code opens a PR to register them following `docs/developer_guides/managing_models.md`. Models a reviewer looked at and rejected are recorded in `scripts/reconcile_ignored_models.json`, which keeps them out of later runs.
 - `price_changes` - upstream rates have moved for an existing seed entry. The script rewrites `llm_pricing.json` and emits a `NNNN_rate_update_YYYYMMDD.py` data migration; the workflow opens a mechanical "Pricing update" PR.
 - `missing_pricing` - active OCS-managed models (entries in `DEFAULT_LLM_PROVIDER_MODELS`) with no `llm_input`/`llm_output` seed rule. The workflow opens or updates a tracked GitHub issue.
+- `deprecated_upstream` - models still listed as active whose upstream `deprecation_date` has passed. Claude Code marks them `deprecated=True`.
+
+Rates are resolved per provider, from each provider's own price-table key: Azure resells OpenAI models at its own rate, so one rate copied across providers bills the rest wrong.
 
 `backfill_pricing_seed` (in `management/commands/`) is a one-shot developer tool that walks `DEFAULT_LLM_PROVIDER_MODELS` and fills the seed from LiteLLM for any uncovered model.
 

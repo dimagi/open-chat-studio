@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """
-Reconcile OCS's in-repo model catalogue and pricing seed against upstream
-sources (llm-stats.com via the zeroeval Stats API, with LiteLLM as a fallback
-for pricing). One daily run produces three signals consumed by the
-``auto-update-models`` workflow:
+Reconcile OCS's in-repo model catalogue and pricing seed against LiteLLM's
+``model_prices_and_context_window.json``, which is the single upstream source:
+it carries pricing, token limits, provider, model kind and deprecation dates
+for ~3 900 models, is updated several times a day, and needs no credentials.
 
-* **new_models** - candidates newly published upstream that OCS hasn't
-  registered yet. Feeds the Claude Code job that opens a "Register new models"
-  PR.
+Discovery works by diffing the file against its own git history: a key present
+today and absent in the commit from ``--baseline-days`` ago is newly published.
+
+One daily run produces four signals consumed by the ``auto-update-models``
+workflow:
+
+* **new_models** - models upstream that OCS hasn't registered yet. Selected by
+  state rather than by a date window, so a day the workflow was broken heals on
+  the next run; recently-published ones are offered first, capped per run, with
+  the remainder reported as ``backlog``. Feeds the Claude Code job that opens a
+  "Register new models" PR. Models a reviewer looked at and rejected are
+  recorded in ``scripts/reconcile_ignored_models.json`` so they stop occupying
+  a slot ahead of the backlog.
 * **price_changes** - existing seed entries whose upstream rate has moved.
   Rewrites ``llm_pricing.json`` in place and emits a
   ``NNNN_rate_update_YYYYMMDD.py`` data migration, so the workflow can open a
@@ -15,17 +25,21 @@ for pricing). One daily run produces three signals consumed by the
 * **missing_pricing** - models in ``default_models.py`` with no usable seed
   entry (no ``llm_input``/``llm_output`` rule). Feeds a "missing pricing"
   GitHub issue so OCS-managed coverage gaps surface as a tracked task.
+* **deprecated_upstream** - models OCS still lists as active whose upstream
+  deprecation date has passed. Feeds the same Claude Code job, which marks them
+  ``deprecated=True``.
 
 Usage (from the repo root)::
 
     python scripts/reconcile_models.py \\
-        --bearer-token "$LLM_STATS_BEARER_TOKEN" \\
-        [--days 1] \\
+        [--baseline-days 7] \\
         [--repo-root .] \\
         [--output reconciliation.json] \\
+        [--dry-run] \\
         [--today YYYY-MM-DD]    # deterministic-tests override
 
-Side effects (only when ``price_changes`` is non-empty):
+Side effects (only when ``price_changes`` is non-empty, and never under
+``--dry-run``):
 
 * Overwrites ``apps/cost_tracking/seed_data/llm_pricing.json`` with the new
   rates.
@@ -37,14 +51,17 @@ Side effects (always, when running under GitHub Actions):
 * Appends gate variables to ``$GITHUB_OUTPUT``::
 
     has_new_models, new_model_count, new_model_ids
-    has_price_changes, price_change_count, pricing_pr_title, pricing_pr_body_path
+    has_price_changes, price_change_count, backfilled_count,
+        pricing_pr_title, pricing_pr_body_path
     has_missing_pricing, missing_pricing_count, missing_pricing_issue_body_path
+    has_deprecated_upstream, deprecated_upstream_count
+
+Exit code is 1 when the price table can't be read; every signal derives from
+it, so a run without it has no output to give.
 
 Pricing unit conventions
 ------------------------
 * OCS ``llm_pricing.json`` stores ``unit_price`` per **1 000** tokens.
-* llm-stats.com returns ``input_price``/``output_price`` per **1 000 000**
-  tokens (divide by 1 000).
 * LiteLLM's ``model_prices_and_context_window.json`` is per **1** token
   (multiply by 1 000).
 """
@@ -52,161 +69,120 @@ Pricing unit conventions
 from __future__ import annotations
 
 import argparse
-import ast
 import datetime
+import enum
+import io
 import json
 import os
-import urllib.error
-import urllib.request
-from collections.abc import Callable, Iterator
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from reconcile_catalogue import (
+    load_active_default_models,
+    load_ignored_models,
+    load_registered_models,
+)
+from reconcile_http import _get_json, _github_headers
+
 # Constants
 
-ORG_TO_OCS_PROVIDERS: dict[str, list[str]] = {
-    "openai": ["openai", "azure"],
-    "anthropic": ["anthropic"],
-    "google": ["google", "google_vertex_ai"],
-    "deepseek": ["deepseek"],
-    "perplexity": ["perplexity"],
-    "minimax": ["minimax"],
+
+class _ExtraSegments(enum.Enum):
+    """What a key's segments after the provider namespace mean."""
+
+    # A preset, or a pass-through to another vendor. Not a model this provider
+    # serves under this name (``perplexity/openai/gpt-5.1``).
+    REJECT = "reject"
+    # A deployment region or tier, not part of the model name
+    # (``azure/eu/gpt-4o``).
+    REGION = "region"
+    # The originating vendor, which this provider's API expects as part of the
+    # model ID (``groq/openai/gpt-oss-120b``).
+    MODEL_NAME = "model_name"
+
+
+@dataclass(frozen=True)
+class _ProviderNamespace:
+    """How LiteLLM keys one provider's models, and what OCS calls that provider."""
+
+    ocs_provider: str
+    prefix: str
+    extra_segments: _ExtraSegments = _ExtraSegments.REJECT
+
+
+# LiteLLM tags every entry with the provider that serves it, so which OCS
+# providers offer a model is read from the data rather than guessed from the
+# organisation that published it. ``prefix`` is the key namespace that provider
+# uses, which is not always its tag: Google's AI Studio models are tagged
+# "gemini" and keyed "gemini/...", while Vertex models are tagged
+# "vertex_ai-language-models" and keyed "vertex_ai/..." or bare.
+LITELLM_PROVIDERS: dict[str, _ProviderNamespace] = {
+    "openai": _ProviderNamespace("openai", "openai"),
+    "azure": _ProviderNamespace("azure", "azure", _ExtraSegments.REGION),
+    "anthropic": _ProviderNamespace("anthropic", "anthropic"),
+    "gemini": _ProviderNamespace("google", "gemini"),
+    # Vertex tags its gemini models two ways and keys some of them both bare
+    # and namespaced, so both tags map to the same OCS provider.
+    "vertex_ai-language-models": _ProviderNamespace("google_vertex_ai", "vertex_ai"),
+    "vertex_ai": _ProviderNamespace("google_vertex_ai", "vertex_ai"),
+    "deepseek": _ProviderNamespace("deepseek", "deepseek"),
+    "perplexity": _ProviderNamespace("perplexity", "perplexity"),
+    "groq": _ProviderNamespace("groq", "groq", _ExtraSegments.MODEL_NAME),
+    "minimax": _ProviderNamespace("minimax", "minimax"),
 }
 
-# Providers we can diff against llm-stats. llm-stats prices an upstream
-# model once (e.g. "gpt-4o"); the same rate applies to OCS providers that
-# wrap that upstream. Others (groq, deepseek, ...) have no llm-stats source.
+OCS_PROVIDER_PREFIX: dict[str, str] = {ns.ocs_provider: ns.prefix for ns in LITELLM_PROVIDERS.values()}
+
+# The kinds of model OCS can actually run as a chatbot. "responses" is the
+# OpenAI Responses API, which covers four models OCS already registers.
+CHAT_MODES = frozenset({"chat", "responses"})
+
+# Some entries are tagged mode "chat" but only emit audio (Google's lyria music
+# models). Where the field is present it is the more reliable signal.
+TEXT_MODALITY = "text"
+
+# Seed providers whose rates are diffed against LiteLLM. Deliberately narrower
+# than the seed: these are the upstreams whose published rates LiteLLM mirrors
+# closely enough to rewrite the seed from. Widening it would put groq/deepseek
+# rates under automated rewrite too, which is a separate decision.
 DIFFABLE_PROVIDERS = frozenset({"openai", "azure", "anthropic", "google", "google_vertex_ai"})
 
 # A model with neither llm_input nor llm_output seed pricing is treated as
 # missing, regardless of whether a cached-input rate exists.
 REQUIRED_SERVICE_KINDS = frozenset({"llm_input", "llm_output"})
 
-LITELLM_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
-LLM_STATS_DETAIL_URL = "https://api.zeroeval.com/stats/v1/models/{model_id}"
-LLM_STATS_UPDATES_URL = "https://api.zeroeval.com/stats/v1/updates?days={days}&limit=30"
-LLM_STATS_PUBLIC_URL = "https://llm-stats.com/models/{model_id}"
+LITELLM_REPO = "BerriAI/litellm"
+LITELLM_PRICING_PATH = "model_prices_and_context_window.json"
+LITELLM_PRICING_URL = f"https://raw.githubusercontent.com/{LITELLM_REPO}/refs/heads/main/{LITELLM_PRICING_PATH}"
+LITELLM_PRICING_AT_URL = f"https://raw.githubusercontent.com/{LITELLM_REPO}/{{sha}}/{LITELLM_PRICING_PATH}"
+LITELLM_SOURCE_URL = f"https://github.com/{LITELLM_REPO}/blob/main/{LITELLM_PRICING_PATH}"
+LITELLM_COMMITS_URL = (
+    f"https://api.github.com/repos/{LITELLM_REPO}/commits?path={LITELLM_PRICING_PATH}&until={{until}}&per_page=1"
+)
 
-DEFAULT_MODELS_REL_PATH = "apps/service_providers/llm_service/default_models.py"
+# How far back to look for "newly published". Only affects ordering: an older
+# model OCS never registered is still a candidate, just behind the recent ones.
+DEFAULT_BASELINE_DAYS = 7
+
+# Registering everything unregistered at once would be an unreviewable PR, so
+# each run takes the newest slice and leaves the rest for the next one. Kept
+# small because each candidate is a judgement call for a human to check.
+MAX_NEW_MODELS_PER_RUN = 10
+
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 MIGRATIONS_DIR_REL_PATH = "apps/cost_tracking/migrations"
 
-_NOISY_DETAIL_FIELDS = {"scores", "top_scores", "providers"}
-
-_DETAIL_PRICE_FIELDS = {
-    "input_price": "llm_input",
-    "output_price": "llm_output",
-    "cached_input_price": "llm_cached_input",
-    "cache_write_price": "llm_cache_write",
-}
-
-NO_PRICING_REASON = "No pricing data found in llm_stats or LiteLLM"
-
-# HTTP helpers
-
-
-def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
-    req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
-
-
-def _api_get(url: str, bearer: str) -> Any:
-    return _get_json(
-        url,
-        headers={
-            "Authorization": f"Bearer {bearer}",
-            "User-Agent": "ocs-reconcile-models-script/1.0",
-            "Accept": "application/json",
-        },
-    )
-
-
-# default_models.py parsing - pure AST, no Django import
-
-
-def _model_call_name(node: ast.expr) -> str | None:
-    if isinstance(node, ast.Call) and node.args:
-        first = node.args[0]
-        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-            return first.value
-    return None
-
-
-def _const_str(node: ast.expr) -> str | None:
-    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
-
-
-def _default_model_pairs(dict_node: ast.Dict) -> Iterator[tuple[str, str]]:
-    for key_node, value_node in zip(dict_node.keys, dict_node.values, strict=True):
-        provider = _const_str(key_node) if key_node is not None else None
-        if provider is None or not isinstance(value_node, ast.List):
-            continue
-        for name in filter(None, map(_model_call_name, value_node.elts)):
-            yield provider, name
-
-
-def _deleted_model_pairs(list_node: ast.List) -> Iterator[tuple[str, str]]:
-    for elt in list_node.elts:
-        if not (isinstance(elt, ast.Tuple) and len(elt.elts) >= 2):
-            continue
-        provider, model = _const_str(elt.elts[0]), _const_str(elt.elts[1])
-        if provider is not None and model is not None:
-            yield provider, model
-
-
-def _assignment_pairs(node: ast.stmt) -> Iterator[tuple[str, str]]:
-    if not isinstance(node, ast.Assign):
-        return
-    targets = {t.id for t in node.targets if isinstance(t, ast.Name)}
-    if "DEFAULT_LLM_PROVIDER_MODELS" in targets and isinstance(node.value, ast.Dict):
-        yield from _default_model_pairs(node.value)
-    elif "DELETED_MODELS" in targets and isinstance(node.value, ast.List):
-        yield from _deleted_model_pairs(node.value)
-
-
-def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
-    """Parse ``default_models.py`` and return ``{provider: {model_name, ...}}``.
-
-    DELETED_MODELS entries are folded in so re-adding a deleted model is
-    flagged for review rather than silently re-registered.
-    """
-    tree = ast.parse((repo_root / DEFAULT_MODELS_REL_PATH).read_text())
-    registered: dict[str, set[str]] = {}
-    for node in tree.body:
-        for provider, model in _assignment_pairs(node):
-            registered.setdefault(provider, set()).add(model)
-    return registered
-
-
-def load_active_default_models(repo_root: Path) -> set[tuple[str, str]]:
-    """``(provider, model)`` pairs in ``DEFAULT_LLM_PROVIDER_MODELS`` only.
-
-    The missing-pricing audit consumes this. DELETED_MODELS are deliberately
-    excluded - the audit only flags coverage gaps for *active* OCS models.
-    """
-    tree = ast.parse((repo_root / DEFAULT_MODELS_REL_PATH).read_text())
-    active: set[tuple[str, str]] = set()
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        targets = {t.id for t in node.targets if isinstance(t, ast.Name)}
-        if "DEFAULT_LLM_PROVIDER_MODELS" in targets and isinstance(node.value, ast.Dict):
-            active.update(_default_model_pairs(node.value))
-    return active
-
+NO_PRICING_REASON = "No pricing data found in the LiteLLM price table"
 
 # Seed I/O
 
 
 def load_seed(path: Path) -> list[dict]:
     return json.loads(path.read_text())
-
-
-def load_priced_models(repo_root: Path) -> set[tuple[str, str]]:
-    return {(entry["provider_type"], entry["model_name"]) for entry in load_seed(repo_root / LLM_PRICING_REL_PATH)}
 
 
 def seed_index(seed: list[dict]) -> dict[tuple[str, str], dict[str, str]]:
@@ -227,16 +203,8 @@ def _fmt(value: float | None) -> str | None:
     return str(Decimal(f"{value:.8g}").normalize())
 
 
-def _per_million_to_per_1k(v: float | None) -> float | None:
-    return v / 1_000.0 if v is not None else None
-
-
 def _per_token_to_per_1k(v: float | None) -> float | None:
     return v * 1_000.0 if v is not None else None
-
-
-def _format_per_1k(per_million: float) -> str:
-    return f"{per_million / 1000:.8f}".rstrip("0").rstrip(".") or "0"
 
 
 def _rates_from_raw(
@@ -256,16 +224,28 @@ def _rates_from_raw(
     return result or None
 
 
-def resolve_pricing_from_llm_stats(details: dict[str, Any]) -> dict[str, str] | None:
-    return _rates_from_raw(
-        {
-            "llm_input": details.get("input_price"),
-            "llm_output": details.get("output_price"),
-            "llm_cached_input": details.get("cached_input_price"),
-            "llm_cache_write": details.get("cache_write_price"),
-        },
-        _per_million_to_per_1k,
-    )
+def _litellm_entry(model_id: str, litellm_data: dict[str, Any], provider: str | None = None) -> dict | None:
+    """Find a model's entry in the price table.
+
+    OCS stores bare model names; LiteLLM namespaces many keys by the provider
+    that serves them, and the two names for a provider differ (OCS "google" is
+    LiteLLM "gemini"). Namespaced keys are tried before the bare key, because a
+    reseller charges its own rate for a model it did not originate and LiteLLM's
+    bare key holds the originating vendor's rate. A lookup with no provider is
+    restricted to the bare key, which keeps it off any reseller's rate.
+    """
+    keys = []
+    if provider:
+        prefix = OCS_PROVIDER_PREFIX.get(provider, provider)
+        # Upstream self-namespaces some keys ("perplexity/perplexity/sonar"),
+        # so both depths are probed to reach the row discovery records.
+        keys += [f"{prefix}/{model_id}", f"{prefix}/{prefix}/{model_id}"]
+    keys.append(model_id)
+    for key in keys:
+        entry = litellm_data.get(key)
+        if isinstance(entry, dict):
+            return entry
+    return None
 
 
 def resolve_pricing_from_litellm(
@@ -273,86 +253,217 @@ def resolve_pricing_from_litellm(
     litellm_data: dict[str, Any],
     provider: str | None = None,
 ) -> dict[str, str] | None:
-    """Look up ``model_id`` in the LiteLLM pricing table.
-
-    Tries the bare model ID first, then ``{provider}/{model_id}`` when a
-    provider is supplied.  This catches provider-namespaced entries such as
-    ``groq/gemma-7b-it`` that would be missed by a bare lookup.
-    """
-    candidates = [model_id]
-    if provider:
-        candidates.append(f"{provider}/{model_id}")
-    for key in candidates:
-        entry = litellm_data.get(key)
-        if entry is not None:
-            return _rates_from_raw(
-                {
-                    "llm_input": entry.get("input_cost_per_token"),
-                    "llm_output": entry.get("output_cost_per_token"),
-                    "llm_cached_input": entry.get("cache_read_input_token_cost"),
-                    "llm_cache_write": entry.get("cache_creation_input_token_cost"),
-                },
-                _per_token_to_per_1k,
-            )
-    return None
+    """Per-1K rates for a model from the LiteLLM price table."""
+    entry = _litellm_entry(model_id, litellm_data, provider)
+    if entry is None:
+        return None
+    return _rates_from_raw(
+        {
+            "llm_input": entry.get("input_cost_per_token"),
+            "llm_output": entry.get("output_cost_per_token"),
+            "llm_cached_input": entry.get("cache_read_input_token_cost"),
+            "llm_cache_write": entry.get("cache_creation_input_token_cost"),
+        },
+        _per_token_to_per_1k,
+    )
 
 
-def rates_from_detail(detail: dict) -> dict[str, str]:
-    """Per-1K-token rates from an llm-stats detail payload."""
-    rates: dict[str, str] = {}
-    for detail_key, service_kind in _DETAIL_PRICE_FIELDS.items():
-        raw = detail.get(detail_key)
-        if raw is None:
-            continue
-        rates[service_kind] = _format_per_1k(raw)
-    return rates
-
-
-def build_pricing_entries(model_id: str, providers: list[str], pricing: dict[str, str]) -> list[dict]:
-    rules = [{"service_kind": kind, "unit_price": price} for kind, price in pricing.items()]
-    return [{"provider_type": provider, "model_name": model_id, "rules": rules} for provider in providers if rules]
-
-
-# llm-stats fetch helpers
-
-
-def _filter_matched_models(updates: dict) -> list[dict]:
+def build_pricing_entries(model_id: str, rates_by_provider: dict[str, dict[str, str]]) -> list[dict]:
+    """One seed entry per provider, each carrying that provider's own rates."""
     return [
-        m
-        for m in updates.get("models", [])
-        if m.get("organization", {}).get("id") in ORG_TO_OCS_PROVIDERS and m.get("model_type") == "llm"
+        {
+            "provider_type": provider,
+            "model_name": model_id,
+            "rules": [{"service_kind": kind, "unit_price": price} for kind, price in rates.items()],
+        }
+        for provider, rates in rates_by_provider.items()
+        if rates
     ]
 
 
-def _enrich_model(model: dict, bearer: str) -> dict:
-    """Hydrate ``model`` in-place with its detail payload (or ``details_error``)."""
-    model_id = model["id"]
+# Discovery via the price table's own git history
+
+
+def _litellm_at(sha: str) -> dict[str, Any]:
+    return _get_json(LITELLM_PRICING_AT_URL.format(sha=sha))
+
+
+def baseline_sha(days: int, today: datetime.date | None = None) -> str | None:
+    """SHA of the last commit to touch the price table before *days* ago.
+
+    Returns None when GitHub can't be reached; recency is then unknown and the
+    run continues rather than failing.
+    """
+    cutoff = (today or datetime.datetime.now(datetime.UTC).date()) - datetime.timedelta(days=days)
     try:
-        details = _api_get(LLM_STATS_DETAIL_URL.format(model_id=model_id), bearer)
-        for field in _NOISY_DETAIL_FIELDS:
-            details.pop(field, None)
-        model["details"] = details
-        if details.get("context_window") and not model.get("context_window"):
-            model["context_window"] = details["context_window"]
-    except urllib.error.HTTPError as e:
-        model["details_error"] = f"HTTP {e.code}: {e.reason}"
-    except Exception as e:  # noqa: BLE001
-        model["details_error"] = str(e)
-    return model
+        commits = _get_json(
+            LITELLM_COMMITS_URL.format(until=f"{cutoff.isoformat()}T00:00:00Z"), headers=_github_headers()
+        )
+    except Exception as exc:  # ordering is a nicety, not worth failing over
+        print(f"  (!) could not read LiteLLM history ({exc}); recency unknown.")
+        return None
+    return commits[0]["sha"] if commits else None
 
 
-def fetch_candidates(bearer: str, days: int) -> list[dict]:
-    updates = _api_get(LLM_STATS_UPDATES_URL.format(days=days), bearer)
-    return [_enrich_model(m, bearer) for m in _filter_matched_models(updates)]
+def fetch_baseline(days: int, today: datetime.date | None = None) -> dict[str, Any] | None:
+    """The price table as it stood *days* ago, or None when it can't be read.
 
-
-def fetch_detail(model_id: str, bearer: str) -> dict | None:
+    None and an empty table are different answers: an unread baseline makes
+    every model look new, so callers must be able to tell them apart.
+    """
+    sha = baseline_sha(days, today)
+    if not sha:
+        return None
     try:
-        return _api_get(LLM_STATS_DETAIL_URL.format(model_id=model_id), bearer)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        return _litellm_at(sha) or None
+    except Exception as exc:
+        print(f"  (!) could not read the baseline price table ({exc}); recency unknown.")
+        return None
+
+
+def _key_for_provider(key: str, litellm_provider: str | None) -> tuple[str, str] | None:
+    """Map a price-table key to ``(ocs_provider, model_name)``, or None to skip it.
+
+    LiteLLM reuses the segments after its provider namespace for three
+    different things, and only ``_ExtraSegments`` says which: an Azure region
+    or tier, a Perplexity preset or pass-through to another vendor, or - for
+    Groq alone - part of the model ID its API expects.
+    """
+    namespace = LITELLM_PROVIDERS.get(litellm_provider)
+    if namespace is None:
+        return None
+    name = key
+    prefix = f"{namespace.prefix}/"
+    while name.startswith(prefix):
+        name = name.removeprefix(prefix)
+    if not name:
+        return None
+    if "/" in name:
+        if namespace.extra_segments is _ExtraSegments.REJECT:
             return None
-        raise
+        if namespace.extra_segments is _ExtraSegments.REGION:
+            name = name.rsplit("/", 1)[-1]
+    return namespace.ocs_provider, name
+
+
+def _model_names(litellm_data: dict[str, Any]) -> set[str]:
+    """Every OCS-shaped model name in a price table, however its keys are namespaced."""
+    names = set()
+    for key, entry in litellm_data.items():
+        if not isinstance(entry, dict):
+            continue
+        mapped = _key_for_provider(key, entry.get("litellm_provider"))
+        if mapped:
+            names.add(mapped[1])
+    return names
+
+
+def _serves_chat(entry: Any) -> bool:
+    """A price-table entry OCS could run as a chatbot."""
+    if not isinstance(entry, dict) or entry.get("mode") not in CHAT_MODES:
+        return False
+    modalities = entry.get("supported_output_modalities")
+    return TEXT_MODALITY in modalities if isinstance(modalities, list) else True
+
+
+def _is_deprecated(entry: dict, today: datetime.date) -> bool:
+    raw = entry.get("deprecation_date")
+    if not raw:
+        return False
+    try:
+        return datetime.date.fromisoformat(str(raw)[:10]) <= today
+    except ValueError:
+        return False
+
+
+def eligible_models(litellm_data: dict[str, Any], today: datetime.date | None = None) -> dict[str, dict]:
+    """Chat-capable models from providers OCS supports, keyed by model name.
+
+    One model can be served by several providers (``gpt-4o`` on both openai and
+    azure), so entries are merged: which providers offer it comes from the data
+    rather than from a hardcoded org mapping.
+    """
+    today = today or datetime.datetime.now(datetime.UTC).date()
+    merged: dict[str, dict] = {}
+    for key, entry in litellm_data.items():
+        if not _serves_chat(entry) or _is_deprecated(entry, today):
+            continue
+        mapped = _key_for_provider(key, entry.get("litellm_provider"))
+        if mapped is None:
+            continue
+        ocs_provider, name = mapped
+        record = merged.setdefault(name, {"id": name, "providers": [], "keys": {}, "deprecation_date": None})
+        _merge_provider_key(record, key, entry, ocs_provider)
+    for record in merged.values():
+        record["providers"].sort()
+    return merged
+
+
+def _merge_provider_key(record: dict, key: str, entry: dict, ocs_provider: str) -> None:
+    """Fold one price-table key into the record for the model name it maps to."""
+    if ocs_provider not in record["providers"]:
+        record["providers"].append(ocs_provider)
+    if _prefers_key(key, record["keys"].get(ocs_provider), ocs_provider):
+        record["keys"][ocs_provider] = key
+    record["deprecation_date"] = record["deprecation_date"] or entry.get("deprecation_date")
+
+
+def _prefers_key(key: str, incumbent: str | None, ocs_provider: str) -> bool:
+    return incumbent is None or _key_rank(key, ocs_provider) < _key_rank(incumbent, ocs_provider)
+
+
+def _key_rank(key: str, ocs_provider: str) -> tuple[int, int]:
+    """Lower is better. A namespaced key beats a bare one so pricing reads the
+    reseller's own rate, and a plain one beats a regional variant of the same
+    model so the seed doesn't inherit a region's premium.
+    """
+    prefix = f"{OCS_PROVIDER_PREFIX[ocs_provider]}/"
+    return (0 if key.startswith(prefix) else 1, key.count("/"))
+
+
+def select_candidates(
+    litellm_data: dict[str, Any],
+    baseline: dict[str, Any] | None,
+    registered: dict[str, set[str]],
+    ignored: dict[str, set[str]] | None = None,
+    today: datetime.date | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Split unregistered models into this run's candidates and the backlog.
+
+    Selection is by state, not by a date window, so nothing is lost when a run
+    fails. Models that appeared in the price table since the baseline are
+    offered first, because those are the ones a reviewer is expecting. A
+    *baseline* of None means the history was unreachable, so recency is
+    reported as unknown rather than claiming every model is new.
+    """
+    ignored = ignored or {}
+    baseline_names = None if baseline is None else _model_names(baseline)
+    unregistered = [
+        {**record, "recently_published": None if baseline_names is None else record["id"] not in baseline_names}
+        for record in eligible_models(litellm_data, today).values()
+        if any(_is_open(record["id"], p, registered, ignored) for p in record["providers"])
+    ]
+    unregistered.sort(key=lambda r: (not r["recently_published"], r["id"]))
+    return unregistered[:MAX_NEW_MODELS_PER_RUN], unregistered[MAX_NEW_MODELS_PER_RUN:]
+
+
+def _is_open(model: str, provider: str, registered: dict[str, set[str]], ignored: dict[str, set[str]]) -> bool:
+    return model not in registered.get(provider, set()) and model not in ignored.get(provider, set())
+
+
+def audit_deprecated_upstream(
+    active: set[tuple[str, str]],
+    litellm_data: dict[str, Any],
+    today: datetime.date | None = None,
+) -> list[dict]:
+    """Active OCS models whose upstream deprecation date has passed."""
+    today = today or datetime.datetime.now(datetime.UTC).date()
+    out = []
+    for provider, model in sorted(active):
+        entry = _litellm_entry(model, litellm_data, provider)
+        if entry and _is_deprecated(entry, today):
+            out.append({"provider_type": provider, "model_name": model, "deprecation_date": entry["deprecation_date"]})
+    return out
 
 
 # Candidate classification (new-models path)
@@ -360,12 +471,14 @@ def fetch_detail(model_id: str, bearer: str) -> dict | None:
 
 @dataclass
 class PricingResult:
-    rates: dict[str, str] | None
+    """Per-1K rates for each provider that has them, keyed by OCS provider."""
+
+    rates_by_provider: dict[str, dict[str, str]]
     source: str | None
 
     @property
     def has_pricing(self) -> bool:
-        return bool(self.rates)
+        return bool(self.rates_by_provider)
 
 
 @dataclass
@@ -377,28 +490,25 @@ class Candidate:
         return self.raw["id"]
 
     @property
-    def org(self) -> str:
-        return self.raw.get("organization", {}).get("id", "")
-
-    @property
-    def details(self) -> dict:
-        return self.raw.get("details", {})
-
-    @property
-    def details_error(self) -> str | None:
-        return self.raw.get("details_error")
-
-    @property
-    def context_window(self) -> int | None:
-        return self.raw.get("context_window")
-
-    @property
     def ocs_providers(self) -> list[str]:
-        return ORG_TO_OCS_PROVIDERS.get(self.org, [])
+        return self.raw.get("providers", [])
+
+    @property
+    def keys(self) -> dict[str, str]:
+        """The price-table key discovery matched, per provider."""
+        return self.raw.get("keys") or {}
+
+    def litellm_key(self, provider: str) -> str:
+        return self.keys.get(provider) or self.id
+
+    @property
+    def recently_published(self) -> bool | None:
+        """None when the baseline was unreachable - unknown, not old."""
+        return self.raw.get("recently_published")
 
     @property
     def source_url(self) -> str:
-        return self.details.get("url") or LLM_STATS_PUBLIC_URL.format(model_id=self.id)
+        return LITELLM_SOURCE_URL
 
     def registered_providers(self, registered: dict[str, set[str]]) -> list[str]:
         return [p for p in self.ocs_providers if self.id in registered.get(p, set())]
@@ -409,14 +519,41 @@ class Candidate:
 
 
 def resolve_pricing(candidate: Candidate, litellm_data: dict[str, Any]) -> PricingResult:
-    if not candidate.details_error:
-        rates = resolve_pricing_from_llm_stats(candidate.details)
+    """Price each provider from its own price-table key.
+
+    A reseller charges its own rate for a model it did not originate.
+    """
+    rates_by_provider = {}
+    for provider in candidate.ocs_providers:
+        rates = resolve_pricing_from_litellm(candidate.litellm_key(provider), litellm_data, provider=provider)
         if rates:
-            return PricingResult(rates, "llm_stats")
-    # Pass the upstream org (e.g. "groq") so provider-namespaced keys like
-    # "groq/gemma-7b-it" are tried as a fallback.
-    rates = resolve_pricing_from_litellm(candidate.id, litellm_data, provider=candidate.org)
-    return PricingResult(rates, "litellm" if rates else None)
+            rates_by_provider[provider] = rates
+    return PricingResult(rates_by_provider, "litellm" if rates_by_provider else None)
+
+
+def token_limit_from_litellm(model_id: str, litellm_data: dict[str, Any], provider: str | None = None) -> int | None:
+    """Context window for a model, used as ``token_limit`` when registering."""
+    entry = _litellm_entry(model_id, litellm_data, provider)
+    if entry is None:
+        return None
+    for field in ("max_input_tokens", "max_tokens"):
+        value = entry.get(field)
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
+
+
+def resolve_token_limits(candidate: Candidate, litellm_data: dict[str, Any]) -> dict[str, int | None]:
+    """Context window per provider.
+
+    ``default_models.py`` stores the limit on each provider's own ``Model``
+    entry, and resellers differ: Azure serves gpt-5-pro at 272k where OpenAI
+    serves 400k.
+    """
+    return {
+        provider: token_limit_from_litellm(candidate.litellm_key(provider), litellm_data, provider=provider)
+        for provider in candidate.ocs_providers
+    }
 
 
 def build_model_entry(
@@ -424,30 +561,33 @@ def build_model_entry(
     registered: dict[str, set[str]],
     priced: set[tuple[str, str]],
     pricing: PricingResult,
+    token_limits: dict[str, int | None] | None = None,
 ) -> tuple[dict, list[dict]]:
     model_id = candidate.id
     providers = candidate.ocs_providers
     entry: dict = {
         "id": model_id,
-        "org": candidate.org,
-        "context_window": candidate.context_window,
+        "token_limit_by_provider": token_limits or {},
+        "recently_published": candidate.recently_published,
+        "deprecation_date": candidate.raw.get("deprecation_date"),
         "ocs_providers": providers,
         "already_registered_providers": candidate.registered_providers(registered),
         "already_priced_providers": [p for p in providers if (p, model_id) in priced],
         "source_url": candidate.source_url,
-        "sources": candidate.details.get("sources", {}),
-        "details_error": candidate.details_error,
     }
     if not pricing.has_pricing:
         entry["pricing"] = {"has_pricing": False, "source": None, "reason": NO_PRICING_REASON}
         return entry, []
-    needs_pricing = [p for p in providers if (p, model_id) not in priced]
-    pricing_entries = build_pricing_entries(model_id, needs_pricing, pricing.rates)
+    needs_pricing = {
+        provider: rates for provider, rates in pricing.rates_by_provider.items() if (provider, model_id) not in priced
+    }
+    pricing_entries = build_pricing_entries(model_id, needs_pricing)
     entry["pricing"] = {
         "has_pricing": True,
         "source": pricing.source,
         "unit": "per_1k_tokens",
-        "rates": pricing.rates,
+        "rates_by_provider": pricing.rates_by_provider,
+        "unpriced_providers": [p for p in providers if p not in pricing.rates_by_provider],
         "llm_pricing_entries": pricing_entries,
     }
     return entry, pricing_entries
@@ -470,26 +610,20 @@ def process_candidates(
             already_registered.append(
                 {
                     "id": candidate.id,
-                    "org": candidate.org,
+                    "providers": candidate.ocs_providers,
                     "registered_providers": candidate.registered_providers(registered),
                 }
             )
             continue
 
         pricing = resolve_pricing(candidate, litellm_data)
-        entry, pricing_entries = build_model_entry(candidate, registered, priced, pricing)
+        token_limits = resolve_token_limits(candidate, litellm_data)
+        entry, pricing_entries = build_model_entry(candidate, registered, priced, pricing, token_limits)
         all_pricing_entries.extend(pricing_entries)
         new_models.append(entry)
 
         if not pricing.has_pricing:
-            unpriced.append(
-                {
-                    "id": candidate.id,
-                    "org": candidate.org,
-                    "ocs_providers": candidate.ocs_providers,
-                    "reason": NO_PRICING_REASON,
-                }
-            )
+            unpriced.append({"id": candidate.id, "ocs_providers": candidate.ocs_providers, "reason": NO_PRICING_REASON})
 
     return {
         "new_models": new_models,
@@ -525,37 +659,29 @@ def diffable_models(index: dict[tuple[str, str], dict[str, str]]) -> set[str]:
 
 def compute_changes(
     index: dict[tuple[str, str], dict[str, str]],
-    fetcher: Callable[[str], dict | None],
+    litellm_data: dict[str, Any],
 ) -> tuple[list[RateChange], set[str]]:
-    """For each diffable model, fetch upstream rates and emit a RateChange
+    """Diff the seed against the LiteLLM price table, emitting a RateChange
     per (provider, service_kind) whose price has moved. ``unmatched`` returns
-    models the fetcher had no usable data for.
+    models LiteLLM had no usable rates for.
+
+    This makes no network calls of its own: the price table is one file,
+    already fetched once per run.
     """
     changes: list[RateChange] = []
     unmatched: set[str] = set()
     for model_name in sorted(diffable_models(index)):
-        detail = fetcher(model_name)
-        if detail is None:
+        matched = False
+        for provider, seed_rates in _diffable_provider_rates(index, model_name):
+            new_rates = resolve_pricing_from_litellm(model_name, litellm_data, provider=provider)
+            if not new_rates:
+                continue
+            matched = True
+            upstream = _UpstreamRates(model_name=model_name, new_rates=new_rates, source_url=LITELLM_SOURCE_URL)
+            changes.extend(_provider_rate_changes(provider, seed_rates, upstream))
+        if not matched:
             unmatched.add(model_name)
-            continue
-        new_rates = rates_from_detail(detail)
-        if not new_rates:
-            unmatched.add(model_name)
-            continue
-        source_url = detail.get("url") or LLM_STATS_PUBLIC_URL.format(model_id=model_name)
-        upstream = _UpstreamRates(model_name=model_name, new_rates=new_rates, source_url=source_url)
-        changes.extend(_changes_for_model(index, upstream))
     return changes, unmatched
-
-
-def _changes_for_model(
-    index: dict[tuple[str, str], dict[str, str]],
-    upstream: _UpstreamRates,
-) -> list[RateChange]:
-    out: list[RateChange] = []
-    for provider, seed_rates in _diffable_provider_rates(index, upstream.model_name):
-        out.extend(_provider_rate_changes(provider, seed_rates, upstream))
-    return out
 
 
 def _diffable_provider_rates(
@@ -675,13 +801,9 @@ def backfill_missing_from_litellm(
 ) -> tuple[list[dict], list[MissingPricingEntry]]:
     """Try to resolve missing-pricing entries from the LiteLLM price table.
 
-    For each entry in *missing*, attempts a litellm lookup (bare model ID first,
-    then ``provider/model_id`` as a fallback).  Entries whose required kinds are
-    all resolved are converted into seed-JSON dicts and returned in
-    *backfilled*; anything that can't be fully resolved stays in *still_missing*.
-
-    Returns:
-        (backfilled, still_missing)
+    Each entry is looked up under its own provider, so a reseller gets its own
+    rate. Entries whose required kinds all resolve become seed-JSON dicts in
+    *backfilled*; the rest stay in *still_missing*.
     """
     backfilled: list[dict] = []
     still_missing: list[MissingPricingEntry] = []
@@ -727,7 +849,7 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str], backfilled: l
     lines = []
     if changes:
         lines += [
-            "Detected rate changes on llm-stats.com against the in-repo seed.",
+            "Detected rate changes in the LiteLLM price table against the in-repo seed.",
             "The data migration loads them on deploy; the seed loader supersedes",
             "each affected `PricingRule` (closes the old row, inserts a fresh one).",
             "",
@@ -758,8 +880,7 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str], backfilled: l
 def _change_row(c: RateChange) -> str:
     old = c.old_price if c.old_price is not None else "-"
     return (
-        f"| {c.provider_type} | {c.model_name} | {c.service_kind} | "
-        f"{old} | {c.new_price} | [llm-stats]({c.source_url}) |"
+        f"| {c.provider_type} | {c.model_name} | {c.service_kind} | {old} | {c.new_price} | [LiteLLM]({c.source_url}) |"
     )
 
 
@@ -778,7 +899,7 @@ def _unmatched_section(unmatched: set[str]) -> list[str]:
         "",
         "## Unmatched models",
         "",
-        "These seed models had no usable rate on llm-stats.com:",
+        "These seed models had no usable rate in the LiteLLM price table:",
         *(f"- `{m}`" for m in sorted(unmatched)),
     ]
 
@@ -812,6 +933,8 @@ class _ReconcileResults:
     """All section data produced by one reconciliation pass."""
 
     candidates: list[dict]
+    backlog: list[dict]
+    deprecated_upstream: list[dict]
     classification: dict
     changes: list[RateChange]
     unmatched_diff: set[str]
@@ -822,12 +945,13 @@ class _ReconcileResults:
 # Output assembly + GitHub Actions integration
 
 
-def _assemble_payload(results: _ReconcileResults, *, run_date: str, days_lookback: int) -> dict:
+def _assemble_payload(results: _ReconcileResults, *, run_date: str) -> dict:
     return {
         "run_date": run_date,
-        "days_lookback": days_lookback,
         "summary": {
-            "candidates_from_api": len(results.candidates),
+            "candidates": len(results.candidates),
+            "backlog": len(results.backlog),
+            "deprecated_upstream": len(results.deprecated_upstream),
             "new_models": len(results.classification["new_models"]),
             "already_registered": len(results.classification["already_registered"]),
             "unpriced_candidates": len(results.classification["unpriced_models"]),
@@ -837,6 +961,8 @@ def _assemble_payload(results: _ReconcileResults, *, run_date: str, days_lookbac
             "missing_pricing": len(results.missing),
         },
         "new_models": results.classification["new_models"],
+        "backlog": [{"id": m["id"], "ocs_providers": m["providers"]} for m in results.backlog],
+        "deprecated_upstream": results.deprecated_upstream,
         "already_registered": results.classification["already_registered"],
         "unpriced_models": results.classification["unpriced_models"],
         "pricing_entries": results.classification["pricing_entries"],
@@ -875,7 +1001,9 @@ def _price_change_outputs(
 ) -> list[str]:
     change_count = len(results.changes)
     backfill_count = len(results.backfilled)
-    has_any = bool(change_count or backfill_count)
+    # The gate opens a PR, so it follows the body being written rather than
+    # the changes being found: --dry-run finds them and writes nothing.
+    has_any = body_path is not None
     parts = []
     if change_count:
         parts.append(f"{change_count} rate change(s)")
@@ -888,6 +1016,14 @@ def _price_change_outputs(
         f"backfilled_count={backfill_count}",
         f"pricing_pr_title={title}",
         f"pricing_pr_body_path={body_path or ''}",
+    ]
+
+
+def _deprecated_upstream_outputs(deprecated: list[dict]) -> list[str]:
+    count = len(deprecated)
+    return [
+        f"has_deprecated_upstream={'true' if count else 'false'}",
+        f"deprecated_upstream_count={count}",
     ]
 
 
@@ -909,22 +1045,36 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--bearer-token", required=True, metavar="TOKEN")
-    parser.add_argument("--days", type=int, default=1, help="Lookback window in days (default: 1, max: 30).")
+    parser.add_argument(
+        "--baseline-days",
+        type=int,
+        default=DEFAULT_BASELINE_DAYS,
+        help=f"How far back 'newly published' looks (default: {DEFAULT_BASELINE_DAYS}).",
+    )
     parser.add_argument("--repo-root", type=Path, default=Path("."), metavar="PATH")
     parser.add_argument("--output", type=Path, default=Path("reconciliation.json"), metavar="FILE")
     parser.add_argument("--today", help="YYYY-MM-DD override (for tests).")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report only: leave the pricing seed and migrations untouched.",
+    )
     return parser
+
+
+class UpstreamUnavailable(RuntimeError):
+    """The price table could not be read, so the run has nothing to work from."""
 
 
 def _load_litellm() -> dict[str, Any]:
     try:
         data = _get_json(LITELLM_PRICING_URL)
-        print(f"  -> {len(data)} LiteLLM entries")
-        return data
-    except Exception as e:  # noqa: BLE001
-        print(f"  (!) Could not fetch LiteLLM pricing ({e}); fallback disabled.")
-        return {}
+    except Exception as exc:
+        raise UpstreamUnavailable(f"could not fetch the LiteLLM price table: {exc}") from exc
+    if not data:
+        raise UpstreamUnavailable("the LiteLLM price table came back empty")
+    print(f"  -> {len(data)} LiteLLM entries")
+    return data
 
 
 def _commit_price_changes(
@@ -932,6 +1082,7 @@ def _commit_price_changes(
     repo_root: Path,
     output_path: Path,
     today: datetime.date,
+    dry_run: bool = False,
 ) -> Path | None:
     """Rewrite seed JSON + emit rate-update migration + write PR body.
 
@@ -942,33 +1093,42 @@ def _commit_price_changes(
     """
     if not results.changes and not results.backfilled:
         return None
+    if dry_run:
+        print(
+            f"  -> dry run: would rewrite the seed and emit a migration "
+            f"({len(results.changes)} rate change(s), {len(results.backfilled)} backfilled)"
+        )
+        return None
     seed_path = repo_root / LLM_PRICING_REL_PATH
-    seed = load_seed(seed_path)
-    updated = apply_changes(seed, results.changes)
-    if results.backfilled:
-        # Merge backfilled entries into the seed.  A model may already have a
-        # partial entry (e.g. only llm_cached_input); in that case we update its
-        # rules in place rather than silently skipping the backfilled data.
-        entry_index: dict[tuple[str, str], int] = {
-            (e["provider_type"], e["model_name"]): i for i, e in enumerate(updated)
-        }
-        for bf_entry in results.backfilled:
-            key = (bf_entry["provider_type"], bf_entry["model_name"])
-            if key in entry_index:
-                existing = updated[entry_index[key]]
-                rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
-                for rule in bf_entry["rules"]:
-                    # Only fill gaps; never overwrite prices already curated in the seed.
-                    rules_by_kind.setdefault(rule["service_kind"], rule)
-                existing["rules"] = list(rules_by_kind.values())
-            else:
-                updated.append(bf_entry)
+    updated = apply_changes(load_seed(seed_path), results.changes)
+    updated = _merge_backfilled(updated, results.backfilled)
     seed_path.write_text(json.dumps(updated, indent=2) + "\n")
     migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
     print(f"  -> wrote {migration_path.name} + updated seed")
     body_path = output_path.with_name(output_path.stem + ".pricing-body.md")
     body_path.write_text(render_pr_body(results.changes, results.unmatched_diff, results.backfilled))
     return body_path
+
+
+def _merge_backfilled(seed: list[dict], backfilled: list[dict]) -> list[dict]:
+    """Add LiteLLM-backfilled entries to the seed, filling gaps only.
+
+    A model may already have a partial entry (e.g. only llm_cached_input); its
+    rules are updated in place rather than the backfilled data being dropped.
+    Prices already curated in the seed are never overwritten.
+    """
+    entry_index = {(e["provider_type"], e["model_name"]): i for i, e in enumerate(seed)}
+    for bf_entry in backfilled:
+        key = (bf_entry["provider_type"], bf_entry["model_name"])
+        if key not in entry_index:
+            seed.append(bf_entry)
+            continue
+        existing = seed[entry_index[key]]
+        rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
+        for rule in bf_entry["rules"]:
+            rules_by_kind.setdefault(rule["service_kind"], rule)
+        existing["rules"] = list(rules_by_kind.values())
+    return seed
 
 
 def _write_missing_body(results: _ReconcileResults, output_path: Path) -> Path | None:
@@ -979,28 +1139,37 @@ def _write_missing_body(results: _ReconcileResults, output_path: Path) -> Path |
     return body_path
 
 
-def _run_reconciliation(repo_root: Path, bearer: str, days: int) -> _ReconcileResults:
+def _run_reconciliation(
+    repo_root: Path,
+    baseline_days: int = DEFAULT_BASELINE_DAYS,
+    today: datetime.date | None = None,
+) -> _ReconcileResults:
     """Fetch + classify + diff + audit. The print()s narrate progress for CI logs."""
+    today = today or datetime.datetime.now(datetime.UTC).date()
     print("  Loading registered models ...")
     registered = load_registered_models(repo_root)
     active = load_active_default_models(repo_root)
+    ignored = load_ignored_models(repo_root)
     print(f"  -> {sum(len(v) for v in registered.values())} registered entries; {len(active)} active OCS models")
+    print(f"  -> {sum(len(v) for v in ignored.values())} model(s) previously considered and skipped")
 
     print("  Loading existing pricing seed ...")
     index = seed_index(load_seed(repo_root / LLM_PRICING_REL_PATH))
     priced = set(index)
     print(f"  -> {len(priced)} priced (provider, model) pairs")
 
-    print("  Fetching LiteLLM pricing fallback ...")
+    print("  Fetching the LiteLLM price table ...")
     litellm_data = _load_litellm()
 
-    print(f"  Fetching candidates from zeroeval API (days={days}) ...")
-    candidates = fetch_candidates(bearer, days)
-    print(f"  -> {len(candidates)} candidate(s) matched to OCS orgs")
+    print(f"  Reading the price table as it stood {baseline_days} day(s) ago ...")
+    baseline = fetch_baseline(baseline_days, today)
+    candidates, backlog = select_candidates(litellm_data, baseline, registered, ignored, today)
+    recent = sum(1 for c in candidates if c["recently_published"])
+    print(f"  -> {len(candidates)} candidate(s) ({recent} newly published), {len(backlog)} in backlog")
     classification = process_candidates(candidates, registered, priced, litellm_data)
 
-    print("  Diffing seed against llm-stats current pricing ...")
-    changes, unmatched_diff = compute_changes(index, lambda mid: fetch_detail(mid, bearer))
+    print("  Diffing seed against the LiteLLM price table ...")
+    changes, unmatched_diff = compute_changes(index, litellm_data)
     print(f"  -> {len(changes)} rate change(s); {len(unmatched_diff)} unmatched")
 
     print("  Auditing missing pricing for OCS-managed models ...")
@@ -1009,24 +1178,42 @@ def _run_reconciliation(repo_root: Path, bearer: str, days: int) -> _ReconcileRe
     backfilled, still_missing = backfill_missing_from_litellm(all_missing, litellm_data)
     print(f"  -> backfilled {len(backfilled)}, still missing {len(still_missing)}")
 
-    return _ReconcileResults(candidates, classification, changes, unmatched_diff, still_missing, backfilled)
+    print("  Checking active models against upstream deprecation dates ...")
+    deprecated = audit_deprecated_upstream(active, litellm_data, today)
+    print(f"  -> {len(deprecated)} active model(s) past their upstream deprecation date")
+
+    return _ReconcileResults(
+        candidates=candidates,
+        backlog=backlog,
+        deprecated_upstream=deprecated,
+        classification=classification,
+        changes=changes,
+        unmatched_diff=unmatched_diff,
+        missing=still_missing,
+        backfilled=backfilled,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     repo_root: Path = args.repo_root.resolve()
-    today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+    today = datetime.date.fromisoformat(args.today) if args.today else datetime.datetime.now(datetime.UTC).date()
+    # Unbuffered, so the CI log interleaves progress with rate-limit sleeps in
+    # real time. Block-buffered output flushes at exit and reads as if every
+    # step ran in the same millisecond.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(line_buffering=True)
     print(f"[reconcile-models] repo_root={repo_root}")
 
-    results = _run_reconciliation(repo_root, args.bearer_token, args.days)
-    pricing_body_path = _commit_price_changes(results, repo_root, args.output, today)
+    try:
+        results = _run_reconciliation(repo_root, args.baseline_days, today)
+    except UpstreamUnavailable as exc:
+        print(f"  (!) {exc}")
+        return 1
+    pricing_body_path = _commit_price_changes(results, repo_root, args.output, today, args.dry_run)
     missing_body_path = _write_missing_body(results, args.output)
 
-    payload = _assemble_payload(
-        results,
-        run_date=datetime.datetime.now(datetime.UTC).isoformat(),
-        days_lookback=args.days,
-    )
+    payload = _assemble_payload(results, run_date=datetime.datetime.now(datetime.UTC).isoformat())
 
     args.output.write_text(json.dumps(payload, indent=2))
 
@@ -1039,6 +1226,7 @@ def main(argv: list[str] | None = None) -> int:
         _new_models_outputs(results.classification["new_models"])
         + _price_change_outputs(results, today, pricing_body_path)
         + _missing_pricing_outputs(results.missing, missing_body_path)
+        + _deprecated_upstream_outputs(results.deprecated_upstream)
     )
     return 0
 
