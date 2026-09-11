@@ -356,10 +356,6 @@ class Command(BaseCommand):
                     f"Remove or clear this reference in the source pipeline before cloning."
                 )
 
-        # A stored `AssistantNode` is inert (#4254), but its id resolves against every team, so
-        # carrying it over would leave the clone referencing the source team's assistant.
-        if "assistant_id" in params:
-            del params["assistant_id"]
             changed = True
 
         # Remap llm_provider_id

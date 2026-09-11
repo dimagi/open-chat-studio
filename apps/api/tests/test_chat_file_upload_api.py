@@ -97,7 +97,7 @@ class TestChatFileUploadAPI:
         file_obj = File.objects.get(id=uploaded_file["id"])
         assert file_obj.name == "small_text.txt"
         assert file_obj.team == session.team
-        # Participant uploads are conversation media, not assistant config.
+        # Participant uploads are conversation media.
         assert file_obj.purpose == FilePurpose.MESSAGE_MEDIA
 
     def test_successful_multiple_file_upload(self, api_client, session):
