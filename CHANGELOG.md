@@ -30,6 +30,8 @@ version section when a release is cut.
 - `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
   get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
   operator or team sets one. (#4371)
+- `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
+  rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.

@@ -5,6 +5,17 @@ export type ReactFlowJsonObject<NodeData = any, EdgeData = any> = {
     edges: Edge<EdgeData>[];
 };
 
+/**
+ * A node still pointing at a deprecated LLM model. Advisory: the model keeps working until it is
+ * removed, so this never makes the pipeline invalid. `replacement` is null when none is declared.
+ */
+export type DeprecatedModel = {
+  model: string;
+  replacement: string | null;
+};
+
+export type DeprecatedModelsType = {[nodeId: string]: DeprecatedModel};
+
 export type PipelineType = {
   id: bigint;
   team: string;
@@ -14,6 +25,7 @@ export type PipelineType = {
   date_created?: string;
   updated_at?: string;
   errors: {[nodeId: string]: {[name: string]: string}},
+  deprecated_models?: DeprecatedModelsType;
   edit_revision?: number;
 };
 
@@ -51,5 +63,6 @@ export type PipelineDiffPayload = {
 export type PipelineSaveResponse = {
   data: Record<string, unknown>;
   errors: Record<string, unknown>;
+  deprecated_models?: DeprecatedModelsType;
   edit_revision: number;
 };
