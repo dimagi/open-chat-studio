@@ -24,6 +24,12 @@ version section when a release is cut.
 ### Upgrading
 <!-- Manual steps, in the order they must run relative to the deploy. Omit if
      the upgrade is "pull the new tag and deploy". -->
+- **After** deploying, run `python manage.py retire_assistant_file_purpose`. It re-points files
+  the retired OpenAI Assistants feature left attached to a collection or a chat message onto
+  their real purpose, and deletes the ones nothing references any more (reclaiming their
+  storage). Archived files are left untouched. `--dry-run` reports what it would do. Safe to run
+  later; until it runs, those rows keep a `purpose` value that is no longer a valid choice, which
+  nothing reads. (#4254)
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
@@ -32,6 +38,21 @@ version section when a release is cut.
   operator or team sets one. (#4371)
 - `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
+- Every OpenAI Assistant is deleted, along with its tool resources and any custom action
+  operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
+  stripped from stored pipeline node params. This is deliberate, irreversible data loss for a
+  feature whose upstream API OpenAI retired on 26 August 2026; the audit log retains the history.
+  The `assistants` tables and the two FK columns still exist and are dropped in the following
+  release. (#4254)
+
+### Deprecations and removals
+- The OpenAI Assistants feature is fully removed (#4254). The `Assistant Admin` role is gone —
+  members holding it lose add/change/delete on files, which no other role grants; re-grant file
+  access through another role if a team relied on it. `Attachment.upload_to_assistant` no longer
+  exists, so a Python node that assigns it will now fail at runtime. `FilePurpose.ASSISTANT` and
+  the `assistants_home` banner location are removed, as is the `assistant` field from the
+  `CustomActionOperation` and `Node` export-API schemas (it was always `null` in exports) and the
+  `assistant` value from `PurposeEnum`.
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.

@@ -114,7 +114,7 @@ Distinct from the **LLM Provider**: a Provider is the credentialed account, a Mo
 _Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosing both.
 
 **OpenAI Assistant** _(removed)_:
-A Team-scoped wrapper around a resource in OpenAI's Assistants API, invoked from a pipeline via an `AssistantNode`. OpenAI retired that API on 26 August 2026 and the feature was removed in #4254; only the `OpenAiAssistant`/`ToolResources` models and their Django admin survive, pending a phase-2 data drop. A pipeline still holding an `AssistantNode` renders it as a **Removed Node** and cannot be built.
+A Team-scoped wrapper around a resource in OpenAI's Assistants API, invoked from a pipeline via an `AssistantNode`. OpenAI retired that API on 26 August 2026 and the feature was removed in #4254. The rows are deleted and no code reads them; the `OpenAiAssistant`/`ToolResources` tables are dropped in the release that follows. A pipeline still holding an `AssistantNode` renders it as a **Removed Node** and cannot be built.
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
