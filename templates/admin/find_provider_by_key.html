@@ -11,7 +11,7 @@
       {% translate "Paste a full API key, the last few characters, or any substring, then pick a provider type. The search iterates all providers of that type and decrypts each config to match against its secret fields. Use \"Suffix\" or \"Contains\" when you only have part of the key." %}
     </p>
 
-    <form method="post" class="flex flex-col gap-3 max-w-2xl mx-auto">
+    <form method="post" class="flex flex-col gap-3 max-w-2xl">
       {% csrf_token %}
       {% render_form_fields form %}
       <div>
