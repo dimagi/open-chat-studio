@@ -1,0 +1,5 @@
+<tr {{ row.attrs.as_html }}>
+  {% for column, cell in row.items %}
+    <td {{ column.attrs.td.as_html }}>{{ cell }}</td>
+  {% endfor %}
+</tr>

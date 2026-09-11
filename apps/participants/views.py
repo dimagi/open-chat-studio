@@ -26,6 +26,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..events.models import ScheduledMessage
+from ..events.tables import SchedulesTable
 from ..experiments.filters import ExperimentSessionFilter, get_filter_context_data
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
@@ -116,11 +117,14 @@ def _schedules_panel_context(
     schedules = participant.get_schedules_for_experiments(as_dict=True, include_inactive=True)
     if filter_experiment_id:
         schedules = [s for s in schedules if s["experiment"].id == filter_experiment_id]
+    schedules_table = SchedulesTable(schedules)
+    schedules_table.empty_text = "No schedules for this participant."
     return {
         "participant": participant,
         "experiments": experiments,
         "selected_experiment_id": filter_experiment_id,
         "participant_schedules": schedules,
+        "schedules_table": schedules_table,
     }
 
 
@@ -440,12 +444,16 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     experiment = schedule.experiment
     schedule.cancel(cancelled_by=request.user)
     schedule_dict = schedule.as_dict()
-    schedule_dict["experiment"] = experiment
-    return render(
-        request,
-        "participants/partials/participant_schedule_row.html",
-        {"schedule": schedule_dict, "participant_id": participant_id},
-    )
+    # Mirrors whichever table this row came from: the session-scoped table has no Chatbot
+    # column, so the swapped-in row must not have one either, or the columns misalign.
+    show_chatbot = bool(request.POST.get("show_chatbot"))
+    if show_chatbot:
+        schedule_dict["experiment"] = experiment
+
+    table = SchedulesTable([schedule_dict])
+    if not show_chatbot:
+        table.exclude = ("experiment",)
+    return render(request, "events/components/schedule_row.html", {"row": table.rows[0]})
 
 
 @permission_required("experiments.view_participant")

@@ -1,0 +1,5 @@
+{% load i18n %}
+<button class="btn btn-sm btn-ghost"
+        onclick="document.getElementById('schedule-logs-{{ record.external_id }}').showModal()">
+  <i class="fa-solid fa-gear"></i> {% translate "Manage" %}
+</button>

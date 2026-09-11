@@ -1,4 +1,5 @@
 {% load i18n %}
+{% load render_table from django_tables2 %}
 <div id="schedules-panel"
      class="app-card p-0 overflow-hidden rounded-2xl border border-base-300 bg-base-100">
   <div class="p-3 flex items-center gap-2 flex-wrap border-b border-base-300">
@@ -19,28 +20,8 @@
                 {% if selected_experiment_id == experiment.id %}btn-soft btn-primary hover:bg-primary/10 hover:text-primary hover:border-base-300{% else %}bg-base-100{% endif %}">{{ experiment }}</a>
     {% endfor %}
   </div>
-  {% if not participant_schedules %}
-    <div class="p-4 text-center text-base-content/60">{% translate "No schedules for this participant." %}</div>
-  {% else %}
-    <table class="table pg-table">
-      <thead>
-        <tr>
-          <th class="text-xs">{% translate "Schedule" %}</th>
-          <th class="text-xs">{% translate "Chatbot" %}</th>
-          <th class="text-xs">{% translate "Next run" %}</th>
-          <th class="text-xs">{% translate "Cadence" %}</th>
-          <th class="text-xs">{% translate "Status" %}</th>
-          <th class="text-xs">{% translate "Manage" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for schedule in participant_schedules %}
-          {% include "participants/partials/participant_schedule_row.html" %}
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+  {% render_table schedules_table "table/tailwind.html" %}
 </div>
 {% for schedule in participant_schedules %}
-  {% include "participants/partials/participant_schedule_modal.html" %}
+  {% include "events/components/schedule_modal.html" %}
 {% endfor %}
