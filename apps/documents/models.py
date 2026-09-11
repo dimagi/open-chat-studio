@@ -23,10 +23,9 @@ from apps.teams.models import BaseTeamModel
 from apps.teams.utils import flag_is_active_for_team, get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
-    get_related_pipeline_experiments_queryset,
-    get_related_pipeline_experiments_queryset_list_param,
-    get_related_pipelines_queryset,
-    get_related_pipelines_queryset_for_list_param,
+    get_related_experiment_versions_queryset,
+    get_related_pipeline_nodes_queryset,
+    has_related_pipeline_references,
 )
 
 logger = logging.getLogger("ocs.documents")
@@ -411,25 +410,15 @@ class Collection(BaseTeamModel, VersionsMixin):
         return reverse("documents:single_collection_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        index_references = get_related_pipelines_queryset_for_list_param(self, "collection_index_ids").distinct()
-        collection_references = get_related_pipelines_queryset(self, "collection_id").distinct()
-        return index_references | collection_references
+        return get_related_pipeline_nodes_queryset(self, "collection_id", "collection_index_ids")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         """
         Get all experiments that reference this collection through a pipeline. This includes both published and working
-        experiments. When check_versions is True, it will return all experiments that reference any version of this
-        collection.
+        experiments — any experiment whose pipeline references this collection or any of its versions.
         """
-        ids = list(self.versions.values_list("id", flat=True)) + [self.id]
-
-        index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(
-            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
-        )
-        collection_references = get_related_pipeline_experiments_queryset(ids, "collection_id").filter(
-            models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),
-        )
-        return index_references | collection_references
+        # TODO: migrate OpenAiAssistant onto this same shared helper (tracked separately)
+        return get_related_experiment_versions_queryset(self, "collection_id", "collection_index_ids")
 
     @transaction.atomic()
     def archive(self):
@@ -440,10 +429,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             delete_collection_task,
         )
 
-        if self.get_related_nodes_queryset().exists():
-            return False
-
-        if self.is_working_version and self.get_related_experiments_queryset().exists():
+        if has_related_pipeline_references(self, "collection_id", "collection_index_ids"):
             return False
 
         super().archive()

@@ -1,5 +1,7 @@
 import pytest
 
+from apps.documents.models import Collection
+from apps.experiments.models import SourceMaterial
 from apps.experiments.versioning import VersionsMixin
 from apps.pipelines.models import Node
 from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -8,10 +10,11 @@ from apps.pipelines.versioning import (
     ParamArchiving,
     ParamVersioning,
     VersionedParamSpec,
+    all_versioned_param_specs,
 )
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
-from apps.utils.factories.pipelines import NodeFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 ALL_SPECS = [
     pytest.param(node_type, spec, id=f"{node_type}.{spec.param_name}")
@@ -20,6 +23,19 @@ ALL_SPECS = [
 ]
 
 assert ALL_SPECS, "Versioned param registry must not be empty"
+
+# Specs whose model has a get_related_nodes_queryset guard (not OpenAiAssistant, which has its own).
+GUARD_FACTORIES = {
+    Collection: CollectionFactory,
+    SourceMaterial: SourceMaterialFactory,
+}
+GUARD_SPECS = [
+    pytest.param(spec, id=f"{spec.model_label}.{spec.param_name}")
+    for spec in all_versioned_param_specs()
+    if hasattr(spec.model_cls, "get_related_nodes_queryset")
+]
+
+assert GUARD_SPECS, "Expected at least one guard-participating spec"
 
 
 @pytest.mark.parametrize(("node_type", "spec"), ALL_SPECS)
@@ -84,3 +100,14 @@ def test_versioning_multi_id_params_is_unsupported():
             fk_field="collection_indexes",
             many=True,
         )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("spec", GUARD_SPECS)
+def test_in_use_guard_param_key_matches_registry(spec):
+    """Guards against registry drift: the guard's hardcoded param key must match the registry."""
+    instance = GUARD_FACTORIES[spec.model_cls].create()
+    value = [str(instance.id)] if spec.many else str(instance.id)
+    NodeFactory.create(pipeline=PipelineFactory.create(team=instance.team), params={spec.param_name: value})
+
+    assert instance.get_related_nodes_queryset().exists()
