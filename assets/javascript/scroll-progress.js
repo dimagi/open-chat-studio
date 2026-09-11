@@ -1,13 +1,19 @@
 'use strict'
 import htmx from 'htmx.org'
-import { computeProgress } from './scroll-progress-math.js'
+import { computeMessageProgress } from './scroll-progress-math.js'
 
-/**
- * Tracks scroll progress through `containerSelector` and reflects it as the width of
- * `#scroll-progress-bar`. The container itself loads asynchronously (htmx `intersect once`)
- * and can be replaced wholesale later by a filter change, so it's re-queried on every update
- * rather than cached once at setup time, and also re-checked after every htmx swap.
- */
+/** The topmost message row still on screen -- its `data-message-index`, or null if none rendered. */
+function currentMessageIndex(rows) {
+  for (const row of rows) {
+    if (row.getBoundingClientRect().bottom > 0) {
+      return parseInt(row.dataset.messageIndex, 10);
+    }
+  }
+  const last = rows[rows.length - 1];
+  return last ? parseInt(last.dataset.messageIndex, 10) : null;
+}
+
+/** Reflects which message is on screen, relative to the total, as the width of `#scroll-progress-bar`. */
 export function setupScrollProgress(containerSelector) {
   const bar = document.getElementById('scroll-progress-bar');
   if (!bar) {
@@ -19,13 +25,10 @@ export function setupScrollProgress(containerSelector) {
     if (!container) {
       return;
     }
-    const rect = container.getBoundingClientRect();
-    const progress = computeProgress({
-      containerTop: window.scrollY + rect.top,
-      containerHeight: container.scrollHeight,
-      viewportHeight: window.innerHeight,
-      scrollY: window.scrollY,
-    });
+    const totalMessages = parseInt(container.dataset.totalMessages, 10) || 0;
+    const rows = container.querySelectorAll('[data-message-index]');
+    const currentIndex = currentMessageIndex(rows);
+    const progress = currentIndex === null ? 0 : computeMessageProgress({ currentIndex, totalMessages });
     bar.style.width = `${progress * 100}%`;
   };
 

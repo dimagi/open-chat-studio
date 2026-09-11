@@ -1,13 +1,9 @@
 'use strict'
 
-/**
- * Fraction (0-1) scrolled through a container, given its position and size relative to the
- * viewport. Kept dependency-free (no DOM, no htmx) so it can be unit tested directly.
- */
-export function computeProgress({ containerTop, containerHeight, viewportHeight, scrollY }) {
-  const scrollable = containerHeight - viewportHeight;
-  if (scrollable <= 0) {
+/** Fraction (0-1) through the conversation, given the message on screen and the total count. */
+export function computeMessageProgress({ currentIndex, totalMessages }) {
+  if (!totalMessages || totalMessages <= 0) {
     return 0;
   }
-  return Math.min(Math.max((scrollY - containerTop) / scrollable, 0), 1);
+  return Math.min(Math.max(currentIndex / totalMessages, 0), 1);
 }
