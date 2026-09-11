@@ -2,8 +2,9 @@
 
 from types import SimpleNamespace
 
-from apps.api.v2.inspect.nodes import graph_digest, node_render_order, nodes_in_render_order
+from apps.api.v2.inspect.nodes import graph_digest, nodes_in_render_order
 from apps.api.v2.inspect.serializers import InspectNodeSerializer
+from apps.pipelines.models import Node
 from apps.pipelines.nodes import nodes as pipeline_nodes
 
 
@@ -19,20 +20,13 @@ def test_resource_param_fields_are_real_node_fields():
     assert not missing, f"resource param keys not declared on any node type: {sorted(missing)}"
 
 
-def test_node_render_order_pins_start_first_end_last():
-    start = SimpleNamespace(type="StartNode")
-    end = SimpleNamespace(type="EndNode")
-    middle = SimpleNamespace(type="LLMResponseWithPrompt")
-    assert node_render_order(start) < node_render_order(middle) < node_render_order(end)
-
-
 def test_nodes_in_render_order_is_stable_whatever_order_the_db_returns():
     """``Node`` has no default ordering, so the same pipeline can come back from the database in a
     different row order each time. The helper has to impose the order, not inherit it."""
-    end = SimpleNamespace(type="EndNode", id=2)
-    start = SimpleNamespace(type="StartNode", id=9)
-    llm = SimpleNamespace(type="LLMResponseWithPrompt", id=7)
-    router = SimpleNamespace(type="RouterNode", id=4)
+    end = Node(type="EndNode", id=2)
+    start = Node(type="StartNode", id=9)
+    llm = Node(type="LLMResponseWithPrompt", id=7)
+    router = Node(type="RouterNode", id=4)
 
     expected = [start, router, llm, end]
     for row_order in ([end, start, llm, router], [llm, router, end, start], expected):

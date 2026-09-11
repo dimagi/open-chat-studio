@@ -34,7 +34,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
-from apps.pipelines.build_state import node_output_handles, pipeline_build_state
+from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -566,7 +566,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     def get_output_handles(self, node) -> list:
         # Server-derived (W5): routers get one handle per branch keyword, plain nodes the single
         # standard output, End none — so a caller can wire edges from any node it reads back.
-        return node_output_handles(node)
+        return node.output_handles()
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):

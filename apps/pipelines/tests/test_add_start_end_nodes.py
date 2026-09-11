@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.pipelines.flow import Flow, react_flow_node_type, split_flow_data
+from apps.pipelines.flow import Flow, split_flow_data
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
     add_missing_start_end_nodes,
     remove_all_start_end_nodes,
@@ -302,7 +302,7 @@ def test_remove_start_end_nodes_with_layout_only_pipeline(team):
     pipeline.data = {
         **pipeline.data,
         "nodes": [
-            {"id": node.flow_id, "type": react_flow_node_type(node.type), "position": node.position or {}}
+            {"id": node.flow_id, "type": node.node_type.react_flow_type, "position": node.position or {}}
             for node in pipeline.node_set.all()
         ],
     }
