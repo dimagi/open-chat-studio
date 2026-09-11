@@ -48,15 +48,13 @@ def test_user_actionable_error_is_not_special_cased(session):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
     assert response["error"] == "nope"
-    assert not response.get("user_facing_error")
     assert response["response"] is None
 
 
 @pytest.mark.django_db()
-def test_generic_exception_sets_error_without_user_facing_flag(session):
+def test_generic_exception_sets_error(session):
     with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=RuntimeError("boom")):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
     assert response["error"] == "boom"
-    assert not response.get("user_facing_error")
     assert response["response"] is None

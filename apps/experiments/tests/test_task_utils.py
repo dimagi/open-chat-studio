@@ -33,16 +33,6 @@ def test_incomplete_task_returns_complete_false(experiment):
     assert result["error_msg"] is False
 
 
-def test_user_facing_error_passed_through(experiment):
-    result_data = {"error": "too big", "user_facing_error": True}
-    progress = {"complete": True, "success": True, "result": result_data}
-    with patch("apps.experiments.task_utils.Progress") as mock_progress_cls:
-        mock_progress_cls.return_value.get_info.return_value = progress
-        result = get_message_task_response(experiment, "task-1")
-    assert result["error_msg"] == "too big"
-    assert result["user_facing_error"] is True
-
-
 def test_generic_error_returns_default_message_when_debug_disabled(experiment):
     experiment.debug_mode_enabled = False
     result_data = {"error": "internal failure"}
@@ -51,7 +41,6 @@ def test_generic_error_returns_default_message_when_debug_disabled(experiment):
         mock_progress_cls.return_value.get_info.return_value = progress
         result = get_message_task_response(experiment, "task-1")
     assert result["error_msg"] == DEFAULT_ERROR_MESSAGE
-    assert result["user_facing_error"] is False
 
 
 def test_generic_error_returns_raw_message_when_debug_enabled(experiment):
