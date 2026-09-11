@@ -16,7 +16,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import BaseMessage, MediaCache
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.tests.message_examples import base_messages
-from apps.chat.exceptions import NoSpeechReason, UserReportableError
+from apps.chat.exceptions import AudioTranscriptionException, NoSpeechReason
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.ocs_notifications.models import NotificationEvent
 from apps.service_providers.models import VoiceProviderType
@@ -105,7 +105,7 @@ def test_real_transcription_failure_still_raises_and_notifies(mock_event_bot_cls
 
     with (
         patch.object(speechsdk, "SpeechConfig", side_effect=RuntimeError("invalid subscription key")),
-        pytest.raises(UserReportableError, match="Unable to transcribe audio"),
+        pytest.raises(AudioTranscriptionException, match="Unable to transcribe audio"),
     ):
         channel.new_user_message(base_messages.audio_message())
 
@@ -159,3 +159,23 @@ def test_no_speech_without_usable_audio_stores_the_placeholder(mock_event_bot_cl
     human = ChatMessage.objects.get(chat=azure_voice_session.chat, message_type=ChatMessageType.HUMAN)
     assert human.content == EMPTY_MESSAGE_PLACEHOLDER
     assert human.get_attached_files().count() == 0
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.pipeline.EventBot")
+def test_voice_note_to_a_bot_without_transcription_replies_and_does_not_notify(mock_event_bot_cls):
+    """No voice provider is a participant-actionable state: they can send text instead.
+
+    The team notification is for transcription *failures*, so it must stay silent here --
+    nothing failed, and the notification would name the wrong cause.
+    """
+    mock_event_bot_cls.return_value.get_user_message.return_value = "I can't listen to voice notes -- please type it."
+    session = ExperimentSessionFactory.create()
+    session.experiment.voice_provider = None
+    session.experiment.save()
+    channel = _channel(session)
+
+    channel.new_user_message(_voice_message())
+
+    assert channel.text_sent == ["I can't listen to voice notes -- please type it."]
+    assert not NotificationEvent.objects.filter(title="Audio Transcription Failed").exists()

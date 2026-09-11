@@ -19,7 +19,6 @@ from apps.chat.exceptions import (
     AudioTranscriptionException,
     NoSpeechDetected,
     NoSpeechReason,
-    UserReportableError,
 )
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.intron import INTRON_BASE_URL
@@ -72,7 +71,7 @@ class SpeechService(pydantic.BaseModel):
             raise
         except Exception as e:
             log.exception(e)
-            raise UserReportableError("Unable to transcribe audio") from e
+            raise AudioTranscriptionException("Unable to transcribe audio") from e
 
         # Azure reports silence outright; the rest return an empty transcript.
         if not (transcript or "").strip():

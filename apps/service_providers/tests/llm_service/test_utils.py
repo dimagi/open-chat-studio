@@ -5,7 +5,7 @@ import openai
 import pytest
 from langchain_core.messages import HumanMessage
 
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.service_providers.llm_service.image_types import (
     DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
     GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES,
@@ -308,13 +308,13 @@ class TestFormatMultimodalInput:
             pytest.param("image/tiff", id="tiff"),
         ],
     )
-    def test_unsupported_image_type_raises_user_reportable_error(self, content_type):
+    def test_unsupported_image_type_raises_user_actionable_error(self, content_type):
         attachment = Mock()
         attachment.size = 1024
         attachment.content_type = content_type
         attachment.name = "holiday-photo"
 
-        with pytest.raises(UserReportableError) as exc_info:
+        with pytest.raises(UserActionableError) as exc_info:
             format_multimodal_input("Look at this", [attachment])
 
         assert "`holiday-photo`" in str(exc_info.value)
@@ -359,7 +359,7 @@ class TestFormatMultimodalInput:
         gif.content_type = "image/gif"
         gif.name = "animation"
 
-        with pytest.raises(UserReportableError) as exc_info:
+        with pytest.raises(UserActionableError) as exc_info:
             format_multimodal_input(
                 "Fun gif", [gif], supported_image_content_types=GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
             )
@@ -378,7 +378,7 @@ class TestFormatMultimodalInput:
         bad.content_type = "image/bmp"
         bad.name = "bad"
 
-        with pytest.raises(UserReportableError):
+        with pytest.raises(UserActionableError):
             format_multimodal_input("Two images", [good, bad])
 
 
@@ -403,7 +403,7 @@ class TestInvokeWithImageErrorTranslation:
         agent = Mock()
         agent.invoke.side_effect = _bad_request_error(code)
 
-        with pytest.raises(UserReportableError) as exc_info:
+        with pytest.raises(UserActionableError) as exc_info:
             invoke_with_image_error_translation(
                 agent, {"messages": []}, supported_image_content_types=DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
             )

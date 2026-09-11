@@ -46,8 +46,14 @@ class VersionedExperimentSessionsNotAllowedException(ChatException):
     pass
 
 
-class UserReportableError(ChatException):
-    """A class of errors that can be reported to the end user (participant)"""
+class UserActionableError(ChatException):
+    """Raised when the participant can fix what went wrong by changing what they send.
+
+    The pipeline answers the participant with a message generated from this error and
+    does not re-raise it, so it never fails the task or marks the trace as errored.
+    Anything the participant cannot act on -- a provider outage, a revoked key, a bug --
+    must use a different exception. See ADR-0065.
+    """
 
 
 class ServiceWindowExpiredException(ChatException):

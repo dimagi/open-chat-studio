@@ -12,7 +12,7 @@ from apps.chat.exceptions import (
     ChatException,
     NoSpeechDetected,
     NoSpeechReason,
-    UserReportableError,
+    UserActionableError,
 )
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
@@ -300,27 +300,52 @@ class TestNoSpeechDetected:
 
         assert ctx.processing_errors == []
 
-    @pytest.mark.parametrize(
-        "error",
-        [
-            pytest.param(UserReportableError("Unable to transcribe audio"), id="provider-failure"),
-            pytest.param(AudioTranscriptionException("Azure speech transcription failed"), id="direct-parent"),
-        ],
-    )
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
-    def test_real_transcription_failures_are_still_reraised(self, mock_gen, error):
-        """Only the NoSpeechDetected subclass is exempt; its ancestors keep reaching Sentry."""
+    def test_real_transcription_failures_are_still_reraised(self, mock_gen):
+        """A transcription fault the participant cannot act on keeps reaching Sentry."""
         mock_gen.return_value = "something went wrong"
+        error = AudioTranscriptionException("Azure speech transcription failed")
         s1 = _make_stage(side_effect=error)
         t1 = _make_stage()
 
         ctx = make_context()
         pipeline = _pipeline(core=[s1], terminal=[t1])
 
-        with pytest.raises(type(error)):
+        with pytest.raises(AudioTranscriptionException):
             pipeline.process(ctx)
 
         t1.assert_called_once()
+
+
+class TestUserActionableError:
+    """An error the participant can act on is answered, not reported as a fault."""
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_replies_with_the_generated_message_and_does_not_reraise(self, mock_gen):
+        mock_gen.return_value = "That image type is not supported -- try a PNG."
+        error = UserActionableError("`x.bmp` is not a supported image type")
+        s1 = _make_stage(side_effect=error)
+        t1 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1])
+
+        result = pipeline.process(ctx)
+
+        assert result is ctx
+        mock_gen.assert_called_once_with(ctx, error)
+        assert ctx.early_exit_response == "That image type is not supported -- try a PNG."
+        t1.assert_called_once()
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_is_not_recorded_as_a_processing_error(self, mock_gen):
+        mock_gen.return_value = "That image type is not supported -- try a PNG."
+        s1 = _make_stage(side_effect=UserActionableError("`x.bmp` is not a supported image type"))
+
+        ctx = make_context()
+        _pipeline(core=[s1], terminal=[_make_stage()]).process(ctx)
+
+        assert ctx.processing_errors == []
 
 
 class TestErrorMessageGeneration:

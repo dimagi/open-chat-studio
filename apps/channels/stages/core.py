@@ -17,7 +17,7 @@ from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserReportableError
+from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserActionableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -579,6 +579,11 @@ class QueryExtractionStage(ProcessingStage):
                 # attachment carry the content.
                 ctx.user_query = ""
                 ctx.no_speech_reason = e.reason
+            except UserActionableError:
+                # Nothing failed -- the chatbot has no transcription and the participant can
+                # send text instead. The pipeline answers them; a failure notification here
+                # would tell the team the wrong thing about a state that never self-heals.
+                raise
             except Exception as e:
                 # Stage handles its own error
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
@@ -604,7 +609,7 @@ class QueryExtractionStage(ProcessingStage):
             speech_service = ctx.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        raise UserReportableError("Voice transcription is not available for this chatbot")
+        raise UserActionableError("Voice transcription is not available for this chatbot")
 
 
 # ---------------------------------------------------------------------------
@@ -733,9 +738,9 @@ class NoSpeechGuardStage(ProcessingStage):
 class BotInteractionStage(ProcessingStage):
     """Sends the user query to the bot and captures the response.
 
-    Exceptions are NOT caught here -- the pipeline's catch-all error handler
-    generates the user-facing error message, sets ctx.early_exit_response,
-    runs terminal stages, and then re-raises.
+    Exceptions are NOT caught here. The pipeline generates the user-facing error
+    message, sets ctx.early_exit_response and runs terminal stages; it then re-raises
+    a genuine fault, but answers a UserActionableError without re-raising (ADR-0065).
     """
 
     span_input_fields = ("user_query",)
