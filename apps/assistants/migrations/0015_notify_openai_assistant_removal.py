@@ -1,9 +1,13 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-
 
 class Migration(migrations.Migration):
+    """Ran notify_openai_assistant_removal, a command deleted with the feature in #4254.
+
+    Kept as a noop so a fresh database does not try to call it. The original run is recorded in
+    the CustomMigration row named notify_openai_assistant_removal.
+    """
+
     dependencies = [
         ("assistants", "0014_alter_toolresources_extra"),
         ("data_migrations", "0001_initial"),
@@ -11,10 +15,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Email team admins about the upcoming OpenAI Assistants API removal.
-        # force=True because the command's run-once slug is fixed; Django tracks this migration's single run.
-        RunDataMigration(
-            "notify_openai_assistant_removal",
-            command_options={"force": True},
-        ),
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
     ]

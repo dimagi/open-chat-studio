@@ -22,7 +22,7 @@ class TestSendBulkTeamAdminEmails:
         results = send_bulk_team_admin_emails(
             teams_context={team.id: {}},
             subject_template="Subject for {{ team.name }}",
-            body_template_path="events/email/openai_assistant_removal.txt",
+            body_template_path="events/email/summarize_removal.txt",
         )
 
         assert results["sent"] == 1
@@ -41,7 +41,7 @@ class TestSendBulkTeamAdminEmails:
         results = send_bulk_team_admin_emails(
             teams_context={team.id: {}},
             subject_template="Subject for {{ team.name }}",
-            body_template_path="events/email/openai_assistant_removal.txt",
+            body_template_path="events/email/summarize_removal.txt",
         )
 
         assert results["sent"] == 1
