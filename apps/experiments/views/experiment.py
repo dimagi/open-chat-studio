@@ -124,7 +124,7 @@ def _process_uploaded_files(request, session):
         )
 
         # Participant uploads within a conversation are message media, regardless of
-        # which tool they feed. ASSISTANT is reserved for bot-configuration files.
+        # which tool they feed.
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(
                 name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
