@@ -26,6 +26,7 @@
   <div class="group flex gap-3.5 px-5 py-4 border-b border-base-300
               {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
        x-data="{ tags: {{ message.all_tag_names|to_json|force_escape }}, get isSelected() { return commentsRow === {{ message.id }} }, }"
+       data-message-index="{{ page_start_index|add:forloop.counter|add:-1 }}"
        {% if highlight_message_id == message.id %}
          id="{{ message.id }}"
        {% endif %}>

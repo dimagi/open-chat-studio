@@ -1,7 +1,8 @@
 {% load chat_tags form_tags json_tags waffle_tags %}
 <div id="table-top"
      class="app-card p-0 overflow-hidden"
-     x-data="{selectedDataset: null}">
+     x-data="{selectedDataset: null}"
+     data-total-messages="{{ total_messages }}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
   <!-- Loading indicator for initial messages -->
   <div id="messages-initial-loading" class="hidden">
