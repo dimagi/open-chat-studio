@@ -1436,7 +1436,7 @@ class ExperimentSessionObjectManager(models.Manager):
         if experiment_id:
             queryset = queryset.filter(experiment__id=experiment_id)
 
-        queryset = queryset.select_related("experiment", "participant__user", "chat")
+        queryset = queryset.select_related("experiment", "participant__user", "chat", "experiment_channel")
         # Order by the same expression the "Last activity" column renders, so a session whose
         # `last_activity_at` is null doesn't sort to the bottom while displaying a recent
         # `created_at`. Backed by `expsession_team_lastact_c_idx`.

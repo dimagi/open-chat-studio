@@ -51,6 +51,11 @@ version section when a release is cut.
   pages that read them are gone (see Deployment below). Setting them is now a
   no-op rather than an error, so no action is required, but they can be dropped
   from your environment. (#4389)
+- `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS`, `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS`:
+  new, optional, default `36000` and `60`. Lifetime in seconds of OAuth access
+  tokens issued at `/o/token/`; the second applies to client-credentials tokens
+  requested with the `chat:start` scope alone, which are meant for the chat
+  widget. Previously every token lived 36000 seconds. (#4472)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,

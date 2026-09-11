@@ -63,10 +63,13 @@ class ChatAPIRateThrottle(APIRateThrottle):
     scope = "chat_api"
 
     def identity(self, request, view) -> tuple[str, str]:
+        auth = getattr(request, "auth", None)
+        if isinstance(auth, OAuth2AccessToken):
+            # A token renewal is the OAuth client's traffic, not the visitor's.
+            return "oauth_client", str(auth.application_id)
         session_id = getattr(view, "kwargs", {}).get("session_id")
         if session_id is not None:
             return "session", str(session_id)
-        auth = getattr(request, "auth", None)
         if isinstance(auth, ExperimentChannel):
             if auth.platform == ChannelPlatform.PUBLIC:
                 # A shared link cannot pool every visitor in one bucket: any holder could lock

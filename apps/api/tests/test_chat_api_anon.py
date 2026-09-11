@@ -36,6 +36,7 @@ def test_start_chat_session(team_with_users, api_client, experiment):
     assert response_json == {
         "session_id": mock.ANY,
         "session_token": mock.ANY,
+        "expires_at": mock.ANY,
         "chatbot": {
             "id": experiment.public_id,
             "name": experiment.name,

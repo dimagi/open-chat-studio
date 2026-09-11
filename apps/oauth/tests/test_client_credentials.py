@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
+from apps.oauth.token_lifetime import access_token_expire_seconds
 from apps.oauth.validator import APIScopedValidator
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -90,3 +91,55 @@ def test_validate_scopes_does_not_restrict_authorization_code(settings):
     client = OAuth2Application(authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE)
 
     assert validator.validate_scopes("cid", ["chatbots:read"], client, None) is True
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("scope", "expected_seconds"),
+    [
+        pytest.param("chat:start", 120, id="chat-start-alone-is-short-lived"),
+        pytest.param("chat:start sessions:read", 7200, id="chat-start-with-other-scopes-keeps-default"),
+        pytest.param("sessions:read", 7200, id="other-scopes-keep-default"),
+    ],
+)
+def test_token_lifetime_depends_on_requested_scopes(client, client_credentials_app, settings, scope, expected_seconds):
+    """A token requested with chat:start alone is bound for a browser, so it lives for the shorter lifetime."""
+    settings.OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS = 7200
+    settings.OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS = 120
+
+    before = timezone.now()
+    response = client.post(
+        reverse("oauth2_provider:token"),
+        {
+            "grant_type": "client_credentials",
+            "client_id": client_credentials_app.client_id,
+            "client_secret": "machine-client-secret",
+            "scope": scope,
+        },
+    )
+
+    assert response.status_code == 200, response.content
+    assert response.json()["expires_in"] == expected_seconds
+    token = OAuth2AccessToken.objects.get(token=response.json()["access_token"])
+    assert (
+        before + timedelta(seconds=expected_seconds)
+        <= token.expires
+        <= timezone.now() + timedelta(seconds=expected_seconds)
+    )
+
+
+@pytest.mark.parametrize(
+    ("grant_type", "scopes", "expected_seconds"),
+    [
+        pytest.param("client_credentials", ["chat:start"], 120, id="machine-chat-start-alone"),
+        pytest.param("authorization_code", ["chat:start"], 7200, id="authorization-code-keeps-default"),
+        pytest.param("refresh_token", ["chat:start"], 7200, id="refresh-keeps-default"),
+        pytest.param("client_credentials", ["chat:start", "sessions:read"], 7200, id="broader-machine-token"),
+    ],
+)
+def test_short_lifetime_applies_only_to_machine_tokens(settings, grant_type, scopes, expected_seconds):
+    settings.OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS = 7200
+    settings.OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS = 120
+    request = SimpleNamespace(grant_type=grant_type, scopes=scopes)
+
+    assert access_token_expire_seconds(request) == expected_seconds

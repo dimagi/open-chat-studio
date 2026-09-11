@@ -6,6 +6,8 @@
 
 <p class="adr-meta">Extends: <a href="0039-require-proof-of-possession-for-chat-session-access.md">ADR-0039</a>, <a href="0052-app-layer-rate-limiting-mechanism.md">ADR-0052</a>, <a href="0053-chat-session-start-requires-membership-or-embed-key.md">ADR-0053</a>, <a href="0059-chat-api-channel-credential-mode.md">ADR-0059</a></p>
 
+<p class="adr-meta">Amended by: <a href="0065-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0065</a> — the token renewal endpoint also carries the bearer authenticator, and renewals are throttled per OAuth application.</p>
+
 ## Context
 
 ADR-0053 placed the start-session authorization rule in one function. OAuth could be added to that function or checked separately, and the choice depends on two DRF behaviours. DRF stops at the first authenticator that returns a result. The chat API throttle (mechanism in ADR-0052) keys its bucket on the channel it finds in `request.auth`. If the token is resolved anywhere other than an authentication class, `request.auth` stays empty and all machine callers behind one egress IP share the anonymous IP bucket.

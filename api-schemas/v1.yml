@@ -178,6 +178,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatPollResponse'
           description: ''
+  /api/chat/{session_id}/token/:
+    post:
+      operationId: chat_renew_session_token
+      description: 'Issue a new session token for an existing session, so the widget
+        can continue the conversation after its current token expires. Called by the
+        widget with a fresh client-credentials token from the host, the same `chat:start`
+        token used for `POST /api/chat/start/`. Admission matches session start: the
+        token must be for the session''s chatbot, the Chat API Channel must be in
+        OAuth token mode, and the channel''s origin rule applies.'
+      summary: Renew a chat session's token
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+          format: uuid
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      security:
+      - chatOAuth2:
+        - chat:start
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionTokenResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAccessDenied'
+          description: ''
   /api/chat/{session_id}/upload/:
     post:
       operationId: chat_upload_file
@@ -1319,6 +1355,24 @@ components:
         * `processing` - Processing
         * `completed` - Completed
         * `error` - Error
+    ChatSessionTokenResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        session_token:
+          type: string
+          description: Replaces the previous token. Send as the `X-Session-Token`
+            header on subsequent requests for this session.
+        expires_at:
+          type: string
+          format: date-time
+          description: When the token stops working.
+      required:
+      - expires_at
+      - session_id
+      - session_token
     ChatStartSessionRefused:
       type: object
       properties:
@@ -1373,6 +1427,12 @@ components:
           nullable: true
           description: Present when the session is token-protected. Send as the `X-Session-Token`
             header on all subsequent requests for this session.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the session token stops working. Null when no token was
+            issued.
         chatbot:
           allOf:
           - $ref: '#/components/schemas/Experiment'
@@ -1388,8 +1448,10 @@ components:
       required:
       - chatbot
       - consent
+      - expires_at
       - participant
       - session_id
+      - session_token
     ChatTaskPoll:
       type: object
       properties:
