@@ -55,6 +55,6 @@ class CustomActionOperationFactory(factory.django.DjangoModelFactory):
         model = "custom_actions.CustomActionOperation"
 
     custom_action = factory.SubFactory(CustomActionFactory)
-    # Attached to a node (not an assistant) -- the model's check constraint requires one of them.
+    # The model's node_required check constraint makes this mandatory.
     node = factory.SubFactory("apps.utils.factories.pipelines.NodeFactory")
     operation_id = "weather_get"

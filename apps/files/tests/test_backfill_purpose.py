@@ -2,9 +2,8 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from apps.assistants.models import ToolResources
+from apps.files.management.commands.backfill_file_purpose import RULES
 from apps.files.models import File, FilePurpose
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFileFactory
 from apps.utils.factories.experiment import ChatAttachmentFactory
 from apps.utils.factories.files import FileFactory
@@ -17,11 +16,6 @@ def _run():
 @pytest.mark.django_db()
 def test_backfill_assigns_purpose_by_relation_and_pattern():
     collection_file = CollectionFileFactory.create()
-
-    assistant = OpenAiAssistantFactory.create()
-    tool_resource = ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter")
-    tool_file = FileFactory.create(team=assistant.team)
-    tool_resource.files.add(tool_file)
 
     voice_attachment = ChatAttachmentFactory.create(tool_type="voice_message")
     voice_file = FileFactory.create(team=voice_attachment.chat.team)
@@ -44,10 +38,10 @@ def test_backfill_assigns_purpose_by_relation_and_pattern():
     _run()
 
     assert File.objects.get(pk=collection_file.file.pk).purpose == FilePurpose.COLLECTION
-    # ASSISTANT is reserved for bot config (tool resources + openai sync); every
-    # conversation-attached file is MESSAGE_MEDIA regardless of tool_type.
-    assert File.objects.get(pk=tool_file.pk).purpose == FilePurpose.ASSISTANT
-    assert File.objects.get(pk=openai_file.pk).purpose == FilePurpose.ASSISTANT
+    # Every conversation-attached file is MESSAGE_MEDIA regardless of tool_type. An
+    # openai-sourced file matches no rule now that the assistant purpose is gone, so the
+    # backfill leaves it for a human rather than guessing.
+    assert File.objects.get(pk=openai_file.pk).purpose == ""
     assert File.objects.get(pk=voice_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
     assert File.objects.get(pk=code_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
     assert File.objects.get(pk=ocs_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
@@ -103,10 +97,16 @@ def test_backfill_treats_chat_attached_zip_as_media_not_export():
 
 @pytest.mark.django_db()
 def test_backfill_is_idempotent():
-    openai_file = FileFactory.create(external_source="openai")
+    collection_file = CollectionFileFactory.create()
 
     _run()
     # second run is a no-op (migration already applied); purpose stays correct
     call_command("backfill_file_purpose", "--force")
 
-    assert File.objects.get(pk=openai_file.pk).purpose == FilePurpose.ASSISTANT
+    assert File.objects.get(pk=collection_file.file.pk).purpose == FilePurpose.COLLECTION
+
+
+def test_assistant_is_not_a_file_purpose():
+    """The purpose went with the feature (#4254); retire_assistant_file_purpose clears the rows."""
+    assert "assistant" not in FilePurpose.values
+    assert not any(purpose == "assistant" for purpose, _condition in RULES)
