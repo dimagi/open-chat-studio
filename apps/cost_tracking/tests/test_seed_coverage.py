@@ -25,9 +25,6 @@ KNOWN_UNPRICED: set[tuple[str, str]] = {
     ("openai", "gpt-5.3-instant"),
     ("perplexity", "llama-3.1-sonar-large-128k-chat"),
     ("perplexity", "llama-3.1-sonar-small-128k-chat"),
-    # DeepSeek's own card quotes peak and off-peak rates that differ by 2x, so which one a
-    # flat unit_price should carry is a call for a human rather than the reconcile script.
-    ("deepseek", "deepseek-flash"),
 }
 
 
