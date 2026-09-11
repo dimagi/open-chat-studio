@@ -52,7 +52,7 @@ class UserActionableError(ChatException):
     The pipeline answers the participant with a message generated from this error and
     does not re-raise it, so it never fails the task or marks the trace as errored.
     Anything the participant cannot act on -- a provider outage, a revoked key, a bug --
-    must use a different exception.
+    must use a different exception. See ADR-0065.
     """
 
 

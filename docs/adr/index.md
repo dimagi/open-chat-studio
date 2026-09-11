@@ -86,3 +86,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0062](0062-uniform-401-for-anonymous-admission-failures.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Anonymous admission failures at session start return one uniform 401 |
 | [0063](0063-session-start-requires-a-chat-start-machine-token.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Session start requires a client-credentials token with the `chat:start` scope |
 | [0064](0064-per-channel-session-token-lifetime-override.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Channels may override the session token lifetime |
+| [0065](0065-participant-actionable-errors-answered-not-raised.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Participant-actionable errors are answered, not raised |
