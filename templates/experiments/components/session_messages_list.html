@@ -6,19 +6,17 @@
       <span class="badge badge-success">{{ message.time_gap_text }}</span>
     </div>
   {% endif %}
-  <div
-    class="group flex gap-3.5 px-5 py-4 border-b border-base-300 {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
-    x-data="{
-            tags: {{ message.all_tag_names|to_json|force_escape }},
-            get isSelected() { return commentsRow === {{ message.id }} },
-            }"
-    {% if highlight_message_id == message.id %}
-      id="{{ message.id }}"
-    {% endif %}
-  >
+  <div class="group flex gap-3.5 px-5 py-4 border-b border-base-300
+              {% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% endif %}"
+       x-data="{ tags: {{ message.all_tag_names|to_json|force_escape }}, get isSelected() { return commentsRow === {{ message.id }} }, }"
+       data-message-index="{{ page_start_index|add:forloop.counter|add:-1 }}"
+       {% if highlight_message_id == message.id %}
+         id="{{ message.id }}"
+       {% endif %}>
     <div class="flex flex-col items-center gap-1.5 w-8 flex-none">
       <span class="text-xs text-base-content/50 tabular-nums">{{ page_start_index|add:forloop.counter|add:-1 }}</span>
-      <span class="w-7 h-7 rounded-lg flex items-center justify-center {% if message.is_ai_message %}bg-base-200 text-base-content/70{% else %}bg-primary/10 text-primary{% endif %}">
+      <span class="w-7 h-7 rounded-lg flex items-center justify-center
+                   {% if message.is_ai_message %}bg-base-200 text-base-content/70{% else %}bg-primary/10 text-primary{% endif %}">
         {% if message.is_ai_message %}
           <i class="fa-solid fa-robot"></i>
         {% else %}
@@ -27,11 +25,12 @@
       </span>
     </div>
     <div class="flex-1 min-w-0 flex flex-col gap-2">
-      <div class="w-full {% if message.is_ai_message %}chat-message-system{% else %}chat-message-user{% endif %}">
+      <div class="w-full
+                  {% if message.is_ai_message %}chat-message-system{% else %}chat-message-user{% endif %}">
         <div class="message-contents text-sm!">
           {% if message.translation == default_message %}
             <div id="chat-message-{{ message.id }}-translation">
-              <div id="translation-loading-spinner-{{ message.id }}" >
+              <div id="translation-loading-spinner-{{ message.id }}">
                 <div class="translation-loading-spinner htmx-show">
                   <span class="loading loading-spinner loading-sm"></span>
                   <span class="ml-2">Translating...</span>
@@ -60,41 +59,41 @@
           {% endif %}
         </div>
       </div>
-
       {% if show_original_translation and not message.translation == default_message %}
         <div id="chat-message-{{ message.id }}-original" class="pg-text-muted">
-          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+          <p><strong>Original Message:</strong>{{ message.content|render_markdown }}</p>
         </div>
       {% endif %}
       {% if message.translation == default_message %}
         {# hidden when loading spinners are shown #}
-        <div id="chat-message-{{ message.id }}-original-default" class="pg-text-muted htmx-hide">
-          <p><strong>Original Message: </strong>{{ message.content|render_markdown }}</p>
+        <div id="chat-message-{{ message.id }}-original-default"
+             class="pg-text-muted htmx-hide">
+          <p><strong>Original Message:</strong>{{ message.content|render_markdown }}</p>
         </div>
       {% endif %}
       <div class="flex flex-col">
         {% for file in message.get_attached_files %}
           <div class="inline text-sm p-1">
-            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}" target="_blank" class="link link-primary">
+            <a href="{% url "experiments:download_file" request.team.slug experiment_session.id file.id %}"
+               target="_blank"
+               class="link link-primary">
               <i class="fa-solid fa-file fa-sm mr-1"></i>{{ file.name }}
             </a>
             ({{ file.display_size }})
             {% if file.is_image %}
               <div class="mt-1" x-data="{ showImage: false }">
-                <button
-                  @click="showImage = !showImage"
-                  class="btn btn-ghost btn-xs"
-                  :class="showImage ? 'text-primary' : 'text-gray-500'">
+                <button @click="showImage = !showImage"
+                        class="btn btn-ghost btn-xs"
+                        :class="showImage ? 'text-primary' : 'text-gray-500'">
                   <i class="fa-solid fa-image fa-sm mr-1"></i>
                   <span x-text="showImage ? 'Hide Image' : 'Show Image'"></span>
                 </button>
-                <div
-                  x-show="showImage"
-                  x-transition
-                  class="mt-2"
-                  hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
-                  hx-trigger="intersect once"
-                  hx-swap="innerHTML">
+                <div x-show="showImage"
+                     x-transition
+                     class="mt-2"
+                     hx-get="{% url 'experiments:get_image_html' request.team.slug experiment_session.id file.id %}"
+                     hx-trigger="intersect once"
+                     hx-swap="innerHTML">
                   <div class="flex items-center gap-2 text-xs text-gray-500">
                     <i class="fa-solid fa-spinner fa-spin"></i>
                     Loading image...
@@ -104,7 +103,8 @@
             {% elif file.is_audio %}
               <div class="mt-1">
                 <audio controls class="h-8">
-                  <source src="{% url 'experiments:download_file' request.team.slug experiment_session.id file.id %}" type="{{ file.content_type }}">
+                  <source src="{% url 'experiments:download_file' request.team.slug experiment_session.id file.id %}"
+                          type="{{ file.content_type }}">
                 </audio>
               </div>
             {% endif %}
@@ -114,7 +114,8 @@
       <div class="pg-help flex items-center gap-3 flex-wrap">
         <span>
           <i class="fa-regular fa-clock mr-1"></i>
-          <time datetime="{{ message.created_at.isoformat }}" title="{{ message.created_at.isoformat }}">
+          <time datetime="{{ message.created_at.isoformat }}"
+                title="{{ message.created_at.isoformat }}">
             {{ message.created_at|date:"DATETIME_FORMAT" }}
           </time>
         </span>
@@ -129,16 +130,15 @@
           {% include "experiments/chat/components/copy_message_link.html" with message=message session_detail_url=session_detail_url %}
         </div>
         {% if perms.annotations.add_usercomment %}
-          <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs" @click="commentsRow = (commentsRow === {{ message.id }} ? null : {{ message.id }})">
+          <button class="ml-auto whitespace-nowrap btn btn-ghost btn-xs"
+                  @click="commentsRow = (commentsRow === {{ message.id }} ? null : {{ message.id }})">
             <i class="fa-regular fa-comment"></i>
             <span id="{{ message.comment_count_element_id }}">{{ message.get_user_comments|length }}</span>
           </button>
         {% endif %}
       </div>
       {% if perms.annotations.add_usercomment %}
-        <div
-          x-show="commentsRow === {{ message.id }}"
-          x-cloak>
+        <div x-show="commentsRow === {{ message.id }}" x-cloak>
           <div class="flex justify-between">
             <h3 class="font-medium">Message Comments</h3>
             <button class="btn btn-ghost btn-sm" @click="commentsRow = null">
@@ -160,13 +160,13 @@
   </div>
 {% endfor %}
 {% if page < total_pages %}
-  <div
-    hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
-    hx-trigger="intersect once"
-    hx-target="this"
-    hx-swap="outerHTML"
-    hx-indicator="#messages-loading-more-{{ page }}">
-    <div id="messages-loading-more-{{ page }}" class="flex items-center justify-center p-4">
+  <div hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
+       hx-trigger="intersect once"
+       hx-target="this"
+       hx-swap="outerHTML"
+       hx-indicator="#messages-loading-more-{{ page }}">
+    <div id="messages-loading-more-{{ page }}"
+         class="flex items-center justify-center p-4">
       <span class="loading loading-spinner loading-sm"></span>
       <span class="ml-2">Loading more...</span>
     </div>
