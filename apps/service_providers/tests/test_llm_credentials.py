@@ -24,6 +24,7 @@ _PROVIDER_VARS = [
     "AZURE_OPENAI_API_VERSION",
     "GROQ_API_KEY",
     "PERPLEXITY_API_KEY",
+    "OPENROUTER_API_KEY",
     "MINIMAX_API_KEY",
     "LITELLM_API_KEY",
     "LITELLM_API_BASE",
@@ -133,6 +134,15 @@ def test_litellm_normalizes_base_url_with_trailing_slash_and_v1(clean_env):
     creds = get_provider_credentials_for_type(LlmProviderTypes.litellm)
     assert creds is not None
     assert creds.config["openai_api_base"] == "https://proxy.example.com/v1"
+
+
+def test_openrouter_minimal_config(clean_env):
+    """Credentials loader returns only the API key; attribution headers are
+    injected by OpenRouterLlmService._get_model_kwargs at request time."""
+    clean_env.setenv("OPENROUTER_API_KEY", "or-test")
+    creds = get_provider_credentials_for_type(LlmProviderTypes.openrouter)
+    assert creds is not None
+    assert creds.config == {"openai_api_key": "or-test"}
 
 
 def test_returns_one_entry_per_configured_provider(clean_env):

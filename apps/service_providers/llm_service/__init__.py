@@ -7,6 +7,7 @@ from .main import (
     LlmService,
     OpenAIGenericService,
     OpenAILlmService,
+    OpenRouterLlmService,
     VoyageAILlmService,
 )
 
@@ -16,6 +17,7 @@ __all__ = [
     "LlmService",
     "OpenAILlmService",
     "OpenAIGenericService",
+    "OpenRouterLlmService",
     "DeepSeekLlmService",
     "GoogleLlmService",
     "GoogleVertexAILlmService",

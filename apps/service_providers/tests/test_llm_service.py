@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from langchain_core.messages import HumanMessage
 
@@ -5,6 +7,7 @@ from apps.service_providers.llm_service import (
     AnthropicLlmService,
     AzureLlmService,
     OpenAILlmService,
+    OpenRouterLlmService,
     VoyageAILlmService,
 )
 from apps.service_providers.llm_service.index_managers import VoyageAILocalIndexManager
@@ -93,6 +96,31 @@ def test_litellm_is_openai_compatible_chat_provider():
     assert service.openai_api_base == "https://proxy.example.com/v1"
 
 
+def test_openrouter_is_openai_compatible_chat_provider():
+    """OpenRouter is routed through OpenRouterLlmService (a subclass of
+    OpenAIGenericService) with the OpenRouter base URL and must not use
+    the OpenAI-specific Responses API."""
+    assert LlmProviderTypes.openrouter.additional_config["openai_api_base"] == "https://openrouter.ai/api/v1"
+    service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
+    assert isinstance(service, OpenRouterLlmService)
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "openrouter"
+    assert service._use_responses_api is False
+
+
+def test_openrouter_does_not_use_responses_api():
+    """Regression guard: OpenRouter must not use the OpenAI Responses API."""
+    mock_site = MagicMock(name="test-site", domain="example.com")
+    mock_site.name = "Test OCS"
+    with (
+        patch("apps.web.meta.get_server_root", return_value="https://example.com"),
+        patch("django.contrib.sites.models.Site.objects.get_current", return_value=mock_site),
+    ):
+        service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
+        llm = service.get_chat_model("some-model")
+    assert llm.use_responses_api is False
+
+
 def test_voyage_ai_service():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     assert isinstance(service, VoyageAILlmService)
@@ -165,3 +193,38 @@ def test_anthropic_service_returns_prompt_caching_middleware():
 )
 def test_non_anthropic_services_have_no_prompt_caching_middleware(service):
     assert service.get_prompt_caching_middleware() is None
+
+
+def test_openrouter_attribution_headers_injected_from_site():
+    """OpenRouterLlmService must populate HTTP-Referer and X-Title automatically
+    from the Django Site object — with no caller involvement.
+
+    This is the fix for the bug snopoke identified: previously headers were only
+    set in the bootstrap_data credential loader, so providers created via the UI
+    or API never sent attribution headers to OpenRouter.
+    """
+    mock_site = MagicMock()
+    mock_site.name = "My OCS Instance"
+    with (
+        patch("apps.web.meta.get_server_root", return_value="https://example.com"),
+        patch("django.contrib.sites.models.Site.objects.get_current", return_value=mock_site),
+    ):
+        service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
+        chat_model = service.get_chat_model("openai/gpt-4.1-mini")
+    assert chat_model.default_headers["HTTP-Referer"] == "https://example.com"
+    assert chat_model.default_headers["X-Title"] == "My OCS Instance"
+
+
+def test_openrouter_caller_supplied_headers_not_overridden():
+    """If default_headers are stored on the service (e.g. legacy config rows),
+    _get_model_kwargs must pass them through unchanged and not hit Site."""
+    custom_headers = {"HTTP-Referer": "https://custom.example.com", "X-Title": "Custom"}
+    service = OpenRouterLlmService(
+        openai_api_key="test",
+        openai_api_base="https://openrouter.ai/api/v1",
+        default_headers=custom_headers,
+    )
+    # No Site.objects call expected — if it were made, it would raise since
+    # there is no DB connection in this test.
+    chat_model = service.get_chat_model("openai/gpt-4.1-mini")
+    assert chat_model.default_headers == custom_headers
