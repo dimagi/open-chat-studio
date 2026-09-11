@@ -11,13 +11,11 @@ from django.utils import timezone
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
-from django_tables2 import RequestConfig, SingleTableView
+from django_tables2 import SingleTableView
 
-from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
 from apps.channels.models import ChannelPlatform
-from apps.chatbots.tables import ParticipantSessionsTable
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_participant
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
@@ -84,14 +82,6 @@ def _sessions_panel_context(
 ) -> dict:
     team = request.team
     total_session_count = ExperimentSession.objects.filter(team=team, participant=participant).count()
-    sessions = (
-        ExperimentSession.objects.get_table_queryset(team, filter_experiment_id)
-        .filter(participant=participant)
-        .prefetch_related(chat_tagged_items_prefetch())
-    )
-    table = ParticipantSessionsTable(sessions)
-    # set request (no pagination) so the chatbot chip can permission-gate its link
-    session_table = RequestConfig(request, paginate=False).configure(table)
     filter_context = get_filter_context_data(
         team=team,
         columns=ExperimentSessionFilter.columns(team),
@@ -104,7 +94,6 @@ def _sessions_panel_context(
         "participant": participant,
         "experiments": experiments,
         "selected_experiment_id": filter_experiment_id,
-        "session_table": session_table,
         "total_session_count": total_session_count,
         **filter_context,
     }
