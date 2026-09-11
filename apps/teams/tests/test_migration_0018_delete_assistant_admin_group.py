@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from django.db import connection
 from django.db.migrations.loader import MigrationLoader
 
-from apps.teams.models import Invitation, Membership
+from apps.teams.models import Flag, Invitation, Membership
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -71,6 +71,18 @@ def test_detaches_the_group_from_invitations(assistant_admin):
 
     invitation.refresh_from_db()
     assert not invitation.groups.exists()
+
+
+@pytest.mark.django_db()
+def test_detaches_the_group_from_flags(assistant_admin):
+    flag = Flag.objects.create(name="flag_assistant_admin_probe")
+    flag.groups.add(assistant_admin)
+
+    _run()
+
+    flag.refresh_from_db()
+    assert Flag.objects.filter(pk=flag.pk).exists()
+    assert not flag.groups.exists()
 
 
 @pytest.mark.django_db()
