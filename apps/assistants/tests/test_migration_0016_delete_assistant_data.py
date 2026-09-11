@@ -6,7 +6,6 @@ from django.db.migrations.loader import MigrationLoader
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.custom_actions.models import CustomActionOperation
-from apps.pipelines.models import Node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.files import FileFactory
@@ -21,24 +20,25 @@ class FakeSchemaEditor:
 
     connection = connection
 
-    def execute(self, sql, params=()):
-        with connection.cursor() as cursor:
-            cursor.execute(sql, params)
-
 
 @pytest.fixture(autouse=True)
 def _requires_migrations(requires_migrations):
     """Every test here loads historical state via the migration graph."""
 
 
-def _run():
-    """Run against the app state the migration actually receives, not the live registry.
+def _state():
+    """The app state the migration actually receives, not the live registry.
 
     Built from the migration's own dependency list so the two cannot drift: a dependency that is
     missing here resolves other apps to a stale state whose columns no longer exist in the DB.
+    These models still carry the assistant FKs, which the live ones have already dropped from
+    state while the columns remain -- so this is also how a test sets up pre-migration rows.
     """
-    state = MigrationLoader(None).project_state(_migration.Migration.dependencies)
-    delete_assistant_data(state.apps, FakeSchemaEditor())
+    return MigrationLoader(None).project_state(_migration.Migration.dependencies).apps
+
+
+def _run():
+    delete_assistant_data(_state(), FakeSchemaEditor())
 
 
 @pytest.mark.django_db()
@@ -58,8 +58,10 @@ def test_deletes_assistant_attached_operations_and_keeps_node_attached_ones():
     """CustomActionOperation.assistant is CASCADE, so the assistant delete takes those rows."""
     assistant = OpenAiAssistantFactory.create()
     action = CustomActionFactory.create(team=assistant.team)
-    assistant_op = CustomActionOperation.objects.create(
-        assistant=assistant, custom_action=action, operation_id="weather_get"
+    assistant_op = (
+        _state()
+        .get_model("custom_actions", "CustomActionOperation")
+        .objects.create(assistant_id=assistant.id, custom_action_id=action.id, operation_id="weather_get")
     )
     node_op = CustomActionOperationFactory.create(custom_action=action)
 
@@ -76,12 +78,13 @@ def test_nulls_the_node_fk_and_strips_the_param():
         type="AssistantNode",
         params={"name": "assist", "assistant_id": str(assistant.id), "citations_enabled": True},
     )
-    Node.objects.filter(pk=node.pk).update(assistant=assistant)
+    historical_node = _state().get_model("pipelines", "Node")
+    historical_node.objects.filter(pk=node.pk).update(assistant_id=assistant.id)
 
     _run()
 
     node.refresh_from_db()
-    assert node.assistant_id is None
+    assert historical_node.objects.get(pk=node.pk).assistant_id is None
     assert node.params == {"name": "assist", "citations_enabled": True}
 
 
