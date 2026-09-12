@@ -1179,22 +1179,12 @@ class Participant(BaseTeamModel):
         return f"{url}#{experiment.id}"
 
     def get_experiments_for_display(self) -> list[Experiment]:
-        """Used by the html templates to display various stats about the participant's participation.
+        """Used by templates to show participant stats per experiment.
 
-        Each returned `Experiment` carries two extra attributes: `joined_on` (this participant's
-        earliest session on that specific experiment, or `None`) and `last_message` (the most
-        recent of `ExperimentSession.last_activity_at` across their sessions on that experiment,
-        or `None`). `last_activity_at` is only ever written from a human message (see
-        `apps.channels.signals.update_session_last_activity`), so this stays equivalent to "last
-        human message on this experiment" without a second query against `ChatMessage`. Uses the
-        raw field rather than `last_activity_expression()`'s `created_at` fallback, so a session
-        with no human message yet still reads as `None` rather than its own creation time.
-
-        Computed as two small, independently-indexed queries (which experiments, then joined_on/
-        last_message together per experiment) rather than one query joined across every session
-        on each chatbot. That join let one `id__in` participant-data match keep every session row
-        of the whole chatbot alive as a join partner, so a correlated per-row subquery ran once
-        per session on the chatbot instead of once per experiment (#4475).
+        Adds `joined_on` and `last_message` per `Experiment`, from `ExperimentSession.last_activity_at`
+        (raw field, not the coalesced `last_activity_expression()`, so a session with no message stays
+        `None`). Two grouped queries instead of one query joined across every chatbot session, which
+        fanned a per-row subquery out to every session, not just this participant's.
         """
         experiments = list(self.get_experiments_queryset(include_archived=True))
         if not experiments:
@@ -1246,8 +1236,8 @@ class Participant(BaseTeamModel):
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
         experiments: Already-loaded result of `get_experiments_for_display()`, so a caller that
-            called it themselves doesn't pay for that query twice (#4475). Ignored when
-            `experiment_id` is set. Falls back to calling it here if not passed.
+            called it themselves doesn't pay for that query twice. Ignored when `experiment_id`
+            is set. Falls back to calling it here if not passed.
         """
         from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
             ScheduledMessage,
