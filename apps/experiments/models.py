@@ -21,6 +21,8 @@ from django.db.models import (
     Case,
     Count,
     F,
+    Max,
+    Min,
     OuterRef,
     Q,
     Subquery,
@@ -1176,28 +1178,39 @@ class Participant(BaseTeamModel):
         )
         return f"{url}#{experiment.id}"
 
-    def get_experiments_for_display(self):
-        """Used by the html templates to display various stats about the participant's participation."""
-        exp_scoped_human_message = ChatMessage.objects.filter(
-            chat__experiment_session__participant=self,
-            message_type="human",
-            chat__experiment_session__experiment__id=OuterRef("id"),
-        )
-        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
-        joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
-        return (
-            self.get_experiments_queryset(include_archived=True)
-            .annotate(
-                joined_on=Subquery(joined_on),
-                last_message=Subquery(last_message),
+    def get_experiments_for_display(self) -> list[Experiment]:
+        """Used by templates to show participant stats per experiment.
+
+        Adds `joined_on` and `last_message` per `Experiment`, from `ExperimentSession.last_activity_at`
+        (raw field, not the coalesced `last_activity_expression()`, so a session with no message stays
+        `None`). Two grouped queries instead of one query joined across every chatbot session, which
+        fanned a per-row subquery out to every session, not just this participant's.
+        """
+        experiments = list(self.get_experiments_queryset(include_archived=True))
+        if not experiments:
+            return experiments
+
+        experiment_ids = [e.id for e in experiments]
+        session_stats_by_experiment = {
+            experiment_id: (joined_on, last_message)
+            for experiment_id, joined_on, last_message in (
+                self.experimentsession_set.filter(experiment_id__in=experiment_ids)
+                .values("experiment_id")
+                .annotate(joined_on=Min("created_at"), last_message=Max("last_activity_at"))
+                .values_list("experiment_id", "joined_on", "last_message")
             )
-            .distinct()
-        )
+        }
+        for experiment in experiments:
+            experiment.joined_on, experiment.last_message = session_stats_by_experiment.get(experiment.id, (None, None))
+        return experiments
 
     def get_experiments_queryset(self, include_archived=False):
         """Get the experiments that the participant has interacted with"""
+        session_experiment_ids = self.experimentsession_set.values_list("experiment_id", flat=True)
+        data_experiment_ids = self.data_set.values_list("experiment_id", flat=True)
+        experiment_ids = set(session_experiment_ids) | set(data_experiment_ids)
         query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
-        return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
+        return query.filter(id__in=experiment_ids)
 
     def get_data_for_experiment(self, experiment_id) -> dict:
         try:
@@ -1206,7 +1219,12 @@ class Participant(BaseTeamModel):
             return {}
 
     def get_schedules_for_experiments(
-        self, experiment_id=None, as_dict=False, as_timezone: str | None = None, include_inactive=False
+        self,
+        experiment_id=None,
+        as_dict=False,
+        as_timezone: str | None = None,
+        include_inactive=False,
+        experiments: list[Experiment] | None = None,
     ):
         """Scheduled messages for this participant, optionally narrowed to one experiment.
 
@@ -1217,6 +1235,9 @@ class Participant(BaseTeamModel):
             second lookup.
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
+        experiments: Already-loaded result of `get_experiments_for_display()`, so a caller that
+            called it themselves doesn't pay for that query twice. Ignored when `experiment_id`
+            is set. Falls back to calling it here if not passed.
         """
         from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
             ScheduledMessage,
@@ -1226,7 +1247,9 @@ class Participant(BaseTeamModel):
             experiment_ids = [experiment_id]
             experiments_by_id = None
         else:
-            experiments_by_id = {e.id: e for e in self.get_experiments_for_display()}
+            if experiments is None:
+                experiments = self.get_experiments_for_display()
+            experiments_by_id = {e.id: e for e in experiments}
             if not experiments_by_id:
                 return []
             experiment_ids = list(experiments_by_id.keys())

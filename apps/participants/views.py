@@ -113,7 +113,7 @@ def _sessions_panel_context(
 def _schedules_panel_context(
     request, participant: Participant, experiments: list[Experiment], filter_experiment_id: int | None
 ) -> dict:
-    schedules = participant.get_schedules_for_experiments(as_dict=True, include_inactive=True)
+    schedules = participant.get_schedules_for_experiments(as_dict=True, include_inactive=True, experiments=experiments)
     if filter_experiment_id:
         schedules = [s for s in schedules if s["experiment"].id == filter_experiment_id]
     return {
