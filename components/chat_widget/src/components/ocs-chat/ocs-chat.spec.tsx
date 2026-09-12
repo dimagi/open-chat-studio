@@ -138,6 +138,37 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('Message rendering', () => {
+    async function renderMessages(messages: OcsChat['messages']) {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.messages = messages;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+      return page.root?.shadowRoot;
+    }
+
+    it('renders user messages as plain text, not markdown or HTML', async () => {
+      const content = '# Heading **bold** <h1>html</h1> <script>alert(1)</script>';
+      const root = await renderMessages([{ created_at: new Date().toISOString(), role: 'user', content, attachments: [] }]);
+
+      const bubble = root?.querySelector('.message-bubble-user');
+      expect(bubble?.querySelector('.chat-markdown')).toBeFalsy();
+      expect(bubble?.querySelector('h1, strong, script')).toBeFalsy();
+      expect(bubble?.querySelector('.chat-plain-text')?.textContent).toBe(content);
+    });
+
+    it('still renders assistant messages as markdown', async () => {
+      const root = await renderMessages([{ created_at: new Date().toISOString(), role: 'assistant', content: '**bold**', attachments: [] }]);
+
+      const bubble = root?.querySelector('.message-bubble-assistant');
+      expect(bubble?.querySelector('.chat-markdown strong')?.textContent).toBe('bold');
+    });
+  });
+
   describe('Starter Questions Display', () => {
     it('should display starter questions when provided via translation files', async () => {
       const page = await newSpecPage({

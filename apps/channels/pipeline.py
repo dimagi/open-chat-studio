@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException
+from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -84,6 +84,12 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
+    # Set by QueryExtractionStage when a voice note held no speech. It defers the
+    # signal rather than raising so ChatMessageCreationStage still records the turn;
+    # NoSpeechGuardStage raises once it has. An empty user_query cannot carry this
+    # on its own -- an attachment-only message with no caption looks identical.
+    no_speech_reason: NoSpeechReason | None = None
+
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,
     # or file). SendingErrorHandlerStage processes each one for notifications
@@ -150,19 +156,40 @@ class MessageProcessingPipeline:
     2. EarlyAbort -- silent halt; no message, no terminal stages.
        Used when reporting back to the user would be wrong (e.g. platform
        consent withdrawn).
-    3. Pipeline build error -- the pipeline is misconfigured (e.g. a
-       deprecated model, an unreachable node). This is a user
-       configuration problem, not a bug, so it replies with the generic
-       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is logged as
-       a warning WITHOUT being re-raised (which would report it to Sentry
-       and fail the task with no useful retry).
-    4. Unexpected Exception -- catch-all generates an error message
+    3. Configuration error -- the chatbot is misconfigured (e.g. a
+       deprecated model, an unreachable node, a broken template, code that
+       raised). This is a user configuration problem, not a bug, so it
+       replies with the generic DEFAULT_ERROR_RESPONSE_TEXT, runs terminal
+       stages, and is logged as a warning WITHOUT being re-raised (which
+       would report it to Sentry and fail the task with no useful retry).
+    4. NoSpeechDetected -- the transcriber found no speech in the
+       participant's voice note. Replies with a message generated from
+       NO_SPEECH_PROMPTS via EventBot, falls back to
+       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is NOT
+       re-raised: it is user input, not a fault.
+    5. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
        RE-RAISES so the caller knows processing failed.
     """
 
     DEFAULT_ERROR_RESPONSE_TEXT = "Sorry, something went wrong while processing your message. Please try again later"
+
+    # Errors in how the chatbot was configured, not bugs: they get the canned reply
+    # and are never re-raised.
+    CONFIGURATION_EXCEPTIONS = (PipelineBuildError, PipelineNodeBuildError, CodeNodeRunError, NodeUserConfigRunError)
+
+    # Fed to the error bot, which turns them into advice in the participant's language.
+    NO_SPEECH_PROMPTS = {
+        NoSpeechReason.SILENCE: (
+            "Tell the user that no speech could be heard in the voice message they sent"
+            " and that they should try recording it again."
+        ),
+        NoSpeechReason.NOT_UNDERSTOOD: (
+            "Tell the user that the speech in the voice message they sent could not be made out"
+            " and that they should try recording it again, speaking clearly."
+        ),
+    }
 
     def __init__(
         self,
@@ -185,14 +212,17 @@ class MessageProcessingPipeline:
            handling, no terminal stages, no user-facing response.
         3. If any raises a passthrough exception, re-raise immediately
            without error handling or terminal stages.
-        4. If any raises a pipeline build error, reply with the generic
+        4. If any raises a configuration error, reply with the generic
            error text, log a warning, and set ctx.early_exit_response --
            but do NOT re-raise (misconfiguration is not a bug worth
            reporting).
-        5. If any raises an unexpected exception, generate an error message
+        5. If any raises NoSpeechDetected, reply with a message generated
+           from the reason and set ctx.early_exit_response -- but do NOT
+           re-raise (silence is user input, not a bug).
+        6. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        6. Run terminal stages unconditionally (they always fire).
-        7. If there was an unexpected exception, re-raise it after terminal
+        7. Run terminal stages unconditionally (they always fire).
+        8. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         try:
@@ -230,24 +260,21 @@ class MessageProcessingPipeline:
             # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
             # no error message generation, no terminal stages.
             raise
-        except (PipelineBuildError, PipelineNodeBuildError) as e:
-            # The pipeline is misconfigured (e.g. a deprecated model). Reply
-            # with the generic message and run terminal stages, but do NOT
-            # re-raise: this is a configuration problem, not a bug, and
-            # re-raising would report it to Sentry and fail the task with no
-            # useful retry. Skip LLM-based message generation -- the LLM may be
-            # the thing that is misconfigured, and a canned reply is enough.
-            logger.warning("Pipeline build error (node=%s): %s", getattr(e, "node_id", None), e)
+        except self.CONFIGURATION_EXCEPTIONS as e:
+            # The chatbot is misconfigured (a deprecated model, a broken template,
+            # user-authored code that raised). Reply with the canned message and run
+            # terminal stages, but do NOT re-raise: this is a configuration problem,
+            # not a bug, and re-raising would report it to Sentry and fail the task
+            # with no useful retry. Skip LLM-based message generation too -- the LLM
+            # may be the thing that is misconfigured.
+            logger.warning(
+                "Chatbot configuration error (%s, node=%s): %s", type(e).__name__, getattr(e, "node_id", None), e
+            )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
-        except (CodeNodeRunError, NodeUserConfigRunError) as e:
-            # User-authored code or user-configured template/email raised an error.
-            # This is a user configuration problem, not a system bug.
-            # Log a warning and return a canned reply without re-raising so that
-            # Sentry does not receive a spurious error report.
-            logger.warning("Node user config error: %s", e)
-            ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
-            ctx.processing_errors.append(str(e))
+        except NoSpeechDetected as e:
+            logger.info("No speech detected in voice message: %s", e.reason)
+            ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
         except Exception as e:
             ctx.early_exit_response = self._generate_error_message(ctx, e)
             ctx.processing_errors.append(str(e))
@@ -264,7 +291,6 @@ class MessageProcessingPipeline:
         Maps to the old _inform_user_of_error() but WITHOUT sending --
         sending is ResponseSendingStage's responsibility.
         """
-        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
         prompt = (
             "Tell the user that something went wrong while processing their message"
             " and that they should try again later."
@@ -275,7 +301,11 @@ class MessageProcessingPipeline:
                 f"they should try again later or adjust the message type or contents "
                 f"according to the following error message: {exception}"
             )
+        return self._user_message(ctx, prompt, exception)
 
+    def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
+        """Ask EventBot for a participant-facing message, falling back to the canned reply."""
+        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
         event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
         try:
             return event_bot.get_user_message(prompt)

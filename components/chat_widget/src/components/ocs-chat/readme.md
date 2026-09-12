@@ -94,11 +94,8 @@ Type: `Promise<string>`
 | `--chat-window-width`                          | Chat window width in pixels or percent (25%)                                     |
 | `--chat-z-index`                               | Z-index for chat widget (50)                                                     |
 | `--code-bg-assistant-color`                    | Code background in assistant messages (--message-assistant-bg-color + 50% white) |
-| `--code-bg-user-color`                         | Code background in user messages (--message-user-bg-color + 20% white)           |
 | `--code-border-assistant-color`                | Code border in assistant messages (--message-assistant-bg-color + 10% black)     |
-| `--code-border-user-color`                     | Code border in user messages (--message-user-bg-color + 20% black)               |
 | `--code-text-assistant-color`                  | Code text color in assistant messages (--message-assistant-text-color)           |
-| `--code-text-user-color`                       | Code text color in user messages (--message-user-text-color)                     |
 | `--confirmation-button-cancel-bg-color`        | Cancel button background color (uses --button-background-color-hover)            |
 | `--confirmation-button-cancel-bg-hover-color`  | Cancel button background on hover (uses #e5e7eb)                                 |
 | `--confirmation-button-cancel-text-color`      | Cancel button text color (uses --header-button-text-color)                       |
