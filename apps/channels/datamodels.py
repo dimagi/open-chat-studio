@@ -334,7 +334,7 @@ class WhatsAppMessage(BaseMessage):
         elif message_type in ("image", "document"):
             body = message.get(message_type, {}).get("caption", "")
 
-        _media_types = ("image", "document", "audio", "video", "sticker")
+        _media_types = ("image", "document", "audio", "voice", "video", "sticker")
         media_payload = message.get(message_type, {}) if message_type in _media_types else {}
         # For documents the provider gives us a real MIME type; for images we keep the
         # literal "image" marker (Twilio still uses image/* — the hydration stage handles both).
