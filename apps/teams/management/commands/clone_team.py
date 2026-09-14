@@ -356,8 +356,6 @@ class Command(BaseCommand):
                     f"Remove or clear this reference in the source pipeline before cloning."
                 )
 
-            changed = True
-
         # Remap llm_provider_id
         if "llm_provider_id" in params and params["llm_provider_id"]:
             old_id = int(params["llm_provider_id"])

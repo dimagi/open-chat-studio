@@ -9,12 +9,14 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
+from apps.teams.management.commands.clone_team import CloneContext, Command
 from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -392,3 +394,30 @@ def test_clone_team_copies_feature_flags(source_team):
 
     # Verify target team is in the same flag
     assert flag.teams.filter(id=target.id).exists()
+
+
+@pytest.mark.django_db()
+def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
+    """`changed` gates the write, and writing a node the clone had no reason to touch is lossy.
+
+    `set_params` re-derives the FK columns from params, so saving a node whose params never
+    carried a resource id nulls whatever column the params do not mirror.
+    """
+    source, target = TeamFactory.create(), TeamFactory.create()
+    provider = LlmProviderFactory.create(team=target)
+    pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
+    node = Node.objects.create(
+        pipeline=pipeline,
+        type="RouterNode",
+        flow_id="router",
+        label="Router",
+        params={"keywords": ["yes", "no"]},
+    )
+    Node.objects.filter(pk=node.pk).update(llm_provider_id=provider.id)
+    node = Node.objects.get(pk=node.pk)
+
+    Command()._remap_node_params(CloneContext(source_team=source, target_team=target), node)
+
+    node.refresh_from_db()
+    assert node.llm_provider_id == provider.id
+    assert node.params == {"keywords": ["yes", "no"]}
