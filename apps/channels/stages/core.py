@@ -584,17 +584,9 @@ class QueryExtractionStage(ProcessingStage):
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
             except NoSpeechDetected as e:
-                # Defer so ChatMessageCreationStage records the turn first: the voice note is
-                # real input and belongs in the history and on the trace, even though there are
-                # no words in it. The empty query is what makes that stage keep the text empty
-                # and let the attachment carry the content.
-                ctx.user_query = ""
-                ctx.error_reason = UserActionableError(NO_SPEECH_MESSAGES[e.reason])
-            except UserActionableError:
-                # Raised by _do_transcription when the chatbot has no transcription-capable voice
-                # provider. The participant can send text instead, so this skips the failure
-                # notification below and leaves the pipeline to answer them (ADR-0065).
-                raise
+                self._defer(ctx, UserActionableError(NO_SPEECH_MESSAGES[e.reason]))
+            except UserActionableError as e:
+                self._defer(ctx, e)
             except Exception as e:
                 # Stage handles its own error
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
@@ -602,6 +594,17 @@ class QueryExtractionStage(ProcessingStage):
                 raise
         else:
             ctx.user_query = ctx.message.message_text
+
+    @staticmethod
+    def _defer(ctx: MessageProcessingContext, error: UserActionableError) -> None:
+        """Hold the error for ErrorGuardStage so ChatMessageCreationStage records the turn first.
+
+        The voice note is real input and belongs in the history and on the trace even though
+        nothing could be read out of it. The empty query is what makes that stage keep the
+        text empty and let the attachment carry the content.
+        """
+        ctx.user_query = ""
+        ctx.error_reason = error
 
     def _transcribe_voice(self, ctx: MessageProcessingContext) -> str:
         ctx.callbacks.transcription_started(ctx.participant_identifier)

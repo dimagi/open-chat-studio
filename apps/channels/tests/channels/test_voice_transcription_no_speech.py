@@ -180,3 +180,23 @@ def test_voice_note_to_a_bot_without_transcription_replies_and_does_not_notify(m
 
     assert channel.text_sent == ["I can't listen to voice notes -- please type it."]
     assert not NotificationEvent.objects.filter(title="Audio Transcription Failed").exists()
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.pipeline.EventBot")
+def test_voice_note_to_a_bot_without_transcription_records_the_turn(mock_event_bot_cls):
+    """The voice note is real input, so it belongs in the history and on the trace.
+
+    Same rule as a voice note that held no speech: the reply is about the note, and a
+    chat history missing the thing being replied to reads as a non-sequitur.
+    """
+    mock_event_bot_cls.return_value.get_user_message.return_value = "I can't listen to voice notes -- please type it."
+    session = ExperimentSessionFactory.create()
+    session.experiment.voice_provider = None
+    session.experiment.save()
+    channel = _channel(session)
+
+    channel.new_user_message(_voice_message())
+
+    human = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.HUMAN)
+    assert human.get_attached_files().count() == 1

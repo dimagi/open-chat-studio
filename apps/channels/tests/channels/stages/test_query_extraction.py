@@ -118,6 +118,26 @@ class TestQueryExtractionStage:
         assert _span(ctx).set_outputs.called
         _span(ctx).mark_span_as_error.assert_not_called()
 
+    @patch("apps.channels.stages.core.audio_transcription_failure_notification")
+    def test_unavailable_transcription_defers_too(self, mock_notification):
+        """Deferred for the same reason: the voice note belongs in the history either way.
+
+        Nothing was tried and failed, so the team notification must stay silent.
+        """
+        msg = audio_message()
+        experiment = MagicMock()
+        experiment.voice_provider = None
+        ctx = make_context(message=msg, callbacks=StubCallbacks(), experiment=experiment)
+
+        self.stage(ctx)
+
+        assert isinstance(ctx.error_reason, UserActionableError)
+        assert "not available" in str(ctx.error_reason)
+        assert ctx.user_query == ""
+        mock_notification.assert_not_called()
+        assert ctx.processing_errors == []
+        _span(ctx).mark_span_as_error.assert_not_called()
+
 
 class TestErrorGuardStage:
     def setup_method(self):
