@@ -130,6 +130,22 @@ class TestOCSCallbackHandler:
         assert tracer.error_detected is True
         assert tracer.error_message == error_message
 
+    def test_on_tool_error_records_error(self):
+        """Tool error handler records the error on the tracer, same path as LLM/chain errors."""
+        experiment = Mock(id=456)
+        tracer = OCSTracer(experiment, team_id=123)
+        tracer.trace_id = str(uuid4())  # ty: ignore[invalid-assignment]
+        tracer.session = Mock()
+
+        callback_handler = OCSCallbackHandler(tracer=tracer)
+
+        error_message = "API rate limit exceeded"
+        callback_handler.on_tool_error(error=Exception(error_message))
+
+        assert tracer.error_detected is True
+        assert tracer.error_message == error_message
+        assert tracer.error_span_name == "Tool Error"
+
 
 @pytest.mark.django_db()
 class TestOCSTracerNotifications:

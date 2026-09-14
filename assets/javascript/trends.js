@@ -31,19 +31,21 @@ const CHART_OPTIONS = {
  * Creates a minimal sparkline bar chart from pre-fetched trend data.
  * @param {CanvasRenderingContext2D} ctx - Canvas 2D context to render the chart
  * @param {{ successes: number[], errors: number[] }} data - Trend data arrays
+ * @param {{ successColor?: string, errorColor?: string }} [colors] - Override the bar
+ *   colors for callers whose series isn't a success/error split (e.g. a plain count).
  */
-export const renderChart = (ctx, data) => {
+export const renderChart = (ctx, data, colors = {}) => {
     const datasets = [
         {
             label: "Success",
             data: data.successes,
-            backgroundColor: "#16a34a",
+            backgroundColor: colors.successColor || "#16a34a",
             maxBarThickness: 4,
         },
         {
             label: "Errors",
             data: data.errors,
-            backgroundColor: "#dc2626",
+            backgroundColor: colors.errorColor || "#dc2626",
             maxBarThickness: 4,
         }
     ];

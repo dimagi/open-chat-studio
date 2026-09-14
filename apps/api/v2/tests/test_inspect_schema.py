@@ -38,6 +38,7 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
         "pipeline_valid",
         "pipeline_errors",
         "unwired_handles",
+        "deprecated_models",
         "events",
     }
 

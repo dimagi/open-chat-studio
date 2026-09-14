@@ -2,7 +2,9 @@ import django_tables2 as tables
 from django.conf import settings
 from django.template.loader import get_template
 from django.urls import reverse
+from django.utils.formats import date_format
 from django.utils.html import format_html, format_html_join
+from django.utils.translation import gettext as _
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.events.utils import truncate_dict_items
@@ -101,3 +103,62 @@ class EventsTable(tables.Table):
             "action_type",
             "action_params",
         )
+
+
+class SchedulesTable(tables.Table):
+    """Scheduled messages, shared by the session-scoped and participant-wide schedule tabs.
+
+    `experiment` (the Chatbot column) is only meaningful when a schedule list aggregates
+    across chatbots -- exclude it (`table.exclude = ("experiment",)`) for a single-session
+    view, matching the same convention already used for `ChatbotSessionsTable`.
+    """
+
+    name = tables.Column(verbose_name="Schedule")
+    experiment = tables.Column(verbose_name="Chatbot")
+    next_trigger_date = tables.Column(verbose_name="Next run", empty_values=())
+    cadence = tables.Column(verbose_name="Cadence", empty_values=())
+    status = tables.Column(verbose_name="Status", empty_values=())
+    manage = tables.TemplateColumn(
+        verbose_name="Manage",
+        template_name="events/components/schedule_manage_button.html",
+    )
+
+    def render_next_trigger_date(self, record):
+        if record.get("is_complete") or record.get("is_cancelled"):
+            return "-"
+        value = record.get("next_trigger_date")
+        if not value:
+            return "-"
+        return format_html(
+            '<time datetime="{}" title="{}">{}</time>',
+            value.isoformat(),
+            value.isoformat(),
+            date_format(value, "DATETIME_FORMAT"),
+        )
+
+    def render_cadence(self, record):
+        if record.get("repetitions"):
+            return _("Every %(frequency)s %(time_period)s, %(repetitions)s times") % {
+                "frequency": record["frequency"],
+                "time_period": record["time_period"],
+                "repetitions": record["repetitions"],
+            }
+        return _("One-off")
+
+    def render_status(self, record):
+        if record.get("is_cancelled"):
+            label = _("Cancelled")
+        elif record.get("is_complete"):
+            label = _("Completed")
+        else:
+            label = _("Active")
+        return format_html('<span class="badge badge-ghost">{}</span>', label)
+
+    class Meta:
+        orderable = False
+        empty_text = "No schedules."
+        row_attrs = {
+            **settings.DJANGO_TABLES2_ROW_ATTRS,
+            "id": lambda record: f"schedule_{record['external_id']}",
+        }
+        sequence = ("name", "experiment", "next_trigger_date", "cadence", "status", "manage")

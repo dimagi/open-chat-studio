@@ -19,11 +19,14 @@ export function classNames(...classes: Array<string | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
-export function nodeBorderClass(nodeErrors : boolean, selected : boolean ): string {
-  const defaultBorder = nodeErrors ? "border-error " : ""
-  const selectedBorder = nodeErrors ? "border-secondary" : "border-primary"
-  const border = selected ? selectedBorder : defaultBorder
-  return classNames(border, "border py-2 shadow-md rounded-xl border-2")
+export function nodeBorderClass(nodeErrors : boolean, selected : boolean, nodeWarnings = false): string {
+  if (nodeErrors) {
+    return classNames(selected ? "border-secondary" : "border-error", "border py-2 shadow-md rounded-xl border-2")
+  }
+  if (nodeWarnings) {
+    return classNames(selected ? "border-warning" : "border-warning/60", "border py-2 shadow-md rounded-xl border-2")
+  }
+  return classNames(selected ? "border-primary" : "", "border py-2 shadow-md rounded-xl border-2")
 }
 
 const localCache = {

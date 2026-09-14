@@ -26,4 +26,6 @@ export type PipelineStoreType = {
     nodes: Node[];
     edges: Edge[];
   }) => void;
+  undoLastChange: () => void;
+  redoLastChange: () => void;
 };

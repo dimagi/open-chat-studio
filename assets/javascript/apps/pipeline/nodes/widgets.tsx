@@ -921,10 +921,15 @@ export function LlmWidget(props: WidgetParams) {
   } else {
     error = "This field is required."
   }
+  const selectedModel = (parameterValues.llm_provider_model_id as LlmProviderModel[])
+    .find((model) => String(model.value) === String(providerModelId));
+  const warning = selectedModel?.deprecated
+    ? "Deprecated — move to a supported model before it is removed."
+    : undefined;
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
   return (
     <>
-      <InputField label={props.label} help_text={props.helpText} inputError={error}>
+      <InputField label={props.label} help_text={props.helpText} inputError={error} inputWarning={warning}>
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
@@ -1099,10 +1104,11 @@ function HelpBubble({ helpText }: { helpText: string }) {
   );
 }
 
-export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
+export function InputField({label, help_text, inputError, inputWarning, children}: React.PropsWithChildren<{
   label: string | ReactNode,
   help_text: string,
-  inputError?: string | undefined
+  inputError?: string | undefined,
+  inputWarning?: string | undefined
 }>) {
   return (
     <>
@@ -1115,6 +1121,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
       </div>
       <div>
         <small className="text-red-500">{inputError}</small>
+        {!inputError && inputWarning && <small className="text-warning">{inputWarning}</small>}
       </div>
     </>
   );

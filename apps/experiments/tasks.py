@@ -14,7 +14,6 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.web_channel import WebChannel
 from apps.chat.bots import create_conversation
-from apps.chat.exceptions import UserReportableError
 from apps.experiments.export import count_export_messages, export_to_tempfile, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File, FilePurpose
@@ -144,9 +143,6 @@ def get_response_for_webchat_task(
         # so add the response here as well as the message ID
         response["response"] = chat_message.content
         response["message_id"] = chat_message.id
-    except UserReportableError as e:
-        response["error"] = str(e)
-        response["user_facing_error"] = True
     except Exception as e:
         logger.exception(e)
         response["error"] = str(e)
