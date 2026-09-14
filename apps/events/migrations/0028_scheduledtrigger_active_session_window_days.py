@@ -103,4 +103,13 @@ class Migration(migrations.Migration):
                 apps.experiments.versioning.VersionsMixin,
             ),
         ),
+        migrations.AddField(
+            model_name="scheduledtrigger",
+            name="active_session_window_days",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="Only fire against sessions with user activity in the last N days. Leave blank to target all open sessions.",
+                null=True,
+            ),
+        ),
     ]
