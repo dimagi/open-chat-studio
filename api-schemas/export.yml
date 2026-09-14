@@ -4498,6 +4498,7 @@ components:
       - anthropic
       - groq
       - perplexity
+      - openrouter
       - deepseek
       - minimax
       - litellm
@@ -4511,6 +4512,7 @@ components:
         * `anthropic` - Anthropic
         * `groq` - Groq
         * `perplexity` - Perplexity
+        * `openrouter` - OpenRouter
         * `deepseek` - DeepSeek
         * `minimax` - MiniMax
         * `litellm` - LiteLLM
@@ -6093,6 +6095,7 @@ components:
       - cursor
       - has_more
       - results
+
     UsageRecordDetail:
       type: object
       properties:

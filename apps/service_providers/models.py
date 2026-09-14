@@ -77,6 +77,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     anthropic = "anthropic", _("Anthropic")
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
+    openrouter = "openrouter", _("OpenRouter"), {"openai_api_base": "https://openrouter.ai/api/v1"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
     litellm = "litellm", _("LiteLLM")
@@ -122,7 +123,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AzureOpenAIConfigForm
             case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
+            case (
+                LlmProviderTypes.groq
+                | LlmProviderTypes.perplexity
+                | LlmProviderTypes.minimax
+                | LlmProviderTypes.openrouter
+            ):
                 return forms.OpenAIGenericConfigForm
             case LlmProviderTypes.litellm:
                 return forms.LiteLLMConfigForm
@@ -161,8 +167,14 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AzureLlmService(**config)
             case LlmProviderTypes.anthropic:
                 return llm_service.AnthropicLlmService(**config)
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
+            case (
+                LlmProviderTypes.groq
+                | LlmProviderTypes.perplexity
+                | LlmProviderTypes.minimax
+            ):
                 return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.openrouter:
+                return llm_service.OpenRouterLlmService(**config)
             case LlmProviderTypes.litellm:
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:

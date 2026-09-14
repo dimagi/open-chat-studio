@@ -187,6 +187,10 @@ class LlmService(pydantic.BaseModel):
 class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
+    # Extra HTTP headers forwarded verbatim to every request.
+    # Used by OpenRouter to carry attribution headers (HTTP-Referer / X-Title);
+    # None for all other generic providers so ChatOpenAI uses its own defaults.
+    default_headers: dict[str, str] | None = None
     # Subclasses can override this to enable the OpenAI Responses API.
     # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
     _use_responses_api: ClassVar[bool] = False
@@ -217,10 +221,40 @@ class OpenAIGenericService(LlmService):
         if effort := kwargs.pop("effort", None):
             kwargs["reasoning"] = {"effort": effort}
 
-        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
+        model_kwargs = {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
+        if self.default_headers:
+            model_kwargs["default_headers"] = self.default_headers
+        return model_kwargs
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
+
+
+class OpenRouterLlmService(OpenAIGenericService):
+    """OpenAI-compatible service for OpenRouter with automatic attribution headers.
+
+    OpenRouter recommends sending ``HTTP-Referer`` and ``X-Title`` on every
+    request so that traffic is attributed to this application in the OpenRouter
+    dashboard and rate-limit tiers.  These headers must be injected on every
+    code path (UI, API, bootstrap) — not only during ``bootstrap_data`` seeding.
+    """
+
+    def _get_model_kwargs(self, **kwargs) -> dict:
+        """Inject attribution headers from the current Django Site into every chat request."""
+        model_kwargs = super()._get_model_kwargs(**kwargs)
+        # Only derive from Site when the caller didn't supply explicit headers.
+        # ``super()._get_model_kwargs`` already merges ``self.default_headers`` when set.
+        if "default_headers" not in model_kwargs:
+            from django.contrib.sites.models import Site  # noqa: PLC0415
+
+            from apps.web.meta import get_server_root  # noqa: PLC0415
+
+            site = Site.objects.get_current()
+            model_kwargs["default_headers"] = {
+                "HTTP-Referer": get_server_root(),
+                "X-Title": site.name,
+            }
+        return model_kwargs
 
 
 class OpenAILlmService(OpenAIGenericService):
