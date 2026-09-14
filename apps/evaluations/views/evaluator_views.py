@@ -198,12 +198,28 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
 
     def delete(self, request, team_slug: str, pk: int):
-        """Delete the evaluator, returning 409 if a related run is still in progress."""
+        """Archive the evaluator if it has history, otherwise delete it.
+
+        Returns 409 if a related run is still in progress.
+        """
         evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
         try:
-            evaluator.delete()
+            if evaluator.evaluationresult_set.exists() or evaluator.evaluationrunaggregate_set.exists():
+                evaluator.archive()
+            else:
+                evaluator.delete()
         except InFlightRunsError as e:
             return HttpResponse(", ".join(e.messages), status=409)
+        return HttpResponse(status=200)
+
+
+class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "evaluations.delete_evaluator"
+
+    def post(self, request, team_slug: str, pk: int):
+        """Restore an archived evaluator."""
+        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        evaluator.unarchive()
         return HttpResponse(status=200)
 
 

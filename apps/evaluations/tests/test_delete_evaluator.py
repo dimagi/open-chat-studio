@@ -6,6 +6,8 @@ from django.urls import reverse
 from apps.evaluations.models import EvaluationRunStatus, Evaluator
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
+    EvaluationResultFactory,
+    EvaluationRunAggregateFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
 )
@@ -155,3 +157,69 @@ def test_delete_evaluator_blocked_by_frozen_plan_after_config_removal(status, cl
 
     assert response.status_code == 409
     assert Evaluator.objects.filter(id=evaluator.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "history",
+    [
+        pytest.param("result", id="results-only"),
+        pytest.param("aggregate", id="aggregates-only"),
+        pytest.param("both", id="results-and-aggregates"),
+    ],
+)
+def test_delete_evaluator_with_any_history_archives_it(history, client, team_with_users):
+    """An aggregates-only evaluator must not take the hard-delete branch: PROTECT
+    would raise ProtectedError, which the view does not catch."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
+    if history in ("result", "both"):
+        EvaluationResultFactory.create(team=team_with_users, run=run, evaluator=evaluator)
+    if history in ("aggregate", "both"):
+        EvaluationRunAggregateFactory.create(run=run, evaluator=evaluator)
+
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id])
+    response = client.delete(url)
+
+    assert response.status_code == 200
+    evaluator.refresh_from_db()
+    assert evaluator.is_archived is True
+
+
+@pytest.mark.django_db()
+def test_unarchive_restores_the_evaluator(client, team_with_users):
+    """Unarchiving an archived evaluator clears its is_archived flag."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    evaluator.archive()
+
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, evaluator.id])
+    response = client.post(url)
+
+    assert response.status_code == 200
+    evaluator.refresh_from_db()
+    assert evaluator.is_archived is False
+
+
+@pytest.mark.django_db()
+def test_unarchive_without_delete_perm_is_forbidden(client, team_with_users):
+    """A user without delete_evaluator permission cannot unarchive an evaluator."""
+    view_perm = Permission.objects.get(
+        content_type=ContentType.objects.get_for_model(Evaluator),
+        codename="view_evaluator",
+    )
+    limited_group = GroupFactory.create(name="evaluations-view-only-unarchive")
+    limited_group.permissions.add(view_perm)
+    membership = MembershipFactory.create(team=team_with_users, groups=[limited_group])
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    evaluator.archive()
+
+    client.force_login(membership.user)
+    url = reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, evaluator.id])
+    response = client.post(url)
+
+    assert response.status_code == 403
+    evaluator.refresh_from_db()
+    assert evaluator.is_archived is True
