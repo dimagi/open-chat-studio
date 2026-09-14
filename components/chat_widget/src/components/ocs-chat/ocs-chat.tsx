@@ -2267,6 +2267,13 @@ export class OcsChat {
     );
   }
 
+  private renderMessageContent(message: ChatMessage) {
+    if (message.role === 'user') {
+      return <div class="chat-plain-text">{message.content}</div>;
+    }
+    return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -2381,7 +2388,7 @@ export class OcsChat {
                           message.role === 'user' ? 'message-bubble-user' : message.role === 'assistant' ? 'message-bubble-assistant' : 'message-bubble-system'
                         }`}
                       >
-                        <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>
+                        {this.renderMessageContent(message)}
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (

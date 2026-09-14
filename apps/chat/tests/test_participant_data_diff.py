@@ -2,7 +2,8 @@ import pytest
 from django.urls import reverse
 
 from apps.annotations.models import Tag, TagCategories
-from apps.chat.models import ChatMessageType
+from apps.chat.models import ChatMessageMetadataKeys, ChatMessageType
+from apps.pipelines.models import PipelineChatHistoryModes
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
     ExperimentSessionFactory,
@@ -108,3 +109,112 @@ class TestTagFilterInSessionMessages:
         page_messages = response.context["messages"]
 
         assert {message.id for message in page_messages} == {billing_message.id, urgent_message.id}
+
+
+@pytest.mark.django_db()
+class TestPushUrlInSessionMessages:
+    def test_htmx_request_pushes_the_full_session_page_url(self, client, experiment):
+        """This view only ever renders the messages fragment. Letting htmx push its own URL
+        would leave a refresh pointing at that bare fragment instead of the full page, so the
+        view has to push the full page's URL (with the same filters) itself.
+        """
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+        expected_page_url = reverse(
+            "chatbots:chatbot_session_view",
+            args=[experiment.team.slug, experiment.public_id, session.external_id],
+        )
+
+        response = client.get(f"{url}?tag_filter=billing", headers={"HX-Request": "true"})
+
+        assert response["HX-Push-Url"] == f"{expected_page_url}?tag_filter=billing"
+
+    def test_non_htmx_request_does_not_set_the_header(self, client, experiment):
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        client.force_login(experiment.owner)
+        url = reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+
+        response = client.get(url)
+
+        assert "HX-Push-Url" not in response
+
+
+@pytest.mark.django_db()
+class TestCompressionCheckpointsInSessionMessages:
+    def _url(self, experiment, session):
+        return reverse(
+            "experiments:experiment_session_messages_view",
+            kwargs={
+                "team_slug": experiment.team.slug,
+                "experiment_id": experiment.public_id,
+                "session_id": session.external_id,
+            },
+        )
+
+    def test_summarize_checkpoint_shows_the_summary_text(self, client, experiment):
+        """A real summarize checkpoint only ever sets `summary` -- `compression_marker` is reserved
+        for the synthetic, unsaved message `ChatMessage.save()` refuses to persist (see
+        `save_compression_checkpoint` in apps/pipelines/repository.py)."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Earlier message")
+        ChatMessageFactory.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="Later message",
+            summary="The user asked about billing and was told to check the invoices page.",
+        )
+
+        client.force_login(experiment.owner)
+        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "History summarized here" in content
+        assert "The user asked about billing and was told to check the invoices page." in content
+        assert "History truncated here" not in content
+
+    def test_truncation_checkpoint_shows_a_plain_separator(self, client, experiment):
+        """Every truncation mode sets the same `compression_marker` shape -- the template only
+        checks it's set, not which mode -- so one representative mode covers the branch."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+        )
+        ChatMessageFactory.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="Later message",
+            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: PipelineChatHistoryModes.TRUNCATE_TOKENS},
+        )
+
+        client.force_login(experiment.owner)
+        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "History truncated here" in content
+        assert "History summarized here" not in content

@@ -11,6 +11,7 @@ from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from apps.channels.models import ChannelPlatform
+from apps.chat.exceptions import UserActionableError
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
@@ -326,7 +327,12 @@ class OCSCallbackHandler(BaseCallbackHandler):
         super().__init__()
         self.tracer = tracer
 
-    def _capture_error(self, error_message: str, span_name: str) -> None:
+    def _capture_error(self, error: BaseException | None, fallback_message: str, span_name: str) -> None:
+        if isinstance(error, UserActionableError):
+            # The participant can act on this, so the run did not fail (ADR-0065).
+            return
+
+        error_message = str(error) if error else fallback_message
         self.tracer.error_detected = True
         if not self.tracer.error_message:
             self.tracer.error_message = error_message
@@ -350,13 +356,15 @@ class OCSCallbackHandler(BaseCallbackHandler):
             self.tracer.metrics_collector.on_tool_start(serialized, input_str, **kwargs)
 
     def on_llm_error(self, *args, **kwargs) -> None:
-        error = kwargs.get("error") or (args[0] if args else None)
-        self._capture_error(str(error) if error else "LLM error occurred", "LLM Error")
+        self._capture_error(_error_arg(args, kwargs), "LLM error occurred", "LLM Error")
 
     def on_chain_error(self, *args, **kwargs) -> None:
-        error = kwargs.get("error") or (args[0] if args else None)
-        self._capture_error(str(error) if error else "Chain error occurred", "Chain Error")
+        self._capture_error(_error_arg(args, kwargs), "Chain error occurred", "Chain Error")
 
     def on_tool_error(self, *args, **kwargs) -> None:
-        error = kwargs.get("error") or (args[0] if args else None)
-        self._capture_error(str(error) if error else "Tool error occurred", "Tool Error")
+        self._capture_error(_error_arg(args, kwargs), "Tool error occurred", "Tool Error")
+
+
+def _error_arg(args, kwargs) -> BaseException | None:
+    """LangChain passes the exception positionally on some callbacks and by keyword on others."""
+    return kwargs.get("error") or (args[0] if args else None)
