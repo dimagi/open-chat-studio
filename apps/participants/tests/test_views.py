@@ -14,6 +14,7 @@ from apps.experiments.models import ExperimentSession, Participant, ParticipantD
 from apps.participants.forms import TriggerBotForm
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.events import ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
 
@@ -186,6 +187,85 @@ class TestParticipantTabPanelsBuildOnlyTheirOwnContext:
         assert response.status_code == 200
         for key in ("session_table", "participant_schedules", "participant_data", "message_trend"):
             assert key in response.context, key
+
+
+def _schedule_params():
+    return {"name": "Test", "time_period": "days", "frequency": 1, "repetitions": 1, "prompt_text": "hi"}
+
+
+@pytest.mark.django_db()
+class TestParticipantSchedulesTable:
+    def test_schedules_panel_table_shows_the_chatbot_column(self, client, team_with_users):
+        """The participant tab aggregates schedules across every chatbot the participant has
+        used, so it needs the Chatbot column the session-scoped table doesn't."""
+        team = team_with_users
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(participant=participant, team=team, experiment__team=team)
+        ScheduledMessageFactory.create(
+            experiment=session.experiment,
+            team=team,
+            participant=participant,
+            action=None,
+            custom_schedule_params=_schedule_params(),
+        )
+        user = team.members.first()
+        client.login(username=user.username, password="password")
+
+        url = reverse("participants:schedules-panel", args=[team.slug, participant.id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert "experiment" in response.context["schedules_table"].columns.names()
+
+
+@pytest.mark.django_db()
+class TestCancelSchedule:
+    def _url(self, team, participant):
+        return reverse("participants:cancel_schedule", args=[team.slug, participant.id, "SCHED-1"])
+
+    def test_from_the_participant_page_keeps_the_chatbot_column(self, client, team_with_users):
+        team = team_with_users
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(participant=participant, team=team, experiment__team=team)
+        schedule = ScheduledMessageFactory.create(
+            experiment=session.experiment,
+            team=team,
+            participant=participant,
+            action=None,
+            external_id="SCHED-1",
+            custom_schedule_params=_schedule_params(),
+        )
+        user = team.members.first()
+        client.login(username=user.username, password="password")
+
+        response = client.post(self._url(team, participant), {"show_chatbot": "1"})
+
+        assert response.status_code == 200
+        assert str(session.experiment) in response.content.decode()
+        schedule.refresh_from_db()
+        assert schedule.is_cancelled
+
+    def test_from_the_session_page_excludes_the_chatbot_column(self, client, team_with_users):
+        """Regression: the session-scoped table has no Chatbot column, so the row swapped in
+        after cancelling must not have one either, or the columns misalign."""
+        team = team_with_users
+        participant = ParticipantFactory.create(team=team)
+        session = ExperimentSessionFactory.create(participant=participant, team=team, experiment__team=team)
+        ScheduledMessageFactory.create(
+            experiment=session.experiment,
+            team=team,
+            participant=participant,
+            action=None,
+            external_id="SCHED-1",
+            custom_schedule_params=_schedule_params(),
+        )
+        user = team.members.first()
+        client.login(username=user.username, password="password")
+
+        response = client.post(self._url(team, participant), {})
+
+        assert response.status_code == 200
+        assert str(session.experiment) not in response.content.decode()
 
 
 @pytest.mark.django_db()
