@@ -169,8 +169,7 @@ def test_delete_evaluator_blocked_by_frozen_plan_after_config_removal(status, cl
     ],
 )
 def test_delete_evaluator_with_any_history_archives_it(history, client, team_with_users):
-    """An aggregates-only evaluator must not take the hard-delete branch: PROTECT
-    would raise ProtectedError, which the view does not catch."""
+    """An aggregates-only evaluator must archive, not hard-delete, or PROTECT raises."""
     evaluator = EvaluatorFactory.create(team=team_with_users)
     config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
     run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)

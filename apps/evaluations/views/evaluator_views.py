@@ -198,10 +198,7 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
 
     def delete(self, request, team_slug: str, pk: int):
-        """Archive the evaluator if it has history, otherwise delete it.
-
-        Returns 409 if a related run is still in progress.
-        """
+        """Archive the evaluator if it has history, else delete it; 409 while a related run is in flight."""
         evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
         try:
             if evaluator.evaluationresult_set.exists() or evaluator.evaluationrunaggregate_set.exists():
