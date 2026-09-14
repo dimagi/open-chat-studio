@@ -46,6 +46,11 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
+from apps.utils.deletion import (
+    get_related_experiment_versions_queryset,
+    get_related_pipeline_nodes_queryset,
+    has_related_pipeline_references,
+)
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
@@ -175,6 +180,20 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
+
+    def get_related_nodes_queryset(self) -> models.QuerySet:
+        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        return get_related_experiment_versions_queryset(self, "source_material_id")
+
+    @transaction.atomic()
+    def archive(self):
+        """Mirrors Collection.archive()'s in-use guard."""
+        if has_related_pipeline_references(self, "source_material_id"):
+            return False
+        super().archive()
+        return True
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(

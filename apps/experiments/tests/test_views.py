@@ -20,12 +20,14 @@ from apps.experiments.models import (
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
 from apps.files.models import FilePurpose
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
     ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantFactory,
+    SourceMaterialFactory,
 )
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -409,6 +411,54 @@ def test_experiment_session_message_view_missing_message(delay_mock, experiment,
 
     assert response.status_code == 400
     delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+class TestDeleteSourceMaterial:
+    def test_user_cannot_delete_a_source_material_in_use(self, client, experiment):
+        """Blocked both when a working node references it directly and when only a published version does."""
+        experiment.pipeline = PipelineFactory.create(team=experiment.team)
+        experiment.save()
+
+        source_material = SourceMaterialFactory.create(team=experiment.team)
+        client.force_login(experiment.team.members.first())
+        node = NodeFactory.create(
+            pipeline=experiment.pipeline,
+            type=LLMResponseWithPrompt.__name__,
+            params={"source_material_id": str(source_material.id)},
+        )
+        experiment.create_new_version()
+
+        url = reverse("experiments:source_material_delete", args=[experiment.team.slug, source_material.id])
+        # Case 1 - the working pipeline node references it directly
+        response = client.delete(url)
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
+
+        # Case 2 - remove the direct reference; only the published version's node still uses it
+        node.params = {}
+        node.save()
+
+        response = client.delete(url)
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert response["HX-Reswap"] == "beforeend"
+        source_material.refresh_from_db()
+        assert source_material.is_archived is False
+
+    def test_source_material_is_archived_when_unused(self, client):
+        source_material = SourceMaterialFactory.create(team=TeamWithUsersFactory.create())
+        client.force_login(source_material.team.members.first())
+
+        url = reverse("experiments:source_material_delete", args=[source_material.team.slug, source_material.id])
+        response = client.delete(url)
+
+        assert response.status_code == 200
+        source_material.refresh_from_db()
+        assert source_material.is_archived
 
 
 @pytest.mark.django_db()
