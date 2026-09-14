@@ -43,7 +43,8 @@
     </div>
     <div class="flex-1 min-w-0 flex flex-col gap-2">
       <div class="w-full
-                  {% if message.is_ai_message %}chat-message-system{% else %}chat-message-user{% endif %}">
+                  {% if message.is_ai_message %}chat-message-system{% else %}chat-message-user{% endif %}
+                  {% if message.is_tag_context %}opacity-50{% endif %}">
         <div class="message-contents text-sm!">
           {% if message.translation == default_message %}
             <div id="chat-message-{{ message.id }}-translation">
