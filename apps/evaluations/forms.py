@@ -148,7 +148,7 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        evaluator_qs = Evaluator.objects.filter(team=team)
+        evaluator_qs = Evaluator.objects.filter(team=team, is_archived=False)
         self.fields["evaluators"].queryset = evaluator_qs
         if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
             self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
@@ -251,6 +251,8 @@ class EvaluationConfigForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
+        """Persist the config, then re-add archived evaluators the picker could not submit."""
+        archived_members = list(self.instance.evaluators.filter(is_archived=True)) if self.instance.pk else []
         instance = super().save(commit=False)
         cleaned_data = self.cleaned_data
         instance.version_selection_type = cleaned_data["version_selection_type"]
@@ -269,6 +271,8 @@ class EvaluationConfigForm(forms.ModelForm):
         if commit:
             instance.save()
             self.save_m2m()
+            if archived_members:
+                instance.evaluators.add(*archived_members)
         return instance
 
 

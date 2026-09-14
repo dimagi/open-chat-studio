@@ -2,7 +2,14 @@ import pytest
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.utils import make_evaluation_messages_from_sessions, merge_binary_labels, parse_history_text
+from apps.evaluations.forms import EvaluationConfigForm
+from apps.evaluations.utils import (
+    get_evaluators_with_schema,
+    make_evaluation_messages_from_sessions,
+    merge_binary_labels,
+    parse_history_text,
+)
+from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -240,3 +247,66 @@ class TestMergeBinaryLabels:
     def test_non_binary_stats_unchanged(self):
         stats = {"type": "numeric", "count": 3, "mean": 2.0}
         assert merge_binary_labels(stats, {"type": "int"}) is stats
+
+
+@pytest.mark.django_db()
+def test_get_evaluators_with_schema_excludes_archived(team_with_users):
+    """Archived evaluators are omitted from the schema listing used to build config pickers."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    archived.archive()
+
+    ids = {entry["id"] for entry in get_evaluators_with_schema(team_with_users)}
+
+    assert kept.id in ids
+    assert archived.id not in ids
+
+
+@pytest.mark.django_db()
+def test_config_picker_does_not_offer_archived_evaluators(team_with_users):
+    """The config form's evaluator checkbox widget does not render archived evaluators."""
+    EvaluatorFactory.create(team=team_with_users, name="Kept scorer")
+    archived = EvaluatorFactory.create(team=team_with_users, name="Retired scorer")
+    archived.archive()
+
+    rendered = str(EvaluationConfigForm(team=team_with_users)["evaluators"])
+
+    assert "Kept scorer" in rendered
+    assert "Retired scorer" not in rendered
+
+
+@pytest.mark.django_db()
+def test_a_new_runs_frozen_plan_excludes_archived_evaluators(team_with_users):
+    """A run's frozen evaluator_ids plan drops evaluators archived after the config was built."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[kept, archived])
+    archived.archive()
+
+    run = config.run()
+
+    assert run.evaluator_ids == [kept.id]
+
+
+@pytest.mark.django_db()
+def test_saving_a_config_preserves_its_archived_members(team_with_users):
+    """Saving a config through the picker keeps its archived evaluators, which the picker cannot submit."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset, evaluators=[kept, archived])
+    archived.archive()
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={
+            "name": "Renamed config",
+            "evaluators": [kept.id],
+            "dataset": config.dataset_id,
+        },
+        instance=config,
+    )
+    assert form.is_valid(), form.errors
+    form.save()
+
+    assert set(config.evaluators.all()) == {kept, archived}

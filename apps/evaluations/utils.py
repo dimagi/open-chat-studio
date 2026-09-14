@@ -90,7 +90,7 @@ def get_evaluators_with_schema(team) -> list[dict]:
     evaluator_type_info = get_evaluator_type_info()
 
     evaluators_list = []
-    for evaluator in Evaluator.objects.filter(team=team):
+    for evaluator in Evaluator.objects.filter(team=team, is_archived=False):
         type_info = evaluator_type_info.get(evaluator.type, {})
         evaluators_list.append(
             {

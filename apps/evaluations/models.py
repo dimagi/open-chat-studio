@@ -691,7 +691,7 @@ class EvaluationConfig(BaseTeamModel):
                 status=EvaluationRunStatus.PENDING,
                 type=run_type,
                 job_id=str(uuid.uuid4()),
-                evaluator_ids=list(self.evaluators.values_list("id", flat=True)),
+                evaluator_ids=list(self.evaluators.filter(is_archived=False).values_list("id", flat=True)),
             )
 
             if run_type == EvaluationRunType.PREVIEW:
