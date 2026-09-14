@@ -99,6 +99,7 @@ class Evaluator(BaseTeamModel):
     params = SanitizedJSONField(
         default=dict
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
+    is_archived = models.BooleanField(default=False, db_default=False)
     evaluation_mode = models.CharField(
         max_length=10,
         choices=EvaluationMode.choices,
@@ -147,6 +148,22 @@ class Evaluator(BaseTeamModel):
         """Block deletion while any config using this evaluator has an in-flight run."""
         raise_if_runs_in_flight(self._in_flight_runs(), "evaluator")
         return super().delete(*args, **kwargs)
+
+    def archive(self):
+        """Retire the evaluator, keeping the results and aggregates it produced.
+
+        Config membership is left in place: the concordance report
+        (`apps/assessments/views.py:41`) and the config table read it, and the
+        `evaluator_ids` freeze is filtered instead so archiving stops future runs.
+        """
+        raise_if_runs_in_flight(self._in_flight_runs(), "evaluator")
+        self.is_archived = True
+        self.save(update_fields=["is_archived"])
+
+    def unarchive(self):
+        """Restore an archived evaluator so it can run again."""
+        self.is_archived = False
+        self.save(update_fields=["is_archived"])
 
     @cached_property
     def evaluator(self):
@@ -792,7 +809,7 @@ class EvaluationRun(BaseTeamModel):
 
 
 class EvaluationResult(BaseTeamModel):
-    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.PROTECT)
     message = models.ForeignKey(EvaluationMessage, on_delete=models.CASCADE)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
     session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, null=True)
@@ -835,7 +852,7 @@ class EvaluationRunAggregate(BaseModel):
     """Stores aggregated results for an evaluation run, per evaluator."""
 
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="aggregates")
-    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.PROTECT)
     aggregates = models.JSONField(default=dict)
     computed_at = models.DateTimeField(auto_now_add=True)
 
