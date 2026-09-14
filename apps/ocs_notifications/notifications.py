@@ -198,28 +198,6 @@ def message_delivery_failure_notification(
     )
 
 
-@silence_exceptions(logger, log_message="Failed to create tool error notification")
-def tool_error_notification(team, tool_name: str, error_message: str, session=None) -> None:
-    """Create notification when a tool execution fails."""
-    event_data = {"tool_name": tool_name, "error_message": error_message}
-    links = {}
-
-    if session:
-        links["View Bot"] = session.experiment.get_absolute_url()
-        links["View Session"] = session.get_absolute_url()
-
-    create_notification(
-        title="Tool Error Detected",
-        message=error_message,
-        level=LevelChoices.ERROR,
-        team=team,
-        slug="tool-error",
-        event_data=event_data,
-        permissions=None,
-        links=links,
-    )
-
-
 @dataclass(frozen=True)
 class AffectedResources:
     """The resources referencing an LLM model, grouped by kind as ``{name: url}`` maps.
