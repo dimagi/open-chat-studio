@@ -29,6 +29,9 @@ def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended_ids: li
     """Enqueue a DELTA evaluation run for each opted-in config on this dataset."""
     configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
     for config in configs:
+        if not config.evaluators.filter(is_archived=False).exists():
+            logger.warning("Skipping auto-run for config %s: no active evaluators", config.id)
+            continue
         config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=appended_ids)
 
 

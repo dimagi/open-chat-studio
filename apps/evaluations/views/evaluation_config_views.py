@@ -861,16 +861,33 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
         return render(request, "evaluations/components/evaluation_result_detail_panel.html", context)
 
 
+def _no_active_evaluators_response(config) -> HttpResponse | None:
+    """A 400 explaining why the config cannot run, or None when it has an active evaluator."""
+    if config.evaluators.filter(is_archived=False).exists():
+        return None
+    return HttpResponse(
+        f"'{config.name}' has no active evaluators, so a run would produce no results. "
+        "Add an evaluator to this configuration first.",
+        status=400,
+    )
+
+
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
+    """Start a full run of the config, refusing when it has no active evaluators."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
+    if refusal := _no_active_evaluators_response(config):
+        return refusal
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_preview(request, team_slug, evaluation_pk):
+    """Start a preview run of the config, refusing when it has no active evaluators."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
+    if refusal := _no_active_evaluators_response(config):
+        return refusal
     run = config.run_preview()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
