@@ -126,3 +126,32 @@ def test_delete_evaluator_for_other_team_returns_404(client, team_with_users):
 
     assert response.status_code == 404
     assert Evaluator.objects.filter(id=evaluator.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(EvaluationRunStatus.PENDING, id="pending"),
+        pytest.param(EvaluationRunStatus.PROCESSING, id="processing"),
+    ],
+)
+def test_delete_evaluator_blocked_by_frozen_plan_after_config_removal(status, client, team_with_users):
+    """A run holds its evaluator in evaluator_ids even after the config drops it."""
+    user = team_with_users.members.first()
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+    EvaluationRunFactory.create(
+        team=team_with_users,
+        config=config,
+        status=status,
+        evaluator_ids=[evaluator.id],
+    )
+    config.evaluators.clear()
+
+    client.force_login(user)
+    url = reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id])
+    response = client.delete(url)
+
+    assert response.status_code == 409
+    assert Evaluator.objects.filter(id=evaluator.id).exists()

@@ -132,9 +132,20 @@ class Evaluator(BaseTeamModel):
             label = self.type
         return f"{self.name} ({label})"
 
+    def _in_flight_runs(self):
+        """Runs that would be stranded by removing this evaluator.
+
+        Matches both current config membership and the plan frozen on the run at
+        creation, because a run executes from `evaluator_ids` rather than from live
+        membership.
+        """
+        return EvaluationRun.objects.filter(
+            models.Q(config__evaluators=self) | models.Q(evaluator_ids__contains=[self.id])
+        )
+
     def delete(self, *args, **kwargs):
         """Block deletion while any config using this evaluator has an in-flight run."""
-        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__evaluators=self), "evaluator")
+        raise_if_runs_in_flight(self._in_flight_runs(), "evaluator")
         return super().delete(*args, **kwargs)
 
     @cached_property
