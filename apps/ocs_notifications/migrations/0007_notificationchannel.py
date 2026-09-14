@@ -7,10 +7,14 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
+    # The migrations that create the FK targets, not the autodetector's current leaves.
+    # A leaf dependency drags service_providers ahead of pipelines in a from-scratch plan,
+    # where the notify_deprecated_models data migration queries live models and so reads
+    # columns that later migrations have yet to add.
     dependencies = [
         ("ocs_notifications", "0006_eventtype_created_at_index"),
-        ("service_providers", "0077_deprecate_gpt5_family"),
-        ("teams", "0015_team_created_by"),
+        ("service_providers", "0008_messagingprovider"),
+        ("teams", "0001_initial"),
     ]
 
     operations = [
