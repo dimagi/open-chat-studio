@@ -6,7 +6,7 @@
 
 <p class="adr-meta">Extends: <a href="0039-require-proof-of-possession-for-chat-session-access.md">ADR-0039</a>, <a href="0052-app-layer-rate-limiting-mechanism.md">ADR-0052</a>, <a href="0053-chat-session-start-requires-membership-or-embed-key.md">ADR-0053</a>, <a href="0059-chat-api-channel-credential-mode.md">ADR-0059</a></p>
 
-<p class="adr-meta">Amended by: <a href="0065-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0065</a> — the token renewal endpoint also carries the bearer authenticator, and renewals are throttled per OAuth application.</p>
+<p class="adr-meta">Amended by: <a href="0066-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0066</a> — the token renewal endpoint also carries the bearer authenticator, and renewals are throttled per OAuth application.</p>
 
 ## Context
 

@@ -1,4 +1,4 @@
-# ADR-0065: Session tokens carry their expiry and are renewed in place
+# ADR-0066: Session tokens carry their expiry and are renewed in place
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 

@@ -6,7 +6,7 @@
 
 <p class="adr-meta">Supersedes: <a href="0040-stateless-signed-session-tokens-with-inactivity-expiry.md">ADR-0040</a> (its expiry rule; the stateless signed token stands)</p>
 
-<p class="adr-meta">Superseded by: <a href="0065-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0065</a> — the lifetime is measured from token issuance and carried in the token, and a token can be renewed; expiry on age rather than inactivity stands.</p>
+<p class="adr-meta">Superseded by: <a href="0066-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0066</a> — the lifetime is measured from token issuance and carried in the token, and a token can be renewed; expiry on age rather than inactivity stands.</p>
 
 ## Context
 

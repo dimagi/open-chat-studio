@@ -6,7 +6,7 @@
 
 <p class="adr-meta">Extends: <a href="0054-chat-session-tokens-expire-on-absolute-age.md">ADR-0054</a>, <a href="0059-chat-api-channel-credential-mode.md">ADR-0059</a></p>
 
-<p class="adr-meta">Amended by: <a href="0065-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0065</a> — the lifetime applies to each issued token, and on an oauth-mode channel the widget renews the token instead of starting a new session.</p>
+<p class="adr-meta">Amended by: <a href="0066-session-tokens-carry-their-expiry-and-renew-in-place.md">ADR-0066</a> — the lifetime applies to each issued token, and on an oauth-mode channel the widget renews the token instead of starting a new session.</p>
 
 ## Context
 
