@@ -1,3 +1,5 @@
+from io import StringIO
+
 import pytest
 from django.core.management import call_command
 
@@ -13,6 +15,12 @@ ASSISTANT = "assistant"
 
 def _run(**kwargs):
     call_command("retire_assistant_file_purpose", **kwargs)
+
+
+def _dry_run_output() -> str:
+    out = StringIO()
+    _run(dry_run=True, stdout=out)
+    return out.getvalue()
 
 
 @pytest.mark.django_db()
@@ -124,6 +132,34 @@ def test_dry_run_changes_nothing():
     assert File.objects.get_all().filter(pk=orphan.pk).exists()
     collection_file.file.refresh_from_db()
     assert collection_file.file.purpose == ASSISTANT
+
+
+@pytest.mark.django_db()
+def test_dry_run_counts_a_doubly_referenced_file_once():
+    """Nothing is repurposed on a dry run, so both rules still see a file that matches both."""
+    collection_file = CollectionFileFactory.create()
+    attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
+    attachment.files.add(collection_file.file)
+    File.objects.filter(pk=collection_file.file_id).update(purpose=ASSISTANT)
+
+    assert "  repointed: 1" in _dry_run_output()
+
+
+@pytest.mark.django_db()
+def test_dry_run_does_not_report_what_it_would_touch_as_stranded():
+    FileFactory.create(purpose=ASSISTANT)
+    collection_file = CollectionFileFactory.create()
+    File.objects.filter(pk=collection_file.file_id).update(purpose=ASSISTANT)
+
+    assert "left alone" not in _dry_run_output()
+
+
+@pytest.mark.django_db()
+def test_dry_run_still_reports_a_genuinely_stranded_file():
+    working = FileFactory.create(purpose=ASSISTANT)
+    FileFactory.create(purpose=ASSISTANT, team=working.team, working_version=working)
+
+    assert "left alone (referenced by an unclassified relation): 2" in _dry_run_output()
 
 
 @pytest.mark.django_db()

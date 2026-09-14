@@ -38,32 +38,38 @@ class Command(IdempotentCommand):
     def perform_migration(self, dry_run=False):
         repointed = self._repoint(dry_run)
         deleted = self._delete_unreferenced(dry_run)
-        stranded = File.objects.filter(purpose=ASSISTANT_PURPOSE).count()
+        # A dry run leaves the retired purpose on every row it only planned to touch, so those
+        # rows have to come out by id rather than by the purpose the real run would have changed.
+        stranded = File.objects.filter(purpose=ASSISTANT_PURPOSE).exclude(id__in=repointed | deleted).count()
 
-        self.stdout.write(f"  repointed: {repointed}")
-        self.stdout.write(f"  deleted: {deleted}")
+        self.stdout.write(f"  repointed: {len(repointed)}")
+        self.stdout.write(f"  deleted: {len(deleted)}")
         if stranded:
             self.stdout.write(self.style.WARNING(f"  left alone (referenced by an unclassified relation): {stranded}"))
 
         verb = "Would repoint" if dry_run else "Repointed"
-        return f"{verb} {repointed}, deleted {deleted}, left {stranded}"
+        return f"{verb} {len(repointed)}, deleted {len(deleted)}, left {stranded}"
 
-    def _repoint(self, dry_run) -> int:
-        total = 0
+    def _repoint(self, dry_run) -> set[int]:
+        planned: set[int] = set()
         for purpose, condition in REPOINT_RULES:
-            ids = list(
-                File.objects.filter(condition, purpose=ASSISTANT_PURPOSE).values_list("id", flat=True).distinct()
+            # Excluding what an earlier rule claimed is what gives REPOINT_RULES its precedence
+            # on a dry run; on a real run the purpose update has already taken those rows out.
+            ids = set(
+                File.objects.filter(condition, purpose=ASSISTANT_PURPOSE)
+                .exclude(id__in=planned)
+                .values_list("id", flat=True)
             )
             if not ids:
                 continue
-            total += len(ids)
+            planned |= ids
             if self.verbosity > 1:
                 self.stdout.write(f"  {purpose}: {len(ids)}")
             if not dry_run:
                 File.objects.filter(id__in=ids).update(purpose=purpose)
-        return total
+        return planned
 
-    def _delete_unreferenced(self, dry_run) -> int:
+    def _delete_unreferenced(self, dry_run) -> set[int]:
         candidates = list(File.objects.filter(UNREFERENCED, purpose=ASSISTANT_PURPOSE))
 
         # Belt-and-braces: UNREFERENCED only knows the relations it names, so re-check every
@@ -81,4 +87,4 @@ class Command(IdempotentCommand):
             for start in range(0, len(ids), DELETE_BATCH_SIZE):
                 File.objects.filter(pk__in=ids[start : start + DELETE_BATCH_SIZE]).delete()
 
-        return len(orphans)
+        return {file.pk for file in orphans}

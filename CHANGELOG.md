@@ -40,8 +40,10 @@ version section when a release is cut.
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
   operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
-  stripped from stored pipeline node params. This is deliberate, irreversible data loss for a
-  feature whose upstream API OpenAI retired on 26 August 2026; the audit log retains the history.
+  stripped from stored pipeline node params. Any `Banner` pinned to the removed
+  `assistants_home` location is deleted; it had nowhere left to render. This is deliberate,
+  irreversible data loss for a feature whose upstream API OpenAI retired on 26 August 2026;
+  the audit log retains the history.
   The `assistants` tables and the two FK columns still exist and are dropped in the following
   release. (#4254)
 
@@ -104,9 +106,9 @@ version section when a release is cut.
   still opens in the editor — the node renders as a "Removed Node" — but the
   pipeline no longer builds, so it cannot run. OpenAI retired the Assistants API
   on 26 August 2026, so these pipelines were already failing at the provider.
-  No migration and no data loss: the `OpenAiAssistant` rows and their Django
-  admin survive this release, and a later phase drops the tables and the FK
-  columns. (#4372, #4254)
+  The `OpenAiAssistant` rows are deleted by this release (see Migrations above)
+  and the Django admin for them is gone; the `assistants` tables and the FK
+  columns are dropped in the following release. (#4372, #4254)
 - **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
   key on a node, and the `AssistantNodeParams` component is gone from the node
   params union. The key was already conditional — omitted for nodes not
@@ -118,10 +120,7 @@ version section when a release is cut.
   it now 404s, the nav entry is removed, and `assistant_file:` links in
   historical chat messages render as plain text instead of downloads. OpenAI
   retired the Assistants API on 26 August 2026, so the feature had no working
-  backend to keep. No migration and no data loss — the `OpenAiAssistant` rows
-  and the Django admin for them survive this release; a later phase drops the
-  tables. Pipelines holding an assistant node are unaffected by this PR. (#4328,
-  #4254)
+  backend to keep. (#4328, #4254)
 
 ### Security
 <!-- Also list here anything requiring operator action, e.g. credential

@@ -3,6 +3,11 @@
 from django.db import migrations, models
 
 
+def delete_assistants_home_banners(apps, schema_editor):
+    Banner = apps.get_model('banners', 'Banner')
+    Banner.objects.filter(location='assistants_home').delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,6 +15,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(delete_assistants_home_banners, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='banner',
             name='location',
