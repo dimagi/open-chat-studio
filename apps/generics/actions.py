@@ -116,6 +116,7 @@ class AjaxAction(Action):
         return self.confirm_message
 
     def get_context(self, request, record, value):
+        """Template context for the action, resolving the per-row confirm message."""
         ctxt = super().get_context(request, record, value)
         ctxt.update(
             {

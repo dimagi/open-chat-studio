@@ -197,9 +197,6 @@ def _evaluator_delete_confirm(record, value):
 
 class EvaluatorTable(tables.Table):
     name = columns.Column(
-        attrs={
-            "a": {"class": "link"},
-        },
         orderable=True,
     )
     type = columns.Column(
