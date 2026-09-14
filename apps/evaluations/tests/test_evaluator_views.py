@@ -8,12 +8,15 @@ from django.test import Client
 from django.urls import reverse
 
 from apps.evaluations import evaluators
-from apps.evaluations.models import ConditionType
+from apps.evaluations.models import ConditionType, EvaluationRunStatus
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
 from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
     EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
     EvaluatorFactory,
     EvaluatorTagRuleFactory,
 )
@@ -380,3 +383,43 @@ class TestPromptVariables:
 class _StubResult:
     def model_dump(self):
         return {}
+
+
+@pytest.mark.django_db()
+def test_archived_evaluator_renders_a_badge_and_an_unarchive_action(client, team_with_users):
+    """The evaluator table shows an Archived badge and an unarchive action for an archived evaluator."""
+    archived = EvaluatorFactory.create(team=team_with_users, name="Retired scorer")
+    archived.archive()
+
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluator_table", args=[team_with_users.slug])
+    html = client.get(url).content.decode()
+
+    assert "Retired scorer" in html
+    assert "Archived" in html
+    assert reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, archived.id]) in html
+
+
+@pytest.mark.parametrize(
+    ("has_history", "expected", "unexpected"),
+    [
+        pytest.param(True, "archived rather than deleted", "permanently delete", id="with-history"),
+        pytest.param(False, "permanently delete", "archived rather than deleted", id="no-history"),
+    ],
+)
+@pytest.mark.django_db()
+def test_delete_confirm_copy_matches_whether_the_evaluator_has_history(
+    client, team_with_users, has_history, expected, unexpected
+):
+    """The delete action's confirm copy warns about archiving only when the evaluator has run history."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    if has_history:
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
+        EvaluationResultFactory.create(team=team_with_users, run=run, evaluator=evaluator)
+
+    client.force_login(team_with_users.members.first())
+    html = client.get(reverse("evaluations:evaluator_table", args=[team_with_users.slug])).content.decode()
+
+    assert expected in html
+    assert unexpected not in html

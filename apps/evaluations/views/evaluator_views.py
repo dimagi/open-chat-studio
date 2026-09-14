@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Count, Exists, OuterRef
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -21,7 +22,7 @@ from apps.evaluations.const import (
 )
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
-from apps.evaluations.models import Evaluator
+from apps.evaluations.models import EvaluationResult, EvaluationRunAggregate, Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
@@ -51,10 +52,11 @@ class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignor
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return (
-            Evaluator.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
+        """Return this team's evaluators annotated with run history and config membership for the table."""
+        return Evaluator.objects.filter(team=self.request.team).annotate(
+            has_history=Exists(EvaluationResult.objects.filter(evaluator=OuterRef("pk")))
+            | Exists(EvaluationRunAggregate.objects.filter(evaluator=OuterRef("pk"))),
+            config_count=Count("evaluationconfig", distinct=True),
         )
 
 

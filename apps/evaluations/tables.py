@@ -178,9 +178,25 @@ class EvaluationRunTable(tables.Table):
         empty_text = "No runs found."
 
 
+def _evaluator_delete_confirm(record, value):
+    """Build the delete confirm message, warning about archiving when the evaluator has run history."""
+    if not record.has_history:
+        return "This will permanently delete the evaluator. Are you sure?"
+    configs = record.config_count
+    if configs:
+        return (
+            f"This evaluator has results from past runs, so it will be archived rather "
+            f"than deleted and that history is kept. It stays on {configs} evaluation "
+            f"config(s) but will not run again. Continue?"
+        )
+    return (
+        "This evaluator has results from past runs, so it will be archived rather "
+        "than deleted and that history is kept. Continue?"
+    )
+
+
 class EvaluatorTable(tables.Table):
     name = columns.Column(
-        linkify=True,
         attrs={
             "a": {"class": "link"},
         },
@@ -197,11 +213,31 @@ class EvaluatorTable(tables.Table):
                 "evaluations:evaluator_delete",
                 title="Delete",
                 icon_class="fa-solid fa-trash",
-                confirm_message="This will permanently delete the evaluator. Are you sure?",
+                confirm_message_factory=_evaluator_delete_confirm,
                 hx_method="delete",
+                display_condition=lambda request, record: not record.is_archived,
+            ),
+            actions.AjaxAction(
+                "evaluations:evaluator_unarchive",
+                title="Unarchive",
+                icon_class="fa-solid fa-rotate-left",
+                confirm_message="This will restore the evaluator to the pickers. Continue?",
+                hx_method="post",
+                display_condition=lambda request, record: record.is_archived,
             ),
         ]
     )
+
+    def render_name(self, value, record):
+        """Render the evaluator name as a link, with an Archived badge when the evaluator is archived."""
+        url = record.get_absolute_url()
+        if record.is_archived:
+            return format_html(
+                '<a class="link" href="{}">{}</a> <span class="badge badge-ghost badge-sm">Archived</span>',
+                url,
+                value,
+            )
+        return format_html('<a class="link" href="{}">{}</a>', url, value)
 
     def render_type(self, value, record):
         """Render the type column with icon and label."""

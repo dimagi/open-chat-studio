@@ -105,10 +105,24 @@ class AjaxAction(Action):
     """A message to display in a confirmation dialog when the action is clicked.
     If none is provided, no confirmation dialog is shown."""
 
+    confirm_message_factory: Callable | None = None
+    """Called with (record, value) to build this row's confirmation message.
+    Takes precedence over `confirm_message`."""
+
+    def get_confirm_message(self, record, value):
+        """Return this row's confirmation message, preferring the factory over the static one."""
+        if self.confirm_message_factory:
+            return self.confirm_message_factory(record, value)
+        return self.confirm_message
+
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
         ctxt.update(
-            {"hx_method": self.hx_method, "confirm_message": self.confirm_message, "action_id": uuid.uuid4().hex}
+            {
+                "hx_method": self.hx_method,
+                "confirm_message": self.get_confirm_message(record, value),
+                "action_id": uuid.uuid4().hex,
+            }
         )
         return ctxt
 
