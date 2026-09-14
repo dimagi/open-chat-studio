@@ -289,7 +289,14 @@ def test_a_new_runs_frozen_plan_excludes_archived_evaluators(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_saving_a_config_preserves_its_archived_members(team_with_users):
+@pytest.mark.parametrize(
+    "commit",
+    [
+        pytest.param(True, id="commit"),
+        pytest.param(False, id="deferred"),
+    ],
+)
+def test_saving_a_config_preserves_its_archived_members(team_with_users, commit):
     """Saving a config through the picker keeps its archived evaluators, which the picker cannot submit."""
     kept = EvaluatorFactory.create(team=team_with_users)
     archived = EvaluatorFactory.create(team=team_with_users)
@@ -307,6 +314,9 @@ def test_saving_a_config_preserves_its_archived_members(team_with_users):
         instance=config,
     )
     assert form.is_valid(), form.errors
-    form.save()
+    instance = form.save(commit=commit)
+    if not commit:
+        instance.save()
+        form.save_m2m()
 
     assert set(config.evaluators.all()) == {kept, archived}

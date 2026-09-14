@@ -17,6 +17,7 @@ from apps.utils.factories.user import GroupFactory
 
 @pytest.mark.django_db()
 def test_delete_evaluator(client, team_with_users):
+    """Hard-deleting an evaluator with no history returns an empty 200 body, letting the row disappear."""
     user = team_with_users.members.first()
     evaluator = EvaluatorFactory.create(team=team_with_users)
 
@@ -25,6 +26,7 @@ def test_delete_evaluator(client, team_with_users):
     response = client.delete(url)
 
     assert response.status_code == 200
+    assert response.content == b""
     assert not Evaluator.objects.filter(id=evaluator.id).exists()
 
 
@@ -169,8 +171,8 @@ def test_delete_evaluator_blocked_by_frozen_plan_after_config_removal(status, cl
     ],
 )
 def test_delete_evaluator_with_any_history_archives_it(history, client, team_with_users):
-    """An aggregates-only evaluator must archive, not hard-delete, or PROTECT raises."""
-    evaluator = EvaluatorFactory.create(team=team_with_users)
+    """An aggregates-only evaluator must archive, not hard-delete, or PROTECT raises; the row re-renders as archived."""
+    evaluator = EvaluatorFactory.create(team=team_with_users, name="Scorer")
     config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
     run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
     if history in ("result", "both"):
@@ -185,12 +187,16 @@ def test_delete_evaluator_with_any_history_archives_it(history, client, team_wit
     assert response.status_code == 200
     evaluator.refresh_from_db()
     assert evaluator.is_archived is True
+    html = response.content.decode()
+    assert "Scorer" in html
+    assert "Archived" in html
+    assert reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, evaluator.id]) in html
 
 
 @pytest.mark.django_db()
 def test_unarchive_restores_the_evaluator(client, team_with_users):
-    """Unarchiving an archived evaluator clears its is_archived flag."""
-    evaluator = EvaluatorFactory.create(team=team_with_users)
+    """Unarchiving an archived evaluator clears its is_archived flag and returns the row without the Archived badge."""
+    evaluator = EvaluatorFactory.create(team=team_with_users, name="Scorer")
     evaluator.archive()
 
     client.force_login(team_with_users.members.first())
@@ -200,6 +206,10 @@ def test_unarchive_restores_the_evaluator(client, team_with_users):
     assert response.status_code == 200
     evaluator.refresh_from_db()
     assert evaluator.is_archived is False
+    html = response.content.decode()
+    assert "Scorer" in html
+    assert "Archived" not in html
+    assert reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id]) in html
 
 
 @pytest.mark.django_db()

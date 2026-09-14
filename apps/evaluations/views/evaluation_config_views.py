@@ -11,10 +11,11 @@ from typing import Any
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -861,22 +862,23 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
         return render(request, "evaluations/components/evaluation_result_detail_panel.html", context)
 
 
-def _no_active_evaluators_response(config) -> HttpResponse | None:
-    """A 400 explaining why the config cannot run, or None when it has an active evaluator."""
+def _no_active_evaluators_response(request: HttpRequest, config: EvaluationConfig) -> HttpResponseRedirect | None:
+    """A redirect to the config's runs home with an error message, or None when it has an active evaluator."""
     if config.evaluators.filter(is_archived=False).exists():
         return None
-    return HttpResponse(
+    messages.error(
+        request,
         f"'{config.name}' has no active evaluators, so a run would produce no results. "
         "Add an evaluator to this configuration first.",
-        status=400,
     )
+    return HttpResponseRedirect(reverse("evaluations:evaluation_runs_home", args=[request.team.slug, config.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
     """Start a full run of the config, refusing when it has no active evaluators."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
-    if refusal := _no_active_evaluators_response(config):
+    if refusal := _no_active_evaluators_response(request, config):
         return refusal
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
@@ -886,7 +888,7 @@ def create_evaluation_run(request, team_slug, evaluation_pk):
 def create_evaluation_preview(request, team_slug, evaluation_pk):
     """Start a preview run of the config, refusing when it has no active evaluators."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
-    if refusal := _no_active_evaluators_response(config):
+    if refusal := _no_active_evaluators_response(request, config):
         return refusal
     run = config.run_preview()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))

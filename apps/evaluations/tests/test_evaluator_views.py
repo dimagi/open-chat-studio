@@ -398,6 +398,8 @@ def test_archived_evaluator_renders_a_badge_and_an_unarchive_action(client, team
     assert "Retired scorer" in html
     assert "Archived" in html
     assert reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, archived.id]) in html
+    assert reverse("evaluations:evaluator_delete", args=[team_with_users.slug, archived.id]) not in html
+    assert reverse("evaluations:evaluator_edit", args=[team_with_users.slug, archived.id]) in html
 
 
 @pytest.mark.parametrize(

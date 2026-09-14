@@ -251,8 +251,8 @@ class EvaluationConfigForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        """Persist the config, then re-add archived evaluators the picker could not submit."""
-        archived_members = list(self.instance.evaluators.filter(is_archived=True)) if self.instance.pk else []
+        """Persist the config; `_save_m2m` re-adds archived evaluators the picker could not submit."""
+        self._archived_members = list(self.instance.evaluators.filter(is_archived=True)) if self.instance.pk else []
         instance = super().save(commit=False)
         cleaned_data = self.cleaned_data
         instance.version_selection_type = cleaned_data["version_selection_type"]
@@ -271,9 +271,13 @@ class EvaluationConfigForm(forms.ModelForm):
         if commit:
             instance.save()
             self.save_m2m()
-            if archived_members:
-                instance.evaluators.add(*archived_members)
         return instance
+
+    def _save_m2m(self):
+        """Save the picker's evaluator selection, then re-add archived evaluators it could not submit."""
+        super()._save_m2m()
+        if self._archived_members:
+            self.instance.evaluators.add(*self._archived_members)
 
 
 class EvaluatorForm(forms.ModelForm):

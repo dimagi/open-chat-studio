@@ -54,6 +54,7 @@ def test_archive_blocked_while_a_run_is_in_flight(status, team_with_users):
     evaluator = EvaluatorFactory.create(team=team_with_users)
     config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
     EvaluationRunFactory.create(team=team_with_users, config=config, status=status, evaluator_ids=[evaluator.id])
+    config.evaluators.clear()
 
     with pytest.raises(InFlightRunsError):
         evaluator.archive()
