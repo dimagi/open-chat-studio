@@ -1,11 +1,16 @@
 import pytest
 from waffle.testutils import override_flag
 
+from apps.teams.flags import Flags
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
 from apps.teams.views.feature_flags import FeatureFlagForm
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+
+MANAGEABLE_FLAG = next(flag.slug for flag in Flags if flag.teams_can_manage and not flag.removed)
+"""The team screen only renders flags admins may manage; taking one from the registry
+keeps these tests alive when the flag they happen to pick is rolled out to everyone."""
 
 
 @pytest.mark.django_db()
@@ -74,7 +79,7 @@ class TestFeatureFlagFormSave:
     """The team settings screen must only write M2M changes for flags the admin actually toggled."""
 
     def _flag(self, request, **kwargs):
-        flag = Flag.objects.create(name="flag_events", **kwargs)
+        flag = Flag.objects.create(name=MANAGEABLE_FLAG, **kwargs)
         request.addfinalizer(flag.flush)
         flag.flush()
         return flag
@@ -83,14 +88,14 @@ class TestFeatureFlagFormSave:
         """A flag on for everyone renders ticked; re-saving the screen must not add the team to
         the M2M, where the membership would outlive the end of the rollout."""
         flag = self._flag(request, everyone=True)
-        form = FeatureFlagForm({"flag_events": "on"}, team=team_with_users)
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on"}, team=team_with_users)
         assert form.is_valid()
         form.save()
         assert not flag.teams.filter(pk=team_with_users.pk).exists()
 
     def test_checking_a_flag_enrols_the_team(self, request, team_with_users):
         flag = self._flag(request)
-        form = FeatureFlagForm({"flag_events": "on"}, team=team_with_users)
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on"}, team=team_with_users)
         assert form.is_valid()
         form.save()
         assert flag.teams.filter(pk=team_with_users.pk).exists()
@@ -98,10 +103,10 @@ class TestFeatureFlagFormSave:
     def test_checking_a_missing_flag_creates_it_without_global_override(self, request, team_with_users):
         """A row minted by the team screen must not carry a global `everyone` decision:
         `False` is now a hard off, so the created row stores `None` and defers to teams."""
-        form = FeatureFlagForm({"flag_events": "on"}, team=team_with_users)
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on"}, team=team_with_users)
         assert form.is_valid()
         form.save()
-        flag = Flag.objects.get(name="flag_events")
+        flag = Flag.objects.get(name=MANAGEABLE_FLAG)
         request.addfinalizer(flag.flush)
         assert flag.everyone is None
         assert flag.superusers is False

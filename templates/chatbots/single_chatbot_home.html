@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags humanize static team_tags waffle_tags %}
+{% load django_tables2 form_tags humanize static team_tags %}
 
 {% block page_head %}
   {{ block.super }}
@@ -163,9 +163,7 @@
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" {% if not highlight_version_id %}checked{% endif %}/>
       {% endif %}
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" {% if highlight_version_id %}checked{% endif %}/>
-      {% flag "flag_events" %}
-        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
-      {% endflag %}
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Settings" id="tab-settings" />
     </div>
 
@@ -210,17 +208,15 @@
         {% endif %}
       </div>
     </div>
-    {% flag "flag_events" %}
-      <div role="tabpanel" class="tab-content" id="content-events">
-        <div class="app-card">
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
-          <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
-          {% if show_events %}
-            {% render_table events_table %}
-          {% endif %}
-        </div>
+    <div role="tabpanel" class="tab-content" id="content-events">
+      <div class="app-card">
+        <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:static_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Static Event</a>
+        <a class="btn btn-sm btn-outline btn-primary" href="{% url 'chatbots:events:timeout_event_new' team.slug experiment.id %}"><i class="fa-regular fa-plus"></i> Create Timeout Event</a>
+        {% if show_events %}
+          {% render_table events_table %}
+        {% endif %}
       </div>
-    {% endflag %}
+    </div>
 
     <div role="tabpanel" class="tab-content" id="content-settings">
       <div class="app-card">

@@ -806,13 +806,6 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
-        400: inline_serializer(
-            "ChatTaskPollUserError",
-            {
-                "error": serializers.CharField(required=False),
-                "status": serializers.CharField(),
-            },
-        ),
         404: inline_serializer(
             "ChatTaskPollNotFound",
             {
@@ -869,9 +862,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if error := task_details["error_msg"]:
         data = {"error": error, "status": "error"}
-        is_user_error = task_details.get("user_facing_error")
-        http_status = status.HTTP_400_BAD_REQUEST if is_user_error else status.HTTP_500_INTERNAL_SERVER_ERROR
-        return Response(data, status=http_status)
+        return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     if message := task_details["message"]:
         data = {

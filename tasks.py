@@ -201,31 +201,35 @@ def _get_portless_name(c: Context) -> str:
     return name
 
 
+def _base_runserver_command(c: Context, public: bool) -> str:
+    """Build the runserver command. portless gives the server a stable
+    *.localhost name, which an ngrok tunnel cannot reach."""
+    if _has_portless(c) and not public:
+        return f"portless {_get_portless_name(c)} uv run manage.py runserver"
+    return "python manage.py runserver"
+
+
+def _with_ngrok_env(command: str, public_url: str) -> tuple[str, bool]:
+    """Prefix the command with the env vars an ngrok tunnel needs.
+    Returns the command and whether to run it on a pty."""
+    env_vars = [
+        "CSRF_TRUSTED_ORIGINS='https://*.ngrok.io,https://*.ngrok-free.app'",
+        f"SITE_URL_ROOT='{public_url}'",
+    ]
+    if platform.system() == "Windows":
+        env = "; ".join([f"$env:{var}" for var in env_vars])
+        return f'powershell -Command "{env}; {command}"', False
+    return f"{' '.join(env_vars)} {command}", sys.stdout.isatty()
+
+
 @task(aliases=["django"], help={"public": "Expose server publicly via ngrok tunnel"})
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
     _disable_stdin_forwarding(c)
-    if _has_portless(c):
-        portless_name = _get_portless_name(c)
-        runserver_command = f"portless {portless_name} uv run manage.py runserver"
-    else:
-        runserver_command = "python manage.py runserver"
+    runserver_command = _base_runserver_command(c, public)
+    pty = sys.stdout.isatty()
     if public:
-        public_url = ngrok_url(c)
-        env_vars = [
-            "CSRF_TRUSTED_ORIGINS='https://*.ngrok.io,https://*.ngrok-free.app'",
-            f"SITE_URL_ROOT='{public_url}'",
-        ]
-        if platform.system() == "Windows":
-            env = "; ".join([f"$env:{var}" for var in env_vars])
-            runserver_command = f'powershell -Command "{env}; {runserver_command}"'
-            pty = False
-        else:
-            env = " ".join(env_vars)
-            runserver_command = f"{env} {runserver_command}"
-            pty = sys.stdout.isatty()
-    else:
-        pty = sys.stdout.isatty()
+        runserver_command, pty = _with_ngrok_env(runserver_command, ngrok_url(c))
 
     c.run(runserver_command, echo=True, pty=pty)
 

@@ -1,0 +1,21 @@
+{% extends "table/tailwind_js_pagination.html" %}
+{% load django_tables2 i18n %}
+{% comment %}
+Replaces prev/next paging with a single "Load all" action. The first page shows by
+default; one click re-requests page 1 at a page size covering every row, through the
+same full-container swap already used for pagination and sort clicks.
+{% endcomment %}
+
+{% block pagination %}
+    {% if table.page.has_next %}
+        <div class="flex pagination justify-end">
+            <a class="btn btn-ghost btn-sm"
+               hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=1 table.prefixed_per_page_field=table.paginator.count %}"
+               hx-trigger="click"
+               hx-target="closest div.table-container"
+               hx-swap="outerHTML">
+                {% translate "Load all" %}
+            </a>
+        </div>
+    {% endif %}
+{% endblock pagination %}

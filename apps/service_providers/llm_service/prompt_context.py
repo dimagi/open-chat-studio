@@ -276,7 +276,7 @@ class ParticipantDataProxy:
         Returns all active scheduled messages for the participant in the current chat session.
         """
         if self._scheduled_messages is None:
-            self._scheduled_messages = self.session.participant.get_schedules_for_experiment(
+            self._scheduled_messages = self.session.participant.get_schedules_for_experiments(
                 self.experiment_id, as_dict=True, as_timezone=self.get_timezone()
             )
         return self._scheduled_messages

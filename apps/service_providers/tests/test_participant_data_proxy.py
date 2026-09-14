@@ -63,10 +63,10 @@ class TestParticipantDataProxy:
         session = ExperimentSessionFactory.create(experiment=experiment, participant=participant)
         proxy = ParticipantDataProxy({}, session)
 
-        # Mock the get_schedules_for_experiment method on participant
+        # Mock the get_schedules_for_experiments method on participant
         mock_schedules = [{"id": 1, "message": "Test reminder", "scheduled_time": "2023-01-01T10:00:00Z"}]
         with patch.object(
-            Participant, "get_schedules_for_experiment", return_value=mock_schedules
+            Participant, "get_schedules_for_experiments", return_value=mock_schedules
         ) as mock_get_schedules:
             result = proxy.get_schedules()
 
