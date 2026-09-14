@@ -1,8 +1,11 @@
 import pytest
 from django.db import connection
 from django.db.models import ProtectedError
+from django.urls import reverse
 
 from apps.evaluations.models import EvaluationRunStatus, Evaluator, InFlightRunsError
+from apps.teams.models import Team
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationResultFactory,
@@ -10,6 +13,7 @@ from apps.utils.factories.evaluations import (
     EvaluationRunFactory,
     EvaluatorFactory,
 )
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -107,3 +111,58 @@ def test_is_archived_keeps_a_database_level_default():
         (column_default,) = cursor.fetchone()
 
     assert column_default == "false"
+
+
+@pytest.mark.django_db()
+def test_csv_export_still_contains_an_archived_evaluators_column(client, team_with_users):
+    """#3861's acceptance criterion: archiving preserves a past run's exported history."""
+    evaluator = EvaluatorFactory.create(team=team_with_users, name="Retired Judge")
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(
+        team=team_with_users,
+        config=config,
+        status=EvaluationRunStatus.COMPLETED,
+        evaluator_ids=[evaluator.id],
+    )
+    EvaluationResultFactory.create(
+        team=team_with_users,
+        run=run,
+        evaluator=evaluator,
+        output={"result": {"score": 8.5}},
+    )
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluation_run_download", args=[team_with_users.slug, config.id, run.id])
+    before = client.get(url).content.decode()
+
+    evaluator.archive()
+    after = client.get(url).content.decode()
+
+    assert "score (Retired Judge)" in after
+    assert after == before
+
+
+@pytest.mark.django_db()
+def test_the_default_manager_never_hides_archived_evaluators(team_with_users):
+    """Historical read paths (results table, cost reporting, tag-deletion chips, concordance) resolve via `objects`."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    evaluator.archive()
+
+    assert Evaluator.objects.filter(id=evaluator.id).exists()
+    assert Evaluator.objects.filter(team=team_with_users).count() == 1
+
+
+@pytest.mark.django_db()
+def test_deleting_a_team_with_an_archived_evaluator_and_history_succeeds():
+    """Pins the ordering interaction between PROTECT and _deletion_order."""
+    team = TeamFactory.create()
+    evaluator = EvaluatorFactory.create(team=team)
+    config = EvaluationConfigFactory.create(team=team, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team, config=config, status=EvaluationRunStatus.COMPLETED)
+    EvaluationResultFactory.create(team=team, run=run, evaluator=evaluator)
+    EvaluationRunAggregateFactory.create(run=run, evaluator=evaluator)
+    evaluator.archive()
+
+    delete_object_with_auditing_of_related_objects(team)
+
+    assert not Team.objects.filter(id=team.id).exists()
+    assert not Evaluator.objects.filter(id=evaluator.id).exists()
