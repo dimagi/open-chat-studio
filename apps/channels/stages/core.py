@@ -557,9 +557,6 @@ class ConsentFlowStage(ProcessingStage):
 # ---------------------------------------------------------------------------
 
 
-# Participant-facing wording for a voice note the transcriber found no words in. Written
-# for the participant because the error bot rephrases it into their reply, in their
-# language. NoSpeechDetected is the speech service's vocabulary and stops here.
 NO_SPEECH_MESSAGES = {
     NoSpeechReason.SILENCE: "No speech could be heard in the voice message you sent. Please try recording it again.",
     NoSpeechReason.NOT_UNDERSTOOD: (
