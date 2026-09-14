@@ -603,7 +603,7 @@ class QueryExtractionStage(ProcessingStage):
         keeps the recorded text empty and lets the attachment carry the content.
         """
         ctx.user_query = ""
-        ctx.error_reason = error
+        ctx.deferred_error = error
 
     def _transcribe_voice(self, ctx: MessageProcessingContext) -> str:
         ctx.callbacks.transcription_started(ctx.participant_identifier)
@@ -736,16 +736,16 @@ class ErrorGuardStage(ProcessingStage):
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.error_reason is not None
+        return ctx.deferred_error is not None
 
     def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
         # str() rather than a field path -- the default rendering of an exception
         # object is its type name, which says nothing about why the turn stopped.
-        return {"error_reason": str(ctx.error_reason)}
+        return {"deferred_error": str(ctx.deferred_error)}
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.error_reason is not None
-        raise ctx.error_reason
+        assert ctx.deferred_error is not None
+        raise ctx.deferred_error
 
 
 # ---------------------------------------------------------------------------

@@ -89,7 +89,7 @@ class MessageProcessingContext:
     # rather than raising so ChatMessageCreationStage still records the turn; ErrorGuardStage
     # raises once it has. An empty user_query cannot carry this on its own -- an
     # attachment-only message with no caption looks identical.
-    error_reason: Exception | None = None
+    deferred_error: Exception | None = None
 
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,

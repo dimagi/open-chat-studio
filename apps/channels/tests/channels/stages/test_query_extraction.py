@@ -100,7 +100,7 @@ class TestQueryExtractionStage:
 
         self.stage(ctx)
 
-        assert ctx.error_reason is error
+        assert ctx.deferred_error is error
         assert ctx.user_query == ""
         mock_notification.assert_called_once()
         assert any("Voice transcription failed" in e for e in ctx.processing_errors)
@@ -128,8 +128,8 @@ class TestQueryExtractionStage:
 
         self.stage(ctx)
 
-        assert isinstance(ctx.error_reason, UserActionableError)
-        assert str(ctx.error_reason) == NO_SPEECH_MESSAGES[reason]
+        assert isinstance(ctx.deferred_error, UserActionableError)
+        assert str(ctx.deferred_error) == NO_SPEECH_MESSAGES[reason]
         # Empty rather than None, so ChatMessageCreationStage runs and keeps the text empty.
         assert ctx.user_query == ""
         mock_notification.assert_not_called()
@@ -150,8 +150,8 @@ class TestQueryExtractionStage:
 
         self.stage(ctx)
 
-        assert isinstance(ctx.error_reason, UserActionableError)
-        assert "not available" in str(ctx.error_reason)
+        assert isinstance(ctx.deferred_error, UserActionableError)
+        assert "not available" in str(ctx.deferred_error)
         assert ctx.user_query == ""
         mock_notification.assert_not_called()
         assert ctx.processing_errors == []
@@ -170,7 +170,7 @@ class TestErrorGuardStage:
         ],
     )
     def test_raises_the_deferred_error(self, error):
-        ctx = make_context(user_query="", error_reason=error)
+        ctx = make_context(user_query="", deferred_error=error)
 
         with pytest.raises(type(error)) as exc_info:
             self.stage(ctx)
@@ -179,12 +179,12 @@ class TestErrorGuardStage:
 
     def test_records_the_error_on_its_span(self):
         """The exception's type name alone would not say why the turn stopped."""
-        ctx = make_context(user_query="", error_reason=UserActionableError("no transcription here"))
+        ctx = make_context(user_query="", deferred_error=UserActionableError("no transcription here"))
 
         with pytest.raises(UserActionableError):
             self.stage(ctx)
 
-        assert ctx.trace_service.span.call_args.kwargs["inputs"] == {"error_reason": "no transcription here"}
+        assert ctx.trace_service.span.call_args.kwargs["inputs"] == {"deferred_error": "no transcription here"}
 
     def test_does_not_run_for_an_ordinary_empty_query(self):
         """An attachment-only message with no caption reaches this stage with user_query == ""."""
