@@ -14,14 +14,12 @@ SUPER_ADMIN_GROUP = "Super Admin"
 TEAM_ADMIN_GROUP = "Team Admin"
 CHATBOT_ADMIN_GROUP = "Chatbot Admin"
 EVENT_ADMIN_GROUP = "Event Admin"
-ASSISTANT_ADMIN_GROUP = "Assistant Admin"
 CHAT_VIEWER_GROUP = "Chat Viewer"
 EVALUATION_ADMIN_GROUP = "Evaluation Admin"
 ANNOTATION_REVIEWER_GROUP = "Annotation Reviewer"
 
 NORMAL_USER_GROUPS = [
     CHATBOT_ADMIN_GROUP,
-    ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
     EVENT_ADMIN_GROUP,
 ]
@@ -49,6 +47,8 @@ class TeamBackend(ModelBackend):
 
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
+    # The entry keeps these models permission-covered until they are dropped, which
+    # test_missing_content_types enforces.
     "assistants": ["openaiassistant", "toolresources"],
     "banners": ["banner"],
     "bot_channels": ["experimentchannel"],
@@ -107,6 +107,7 @@ CONTENT_TYPES = {
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
     "ocs_notifications": [
+        "notificationchannel",
         "usernotificationpreferences",
         "eventtype",
         "notificationevent",
@@ -201,6 +202,8 @@ GROUPS = [
             # OAuth applications are registered from the team admin page, so the role that administers
             # the team can manage them.
             AppPermSetDef("oauth", ALL),
+            # Slack notification channels are configured per team from the team admin page.
+            ModelPermSetDef("ocs_notifications", "notificationchannel", ALL),
         ],
     ),
     GroupDef(
@@ -221,13 +224,6 @@ GROUPS = [
     GroupDef(
         CHAT_VIEWER_GROUP,
         CHAT_VIEWER_PERMS,
-    ),
-    GroupDef(
-        ASSISTANT_ADMIN_GROUP,
-        [
-            AppPermSetDef("assistants", ALL),
-            AppPermSetDef("files", ALL),
-        ],
     ),
     GroupDef(
         EVENT_ADMIN_GROUP,

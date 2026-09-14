@@ -23,34 +23,39 @@
                     <span>Mute for</span>
                 </li>
                 <li>
-                    <a hx-post="{{ url_for_mute }}"
+                    <button type="button"
+                        hx-post="{{ url_for_mute }}"
                         hx-vals='{"duration": "8h"}'
                         hx-swap="morph"
-                        hx-target="#btn-mute-{{ record.id }}">8 hours</a>
+                        hx-target="#btn-mute-{{ record.id }}">8 hours</button>
                 </li>
                 <li>
-                    <a hx-post="{{ url_for_mute }}"
+                    <button type="button"
+                        hx-post="{{ url_for_mute }}"
                         hx-vals='{"duration": "1d"}'
                         hx-swap="morph"
-                        hx-target="#btn-mute-{{ record.id }}">1 day</a>
+                        hx-target="#btn-mute-{{ record.id }}">1 day</button>
                 </li>
                 <li>
-                    <a hx-post="{{ url_for_mute }}"
+                    <button type="button"
+                        hx-post="{{ url_for_mute }}"
                         hx-vals='{"duration": "1w"}'
                         hx-swap="morph"
-                        hx-target="#btn-mute-{{ record.id }}">1 week</a>
+                        hx-target="#btn-mute-{{ record.id }}">1 week</button>
                 </li>
                 <li>
-                    <a hx-post="{{ url_for_mute }}"
+                    <button type="button"
+                        hx-post="{{ url_for_mute }}"
                         hx-vals='{"duration": "1m"}'
                         hx-swap="morph"
-                        hx-target="#btn-mute-{{ record.id }}">1 month</a>
+                        hx-target="#btn-mute-{{ record.id }}">1 month</button>
                 </li>
                 <li>
-                    <a hx-post="{{ url_for_mute }}"
+                    <button type="button"
+                        hx-post="{{ url_for_mute }}"
                         hx-vals='{"duration": "forever"}'
                         hx-swap="morph"
-                        hx-target="#btn-mute-{{ record.id }}">Forever</a>
+                        hx-target="#btn-mute-{{ record.id }}">Forever</button>
                 </li>
             </ul>
         </div>

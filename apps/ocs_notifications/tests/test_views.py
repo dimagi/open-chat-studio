@@ -760,8 +760,11 @@ class TestNotificationButtonsUseMorphSwap:
         response = client.get(reverse("ocs_notifications:notifications_table"))
 
         assert response.status_code == 200
-        assert b'hx-ext="morph"' in response.content
-        assert b'hx-swap="morph"' in response.content
+        read_button = re.search(
+            rb"<button[^>]*toggle_notification_read[^>]*>", response.content, re.DOTALL
+        ).group()
+        assert b'hx-ext="morph"' in read_button
+        assert b'hx-swap="morph"' in read_button
 
     def test_mute_button_uses_morph_swap_for_every_duration_link(self, client, team_with_users):
         user = team_with_users.members.first()
@@ -774,8 +777,10 @@ class TestNotificationButtonsUseMorphSwap:
         response = client.get(reverse("ocs_notifications:notifications_table"))
 
         assert response.status_code == 200
-        # one duration link each for 8h/1d/1w/1m/forever, all self-swapping the same container
-        assert response.content.count(b'hx-swap="morph"') >= 5
+        # one duration button each for 8h/1d/1w/1m/forever, all self-swapping the same container
+        duration_buttons = re.findall(rb'<button[^>]*hx-vals=.\{"duration":[^>]*>', response.content)
+        assert len(duration_buttons) == 5
+        assert all(b'hx-swap="morph"' in button for button in duration_buttons)
 
     def test_mute_button_uses_morph_swap_when_already_muted(self, client, team_with_users):
         user = team_with_users.members.first()
@@ -791,7 +796,10 @@ class TestNotificationButtonsUseMorphSwap:
 
         assert response.status_code == 200
         assert b"Unmute Now" in response.content
-        assert b'hx-swap="morph"' in response.content
+        unmute_button = re.search(
+            rb"<button[^>]*unmute_notification[^>]*>", response.content, re.DOTALL
+        ).group()
+        assert b'hx-swap="morph"' in unmute_button
 
     def test_do_not_disturb_pills_use_morph_swap(self, client, team_with_users):
         user = team_with_users.members.first()

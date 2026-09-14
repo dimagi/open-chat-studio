@@ -230,3 +230,68 @@ class TestExternalIds:
     )
     def test_parse_records_the_provider_id(self, parse, expected):
         assert parse().external_ids == expected
+
+
+class TestWhatsAppMessageParseNonMediaTypes:
+    """WhatsApp messages whose per-type payload is not a dict (e.g. 'contacts', which Meta
+    sends as a list) must parse without error, with all media fields set to None."""
+
+    def _contacts_message_value(self):
+        """Minimal contacts-type message mimicking a real Meta Cloud API webhook payload."""
+        return {
+            "messaging_product": "whatsapp",
+            "metadata": {"display_phone_number": "254704737122", "phone_number_id": "111"},
+            "contacts": [{"profile": {"name": "Sender"}, "wa_id": "254796656237"}],
+            "messages": [
+                {
+                    "from": "254796656237",
+                    "id": "wamid.contacts_test",
+                    "timestamp": "1789324142",
+                    "type": "contacts",
+                    "contacts": [
+                        {
+                            "name": {"first_name": "Esther", "formatted_name": "Esther Shem"},
+                            "phones": [{"phone": "+254103006076", "wa_id": "254103006076", "type": "MOBILE"}],
+                        }
+                    ],
+                }
+            ],
+        }
+
+    @pytest.mark.parametrize(
+        "message_type",
+        [
+            pytest.param("contacts", id="contacts"),
+            pytest.param("location", id="location"),
+        ],
+    )
+    def test_non_media_message_parses_without_error(self, message_type):
+        """parse() must not raise AttributeError when the per-type payload is a list or
+        non-dict value (regression test for contacts-type messages crashing with
+        AttributeError: 'list' object has no attribute 'get')."""
+        message_data = {
+            "messaging_product": "whatsapp",
+            "metadata": {"display_phone_number": "254704737122", "phone_number_id": "111"},
+            "contacts": [{"profile": {"name": "Sender"}, "wa_id": "254796656237"}],
+            "messages": [
+                {
+                    "from": "254796656237",
+                    "id": "wamid.test",
+                    "timestamp": "1789324142",
+                    "type": message_type,
+                    message_type: [{"dummy": "payload"}],
+                }
+            ],
+        }
+        parsed = WhatsAppMessage.parse(message_data)
+        assert parsed.media_id is None
+        assert parsed.media_url is None
+        assert parsed.attachment_mime_type is None
+
+    def test_contacts_message_parsed_correctly(self):
+        """A real contacts-type payload parses successfully with media fields None."""
+        parsed = WhatsAppMessage.parse(self._contacts_message_value())
+        assert parsed.media_id is None
+        assert parsed.media_url is None
+        assert parsed.attachment_mime_type is None
+        assert parsed.whatsapp_message_id == "wamid.contacts_test"

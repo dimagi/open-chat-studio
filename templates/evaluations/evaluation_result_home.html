@@ -19,7 +19,7 @@
 {% endblock breadcrumbs %}
 
 {% block app %}
-  <div class="container mx-auto px-4 py-8">
+  <div class="py-8">
     {% url 'evaluations:edit' request.team.slug evaluation_run.config.id as config_url %}
     {# Header card: title, actions, meta row, stat row, collapsible run details #}
     <div class="card card-border bg-base-100 mb-6">

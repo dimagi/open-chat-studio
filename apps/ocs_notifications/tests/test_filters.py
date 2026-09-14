@@ -6,6 +6,8 @@ from django.test import RequestFactory
 from apps.ocs_notifications.filters import (
     EXPLICIT_FILTERS_PARAM,
     SeverityLevelFilter,
+    TeamFilter,
+    UserNotificationFilter,
     build_toggle_options,
     resolve_notification_filter_params,
 )
@@ -103,3 +105,27 @@ class TestResolveNotificationFilterParams:
         filter_params = resolve_notification_filter_params(request)
 
         assert [f.column for f in filter_params.filters] == ["read"]
+
+
+@pytest.mark.django_db()
+class TestTeamFilterPrepare:
+    """TeamFilter.prepare() must return a new, populated instance and leave both the original
+    and the UserNotificationFilter.filters singleton untouched. See #4363."""
+
+    def test_prepare_returns_a_new_instance_with_the_users_teams(self, team_with_users):
+        user = team_with_users.members.first()
+        original = TeamFilter()
+
+        prepared = original.prepare(team_with_users, user=user)
+
+        assert prepared is not original
+        assert original.options == []
+        assert [opt["id"] for opt in prepared.options] == [team_with_users.id]
+
+    def test_columns_leaves_the_shared_team_filter_singleton_untouched(self, team_with_users):
+        user = team_with_users.members.first()
+        shared_team_filter = next(f for f in UserNotificationFilter.filters if isinstance(f, TeamFilter))
+
+        UserNotificationFilter.columns(team=team_with_users, user=user)
+
+        assert shared_team_filter.options == []
