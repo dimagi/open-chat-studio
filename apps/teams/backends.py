@@ -107,6 +107,7 @@ CONTENT_TYPES = {
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
     "ocs_notifications": [
+        "notificationchannel",
         "usernotificationpreferences",
         "eventtype",
         "notificationevent",
@@ -201,6 +202,8 @@ GROUPS = [
             # OAuth applications are registered from the team admin page, so the role that administers
             # the team can manage them.
             AppPermSetDef("oauth", ALL),
+            # Slack notification channels are configured per team from the team admin page.
+            ModelPermSetDef("ocs_notifications", "notificationchannel", ALL),
         ],
     ),
     GroupDef(
