@@ -584,8 +584,8 @@ def test_participant_scoped_sessions_table_view_paginates(client, team_with_user
 
     table = response.context_data["table"]
     assert table.paginator.count == 30
-    assert len(table.page.object_list) < 30
-    assert table.paginator.num_pages > 1
+    assert len(table.page.object_list) == 25
+    assert table.paginator.num_pages == 2
 
 
 @pytest.mark.django_db()
