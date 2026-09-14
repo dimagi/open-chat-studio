@@ -263,7 +263,13 @@ class MessageProcessingPipeline:
             # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
             # no error message generation, no terminal stages.
             raise
-        except self.CONFIGURATION_EXCEPTIONS as e:
+        except Exception as e:
+            return self._handle_stage_exception(ctx, e)
+        return None
+
+    def _handle_stage_exception(self, ctx: MessageProcessingContext, e: Exception) -> Exception | None:
+        """Dispatch a core-stage exception to its handler; returns it if it should be re-raised."""
+        if isinstance(e, self.CONFIGURATION_EXCEPTIONS):
             # The chatbot is misconfigured (a deprecated model, a broken template,
             # user-authored code that raised). Reply with the canned message and run
             # terminal stages, but do NOT re-raise: this is a configuration problem,
@@ -275,18 +281,19 @@ class MessageProcessingPipeline:
             )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
-        except NoSpeechDetected as e:
+            return None
+        if isinstance(e, NoSpeechDetected):
             logger.info("No speech detected in voice message: %s", e.reason)
             ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
-        except UserActionableError as e:
+            return None
+        if isinstance(e, UserActionableError):
             # Answered, never re-raised -- see ADR-0065.
             logger.info("Participant-actionable error: %s", e)
             ctx.early_exit_response = self._generate_error_message(ctx, e)
-        except Exception as e:
-            ctx.early_exit_response = self._generate_error_message(ctx, e)
-            ctx.processing_errors.append(str(e))
-            return e
-        return None
+            return None
+        ctx.early_exit_response = self._generate_error_message(ctx, e)
+        ctx.processing_errors.append(str(e))
+        return e
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.
