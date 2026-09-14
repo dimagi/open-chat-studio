@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason
+from apps.chat.exceptions import ChatException, UserActionableError
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -84,11 +84,12 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
-    # Set by QueryExtractionStage when a voice note held no speech. It defers the
-    # signal rather than raising so ChatMessageCreationStage still records the turn;
-    # NoSpeechGuardStage raises once it has. An empty user_query cannot carry this
-    # on its own -- an attachment-only message with no caption looks identical.
-    no_speech_reason: NoSpeechReason | None = None
+    # Set by QueryExtractionStage when a voice note yielded no query -- no speech in it,
+    # nothing able to transcribe it, or transcription failed outright. It defers the error
+    # rather than raising so ChatMessageCreationStage still records the turn; ErrorGuardStage
+    # raises once it has. An empty user_query cannot carry this on its own -- an
+    # attachment-only message with no caption looks identical.
+    deferred_error: Exception | None = None
 
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,
@@ -162,11 +163,10 @@ class MessageProcessingPipeline:
        replies with the generic DEFAULT_ERROR_RESPONSE_TEXT, runs terminal
        stages, and is logged as a warning WITHOUT being re-raised (which
        would report it to Sentry and fail the task with no useful retry).
-    4. NoSpeechDetected -- the transcriber found no speech in the
-       participant's voice note. Replies with a message generated from
-       NO_SPEECH_PROMPTS via EventBot, falls back to
-       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is NOT
-       re-raised: it is user input, not a fault.
+    4. UserActionableError -- the participant can fix what went wrong by
+       changing what they send. Replies with a message generated from the
+       error via EventBot, falls back to DEFAULT_ERROR_RESPONSE_TEXT, runs
+       terminal stages, and is NOT re-raised: it is not a fault (ADR-0065).
     5. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
@@ -178,18 +178,6 @@ class MessageProcessingPipeline:
     # Errors in how the chatbot was configured, not bugs: they get the canned reply
     # and are never re-raised.
     CONFIGURATION_EXCEPTIONS = (PipelineBuildError, PipelineNodeBuildError, CodeNodeRunError, NodeUserConfigRunError)
-
-    # Fed to the error bot, which turns them into advice in the participant's language.
-    NO_SPEECH_PROMPTS = {
-        NoSpeechReason.SILENCE: (
-            "Tell the user that no speech could be heard in the voice message they sent"
-            " and that they should try recording it again."
-        ),
-        NoSpeechReason.NOT_UNDERSTOOD: (
-            "Tell the user that the speech in the voice message they sent could not be made out"
-            " and that they should try recording it again, speaking clearly."
-        ),
-    }
 
     def __init__(
         self,
@@ -216,9 +204,9 @@ class MessageProcessingPipeline:
            error text, log a warning, and set ctx.early_exit_response --
            but do NOT re-raise (misconfiguration is not a bug worth
            reporting).
-        5. If any raises NoSpeechDetected, reply with a message generated
-           from the reason and set ctx.early_exit_response -- but do NOT
-           re-raise (silence is user input, not a bug).
+        5. If any raises UserActionableError, reply with a message generated
+           from the error and set ctx.early_exit_response -- but do NOT
+           re-raise (the participant can act on it, so it is not a bug).
         6. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
         7. Run terminal stages unconditionally (they always fire).
@@ -260,7 +248,13 @@ class MessageProcessingPipeline:
             # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
             # no error message generation, no terminal stages.
             raise
-        except self.CONFIGURATION_EXCEPTIONS as e:
+        except Exception as e:
+            return self._handle_stage_exception(ctx, e)
+        return None
+
+    def _handle_stage_exception(self, ctx: MessageProcessingContext, e: Exception) -> Exception | None:
+        """Dispatch a core-stage exception to its handler; returns it if it should be re-raised."""
+        if isinstance(e, self.CONFIGURATION_EXCEPTIONS):
             # The chatbot is misconfigured (a deprecated model, a broken template,
             # user-authored code that raised). Reply with the canned message and run
             # terminal stages, but do NOT re-raise: this is a configuration problem,
@@ -272,34 +266,42 @@ class MessageProcessingPipeline:
             )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
-        except NoSpeechDetected as e:
-            logger.info("No speech detected in voice message: %s", e.reason)
-            ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
-        except Exception as e:
+            return None
+        if isinstance(e, UserActionableError):
+            # Answered, never re-raised -- see ADR-0065.
+            logger.info("Participant-actionable error: %s", e)
             ctx.early_exit_response = self._generate_error_message(ctx, e)
-            ctx.processing_errors.append(str(e))
-            return e
-        return None
+            return None
+        ctx.early_exit_response = self._generate_error_message(ctx, e)
+        ctx.processing_errors.append(str(e))
+        return e
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.
 
-        Preserves the ChatException distinction: ChatException instances
-        get a more specific prompt that includes the error message.
-        Falls back to DEFAULT_ERROR_RESPONSE_TEXT if EventBot fails.
+        The prompt is chosen by what the participant can do about the exception:
+        act on it now, adjust and retry, or only wait. Falls back to
+        DEFAULT_ERROR_RESPONSE_TEXT if EventBot fails.
 
         Maps to the old _inform_user_of_error() but WITHOUT sending --
         sending is ResponseSendingStage's responsibility.
         """
-        prompt = (
-            "Tell the user that something went wrong while processing their message"
-            " and that they should try again later."
-        )
-        if isinstance(exception, ChatException):
+        if isinstance(exception, UserActionableError):
+            # The message is already written for the participant and names the action open to
+            # them, so the prompt relays it as-is. It does not offer waiting as an alternative,
+            # which is the one thing that will not help: an unsupported image type stays
+            # unsupported and a silent voice note stays silent (ADR-0065).
+            prompt = f"Tell the user the following, and what they can do about it now: {exception}"
+        elif isinstance(exception, ChatException):
             prompt = (
                 f"Tell the user that you were unable to process their message and that "
                 f"they should try again later or adjust the message type or contents "
                 f"according to the following error message: {exception}"
+            )
+        else:
+            prompt = (
+                "Tell the user that something went wrong while processing their message"
+                " and that they should try again later."
             )
         return self._user_message(ctx, prompt, exception)
 

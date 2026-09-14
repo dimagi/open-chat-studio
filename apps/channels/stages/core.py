@@ -17,7 +17,7 @@ from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserReportableError
+from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -557,6 +557,15 @@ class ConsentFlowStage(ProcessingStage):
 # ---------------------------------------------------------------------------
 
 
+NO_SPEECH_MESSAGES = {
+    NoSpeechReason.SILENCE: "No speech could be heard in the voice message you sent. Please try recording it again.",
+    NoSpeechReason.NOT_UNDERSTOOD: (
+        "The speech in the voice message you sent could not be made out."
+        " Please try recording it again, speaking clearly."
+    ),
+}
+
+
 class QueryExtractionStage(ProcessingStage):
     """Extracts the user's query from the message.
 
@@ -572,20 +581,29 @@ class QueryExtractionStage(ProcessingStage):
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
             except NoSpeechDetected as e:
-                # Defer to NoSpeechGuardStage so ChatMessageCreationStage records the
-                # turn first: the voice note is real input and belongs in the history
-                # and on the trace, even though there are no words in it. The empty
-                # query is what makes that stage keep the text empty and let the
-                # attachment carry the content.
-                ctx.user_query = ""
-                ctx.no_speech_reason = e.reason
+                self._defer_exception(ctx, UserActionableError(NO_SPEECH_MESSAGES[e.reason]))
+            except UserActionableError as e:
+                self._defer_exception(ctx, e)
             except Exception as e:
-                # Stage handles its own error
+                # Unlike the branches above, this is a fault rather than something the
+                # participant can act on, so the team is told about it.
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
                 ctx.processing_errors.append(f"Voice transcription failed: {e}")
-                raise
+                self._defer_exception(ctx, e)
         else:
             ctx.user_query = ctx.message.message_text
+
+    @staticmethod
+    def _defer_exception(ctx: MessageProcessingContext, error: Exception) -> None:
+        """Hold the error on the context instead of raising it from this stage.
+
+        The voice note is real input and belongs in the history and on the trace even though
+        nothing could be read out of it. Raising here would stop the pipeline before the turn
+        is recorded; the held error is raised later, once it has been. The empty query is what
+        keeps the recorded text empty and lets the attachment carry the content.
+        """
+        ctx.user_query = ""
+        ctx.deferred_error = error
 
     def _transcribe_voice(self, ctx: MessageProcessingContext) -> str:
         ctx.callbacks.transcription_started(ctx.participant_identifier)
@@ -604,7 +622,7 @@ class QueryExtractionStage(ProcessingStage):
             speech_service = ctx.experiment.voice_provider.get_speech_service()
             if speech_service.supports_transcription:
                 return speech_service.transcribe_audio(audio)
-        raise UserReportableError("Voice transcription is not available for this chatbot")
+        raise UserActionableError("Voice transcription is not available for this chatbot")
 
 
 # ---------------------------------------------------------------------------
@@ -703,26 +721,31 @@ class ChatMessageCreationStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
-# NoSpeechGuardStage
+# ErrorGuardStage
 # ---------------------------------------------------------------------------
 
 
-class NoSpeechGuardStage(ProcessingStage):
-    """Stops a voice note that held no speech, once the turn has been recorded.
+class ErrorGuardStage(ProcessingStage):
+    """Raises the error QueryExtractionStage deferred, once the turn has been recorded.
 
     Sits after ChatMessageCreationStage because QueryExtractionStage cannot both
-    record the turn and halt the pipeline. The pipeline answers the participant
-    from the reason.
+    record the turn and halt the pipeline. Every pipeline that runs QueryExtractionStage
+    needs this stage in that position, or a deferred error is never raised and the
+    participant gets no reply at all. The pipeline answers the participant from the error,
+    and re-raises it if it was a fault rather than something they can act on.
     """
 
-    span_input_fields = ("no_speech_reason",)
-
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.no_speech_reason is not None
+        return ctx.deferred_error is not None
+
+    def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
+        # str() rather than a field path -- the default rendering of an exception
+        # object is its type name, which says nothing about why the turn stopped.
+        return {"deferred_error": str(ctx.deferred_error)}
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.no_speech_reason is not None
-        raise NoSpeechDetected(ctx.no_speech_reason)
+        assert ctx.deferred_error is not None
+        raise ctx.deferred_error
 
 
 # ---------------------------------------------------------------------------
@@ -733,9 +756,9 @@ class NoSpeechGuardStage(ProcessingStage):
 class BotInteractionStage(ProcessingStage):
     """Sends the user query to the bot and captures the response.
 
-    Exceptions are NOT caught here -- the pipeline's catch-all error handler
-    generates the user-facing error message, sets ctx.early_exit_response,
-    runs terminal stages, and then re-raises.
+    Exceptions are NOT caught here. The pipeline generates the user-facing error
+    message, sets ctx.early_exit_response and runs terminal stages; it then re-raises
+    a genuine fault, but answers a UserActionableError without re-raising (ADR-0065).
     """
 
     span_input_fields = ("user_query",)

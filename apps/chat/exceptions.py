@@ -25,8 +25,9 @@ class NoSpeechReason(StrEnum):
 class NoSpeechDetected(AudioTranscriptionException):
     """The transcriber found no speech in the audio: a silent or unintelligible voice note.
 
-    The pipeline answers the participant instead of notifying the team, so each reason
-    needs participant-facing wording in MessageProcessingPipeline.NO_SPEECH_PROMPTS.
+    Raised only by the speech service. Nothing failed, so the channel framework catches it
+    at QueryExtractionStage and hands the participant a UserActionableError instead -- each
+    reason needs participant-facing wording in NO_SPEECH_MESSAGES there.
     """
 
     def __init__(self, reason: NoSpeechReason):
@@ -46,8 +47,14 @@ class VersionedExperimentSessionsNotAllowedException(ChatException):
     pass
 
 
-class UserReportableError(ChatException):
-    """A class of errors that can be reported to the end user (participant)"""
+class UserActionableError(ChatException):
+    """Raised when the participant can fix what went wrong by changing what they send.
+
+    The pipeline answers the participant with a message generated from this error and
+    does not re-raise it, so it never fails the task or marks the trace as errored.
+    Anything the participant cannot act on -- a provider outage, a revoked key, a bug --
+    must use a different exception. See ADR-0065.
+    """
 
 
 class ServiceWindowExpiredException(ChatException):
