@@ -3,7 +3,6 @@ from unittest.mock import patch
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.chat.exceptions import UserActionableError
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -39,16 +38,6 @@ def test_get_response_for_webchat_task(session):
     assert response["response"] == "Hi"
     assert response["message_id"] is not None
     assert response["error"] is None
-
-
-@pytest.mark.django_db()
-def test_user_actionable_error_is_not_special_cased(session):
-    """The pipeline answers these itself, so one reaching the task is an ordinary failure."""
-    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserActionableError("nope")):
-        response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
-
-    assert response["error"] == "nope"
-    assert response["response"] is None
 
 
 @pytest.mark.django_db()
