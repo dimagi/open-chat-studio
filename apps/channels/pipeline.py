@@ -279,22 +279,29 @@ class MessageProcessingPipeline:
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.
 
-        Preserves the ChatException distinction: ChatException instances
-        get a more specific prompt that includes the error message.
-        Falls back to DEFAULT_ERROR_RESPONSE_TEXT if EventBot fails.
+        The prompt is chosen by what the participant can do about the exception:
+        act on it now, adjust and retry, or only wait. Falls back to
+        DEFAULT_ERROR_RESPONSE_TEXT if EventBot fails.
 
         Maps to the old _inform_user_of_error() but WITHOUT sending --
         sending is ResponseSendingStage's responsibility.
         """
-        prompt = (
-            "Tell the user that something went wrong while processing their message"
-            " and that they should try again later."
-        )
-        if isinstance(exception, ChatException):
+        if isinstance(exception, UserActionableError):
+            # The message is already written for the participant and names the action open to
+            # them, so the prompt relays it as-is. It does not offer waiting as an alternative,
+            # which is the one thing that will not help: an unsupported image type stays
+            # unsupported and a silent voice note stays silent (ADR-0065).
+            prompt = f"Tell the user the following, and what they can do about it now: {exception}"
+        elif isinstance(exception, ChatException):
             prompt = (
                 f"Tell the user that you were unable to process their message and that "
                 f"they should try again later or adjust the message type or contents "
                 f"according to the following error message: {exception}"
+            )
+        else:
+            prompt = (
+                "Tell the user that something went wrong while processing their message"
+                " and that they should try again later."
             )
         return self._user_message(ctx, prompt, exception)
 

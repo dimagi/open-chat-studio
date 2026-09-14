@@ -338,6 +338,25 @@ class TestErrorMessageGeneration:
 
     @patch("apps.channels.pipeline.EventBot")
     @patch("apps.channels.pipeline.TraceInfo")
+    def test_user_actionable_error_prompt_does_not_defer_the_participant(self, mock_trace_info, mock_event_bot_cls):
+        """The action is available now, so the prompt must not frame the error as a fault."""
+        mock_bot = MagicMock()
+        mock_bot.get_user_message.return_value = "that image type is not supported"
+        mock_event_bot_cls.return_value = mock_bot
+
+        ctx = make_context()
+        pipeline = _pipeline()
+        exc = UserActionableError("`x.bmp` is not a supported image type")
+
+        result = pipeline._generate_error_message(ctx, exc)
+
+        assert result == "that image type is not supported"
+        prompt_arg = mock_bot.get_user_message.call_args[0][0]
+        assert "`x.bmp` is not a supported image type" in prompt_arg
+        assert "try again later" not in prompt_arg
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
     def test_generic_exception_uses_generic_prompt(self, mock_trace_info, mock_event_bot_cls):
         """Non-ChatException gets a generic error prompt."""
         mock_bot = MagicMock()

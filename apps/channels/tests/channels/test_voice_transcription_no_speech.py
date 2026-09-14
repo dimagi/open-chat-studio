@@ -93,6 +93,8 @@ def test_no_speech_replies_without_erroring_or_notifying(
     # The wording for the reason reaches the error bot as the error to phrase a reply about.
     prompt = mock_event_bot_cls.return_value.get_user_message.call_args.args[0]
     assert NO_SPEECH_MESSAGES[expected_reason] in prompt
+    # Recording again is the action; telling them to wait would contradict it.
+    assert "try again later" not in prompt
 
     assert not NotificationEvent.objects.filter(title="Audio Transcription Failed").exists()
 
