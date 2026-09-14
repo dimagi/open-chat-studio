@@ -14,12 +14,10 @@ CUSTOM_ERROR_MESSAGE = (
 )
 
 
-def _resolve_error_details(error: str, user_facing: bool, debug_mode: bool) -> dict:
-    if user_facing:
-        return {"error_msg": error, "user_facing_error": True}
+def _resolve_error_details(error: str, debug_mode: bool) -> dict:
     if not debug_mode:
         error = CUSTOM_ERROR_MESSAGE if "Invalid parameter" in error else DEFAULT_ERROR_MESSAGE  # TODO: temporary
-    return {"error_msg": error, "user_facing_error": False}
+    return {"error_msg": error}
 
 
 def _handle_success_result(result: dict, experiment) -> dict:
@@ -29,9 +27,7 @@ def _handle_success_result(result: dict, experiment) -> dict:
     elif response := result.get("response"):
         details["message"] = ChatMessage(content=response, message_type=ChatMessageType.AI)
     if error := result.get("error"):
-        details.update(
-            _resolve_error_details(error, bool(result.get("user_facing_error")), experiment.debug_mode_enabled)
-        )
+        details.update(_resolve_error_details(error, experiment.debug_mode_enabled))
     return details
 
 

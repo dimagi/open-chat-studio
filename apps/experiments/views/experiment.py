@@ -546,6 +546,56 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
+def _set_messages_view_push_url(response, request, team_slug, experiment, session_id):
+    """The control panel's own filter controls (tag/language) hit `experiment_session_messages_view`
+    via htmx, targeting `#messages-container`, not a full navigation. A plain hx-push-url there
+    would point the address bar at this component view's own URL, not the session page, so a
+    refresh would lose the surrounding page. Push the full session page's URL instead, with the
+    same querystring: its own `#messages-container` re-fetches this view on load, so a refresh
+    lands back on the same filtered/translated state.
+    """
+    if not request.htmx:
+        return
+    session_url = reverse("chatbots:chatbot_session_view", args=[team_slug, experiment.public_id, session_id])
+    querystring = request.GET.urlencode()
+    response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
+
+
+def _tag_filter_context_ids(chat, matched_ids: set[int]) -> set[int]:
+    """The message immediately before and after each match, so a reviewer can see what was
+    said around a tagged message rather than just the tagged message on its own.
+
+    IDs aren't guaranteed contiguous per chat, so this walks the chat's own ordered id list
+    rather than doing id +/- 1 arithmetic.
+    """
+    ordered_ids = list(ChatMessage.objects.filter(chat=chat).order_by("created_at", "id").values_list("id", flat=True))
+    context_ids = set()
+    for index, message_id in enumerate(ordered_ids):
+        if message_id not in matched_ids:
+            continue
+        if index > 0:
+            context_ids.add(ordered_ids[index - 1])
+        if index < len(ordered_ids) - 1:
+            context_ids.add(ordered_ids[index + 1])
+    return context_ids - matched_ids
+
+
+def _apply_tag_filter(messages_queryset, chat, selected_tags):
+    """Narrow the queryset to matched messages plus one message of context on each side."""
+    if not selected_tags:
+        return messages_queryset, set(), set()
+    matched_ids = set(messages_queryset.filter(tags__name__in=selected_tags).distinct().values_list("id", flat=True))
+    context_ids = _tag_filter_context_ids(chat, matched_ids)
+    return messages_queryset.filter(id__in=matched_ids | context_ids), matched_ids, context_ids
+
+
+def _mark_tag_context(messages, selected_tags, matched_ids):
+    if not selected_tags:
+        return
+    for message in messages:
+        message.is_tag_context = message.id not in matched_ids
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -565,7 +615,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
 
     messages_queryset = (
         ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at")
+        .order_by("created_at", "id")
         .prefetch_related(
             Prefetch(
                 "tagged_items",
@@ -581,8 +631,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
             ),
         )
     )
-    if selected_tags:
-        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
+    messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -616,6 +665,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
 
+    _mark_tag_context(current_page_messages, selected_tags, matched_ids)
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -626,6 +677,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         "page_size": page_size,
         "page_start_index": page_start_index,
         "selected_tags": selected_tags,
+        "tag_match_count": len(matched_ids),
+        "tag_context_count": len(context_ids),
         "language": language,
         "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
         "has_missing_translations": False,
@@ -683,9 +736,12 @@ def _build_full_page_message_context(request, session, messages_queryset, langua
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     """Full session transcript page."""
     session = request.experiment_session
-    context, messages_queryset = _build_session_messages_context(request, session, request.experiment)
+    experiment = request.experiment
+    context, messages_queryset = _build_session_messages_context(request, session, experiment)
     context.update(_build_full_page_message_context(request, session, messages_queryset, context["language"]))
-    return TemplateResponse(request, "experiments/components/session_messages.html", context)
+    response = TemplateResponse(request, "experiments/components/session_messages.html", context)
+    _set_messages_view_push_url(response, request, team_slug, experiment, session_id)
+    return response
 
 
 @experiment_session_view()

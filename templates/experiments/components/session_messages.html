@@ -1,7 +1,9 @@
 {% load chat_tags form_tags json_tags waffle_tags %}
-<div id="table-top" class="app-card p-0 overflow-hidden" x-data="{selectedDataset: null}">
+<div id="table-top"
+     class="app-card p-0 overflow-hidden"
+     x-data="{selectedDataset: null}"
+     data-total-messages="{{ total_messages }}">
   {% include "experiments/components/experiment_session_messages_control_panel.html" %}
-
   <!-- Loading indicator for initial messages -->
   <div id="messages-initial-loading" class="hidden">
     <div class="flex items-center justify-center p-4">
@@ -9,16 +11,13 @@
       <span class="ml-2">Loading...</span>
     </div>
   </div>
-
   <div class="flex flex-col" x-data="{commentsRow: null}">
     {% include "experiments/components/session_messages_list.html" %}
   </div>
-
   <div id="update_dataset_modal"></div>
 </div>
 {{ llm_provider_models_dict|json_script:"provider-models-dict" }}
 {{ default_translation_models_by_providers|json_script:"default-translation-models-dict" }}
-
 <script>
   window.hasMissingTranslations = {{ has_missing_translations|yesno:"true,false" }};
   if (!window.providerModels) {
