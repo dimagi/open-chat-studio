@@ -14,8 +14,8 @@ from apps.channels.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     DuplicateDeliveryStage,
+    ErrorGuardStage,
     MessageTypeValidationStage,
-    NoSpeechGuardStage,
     ParticipantIdentifierStage,
     ParticipantResolverStage,
     QueryExtractionStage,
@@ -143,9 +143,9 @@ class ChannelBase(ABC):
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
-                # After the turn is recorded, so a silent voice note still appears in
-                # the history and on the trace.
-                NoSpeechGuardStage(),
+                # After the turn is recorded, so a voice note nothing could be read out
+                # of still appears in the history and on the trace.
+                ErrorGuardStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),

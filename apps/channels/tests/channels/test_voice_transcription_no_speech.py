@@ -14,7 +14,7 @@ import pytest
 
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import BaseMessage, MediaCache
-from apps.channels.pipeline import MessageProcessingPipeline
+from apps.channels.stages.core import NO_SPEECH_MESSAGES
 from apps.channels.tests.message_examples import base_messages
 from apps.chat.exceptions import AudioTranscriptionException, NoSpeechReason
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -90,8 +90,9 @@ def test_no_speech_replies_without_erroring_or_notifying(
 
     assert channel.text_sent == ["I could not hear anything"]
 
+    # The wording for the reason reaches the error bot as the error to phrase a reply about.
     prompt = mock_event_bot_cls.return_value.get_user_message.call_args.args[0]
-    assert prompt == MessageProcessingPipeline.NO_SPEECH_PROMPTS[expected_reason]
+    assert NO_SPEECH_MESSAGES[expected_reason] in prompt
 
     assert not NotificationEvent.objects.filter(title="Audio Transcription Failed").exists()
 

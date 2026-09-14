@@ -25,8 +25,9 @@ class NoSpeechReason(StrEnum):
 class NoSpeechDetected(AudioTranscriptionException):
     """The transcriber found no speech in the audio: a silent or unintelligible voice note.
 
-    The pipeline answers the participant instead of notifying the team, so each reason
-    needs participant-facing wording in MessageProcessingPipeline.NO_SPEECH_PROMPTS.
+    Raised only by the speech service. Nothing failed, so the channel framework catches it
+    at QueryExtractionStage and hands the participant a UserActionableError instead -- each
+    reason needs participant-facing wording in NO_SPEECH_MESSAGES there.
     """
 
     def __init__(self, reason: NoSpeechReason):

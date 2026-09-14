@@ -17,7 +17,7 @@ from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
-from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, UserActionableError
+from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
@@ -557,6 +557,18 @@ class ConsentFlowStage(ProcessingStage):
 # ---------------------------------------------------------------------------
 
 
+# Participant-facing wording for a voice note the transcriber found no words in. Written
+# for the participant because the error bot rephrases it into their reply, in their
+# language. NoSpeechDetected is the speech service's vocabulary and stops here.
+NO_SPEECH_MESSAGES = {
+    NoSpeechReason.SILENCE: "No speech could be heard in the voice message you sent. Please try recording it again.",
+    NoSpeechReason.NOT_UNDERSTOOD: (
+        "The speech in the voice message you sent could not be made out."
+        " Please try recording it again, speaking clearly."
+    ),
+}
+
+
 class QueryExtractionStage(ProcessingStage):
     """Extracts the user's query from the message.
 
@@ -572,17 +584,16 @@ class QueryExtractionStage(ProcessingStage):
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
             except NoSpeechDetected as e:
-                # Defer to NoSpeechGuardStage so ChatMessageCreationStage records the
-                # turn first: the voice note is real input and belongs in the history
-                # and on the trace, even though there are no words in it. The empty
-                # query is what makes that stage keep the text empty and let the
-                # attachment carry the content.
+                # Defer so ChatMessageCreationStage records the turn first: the voice note is
+                # real input and belongs in the history and on the trace, even though there are
+                # no words in it. The empty query is what makes that stage keep the text empty
+                # and let the attachment carry the content.
                 ctx.user_query = ""
-                ctx.no_speech_reason = e.reason
+                ctx.error_reason = UserActionableError(NO_SPEECH_MESSAGES[e.reason])
             except UserActionableError:
-                # Nothing failed -- the chatbot has no transcription and the participant can
-                # send text instead. The pipeline answers them; a failure notification here
-                # would tell the team the wrong thing about a state that never self-heals.
+                # Raised by _do_transcription when the chatbot has no transcription-capable voice
+                # provider. The participant can send text instead, so this skips the failure
+                # notification below and leaves the pipeline to answer them (ADR-0065).
                 raise
             except Exception as e:
                 # Stage handles its own error
@@ -708,26 +719,29 @@ class ChatMessageCreationStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
-# NoSpeechGuardStage
+# ErrorGuardStage
 # ---------------------------------------------------------------------------
 
 
-class NoSpeechGuardStage(ProcessingStage):
-    """Stops a voice note that held no speech, once the turn has been recorded.
+class ErrorGuardStage(ProcessingStage):
+    """Raises the error QueryExtractionStage deferred, once the turn has been recorded.
 
     Sits after ChatMessageCreationStage because QueryExtractionStage cannot both
     record the turn and halt the pipeline. The pipeline answers the participant
-    from the reason.
+    from the error.
     """
 
-    span_input_fields = ("no_speech_reason",)
-
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.no_speech_reason is not None
+        return ctx.error_reason is not None
+
+    def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
+        # str() rather than a field path -- the default rendering of an exception
+        # object is its type name, which says nothing about why the turn stopped.
+        return {"error_reason": str(ctx.error_reason)}
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.no_speech_reason is not None
-        raise NoSpeechDetected(ctx.no_speech_reason)
+        assert ctx.error_reason is not None
+        raise ctx.error_reason
 
 
 # ---------------------------------------------------------------------------

@@ -10,8 +10,6 @@ from apps.channels.pipeline import (
 from apps.chat.exceptions import (
     AudioTranscriptionException,
     ChatException,
-    NoSpeechDetected,
-    NoSpeechReason,
     UserActionableError,
 )
 from apps.pipelines.exceptions import (
@@ -263,42 +261,12 @@ class TestUserCausedErrors:
         assert not issubclass(NodeUserConfigRunError, PipelineNodeRunError)
 
 
-class TestNoSpeechDetected:
-    """A voice note with no recognizable speech is participant input, not a fault."""
+class TestTranscriptionFailure:
+    """Only a genuine transcription fault reaches the pipeline as a failure.
 
-    @pytest.mark.parametrize(
-        "reason",
-        [
-            pytest.param(NoSpeechReason.SILENCE, id="silence"),
-            pytest.param(NoSpeechReason.NOT_UNDERSTOOD, id="not-understood"),
-        ],
-    )
-    @patch("apps.channels.pipeline.MessageProcessingPipeline._user_message")
-    def test_replies_with_the_prompt_for_the_reason_and_does_not_reraise(self, mock_user_message, reason):
-        mock_user_message.return_value = "I could not hear anything in that voice note"
-        error = NoSpeechDetected(reason)
-        s1 = _make_stage(side_effect=error)
-        t1 = _make_stage()
-
-        ctx = make_context()
-        pipeline = _pipeline(core=[s1], terminal=[t1])
-
-        result = pipeline.process(ctx)
-
-        assert result is ctx
-        mock_user_message.assert_called_once_with(ctx, MessageProcessingPipeline.NO_SPEECH_PROMPTS[reason], error)
-        assert ctx.early_exit_response == "I could not hear anything in that voice note"
-        t1.assert_called_once()
-
-    @patch("apps.channels.pipeline.MessageProcessingPipeline._user_message")
-    def test_is_not_recorded_as_a_processing_error(self, mock_user_message):
-        mock_user_message.return_value = "I could not hear anything in that voice note"
-        s1 = _make_stage(side_effect=NoSpeechDetected(NoSpeechReason.SILENCE))
-
-        ctx = make_context()
-        _pipeline(core=[s1], terminal=[_make_stage()]).process(ctx)
-
-        assert ctx.processing_errors == []
+    A voice note with no speech in it never gets this far: QueryExtractionStage turns
+    NoSpeechDetected into a UserActionableError, covered by TestUserActionableError.
+    """
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_real_transcription_failures_are_still_reraised(self, mock_gen):

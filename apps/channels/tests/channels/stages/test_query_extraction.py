@@ -2,10 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.stages.core import NoSpeechGuardStage, QueryExtractionStage
+from apps.channels.stages.core import NO_SPEECH_MESSAGES, ErrorGuardStage, QueryExtractionStage
 from apps.channels.tests.channels.conftest import StubCallbacks, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
-from apps.chat.exceptions import NoSpeechDetected, NoSpeechReason
+from apps.chat.exceptions import NoSpeechDetected, NoSpeechReason, UserActionableError
 
 
 def _span(ctx):
@@ -94,8 +94,11 @@ class TestQueryExtractionStage:
         ],
     )
     @patch("apps.channels.stages.core.audio_transcription_failure_notification")
-    def test_no_speech_defers_instead_of_raising(self, mock_notification, reason):
-        """Deferred so ChatMessageCreationStage still records the turn."""
+    def test_no_speech_defers_a_user_actionable_error(self, mock_notification, reason):
+        """NoSpeechDetected is the speech service's vocabulary and is translated here.
+
+        Deferred rather than raised so ChatMessageCreationStage still records the turn.
+        """
         msg = audio_message()
         experiment = MagicMock()
         experiment.voice_provider.get_speech_service.return_value.supports_transcription = True
@@ -106,7 +109,8 @@ class TestQueryExtractionStage:
 
         self.stage(ctx)
 
-        assert ctx.no_speech_reason == reason
+        assert isinstance(ctx.error_reason, UserActionableError)
+        assert str(ctx.error_reason) == NO_SPEECH_MESSAGES[reason]
         # Empty rather than None, so ChatMessageCreationStage runs and keeps the text empty.
         assert ctx.user_query == ""
         mock_notification.assert_not_called()
@@ -115,17 +119,27 @@ class TestQueryExtractionStage:
         _span(ctx).mark_span_as_error.assert_not_called()
 
 
-class TestNoSpeechGuardStage:
+class TestErrorGuardStage:
     def setup_method(self):
-        self.stage = NoSpeechGuardStage()
+        self.stage = ErrorGuardStage()
 
-    def test_raises_the_deferred_reason(self):
-        ctx = make_context(user_query="", no_speech_reason=NoSpeechReason.NOT_UNDERSTOOD)
+    def test_raises_the_deferred_error(self):
+        error = UserActionableError(NO_SPEECH_MESSAGES[NoSpeechReason.NOT_UNDERSTOOD])
+        ctx = make_context(user_query="", error_reason=error)
 
-        with pytest.raises(NoSpeechDetected) as exc_info:
+        with pytest.raises(UserActionableError) as exc_info:
             self.stage(ctx)
 
-        assert exc_info.value.reason == NoSpeechReason.NOT_UNDERSTOOD
+        assert exc_info.value is error
+
+    def test_records_the_error_on_its_span(self):
+        """The exception's type name alone would not say why the turn stopped."""
+        ctx = make_context(user_query="", error_reason=UserActionableError("no transcription here"))
+
+        with pytest.raises(UserActionableError):
+            self.stage(ctx)
+
+        assert ctx.trace_service.span.call_args.kwargs["inputs"] == {"error_reason": "no transcription here"}
 
     def test_does_not_run_for_an_ordinary_empty_query(self):
         """An attachment-only message with no caption reaches this stage with user_query == ""."""

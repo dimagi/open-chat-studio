@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException, NoSpeechDetected, NoSpeechReason, UserActionableError
+from apps.chat.exceptions import ChatException, UserActionableError
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -84,11 +84,12 @@ class MessageProcessingContext:
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
 
-    # Set by QueryExtractionStage when a voice note held no speech. It defers the
-    # signal rather than raising so ChatMessageCreationStage still records the turn;
-    # NoSpeechGuardStage raises once it has. An empty user_query cannot carry this
-    # on its own -- an attachment-only message with no caption looks identical.
-    no_speech_reason: NoSpeechReason | None = None
+    # Set by QueryExtractionStage when a voice note yielded no query -- no speech in it,
+    # or nothing able to transcribe it. It defers the error rather than raising so
+    # ChatMessageCreationStage still records the turn; ErrorGuardStage raises once it has.
+    # An empty user_query cannot carry this on its own -- an attachment-only message with
+    # no caption looks identical.
+    error_reason: UserActionableError | None = None
 
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,
@@ -162,11 +163,10 @@ class MessageProcessingPipeline:
        replies with the generic DEFAULT_ERROR_RESPONSE_TEXT, runs terminal
        stages, and is logged as a warning WITHOUT being re-raised (which
        would report it to Sentry and fail the task with no useful retry).
-    4. NoSpeechDetected -- the transcriber found no speech in the
-       participant's voice note. Replies with a message generated from
-       NO_SPEECH_PROMPTS via EventBot, falls back to
-       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is NOT
-       re-raised: it is user input, not a fault.
+    4. UserActionableError -- the participant can fix what went wrong by
+       changing what they send. Replies with a message generated from the
+       error via EventBot, falls back to DEFAULT_ERROR_RESPONSE_TEXT, runs
+       terminal stages, and is NOT re-raised: it is not a fault (ADR-0065).
     5. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
@@ -178,18 +178,6 @@ class MessageProcessingPipeline:
     # Errors in how the chatbot was configured, not bugs: they get the canned reply
     # and are never re-raised.
     CONFIGURATION_EXCEPTIONS = (PipelineBuildError, PipelineNodeBuildError, CodeNodeRunError, NodeUserConfigRunError)
-
-    # Fed to the error bot, which turns them into advice in the participant's language.
-    NO_SPEECH_PROMPTS = {
-        NoSpeechReason.SILENCE: (
-            "Tell the user that no speech could be heard in the voice message they sent"
-            " and that they should try recording it again."
-        ),
-        NoSpeechReason.NOT_UNDERSTOOD: (
-            "Tell the user that the speech in the voice message they sent could not be made out"
-            " and that they should try recording it again, speaking clearly."
-        ),
-    }
 
     def __init__(
         self,
@@ -216,16 +204,13 @@ class MessageProcessingPipeline:
            error text, log a warning, and set ctx.early_exit_response --
            but do NOT re-raise (misconfiguration is not a bug worth
            reporting).
-        5. If any raises NoSpeechDetected, reply with a message generated
-           from the reason and set ctx.early_exit_response -- but do NOT
-           re-raise (silence is user input, not a bug).
-        6. If any raises UserActionableError, reply with a message generated
+        5. If any raises UserActionableError, reply with a message generated
            from the error and set ctx.early_exit_response -- but do NOT
            re-raise (the participant can act on it, so it is not a bug).
-        7. If any raises an unexpected exception, generate an error message
+        6. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        8. Run terminal stages unconditionally (they always fire).
-        9. If there was an unexpected exception, re-raise it after terminal
+        7. Run terminal stages unconditionally (they always fire).
+        8. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         try:
@@ -281,10 +266,6 @@ class MessageProcessingPipeline:
             )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
-            return None
-        if isinstance(e, NoSpeechDetected):
-            logger.info("No speech detected in voice message: %s", e.reason)
-            ctx.early_exit_response = self._user_message(ctx, self.NO_SPEECH_PROMPTS[e.reason], e)
             return None
         if isinstance(e, UserActionableError):
             # Answered, never re-raised -- see ADR-0065.
