@@ -453,7 +453,7 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     table = SchedulesTable([schedule_dict])
     if not show_chatbot:
         table.exclude = ("experiment",)
-    return render(request, "events/components/schedule_row.html", {"row": table.rows[0]})
+    return render(request, "table/table_row.html", {"row": table.rows[0]})
 
 
 @permission_required("experiments.view_participant")
