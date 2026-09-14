@@ -205,7 +205,7 @@ def _get_portless_name(c: Context) -> str:
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
     _disable_stdin_forwarding(c)
-    if _has_portless(c):
+    if _has_portless(c) and not public:
         portless_name = _get_portless_name(c)
         runserver_command = f"portless {portless_name} uv run manage.py runserver"
     else:
