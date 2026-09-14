@@ -584,20 +584,20 @@ class QueryExtractionStage(ProcessingStage):
             try:
                 ctx.user_query = self._transcribe_voice(ctx)
             except NoSpeechDetected as e:
-                self._defer(ctx, UserActionableError(NO_SPEECH_MESSAGES[e.reason]))
+                self._defer_exception(ctx, UserActionableError(NO_SPEECH_MESSAGES[e.reason]))
             except UserActionableError as e:
-                self._defer(ctx, e)
+                self._defer_exception(ctx, e)
             except Exception as e:
                 # Unlike the branches above, this is a fault rather than something the
                 # participant can act on, so the team is told about it.
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
                 ctx.processing_errors.append(f"Voice transcription failed: {e}")
-                self._defer(ctx, e)
+                self._defer_exception(ctx, e)
         else:
             ctx.user_query = ctx.message.message_text
 
     @staticmethod
-    def _defer(ctx: MessageProcessingContext, error: Exception) -> None:
+    def _defer_exception(ctx: MessageProcessingContext, error: Exception) -> None:
         """Hold the error on the context instead of raising it from this stage.
 
         The voice note is real input and belongs in the history and on the trace even though
