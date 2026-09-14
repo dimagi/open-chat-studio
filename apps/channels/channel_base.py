@@ -144,7 +144,8 @@ class ChannelBase(ABC):
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 # After the turn is recorded, so a voice note nothing could be read out
-                # of still appears in the history and on the trace.
+                # of still appears in the history and on the trace. Every pipeline with a
+                # QueryExtractionStage needs this stage, in this position.
                 ErrorGuardStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),

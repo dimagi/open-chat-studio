@@ -15,6 +15,7 @@ from apps.channels.stages.core import (
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
+    ErrorGuardStage,
     MessageTypeValidationStage,
     ParticipantIdentifierStage,
     QueryExtractionStage,
@@ -84,6 +85,7 @@ class WebChannel(ChannelBase):
                 # No ConsentFlowStage — web uses UI-based consent
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ErrorGuardStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],

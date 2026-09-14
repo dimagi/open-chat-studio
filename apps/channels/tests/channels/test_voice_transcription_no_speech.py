@@ -115,6 +115,28 @@ def test_real_transcription_failure_still_raises_and_notifies(mock_event_bot_cls
 
 @pytest.mark.django_db()
 @patch("apps.channels.pipeline.EventBot")
+def test_real_transcription_failure_records_the_turn_before_raising(mock_event_bot_cls, azure_voice_session):
+    """The fault is raised late enough that the voice note is already in the history.
+
+    The participant is told something went wrong, and that reply reads as a non-sequitur
+    if the note it is about is missing.
+    """
+    mock_event_bot_cls.return_value.get_user_message.return_value = "something went wrong"
+    channel = _channel(azure_voice_session)
+
+    with (
+        patch.object(speechsdk, "SpeechConfig", side_effect=RuntimeError("invalid subscription key")),
+        pytest.raises(AudioTranscriptionException),
+    ):
+        channel.new_user_message(_voice_message())
+
+    human = ChatMessage.objects.get(chat=azure_voice_session.chat, message_type=ChatMessageType.HUMAN)
+    assert human.get_attached_files().count() == 1
+    assert channel.text_sent == ["something went wrong"]
+
+
+@pytest.mark.django_db()
+@patch("apps.channels.pipeline.EventBot")
 def test_no_speech_records_the_turn_and_links_it_to_the_trace(mock_event_bot_cls, azure_voice_session):
     """The turn must be visible in chat history and reachable from the trace both ways.
 

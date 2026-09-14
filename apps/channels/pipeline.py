@@ -85,11 +85,11 @@ class MessageProcessingContext:
     early_exit_response: str | None = None
 
     # Set by QueryExtractionStage when a voice note yielded no query -- no speech in it,
-    # or nothing able to transcribe it. It defers the error rather than raising so
-    # ChatMessageCreationStage still records the turn; ErrorGuardStage raises once it has.
-    # An empty user_query cannot carry this on its own -- an attachment-only message with
-    # no caption looks identical.
-    error_reason: UserActionableError | None = None
+    # nothing able to transcribe it, or transcription failed outright. It defers the error
+    # rather than raising so ChatMessageCreationStage still records the turn; ErrorGuardStage
+    # raises once it has. An empty user_query cannot carry this on its own -- an
+    # attachment-only message with no caption looks identical.
+    error_reason: Exception | None = None
 
     # --- Sending errors -----------------------------------------------------
     # Populated by ResponseSendingStage for each send failure (text, voice,

@@ -588,20 +588,22 @@ class QueryExtractionStage(ProcessingStage):
             except UserActionableError as e:
                 self._defer(ctx, e)
             except Exception as e:
-                # Stage handles its own error
+                # Unlike the branches above, this is a fault rather than something the
+                # participant can act on, so the team is told about it.
                 audio_transcription_failure_notification(ctx.experiment, platform=ctx.experiment_channel.platform)
                 ctx.processing_errors.append(f"Voice transcription failed: {e}")
-                raise
+                self._defer(ctx, e)
         else:
             ctx.user_query = ctx.message.message_text
 
     @staticmethod
-    def _defer(ctx: MessageProcessingContext, error: UserActionableError) -> None:
-        """Hold the error for ErrorGuardStage so ChatMessageCreationStage records the turn first.
+    def _defer(ctx: MessageProcessingContext, error: Exception) -> None:
+        """Hold the error on the context instead of raising it from this stage.
 
         The voice note is real input and belongs in the history and on the trace even though
-        nothing could be read out of it. The empty query is what makes that stage keep the
-        text empty and let the attachment carry the content.
+        nothing could be read out of it. Raising here would stop the pipeline before the turn
+        is recorded; the held error is raised later, once it has been. The empty query is what
+        keeps the recorded text empty and lets the attachment carry the content.
         """
         ctx.user_query = ""
         ctx.error_reason = error
@@ -730,8 +732,10 @@ class ErrorGuardStage(ProcessingStage):
     """Raises the error QueryExtractionStage deferred, once the turn has been recorded.
 
     Sits after ChatMessageCreationStage because QueryExtractionStage cannot both
-    record the turn and halt the pipeline. The pipeline answers the participant
-    from the error.
+    record the turn and halt the pipeline. Every pipeline that runs QueryExtractionStage
+    needs this stage in that position, or a deferred error is never raised and the
+    participant gets no reply at all. The pipeline answers the participant from the error,
+    and re-raises it if it was a fault rather than something they can act on.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:

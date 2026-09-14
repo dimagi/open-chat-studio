@@ -2,10 +2,26 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.stages.core import NO_SPEECH_MESSAGES, ErrorGuardStage, QueryExtractionStage
+from apps.channels.api_channel import ApiChannel
+from apps.channels.channel_base import ChannelBase
+from apps.channels.evaluation_channel import EvaluationChannel
+from apps.channels.registry import PLATFORM_CHANNEL_CLASSES
+from apps.channels.stages.core import (
+    NO_SPEECH_MESSAGES,
+    AttachmentHydrationStage,
+    ChatMessageCreationStage,
+    ErrorGuardStage,
+    QueryExtractionStage,
+)
 from apps.channels.tests.channels.conftest import StubCallbacks, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
+from apps.channels.web_channel import WebChannel
 from apps.chat.exceptions import NoSpeechDetected, NoSpeechReason, UserActionableError
+
+_CHANNEL_CLASSES = sorted(
+    {ChannelBase, ApiChannel, WebChannel, EvaluationChannel, *PLATFORM_CHANNEL_CLASSES.values()},
+    key=lambda cls: cls.__name__,
+)
 
 
 def _span(ctx):
@@ -68,23 +84,26 @@ class TestQueryExtractionStage:
         assert len(callbacks.echo_transcript_calls) == 0
 
     @patch("apps.channels.stages.core.audio_transcription_failure_notification")
-    def test_transcription_failure_notifies(self, mock_notification):
+    def test_transcription_failure_notifies_and_defers(self, mock_notification):
+        """A genuine fault is deferred too, so the voice note still reaches the history.
+
+        It is a fault rather than something the participant can act on, so it also
+        notifies the team and is recorded as a processing error.
+        """
         msg = audio_message()
         callbacks = StubCallbacks()
         experiment = MagicMock()
         experiment.voice_provider.get_speech_service.return_value.supports_transcription = True
-        experiment.voice_provider.get_speech_service.return_value.transcribe_audio.side_effect = RuntimeError(
-            "transcription failed"
-        )
+        error = RuntimeError("transcription failed")
+        experiment.voice_provider.get_speech_service.return_value.transcribe_audio.side_effect = error
         ctx = make_context(message=msg, callbacks=callbacks, experiment=experiment)
 
-        with pytest.raises(RuntimeError, match="transcription failed"):
-            self.stage(ctx)
+        self.stage(ctx)
 
+        assert ctx.error_reason is error
+        assert ctx.user_query == ""
         mock_notification.assert_called_once()
         assert any("Voice transcription failed" in e for e in ctx.processing_errors)
-        # The raise tears the span down, which is what marks the trace as errored.
-        assert not _span(ctx).set_outputs.called
 
     @pytest.mark.parametrize(
         "reason",
@@ -143,11 +162,17 @@ class TestErrorGuardStage:
     def setup_method(self):
         self.stage = ErrorGuardStage()
 
-    def test_raises_the_deferred_error(self):
-        error = UserActionableError(NO_SPEECH_MESSAGES[NoSpeechReason.NOT_UNDERSTOOD])
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(UserActionableError(NO_SPEECH_MESSAGES[NoSpeechReason.NOT_UNDERSTOOD]), id="actionable"),
+            pytest.param(RuntimeError("transcription failed"), id="fault"),
+        ],
+    )
+    def test_raises_the_deferred_error(self, error):
         ctx = make_context(user_query="", error_reason=error)
 
-        with pytest.raises(UserActionableError) as exc_info:
+        with pytest.raises(type(error)) as exc_info:
             self.stage(ctx)
 
         assert exc_info.value is error
@@ -168,3 +193,23 @@ class TestErrorGuardStage:
         self.stage(ctx)
 
         assert ctx.early_exit_response is None
+
+
+class TestErrorGuardIsWired:
+    """A deferred error is only ever raised by ErrorGuardStage.
+
+    A pipeline that extracts a query but omits the guard would swallow the error entirely:
+    the participant would get no reply, and a transcription fault would never be reported.
+    The guard must also come after the turn is recorded, or the voice note it is about is
+    missing from the history.
+    """
+
+    @pytest.mark.parametrize("channel_cls", _CHANNEL_CLASSES, ids=lambda cls: cls.__name__)
+    def test_query_extraction_is_always_followed_by_the_guard(self, channel_cls):
+        stub_self = MagicMock(attachment_hydration_stage_class=AttachmentHydrationStage)
+        stage_types = [type(stage) for stage in channel_cls._build_pipeline(stub_self).core_stages]
+        if QueryExtractionStage not in stage_types:
+            pytest.skip(f"{channel_cls.__name__} does not extract a query")
+
+        assert ErrorGuardStage in stage_types, f"{channel_cls.__name__} never raises a deferred error"
+        assert stage_types.index(ErrorGuardStage) > stage_types.index(ChatMessageCreationStage)
