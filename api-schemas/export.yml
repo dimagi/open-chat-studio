@@ -2552,10 +2552,6 @@ components:
           minimum: 1
           description: How many candidates to retrieve from each of the dense and
             lexical searches before fusing them.
-        enable_reranking:
-          type: boolean
-          description: If enabled, retrieval candidates are rescored against the query
-            by a reranker before the best of them are returned.
         rerank_model:
           type: string
           description: Reranker model, named as the provider names it. A model the

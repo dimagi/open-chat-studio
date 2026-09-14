@@ -6,9 +6,14 @@ from apps.documents.rerankers import (
     VOYAGE_MAX_RETRIES,
     VOYAGE_TIMEOUT_SECONDS,
     RerankedDocument,
+    RerankerError,
     VoyageReranker,
 )
 from apps.documents.tests.retrieval_helpers import voyage_response
+
+
+class _VoyageError(Exception):
+    pass
 
 
 class TestVoyageReranker:
@@ -71,14 +76,21 @@ class TestVoyageReranker:
 
         client_cls.assert_not_called()
 
-    def test_provider_failures_propagate(self):
-        """The fallback policy lives in `apps.documents.retrieval`, in one place. Swallowing the
-        error here would make a failed call indistinguishable from a query that ranked nothing.
-        """
+    def test_provider_failures_are_normalized(self):
         reranker = VoyageReranker(api_key="key", model="rerank-2")
         with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.side_effect = RuntimeError("429 rate limited")
-            with pytest.raises(RuntimeError, match="429"):
+            with mock.patch("voyageai.error.VoyageError", _VoyageError):
+                client_cls.return_value.rerank.side_effect = _VoyageError("429 rate limited")
+                with pytest.raises(RerankerError) as exc_info:
+                    reranker.rerank("q", ["a", "b"], limit=2)
+
+        assert isinstance(exc_info.value.__cause__, _VoyageError)
+
+    def test_unexpected_errors_propagate(self):
+        reranker = VoyageReranker(api_key="key", model="rerank-2")
+        with mock.patch("voyageai.Client") as client_cls:
+            client_cls.return_value.rerank.side_effect = RuntimeError("adapter bug")
+            with pytest.raises(RuntimeError, match="adapter bug"):
                 reranker.rerank("q", ["a", "b"], limit=2)
 
     def test_accepts_any_sequence_of_documents(self):

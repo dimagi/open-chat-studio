@@ -13,11 +13,10 @@ from django.test.utils import CaptureQueriesContext
 from waffle.testutils import override_flag
 
 from apps.documents.models import Collection, SearchLanguage
-from apps.documents.rerankers import RerankedDocument, VoyageReranker
+from apps.documents.rerankers import RerankedDocument, RerankerError, VoyageReranker
 from apps.documents.retrieval import MAX_RERANK_CONTEXT_CHARS, search_collection
 from apps.documents.tests.retrieval_helpers import (
     HYBRID_FLAG,
-    RERANK_FLAG,
     StubReranker,
     add_chunk,
     make_indexed_collection,
@@ -121,8 +120,7 @@ class TestRerankStage:
 
     @pytest.mark.parametrize("hybrid", [True, False], ids=["fused-candidates", "dense-candidates"])
     def test_reranks_either_kind_of_candidate_list(self, hybrid):
-        """The two flags are independent, so the stage has to work on a fused ranking and on a
-        dense-only one."""
+        """The stage can handle a fused ranking or a dense fallback with no lexical hits."""
         collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
         first = add_chunk(collection, file, "Paris is the capital of France.", unit_vector(0))
         second = add_chunk(collection, file, "Lyon is a city in France.", unit_vector(1))
@@ -154,7 +152,7 @@ class TestRerankStageFallbacks:
     @pytest.mark.parametrize(
         "reranker",
         [
-            pytest.param(StubReranker(error=RuntimeError("provider is down")), id="provider-error"),
+            pytest.param(StubReranker(error=RerankerError("provider is down")), id="provider-error"),
             pytest.param(StubReranker([RerankedDocument(9, 0.9)]), id="out-of-range-index"),
             pytest.param(StubReranker([RerankedDocument(0, 0.9), RerankedDocument(0, 0.1)]), id="duplicate-index"),
             pytest.param(StubReranker([]), id="empty-ranking"),
@@ -178,10 +176,19 @@ class TestRerankStageFallbacks:
         for index in range(5):
             add_chunk(collection, file, f"chunk {index}", unit_vector(index))
 
-        reranker = StubReranker(error=RuntimeError("provider is down"))
+        reranker = StubReranker(error=RerankerError("provider is down"))
         results = search_with_reranker(collection, "chunk", reranker, top_k=2)
 
         assert len(results) == 2
+
+    def test_an_unexpected_error_propagates(self):
+        collection, file = make_indexed_collection()
+        for index in range(2):
+            add_chunk(collection, file, f"chunk {index}", unit_vector(index))
+
+        reranker = StubReranker(error=RuntimeError("adapter bug"))
+        with pytest.raises(RuntimeError, match="adapter bug"):
+            search_with_reranker(collection, "chunk", reranker, top_k=2)
 
     def test_a_request_for_no_results_is_not_sent_to_the_provider(self):
         """`top_k` of 0 is what makes an empty ranking legitimate. Answering it here keeps the
@@ -304,7 +311,7 @@ class TestRerankerGating:
     def test_builds_a_reranker_for_the_configured_provider_and_model(self):
         collection, _ = rerankable_collection(rerank_model="rerank-2-lite")
 
-        with override_flag(RERANK_FLAG, active=True):
+        with override_flag(HYBRID_FLAG, active=True):
             reranker = collection.get_reranker()
 
         assert isinstance(reranker, VoyageReranker)
@@ -315,16 +322,9 @@ class TestRerankerGating:
         behave exactly as it did before, until the flag is turned on for its team."""
         collection, _ = rerankable_collection()
 
-        with override_flag(RERANK_FLAG, active=False):
+        with override_flag(HYBRID_FLAG, active=False):
             assert collection.get_reranker() is None
             assert collection.reranking_enabled is False
-
-    def test_disabled_on_the_collection_builds_nothing(self):
-        collection, _ = rerankable_collection()
-        collection.enable_reranking = False
-
-        with override_flag(RERANK_FLAG, active=True):
-            assert collection.get_reranker() is None
 
     def test_remote_indexes_build_nothing(self):
         """A remote index's chunks live at the provider and never reach a ranking stage OCS
@@ -332,7 +332,7 @@ class TestRerankerGating:
         collection, _ = rerankable_collection()
         collection.is_remote_index = True
 
-        with override_flag(RERANK_FLAG, active=True):
+        with override_flag(HYBRID_FLAG, active=True):
             assert collection.get_reranker() is None
 
     @pytest.mark.parametrize(
@@ -349,13 +349,13 @@ class TestRerankerGating:
         collection, _ = rerankable_collection()
         setattr(collection, field, value)
 
-        with override_flag(RERANK_FLAG, active=True):
+        with override_flag(HYBRID_FLAG, active=True):
             assert collection.reranking_enabled is False
             assert collection.get_reranker() is None
 
     def test_deciding_reads_no_provider_row(self):
         """`reranking_enabled` is asked on every search, and the chat search tools ask it before
-        collecting conversation context, so it must answer without a provider fetch:
+        formatting conversation context, so it must answer without a provider fetch:
         `reranker_provider` would load the row, `reranker_provider_id` is already there.
 
         The collection is re-loaded first because assigning the FK caches the object on the
@@ -364,7 +364,7 @@ class TestRerankerGating:
         collection, _ = rerankable_collection()
         collection = Collection.objects.get(id=collection.id)
 
-        with override_flag(RERANK_FLAG, active=True):
+        with override_flag(HYBRID_FLAG, active=True):
             with CaptureQueriesContext(connection) as queries:
                 assert collection.reranking_enabled is True
 
@@ -378,7 +378,7 @@ class TestRerankerGating:
         collection.reranker_provider = LlmProviderFactory.create(team=collection.team)
 
         with caplog.at_level(logging.WARNING, logger="ocs.documents"):
-            with override_flag(RERANK_FLAG, active=True):
+            with override_flag(HYBRID_FLAG, active=True):
                 assert collection.get_reranker() is None
 
         assert "no rerank endpoint" in caplog.text
@@ -395,7 +395,7 @@ class TestRerankerGating:
         )
 
         with caplog.at_level(logging.WARNING, logger="ocs.documents"):
-            with override_flag(RERANK_FLAG, active=True):
+            with override_flag(HYBRID_FLAG, active=True):
                 assert collection.get_reranker() is None
 
         assert "belongs to another team" in caplog.text
@@ -411,7 +411,7 @@ class TestRerankerGating:
         )
 
         with caplog.at_level(logging.WARNING, logger="ocs.documents"):
-            with override_flag(RERANK_FLAG, active=True):
+            with override_flag(HYBRID_FLAG, active=True):
                 assert collection.get_reranker() is None
 
         assert "credentials are not usable" in caplog.text
@@ -433,7 +433,7 @@ class TestRerankingThroughTheProvider:
         with mock.patch("voyageai.Client") as client_cls:
             client_cls.return_value.rerank.return_value = voyage_response((1, 0.91), (0, 0.12))
             with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
-                with override_flag(RERANK_FLAG, active=True):
+                with override_flag(HYBRID_FLAG, active=True):
                     results = search_collection(collection, "alpha", top_k=2)
 
         # Dense search puts `first` on top; the provider's ranking overrides it.
@@ -445,7 +445,7 @@ class TestRerankingThroughTheProvider:
 
 @pytest.mark.django_db()
 class TestRerankColumnDatabaseDefaults:
-    """The three non-nullable rerank columns carry database-level defaults, not just Python ones.
+    """The non-nullable rerank columns carry database-level defaults, not just Python ones.
 
     Django applies `default` when *it* builds the INSERT, and drops the DDL default once the
     column is backfilled. An INSERT from the release that predates the column therefore names
@@ -456,7 +456,6 @@ class TestRerankColumnDatabaseDefaults:
     @pytest.mark.parametrize(
         ("column", "expected"),
         [
-            pytest.param("enable_reranking", "false", id="enable-reranking"),
             pytest.param("rerank_model", "'rerank-2'", id="rerank-model"),
             pytest.param("rerank_top_n", "50", id="rerank-top-n"),
         ],

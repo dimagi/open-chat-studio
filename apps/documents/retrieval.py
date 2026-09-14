@@ -3,24 +3,23 @@
 `search_collection` is the single entry point used by the chat search tools and the
 collection query preview, so both share one definition of "what retrieval means".
 
-With both feature flags inactive for a collection's team, retrieval is dense-only and returns
-exactly what it did before either stage existed. The two stages are independent, and each falls
-back to what sits beneath it:
+With the hybrid-search feature flag inactive for a collection's team, retrieval is dense-only and
+returns exactly what it did before either stage existed. Each stage falls back to what sits beneath
+it:
 
 `flag_hybrid_search` adds a lexical ranking from Postgres full-text search, fused with the dense
 ranking by Reciprocal Rank Fusion (RRF). RRF fuses *ranks*, not scores, on purpose: cosine
 distances and `ts_rank_cd` values live on incomparable scales, so score-level fusion would need
 brittle per-query normalization. A query with no lexical hits leaves the dense ranking as it is.
 
-`flag_reranking` rescores a wider pool of whatever candidates the stages above produced --
-dense-only or fused -- against the query, and returns the best `top_k`. A reranker that fails or
-answers with something unusable leaves the ranking it was given as it is.
+When a reranker provider and model are configured, reranking rescores a wider pool of retrieved
+candidates against the query and returns the best `top_k`. A reranker that fails or answers with
+something unusable leaves the ranking it was given as it is.
 """
 
 import functools
 import logging
 import operator
-import time
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
@@ -30,7 +29,7 @@ from django.db.models import F
 from pgvector.django import CosineDistance
 
 from apps.documents.models import Collection, SearchLanguage, chunk_from_indexed_file
-from apps.documents.rerankers import RerankedDocument, Reranker
+from apps.documents.rerankers import RerankedDocument, Reranker, RerankerError
 from apps.files.models import FileChunkEmbedding
 
 logger = logging.getLogger("ocs.retrieval")
@@ -145,14 +144,13 @@ def _rerank(
         # whatever its embedding came out as, but a reranker has no such fallback.
         return candidates[:top_k]
 
-    started = time.monotonic()
     try:
         ranked = reranker.rerank(
             _rerank_query(query, context),
             [candidate.contextualized_text for candidate in candidates],
             limit=top_k,
         )
-    except Exception:
+    except RerankerError:
         logger.exception(
             "Reranking failed; falling back to the un-reranked ranking",
             extra={"candidate_count": len(candidates), "top_k": top_k},
@@ -162,14 +160,6 @@ def _rerank(
     if not _ranking_describes_candidates(ranked, len(candidates)):
         return candidates[:top_k]
 
-    logger.info(
-        "Reranked collection retrieval candidates",
-        extra={
-            "candidate_count": len(candidates),
-            "result_count": len(ranked),
-            "duration_ms": round((time.monotonic() - started) * 1000),
-        },
-    )
     results = []
     for item in ranked:
         chunk = candidates[item.index]

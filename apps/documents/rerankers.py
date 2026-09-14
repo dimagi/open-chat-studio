@@ -8,10 +8,10 @@ how each half happened to retrieve them.
 Only a hosted reranker is implemented, backed by Voyage AI. A local cross-encoder and Cohere are
 both left as follow-ups: each would add a third-party dependency, where Voyage adds none.
 
-There is no no-op implementation. A collection with reranking off returns None from
-`Collection.get_reranker()` and `apps.documents.retrieval` skips the stage outright, which is
-both cheaper than scoring through an identity function and leaves the `distance` and
-`fused_score` annotations that the collection query preview renders in place.
+There is no no-op implementation. A collection without an active gate and complete reranker
+configuration returns None from `Collection.get_reranker()`, and `apps.documents.retrieval` skips
+the stage outright. This leaves the `distance` and `fused_score` annotations that the collection
+query preview renders in place.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -24,6 +24,10 @@ from typing import NamedTuple
 # un-reranked ranking.
 VOYAGE_TIMEOUT_SECONDS = 10.0
 VOYAGE_MAX_RETRIES = 1
+
+
+class RerankerError(Exception):
+    """An expected failure while calling a reranking provider."""
 
 
 class RerankedDocument(NamedTuple):
@@ -40,8 +44,8 @@ class Reranker(metaclass=ABCMeta):
     def rerank(self, query: str, documents: Sequence[str], *, limit: int) -> list[RerankedDocument]:
         """Score every document against `query` and return at most `limit`, best first.
 
-        Implementations raise on failure rather than degrading. The fallback policy -- keep the
-        order retrieval already produced -- belongs to the single caller in
+        Implementations normalize expected provider failures to `RerankerError` rather than
+        degrading. The fallback policy -- keep the order retrieval already produced -- belongs to the single caller in
         `apps.documents.retrieval`, so it is stated once instead of in every implementation, and
         an empty return stays distinguishable from a call that failed.
         """
@@ -71,14 +75,17 @@ class VoyageReranker(Reranker):
         import voyageai  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         client = voyageai.Client(api_key=self._api_key, timeout=self._timeout, max_retries=VOYAGE_MAX_RETRIES)
-        response = client.rerank(
-            query=query,
-            documents=documents,
-            model=self._model,
-            top_k=min(limit, len(documents)),
-            # Clip the pair to the model's context window rather than have the call rejected
-            # outright. Documents are chunk-sized and the query is bounded by its caller (see
-            # `apps.documents.retrieval`), so this is a guard, not the normal path.
-            truncation=True,
-        )
+        try:
+            response = client.rerank(
+                query=query,
+                documents=documents,
+                model=self._model,
+                top_k=min(limit, len(documents)),
+                # Clip the pair to the model's context window rather than have the call rejected
+                # outright. Documents are chunk-sized and the query is bounded by its caller (see
+                # `apps.documents.retrieval`), so this is a guard, not the normal path.
+                truncation=True,
+            )
+        except voyageai.error.VoyageError as exc:
+            raise RerankerError from exc
         return [RerankedDocument(index=result.index, score=result.relevance_score) for result in response.results]

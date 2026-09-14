@@ -46,6 +46,7 @@ dependencies = [
     "langchain-openai>=1.4.1",
     "langchain_google_genai",
     "langchain-voyageai",
+    "voyageai==0.5.0",
     "langchain-community>=0.4.2",
     "langfuse>=4.14.1",
     "langgraph>=1.2.9",

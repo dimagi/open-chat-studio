@@ -13,7 +13,7 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
 
@@ -21,7 +21,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-from apps.chat.models import ChatAttachment, ChatMessageType
+from apps.chat.models import ChatAttachment
 from apps.documents.models import Collection
 from apps.documents.retrieval import search_collection
 from apps.events.forms import ScheduledMessageConfigForm
@@ -156,26 +156,17 @@ def _get_search_tool_footer(with_citations: bool):
 RERANK_CONTEXT_MESSAGE_COUNT = 6
 
 
-def _recent_conversation_context(collection, session: ExperimentSession | None) -> str | None:
-    """The tail of the conversation, for the reranker's view of the query.
-
-    Returns None unless reranking is actually active for the collection. The rerank stage is the
-    only consumer and it is off by default, so the query this costs must not be paid by every
-    search. `reranking_enabled` is a cached waffle lookup, which is the cheaper of the two.
-    """
-    if session is None or not collection.reranking_enabled:
+def _recent_conversation_context(collection, graph_state: dict) -> str | None:
+    """Return recent human and AI turns already loaded into the graph state."""
+    if not collection.reranking_enabled:
         return None
 
-    # System messages are excluded: they are prompts and summaries, not turns, and would crowd
-    # out the exchange the context exists to carry.
-    recent = list(
-        session.chat.messages.filter(message_type__in=[ChatMessageType.HUMAN, ChatMessageType.AI])
-        .order_by("-created_at")
-        .values_list("message_type", "content")[:RERANK_CONTEXT_MESSAGE_COUNT]
-    )
-    # Newest first out of the database, oldest first into the context, so it reads as a transcript.
-    recent.reverse()
-    turns = [f"{ChatMessageType(message_type).role}: {content}" for message_type, content in recent]
+    turns = []
+    for message in graph_state.get("messages", []):
+        if isinstance(message, HumanMessage | AIMessage) and (content := message.text.strip()):
+            role = "user" if isinstance(message, HumanMessage) else "assistant"
+            turns.append(f"{role}: {content}")
+    turns = turns[-RERANK_CONTEXT_MESSAGE_COUNT:]
     return "\n".join(turns) or None
 
 
@@ -185,7 +176,7 @@ def _perform_collection_search(
     max_results: int = 5,
     generate_citations: bool = True,
     include_collection_info: bool = False,
-    session: ExperimentSession | None = None,
+    graph_state: dict | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -196,8 +187,7 @@ def _perform_collection_search(
         max_results: Maximum number of results to return
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
-        session: The session this search is part of, when there is one. Its recent turns condition
-            the reranker; it is unused when reranking is not active for the collection.
+        graph_state: The LangGraph state containing the conversation already loaded for the LLM.
 
     Returns:
         Formatted search results string
@@ -206,7 +196,7 @@ def _perform_collection_search(
         collection=collection,
         query=query,
         top_k=max_results,
-        context=_recent_conversation_context(collection, session),
+        context=_recent_conversation_context(collection, graph_state or {}),
     )
 
     if not embeddings:
@@ -573,7 +563,7 @@ class SearchIndexTool(CustomBaseTool):
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
 
-    def action(self, query: str) -> str:
+    def action(self, query: str, graph_state: dict | None = None) -> str:
         """
         Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
         rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
@@ -585,7 +575,7 @@ class SearchIndexTool(CustomBaseTool):
             max_results=self.search_config.max_results,
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
-            session=self.experiment_session,
+            graph_state=graph_state,
         )
 
 
@@ -603,7 +593,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     generate_citations: bool = True
     allowed_collection_ids: list[int]
 
-    def action(self, collection_index_id: int, query: str) -> str:
+    def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
@@ -623,7 +613,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             max_results=self.max_results,
             generate_citations=self.generate_citations,
             include_collection_info=True,
-            session=self.experiment_session,
+            graph_state=graph_state,
         )
 
 

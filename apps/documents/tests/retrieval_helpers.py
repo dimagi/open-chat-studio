@@ -21,7 +21,6 @@ from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 HYBRID_FLAG = "flag_hybrid_search"
-RERANK_FLAG = "flag_reranking"
 
 
 def voyage_response(*pairs: tuple[int, float]):
@@ -98,7 +97,7 @@ def search_with_reranker(collection, query, reranker, *, top_k=5, context=None, 
 
 def rerankable_collection(**kwargs):
     """A collection configured so that `get_reranker` has everything it needs."""
-    collection, file = make_indexed_collection(enable_reranking=True, **kwargs)
+    collection, file = make_indexed_collection(**kwargs)
     collection.reranker_provider = LlmProviderFactory.create(
         team=collection.team,
         type=str(LlmProviderTypes.voyage),

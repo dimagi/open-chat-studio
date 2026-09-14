@@ -18,6 +18,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
+from apps.documents.rerankers import RerankerError, VoyageReranker
 from apps.documents.views import _queue_document_source_sync
 from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.index_managers import OpenAILocalIndexManager
@@ -933,7 +934,6 @@ class TestQueryCollectionView:
             is_remote_index=False,
             llm_provider=LlmProviderFactory.create(team=team),
             embedding_provider_model=EmbeddingProviderModelFactory.create(team=team),
-            enable_reranking=True,
             reranker_provider=LlmProviderFactory.create(
                 team=team, type=str(LlmProviderTypes.voyage), config={"voyage_api_key": "test-voyage-key"}
             ),
@@ -977,7 +977,7 @@ class TestQueryCollectionView:
                     mock.Mock(index=0, relevance_score=0.21),
                 ]
             )
-            with override_flag("flag_reranking", active=True):
+            with override_flag("flag_hybrid_search", active=True):
                 response = self._get(client, collection)
 
         assert response.status_code == 200
@@ -993,7 +993,7 @@ class TestQueryCollectionView:
         page it has always been."""
         collection, chunks = collection_with_chunks
 
-        with override_flag("flag_reranking", active=False):
+        with override_flag("flag_hybrid_search", active=False):
             response = self._get(client, collection)
 
         html = response.content.decode()
@@ -1006,9 +1006,8 @@ class TestQueryCollectionView:
         an error."""
         collection, chunks = collection_with_chunks
 
-        with mock.patch("voyageai.Client") as client_cls:
-            client_cls.return_value.rerank.side_effect = RuntimeError("provider is down")
-            with override_flag("flag_reranking", active=True):
+        with mock.patch.object(VoyageReranker, "rerank", side_effect=RerankerError("provider is down")):
+            with override_flag("flag_hybrid_search", active=True):
                 response = self._get(client, collection)
 
         assert response.status_code == 200

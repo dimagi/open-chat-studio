@@ -270,17 +270,6 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     # Reranking. Literal defaults for the same reason as the hybrid search knobs above, and off
     # the pipeline node UI for the same reason too.
-    enable_reranking = models.BooleanField(
-        default=False,
-        # A database-level default as well as a Python one, so an INSERT from the release that
-        # predates this column still succeeds during a rolling deploy. `reranker_provider` needs
-        # no such thing: it is nullable.
-        db_default=False,
-        help_text=(
-            "If enabled, retrieval candidates are rescored against the query by a reranker before "
-            "the best of them are returned."
-        ),
-    )
     reranker_provider = models.ForeignKey(
         "service_providers.LlmProvider",
         on_delete=models.SET_NULL,
@@ -590,10 +579,9 @@ class Collection(BaseTeamModel, VersionsMixin):
     def reranking_enabled(self) -> bool:
         """Whether the rerank stage will run for this collection.
 
-        Independent of hybrid search: a reranker reorders whatever candidates retrieval produced,
-        dense-only or fused, so the two flags can be rolled out in either order. Remote indexes
-        are excluded for the same reason they are excluded from hybrid search -- their chunks live
-        at the provider and never reach a ranking stage OCS controls.
+        Reranking uses the hybrid-search feature gate. Remote indexes are excluded for the same
+        reason they are excluded from hybrid search: their chunks live at the provider and never
+        reach a ranking stage OCS controls.
 
         An incomplete configuration reads as off rather than as an error: the stage cannot run
         without a provider and a model, and there is nothing for a search to do about it. The
@@ -604,15 +592,13 @@ class Collection(BaseTeamModel, VersionsMixin):
         Every check that can be answered from the instance comes before the flag lookup, and
         `reranker_provider_id` is used rather than `reranker_provider` so none of them can reach
         the database. Callers rely on this: the chat search tools ask this question before
-        collecting conversation context, precisely to avoid a query when the stage will not run.
+        formatting conversation context that the graph already loaded.
         """
         if self.is_remote_index:
             return False
-        if not self.enable_reranking:
-            return False
         if not self.reranker_provider_id or not self.rerank_model:
             return False
-        return flag_is_active_for_team(self.team, Flags.RERANKING.slug)
+        return flag_is_active_for_team(self.team, Flags.HYBRID_SEARCH.slug)
 
     def get_reranker(self) -> Reranker | None:
         """Build a reranker for this collection's retrieval, or None to skip the stage.

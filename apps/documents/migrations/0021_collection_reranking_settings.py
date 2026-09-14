@@ -6,28 +6,10 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("documents", "0020_collection_hybrid_search_settings"),
-        # The migration that creates LlmProvider is all the reranker_provider FK needs in state.
-        # makemigrations pins the current service_providers leaf instead, plus the current leaf of
-        # files and teams, which nothing here touches. The service_providers leaf is not merely
-        # redundant: depending on it pulls it ahead of pipelines.0029 in the graph, and its
-        # notify_deprecated_models data migration reads pipelines_node through the live model, so
-        # a fresh migrate then fails on the column 0029 has not added yet.
         ("service_providers", "0001_initial"),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="collection",
-            name="enable_reranking",
-            field=models.BooleanField(
-                default=False,
-                db_default=False,
-                help_text=(
-                    "If enabled, retrieval candidates are rescored against the query by a reranker "
-                    "before the best of them are returned."
-                ),
-            ),
-        ),
         migrations.AddField(
             model_name="collection",
             name="reranker_provider",

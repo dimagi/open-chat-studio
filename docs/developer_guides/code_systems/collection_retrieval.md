@@ -1,9 +1,9 @@
 # Collection Retrieval
 
 Retrieval is how an indexed collection turns a natural-language query into the handful of file
-chunks a chatbot puts in front of its LLM. It runs in three stages, each independently feature
-flagged and each off by default, so a deployment that enables none of them behaves exactly as
-OCS did before any of this existed.
+chunks a chatbot puts in front of its LLM. Contextual retrieval has its own feature flag; hybrid
+search and reranking share another. Both are off by default, so a deployment that enables neither
+behaves exactly as OCS did before any of this existed.
 
 `apps.documents.retrieval.search_collection` is the single entry point. Both callers go through
 it — the chat search tools (`SearchIndexTool`, `SearchCollectionByIdTool` in
@@ -26,9 +26,9 @@ query ──► dense (pgvector)   ─┐
 | --- | --- | --- |
 | Contextual chunk headers (indexing time) | `flag_contextual_retrieval` | `apps/service_providers/llm_service/contextualizer.py` |
 | Lexical search and RRF fusion | `flag_hybrid_search` | `apps/documents/retrieval.py` |
-| Reranking | `flag_reranking` | `apps/documents/rerankers.py` |
+| Reranking | `flag_hybrid_search` plus provider/model configuration | `apps/documents/rerankers.py` |
 
-All three are team-aware waffle flags (see [Feature Flags](feature_flags.md)), so they can be
+Both are team-aware waffle flags (see [Feature Flags](feature_flags.md)), so they can be
 enabled per team, by percentage, or globally, and rolled back without a deploy.
 
 ### Indexing: contextual chunk headers
@@ -90,19 +90,18 @@ something that does not describe the candidate list it was sent leaves the searc
 ranking it already had, logs, and returns that. `Collection.get_reranker()` likewise returns
 `None` for every reason not to rerank rather than raising.
 
-`Collection.reranking_enabled` answers whether the stage will run at all, and it covers the
-configuration as well as the flag: a collection with `enable_reranking` set but no provider or
-model reads as off, since the stage cannot run without them. It answers entirely from the loaded
-instance, which is what lets the chat search tools check it before collecting conversation
-context rather than after.
+`Collection.reranking_enabled` answers whether the stage will run at all. The hybrid-search flag
+must be active and both `reranker_provider` and `rerank_model` must be present. It answers from the
+loaded collection instance without fetching the provider row.
 
 #### Context conditioning
 
-`search_collection` accepts an optional `context` — the recent conversation turns, which the chat
-search tools collect from the session. It is prepended to the reranker's query so the reranker can
-tell which of several similar chunks answers the question actually being asked: "how much does it
-cost" scores differently once the turn before it is visible. Only the reranker reads it, so the
-tools skip collecting it entirely unless reranking is active for the collection.
+`search_collection` accepts an optional `context` — the recent conversation turns, which
+LangGraph injects into the chat search tools as part of the graph state. It is prepended to the
+reranker's query so the reranker can tell which of several similar chunks answers the question
+actually being asked: "how much does it cost" scores differently once the turn before it is
+visible. Only the reranker reads it, so the tools skip formatting it unless reranking is active
+for the collection.
 
 The context is clipped to its tail (`MAX_RERANK_CONTEXT_CHARS`) because the recent turns are the
 ones that disambiguate, and because the provider clips the query-document pair to the model's
@@ -110,10 +109,10 @@ context window — an unbounded context would push the query itself out of that 
 
 ## Enabling reranking for a collection
 
-1. Enable `flag_reranking` for the team.
+1. Enable `flag_hybrid_search` for the team.
 2. Create a Voyage AI LLM provider for the team, if it does not already have one.
-3. On the collection, set `enable_reranking=True` and `reranker_provider` to that provider.
-   `rerank_model` defaults to `rerank-2` and `rerank_top_n` to 50.
+3. On the collection, set `reranker_provider` to that provider. `rerank_model` defaults to
+   `rerank-2` and `rerank_top_n` to 50.
 
 All three are required. Leaving the provider unset leaves reranking off, silently by design;
 the failures that do log are the ones an operator cannot predict, such as a provider with no
@@ -124,8 +123,8 @@ editable in the Django admin, which offers every team's providers, so `get_reran
 the provider's team itself. Reranking with another team's credentials would bill them and send
 this collection's queries to their account.
 
-The tuning fields (`search_language`, `search_dense_weight`, `search_fetch_k`, `enable_reranking`,
-`reranker_provider`, `rerank_model`, `rerank_top_n`) are model fields with no form or pipeline
+The tuning fields (`search_language`, `search_dense_weight`, `search_fetch_k`, `reranker_provider`,
+`rerank_model`, `rerank_top_n`) are model fields with no form or pipeline
 node UI, to keep the node's configuration surface small while the defaults are being proven. The
 node's existing `max_results` is what controls the final `top_k`.
 
@@ -137,5 +136,4 @@ database check constraints on `Collection` are the only thing that actually stop
 Contextualization is paid once per chunk at indexing time, never at query time. Hybrid search
 adds one GIN-index query and an in-memory fusion over at most `2 * search_fetch_k` rows.
 Reranking is the only stage with a per-query external cost: one provider call scoring
-`rerank_top_n` candidates, which is what bounds it. The stage logs its candidate count, result
-count, and duration so operators can see both in their existing log tooling.
+`rerank_top_n` candidates, which is what bounds it.
