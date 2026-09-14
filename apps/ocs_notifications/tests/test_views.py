@@ -751,7 +751,7 @@ class TestNotificationButtonsUseMorphSwap:
 
     def test_read_button_uses_morph_swap(self, client, team_with_users):
         user = team_with_users.members.first()
-        _create_notification(user=user, team=team_with_users)
+        notification = _create_notification(user=user, team=team_with_users)
         client.force_login(user)
         session = client.session
         session["team"] = team_with_users.id
@@ -760,8 +760,9 @@ class TestNotificationButtonsUseMorphSwap:
         response = client.get(reverse("ocs_notifications:notifications_table"))
 
         assert response.status_code == 200
+        toggle_url = reverse("ocs_notifications:toggle_notification_read", args=[notification.id])
         read_button = re.search(
-            rb"<button[^>]*toggle_notification_read[^>]*>", response.content, re.DOTALL
+            rb"<button[^>]*" + re.escape(toggle_url.encode()) + rb"[^>]*>", response.content, re.DOTALL
         ).group()
         assert b'hx-ext="morph"' in read_button
         assert b'hx-swap="morph"' in read_button
@@ -796,8 +797,9 @@ class TestNotificationButtonsUseMorphSwap:
 
         assert response.status_code == 200
         assert b"Unmute Now" in response.content
+        unmute_url = reverse("ocs_notifications:unmute_notification", args=[notification.id])
         unmute_button = re.search(
-            rb"<button[^>]*unmute_notification[^>]*>", response.content, re.DOTALL
+            rb"<button[^>]*" + re.escape(unmute_url.encode()) + rb"[^>]*>", response.content, re.DOTALL
         ).group()
         assert b'hx-swap="morph"' in unmute_button
 
