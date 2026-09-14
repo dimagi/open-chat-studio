@@ -25,6 +25,20 @@ import {computePipelineDiff} from "../diffPipeline";
 // each call makes every render look like a change and loops until React bails out.
 const NO_PIPELINE_ERRORS: string[] = [];
 
+// Runs `fn` with temporal (undo/redo) tracking paused, when `shouldPause` is true. Every
+// server-driven or React-Flow-bookkeeping write to nodes/edges goes through this, so pause and
+// resume can't drift out of sync at one of the call sites. The try/finally matters: without it,
+// an exception inside fn would leave tracking paused for the rest of the session, silently
+// dropping every undo step after.
+export function withTemporalPaused(shouldPause: boolean, fn: () => void) {
+  if (shouldPause) usePipelineStore.temporal.getState().pause();
+  try {
+    fn();
+  } finally {
+    if (shouldPause) usePipelineStore.temporal.getState().resume();
+  }
+}
+
 let saveTimeoutId: NodeJS.Timeout | null = null;
 // Serialization guard for autosave (see issue #3895). While a PATCH is in-flight
 // its response has not yet bumped `currentRevision`, so firing a second PATCH would
@@ -97,20 +111,20 @@ const createPipelineStore: StateCreator<
       if (change.type === "position" && change.position === undefined) return false;
       return true;
     });
-    if (!isUserEdit) usePipelineStore.temporal.getState().pause();
-    set({
-      nodes: applyNodeChanges(changes, get().nodes),
+    withTemporalPaused(!isUserEdit, () => {
+      set({
+        nodes: applyNodeChanges(changes, get().nodes),
+      });
     });
-    if (!isUserEdit) usePipelineStore.temporal.getState().resume();
   },
   onEdgesChange: (changes: EdgeChange[]) => {
     if (get().readOnly) return;
     const isUserEdit = changes.some((change) => change.type !== "select");
-    if (!isUserEdit) usePipelineStore.temporal.getState().pause();
-    set({
-      edges: applyEdgeChanges(changes, get().edges),
+    withTemporalPaused(!isUserEdit, () => {
+      set({
+        edges: applyEdgeChanges(changes, get().edges),
+      });
     });
-    if (!isUserEdit) usePipelineStore.temporal.getState().resume();
   },
   setNodes: (change) => {
     if (get().readOnly) return;
@@ -283,12 +297,12 @@ const createPipelineStore: StateCreator<
   },
   resetFlow: ({nodes, edges}) => {
     // Loading or reloading a pipeline is not a user edit — don't let it become an undo step.
-    usePipelineStore.temporal.getState().pause();
-    set({
-      nodes,
-      edges,
+    withTemporalPaused(true, () => {
+      set({
+        nodes,
+        edges,
+      });
     });
-    usePipelineStore.temporal.getState().resume();
   },
   undoLastChange: () => {
     if (get().readOnly) return;
@@ -414,22 +428,22 @@ const createPipelineManagerStore: StateCreator<
             saveSucceeded = true;
             pipeline.data = saveResponse.data as PipelineType["data"];
             // Same reasoning as resetFlow above.
-            usePipelineStore.temporal.getState().pause();
-            set({
-              currentPipeline: pipeline,
-              dirty: false,
-              currentRevision: saveResponse.edit_revision,
-            });
-            set({
-              errors: saveResponse.errors as ErrorsType,
-              deprecatedModels: saveResponse.deprecated_models ?? {},
-            });
-            if (get().reactFlowInstance && saveResponse.errors) {
+            withTemporalPaused(true, () => {
               set({
-                edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
-              })
-            }
-            usePipelineStore.temporal.getState().resume();
+                currentPipeline: pipeline,
+                dirty: false,
+                currentRevision: saveResponse.edit_revision,
+              });
+              set({
+                errors: saveResponse.errors as ErrorsType,
+                deprecatedModels: saveResponse.deprecated_models ?? {},
+              });
+              if (get().reactFlowInstance && saveResponse.errors) {
+                set({
+                  edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
+                })
+              }
+            });
             resolve();
           }
         })
@@ -454,29 +468,29 @@ const createPipelineManagerStore: StateCreator<
       if (response) {
         patchSucceeded = true;
         // Update local state with merged data from server — same reasoning as resetFlow.
-        usePipelineStore.temporal.getState().pause();
-        const edges = response.data?.edges as Edge[] | undefined;
-        set({
-          currentRevision: response.edit_revision,
-          errors: response.errors as ErrorsType,
-          deprecatedModels: response.deprecated_models ?? {},
-          dirty: false,
+        withTemporalPaused(true, () => {
+          const edges = response.data?.edges as Edge[] | undefined;
+          set({
+            currentRevision: response.edit_revision,
+            errors: response.errors as ErrorsType,
+            deprecatedModels: response.deprecated_models ?? {},
+            dirty: false,
+          });
+          if (edges) {
+            set({
+              edges: updateEdgeClasses(edges, response.errors as ErrorsType),
+            });
+          }
+          if (get().currentPipeline) {
+            // Ensure the current pipeline reflects the merged server state
+            set({
+              currentPipeline: {
+                ...get().currentPipeline!,
+                data: response.data as PipelineType["data"],
+              },
+            });
+          }
         });
-        if (edges) {
-          set({
-            edges: updateEdgeClasses(edges, response.errors as ErrorsType),
-          });
-        }
-        if (get().currentPipeline) {
-          // Ensure the current pipeline reflects the merged server state
-          set({
-            currentPipeline: {
-              ...get().currentPipeline!,
-              data: response.data as PipelineType["data"],
-            },
-          });
-        }
-        usePipelineStore.temporal.getState().resume();
       }
     } catch (err) {
       if ((err as {status?: number; currentRevision?: number}).status === 409) {

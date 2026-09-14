@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from "vitest";
 import {Edge, Node} from "reactflow";
-import usePipelineStore from "./pipelineStore";
+import usePipelineStore, {withTemporalPaused} from "./pipelineStore";
 
 const nodeA: Node = {id: "a", type: "pipelineNode", position: {x: 0, y: 0}, data: {type: "LLMResponse", params: {}}};
 const nodeB: Node = {id: "b", type: "pipelineNode", position: {x: 100, y: 0}, data: {type: "LLMResponse", params: {}}};
@@ -183,6 +183,19 @@ describe("pipelineStore undo/redo", () => {
     usePipelineStore.getState().undoLastChange();
 
     expect(usePipelineStore.getState().nodes.map((n) => n.id)).toEqual(["a"]);
+  });
+
+  // withTemporalPaused brackets every server-driven or React-Flow-bookkeeping write with
+  // pause()/resume(). Without a try/finally around the callback, a throw would leave tracking
+  // paused for the rest of the session, silently dropping every undo step after.
+  test("withTemporalPaused resumes tracking even when the callback throws", () => {
+    expect(() => {
+      withTemporalPaused(true, () => {
+        throw new Error("boom");
+      });
+    }).toThrow("boom");
+
+    expect(usePipelineStore.temporal.getState().isTracking).toBe(true);
   });
 
   test("redoLastChange does nothing in read-only mode", () => {
