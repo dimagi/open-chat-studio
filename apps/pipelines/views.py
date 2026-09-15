@@ -11,6 +11,7 @@ from django.db.models import Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -169,7 +170,10 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
         return {
             **data,
             "pipeline_id": kwargs["pk"],
-            "pipeline_name": pipeline.name,
+            "breadcrumbs": [
+                (_("Event Pipelines"), reverse("pipelines:home", args=[self.request.team.slug])),
+                (pipeline.name, None),
+            ],
             "node_schemas": get_node_schemas(),
             "parameter_values": get_node_parameter_values(
                 team=self.request.team,

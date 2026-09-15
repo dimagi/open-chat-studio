@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, FormView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
@@ -51,6 +52,7 @@ from apps.experiments.views.experiment import (
 from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
@@ -249,7 +251,14 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         return queryset
 
 
-class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+def _chatbot_breadcrumbs(team_slug: str, experiment: Experiment) -> list[Crumb]:
+    return [
+        (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
+        (experiment.name, reverse("chatbots:single_chatbot_home", args=[team_slug, experiment.id])),
+    ]
+
+
+class CreateChatbot(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Experiment
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
@@ -264,6 +273,12 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         kwargs = super().get_form_kwargs()
         kwargs["request"] = self.request
         return kwargs
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [
+            (_("Chatbots"), reverse("chatbots:chatbots_home", args=[self.request.team.slug])),
+            (_("Create"), None),
+        ]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -325,6 +340,10 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "usage_summary": usage_summary,
         "broadcast_form": BroadcastMessageForm(experiment),
+        "breadcrumbs": [
+            (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
+            (experiment.name, None),
+        ],
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -398,9 +417,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
+            "breadcrumbs": [*_chatbot_breadcrumbs(self.request.team.slug, experiment), (_("Edit"), None)],
             "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
             "default_values": get_node_default_values(self.request.team),
-            "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [
                 name
@@ -455,6 +474,10 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
         context["page_title"] = f"Create Version - {working_experiment.name}"
+        context["breadcrumbs"] = [
+            *_chatbot_breadcrumbs(self.request.team.slug, working_experiment),
+            (_("Create Version"), None),
+        ]
         return context
 
     def form_valid(self, form):
@@ -813,6 +836,7 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
             "session": session,
             "session_token": issue_session_token(session),
             "active_tab": "chatbots",
+            "breadcrumbs": [*_chatbot_breadcrumbs(team_slug, experiment), (session.external_id, None)],
             **version_specific_vars,
         },
     )
@@ -897,7 +921,13 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     return TemplateResponse(
         request,
         "chatbots/chatbot_invitations.html",
-        {"invitation_form": form, "experiment": chatbot, "sessions": sessions, **version_specific_vars},
+        {
+            "invitation_form": form,
+            "experiment": chatbot,
+            "sessions": sessions,
+            "breadcrumbs": [*_chatbot_breadcrumbs(team_slug, chatbot), (_("Invitations"), None)],
+            **version_specific_vars,
+        },
     )
 
 
@@ -930,6 +960,10 @@ def _chatbot_chat_ui(request):
             "session": request.experiment_session,
             "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
+            "breadcrumbs": [
+                *_chatbot_breadcrumbs(request.team.slug, request.experiment),
+                (request.experiment_session.external_id, None),
+            ],
             **version_specific_vars,
         },
     )
