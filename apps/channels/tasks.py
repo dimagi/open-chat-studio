@@ -104,7 +104,7 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
     See https://www.twilio.com/docs/usage/webhooks/webhooks-security
     """
     try:
-        auth_token = experiment_channel.messaging_provider.get_messaging_service().auth_token
+        auth_token = experiment_channel.messaging_provider.get_messaging_service().auth_token.get_secret_value()
         return RequestValidator(auth_token).validate(request_uri, raw_data, signature)
     except Exception:
         log.exception("Twilio signature validation failed")
