@@ -2,8 +2,7 @@
 
 ``attach_stacktrace=True`` sends stack-frame locals with every event, so a pydantic service model
 on the frame is serialized by its repr. The ``EventScrubber`` in ``config/sentry.py`` matches by
-exact variable/dict-key name and cannot reach a secret embedded inside that repr string, which is
-how an Azure subscription key was published to 24 production events.
+exact variable/dict-key name and cannot reach a secret embedded inside that repr string.
 
 Holding credentials as ``pydantic.SecretStr`` closes that, but makes every read site a place where
 a missing ``.get_secret_value()`` hands the provider SDK ``SecretStr('**********')`` — which a
