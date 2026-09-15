@@ -13,6 +13,7 @@ from apps.cost_tracking.services.reporting import session_usage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
+from apps.trace.models import participant_data_from_trace
 
 
 class ApiUrlField(serializers.HyperlinkedIdentityField):
@@ -197,6 +198,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     messages = serializers.SerializerMethodField()
     usage = serializers.SerializerMethodField()
     tags = TagListSerializerField(source="chat.tags")
+    participant_data = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperimentSession
@@ -208,12 +210,14 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "participant",
             "created_at",
             "updated_at",
+            "ended_at",
             "status",
             "platform",
             "messages",
             "usage",
             "tags",
             "state",
+            "participant_data",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -223,7 +227,6 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             self.fields.pop("messages")
             self.fields.pop("usage")
         else:
-            # hack to change the component name for the schema to include messages
             self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
 
     @extend_schema_field(MessageSerializer(many=True))
@@ -234,6 +237,41 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     @extend_schema_field(SessionUsageSerializer)
     def get_usage(self, instance):
         return SessionUsageSerializer(session_usage(instance)).data
+
+    @extend_schema_field(serializers.DictField(allow_null=True))
+    def get_participant_data(self, instance):
+        """Participant data as of the session's latest trace, or experiment-level data without one.
+
+        When traces exist, the latest trace's snapshot plus its diff reconstruct the state as of
+        that trace (``participant_data_from_trace``); without traces, falls back to the
+        experiment-level row for the participant (``_participant_data_fallback``)."""
+        prefetched = getattr(instance, "_prefetched_traces", None)
+        if prefetched is not None:
+            trace = prefetched[0] if prefetched else None
+        else:
+            trace = instance.traces.order_by("-timestamp", "-id").first()
+
+        if trace is None:
+            return self._participant_data_fallback(instance)
+
+        return participant_data_from_trace(trace)
+
+    def _participant_data_fallback(self, instance) -> dict:
+        """Return experiment-level participant data for trace-less sessions.
+
+        ParticipantData rows are keyed to the working version of an experiment, so a session
+        pinned to a published version resolves ``get_working_version_id()`` (mirroring
+        ``ParticipantData.objects.for_experiment()``) before matching. Prefetched data avoids a
+        query per session on list responses; without a prefetch, the model helper does the lookup.
+        """
+        prefetched = getattr(instance.participant, "_prefetched_participant_data", None)
+        if prefetched is not None:
+            experiment_id = instance.experiment.get_working_version_id()
+            for pd in prefetched:
+                if pd.experiment_id == experiment_id:
+                    return pd.data
+            return {}
+        return instance.participant_data_from_experiment
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
