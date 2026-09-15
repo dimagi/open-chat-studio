@@ -4,7 +4,9 @@ from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+from django.utils.translation import gettext as _
 
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.events.forms import (
     ACTION_PARAMS_FORMS,
     EventActionForm,
@@ -13,12 +15,14 @@ from apps.events.forms import (
     TimeoutTriggerForm,
     build_action_params_form,
 )
+
 from apps.events.models import (
     ScheduledTrigger,
     StaticTrigger,
     TimeoutTrigger,
 )
 from apps.experiments.models import Experiment
+from apps.generics.breadcrumbs import Crumb
 from apps.teams.decorators import login_and_team_required
 
 
@@ -30,6 +34,11 @@ def _assert_team_experiment(request, experiment_id):
 def _get_events_url(team_slug, experiment_id):
     url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     return f"{url}#events"
+
+
+def _event_breadcrumbs(request, experiment_id, leaf: str) -> list[Crumb]:
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+    return [*chatbot_crumbs(request.team.slug, experiment), (leaf, None)]
 
 
 @login_and_team_required
@@ -87,7 +96,14 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
         trigger_form = trigger_form_class()
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+        trigger_form,
+        action_primary_form,
+        action_params_form,
+        action_type,
+        trigger_form_class,
+        experiment_id,
+        request,
+        title=_("New Event"),
     )
     return render(request, "events/manage_event.html", context)
 
@@ -98,10 +114,19 @@ def _default_action_type() -> str:
 
 
 def _event_form_context(
-    trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+    trigger_form,
+    action_primary_form,
+    action_params_form,
+    action_type,
+    trigger_form_class,
+    experiment_id,
+    request,
+    title: str,
 ):
     namespace = request.resolver_match.namespace  # e.g., "chatbots:events"
     return {
+        "title": title,
+        "breadcrumbs": _event_breadcrumbs(request, experiment_id, title),
         "trigger_form": trigger_form,
         "action_primary_form": action_primary_form,
         "action_params_form": action_params_form,
@@ -181,7 +206,14 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         trigger_form = trigger_form_class(instance=trigger)
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+        trigger_form,
+        action_primary_form,
+        action_params_form,
+        action_type,
+        trigger_form_class,
+        experiment_id,
+        request,
+        title=_("Edit Event"),
     )
     return render(request, "events/manage_event.html", context)
 
@@ -221,10 +253,10 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def static_logs_view(request, team_slug, experiment_id, trigger_id):
-    trigger = get_object_or_404(
+        trigger = get_object_or_404(
         StaticTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
     )
-    context = _get_event_logs_context(trigger)
+    context = _get_event_logs_context(request, trigger)
     return render(request, "events/view_logs.html", context)
 
 
@@ -234,24 +266,27 @@ def timeout_logs_view(request, team_slug, experiment_id, trigger_id):
     trigger = get_object_or_404(
         TimeoutTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
     )
-    context = _get_event_logs_context(trigger)
+    context = _get_event_logs_context(request, trigger)
     return render(request, "events/view_logs.html", context)
 
 
 @login_and_team_required
 @permission_required("events.view_eventlog")
-def scheduled_logs_view(request, team_slug, experiment_id, trigger_id):
+def scheduled_logs_view(request, team_slug: str, experiment_id: str, trigger_id):
     trigger = get_object_or_404(
         ScheduledTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
     )
-    context = _get_event_logs_context(trigger)
+    context = _get_event_logs_context(request, trigger)
+    return render(request, "events/view_logs.html", context)
     return render(request, "events/view_logs.html", context)
 
 
-def _get_event_logs_context(trigger):
+def _get_event_logs_context(request, trigger):
+    title = _("Event Logs")
     return {
         "event_logs": trigger.event_logs.order_by("-created_at").all(),
-        "title": "Event logs",
+        "title": title,
+        "breadcrumbs": _event_breadcrumbs(request, trigger.experiment_id, title),
         "trigger": trigger,
     }
 

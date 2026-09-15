@@ -7,11 +7,13 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import Tag
 from apps.evaluations import evaluators
+from apps.evaluations.breadcrumbs import evaluators_crumbs
 from apps.evaluations.const import (
     EVALUATOR_PROMPT_VARIABLES,
     evaluator_prompt_variable_hints,
@@ -150,6 +152,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evalua
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_evaluator_form_context(context["form"]))
+        context["breadcrumbs"] = [*evaluators_crumbs(self.request.team.slug), (_("Create"), None)]
         return context
 
     def get_form_kwargs(self):
@@ -175,6 +178,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evaluato
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_evaluator_form_context(context["form"]))
+        context["breadcrumbs"] = [*evaluators_crumbs(self.request.team.slug), (self.object.name, None)]
         return context
 
     def get_queryset(self):

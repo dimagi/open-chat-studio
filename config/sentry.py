@@ -13,6 +13,10 @@ from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 #
 # Anything holding raw secret/key material should be named to match one of these entries; prefer
 # the ``encryption_key`` convention for CommCare Connect per-participant keys.
+#
+# The denylist cannot reach a secret embedded in the repr *string* of a frame local, so a credential
+# held on a pydantic model needs ``pydantic.SecretStr`` instead (or ``Field(repr=False)`` where
+# SecretStr does not fit). ``apps/service_providers/tests/test_credentials.py`` enforces that.
 SENTRY_SECRET_VAR_DENYLIST = [
     "encryption_key",
     "encryption_key_bytes",

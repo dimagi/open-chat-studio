@@ -8,6 +8,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
@@ -19,6 +20,7 @@ from apps.channels.models import ChannelPlatform
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_participant
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
+from apps.generics.breadcrumbs import Crumb
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -142,6 +144,10 @@ def _data_panel_context(
     }
 
 
+def _participants_crumb(team_slug: str) -> Crumb:
+    return _("Participants"), reverse("participants:participant_home", args=[team_slug])
+
+
 def single_participant_home_context(
     request, context: dict, participant_id: int, experiment_id: int | None = None
 ) -> dict:
@@ -163,7 +169,13 @@ def single_participant_home_context(
     team = request.team
     participant, experiments, filter_experiment_id = _get_participant_and_chatbots(request, participant_id)
 
-    context.update({"active_tab": "participants", "participant": participant})
+    context.update(
+        {
+            "active_tab": "participants",
+            "participant": participant,
+            "breadcrumbs": [_participants_crumb(team.slug), (participant.name or participant.identifier, None)],
+        }
+    )
     context.update(_sessions_panel_context(request, participant, experiments, filter_experiment_id))
     context.update(_schedules_panel_context(request, participant, experiments, filter_experiment_id))
     context.update(_data_panel_context(request, participant, experiments, filter_experiment_id, experiment_id))
@@ -388,7 +400,7 @@ class EditParticipantData(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
             # ParticipantData is always keyed to the working version's id, so a chatbot
             # running as a published version needs resolving back to it here too.
             working_experiment_id = experiment.working_version_id if experiment.is_a_version else experiment.id
-            data_row, _ = ParticipantData.objects.update_or_create(
+            data_row, _created = ParticipantData.objects.update_or_create(
                 participant=participant,
                 experiment_id=working_experiment_id,
                 team=request.team,
@@ -504,7 +516,15 @@ def import_participants(request, team_slug: str):
             except Exception as e:
                 messages.error(request, f"Import failed: {str(e)}")
 
-    return render(request, "participants/participant_import.html", {"form": form, "import_results": import_results})
+    return render(
+        request,
+        "participants/participant_import.html",
+        {
+            "form": form,
+            "import_results": import_results,
+            "breadcrumbs": [_participants_crumb(team_slug), (_("Import"), None)],
+        },
+    )
 
 
 @permission_required(["experiments.view_participant", "experiments.view_participantdata"])
@@ -557,7 +577,7 @@ def trigger_bot(request, team_slug: str, participant_id: int):
     try:
         # Shared with the API's trigger-bot endpoint: the session has to exist before the task runs,
         # and both callers must agree on the task's arguments (#4221).
-        session, _ = prepare_trigger_bot_message(
+        session, _created = prepare_trigger_bot_message(
             form.cleaned_data["experiment"],
             participant.identifier,
             participant.platform,

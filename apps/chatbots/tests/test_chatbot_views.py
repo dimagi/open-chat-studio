@@ -153,6 +153,10 @@ def test_single_chatbot_home(client, team_with_users):
 
     assert response.status_code == 200
     assert "chatbots/single_chatbot_home.html" in [t.name for t in response.templates]
+    assert response.context["breadcrumbs"] == [
+        ("Chatbots", reverse("chatbots:chatbots_home", args=[team.slug])),
+        ("Test Experiment", None),
+    ]
 
 
 @pytest.mark.django_db()

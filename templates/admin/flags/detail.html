@@ -4,9 +4,6 @@
 {% block app %}
   <section class="app-card">
     <div>
-      <a href="{% url 'ocs_admin:flags_home' %}" class="text-sm text-base-content/70 hover:text-base-content mb-2 inline-block">
-        ← {% translate "Back to Flags" %}
-      </a>
       <h1 class="pg-title">{{ flag.name }}</h1>
       {% if flag_info %}
         <p class="text-base-content/80 mt-2">{{ flag_info.description }}</p>

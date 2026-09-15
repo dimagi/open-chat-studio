@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.http import FileResponse, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView
 from django_htmx.http import HttpResponseClientRedirect, HttpResponseClientRefresh
@@ -14,6 +15,7 @@ from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..teams.decorators import login_and_team_required
@@ -21,6 +23,10 @@ from .forms import TranscriptAnalysisForm
 from .models import AnalysisQuery, TranscriptAnalysis
 from .tables import TranscriptAnalysisTable
 from .tasks import process_transcript_analysis
+
+
+def _analysis_root(team_slug: str) -> Crumb:
+    return (_("Session Analysis"), reverse("analysis:list", args=[team_slug]))
 
 
 class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
@@ -43,7 +49,7 @@ class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):  #
         return context
 
 
-class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
+class TranscriptAnalysisCreateView(BreadcrumbsMixin, LoginAndTeamRequiredMixin, CreateView):
     model = TranscriptAnalysis
     form_class = TranscriptAnalysisForm
     template_name = "analysis/create.html"
@@ -58,6 +64,9 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         kwargs["experiment"] = self.experiment
         kwargs["team"] = self.request.team
         return kwargs
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [_analysis_root(self.request.team.slug), (_("Create"), None)]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -76,7 +85,7 @@ class TranscriptAnalysisCreateView(LoginAndTeamRequiredMixin, CreateView):
         return reverse("analysis:detail", args=[self.request.team.slug, self.object.id])
 
 
-class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
+class TranscriptAnalysisDetailView(BreadcrumbsMixin, LoginAndTeamRequiredMixin, DetailView):
     model = TranscriptAnalysis
     template_name = "analysis/detail.html"
 
@@ -88,6 +97,9 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
 
     def get_queryset(self):
         return TranscriptAnalysis.objects.filter(team=self.request.team)
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [_analysis_root(self.request.team.slug), (self.object.name, None)]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -110,7 +122,7 @@ class TranscriptAnalysisDetailView(LoginAndTeamRequiredMixin, DetailView):
         return RequestConfig(self.request).configure(table)
 
 
-class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
+class TranscriptAnalysisDeleteView(BreadcrumbsMixin, LoginAndTeamRequiredMixin, DeleteView):
     model = TranscriptAnalysis
     template_name = "analysis/confirm_delete.html"
 
@@ -119,6 +131,13 @@ class TranscriptAnalysisDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse("analysis:list", args=[self.request.team.slug])
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [
+            _analysis_root(self.request.team.slug),
+            (self.object.name, self.object.get_absolute_url()),
+            (_("Delete"), None),
+        ]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

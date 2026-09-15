@@ -73,31 +73,6 @@
   @apply overflow-x-auto;
 }
 
-@utility pg-breadcrumbs {
-  /* breadcrumbs */
-  display: flex;
-  align-items: center;
-
-  & a {
-    text-decoration: underline;
-  }
-
-  & li:first-child {
-    padding: 0;
-  }
-
-  & li:not(:first-child) {
-    padding: 0 0 0 0.75em;
-  }
-
-  & li:not(:first-child)::before {
-    color: gray;
-    content: '\0002f';
-    float: left;
-    padding-right: 0.75em;
-  }
-}
-
 @utility pg-breadcrumb-active {
   color: #7a7a7a;
 }
