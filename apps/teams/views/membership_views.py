@@ -45,6 +45,10 @@ def team_membership_details(request, team_slug, membership_id):
         "teams/team_membership_details.html",
         {
             "active_tab": "manage-team",
+            "breadcrumbs": [
+                (_("Team Settings"), reverse("single_team:manage_team", args=[request.team.slug])),
+                (membership.user.get_display_name(), None),
+            ],
             "membership": membership,
             "membership_form": membership_form,
             "editing_self": editing_self,

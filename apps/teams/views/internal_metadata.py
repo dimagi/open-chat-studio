@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.decorators import login_and_team_required
@@ -29,5 +30,9 @@ def internal_metadata(request, team_slug):
         {
             "form": form,
             "team": team,
+            "breadcrumbs": [
+                (_("Team Settings"), reverse("single_team:manage_team", args=[team.slug])),
+                (_("Internal Metadata"), None),
+            ],
         },
     )
