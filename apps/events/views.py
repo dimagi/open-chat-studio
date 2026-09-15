@@ -3,8 +3,8 @@ from django.db import models
 from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from django.views.decorators.http import require_POST
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST
 
 from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.events.forms import (
@@ -15,7 +15,6 @@ from apps.events.forms import (
     TimeoutTriggerForm,
     build_action_params_form,
 )
-
 from apps.events.models import (
     ScheduledTrigger,
     StaticTrigger,
@@ -253,7 +252,7 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def static_logs_view(request, team_slug, experiment_id, trigger_id):
-        trigger = get_object_or_404(
+    trigger = get_object_or_404(
         StaticTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
     )
     context = _get_event_logs_context(request, trigger)
