@@ -100,7 +100,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
                   <button className="btn btn-xs join-item" aria-label="Change node type">
                       <i className="fa-solid fa-right-left"></i>
                   </button>
-                  <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 max-h-60 overflow-y-auto">
+                  <ul tabIndex={0} className="dropdown-content z-[1] menu flex-nowrap p-2 shadow bg-base-100 rounded-box w-52 max-h-60 overflow-y-auto">
                     <li className="menu-title">Change type</li>
                     {changeableTypes.map((schema) => (
                       <li key={schema.title}>
