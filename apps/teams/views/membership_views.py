@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
 from apps.api.models import UserAPIKey
+from apps.teams.breadcrumbs import team_settings_crumb
 from apps.teams.decorators import login_and_team_required
 from apps.teams.exceptions import TeamPermissionError
 from apps.teams.forms import MembershipForm
@@ -46,7 +47,7 @@ def team_membership_details(request, team_slug, membership_id):
         {
             "active_tab": "manage-team",
             "breadcrumbs": [
-                (_("Team Settings"), reverse("single_team:manage_team", args=[request.team.slug])),
+                team_settings_crumb(request.team.slug),
                 (membership.user.get_display_name(), None),
             ],
             "membership": membership,

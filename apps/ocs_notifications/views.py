@@ -331,7 +331,7 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
                 # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
                 # request.team), so the trail needs its own team indicator.
                 (self.event_type.team.name, None),
-                (title or "", None),
+                *([(title, None)] if title else []),
             ],
         }
 

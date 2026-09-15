@@ -32,7 +32,7 @@ from apps.cost_tracking.services.reporting import (
     evaluation_run_cost,
     evaluation_run_costs,
 )
-from apps.evaluations.breadcrumbs import evaluations_crumbs
+from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import (
@@ -184,7 +184,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
         return {
             **super().get_context_data(**kwargs),
             "config": config,
-            "breadcrumbs": [*evaluations_crumbs(team_slug), (_("%(name)s Runs") % {"name": config.name}, None)],
+            "breadcrumbs": [*evaluations_crumbs(team_slug), (config_runs_label(config), None)],
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
             "cost_summary": evaluation_config_cost_summary(config),
@@ -305,7 +305,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             "title": title,
             "breadcrumbs": [
                 *evaluations_crumbs(team_slug, evaluation_run.config),
-                (_("Run %(id)s") % {"id": evaluation_run.id}, None),
+                (run_label(evaluation_run), None),
             ],
             "page_title": title,
             "evaluation_run": evaluation_run,

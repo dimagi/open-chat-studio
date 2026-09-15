@@ -1,11 +1,11 @@
 from django import forms
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from apps.teams.breadcrumbs import team_settings_crumb
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import get_all_flag_info
 from apps.teams.models import Flag
@@ -112,7 +112,7 @@ def feature_flags(request, team_slug):
             "team": team,
             "is_team_admin": is_team_admin,
             "breadcrumbs": [
-                (_("Team Settings"), reverse("single_team:manage_team", args=[team.slug])),
+                team_settings_crumb(team.slug),
                 (_("Feature Flags"), None),
             ],
         },

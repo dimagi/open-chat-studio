@@ -5,6 +5,14 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.generics.breadcrumbs import Crumb
 
 
+def config_runs_label(config: EvaluationConfig) -> str:
+    return _("%(name)s Runs") % {"name": config.name}
+
+
+def run_label(run: EvaluationRun) -> str:
+    return _("Run %(id)s") % {"id": run.id}
+
+
 def datasets_crumbs(team_slug: str, dataset: EvaluationDataset | None = None) -> list[Crumb]:
     crumbs: list[Crumb] = [(_("Datasets"), reverse("evaluations:dataset_home", args=[team_slug]))]
     if dataset:
@@ -17,9 +25,9 @@ def evaluations_crumbs(
 ) -> list[Crumb]:
     crumbs: list[Crumb] = [(_("Evaluations"), reverse("evaluations:home", args=[team_slug]))]
     if config:
-        crumbs.append((_("%(name)s Runs") % {"name": config.name}, config.get_absolute_url()))
+        crumbs.append((config_runs_label(config), config.get_absolute_url()))
     if run:
-        crumbs.append((_("Run %(id)s") % {"id": run.id}, run.get_absolute_url()))
+        crumbs.append((run_label(run), run.get_absolute_url()))
     return crumbs
 
 

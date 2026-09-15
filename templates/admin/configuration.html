@@ -3,9 +3,7 @@
 
 {% block app %}
   <section class="app-card">
-    <div class="mb-6">
-      <h1 class="pg-title">{% translate "Site Configuration" %}</h1>
-    </div>
+    <h1 class="pg-title mb-6">{% translate "Site Configuration" %}</h1>
 
     {% if not config_instance %}
       <div class="alert alert-info">

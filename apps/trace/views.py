@@ -80,7 +80,7 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
         context["token_usage"] = trace_token_usage(self.object)
         context["breadcrumbs"] = [
             (_("Traces"), reverse("trace:home", args=[self.request.team.slug])),
-            (_("Trace %(trace_id)s") % {"trace_id": self.object.trace_id}, None),
+            (self.object.experiment.name, None),
         ]
         return context
 
