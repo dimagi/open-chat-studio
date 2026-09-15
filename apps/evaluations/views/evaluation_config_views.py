@@ -20,6 +20,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
@@ -31,6 +32,7 @@ from apps.cost_tracking.services.reporting import (
     evaluation_run_cost,
     evaluation_run_costs,
 )
+from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import (
@@ -107,6 +109,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Creat
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        context["breadcrumbs"] = [*evaluations_crumbs(self.request.team.slug), (_("Create"), None)]
         return context
 
     def get_form_kwargs(self):
@@ -136,6 +139,7 @@ class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateV
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        context["breadcrumbs"] = [*evaluations_crumbs(self.request.team.slug, self.object), (_("Edit"), None)]
         return context
 
     def get_queryset(self):
@@ -180,6 +184,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
         return {
             **super().get_context_data(**kwargs),
             "config": config,
+            "breadcrumbs": [*evaluations_crumbs(team_slug), (config_runs_label(config), None)],
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
             "cost_summary": evaluation_config_cost_summary(config),
@@ -298,6 +303,10 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
+            "breadcrumbs": [
+                *evaluations_crumbs(team_slug, evaluation_run.config),
+                (run_label(evaluation_run), None),
+            ],
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
@@ -856,6 +865,10 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
             "title": "Upload Results",
             "page_title": "Upload Results",
             "evaluation_run": evaluation_run,
+            "breadcrumbs": [
+                *evaluations_crumbs(team_slug, evaluation_run.config, evaluation_run),
+                (_("Upload Results"), None),
+            ],
         }
         return render(request, "evaluations/evaluation_run_update.html", context)
     elif request.method == "POST":

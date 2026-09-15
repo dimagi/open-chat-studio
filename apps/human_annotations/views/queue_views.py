@@ -32,6 +32,7 @@ from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.dynamic_filters.datastructures import FilterParams
 
+from ..breadcrumbs import queues_crumbs
 from ..forms import AnnotationQueueForm, ImportFromDatasetForm
 from ..models import (
     Annotation,
@@ -86,6 +87,11 @@ class CreateAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         "active_tab": "annotation_queues",
     }
 
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(**kwargs) | {
+            "breadcrumbs": [*queues_crumbs(self.request.team.slug), (_("Create"), None)]
+        }
+
     def get_success_url(self):
         return reverse("human_annotations:queue_home", args=[self.request.team.slug])
 
@@ -120,6 +126,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
         context["existing_schema"] = self.object.schema
         context["schema_locked"] = annotations_started
         context["annotations_started"] = annotations_started
+        context["breadcrumbs"] = [*queues_crumbs(self.request.team.slug, self.object), (_("Edit"), None)]
         return context
 
     def get_success_url(self):
@@ -157,6 +164,7 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         context = super().get_context_data(**kwargs)
         queue = self.object
         context["active_tab"] = "annotation_queues"
+        context["breadcrumbs"] = [*queues_crumbs(self.request.team.slug), (queue.name, None)]
         context["progress"] = queue.get_progress()
         items_table_url = reverse(
             "human_annotations:queue_items_table",
@@ -290,6 +298,7 @@ class AddSessionsToQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
                 "queue": queue,
                 "sessions_count_url": sessions_count_url,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": [*queues_crumbs(team_slug, queue), (_("Add Sessions"), None)],
                 **filter_context,
             },
         )
@@ -494,6 +503,7 @@ class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "team_members": team_members,
                 "current_assignees": current_assignees,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": [*queues_crumbs(team_slug, queue), (_("Manage Assignees"), None)],
             },
         )
 
@@ -513,7 +523,12 @@ class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         return render(
             request,
             "human_annotations/import_from_dataset.html",
-            {"queue": queue, "form": form, "active_tab": "annotation_queues"},
+            {
+                "queue": queue,
+                "form": form,
+                "active_tab": "annotation_queues",
+                "breadcrumbs": [*queues_crumbs(request.team.slug, queue), (_("Import from Dataset"), None)],
+            },
         )
 
     def get(self, request, team_slug: str, pk: int):

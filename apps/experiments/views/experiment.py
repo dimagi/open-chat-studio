@@ -32,6 +32,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.timesince import timesince
+from django.utils.translation import gettext as _
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -47,6 +48,7 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
@@ -364,6 +366,7 @@ def _run_public_consent_flow(request, team_slug: str, experiment, experiment_ver
         {
             "active_tab": "experiments",
             "experiment": experiment,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, experiment), (_("Start Session"), None)],
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -504,6 +507,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
         {
             "active_tab": "experiments",
             "experiment": published_version,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Start Session"), None)],
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -861,6 +865,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
             "experiment_session": request.experiment_session,
             "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Review"), None)],
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             **version_specific_vars,
@@ -879,6 +884,7 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
             "active_tab": "experiments",
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Complete"), None)],
         },
     )
 
