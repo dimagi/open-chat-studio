@@ -51,10 +51,11 @@ Side effects (always, when running under GitHub Actions):
 * Appends gate variables to ``$GITHUB_OUTPUT``::
 
     has_new_models, new_model_count, new_model_ids
+    has_deprecated_upstream, deprecated_upstream_count
+    has_catalogue_work     # either of the two above; gates the Claude Code job
     has_price_changes, price_change_count, backfilled_count,
         pricing_pr_title, pricing_pr_body_path
     has_missing_pricing, missing_pricing_count, missing_pricing_issue_body_path
-    has_deprecated_upstream, deprecated_upstream_count
 
 Exit code is 1 when the price table can't be read; every signal derives from
 it, so a run without it has no output to give.
@@ -75,8 +76,7 @@ import io
 import json
 import os
 import sys
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -86,9 +86,7 @@ from .catalogue import (
     load_ignored_models,
     load_registered_models,
 )
-from .http import _get_json, _github_headers
-
-# Constants
+from .http import get_json, github_headers
 
 
 class _ExtraSegments(enum.Enum):
@@ -178,7 +176,13 @@ MIGRATIONS_DIR_REL_PATH = "apps/cost_tracking/migrations"
 
 NO_PRICING_REASON = "No pricing data found in the LiteLLM price table"
 
-# Seed I/O
+# Price-table cost field -> OCS service kind.
+LITELLM_COST_FIELDS = {
+    "input_cost_per_token": "llm_input",
+    "output_cost_per_token": "llm_output",
+    "cache_read_input_token_cost": "llm_cached_input",
+    "cache_creation_input_token_cost": "llm_cache_write",
+}
 
 
 def load_seed(path: Path) -> list[dict]:
@@ -193,9 +197,6 @@ def seed_index(seed: list[dict]) -> dict[tuple[str, str], dict[str, str]]:
     }
 
 
-# Pricing resolvers
-
-
 def _fmt(value: float | None) -> str | None:
     """Up to 8 significant digits, trailing zeros stripped. None -> None."""
     if value is None:
@@ -207,21 +208,20 @@ def _per_token_to_per_1k(v: float | None) -> float | None:
     return v * 1_000.0 if v is not None else None
 
 
-def _rates_from_raw(
-    raw: dict[str, float | None],
-    convert: Callable[[float | None], float | None],
-) -> dict[str, str] | None:
-    """Convert raw prices to per-1K strings. Returns ``None`` when both
-    input and output are absent (cached-input-only isn't useful on its own).
+def _rates_from_entry(entry: dict) -> dict[str, str] | None:
+    """Per-1K rates read off one price-table entry.
+
+    Returns ``None`` when both input and output are absent - a cached-input
+    rate isn't useful on its own.
     """
-    if raw.get("llm_input") is None and raw.get("llm_output") is None:
-        return None
-    result: dict[str, str] = {}
-    for kind, value in raw.items():
-        price = _fmt(convert(value))
+    rates: dict[str, str] = {}
+    for cost_field, kind in LITELLM_COST_FIELDS.items():
+        price = _fmt(_per_token_to_per_1k(entry.get(cost_field)))
         if price is not None:
-            result[kind] = price
-    return result or None
+            rates[kind] = price
+    if "llm_input" not in rates and "llm_output" not in rates:
+        return None
+    return rates
 
 
 def _litellm_entry(model_id: str, litellm_data: dict[str, Any], provider: str | None = None) -> dict | None:
@@ -255,17 +255,7 @@ def resolve_pricing_from_litellm(
 ) -> dict[str, str] | None:
     """Per-1K rates for a model from the LiteLLM price table."""
     entry = _litellm_entry(model_id, litellm_data, provider)
-    if entry is None:
-        return None
-    return _rates_from_raw(
-        {
-            "llm_input": entry.get("input_cost_per_token"),
-            "llm_output": entry.get("output_cost_per_token"),
-            "llm_cached_input": entry.get("cache_read_input_token_cost"),
-            "llm_cache_write": entry.get("cache_creation_input_token_cost"),
-        },
-        _per_token_to_per_1k,
-    )
+    return _rates_from_entry(entry) if entry is not None else None
 
 
 def build_pricing_entries(model_id: str, rates_by_provider: dict[str, dict[str, str]]) -> list[dict]:
@@ -284,10 +274,6 @@ def build_pricing_entries(model_id: str, rates_by_provider: dict[str, dict[str, 
 # Discovery via the price table's own git history
 
 
-def _litellm_at(sha: str) -> dict[str, Any]:
-    return _get_json(LITELLM_PRICING_AT_URL.format(sha=sha))
-
-
 def baseline_sha(days: int, today: datetime.date | None = None) -> str | None:
     """SHA of the last commit to touch the price table before *days* ago.
 
@@ -296,8 +282,8 @@ def baseline_sha(days: int, today: datetime.date | None = None) -> str | None:
     """
     cutoff = (today or datetime.datetime.now(datetime.UTC).date()) - datetime.timedelta(days=days)
     try:
-        commits = _get_json(
-            LITELLM_COMMITS_URL.format(until=f"{cutoff.isoformat()}T00:00:00Z"), headers=_github_headers()
+        commits = get_json(
+            LITELLM_COMMITS_URL.format(until=f"{cutoff.isoformat()}T00:00:00Z"), headers=github_headers()
         )
     except Exception as exc:  # ordering is a nicety, not worth failing over
         print(f"  (!) could not read LiteLLM history ({exc}); recency unknown.")
@@ -315,7 +301,7 @@ def fetch_baseline(days: int, today: datetime.date | None = None) -> dict[str, A
     if not sha:
         return None
     try:
-        return _litellm_at(sha) or None
+        return get_json(LITELLM_PRICING_AT_URL.format(sha=sha)) or None
     except Exception as exc:
         print(f"  (!) could not read the baseline price table ({exc}); recency unknown.")
         return None
@@ -392,24 +378,20 @@ def eligible_models(litellm_data: dict[str, Any], today: datetime.date | None = 
         if mapped is None:
             continue
         ocs_provider, name = mapped
-        record = merged.setdefault(name, {"id": name, "providers": [], "keys": {}, "deprecation_date": None})
+        record = merged.setdefault(name, {"id": name, "providers": set(), "keys": {}, "deprecation_date": None})
         _merge_provider_key(record, key, entry, ocs_provider)
     for record in merged.values():
-        record["providers"].sort()
+        record["providers"] = sorted(record["providers"])
     return merged
 
 
 def _merge_provider_key(record: dict, key: str, entry: dict, ocs_provider: str) -> None:
     """Fold one price-table key into the record for the model name it maps to."""
-    if ocs_provider not in record["providers"]:
-        record["providers"].append(ocs_provider)
-    if _prefers_key(key, record["keys"].get(ocs_provider), ocs_provider):
+    record["providers"].add(ocs_provider)
+    incumbent = record["keys"].get(ocs_provider)
+    if incumbent is None or _key_rank(key, ocs_provider) < _key_rank(incumbent, ocs_provider):
         record["keys"][ocs_provider] = key
     record["deprecation_date"] = record["deprecation_date"] or entry.get("deprecation_date")
-
-
-def _prefers_key(key: str, incumbent: str | None, ocs_provider: str) -> bool:
-    return incumbent is None or _key_rank(key, ocs_provider) < _key_rank(incumbent, ocs_provider)
 
 
 def _key_rank(key: str, ocs_provider: str) -> tuple[int, int]:
@@ -443,7 +425,8 @@ def select_candidates(
         for record in eligible_models(litellm_data, today).values()
         if any(_is_open(record["id"], p, registered, ignored) for p in record["providers"])
     ]
-    unregistered.sort(key=lambda r: (not r["recently_published"], r["id"]))
+    # Unknown recency (an unreachable baseline) sorts with "old", not with "new".
+    unregistered.sort(key=lambda r: (r["recently_published"] is not True, r["id"]))
     return unregistered[:MAX_NEW_MODELS_PER_RUN], unregistered[MAX_NEW_MODELS_PER_RUN:]
 
 
@@ -469,16 +452,20 @@ def audit_deprecated_upstream(
 # Candidate classification (new-models path)
 
 
-@dataclass
+@dataclass(frozen=True)
 class PricingResult:
     """Per-1K rates for each provider that has them, keyed by OCS provider."""
 
     rates_by_provider: dict[str, dict[str, str]]
-    source: str | None
 
     @property
     def has_pricing(self) -> bool:
         return bool(self.rates_by_provider)
+
+    @property
+    def source(self) -> str | None:
+        """Provenance recorded in the payload. LiteLLM is the only source."""
+        return "litellm" if self.has_pricing else None
 
 
 @dataclass
@@ -507,8 +494,8 @@ class Candidate:
         return self.raw.get("recently_published")
 
     @property
-    def source_url(self) -> str:
-        return LITELLM_SOURCE_URL
+    def deprecation_date(self) -> str | None:
+        return self.raw.get("deprecation_date")
 
     def registered_providers(self, registered: dict[str, set[str]]) -> list[str]:
         return [p for p in self.ocs_providers if self.id in registered.get(p, set())]
@@ -528,7 +515,7 @@ def resolve_pricing(candidate: Candidate, litellm_data: dict[str, Any]) -> Prici
         rates = resolve_pricing_from_litellm(candidate.litellm_key(provider), litellm_data, provider=provider)
         if rates:
             rates_by_provider[provider] = rates
-    return PricingResult(rates_by_provider, "litellm" if rates_by_provider else None)
+    return PricingResult(rates_by_provider)
 
 
 def token_limit_from_litellm(model_id: str, litellm_data: dict[str, Any], provider: str | None = None) -> int | None:
@@ -536,8 +523,8 @@ def token_limit_from_litellm(model_id: str, litellm_data: dict[str, Any], provid
     entry = _litellm_entry(model_id, litellm_data, provider)
     if entry is None:
         return None
-    for field in ("max_input_tokens", "max_tokens"):
-        value = entry.get(field)
+    for limit_field in ("max_input_tokens", "max_tokens"):
+        value = entry.get(limit_field)
         if isinstance(value, int) and value > 0:
             return value
     return None
@@ -562,35 +549,56 @@ def build_model_entry(
     priced: set[tuple[str, str]],
     pricing: PricingResult,
     token_limits: dict[str, int | None] | None = None,
-) -> tuple[dict, list[dict]]:
+) -> dict:
+    """One ``new_models[]`` entry of the payload."""
     model_id = candidate.id
     providers = candidate.ocs_providers
-    entry: dict = {
+    return {
         "id": model_id,
         "token_limit_by_provider": token_limits or {},
         "recently_published": candidate.recently_published,
-        "deprecation_date": candidate.raw.get("deprecation_date"),
+        "deprecation_date": candidate.deprecation_date,
         "ocs_providers": providers,
         "already_registered_providers": candidate.registered_providers(registered),
         "already_priced_providers": [p for p in providers if (p, model_id) in priced],
-        "source_url": candidate.source_url,
+        "source_url": LITELLM_SOURCE_URL,
+        "pricing": _pricing_section(model_id, providers=providers, priced=priced, pricing=pricing),
     }
+
+
+def _pricing_section(
+    model_id: str,
+    providers: list[str],
+    priced: set[tuple[str, str]],
+    pricing: PricingResult,
+) -> dict:
+    """The entry's ``pricing`` block, carrying the seed entries still to add."""
     if not pricing.has_pricing:
-        entry["pricing"] = {"has_pricing": False, "source": None, "reason": NO_PRICING_REASON}
-        return entry, []
+        return {"has_pricing": False, "source": None, "reason": NO_PRICING_REASON}
     needs_pricing = {
         provider: rates for provider, rates in pricing.rates_by_provider.items() if (provider, model_id) not in priced
     }
-    pricing_entries = build_pricing_entries(model_id, needs_pricing)
-    entry["pricing"] = {
+    return {
         "has_pricing": True,
         "source": pricing.source,
         "unit": "per_1k_tokens",
         "rates_by_provider": pricing.rates_by_provider,
         "unpriced_providers": [p for p in providers if p not in pricing.rates_by_provider],
-        "llm_pricing_entries": pricing_entries,
+        "llm_pricing_entries": build_pricing_entries(model_id, needs_pricing),
     }
-    return entry, pricing_entries
+
+
+@dataclass
+class Classification:
+    """What one run made of the candidates it was offered.
+
+    An accumulator: ``process_candidates`` appends to these as it goes.
+    """
+
+    new_models: list[dict] = field(default_factory=list)
+    already_registered: list[dict] = field(default_factory=list)
+    unpriced_models: list[dict] = field(default_factory=list)
+    pricing_entries: list[dict] = field(default_factory=list)
 
 
 def process_candidates(
@@ -598,16 +606,13 @@ def process_candidates(
     registered: dict[str, set[str]],
     priced: set[tuple[str, str]],
     litellm_data: dict[str, Any],
-) -> dict:
-    new_models: list[dict] = []
-    already_registered: list[dict] = []
-    unpriced: list[dict] = []
-    all_pricing_entries: list[dict] = []
-
+) -> Classification:
+    """Price and describe each candidate, setting aside the ones already registered."""
+    result = Classification()
     for raw in candidates:
         candidate = Candidate(raw)
         if candidate.is_fully_registered(registered):
-            already_registered.append(
+            result.already_registered.append(
                 {
                     "id": candidate.id,
                     "providers": candidate.ocs_providers,
@@ -616,21 +621,22 @@ def process_candidates(
             )
             continue
 
-        pricing = resolve_pricing(candidate, litellm_data)
-        token_limits = resolve_token_limits(candidate, litellm_data)
-        entry, pricing_entries = build_model_entry(candidate, registered, priced, pricing, token_limits)
-        all_pricing_entries.extend(pricing_entries)
-        new_models.append(entry)
+        pricing = resolve_pricing(candidate=candidate, litellm_data=litellm_data)
+        entry = build_model_entry(
+            candidate=candidate,
+            registered=registered,
+            priced=priced,
+            pricing=pricing,
+            token_limits=resolve_token_limits(candidate=candidate, litellm_data=litellm_data),
+        )
+        result.new_models.append(entry)
+        result.pricing_entries.extend(entry["pricing"].get("llm_pricing_entries", []))
 
         if not pricing.has_pricing:
-            unpriced.append({"id": candidate.id, "ocs_providers": candidate.ocs_providers, "reason": NO_PRICING_REASON})
-
-    return {
-        "new_models": new_models,
-        "already_registered": already_registered,
-        "unpriced_models": unpriced,
-        "pricing_entries": all_pricing_entries,
-    }
+            result.unpriced_models.append(
+                {"id": candidate.id, "ocs_providers": candidate.ocs_providers, "reason": NO_PRICING_REASON}
+            )
+    return result
 
 
 # Rate diff (existing-seed path)
@@ -646,15 +652,15 @@ class RateChange:
     source_url: str
 
 
-@dataclass(frozen=True)
-class _UpstreamRates:
-    model_name: str
-    new_rates: dict[str, str]
-    source_url: str
-
-
-def diffable_models(index: dict[tuple[str, str], dict[str, str]]) -> set[str]:
-    return {model for (provider, model), _ in index.items() if provider in DIFFABLE_PROVIDERS}
+def _diffable_by_model(
+    index: dict[tuple[str, str], dict[str, str]],
+) -> dict[str, list[tuple[str, dict[str, str]]]]:
+    """Seed rows under automated rewrite, grouped as ``{model: [(provider, rates)]}``."""
+    grouped: dict[str, list[tuple[str, dict[str, str]]]] = {}
+    for (provider, model), seed_rates in index.items():
+        if provider in DIFFABLE_PROVIDERS:
+            grouped.setdefault(model, []).append((provider, seed_rates))
+    return grouped
 
 
 def compute_changes(
@@ -668,48 +674,35 @@ def compute_changes(
     This makes no network calls of its own: the price table is one file,
     already fetched once per run.
     """
+    by_model = _diffable_by_model(index)
     changes: list[RateChange] = []
-    unmatched: set[str] = set()
-    for model_name in sorted(diffable_models(index)):
-        matched = False
-        for provider, seed_rates in _diffable_provider_rates(index, model_name):
+    matched: set[str] = set()
+    for model_name, provider_rates in sorted(by_model.items()):
+        for provider, seed_rates in provider_rates:
             new_rates = resolve_pricing_from_litellm(model_name, litellm_data, provider=provider)
             if not new_rates:
                 continue
-            matched = True
-            upstream = _UpstreamRates(model_name=model_name, new_rates=new_rates, source_url=LITELLM_SOURCE_URL)
-            changes.extend(_provider_rate_changes(provider, seed_rates, upstream))
-        if not matched:
-            unmatched.add(model_name)
-    return changes, unmatched
-
-
-def _diffable_provider_rates(
-    index: dict[tuple[str, str], dict[str, str]],
-    model_name: str,
-) -> list[tuple[str, dict[str, str]]]:
-    return [
-        (provider, seed_rates)
-        for (provider, name), seed_rates in index.items()
-        if name == model_name and provider in DIFFABLE_PROVIDERS
-    ]
+            matched.add(model_name)
+            changes.extend(_provider_rate_changes(provider, model_name, seed_rates, new_rates))
+    return changes, by_model.keys() - matched
 
 
 def _provider_rate_changes(
     provider: str,
+    model_name: str,
     seed_rates: dict[str, str],
-    upstream: _UpstreamRates,
+    new_rates: dict[str, str],
 ) -> list[RateChange]:
     return [
         RateChange(
             provider_type=provider,
-            model_name=upstream.model_name,
+            model_name=model_name,
             service_kind=service_kind,
             old_price=seed_rates.get(service_kind),
             new_price=new_price,
-            source_url=upstream.source_url,
+            source_url=LITELLM_SOURCE_URL,
         )
-        for service_kind, new_price in upstream.new_rates.items()
+        for service_kind, new_price in new_rates.items()
         if _price_differs(seed_rates.get(service_kind), new_price)
     ]
 
@@ -752,25 +745,15 @@ def _apply_to_rule(rule: dict, updated_kinds: dict[str, str]) -> dict:
 
 
 def generate_migration(migrations_dir: Path, today: datetime.date) -> Path:
-    next_num = _next_migration_number(migrations_dir)
-    prev_name = _latest_migration_name(migrations_dir)
-    filename = f"{next_num:04d}_rate_update_{today.strftime('%Y%m%d')}.py"
-    target = migrations_dir / filename
-    target.write_text(_migration_template(prev_name))
-    return target
-
-
-def _next_migration_number(migrations_dir: Path) -> int:
-    existing = sorted(p.stem for p in migrations_dir.glob("[0-9]*.py"))
-    last = existing[-1] if existing else "0000_initial"
-    return int(last.split("_", 1)[0]) + 1
-
-
-def _latest_migration_name(migrations_dir: Path) -> str:
+    """Write a rate-update migration depending on the latest existing one."""
     existing = sorted(p.stem for p in migrations_dir.glob("[0-9]*.py"))
     if not existing:
         raise RuntimeError(f"No existing migrations in {migrations_dir}")
-    return existing[-1]
+    prev_name = existing[-1]
+    next_num = int(prev_name.split("_", 1)[0]) + 1
+    target = migrations_dir / f"{next_num:04d}_rate_update_{today.strftime('%Y%m%d')}.py"
+    target.write_text(_migration_template(prev_name))
+    return target
 
 
 def _migration_template(prev_name: str) -> str:
@@ -935,37 +918,38 @@ class _ReconcileResults:
     candidates: list[dict]
     backlog: list[dict]
     deprecated_upstream: list[dict]
-    classification: dict
     changes: list[RateChange]
     unmatched_diff: set[str]
     missing: list[MissingPricingEntry]  # truly unresolvable after litellm backfill
     backfilled: list[dict]  # new seed entries resolved from litellm
+    classification: Classification = field(default_factory=Classification)
 
 
 # Output assembly + GitHub Actions integration
 
 
 def _assemble_payload(results: _ReconcileResults, *, run_date: str) -> dict:
+    classified = results.classification
     return {
         "run_date": run_date,
         "summary": {
             "candidates": len(results.candidates),
             "backlog": len(results.backlog),
             "deprecated_upstream": len(results.deprecated_upstream),
-            "new_models": len(results.classification["new_models"]),
-            "already_registered": len(results.classification["already_registered"]),
-            "unpriced_candidates": len(results.classification["unpriced_models"]),
-            "pricing_entries_generated": len(results.classification["pricing_entries"]),
+            "new_models": len(classified.new_models),
+            "already_registered": len(classified.already_registered),
+            "unpriced_candidates": len(classified.unpriced_models),
+            "pricing_entries_generated": len(classified.pricing_entries),
             "price_changes": len(results.changes),
             "backfilled_from_litellm": len(results.backfilled),
             "missing_pricing": len(results.missing),
         },
-        "new_models": results.classification["new_models"],
+        "new_models": classified.new_models,
         "backlog": [{"id": m["id"], "ocs_providers": m["providers"]} for m in results.backlog],
         "deprecated_upstream": results.deprecated_upstream,
-        "already_registered": results.classification["already_registered"],
-        "unpriced_models": results.classification["unpriced_models"],
-        "pricing_entries": results.classification["pricing_entries"],
+        "already_registered": classified.already_registered,
+        "unpriced_models": classified.unpriced_models,
+        "pricing_entries": classified.pricing_entries,
         "price_changes": [c.__dict__ for c in results.changes],
         "unmatched_diff_models": sorted(results.unmatched_diff),
         "backfilled_pricing": results.backfilled,
@@ -985,58 +969,54 @@ def _write_github_output(lines: list[str]) -> None:
             f.write(f"{line}\n")
 
 
-def _new_models_outputs(new_models: list[dict]) -> list[str]:
-    count = len(new_models)
-    return [
-        f"has_new_models={'true' if count else 'false'}",
-        f"new_model_count={count}",
-        f"new_model_ids={','.join(m['id'] for m in new_models)}",
-    ]
-
-
-def _price_change_outputs(
+def _github_outputs(
     results: _ReconcileResults,
+    *,
     today: datetime.date,
-    body_path: Path | None,
+    pricing_body_path: Path | None,
+    missing_body_path: Path | None,
 ) -> list[str]:
-    change_count = len(results.changes)
-    backfill_count = len(results.backfilled)
-    # The gate opens a PR, so it follows the body being written rather than
-    # the changes being found: --dry-run finds them and writes nothing.
-    has_any = body_path is not None
+    """The gate variables the workflow reads back from ``$GITHUB_OUTPUT``."""
+    new_models = results.classification.new_models
+    deprecated = results.deprecated_upstream
+    # A pricing PR is gated on its body being written rather than on changes
+    # being found: --dry-run finds them and writes nothing.
+    has_pricing_pr = pricing_body_path is not None
+    values: dict[str, object] = {
+        "has_new_models": bool(new_models),
+        "new_model_count": len(new_models),
+        "new_model_ids": ",".join(m["id"] for m in new_models),
+        "has_deprecated_upstream": bool(deprecated),
+        "deprecated_upstream_count": len(deprecated),
+        # Either signal is work for the Claude Code job, so the workflow gates
+        # on one variable rather than repeating the disjunction per step.
+        "has_catalogue_work": bool(new_models or deprecated),
+        "has_price_changes": has_pricing_pr,
+        "price_change_count": len(results.changes),
+        "backfilled_count": len(results.backfilled),
+        "pricing_pr_title": _pricing_pr_title(results, today) if has_pricing_pr else "",
+        "pricing_pr_body_path": pricing_body_path,
+        "has_missing_pricing": bool(results.missing),
+        "missing_pricing_count": len(results.missing),
+        "missing_pricing_issue_body_path": missing_body_path,
+    }
+    return [f"{name}={_render_output(value)}" for name, value in values.items()]
+
+
+def _render_output(value: object) -> str:
+    """Booleans as Actions expects them, and an absent path as an empty string."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return "" if value is None else str(value)
+
+
+def _pricing_pr_title(results: _ReconcileResults, today: datetime.date) -> str:
     parts = []
-    if change_count:
-        parts.append(f"{change_count} rate change(s)")
-    if backfill_count:
-        parts.append(f"{backfill_count} backfilled from LiteLLM")
-    title = f"Pricing update: {', '.join(parts)} ({today.isoformat()})" if has_any else ""
-    return [
-        f"has_price_changes={'true' if has_any else 'false'}",
-        f"price_change_count={change_count}",
-        f"backfilled_count={backfill_count}",
-        f"pricing_pr_title={title}",
-        f"pricing_pr_body_path={body_path or ''}",
-    ]
-
-
-def _deprecated_upstream_outputs(deprecated: list[dict]) -> list[str]:
-    count = len(deprecated)
-    return [
-        f"has_deprecated_upstream={'true' if count else 'false'}",
-        f"deprecated_upstream_count={count}",
-    ]
-
-
-def _missing_pricing_outputs(missing: list[MissingPricingEntry], body_path: Path | None) -> list[str]:
-    count = len(missing)
-    return [
-        f"has_missing_pricing={'true' if count else 'false'}",
-        f"missing_pricing_count={count}",
-        f"missing_pricing_issue_body_path={body_path or ''}",
-    ]
-
-
-# CLI
+    if results.changes:
+        parts.append(f"{len(results.changes)} rate change(s)")
+    if results.backfilled:
+        parts.append(f"{len(results.backfilled)} backfilled from LiteLLM")
+    return f"Pricing update: {', '.join(parts)} ({today.isoformat()})"
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -1069,7 +1049,7 @@ class UpstreamUnavailable(RuntimeError):
 
 def _load_litellm() -> dict[str, Any]:
     try:
-        data = _get_json(LITELLM_PRICING_URL)
+        data = get_json(LITELLM_PRICING_URL)
     except Exception as exc:
         raise UpstreamUnavailable(f"could not fetch the LiteLLM price table: {exc}") from exc
     if not data:
@@ -1163,11 +1143,13 @@ def _run_reconciliation(
     litellm_data = _load_litellm()
 
     print(f"  Reading the price table as it stood {baseline_days} day(s) ago ...")
-    baseline = fetch_baseline(baseline_days, today)
-    candidates, backlog = select_candidates(litellm_data, baseline, registered, ignored, today)
+    baseline = fetch_baseline(days=baseline_days, today=today)
+    candidates, backlog = select_candidates(
+        litellm_data, baseline=baseline, registered=registered, ignored=ignored, today=today
+    )
     recent = sum(1 for c in candidates if c["recently_published"])
     print(f"  -> {len(candidates)} candidate(s) ({recent} newly published), {len(backlog)} in backlog")
-    classification = process_candidates(candidates, registered, priced, litellm_data)
+    classification = process_candidates(candidates, registered=registered, priced=priced, litellm_data=litellm_data)
 
     print("  Diffing seed against the LiteLLM price table ...")
     changes, unmatched_diff = compute_changes(index, litellm_data)
@@ -1180,7 +1162,7 @@ def _run_reconciliation(
     print(f"  -> backfilled {len(backfilled)}, still missing {len(still_missing)}")
 
     print("  Checking active models against upstream deprecation dates ...")
-    deprecated = audit_deprecated_upstream(active, litellm_data, today)
+    deprecated = audit_deprecated_upstream(active, litellm_data, today=today)
     print(f"  -> {len(deprecated)} active model(s) past their upstream deprecation date")
 
     return _ReconcileResults(
@@ -1207,11 +1189,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[reconcile-models] repo_root={repo_root}")
 
     try:
-        results = _run_reconciliation(repo_root, args.baseline_days, today)
+        results = _run_reconciliation(repo_root, baseline_days=args.baseline_days, today=today)
     except UpstreamUnavailable as exc:
         print(f"  (!) {exc}")
         return 1
-    pricing_body_path = _commit_price_changes(results, repo_root, args.output, today, args.dry_run)
+    pricing_body_path = _commit_price_changes(
+        results, repo_root=repo_root, output_path=args.output, today=today, dry_run=args.dry_run
+    )
     missing_body_path = _write_missing_body(results, args.output)
 
     payload = _assemble_payload(results, run_date=datetime.datetime.now(datetime.UTC).isoformat())
@@ -1224,10 +1208,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {key}: {value}")
 
     _write_github_output(
-        _new_models_outputs(results.classification["new_models"])
-        + _price_change_outputs(results, today, pricing_body_path)
-        + _missing_pricing_outputs(results.missing, missing_body_path)
-        + _deprecated_upstream_outputs(results.deprecated_upstream)
+        _github_outputs(
+            results,
+            today=today,
+            pricing_body_path=pricing_body_path,
+            missing_body_path=missing_body_path,
+        )
     )
     return 0
 

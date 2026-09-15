@@ -62,6 +62,7 @@ jobs:
       new_model_ids: ${{ steps.reconcile.outputs.new_model_ids }}
       has_deprecated_upstream: ${{ steps.reconcile.outputs.has_deprecated_upstream }}
       deprecated_upstream_count: ${{ steps.reconcile.outputs.deprecated_upstream_count }}
+      has_catalogue_work: ${{ steps.reconcile.outputs.has_catalogue_work }}
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.
@@ -91,7 +92,7 @@ jobs:
           python3 -m scripts.auto_sync_models.run --output reconciliation.json
 
       - name: Upload reconciliation payload
-        if: steps.reconcile.outputs.has_new_models == 'true' || steps.reconcile.outputs.has_deprecated_upstream == 'true'
+        if: steps.reconcile.outputs.has_catalogue_work == 'true'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: reconciliation-payload
@@ -157,7 +158,7 @@ jobs:
 
   new-models-pr:
     needs: reconcile
-    if: needs.reconcile.outputs.has_new_models == 'true' || needs.reconcile.outputs.has_deprecated_upstream == 'true'
+    if: needs.reconcile.outputs.has_catalogue_work == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

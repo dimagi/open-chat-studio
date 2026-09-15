@@ -17,8 +17,7 @@ from typing import Any
 
 import pytest
 
-from scripts.auto_sync_models import http as reconcile_http
-from scripts.auto_sync_models import run as reconcile_models
+from scripts.auto_sync_models import http, run
 from scripts.auto_sync_models.catalogue import (
     IGNORED_MODELS_REL_PATH,
     load_active_default_models,
@@ -30,7 +29,7 @@ from scripts.auto_sync_models.http import (
     MAX_BACKOFF_SECONDS,
     MAX_TOTAL_BURST_WAIT_SECONDS,
     RATE_LIMIT_JITTER_SECONDS,
-    _get_json,
+    get_json,
 )
 from scripts.auto_sync_models.run import (
     LITELLM_SOURCE_URL,
@@ -43,7 +42,6 @@ from scripts.auto_sync_models.run import (
     _fmt,
     _key_for_provider,
     _litellm_entry,
-    _next_migration_number,
     _per_token_to_per_1k,
     _ReconcileResults,
     apply_changes,
@@ -52,7 +50,6 @@ from scripts.auto_sync_models.run import (
     backfill_missing_from_litellm,
     build_pricing_entries,
     compute_changes,
-    diffable_models,
     eligible_models,
     fetch_baseline,
     generate_migration,
@@ -334,18 +331,22 @@ SAMPLE_PRICING = [
 ]
 
 
-@pytest.fixture()
-def repo_root(tmp_path: Path) -> Path:
-    """Minimal repo tree with default_models.py and llm_pricing.json."""
+def _write_repo(tmp_path: Path, default_models: str, pricing: list[dict] | None = None) -> Path:
+    """Minimal repo tree holding just default_models.py and llm_pricing.json."""
     models_dir = tmp_path / "apps/service_providers/llm_service"
     models_dir.mkdir(parents=True)
-    (models_dir / "default_models.py").write_text(SAMPLE_DEFAULT_MODELS)
+    (models_dir / "default_models.py").write_text(default_models)
 
     pricing_dir = tmp_path / "apps/cost_tracking/seed_data"
     pricing_dir.mkdir(parents=True)
-    (pricing_dir / "llm_pricing.json").write_text(json.dumps(SAMPLE_PRICING))
+    (pricing_dir / "llm_pricing.json").write_text(json.dumps(pricing or []))
 
     return tmp_path
+
+
+@pytest.fixture()
+def repo_root(tmp_path: Path) -> Path:
+    return _write_repo(tmp_path, SAMPLE_DEFAULT_MODELS, SAMPLE_PRICING)
 
 
 # load_registered_models
@@ -430,14 +431,7 @@ SAMPLE_AWKWARD_MODELS = textwrap.dedent(
 @pytest.fixture()
 def awkward_repo_root(tmp_path: Path) -> Path:
     """Repo tree whose default_models.py uses awkward (but valid) formatting."""
-    models_dir = tmp_path / "apps/service_providers/llm_service"
-    models_dir.mkdir(parents=True)
-    (models_dir / "default_models.py").write_text(SAMPLE_AWKWARD_MODELS)
-
-    pricing_dir = tmp_path / "apps/cost_tracking/seed_data"
-    pricing_dir.mkdir(parents=True)
-    (pricing_dir / "llm_pricing.json").write_text("[]")
-    return tmp_path
+    return _write_repo(tmp_path, SAMPLE_AWKWARD_MODELS)
 
 
 def test_registered_comment_between_model_and_name(awkward_repo_root):
@@ -511,9 +505,9 @@ def test_process_new_model_with_pricing():
     registered = {"openai": set(), "azure": set()}
     result = process_candidates(candidates, registered, set(), _entry("gpt-new"))
 
-    assert len(result["new_models"]) == 1
-    assert len(result["already_registered"]) == 0
-    m = result["new_models"][0]
+    assert len(result.new_models) == 1
+    assert len(result.already_registered) == 0
+    m = result.new_models[0]
     assert m["pricing"]["has_pricing"] is True
     assert m["pricing"]["source"] == "litellm"
     assert m["token_limit_by_provider"] == {"openai": 128000, "azure": 128000}
@@ -525,9 +519,9 @@ def test_process_fully_registered_model_is_skipped():
     candidates = [_candidate("gpt-4o")]
     registered = {"openai": {"gpt-4o"}, "azure": {"gpt-4o"}}
     result = process_candidates(candidates, registered, set(), {})
-    assert len(result["new_models"]) == 0
-    assert len(result["already_registered"]) == 1
-    assert result["already_registered"][0]["id"] == "gpt-4o"
+    assert len(result.new_models) == 0
+    assert len(result.already_registered) == 1
+    assert result.already_registered[0]["id"] == "gpt-4o"
 
 
 def test_process_partially_registered_model_still_processed():
@@ -535,14 +529,14 @@ def test_process_partially_registered_model_still_processed():
     candidates = [_candidate("gpt-4o")]
     registered = {"openai": {"gpt-4o"}, "azure": set()}
     result = process_candidates(candidates, registered, set(), {})
-    assert len(result["new_models"]) == 1
+    assert len(result.new_models) == 1
 
 
 def test_process_unpriced_model_flagged():
     candidate = _candidate("mystery-model", providers=("deepseek",))
     result = process_candidates([candidate], {"deepseek": set()}, set(), {})
-    assert len(result["unpriced_models"]) == 1
-    assert result["new_models"][0]["pricing"]["has_pricing"] is False
+    assert len(result.unpriced_models) == 1
+    assert result.new_models[0]["pricing"]["has_pricing"] is False
 
 
 def test_process_already_priced_providers_excluded():
@@ -550,7 +544,7 @@ def test_process_already_priced_providers_excluded():
     registered = {"openai": set(), "azure": set()}
     priced = {("openai", "gpt-4o")}
     result = process_candidates(candidates, registered, priced, _entry("gpt-4o"))
-    m = result["new_models"][0]
+    m = result.new_models[0]
     assert m["already_priced_providers"] == ["openai"]
     entry_providers = {e["provider_type"] for e in m["pricing"]["llm_pricing_entries"]}
     assert entry_providers == {"azure"}
@@ -565,10 +559,10 @@ def test_process_pricing_entries_flat_list():
     registered = {"anthropic": set(), "google": set(), "google_vertex_ai": set()}
     litellm_data = {**_entry("model-a"), **_entry("model-b")}
     result = process_candidates(candidates, registered, set(), litellm_data)
-    assert len(result["pricing_entries"]) == 3
+    assert len(result.pricing_entries) == 3
 
 
-# seed_index + diffable_models
+# seed_index + _diffable_by_model
 
 
 def test_seed_index_keys_by_provider_and_model():
@@ -589,14 +583,14 @@ def test_seed_index_keys_by_provider_and_model():
     assert index[("azure", "gpt-4o")] == {"llm_input": "0.0025"}
 
 
-def test_diffable_models_skips_non_upstream_providers():
+def test_diffable_by_model_skips_non_upstream_providers():
     index = {
         ("openai", "gpt-4o"): {},
         ("azure", "gpt-4o"): {},
         ("groq", "llama-3.3-70b-versatile"): {},
         ("deepseek", "deepseek-v4-flash"): {},
     }
-    assert diffable_models(index) == {"gpt-4o"}
+    assert run._diffable_by_model(index).keys() == {"gpt-4o"}
 
 
 # compute_changes
@@ -724,11 +718,14 @@ class TestApplyChanges:
 # Migration generation
 
 
-def test_next_migration_number_increments(tmp_path):
+def test_migration_number_increments_and_ignores_non_numbered_files(tmp_path):
     (tmp_path / "0001_initial.py").touch()
     (tmp_path / "0002_seed_pricing.py").touch()
     (tmp_path / "__init__.py").touch()  # should be ignored
-    assert _next_migration_number(tmp_path) == 3
+
+    written = generate_migration(tmp_path, datetime.date(2026, 6, 17))
+
+    assert written.name.startswith("0003_")
 
 
 def test_generate_migration_writes_file_with_correct_dependency(tmp_path):
@@ -823,7 +820,6 @@ def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_
         candidates=[],
         backlog=[],
         deprecated_upstream=[],
-        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
         missing=[],
@@ -877,7 +873,6 @@ def test_commit_price_changes_backfill_does_not_overwrite_curated_prices(repo_ro
         candidates=[],
         backlog=[],
         deprecated_upstream=[],
-        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
         changes=[],
         unmatched_diff=set(),
         missing=[],
@@ -1093,25 +1088,44 @@ def test_render_missing_pricing_issue_body_one_row_per_entry():
 # --today, --dry-run and the GitHub Actions gates
 
 
-def test_dry_run_leaves_the_seed_and_migrations_alone(repo_root, tmp_path):
-    """Running the script to inspect its output must not rewrite the repo."""
-    seed_path = repo_root / reconcile_models.LLM_PRICING_REL_PATH
-    before = seed_path.read_text()
-    migrations = repo_root / reconcile_models.MIGRATIONS_DIR_REL_PATH
-    changes = [RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", LITELLM_SOURCE_URL)]
-    results = _ReconcileResults(
-        candidates=[],
-        backlog=[],
-        deprecated_upstream=[],
-        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
-        changes=changes,
-        unmatched_diff=set(),
-        missing=[],
-        backfilled=[],
+A_RATE_CHANGE = RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", LITELLM_SOURCE_URL)
+
+
+def _results(**overrides) -> _ReconcileResults:
+    """An otherwise-empty reconciliation result, for the side-effect tests."""
+    fields: dict[str, Any] = {
+        "candidates": [],
+        "backlog": [],
+        "deprecated_upstream": [],
+        "changes": [],
+        "unmatched_diff": set(),
+        "missing": [],
+        "backfilled": [],
+    }
+    return _ReconcileResults(**(fields | overrides))
+
+
+def _gate_outputs(results: _ReconcileResults, pricing_body_path: Path | None = None) -> list[str]:
+    return run._github_outputs(
+        results,
+        today=datetime.date(2026, 7, 1),
+        pricing_body_path=pricing_body_path,
+        missing_body_path=None,
     )
 
+
+def test_dry_run_leaves_the_seed_and_migrations_alone(repo_root, tmp_path):
+    """Running the script to inspect its output must not rewrite the repo."""
+    seed_path = repo_root / run.LLM_PRICING_REL_PATH
+    before = seed_path.read_text()
+    migrations = repo_root / run.MIGRATIONS_DIR_REL_PATH
+
     body_path = _commit_price_changes(
-        results, repo_root, tmp_path / "out.json", datetime.date(2026, 7, 1), dry_run=True
+        _results(changes=[A_RATE_CHANGE]),
+        repo_root=repo_root,
+        output_path=tmp_path / "out.json",
+        today=datetime.date(2026, 7, 1),
+        dry_run=True,
     )
 
     assert body_path is None
@@ -1121,22 +1135,17 @@ def test_dry_run_leaves_the_seed_and_migrations_alone(repo_root, tmp_path):
 
 def test_dry_run_does_not_gate_a_pricing_pr(repo_root, tmp_path):
     """The gate opens a PR for a commit that --dry-run never makes."""
-    changes = [RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", LITELLM_SOURCE_URL)]
-    results = _ReconcileResults(
-        candidates=[],
-        backlog=[],
-        deprecated_upstream=[],
-        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
-        changes=changes,
-        unmatched_diff=set(),
-        missing=[],
-        backfilled=[],
-    )
+    results = _results(changes=[A_RATE_CHANGE])
+
     body_path = _commit_price_changes(
-        results, repo_root, tmp_path / "out.json", datetime.date(2026, 7, 1), dry_run=True
+        results,
+        repo_root=repo_root,
+        output_path=tmp_path / "out.json",
+        today=datetime.date(2026, 7, 1),
+        dry_run=True,
     )
 
-    outputs = reconcile_models._price_change_outputs(results, datetime.date(2026, 7, 1), body_path)
+    outputs = _gate_outputs(results, pricing_body_path=body_path)
 
     assert "has_price_changes=false" in outputs
     assert "price_change_count=1" in outputs
@@ -1145,18 +1154,23 @@ def test_dry_run_does_not_gate_a_pricing_pr(repo_root, tmp_path):
 def test_deprecated_upstream_gets_its_own_gate():
     """A run with no candidates but a passed deprecation date still has work
     for the Claude Code job, so it cannot ride on has_new_models."""
-    outputs = reconcile_models._deprecated_upstream_outputs(
-        [{"provider_type": "openai", "model_name": "gpt-old", "deprecation_date": "2026-02-17"}]
-    )
+    deprecated = [{"provider_type": "openai", "model_name": "gpt-old", "deprecation_date": "2026-02-17"}]
 
-    assert outputs == ["has_deprecated_upstream=true", "deprecated_upstream_count=1"]
+    outputs = _gate_outputs(_results(deprecated_upstream=deprecated))
+
+    assert "has_deprecated_upstream=true" in outputs
+    assert "deprecated_upstream_count=1" in outputs
+    assert "has_new_models=false" in outputs
+    # Job 2 gates on this one variable rather than repeating the disjunction.
+    assert "has_catalogue_work=true" in outputs
 
 
 def test_deprecated_upstream_gate_is_false_when_empty():
-    assert reconcile_models._deprecated_upstream_outputs([]) == [
-        "has_deprecated_upstream=false",
-        "deprecated_upstream_count=0",
-    ]
+    outputs = _gate_outputs(_results())
+
+    assert "has_deprecated_upstream=false" in outputs
+    assert "deprecated_upstream_count=0" in outputs
+    assert "has_catalogue_work=false" in outputs
 
 
 def test_today_override_reaches_the_baseline_and_the_deprecation_audit(recorder, repo_root):
@@ -1164,7 +1178,7 @@ def test_today_override_reaches_the_baseline_and_the_deprecation_audit(recorder,
     migration filename."""
     rec = recorder(current=_entry("gpt-old", deprecation_date="2026-05-01"))
 
-    results = reconcile_models._run_reconciliation(repo_root, baseline_days=7, today=datetime.date(2026, 4, 1))
+    results = run._run_reconciliation(repo_root, baseline_days=7, today=datetime.date(2026, 4, 1))
 
     assert any("until=2026-03-25T00:00:00Z" in url for url in rec.urls)
     assert [c["id"] for c in results.candidates] == ["gpt-old"]
@@ -1173,21 +1187,21 @@ def test_today_override_reaches_the_baseline_and_the_deprecation_audit(recorder,
 def test_a_model_past_its_deprecation_date_is_not_offered(recorder, repo_root):
     recorder(current=_entry("gpt-old", deprecation_date="2026-05-01"))
 
-    results = reconcile_models._run_reconciliation(repo_root, baseline_days=7, today=datetime.date(2026, 6, 1))
+    results = run._run_reconciliation(repo_root, baseline_days=7, today=datetime.date(2026, 6, 1))
 
     assert results.candidates == []
 
 
 # Upstream request budget
 #
-# Every HTTP request goes through `_get_json`, so patching it gives an exact
+# Every HTTP request goes through `get_json`, so patching it gives an exact
 # per-run call count. There is one upstream now - LiteLLM's price table - so a
 # run costs the current file, the baseline file, and the commit lookup that
 # finds the baseline. No credentials, no metered API, no per-model requests.
 
 
 class _CallRecorder:
-    """Stand-in for `reconcile_models._get_json` that records every URL."""
+    """Stand-in for `run.get_json` that records every URL."""
 
     def __init__(self, current: dict | None = None, baseline: dict | None = None, sha: str = "abc123"):
         self.urls: list[str] = []
@@ -1218,7 +1232,7 @@ class _CallRecorder:
 def recorder(monkeypatch):
     def _make(**kwargs):
         rec = _CallRecorder(**kwargs)
-        monkeypatch.setattr(reconcile_models, "_get_json", rec)
+        monkeypatch.setattr(run, "get_json", rec)
         return rec
 
     return _make
@@ -1228,14 +1242,14 @@ def test_call_budget_formula(recorder, repo_root):
     """One run = 1 commit lookup + the current file + the baseline file."""
     rec = recorder(current=_entry("gpt-new"), baseline={})
 
-    reconcile_models._run_reconciliation(repo_root)
+    run._run_reconciliation(repo_root)
 
     assert rec.counts == {"github_api": 1, "raw_files": 2, "total": 3}
 
 
 def test_call_budget_is_independent_of_seed_size(recorder, repo_root):
     """Growing the seed costs no extra requests: the diff reads one file."""
-    (repo_root / reconcile_models.LLM_PRICING_REL_PATH).write_text(
+    (repo_root / run.LLM_PRICING_REL_PATH).write_text(
         json.dumps(
             [
                 {
@@ -1249,7 +1263,7 @@ def test_call_budget_is_independent_of_seed_size(recorder, repo_root):
     )
     rec = recorder(current=_entry("gpt-4o"))
 
-    reconcile_models._run_reconciliation(repo_root)
+    run._run_reconciliation(repo_root)
 
     assert rec.counts["total"] == 3
 
@@ -1259,7 +1273,7 @@ def test_run_survives_an_unreachable_commit_history(recorder, repo_root):
     rather than claiming every model was published this week."""
     rec = recorder(current=_entry("gpt-new"), sha="")
 
-    results = reconcile_models._run_reconciliation(repo_root)
+    results = run._run_reconciliation(repo_root)
 
     assert [c["id"] for c in results.candidates] == ["gpt-new"]
     assert results.candidates[0]["recently_published"] is None
@@ -1271,15 +1285,15 @@ def test_run_fails_when_the_price_table_is_unreadable(recorder, repo_root):
     nothing to report and must not exit 0 having produced nothing."""
     recorder(current={})
 
-    with pytest.raises(reconcile_models.UpstreamUnavailable):
-        reconcile_models._run_reconciliation(repo_root)
+    with pytest.raises(run.UpstreamUnavailable):
+        run._run_reconciliation(repo_root)
 
 
 def test_only_public_hosts_are_contacted(recorder, repo_root):
     """The run needs no credentials: both files are public."""
     rec = recorder(current=_entry("gpt-new"))
 
-    reconcile_models._run_reconciliation(repo_root)
+    run._run_reconciliation(repo_root)
 
     assert all(u.startswith(("https://raw.githubusercontent.com/", "https://api.github.com/")) for u in rec.urls)
 
@@ -1449,7 +1463,7 @@ def test_token_limits_are_reported_per_provider():
 
     result = process_candidates(candidates, {"openai": set(), "azure": set()}, set(), table)
 
-    assert result["new_models"][0]["token_limit_by_provider"] == {"azure": 272000, "openai": 400000}
+    assert result.new_models[0]["token_limit_by_provider"] == {"azure": 272000, "openai": 400000}
 
 
 @pytest.mark.parametrize(
@@ -1509,7 +1523,7 @@ def test_each_provider_is_priced_from_its_own_key():
     result = process_candidates(candidates, {"openai": set(), "azure": set()}, set(), _RESELLER_TABLE)
 
     rates = {
-        e["provider_type"]: {r["service_kind"]: r["unit_price"] for r in e["rules"]} for e in result["pricing_entries"]
+        e["provider_type"]: {r["service_kind"]: r["unit_price"] for r in e["rules"]} for e in result.pricing_entries
     }
 
     assert rates["openai"] == {"llm_input": "0.00015", "llm_output": "0.0006", "llm_cached_input": "0.000075"}
@@ -1541,7 +1555,7 @@ def test_a_provider_with_no_upstream_rate_is_reported_not_guessed():
 
     result = process_candidates(candidates, {"openai": set(), "azure": set()}, set(), table)
 
-    entry = result["new_models"][0]
+    entry = result.new_models[0]
     assert entry["pricing"]["unpriced_providers"] == ["azure"]
     assert [e["provider_type"] for e in entry["pricing"]["llm_pricing_entries"]] == ["openai"]
 
@@ -1722,7 +1736,7 @@ def _http_error(status: int, retry_after: str | None = None, **headers: str) -> 
 
 @pytest.fixture()
 def urlopen(monkeypatch):
-    """Queue responses for `_get_json`. Returns a `(sleeps, requests)` pair of
+    """Queue responses for `get_json`. Returns a `(sleeps, requests)` pair of
     the durations slept and the `urllib.request.Request` objects sent."""
     sleeps: list[float] = []
     requests: list[Any] = []
@@ -1737,9 +1751,9 @@ def urlopen(monkeypatch):
                 raise item
             return io.BytesIO(json.dumps(item).encode())
 
-        monkeypatch.setattr(reconcile_http.urllib.request, "urlopen", _fake_urlopen)
-        monkeypatch.setattr(reconcile_http.time, "sleep", sleeps.append)
-        monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, _b: 0.0)
+        monkeypatch.setattr(http.urllib.request, "urlopen", _fake_urlopen)
+        monkeypatch.setattr(http.time, "sleep", sleeps.append)
+        monkeypatch.setattr(http.random, "uniform", lambda _a, _b: 0.0)
         return sleeps, requests
 
     return _install
@@ -1748,15 +1762,15 @@ def urlopen(monkeypatch):
 def test_burst_429_is_retried_after_retry_after_seconds(urlopen):
     sleeps, _ = urlopen(_http_error(429, "7"), {"ok": True})
 
-    assert _get_json(RAW_URL) == {"ok": True}
+    assert get_json(RAW_URL) == {"ok": True}
     assert sleeps == [7.0]
 
 
 def test_burst_429_sleep_gets_jitter(monkeypatch, urlopen):
     sleeps, _ = urlopen(_http_error(429, "7"), {"ok": True})
-    monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, b: b)
+    monkeypatch.setattr(http.random, "uniform", lambda _a, b: b)
 
-    _get_json(RAW_URL)
+    get_json(RAW_URL)
 
     assert sleeps == [7.0 + RATE_LIMIT_JITTER_SECONDS]
 
@@ -1769,9 +1783,9 @@ def test_backoff_window_doubles_per_consecutive_miss(urlopen, monkeypatch):
         _http_error(429, "not-a-number"),
         {"ok": True},
     )
-    monkeypatch.setattr(reconcile_http.random, "uniform", lambda _a, b: b)
+    monkeypatch.setattr(http.random, "uniform", lambda _a, b: b)
 
-    assert _get_json(RAW_URL) == {"ok": True}
+    assert get_json(RAW_URL) == {"ok": True}
     assert sleeps == [DEFAULT_RETRY_AFTER_SECONDS, DEFAULT_RETRY_AFTER_SECONDS * 2]
 
 
@@ -1780,7 +1794,7 @@ def test_retry_after_is_honoured_in_full(urlopen):
     window it asked for, so the header is slept in full rather than clamped."""
     sleeps, _ = urlopen(_http_error(429, "300"), {"ok": True})
 
-    _get_json(RAW_URL)
+    get_json(RAW_URL)
 
     assert sleeps == [300.0]
     assert MAX_BACKOFF_SECONDS < 300.0
@@ -1791,7 +1805,7 @@ def test_a_wait_that_would_outlast_the_budget_fails_without_sleeping(urlopen):
     sleeps, _ = urlopen(_http_error(429, "3600"))
 
     with pytest.raises(urllib.error.HTTPError):
-        _get_json(RAW_URL)
+        get_json(RAW_URL)
 
     assert sleeps == []
 
@@ -1799,7 +1813,7 @@ def test_a_wait_that_would_outlast_the_budget_fails_without_sleeping(urlopen):
 def test_rate_limits_are_retried_for_as_long_as_the_budget_allows(urlopen):
     sleeps, _ = urlopen(*[_http_error(429, "5")] * 30, {"ok": True})
 
-    assert _get_json(RAW_URL) == {"ok": True}
+    assert get_json(RAW_URL) == {"ok": True}
     assert sleeps == [5.0] * 30
 
 
@@ -1808,7 +1822,7 @@ def test_burst_retry_stops_at_the_total_wait_budget(urlopen):
     sleeps, _ = urlopen(*[_http_error(429, "60")] * 1000)
 
     with pytest.raises(urllib.error.HTTPError):
-        _get_json(RAW_URL)
+        get_json(RAW_URL)
 
     assert sum(sleeps) <= MAX_TOTAL_BURST_WAIT_SECONDS
 
@@ -1824,7 +1838,7 @@ def test_github_403_rate_limits_are_retried(urlopen, error):
     """GitHub reports its hourly and secondary limits as 403, not 429."""
     sleeps, _ = urlopen(error, {"ok": True})
 
-    assert _get_json(RAW_URL) == {"ok": True}
+    assert get_json(RAW_URL) == {"ok": True}
     assert len(sleeps) == 1
 
 
@@ -1834,7 +1848,7 @@ def test_a_plain_403_is_not_retried(urlopen):
     sleeps, _ = urlopen(_http_error(403))
 
     with pytest.raises(urllib.error.HTTPError):
-        _get_json(RAW_URL)
+        get_json(RAW_URL)
 
     assert sleeps == []
 
@@ -1845,7 +1859,7 @@ def test_other_errors_are_not_retried(urlopen, status):
     sleeps, _ = urlopen(_http_error(status))
 
     with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _get_json(RAW_URL)
+        get_json(RAW_URL)
 
     assert exc_info.value.code == status
     assert sleeps == []

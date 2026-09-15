@@ -36,7 +36,7 @@ MAX_TOTAL_BURST_WAIT_SECONDS = 900.0
 def _full_jitter(cap: float) -> float:
     """AWS "full jitter": sleep uniformly over the whole window rather than a
     fixed delay, so separate clients spread out instead of re-colliding."""
-    return random.uniform(0, max(cap, 0.0))
+    return random.uniform(0, cap)
 
 
 def _retry_delay_seconds(exc: urllib.error.HTTPError, backoff: float) -> float:
@@ -71,12 +71,12 @@ def _is_rate_limited(exc: urllib.error.HTTPError) -> bool:
     return bool(headers.get("Retry-After")) or headers.get("x-ratelimit-remaining") == "0"
 
 
-def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
+def get_json(url: str, headers: dict[str, str] | None = None) -> Any:
     """GET and parse JSON, sleeping through rate limits."""
+    req = urllib.request.Request(url, headers=headers or {})
     backoff = DEFAULT_RETRY_AFTER_SECONDS
     waited = 0.0
     while True:
-        req = urllib.request.Request(url, headers=headers or {})
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.load(resp)
@@ -93,7 +93,7 @@ def _get_json(url: str, headers: dict[str, str] | None = None) -> Any:
             waited += delay
 
 
-def _github_headers() -> dict[str, str]:
+def github_headers() -> dict[str, str]:
     """Headers for api.github.com, authenticated when a token is in the env.
 
     Unauthenticated requests share 60 per hour per IP with everything else on
