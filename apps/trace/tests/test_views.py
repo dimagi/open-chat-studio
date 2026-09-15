@@ -236,9 +236,14 @@ def test_trace_table_renders_chips_like_other_tables(client, team_with_users):
     client.force_login(user)
     response = client.get(reverse("trace:table", args=[team.slug]))
 
-    chips = re.findall(r'<a [^>]*class="([^"]*)"', response.content.decode())
+    html = response.content.decode()
+    # Sort headers also render as a real <a> now (see #4463), not just the bot/session
+    # chips this test is about -- exclude them by their own hx-ext="morph" marker rather
+    # than assume every <a class=...> on the page is a chip.
+    anchor_tags = [tag for tag in re.findall(r"<a [^>]*>", html) if 'hx-ext="morph"' not in tag]
+    chips = [re.search(r'class="([^"]*)"', tag).group(1) for tag in anchor_tags]
     assert chips
     for classes in chips:
         assert CHIP_BUTTON_STYLE in classes
         assert "max-w-xs" in classes
-    assert response.content.decode().count("min-w-0 truncate") == 2
+    assert html.count("min-w-0 truncate") == 2

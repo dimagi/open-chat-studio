@@ -36,7 +36,7 @@ export default function NodeOutputs({data}: {
         {outputNames.map((output, index) => (
           <LabeledHandle
             id={generateOutputHandle(index)}
-            key={index}
+            key={generateOutputHandle(index)}
             label={generateOutputLabel(index, output.label)}
             type="source"
             position={Position.Right}

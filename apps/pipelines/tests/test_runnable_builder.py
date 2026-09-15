@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 from typing import Literal
 from unittest import mock
-from unittest.mock import Mock, patch
 
 import pytest
 from django.core import mail
@@ -15,7 +14,7 @@ from pydantic import ValidationError as PydanticValidationError
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.context import NodeContext, PipelineAccessor
 from apps.pipelines.nodes.nodes import (
@@ -28,7 +27,6 @@ from apps.pipelines.nodes.nodes import (
 )
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
-    assistant_node,
     boolean_node,
     code_node,
     create_runnable,
@@ -45,8 +43,6 @@ from apps.pipelines.tests.utils import (
     state_key_router_node,
 )
 from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.runnables import ChainOutput
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     SourceMaterialFactory,
@@ -1093,139 +1089,6 @@ class TestDataExtraction:
             config = {"configurable": {"repo": ORMRepository(session=session)}}
             result = runnable.invoke(state, config=config)
             return result["participant_data"]
-
-
-class TestAssistantNode:
-    """Tests for assistant nodes (OpenAI assistants integration)"""
-
-    def assistant_node_runnable_mock(
-        self, output: str, input_message_metadata: dict | None = None, output_message_metadata: dict | None = None
-    ):
-        """A mock for an assistant node runnable that returns the given output and metadata."""
-        runnable_mock = Mock()
-        runnable_mock.invoke.return_value = ChainOutput(output=output, prompt_tokens=30, completion_tokens=20)
-        runnable_mock.history_manager = Mock()
-        runnable_mock.history_manager.input_message_metadata = input_message_metadata or {}
-        runnable_mock.history_manager.output_message_metadata = output_message_metadata or {}
-        return runnable_mock
-
-    @pytest.mark.django_db()
-    @pytest.mark.parametrize("tools_enabled", [True, False])
-    @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
-    def test_assistant_node(self, get_assistant_runnable, tools_enabled):
-        runnable_mock = self.assistant_node_runnable_mock(
-            output="Hi there human",
-            input_message_metadata={"test": "metadata"},
-            output_message_metadata={"test": "metadata"},
-        )
-        get_assistant_runnable.return_value = runnable_mock
-
-        pipeline = PipelineFactory.create()
-        assistant = OpenAiAssistantFactory.create(tools=[] if tools_enabled else ["some-tool"])
-        nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            messages=["Hi there bot"],
-            experiment_session=session,
-            attachments=[],
-        )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-        output_state = runnable.invoke(state, config=config)
-        assert output_state["input_message_metadata"] == {"test": "metadata"}
-        assert output_state["output_message_metadata"] == {"test": "metadata"}
-        assert output_state["messages"][-1] == "Hi there human"
-
-    @pytest.mark.django_db()
-    @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
-    def test_assistant_node_attachments(self, get_assistant_runnable):
-        runnable_mock = self.assistant_node_runnable_mock(output="Hi there human")
-        get_assistant_runnable.return_value = runnable_mock
-
-        pipeline = PipelineFactory.create()
-        assistant = OpenAiAssistantFactory.create()
-        nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
-        attachments = [
-            Attachment(
-                file_id=123, type="code_interpreter", name="test.py", size=10, download_link="http://localhost:8000"
-            ),
-            Attachment(
-                file_id=456,
-                type="code_interpreter",
-                name="demo.py",
-                size=10,
-                upload_to_assistant=True,
-                download_link="http://localhost:8000",
-            ),
-        ]
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            messages=["Hi there bot"],
-            experiment_session=session,
-            attachments=[att.model_dump() for att in attachments],
-        )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-        output_state = runnable.invoke(state, config=config)
-        assert output_state["messages"][-1] == "Hi there human"
-        args, kwargs = runnable_mock.invoke.call_args
-        assert kwargs["attachments"] == [attachments[1]]
-
-    @pytest.mark.django_db()
-    @patch("apps.pipelines.nodes.nodes.AssistantNode._get_assistant_runnable")
-    def test_assistant_node_raises(self, get_assistant_runnable):
-        runnable_mock = runnable_mock = self.assistant_node_runnable_mock(
-            output="Hi there human",
-            input_message_metadata={"test": "metadata"},
-            output_message_metadata={"test": "metadata"},
-        )
-        get_assistant_runnable.return_value = runnable_mock
-
-        assistant = OpenAiAssistantFactory.create()
-        pipeline = PipelineFactory.create()
-        nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-        runnable = create_runnable(pipeline, nodes)
-        # Delete the assistant after the node is wired up: SET_NULL nulls the node's mirror FK
-        # while the flow data keeps the (now-dangling) id, reproducing the runtime lookup failure.
-        assistant.delete()
-        session = ExperimentSessionFactory.create()
-        state = PipelineState(
-            messages=["Hi there bot"],
-            experiment_session=session,
-            attachments=[],
-        )
-        config = {"configurable": {"repo": ORMRepository(session=session)}}
-        with pytest.raises(PipelineNodeBuildError):
-            runnable.invoke(state, config=config)
-
-    @pytest.mark.django_db()
-    @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-    def test_assistant_node_empty_metadata_handling(self, get_llm_service, pipeline):
-        history_manager_mock = Mock()
-        history_manager_mock.input_message_metadata = None
-        history_manager_mock.output_message_metadata = None
-
-        assistant_chat_mock = Mock()
-        assistant_chat_mock.history_manager = history_manager_mock
-        assistant_chat_mock.invoke = lambda *args, **kwargs: ChainOutput(
-            output="How are you doing?", prompt_tokens=30, completion_tokens=20
-        )
-        assistant = OpenAiAssistantFactory.create()
-        nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
-
-        with patch("apps.pipelines.nodes.nodes.AssistantChat", return_value=assistant_chat_mock):
-            runnable = create_runnable(pipeline, nodes)
-            session = ExperimentSessionFactory.create()
-            state = PipelineState(
-                messages=["I am just a human I have no feelings"],
-                experiment_session=session,
-                attachments=[],
-            )
-            config = {"configurable": {"repo": ORMRepository(session=session)}}
-            output_state = runnable.invoke(state, config=config)
-        assert output_state["input_message_metadata"] == {}
-        assert output_state["output_message_metadata"] == {}
-        assert output_state["messages"][-1] == "How are you doing?"
 
 
 class TestPipelineValidation:

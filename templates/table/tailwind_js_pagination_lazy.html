@@ -1,0 +1,9 @@
+{% extends "table/tailwind_js_pagination.html" %}
+{% load i18n %}
+{% comment %}
+A LazyPaginator has no count, so the pager reports the page number alone.
+{% endcomment %}
+
+{% block pagination_info %}
+    {% blocktranslate with page_number=table.page.number %}Page {{ page_number }}{% endblocktranslate %}
+{% endblock pagination_info %}

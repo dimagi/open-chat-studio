@@ -8,7 +8,7 @@ Open Chat Studio is an open-source project, and you can contribute to its code d
 - Give your branches, commits, and Pull Requests meaningful names and descriptions. This helps track changes later. If your changes cover a particular component, indicate it in the PR name as a prefix, for example: `[DOCS] PR name`.
 - Keep your PRs small — each PR should address one issue. Remove all unrelated changes.
 - [Link your Pull Request to an issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) if applicable.
-- [Document your contribution](#documentation-policy) if your changes are user-facing. [AI automation](../developer_guides/user_docs.md#guidelines) can help draft documentation and changelog entries.
+- [Document your contribution](#documentation-policy) if your changes are user-facing. [AI automation](../developer_guides/user_docs/index.md#when-to-update-docs) can help draft documentation and changelog entries.
 - For work in progress or early test results, use a Draft PR.
 
 ## Ensure Change Quality
@@ -48,9 +48,9 @@ The OCS team automates most of steps 3–6 — see the [Development Workflow](..
 
 ## Documentation Policy
 
-- **User-facing changes** follow these [guidelines](../developer_guides/user_docs.md)
+- **User-facing changes** follow these [guidelines](../developer_guides/user_docs/index.md)
 - **API changes**: If your changes affect the REST API schema, update the `api-schemas/v1.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
-- **Operator-impacting changes** (migrations, new or changed settings, deployment shape, deprecations, removals, security fixes): check the "Self-hosted operators must know about or act on this change" box and add an entry under `[Unreleased]` in the repo-root `CHANGELOG.md`. See [two changelogs, two checkboxes](../developer_guides/user_docs.md#two-changelogs-two-checkboxes).
+- **Operator-impacting changes** (migrations, new or changed settings, deployment shape, deprecations, removals, security fixes): check the "Self-hosted operators must know about or act on this change" box and add an entry under `[Unreleased]` in the repo-root `CHANGELOG.md`. See [two changelogs, two checkboxes](../developer_guides/user_docs/index.md#two-changelogs-two-checkboxes).
 
 ## Communication
 

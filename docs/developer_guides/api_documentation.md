@@ -23,4 +23,4 @@ Whenever changes are made that impact the API schema, the `api-schemas/v1.yml` f
 2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
 3. A GitHub action in the OCS docs repo runs and creates a PR with any updated API docs.
 
-This is one of two ways docs/changelog updates get triggered from a merged PR — see [User Documentation and Changelog Process](user_docs.md) for the other (manual PR-description-driven) path and how the two relate.
+This is one of two ways docs/changelog updates get triggered from a merged PR — see [User Documentation and Changelog Process](user_docs/index.md) for the other (manual PR-description-driven) path and how the two relate.

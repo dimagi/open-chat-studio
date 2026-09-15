@@ -28,17 +28,15 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import File, FileChunkEmbedding
-from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import Intents
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
-from apps.teams.utils import get_current_team, get_slug_for_team
+from apps.teams.utils import get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
-    from apps.assistants.models import OpenAiAssistant
     from apps.pipelines.models import Node
 
 logger = logging.getLogger("ocs.tools")
@@ -278,18 +276,7 @@ class CustomBaseTool(BaseTool):
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
             return "I am unable to do this"
-        try:
-            return self.action(*args, **kwargs)
-        except Exception as e:
-            logger.exception("Error executing tool: %s", self.name)
-            tool_error_notification(
-                team=get_current_team(),
-                tool_name=self.name,
-                error_message=str(e),
-                session=self.experiment_session,
-            )
-
-            return "Something went wrong"
+        return self.action(*args, **kwargs)
 
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
@@ -810,12 +797,6 @@ TOOL_CLASS_MAP = {
 }
 
 
-def get_assistant_tools(assistant, experiment_session: ExperimentSession | None = None) -> list[BaseTool]:
-    tools = get_tool_instances(assistant.tools, experiment_session)
-    tools.extend(get_custom_action_tools(assistant))
-    return tools
-
-
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
@@ -861,7 +842,7 @@ def get_tool_instances(
     return tools
 
 
-def get_custom_action_tools(action_holder: Union[Experiment, "OpenAiAssistant", "Node"]) -> list[BaseTool]:
+def get_custom_action_tools(action_holder: Union[Experiment, "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
     return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
 

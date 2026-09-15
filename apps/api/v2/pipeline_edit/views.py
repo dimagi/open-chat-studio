@@ -449,10 +449,11 @@ class PipelineEdgeEditView(PipelineFacadeView):
 
 
 def pipeline_state(pipeline: Pipeline) -> dict:
-    """The three fields every façade write reports about the pipeline it has just changed."""
+    """The fields every façade write reports about the pipeline it has just changed."""
     state = pipeline_build_state(pipeline)
     return {
         "pipeline_valid": state["pipeline_valid"],
         "pipeline_errors": state["errors"],
         "unwired_handles": state["unwired_handles"],
+        "deprecated_models": state["deprecated_models"],
     }

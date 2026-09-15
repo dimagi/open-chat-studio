@@ -12,6 +12,7 @@ from uuid import UUID
 import sentry_sdk
 from langchain_core.runnables import RunnableConfig
 
+from apps.chat.exceptions import UserActionableError
 from apps.chat.models import ChatMessageMetadataKeys
 
 from .base import TraceContext, Tracer
@@ -158,6 +159,7 @@ class TracingService:
             return
 
         self.span_stack.append(span_context)
+        deferred_actionable_error: UserActionableError | None = None
         try:
             with ExitStack() as stack:
                 # Enter all tracer span contexts, passing the same context object
@@ -174,9 +176,18 @@ class TracingService:
                         logger.exception(f"Error starting span {span_name} in tracer {tracer.__class__.__name__}")
 
                 # Yield the context object to user code
-                yield span_context
+                try:
+                    yield span_context
+                except UserActionableError as e:
+                    # The participant can act on this, so no span it crosses is a failure
+                    # (ADR-0065). Hold it until the tracer contexts have closed, so they
+                    # record a clean exit, then let it carry on to the pipeline.
+                    deferred_actionable_error = e
         finally:
             self.span_stack.pop()
+
+        if deferred_actionable_error is not None:
+            raise deferred_actionable_error
 
     def get_langchain_callbacks(
         self, run_name_map: dict[str, str] | None = None, filter_patterns: list[str] | None = None

@@ -30,6 +30,7 @@ Each message should feel fresh and distinct from the others."""
 class ProgressMessagesInput(BaseModel):
     chatbot_name: str
     chatbot_description: str | None = None
+    team_id: int | None = None
 
 
 class ProgressMessagesOutput(BaseModel):

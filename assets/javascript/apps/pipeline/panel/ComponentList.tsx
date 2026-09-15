@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
 import {formatDocsForSchema, getCachedData} from "../utils";
@@ -33,9 +33,14 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     return acc;
   }, {} as Record<string, React.RefObject<HTMLDivElement | null>>);
 
-  function getHelpOffState() {
+  // Stable across the component's lifetime (nodeSchemas comes from getCachedData()'s
+  // module-level cache, loaded once) — memoized so it can be a real useEffect dependency
+  // below without that effect re-running on every render (an unmemoized function reference
+  // changes every render, which would re-fire the effect, call setShowHelp with a new object,
+  // and re-render in a loop).
+  const getHelpOffState = useCallback(() => {
     return new Map(Array.from(nodeSchemas.keys()).map((key) => [key, false]));
-  }
+  }, [nodeSchemas]);
 
   const [showHelp, setShowHelp] = useState({show: getHelpOffState()})
   const toggleHelp = (nodeType: string) => {
@@ -45,13 +50,13 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
       return {show: newShow};
     });
   }
-  const hideHelp = () => {
+  const hideHelp = useCallback(() => {
     setShowHelp(() => {
       return {show: getHelpOffState()};
     });
-  };
+  }, [getHelpOffState]);
 
-  useEffect(hideHelp, [scrollPosition, isOpen]);
+  useEffect(hideHelp, [scrollPosition, isOpen, hideHelp]);
 
   //** end help bubble state
 

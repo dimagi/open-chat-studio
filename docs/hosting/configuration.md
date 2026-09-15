@@ -55,6 +55,7 @@ These apply whether the connection comes from `DATABASE_URL` or the variables ab
 | `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required to register an OAuth2 application at all: the registration form signs every application with `RS256`, which django-oauth-toolkit rejects when this is unset. Setting it also enables OIDC, signs ID tokens, and adds the `openid`/`profile` scopes. |
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
+| `DATA_UPLOAD_MAX_MEMORY_SIZE` | `10485760` (10 MB) | Largest request body Django will buffer in memory, bounding the JSON API, web-UI form posts and channel webhooks alike. See the [Django docs](https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size). |
 
 ## Rate Limiting
 
@@ -225,3 +226,13 @@ The System Agent is an internal AI assistant used for certain platform features.
 | `SYSTEM_AGENT_MODELS_HIGH` | Model(s) for complex tasks, e.g. `openai:gpt-4o`. Use comma-separated values for fallback. |
 | `SYSTEM_AGENT_MODELS_LOW` | Model(s) for simple tasks, e.g. `openai:gpt-4o-mini`. |
 | `SYSTEM_AGENT_API_KEYS` | Provider API keys as `provider=key` pairs, e.g. `openai=sk-...,anthropic=sk-ant-...`. |
+
+Optionally, trace the System Agent's LLM calls in Langfuse. This is separate from a team's own
+Trace Provider: it's operator-level, covering System Agent usage across all teams.
+
+| Variable | Description |
+|----------|-------------|
+| `OCS_LANGFUSE_PUBLIC_KEY` | Langfuse project public key. Leave unset to disable System Agent tracing. |
+| `OCS_LANGFUSE_SECRET_KEY` | Langfuse project secret key. |
+| `OCS_LANGFUSE_HOST` | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
+| `OCS_LANGFUSE_SAMPLE_RATE` | Fraction of calls to trace, `0.0`-`1.0`. Leave unset to trace every call. |

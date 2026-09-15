@@ -3,7 +3,6 @@ from django import forms
 from django.conf import settings
 from django.db.models import Q, Subquery
 
-from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.documents.datamodels import (
     DEFAULT_UNSUPPORTED_FILE_TYPES,
     ConfluenceSourceConfig,
@@ -342,60 +341,6 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
 
         cleaned_data["config"] = DocumentSourceConfig(confluence=config)
         return cleaned_data
-
-
-class CreateCollectionFromAssistantForm(forms.Form):
-    assistant = forms.ModelChoiceField(
-        queryset=OpenAiAssistant.objects.none(),
-        label="Assistant",
-        help_text="Select an assistant with file search enabled to create a collection from",
-    )
-    collection_name = forms.CharField(
-        max_length=255,
-        label="Collection Name",
-        help_text="Enter a name for the new collection",
-    )
-
-    def __init__(self, request, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Filter assistants that have file search enabled and have file search resources
-        self.fields["assistant"].queryset = (
-            OpenAiAssistant.objects.filter(
-                team=request.team,
-                is_archived=False,
-                working_version_id=None,
-                builtin_tools__contains=["file_search"],
-            )
-            .filter(
-                id__in=ToolResources.objects.filter(
-                    tool_type="file_search",
-                    files__isnull=False,
-                ).values_list("assistant_id", flat=True)
-            )
-            .distinct()
-        )
-
-    def clean_assistant(self):
-        assistant = self.cleaned_data["assistant"]
-        if not assistant:
-            raise forms.ValidationError("Please select an assistant.")
-
-        # Verify the assistant has file search tool resources
-        file_search_resources = assistant.tool_resources.filter(tool_type="file_search")
-        if not file_search_resources.exists():
-            raise forms.ValidationError("The selected assistant does not have file search enabled or configured.")
-
-        # Verify the assistant has files
-        has_files = file_search_resources.filter(files__isnull=False).exists()
-        if not has_files:
-            raise forms.ValidationError("The selected assistant does not have any files for file search.")
-
-        return assistant
-
-    def clean_collection(self):
-        collection_name = self.cleaned_data["collection_name"]
-        if Collection.objects.filter(team=self.request.team, name=collection_name, is_version=False).exists():
-            raise forms.ValidationError("A collection with this name already exists.")
 
 
 class MetadataFilterWidget(forms.Widget):

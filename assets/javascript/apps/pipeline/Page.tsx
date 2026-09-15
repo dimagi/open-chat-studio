@@ -77,8 +77,8 @@ export default function Page() {
             {!isSaving && errors.length > 0 && (
               <div className="content-center">
                 <i className="fa fa-exclamation-triangle text-red-500 mr-2"></i>
-                {errors.map((error, index) => (
-                  <small key={index} className="text-red-500 mr-2">{error}</small>
+                {errors.map((error) => (
+                  <small key={error} className="text-red-500 mr-2">{error}</small>
                 ))}
               </div>
             )}

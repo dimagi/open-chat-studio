@@ -45,7 +45,6 @@ PYTHON_NODE_HELP_PROMPT = textwrap.dedent(
         - `name`: The name of the file.
         - `size`: The size of the file in bytes.
         - `content_type`: The MIME type of the file.
-        - `upload_to_assistant`: Whether the file should be sent to the LLM as an attachment.
         - `read_bytes()`: Reads the attachment content as bytes.
         - `read_text()`: Reads the attachment content as text.
     - Tags: Tags can be attached to individual messages or to the chat session. Tags are used by bot

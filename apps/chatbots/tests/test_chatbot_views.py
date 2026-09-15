@@ -19,7 +19,7 @@ from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.chatbots.tables import ChatbotSessionsTable
+from apps.chatbots.tables import ChatbotSessionsTable, ParticipantSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
     ChatbotSessionsTableView,
@@ -44,7 +44,8 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.events import ScheduledMessageFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
 
@@ -501,6 +502,110 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_uses_the_participant_table(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    other_participant = ParticipantFactory.create(team=team)
+    own_session = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=participant)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, participant=other_participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert isinstance(response.context_data["table"], ParticipantSessionsTable)
+    assert list(response.context_data["table"].data.data) == [own_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_chatbot_quick_filter(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    participant = ParticipantFactory.create(team=team)
+    matching_experiment = ExperimentFactory.create(team=team)
+    other_experiment = ExperimentFactory.create(team=team)
+    matching_session = ExperimentSessionFactory.create(
+        team=team, experiment=matching_experiment, participant=participant
+    )
+    ExperimentSessionFactory.create(team=team, experiment=other_experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"chatbot": matching_experiment.id})
+
+    assert list(response.context_data["table"].data.data) == [matching_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_ignores_a_non_numeric_chatbot_param(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    participant = ParticipantFactory.create(team=team)
+    experiment = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"chatbot": "not-a-number"})
+
+    assert response.status_code == 200
+    assert list(response.context_data["table"].data.data) == [session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_paginates(client, team_with_users):
+    """Regression for #4452: this table used to render every session in one response."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    ExperimentSessionFactory.create_batch(30, team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    table = response.context_data["table"]
+    assert table.paginator.count == 30
+    assert len(table.page.object_list) == 25
+    assert table.paginator.num_pages == 2
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_shows_the_record_count(client, team_with_users):
+    """Regression for #4452: replaces the removed "N of M sessions" pill text."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    ExperimentSessionFactory.create_batch(3, team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    assert "3 records" in response.content.decode()
 
 
 @pytest.mark.django_db()
@@ -1204,6 +1309,38 @@ def test_session_view_shows_participant_data_for_published_version_session(clien
     response = client.get(url)
     assert response.status_code == 200
     assert "docs-reader" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_session_view_schedules_table_excludes_the_chatbot_column(client, team_with_users):
+    """A session's own schedules table is already scoped to one chatbot, so it must not show
+    the Chatbot column the participant-wide table needs."""
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    ScheduledMessageFactory.create(
+        experiment=session.experiment,
+        team=team,
+        participant=session.participant,
+        action=None,
+        custom_schedule_params={
+            "name": "Test",
+            "time_period": "days",
+            "frequency": 1,
+            "repetitions": 1,
+            "prompt_text": "hi",
+        },
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "experiment" not in response.context["schedules_table"].columns.names()
 
 
 @pytest.mark.django_db()

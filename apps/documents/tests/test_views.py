@@ -51,6 +51,12 @@ class TestEditCollection:
         new_vector_store_id = "new-store-123"
         create_remote_index.return_value = new_vector_store_id
 
+        collection_file = CollectionFileFactory.create(
+            collection=collection,
+            status=FileStatus.FAILED,
+            failure_reason="FileUploadError: Incorrect API key provided: sk-abc",
+        )
+
         client.force_login(collection.team.members.first())
         url = reverse("documents:collection_edit", args=[collection.team.slug, collection.id])
 
@@ -69,8 +75,11 @@ class TestEditCollection:
         assert collection.llm_provider == new_llm_provider
         assert collection.openai_vector_store_id == new_vector_store_id
 
-        # Verify that files are marked for reprocessing
-        CollectionFile.objects.filter(collection=collection).update(status=FileStatus.PENDING)
+        # A reason describing the previous provider does not apply to the new one, and the row
+        # is no longer failed.
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.PENDING
+        assert collection_file.failure_reason == ""
 
         # Verify migration task was called
         migrate_mock.assert_called_once_with(
@@ -233,7 +242,7 @@ class TestDeleteCollectionFile:
     def test_delete_file_from_indexed_collection(
         self, is_remote_index, team_with_user, client, remote_index_manager_mock, local_index_manager_mock
     ):
-        """Test deleting a file from an indexed collection when file is not used by an assistant."""
+        """Test deleting a file from an indexed collection when the file is not used elsewhere."""
         llm_provider = LlmProviderFactory.create(team=team_with_user)
         collection = CollectionFactory.create(
             team=team_with_user,
@@ -285,7 +294,7 @@ class TestDeleteCollectionFile:
         # Login user
         client.force_login(team_with_user.members.first())
 
-        # Mock the file as being used elsewhere (by assistant)
+        # Mock the file as being used elsewhere
         with (
             mock.patch.object(File, "is_used", return_value=True),
             mock.patch.object(File, "delete_or_archive") as mock_delete_archive,
@@ -296,7 +305,7 @@ class TestDeleteCollectionFile:
             # Verify collection file relationship is deleted
             assert CollectionFile.objects.filter(collection=collection, file=file).exists() is False
 
-            # Verify file is NOT deleted/archived since it's used by assistant
+            # Verify file is NOT deleted/archived since it's used elsewhere
             mock_delete_archive.assert_not_called()
 
             # Verify OpenAI file deletion was NOT called since file is still used
@@ -307,7 +316,7 @@ class TestDeleteCollectionFile:
             else:
                 local_index_manager_mock.delete_files.assert_not_called()
 
-            # Verify file still exists and is still linked to assistant
+            # Verify file still exists
             file.refresh_from_db()
             assert file.is_archived is False
 

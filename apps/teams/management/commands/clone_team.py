@@ -348,13 +348,19 @@ class Command(BaseCommand):
         changed = False
 
         # Fail if unmapped params have values (these reference objects we don't clone)
-        unmapped_params = ["assistant_id", "collection_id", "collection_index_ids", "synthetic_voice_id"]
+        unmapped_params = ["collection_id", "collection_index_ids", "synthetic_voice_id"]
         for param in unmapped_params:
             if param in params and params[param]:
                 raise CommandError(
                     f"Pipeline node '{node.label}' has {param}={params[param]} which cannot be cloned. "
                     f"Remove or clear this reference in the source pipeline before cloning."
                 )
+
+        # A stored `AssistantNode` is inert (#4254), but its id resolves against every team, so
+        # carrying it over would leave the clone referencing the source team's assistant.
+        if "assistant_id" in params:
+            del params["assistant_id"]
+            changed = True
 
         # Remap llm_provider_id
         if "llm_provider_id" in params and params["llm_provider_id"]:

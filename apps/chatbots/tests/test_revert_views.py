@@ -1,5 +1,3 @@
-from unittest.mock import Mock, patch
-
 import pytest
 from django.contrib.auth.models import Permission
 from django.urls import reverse
@@ -91,7 +89,6 @@ def test_revert_confirm_no_changes_when_working_matches_version(client, team_wit
 
 
 @pytest.mark.django_db()
-@patch("apps.assistants.sync.push_assistant_to_openai", Mock())
 def test_revert_confirm_diff_preserved_when_working_matches_latest(client, team_with_users):
     """The unreleased-changes check must not overwrite the working-vs-target diff.
 

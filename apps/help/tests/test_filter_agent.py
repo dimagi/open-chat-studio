@@ -157,21 +157,24 @@ class TestMakeGetOptionsTool:
 
         assert "error" in result
 
-    def test_prepare_is_called_with_team(self):
-        """prepare(team) must be called so DB-backed filters load options."""
+    def test_prepare_is_called_with_team_and_its_return_value_is_used(self):
+        """prepare(team) must be called, and the filter it *returns* (not the original instance)
+        must supply the options -- prepare() no longer mutates in place. See #4363."""
         choice_filter = mock.Mock(spec=ChoiceColumnFilter)
         choice_filter.query_param = "experiment"
-        choice_filter.options = [{"id": 99, "label": "Mocked"}]
-        # model_copy(deep=True) should return the mock itself for simplicity
-        choice_filter.model_copy.return_value = choice_filter
+        prepared = mock.Mock(spec=ChoiceColumnFilter)
+        prepared.options = [{"id": 99, "label": "Mocked"}]
+        choice_filter.prepare.return_value = prepared
 
         filter_class = self._make_filter_class([choice_filter])
         team = mock.Mock()
 
         tool_fn = make_get_options_tool(filter_class, team)
-        tool_fn.invoke({"param": "experiment"})
+        result = tool_fn.invoke({"param": "experiment"})
 
         choice_filter.prepare.assert_called_once_with(team)
+        choice_filter.model_copy.assert_not_called()
+        assert result["options"] == [{"id": 99, "label": "Mocked"}]
 
 
 class TestFilterAgentRun:
@@ -208,3 +211,28 @@ class TestFilterAgentRun:
         agent.run()
 
         mock_team_cls.objects.get.assert_called_once_with(id=42)
+
+    @mock.patch("apps.help.base.get_help_agent_tracer")
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_passes_trace_config_and_team_id_metadata(self, mock_build, mock_team_cls, mock_get_tracer):
+        tracer = mock.Mock()
+        trace_cm = tracer.trace.return_value
+        trace_cm.__enter__ = mock.Mock(return_value=mock.Mock())
+        trace_cm.__exit__ = mock.Mock(return_value=False)
+        callback = mock.Mock()
+        tracer.get_langchain_callback.return_value = callback
+        mock_get_tracer.return_value = tracer
+
+        stub_output = FilterOutput(filters=[])
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {"structured_response": stub_output}
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = mock.Mock(id=42)
+
+        agent = FilterAgent(input=FilterInput(query="active sessions", filter_slug="session", team_id=42))
+        agent.run()
+
+        call_kwargs = mock_agent.invoke.call_args.kwargs
+        assert call_kwargs["config"]["callbacks"] == [callback]
+        assert tracer.trace.call_args.kwargs["metadata"] == {"team_id": "42"}

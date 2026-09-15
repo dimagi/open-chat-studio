@@ -1,3 +1,5 @@
+import type { ChatConsent } from './chat-session-service';
+
 export interface UploadedFile {
   id: number;
   name: string;
@@ -22,8 +24,8 @@ export interface UploadContext {
   sessionId: string;
   participantId: string;
   participantName?: string;
-  /** Auth headers (session token, CSRF, widget version) — see ChatSessionService.getUploadHeaders. */
-  headers?: Record<string, string>;
+  /** Sends the upload request; `fetch` with no headers when omitted. The widget passes `ChatSessionService.sessionFetch` so the upload carries the session token and renews it. */
+  send?: (url: string, body: FormData) => Promise<Response>;
 }
 
 export interface UploadResult {
@@ -31,6 +33,8 @@ export interface UploadResult {
   uploadedIds: number[];
   errorMessage?: string;
   tokenRejected?: boolean;
+  /** Set when the upload was refused for consent (403 `consent_required`); the files are kept for retry. */
+  consent?: ChatConsent;
 }
 
 export class FileAttachmentManager {
@@ -111,20 +115,25 @@ export class FileAttachmentManager {
     }
 
     try {
-      const response = await fetch(`${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`, {
-        method: 'POST',
-        headers: context.headers ?? {},
-        body: formData,
-      });
+      const url = `${context.apiBaseUrl}/api/chat/${context.sessionId}/upload/`;
+      const response = context.send ? await context.send(url, formData) : await fetch(url, { method: 'POST', headers: {}, body: formData });
 
       if (!response.ok) {
         const errorData = await this.safeJson(response);
-        const errorMessage = (errorData && typeof errorData === 'object' && 'error' in errorData && (errorData as { error?: string }).error) || 'Failed to upload files';
+        const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; consent?: ChatConsent };
+        const errorMessage = body.error || 'Failed to upload files';
+        // Files are left unmarked on a consent refusal: they are re-uploaded once consent is
+        // recorded. A refusal that names consent but carries no block cannot raise the panel,
+        // so the files carry the error and stop the send. Either way it is not a token
+        // rejection.
+        const namesConsent = response.status === 403 && body.code === 'consent_required';
+        const consentRefused = namesConsent && !!body.consent;
         return {
-          selectedFiles: this.markPendingFilesWithError(existingFiles, errorMessage),
+          selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
           errorMessage,
-          tokenRejected: response.status === 403,
+          tokenRejected: response.status === 403 && !namesConsent,
+          consent: consentRefused ? body.consent : undefined,
         };
       }
 

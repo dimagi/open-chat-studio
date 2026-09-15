@@ -2,7 +2,7 @@
 
 The platform has a built-in mechanism for citing sources used by the LLM, particularly when retrieving information from indexed documents. This process involves generation, parsing, and final rendering of citations.
 
-This page covers the `<CIT file-id />` tag mechanism used by **pipeline nodes** (`apps/pipelines/nodes/llm_node.py`). The legacy OpenAI Assistants feature has its own separate citation handling and does not use this tag scheme.
+This page covers the `<CIT file-id />` tag mechanism used by **pipeline nodes** (`apps/pipelines/nodes/llm_node.py`). It is now the only citation mechanism; the OpenAI Assistants feature, which had its own, was removed in #4254.
 
 This assumes the LLM has retrieved content from a document collection — see [Index Manager Classes](index_managers.md) for how that retrieval works.
 

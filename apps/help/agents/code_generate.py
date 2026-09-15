@@ -21,6 +21,7 @@ def _get_system_prompt():
 class CodeGenerateInput(BaseModel):
     query: str
     context: str = ""
+    team_id: int | None = None
 
 
 class CodeGenerateOutput(BaseModel):
@@ -38,28 +39,34 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
         return input.query
 
     def run(self) -> CodeGenerateOutput:
-
         current_code = self.input.context
         if current_code == DEFAULT_FUNCTION:
             current_code = ""
 
-        return self._run_with_retry(current_code, error=None, iteration=0)
+        # One trace covers the whole retry loop, not one trace per attempt.
+        with self._trace({"query": self.get_user_message(self.input), "context": current_code}) as trace_config:
+            return self._run_with_retry(current_code, error=None, iteration=0, trace_config=trace_config)
 
-    def _run_with_retry(self, current_code: str, error: str | None, iteration: int) -> CodeGenerateOutput:
+    def _run_with_retry(
+        self, current_code: str, error: str | None, iteration: int, trace_config: dict
+    ) -> CodeGenerateOutput:
         if iteration > self.max_retries:
             return CodeGenerateOutput(code=current_code)
 
         system_prompt = self._build_system_prompt(current_code, error)
 
         agent = build_system_agent(self.mode, system_prompt)
-        response = agent.invoke({"messages": [{"role": "user", "content": self.get_user_message(self.input)}]})
+        response = agent.invoke(
+            {"messages": [{"role": "user", "content": self.get_user_message(self.input)}]},
+            config=trace_config,
+        )
 
         response_code = response["messages"][-1].text
 
         try:
             CodeNode.model_validate({"code": response_code, "name": "code", "node_id": "code", "django_node": None})
         except pydantic.ValidationError as e:
-            return self._run_with_retry(response_code, error=str(e), iteration=iteration + 1)
+            return self._run_with_retry(response_code, error=str(e), iteration=iteration + 1, trace_config=trace_config)
 
         return CodeGenerateOutput(code=response_code)
 

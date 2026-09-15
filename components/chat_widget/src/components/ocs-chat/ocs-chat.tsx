@@ -11,7 +11,7 @@ import {
   XIcon,
   OcsWidgetAvatar,
 } from './icons';
-import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
+import { renderMarkdownSync as renderMarkdownComplete, sanitizeHTML } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import { TranslationStrings, TranslationManager, defaultTranslations } from '../../utils/translations';
 import {
@@ -22,6 +22,8 @@ import {
   SessionAccessError,
   ChatAuthError,
   AuthTokenProvider,
+  ChatConsent,
+  ConsentRequiredError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
@@ -34,9 +36,18 @@ interface SessionStorageData {
   sessionId?: string;
   messages: ChatMessage[];
   sessionToken?: string;
+  sessionTokenExpiresAt?: string;
 }
 
 type PersistenceMode = 'off' | 'local' | 'tab';
+
+function setOrRemoveItem(storage: Storage, key: string, value?: string): void {
+  if (value) {
+    storage.setItem(key, value);
+  } else {
+    storage.removeItem(key);
+  }
+}
 
 @Component({
   tag: 'open-chat-studio-widget',
@@ -128,7 +139,8 @@ export class OcsChat {
   /**
    * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel
    * requires one. Mint it in the host application's backend and return it here;
-   * the widget asks once per session start and never writes one to local storage.
+   * the widget asks once per session start, again whenever the session token is
+   * about to expire and must be renewed, and never writes one to local storage.
    * `forceRefresh` is set when the previous token was rejected. Being
    * a function, this is a JavaScript property with no HTML attribute equivalent.
    */
@@ -303,6 +315,13 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  /** Latest consent block from start, poll or a refusal. */
+  @State() consent?: ChatConsent;
+  /** The message held while the consent panel is up; released by acceptConsent(). */
+  @State() heldMessage?: string;
+  @State() consentPostInFlight = false;
+  /** Form version whose stored acceptance has already been re-posted this session. */
+  private autoConsentAttempted?: number;
   private buttonPosition: { x: number; y: number } = { x: 30, y: 30 };
   private buttonHorizontalSide: 'left' | 'right' = 'right';
   private buttonVerticalSide: 'top' | 'bottom' = 'bottom';
@@ -334,6 +353,7 @@ export class OcsChat {
   private internalPageContext?: Record<string, any>;
   private sessionEpoch: number = 0;
   private currentSessionToken?: string;
+  private currentSessionTokenExpiresAt?: string;
   @Element() host: HTMLElement;
 
   /**
@@ -368,11 +388,11 @@ export class OcsChat {
     } else {
       if (this.isStorageAvailable()) {
         // Always try to load existing session if storage is available
-        const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
+        const { sessionId, messages, sessionToken, sessionTokenExpiresAt } = this.loadSessionFromStorage();
         if (sessionId && messages) {
           this.activeSessionId = sessionId;
           this.messages = messages;
-          this.applySessionToken(sessionToken);
+          this.applySessionToken(sessionToken, sessionTokenExpiresAt);
         }
       }
     }
@@ -449,9 +469,16 @@ export class OcsChat {
     );
   }
 
-  private applySessionToken(token?: string): void {
+  private applySessionToken(token?: string, expiresAt?: string | null): void {
     this.currentSessionToken = token;
-    this.chatService?.setSessionToken(token);
+    this.currentSessionTokenExpiresAt = token && expiresAt ? expiresAt : undefined;
+    this.chatService?.setSessionToken(token, expiresAt);
+  }
+
+  /** The service renewed the token itself; record it so a reload resumes with the live one. */
+  private handleSessionTokenRenewed(token: string, expiresAt: string): void {
+    this.applySessionToken(token, expiresAt);
+    this.saveSessionTokenToStorage();
   }
 
   private getChatService(): ChatSessionService {
@@ -464,7 +491,9 @@ export class OcsChat {
         taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
         messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
         sessionToken: this.currentSessionToken,
+        sessionTokenExpiresAt: this.currentSessionTokenExpiresAt,
         authTokenProvider: this.authTokenProvider,
+        onSessionTokenRenewed: (token, expiresAt) => this.handleSessionTokenRenewed(token, expiresAt),
       });
     }
     return this.chatService;
@@ -494,6 +523,13 @@ export class OcsChat {
     this.isTyping = false;
     this.isUploadingFiles = false;
     this.typingProgressMessage = '';
+
+    // Session-scoped, so it clears for a bound session too: the panel cannot act without
+    // a session, and it covers the error. The stored acceptance stays, so a fresh session
+    // re-posts it.
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    this.autoConsentAttempted = undefined;
 
     if (this.isSessionBound()) {
       this.addErrorMessage(this.translationManager.get('status.sessionError', 'This chat session is no longer available.'));
@@ -549,6 +585,94 @@ export class OcsChat {
     this.isTyping = false;
     this.isUploadingFiles = false;
     this.currentPollTaskId = '';
+  }
+
+  private consentPending(): boolean {
+    return this.consent?.required === true;
+  }
+
+  private storedConsentFormId(): number | undefined {
+    const raw = this.getStorage()?.getItem(this.getStorageKeys().consent);
+    const parsed = raw == null ? NaN : Number(raw);
+    return Number.isInteger(parsed) ? parsed : undefined;
+  }
+
+  private rememberConsent(formVersionId: number): void {
+    try {
+      this.getStorage()?.setItem(this.getStorageKeys().consent, String(formVersionId));
+    } catch {
+      // storage unavailable: consent is asked again next visit
+    }
+  }
+
+  private forgetConsent(): void {
+    try {
+      this.getStorage()?.removeItem(this.getStorageKeys().consent);
+    } catch {
+      // nothing to forget
+    }
+  }
+
+  /**
+   * Take the server's consent block. A stored acceptance for the same form version
+   * is posted silently, so a returning visitor is asked once per form version under
+   * the persistence store; anything else leaves `consent.required` set so the next
+   * send holds.
+   */
+  private async applyConsent(consent: ChatConsent): Promise<void> {
+    this.consent = consent;
+    if (!consent.required) {
+      // Consent was recorded elsewhere (another tab, another device) while a message
+      // waited on the panel; send it rather than dropping it when the panel closes.
+      await this.releaseHeldMessage();
+      return;
+    }
+    if (consent.form_version_id == null) return;
+    if (this.storedConsentFormId() !== consent.form_version_id) return;
+    // Polling delivers the block on every cycle, so the re-post is attempted once per
+    // form version: a failed one leaves `required` set and the next send shows the panel.
+    if (this.autoConsentAttempted === consent.form_version_id) return;
+    this.autoConsentAttempted = consent.form_version_id;
+    // The composer stays live for the round-trip, so a send during it is held against a
+    // requirement this post clears. Release it here rather than leaving it for a poll.
+    if (await this.postConsent(consent.form_version_id, { silent: true })) {
+      await this.releaseHeldMessage();
+    }
+  }
+
+  /**
+   * Post consent for `formVersionId`; on a stale refusal, drop the memory and keep the new
+   * block. A silent post is one the participant did not ask for, so a failure falls back to
+   * showing them the form rather than reporting an error they cannot act on.
+   */
+  private async postConsent(formVersionId: number, options: { silent?: boolean } = {}): Promise<boolean> {
+    if (!this.activeSessionId || this.consentPostInFlight) return false;
+    this.consentPostInFlight = true;
+    const epoch = this.sessionEpoch;
+    try {
+      await this.getChatService().recordConsent(this.activeSessionId, formVersionId);
+      if (epoch !== this.sessionEpoch) return false;
+      this.rememberConsent(formVersionId);
+      this.consent = { required: false, form_version_id: formVersionId, text: null };
+      return true;
+    } catch (error) {
+      if (epoch !== this.sessionEpoch) return false;
+      if (error instanceof ConsentRequiredError) {
+        this.forgetConsent();
+        this.consent = error.consent;
+        return false;
+      }
+      if (error instanceof SessionAccessError) {
+        this.handleSessionAccessError();
+        return false;
+      }
+      if (!options.silent) {
+        this.handleError(error instanceof Error ? error.message : 'Failed to record consent');
+      }
+      return false;
+    } finally {
+      this.consentPostInFlight = false;
+    }
   }
 
   private parseJSONProp(propValue: string | undefined, propName: string): string[] {
@@ -652,10 +776,14 @@ export class OcsChat {
       const data = await this.getChatService().startSession(requestBody);
       if (epoch !== this.sessionEpoch) return;
       this.activeSessionId = data.session_id;
-      this.applySessionToken(data.session_token ?? undefined);
+      this.applySessionToken(data.session_token ?? undefined, data.expires_at);
       this.saveSessionToStorage();
       this.dispatchWidgetEvent('ocs:session:started', { sessionId: this.activeSessionId });
 
+      if (data.consent) {
+        await this.applyConsent(data.consent);
+        if (epoch !== this.sessionEpoch) return;
+      }
       this.startMessagePolling();
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
@@ -715,14 +843,19 @@ export class OcsChat {
 
     this.isUploadingFiles = true;
     try {
+      const service = this.getChatService();
+      const sessionId = this.activeSessionId;
       const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
         apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
-        sessionId: this.activeSessionId,
+        sessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
-        headers: this.getChatService().getUploadHeaders(),
+        send: (url, body) => service.sessionFetch(sessionId, url, () => ({ method: 'POST', headers: service.getUploadHeaders(), body })),
       });
       this.selectedFiles = uploadResult.selectedFiles;
+      if (uploadResult.consent) {
+        throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
+      }
       if (uploadResult.tokenRejected) {
         throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
       }
@@ -752,6 +885,16 @@ export class OcsChat {
       }
     }
 
+    if (this.consentPending()) {
+      this.holdForConsent(message);
+      return;
+    }
+
+    // Both are restored if the server refuses the send for consent, so the retry after
+    // "I agree" carries the same bubble and the same already-uploaded files.
+    let optimisticMessage: ChatMessage | undefined;
+    let filesBeforeSend: SelectedFile[] = [];
+
     try {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
@@ -766,39 +909,15 @@ export class OcsChat {
         }
       }
 
-      // If this is the first user message and there are welcome messages,
-      // add them to chat history as assistant messages
-      const welcomeMessagesToAdd = this.getWelcomeMessages();
-      if (this.messages.length === 0 && welcomeMessagesToAdd.length > 0) {
-        const now = new Date();
-        const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
-          created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
-          role: 'assistant' as const,
-          content: welcomeMsg,
-          attachments: [],
-        }));
-        this.messages = [...this.messages, ...welcomeMessages];
-      }
+      this.appendWelcomeMessagesIfFirst();
 
-      // Add user message immediately with attachments info
-      const userMessage: ChatMessage = {
-        created_at: new Date().toISOString(),
-        role: 'user',
-        content: message.trim(),
-        attachments: this.allowAttachments
-          ? this.selectedFiles
-              .filter(sf => !sf.error && sf.uploaded)
-              .map(sf => ({
-                name: sf.file.name,
-                content_type: sf.file.type,
-                size: sf.file.size,
-              }))
-          : [],
-      };
+      const userMessage = this.buildOptimisticUserMessage(message);
+      optimisticMessage = userMessage;
       this.messages = [...this.messages, userMessage];
       this.saveSessionToStorage();
       this.messageInput = '';
       if (this.allowAttachments) {
+        filesBeforeSend = this.selectedFiles;
         this.selectedFiles = []; // Clear selected files after sending
       }
       this.scrollToBottom();
@@ -810,18 +929,7 @@ export class OcsChat {
         sessionId: this.activeSessionId ?? '',
       });
 
-      const requestBody: any = { message: message.trim() };
-      if (this.allowAttachments && attachmentIds.length > 0) {
-        requestBody.attachment_ids = attachmentIds;
-      }
-      if (this.internalPageContext) {
-        requestBody.context = this.internalPageContext;
-      }
-      if (this.versionNumber != null) {
-        requestBody.version_number = this.versionNumber;
-      }
-
-      const data = await this.getChatService().sendMessage(this.activeSessionId, requestBody);
+      const data = await this.getChatService().sendMessage(this.activeSessionId, this.buildSendRequestBody(message, attachmentIds));
       if (epoch !== this.sessionEpoch) return;
 
       if (data.status === 'error') {
@@ -836,13 +944,116 @@ export class OcsChat {
       this.startTaskPolling(data.task_id);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
-      if (error instanceof SessionAccessError) {
-        this.handleSessionAccessError();
-        return;
-      }
-      const errorText = error instanceof Error ? error.message : 'Failed to send message';
-      this.handleError(errorText);
+      this.handleSendFailure(error, message, optimisticMessage, filesBeforeSend);
     }
+  }
+
+  /** Welcome messages join the history as assistant turns, once, ahead of the first user message. */
+  private appendWelcomeMessagesIfFirst(): void {
+    const welcomeMessagesToAdd = this.getWelcomeMessages();
+    if (this.messages.length > 0 || welcomeMessagesToAdd.length === 0) return;
+
+    const now = new Date();
+    const welcomeMessages: ChatMessage[] = welcomeMessagesToAdd.map((welcomeMsg, index) => ({
+      created_at: new Date(now.getTime() - (welcomeMessagesToAdd.length - index) * 1000).toISOString(),
+      role: 'assistant' as const,
+      content: welcomeMsg,
+      attachments: [],
+    }));
+    this.messages = [...this.messages, ...welcomeMessages];
+  }
+
+  /** The user's bubble, shown before the server has accepted the message. */
+  private buildOptimisticUserMessage(message: string): ChatMessage {
+    return {
+      created_at: new Date().toISOString(),
+      role: 'user',
+      content: message.trim(),
+      attachments: this.allowAttachments
+        ? this.selectedFiles
+            .filter(sf => !sf.error && sf.uploaded)
+            .map(sf => ({
+              name: sf.file.name,
+              content_type: sf.file.type,
+              size: sf.file.size,
+            }))
+        : [],
+    };
+  }
+
+  private buildSendRequestBody(message: string, attachmentIds: number[]): Record<string, unknown> {
+    const requestBody: Record<string, unknown> = { message: message.trim() };
+    if (this.allowAttachments && attachmentIds.length > 0) {
+      requestBody.attachment_ids = attachmentIds;
+    }
+    if (this.internalPageContext) {
+      requestBody.context = this.internalPageContext;
+    }
+    if (this.versionNumber != null) {
+      requestBody.version_number = this.versionNumber;
+    }
+    return requestBody;
+  }
+
+  /**
+   * A consent refusal keeps the session and puts the send back the way it was, so accepting
+   * retries it whole. A token refusal ends the session. Anything else is reported as is.
+   */
+  private handleSendFailure(error: unknown, message: string, optimisticMessage: ChatMessage | undefined, filesBeforeSend: SelectedFile[]): void {
+    if (error instanceof ConsentRequiredError) {
+      this.consent = error.consent;
+      this.forgetConsent();
+      this.dropOptimisticUserMessage(optimisticMessage);
+      if (this.allowAttachments && filesBeforeSend.length > 0) {
+        this.selectedFiles = filesBeforeSend;
+      }
+      this.holdForConsent(message);
+      return;
+    }
+    if (error instanceof SessionAccessError) {
+      this.handleSessionAccessError();
+      return;
+    }
+    this.handleError(error instanceof Error ? error.message : 'Failed to send message');
+  }
+
+  private holdForConsent(message: string): void {
+    this.heldMessage = message.trim();
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+  }
+
+  /**
+   * Remove the bubble this send appended, if it got that far. An upload refused for
+   * consent throws before the bubble exists, so there may be nothing to remove.
+   */
+  private dropOptimisticUserMessage(message: ChatMessage | undefined): void {
+    if (!message) return;
+    const index = this.messages.indexOf(message);
+    if (index === -1) return;
+    this.messages = [...this.messages.slice(0, index), ...this.messages.slice(index + 1)];
+    this.saveSessionToStorage();
+  }
+
+  /** The "I agree" action: record consent for the shown form, then release the held message. */
+  private async acceptConsent(): Promise<void> {
+    const formVersionId = this.consent?.form_version_id;
+    if (formVersionId == null) return;
+    const recorded = await this.postConsent(formVersionId);
+    if (!recorded) return;
+    await this.releaseHeldMessage();
+  }
+
+  /**
+   * Send the message the consent panel was holding. Clears the hold before sending so a
+   * poll that clears the requirement at the same moment cannot send it twice.
+   */
+  private async releaseHeldMessage(): Promise<void> {
+    const held = this.heldMessage;
+    if (held === undefined) return;
+    this.heldMessage = undefined;
+    await this.sendMessage(held);
   }
 
   private handleStarterQuestionClick(question: string): void {
@@ -1097,6 +1308,9 @@ export class OcsChat {
       onSessionEnded: this.forCurrentSession(() => {
         this.messagePollingHandle = undefined;
         this.handleSessionEnded();
+      }),
+      onConsent: this.forCurrentSession((consent: ChatConsent) => {
+        void this.applyConsent(consent);
       }),
       onError: () => {
         // Silently ignore polling errors to match previous behaviour
@@ -1681,6 +1895,8 @@ export class OcsChat {
       lastActivity: `ocs-chat-activity-${this.chatbotId}`,
       visible: `ocs-chat-visible-${this.chatbotId}`,
       sessionToken: `ocs-chat-token-${this.chatbotId}`,
+      sessionTokenExpiresAt: `ocs-chat-token-expires-${this.chatbotId}`,
+      consent: `ocs-chat-consent-${this.chatbotId}`,
     };
   }
 
@@ -1694,16 +1910,31 @@ export class OcsChat {
       if (this.activeSessionId) {
         storage.setItem(keys.sessionId, this.activeSessionId);
         storage.setItem(keys.lastActivity, new Date().toISOString());
-        if (this.currentSessionToken) {
-          storage.setItem(keys.sessionToken, this.currentSessionToken);
-        } else {
-          storage.removeItem(keys.sessionToken);
-        }
+        this.writeSessionTokenKeys(storage);
       }
       storage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
       console.warn('Failed to save chat session to storage:', error);
     }
+  }
+
+  /** Persist only the token pair: a renewal is not activity and must not touch `lastActivity`. */
+  private saveSessionTokenToStorage(): void {
+    const storage = this.getStorage();
+    if (!storage || this.isSessionBound() || !this.activeSessionId) {
+      return;
+    }
+    try {
+      this.writeSessionTokenKeys(storage);
+    } catch (error) {
+      console.warn('Failed to save chat session to storage:', error);
+    }
+  }
+
+  private writeSessionTokenKeys(storage: Storage): void {
+    const keys = this.getStorageKeys();
+    setOrRemoveItem(storage, keys.sessionToken, this.currentSessionToken);
+    setOrRemoveItem(storage, keys.sessionTokenExpiresAt, this.currentSessionTokenExpiresAt);
   }
 
   private loadSessionFromStorage(): SessionStorageData {
@@ -1740,8 +1971,9 @@ export class OcsChat {
       }
 
       const sessionToken = storage.getItem(keys.sessionToken) ?? undefined;
+      const sessionTokenExpiresAt = storage.getItem(keys.sessionTokenExpiresAt) ?? undefined;
 
-      return { sessionId, messages, sessionToken };
+      return { sessionId, messages, sessionToken, sessionTokenExpiresAt };
     } catch (error) {
       // fall back to starting a new session
       console.warn('Failed to load chat session from storage, starting new session:', error);
@@ -1838,6 +2070,7 @@ export class OcsChat {
       store.removeItem(keys.lastActivity);
       store.removeItem(keys.visible);
       store.removeItem(keys.sessionToken);
+      store.removeItem(keys.sessionTokenExpiresAt);
     } catch (error) {
       console.warn('Failed to clear chat session from storage:', error);
     }
@@ -1921,6 +2154,10 @@ export class OcsChat {
     this.isTyping = false;
     this.sessionEnded = false;
     this.currentPollTaskId = '';
+    // The stored acceptance stays: consent memory follows the persistence store, not the session.
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    this.autoConsentAttempted = undefined;
     if (this.allowAttachments) {
       this.selectedFiles = [];
     }
@@ -2019,31 +2256,62 @@ export class OcsChat {
   }
 
   private renderInputArea() {
+    const consenting = this.shouldShowConsentPanel();
     return (
-      <div class="input-area">
+      <div class={`input-area${consenting ? ' input-area-consent' : ''}`}>
         {this.renderKioskRestart()}
-        <div class="input-container">
-          <textarea
-            ref={el => (this.textareaRef = el)}
-            class="message-textarea"
-            rows={1}
-            placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
-            value={this.messageInput}
-            onInput={e => this.handleInputChange(e)}
-            onKeyPress={e => this.handleKeyPress(e)}
-            disabled={this.isComposerLocked()}
-          ></textarea>
-          {this.renderAttachmentControls()}
-          <button
-            class={`send-button ${this.isSendReady() ? 'send-button-enabled' : 'send-button-disabled'}`}
-            onClick={() => this.sendMessage(this.messageInput)}
-            disabled={this.isComposerLocked() || !this.hasDraft()}
-          >
-            {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
-          </button>
-        </div>
+        {consenting ? this.renderConsentPanel() : this.renderComposer()}
       </div>
     );
+  }
+
+  private shouldShowConsentPanel(): boolean {
+    return this.heldMessage !== undefined && this.consentPending() && !this.sessionEnded;
+  }
+
+  private renderConsentPanel() {
+    return (
+      <div class="consent-panel" role="region" aria-label={this.translationManager.get('consent.agree')}>
+        <div class="consent-text-frame">
+          <div class="consent-text chat-markdown" innerHTML={sanitizeHTML(this.consent?.text ?? '')}></div>
+        </div>
+        <button class="consent-agree send-button send-button-enabled" disabled={this.consentPostInFlight} onClick={() => void this.acceptConsent()}>
+          {this.translationManager.get('consent.agree')}
+        </button>
+      </div>
+    );
+  }
+
+  private renderComposer() {
+    return (
+      <div class="input-container">
+        <textarea
+          ref={el => (this.textareaRef = el)}
+          class="message-textarea"
+          rows={1}
+          placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
+          value={this.messageInput}
+          onInput={e => this.handleInputChange(e)}
+          onKeyPress={e => this.handleKeyPress(e)}
+          disabled={this.isComposerLocked()}
+        ></textarea>
+        {this.renderAttachmentControls()}
+        <button
+          class={`send-button ${this.isSendReady() ? 'send-button-enabled' : 'send-button-disabled'}`}
+          onClick={() => this.sendMessage(this.messageInput)}
+          disabled={this.isComposerLocked() || !this.hasDraft()}
+        >
+          {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
+        </button>
+      </div>
+    );
+  }
+
+  private renderMessageContent(message: ChatMessage) {
+    if (message.role === 'user') {
+      return <div class="chat-plain-text">{message.content}</div>;
+    }
+    return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
   }
 
   render() {
@@ -2141,7 +2409,7 @@ export class OcsChat {
               {/* Messages */}
               {
                 <div ref={el => (this.messageListRef = el)} class="messages-container">
-                  {this.messages.length === 0 && this.getWelcomeMessages().length > 0 && (
+                  {this.messages.length === 0 && !this.shouldShowConsentPanel() && this.getWelcomeMessages().length > 0 && (
                     <div class="welcome-messages">
                       {this.getWelcomeMessages().map((message, index) => (
                         <div key={`welcome-${index}`} class="message-row message-row-assistant">
@@ -2160,7 +2428,7 @@ export class OcsChat {
                           message.role === 'user' ? 'message-bubble-user' : message.role === 'assistant' ? 'message-bubble-assistant' : 'message-bubble-system'
                         }`}
                       >
-                        <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>
+                        {this.renderMessageContent(message)}
                         {message.attachments && message.attachments.length > 0 && (
                           <div class="message-attachments">
                             {message.attachments.map((attachment, attachmentIndex) => (
@@ -2193,7 +2461,7 @@ export class OcsChat {
               }
 
               {/* Starter Questions */}
-              {!this.isReadOnly() && this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
+              {!this.isReadOnly() && this.messages.length === 0 && !this.shouldShowConsentPanel() && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">

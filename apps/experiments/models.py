@@ -21,6 +21,8 @@ from django.db.models import (
     Case,
     Count,
     F,
+    Max,
+    Min,
     OuterRef,
     Q,
     Subquery,
@@ -99,11 +101,6 @@ class VersionFieldDisplayFormatters:
         template = get_template("generic/chip.html")
         url = pipeline.get_absolute_url()
         return template.render({"chip": Chip(label=name, url=url)})
-
-    @staticmethod
-    def format_builtin_tools(tools: set) -> str:
-        """code_interpreter, file_search -> Code Interpreter, File Search"""
-        return ", ".join([tool.replace("_", " ").capitalize() for tool in tools])
 
     @staticmethod
     def format_custom_action_operation(op) -> str:
@@ -949,8 +946,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @transaction.atomic()
     def archive(self):
         """
-        Archive the experiment and all versions in the case where this is the working version. The linked assistant and
-        pipeline for the working version should not be archived.
+        Archive the experiment and all versions in the case where this is the working version. The
+        linked pipeline for the working version should not be archived.
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
@@ -1076,36 +1073,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             fields=fields,
         )
 
-    def get_assistant(self):
-        """
-        Retrieves the assistant associated with the current instance.
-
-        This method attempts to find an assistant node within the pipeline associated with the current instance.
-        - If an assistant node is found, it retrieves the assistant ID from the node's parameters and returns the
-        corresponding OpenAiAssistant object.
-        - If no assistant node is found or if the pipeline is not set, it returns the default assistant associated with
-        the instance.
-        """
-        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
-            OpenAiAssistant,
-        )
-        from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models imports experiments.models
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            AssistantNode,
-        )
-
-        if self.pipeline:
-            node_name = AssistantNode.__name__
-            # TODO: What about multiple assistant nodes?
-            assistant_id = (
-                Node.objects.filter(type=node_name, pipeline=self.pipeline, params__assistant_id__isnull=False)
-                .values_list("params__assistant_id", flat=True)
-                .first()
-            )
-            if assistant_id:
-                return OpenAiAssistant.objects.get(id=assistant_id)
-        return None
-
 
 class Participant(BaseTeamModel):
     name = models.CharField(max_length=320, blank=True)
@@ -1196,6 +1163,11 @@ class Participant(BaseTeamModel):
             .first()
         )
 
+    def is_recently_active(self, days: int = 30) -> bool:
+        """Whether this participant has sent a message within the last `days` days."""
+        last_seen = self.last_seen()
+        return bool(last_seen and last_seen >= timezone.now() - timezone.timedelta(days=days))
+
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
@@ -1206,28 +1178,39 @@ class Participant(BaseTeamModel):
         )
         return f"{url}#{experiment.id}"
 
-    def get_experiments_for_display(self):
-        """Used by the html templates to display various stats about the participant's participation."""
-        exp_scoped_human_message = ChatMessage.objects.filter(
-            chat__experiment_session__participant=self,
-            message_type="human",
-            chat__experiment_session__experiment__id=OuterRef("id"),
-        )
-        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
-        joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
-        return (
-            self.get_experiments_queryset(include_archived=True)
-            .annotate(
-                joined_on=Subquery(joined_on),
-                last_message=Subquery(last_message),
+    def get_experiments_for_display(self) -> list[Experiment]:
+        """Used by templates to show participant stats per experiment.
+
+        Adds `joined_on` and `last_message` per `Experiment`, from `ExperimentSession.last_activity_at`
+        (raw field, not the coalesced `last_activity_expression()`, so a session with no message stays
+        `None`). Two grouped queries instead of one query joined across every chatbot session, which
+        fanned a per-row subquery out to every session, not just this participant's.
+        """
+        experiments = list(self.get_experiments_queryset(include_archived=True))
+        if not experiments:
+            return experiments
+
+        experiment_ids = [e.id for e in experiments]
+        session_stats_by_experiment = {
+            experiment_id: (joined_on, last_message)
+            for experiment_id, joined_on, last_message in (
+                self.experimentsession_set.filter(experiment_id__in=experiment_ids)
+                .values("experiment_id")
+                .annotate(joined_on=Min("created_at"), last_message=Max("last_activity_at"))
+                .values_list("experiment_id", "joined_on", "last_message")
             )
-            .distinct()
-        )
+        }
+        for experiment in experiments:
+            experiment.joined_on, experiment.last_message = session_stats_by_experiment.get(experiment.id, (None, None))
+        return experiments
 
     def get_experiments_queryset(self, include_archived=False):
         """Get the experiments that the participant has interacted with"""
+        session_experiment_ids = self.experimentsession_set.values_list("experiment_id", flat=True)
+        data_experiment_ids = self.data_set.values_list("experiment_id", flat=True)
+        experiment_ids = set(session_experiment_ids) | set(data_experiment_ids)
         query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
-        return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
+        return query.filter(id__in=experiment_ids)
 
     def get_data_for_experiment(self, experiment_id) -> dict:
         try:
@@ -1235,23 +1218,45 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
-    def get_schedules_for_experiment(
-        self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
+    def get_schedules_for_experiments(
+        self,
+        experiment_id=None,
+        as_dict=False,
+        as_timezone: str | None = None,
+        include_inactive=False,
+        experiments: list[Experiment] | None = None,
     ):
-        """
-        Returns all scheduled messages for the associated participant for this session's experiment
+        """Scheduled messages for this participant, optionally narrowed to one experiment.
 
         Parameters:
+        experiment_id: Scope to one chatbot. Omit to aggregate across every chatbot this
+            participant has used, in which case each dict also carries `experiment` (the
+            source `Experiment` instance) so callers can render a chatbot column without a
+            second lookup.
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
+        experiments: Already-loaded result of `get_experiments_for_display()`, so a caller that
+            called it themselves doesn't pay for that query twice. Ignored when `experiment_id`
+            is set. Falls back to calling it here if not passed.
         """
         from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
             ScheduledMessage,
         )
 
+        if experiment_id is not None:
+            experiment_ids = [experiment_id]
+            experiments_by_id = None
+        else:
+            if experiments is None:
+                experiments = self.get_experiments_for_display()
+            experiments_by_id = {e.id: e for e in experiments}
+            if not experiments_by_id:
+                return []
+            experiment_ids = list(experiments_by_id.keys())
+
         messages = (
             ScheduledMessage.objects.filter(
-                experiment_id=experiment_id,
+                experiment_id__in=experiment_ids,
                 participant=self,
                 team=self.team,
             )
@@ -1264,11 +1269,41 @@ class Participant(BaseTeamModel):
 
         scheduled_messages = []
         for message in messages:
-            if as_dict:
-                scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
-            else:
+            if not as_dict:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
+                continue
+            schedule = message.as_dict(as_timezone=as_timezone)
+            if experiments_by_id is not None:
+                schedule["experiment"] = experiments_by_id[message.experiment_id]
+            scheduled_messages.append(schedule)
         return scheduled_messages
+
+    def get_message_trend(self, days: int = 30) -> list[int]:
+        """Daily trace count for this participant across every chatbot, zero-filled for gaps.
+
+        Mirrors the bucket-and-zero-fill approach in `Experiment.get_bulk_trend_data`, scoped to
+        this participant (`Trace.participant`) instead of an experiment, and bucketed by day over
+        a longer window instead of by hour over 24h.
+        """
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=days - 1)
+
+        trace_counts = (
+            Trace.objects.filter(participant=self, timestamp__gte=from_date, timestamp__lte=to_date)
+            .annotate(day_bucket=functions.TruncDate("timestamp"))
+            .values("day_bucket")
+            .annotate(count=Count("id"))
+        )
+        counts_by_day = {row["day_bucket"]: row["count"] for row in trace_counts}
+
+        day_buckets = []
+        current = from_date.date()
+        end = to_date.date()
+        while current <= end:
+            day_buckets.append(current)
+            current += timezone.timedelta(days=1)
+
+        return [counts_by_day.get(day, 0) for day in day_buckets]
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment):
@@ -1797,22 +1832,12 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.assistants.models import (  # noqa: PLC0415 - circular: assistants.models imports experiments.models
-            OpenAiAssistant,
-        )
         from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            AssistantNode,
             LLMResponseWithPrompt,
             RouterNode,
         )
 
         if self.experiment.pipeline:
-            assistant_ids = self.experiment.pipeline.get_node_param_values(AssistantNode, param_name="assistant_id")
-            results = OpenAiAssistant.objects.filter(
-                id__in=assistant_ids, instructions__contains="{participant_data}"
-            ).exists()
-            if results:
-                return True
             llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts

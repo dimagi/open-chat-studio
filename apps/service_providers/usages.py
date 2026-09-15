@@ -4,8 +4,8 @@ Two public helpers:
 
 * :func:`get_provider_usages` — given a provider instance, return all the
   objects that depend on it (pipelines/experiments via pipeline node params,
-  plus anything connected by reverse FK such as assistants, analyses,
-  collections, channels, etc.).
+  plus anything connected by reverse FK such as analyses, collections,
+  channels, etc.).
 * :func:`search_providers_by_api_key` — given a :class:`ServiceProvider` type
   and an API key (or partial), iterate over providers of that type and
   return the ones whose encrypted config contains a matching secret.

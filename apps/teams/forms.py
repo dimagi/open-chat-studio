@@ -184,6 +184,16 @@ class TeamMigrationForm(forms.ModelForm):
         }
 
 
+class TeamMfaForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("require_mfa",)
+        labels = {"require_mfa": _("Require two-factor authentication")}
+        help_texts = {
+            "require_mfa": _("Every member of this team must enrol in two-factor authentication to keep access."),
+        }
+
+
 class NotifyRecipientsForm(forms.Form):
     NOTIFICATION_CHOICES = [
         ("self", "Send email notification to myself"),

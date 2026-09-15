@@ -91,7 +91,7 @@ def _get_version_details(self) -> VersionDetails:
 ## Archiving
 An object can only be archived if neither its working version nor any of its other versions are used by any published version of a related object.
 
-If the object is in use, the user should be informed of the specific usages and prompted to archive those related objects first. For reference, see the behavior when attempting to archive an `OpenAiAssistant`.
+If the object is in use, the user should be informed of the specific usages and prompted to archive those related objects first. For reference, see `Collection.archive` (`apps/documents/models.py`), which refuses and returns `False` while a live node or experiment still references it.
 
 
 [user-docs]: https://docs.openchatstudio.com/concepts/versioning/

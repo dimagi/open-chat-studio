@@ -10,7 +10,6 @@ VIEW_NAME_MAPPING = {
     "pipelines:new": "pipelines_new",
     "chatbots:chatbots_home": "chatbots_home",
     "chatbots:new": "chatbots_new",
-    "assistants:home": "assistants_home",
     "team:manage_team": "team_settings",
 }
 

@@ -18,7 +18,7 @@
     {% endfor %}
     {% if not label_text %}<i class="fa-solid fa-tags"></i>{% endif %}
     {% if allow_edit|default_if_none:True and perms.annotations.add_customtaggeditem %}
-    <button class="btn btn-xs btn-ghost {% if not label_text %}btn-square{% endif %}" title="Edit tags"
+    <button class="btn btn-xs btn-ghost {% if not label_text %}btn-square{% endif %}{% if hover_reveal_edit %} opacity-0 group-hover:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity{% endif %}" title="Edit tags"
             hx-get="{% url 'annotations:tag_ui' request.team.slug %}?edit=1"
             hx-vals='{{ object.object_info }}'
             hx-target="#tag-ui-{{ object.id }}"

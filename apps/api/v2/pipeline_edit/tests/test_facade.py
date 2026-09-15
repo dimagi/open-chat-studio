@@ -230,7 +230,9 @@ class TestTheResponseEnvelope:
 #: the locked read and once for the rebuild after the write. They buy ``custom_actions`` being served
 #: from those rows rather than from the copy in params, and the count does not move with the number
 #: of nodes -- without them each node would read the table itself.
-QUERIES_UNDER_THE_LOCK = 29
+#: One is ``deprecated_models``, a single statement for the whole graph that does not move with the
+#: number of nodes.
+QUERIES_UNDER_THE_LOCK = 30
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
@@ -244,14 +246,14 @@ QUERIES_UNDER_THE_LOCK = 29
 #: 17 is that revert. Every extra node on the fixture graph costs 2 (``pipeline_state`` validates each
 #: one), so a failure at 12 is someone having changed the fixture. Raising it deliberately is a
 #: decision about how long the row is held: say in the commit what the extra statements buy.
-WIRE_QUERIES_UNDER_THE_LOCK = 10
+WIRE_QUERIES_UNDER_THE_LOCK = 11
 
 
 @pytest.mark.django_db()
 def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
     """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with
     it the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for.
-    The absolute count is what pins that: reverting the skip takes it from 10 to 17, while a
+    The absolute count is what pins that: reverting the skip takes it from 11 to 18, while a
     comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)

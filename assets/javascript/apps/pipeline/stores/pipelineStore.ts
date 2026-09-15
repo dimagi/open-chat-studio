@@ -9,10 +9,13 @@ import {
   NodeChange,
 } from "reactflow";
 import {create, StateCreator} from "zustand";
+import {shallow} from "zustand/shallow";
+import {temporal} from "zundo";
 import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
 import {getNodeId} from "../utils";
-import {cloneDeep} from "lodash";
+import cloneDeep from "lodash/cloneDeep";
+import throttle from "lodash/throttle";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
@@ -21,6 +24,20 @@ import {computePipelineDiff} from "../diffPipeline";
 // read via useSyncExternalStore, which compares snapshots by identity, so handing back a fresh []
 // each call makes every render look like a change and loops until React bails out.
 const NO_PIPELINE_ERRORS: string[] = [];
+
+// Runs `fn` with temporal (undo/redo) tracking paused, when `shouldPause` is true. Every
+// server-driven or React-Flow-bookkeeping write to nodes/edges goes through this, so pause and
+// resume can't drift out of sync at one of the call sites. The try/finally matters: without it,
+// an exception inside fn would leave tracking paused for the rest of the session, silently
+// dropping every undo step after.
+export function withTemporalPaused(shouldPause: boolean, fn: () => void) {
+  if (shouldPause) usePipelineStore.temporal.getState().pause();
+  try {
+    fn();
+  } finally {
+    if (shouldPause) usePipelineStore.temporal.getState().resume();
+  }
+}
 
 let saveTimeoutId: NodeJS.Timeout | null = null;
 // Serialization guard for autosave (see issue #3895). While a PATCH is in-flight
@@ -84,14 +101,29 @@ const createPipelineStore: StateCreator<
   },
   setReadOnly: (value: boolean) => set({ readOnly: value }),
   onNodesChange: (changes: NodeChange[]) => {
-    set({
-      nodes: applyNodeChanges(changes, get().nodes),
+    // React Flow fires this for its own bookkeeping too, not just user edits: a
+    // 'dimensions' change as every node first measures itself, a 'select' change on every
+    // click, and — on a plain click that never moved the node — a 'position' change
+    // carrying no `position` value, just `dragging: false` (its own drag-end signal, sent
+    // whether or not anything actually moved). None of those are undo-worthy.
+    const isUserEdit = changes.some((change) => {
+      if (change.type === "dimensions" || change.type === "select") return false;
+      if (change.type === "position" && change.position === undefined) return false;
+      return true;
+    });
+    withTemporalPaused(!isUserEdit, () => {
+      set({
+        nodes: applyNodeChanges(changes, get().nodes),
+      });
     });
   },
   onEdgesChange: (changes: EdgeChange[]) => {
     if (get().readOnly) return;
-    set({
-      edges: applyEdgeChanges(changes, get().edges),
+    const isUserEdit = changes.some((change) => change.type !== "select");
+    withTemporalPaused(!isUserEdit, () => {
+      set({
+        edges: applyEdgeChanges(changes, get().edges),
+      });
     });
   },
   setNodes: (change) => {
@@ -144,24 +176,27 @@ const createPipelineStore: StateCreator<
     }
 
     useEditorStore.getState().closeEditor();
-    const nodes = get().nodes.filter((node) =>
+    const removedNodes = get().nodes.filter((node) =>
       typeof nodeId === "string"
         ? node.id === nodeId
         : nodeId.includes(node.id)
     )
-    const connectedEdges = getConnectedEdges(nodes, get().edges);
+    const connectedEdges = getConnectedEdges(removedNodes, get().edges);
     const remainingEdges = get().edges.filter(
       (edge) => !connectedEdges.includes(edge),
     );
-    get().setEdges(remainingEdges);
-
-    get().setNodes(
-      get().nodes.filter((node) =>
-        typeof nodeId === "string"
-          ? node.id !== nodeId
-          : !nodeId.includes(node.id)
-      )
+    const remainingNodes = get().nodes.filter((node) =>
+      typeof nodeId === "string"
+        ? node.id !== nodeId
+        : !nodeId.includes(node.id)
     );
+
+    // One set() call, not setEdges() then setNodes(): removing a node and its edges is one
+    // user action, and undo history is recorded per set() call, so splitting this into two
+    // calls would make it take two undos to fully restore, landing on a broken intermediate
+    // state (edges gone, node still present) in between.
+    set({edges: remainingEdges, nodes: remainingNodes});
+    get().autoSaveCurrentPipline();
   },
   deleteEdge: (edgeId) => {
     if (get().readOnly) return;
@@ -261,10 +296,26 @@ const createPipelineStore: StateCreator<
     get().setNodes(newNodes);
   },
   resetFlow: ({nodes, edges}) => {
-    set({
-      nodes,
-      edges,
+    // Loading or reloading a pipeline is not a user edit — don't let it become an undo step.
+    withTemporalPaused(true, () => {
+      set({
+        nodes,
+        edges,
+      });
     });
+  },
+  undoLastChange: () => {
+    if (get().readOnly) return;
+    usePipelineStore.temporal.getState().undo();
+    // zundo's undo() sets nodes/edges via the store's raw set(), bypassing setNodes/setEdges
+    // — the only places that trigger autoSaveCurrentPipline() — so it has to be called here
+    // explicitly, or an undo restores the canvas without ever telling the server.
+    get().autoSaveCurrentPipline();
+  },
+  redoLastChange: () => {
+    if (get().readOnly) return;
+    usePipelineStore.temporal.getState().redo();
+    get().autoSaveCurrentPipline();
   },
 })
 
@@ -280,6 +331,7 @@ const createPipelineManagerStore: StateCreator<
   isSaving: false,
   isLoading: true,
   errors: {},
+  deprecatedModels: {},
   conflictDetected: false,
   currentRevision: 0,
   dismissConflict: () => {
@@ -297,7 +349,7 @@ const createPipelineManagerStore: StateCreator<
           currentPipelineId: pipelineId,
           currentRevision: pipeline.edit_revision ?? 0,
         });
-        set({errors: pipeline.errors});
+        set({errors: pipeline.errors, deprecatedModels: pipeline.deprecated_models ?? {}});
         set({isLoading: false});
         if (get().reactFlowInstance) {
           get().resetFlow({
@@ -375,17 +427,23 @@ const createPipelineManagerStore: StateCreator<
           if (saveResponse) {
             saveSucceeded = true;
             pipeline.data = saveResponse.data as PipelineType["data"];
-            set({
-              currentPipeline: pipeline,
-              dirty: false,
-              currentRevision: saveResponse.edit_revision,
-            });
-            set({errors: saveResponse.errors as ErrorsType});
-            if (get().reactFlowInstance && saveResponse.errors) {
+            // Same reasoning as resetFlow above.
+            withTemporalPaused(true, () => {
               set({
-                edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
-              })
-            }
+                currentPipeline: pipeline,
+                dirty: false,
+                currentRevision: saveResponse.edit_revision,
+              });
+              set({
+                errors: saveResponse.errors as ErrorsType,
+                deprecatedModels: saveResponse.deprecated_models ?? {},
+              });
+              if (get().reactFlowInstance && saveResponse.errors) {
+                set({
+                  edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
+                })
+              }
+            });
             resolve();
           }
         })
@@ -409,27 +467,30 @@ const createPipelineManagerStore: StateCreator<
       const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
       if (response) {
         patchSucceeded = true;
-        // Update local state with merged data from server
-        const edges = response.data?.edges as Edge[] | undefined;
-        set({
-          currentRevision: response.edit_revision,
-          errors: response.errors as ErrorsType,
-          dirty: false,
+        // Update local state with merged data from server — same reasoning as resetFlow.
+        withTemporalPaused(true, () => {
+          const edges = response.data?.edges as Edge[] | undefined;
+          set({
+            currentRevision: response.edit_revision,
+            errors: response.errors as ErrorsType,
+            deprecatedModels: response.deprecated_models ?? {},
+            dirty: false,
+          });
+          if (edges) {
+            set({
+              edges: updateEdgeClasses(edges, response.errors as ErrorsType),
+            });
+          }
+          if (get().currentPipeline) {
+            // Ensure the current pipeline reflects the merged server state
+            set({
+              currentPipeline: {
+                ...get().currentPipeline!,
+                data: response.data as PipelineType["data"],
+              },
+            });
+          }
         });
-        if (edges) {
-          set({
-            edges: updateEdgeClasses(edges, response.errors as ErrorsType),
-          });
-        }
-        if (get().currentPipeline) {
-          // Ensure the current pipeline reflects the merged server state
-          set({
-            currentPipeline: {
-              ...get().currentPipeline!,
-              data: response.data as PipelineType["data"],
-            },
-          });
-        }
       }
     } catch (err) {
       if ((err as {status?: number; currentRevision?: number}).status === 409) {
@@ -462,13 +523,35 @@ const createPipelineManagerStore: StateCreator<
   getPipelineError: () => {
     return get().errors["pipeline"] ?? NO_PIPELINE_ERRORS;
   },
+  getNodeDeprecatedModel: (nodeId: string) => {
+    return get().deprecatedModels[nodeId];
+  },
 })
 
 
-const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>((...a) => ({
-  ...createPipelineStore(...a),
-  ...createPipelineManagerStore(...a),
-}));
+// Undo history is tracked for `nodes`/`edges` only, and only for changes made through the
+// user-facing mutators above (onNodesChange, deleteNode, addNode, onConnect, ...). The
+// server-driven writes in resetFlow/_patchPipeline/savePipeline pause tracking around
+// themselves, so a save or reload never becomes an undo step. `handleSet` is throttled so a
+// node drag — which fires onNodesChange on every pointer move — collapses into one history
+// entry instead of one per pixel.
+const usePipelineStore = create<PipelineStoreType & PipelineManagerStoreType>()(
+  temporal(
+    (...a) => ({
+      ...createPipelineStore(...a),
+      ...createPipelineManagerStore(...a),
+    }),
+    {
+      partialize: (state) => ({nodes: state.nodes, edges: state.edges}),
+      limit: 50,
+      // Without this, zundo pushes a history entry on every set() call regardless of
+      // whether nodes/edges actually changed — a set() that touches neither (isLoading,
+      // errors, currentRevision, ...) would still count as an undo step.
+      equality: shallow,
+      handleSet: (handleSet) => throttle<typeof handleSet>((state) => handleSet(state), 500),
+    }
+  )
+);
 
 export default usePipelineStore;
 

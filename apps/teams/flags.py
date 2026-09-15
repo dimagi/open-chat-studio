@@ -35,8 +35,6 @@ class Flags(FlagInfo, Enum):
 
     SESSION_ANALYSIS = ("flag_session-analysis", "Enables detailed session analysis and reporting")
 
-    EVENTS = ("flag_events", "Enables event-driven triggers and scheduled messages", "events", [], True)
-
     SSO_LOGIN = ("flag_sso_login", "Enables Single Sign-On authentication integration", "")
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
@@ -57,6 +55,8 @@ class Flags(FlagInfo, Enum):
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
     EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
+
+    SLACK_NOTIFICATIONS = ("flag_slack_notifications", "Slack notifications channel", "", [], True)
 
     JSON_COLLECTION_LOADER = (
         "flag_json_collection_loader",

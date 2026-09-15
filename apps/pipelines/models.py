@@ -64,11 +64,6 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 
         return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
 
-    def assistant_nodes(self):
-        from apps.pipelines.nodes.nodes import AssistantNode  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        return self.get_queryset().filter(type=AssistantNode.__name__)
-
 
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
 #: these related rows per node, so ``flow_data`` is an N+1 without them.
@@ -717,8 +712,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def archive(self):
         """
-        Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
-        archived when the pipeline they belong to is archived.
+        Archiving a node also archives the versioned resources its params reference. The node's
+        versions will be archived when the pipeline they belong to is archived.
         """
         super().archive()
         if not self.is_a_version:

@@ -89,7 +89,6 @@ The command generates Python code ready for the `ocs-deploy` repository:
 # URI patterns for endpoints that can send large POST bodies
 # These bypass only SizeRestrictions_BODY, all other protections remain active
 SizeRestrictions_BODY = [
-    r"^a/[a-z0-9_-]+/assistants/new/$",
     r"^a/[a-z0-9_-]+/documents/collections/\d+/add_files$",
     r"^slack/events$",
 ]

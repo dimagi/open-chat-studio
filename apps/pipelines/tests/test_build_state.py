@@ -1,12 +1,18 @@
 """Tests for the pipeline build-state helpers: the three-bucket errors report, ``pipeline_valid``,
-the advisory ``unwired_handles`` map, and the stranded-router-edge guard."""
+the advisory ``unwired_handles`` and ``deprecated_models`` maps, and the stranded-router-edge guard."""
 
 import logging
+from unittest.mock import patch
 
 import pytest
 from pydantic import model_validator
 
-from apps.pipelines.build_state import node_output_handles, pipeline_build_state, unwired_handles
+from apps.pipelines.build_state import (
+    deprecated_models,
+    node_output_handles,
+    pipeline_build_state,
+    unwired_handles,
+)
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node, Pipeline
@@ -14,10 +20,15 @@ from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.tests.utils import (
     create_pipeline_model,
     end_node,
+    llm_response_node,
     passthrough_node,
     start_node,
     state_key_router_node,
 )
+from apps.service_providers.llm_service import default_models
+from apps.service_providers.llm_service.default_models import Model
+from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 # ``Node.type`` is graph data, so it can name any module-level attribute of
 # ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
@@ -141,6 +152,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_dangling_router_branch_is_advisory_not_an_error(self):
@@ -159,6 +171,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {router["id"]: [{"handle": "output_1", "label": "B"}]},
+            "deprecated_models": {},
         }
 
     def test_off_graph_island_reports_input_and_output_unwired(self):
@@ -174,6 +187,7 @@ class TestPipelineBuildState:
             "unwired_handles": {
                 island["id"]: [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
             },
+            "deprecated_models": {},
         }
 
     def test_start_input_and_end_output_are_never_reported(self):
@@ -209,6 +223,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_dangling_provider_model_reference_reports_node_error_instead_of_raising(self):
@@ -241,7 +256,50 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
+
+    @pytest.mark.parametrize(
+        ("model_id", "expected"),
+        [
+            pytest.param(
+                0,
+                {"llm_provider_model_id": "LLM provider model with id 0 not found"},
+                id="falsy-id-reaches-the-after-validator",
+            ),
+            pytest.param(
+                999999,
+                {"root": "LLM provider model with id 999999 does not exist"},
+                id="absent-id-is-caught-before-it",
+            ),
+        ],
+    )
+    def test_a_bad_model_id_is_reported_against_the_model_field(self, model_id, expected):
+        """Which validator catches it decides where it lands, and the two differ.
+
+        ``ensure_default_parameters`` runs ``mode="before"`` and raises for an id it cannot look up,
+        so the ordinary dangling reference never reaches ``validate_llm_model`` and reports under
+        ``root``. A falsy-but-present id skips that lookup and does reach it -- the one path on which
+        the ``invalid_model`` error is raised, and it names the model field, not the provider field.
+        """
+        start, end = start_node(), end_node()
+        llm = {
+            "id": "llm-1",
+            "type": "LLMResponseWithPrompt",
+            "params": {
+                "name": "llm-1",
+                "prompt": "hi",
+                "llm_provider_id": 1,
+                "llm_provider_model_id": model_id,
+            },
+        }
+        edges = [
+            {"id": "e1", "source": start["id"], "target": "llm-1"},
+            {"id": "e2", "source": "llm-1", "target": end["id"]},
+        ]
+        pipeline = create_pipeline_model([start, llm, end], edges)
+
+        assert pipeline_build_state(pipeline)["errors"]["node"] == {"llm-1": expected}
 
     def test_node_build_error_is_reported_generically_rather_than_verbatim(self, monkeypatch, caplog):
         """A build-stage node error can wrap a raw pydantic error naming the classes behind the node.
@@ -265,6 +323,7 @@ class TestPipelineBuildState:
                 "pipeline": ["This pipeline could not be built. Check the values of its nodes' params."],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
         assert "SecretInternalNode" not in str(state)
         assert "SecretInternalNode" in caplog.text
@@ -294,6 +353,7 @@ class TestPipelineBuildState:
                 ghost["id"]: [{"handle": "input", "label": None}],
                 end["id"]: [{"handle": "input", "label": None}],
             },
+            "deprecated_models": {},
         }
 
     def test_removed_node_type_with_a_named_handle_edge_does_not_raise(self):
@@ -317,6 +377,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
@@ -342,6 +403,7 @@ class TestPipelineBuildState:
                 "pipeline": [],
             },
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_stranded_router_edge_lands_in_edge_bucket_without_raising(self):
@@ -367,6 +429,7 @@ class TestPipelineBuildState:
                 "pipeline": ["One or more edges reference a router output that no longer exists"],
             },
             "unwired_handles": {router["id"]: [{"handle": "output_0", "label": "A"}]},
+            "deprecated_models": {},
         }
 
     def test_stranded_edge_on_unreachable_router_does_not_block_the_build(self):
@@ -402,6 +465,7 @@ class TestPipelineBuildState:
                 ],
                 island_target["id"]: [{"handle": "output", "label": None}],
             },
+            "deprecated_models": {},
         }
 
     def test_node_and_graph_errors_are_reported_together(self):
@@ -447,6 +511,7 @@ class TestPipelineBuildState:
             "pipeline_valid": True,
             "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {},
+            "deprecated_models": {},
         }
 
     def test_invalid_router_does_not_have_its_edges_called_stranded(self):
@@ -487,4 +552,117 @@ class TestPipelineBuildState:
                 island["id"]: [{"handle": "output", "label": None}],
                 end["id"]: [{"handle": "input", "label": None}],
             },
+            "deprecated_models": {},
         }
+
+
+@pytest.mark.django_db()
+class TestDeprecatedModels:
+    """The advisory deprecated-model map. Deprecation is a migration window, so none of this may
+    touch ``pipeline_valid`` -- an errored pipeline cannot run, be test-messaged or be versioned."""
+
+    @pytest.fixture(autouse=True)
+    def _model_defaults(self):
+        """Replacements come from ``DEFAULT_LLM_PROVIDER_MODELS``, which is edited every time a real
+        model is deprecated. Stub it so these tests describe the mapping, not the current list."""
+        stub = {
+            "openai": [
+                Model("live-model", 1000),
+                Model("old-model", 1000, deprecated=True, replacement="live-model"),
+                Model("orphan-model", 1000, deprecated=True),
+            ]
+        }
+        with patch.dict(default_models.DEFAULT_LLM_PROVIDER_MODELS, stub, clear=True):
+            yield
+
+    def _pipeline_using(self, model):
+        provider = LlmProviderFactory.create(team=model.team, type=model.type)
+        llm = llm_response_node(str(provider.id), str(model.id))
+        pipeline = create_pipeline_model(
+            [start_node(), llm, end_node()], pipeline=PipelineFactory.create(team=model.team)
+        )
+        return pipeline, llm["id"]
+
+    def test_a_node_on_a_deprecated_model_is_advisory_and_still_valid(self):
+        model = LlmProviderModelFactory.create(type="openai", name="old-model", deprecated=True)
+        pipeline, node_id = self._pipeline_using(model)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state["pipeline_valid"] is True
+        assert state["errors"] == {"node": {}, "edge": [], "pipeline": []}
+        assert state["deprecated_models"] == {node_id: {"model": "old-model", "replacement": "live-model"}}
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("orphan-model", id="declared-without-a-replacement"),
+            pytest.param("our-finetune", id="not-in-the-shipped-table"),
+        ],
+    )
+    def test_a_model_with_no_declared_replacement_reports_none(self, name):
+        """The team is still told to migrate; there is just nothing to name as the destination. A
+        team's own model is absent from `DEFAULT_LLM_PROVIDER_MODELS` entirely, so the lookup has to
+        miss rather than raise."""
+        model = LlmProviderModelFactory.create(type="openai", name=name, deprecated=True)
+        pipeline, node_id = self._pipeline_using(model)
+
+        assert deprecated_models(pipeline) == {node_id: {"model": name, "replacement": None}}
+
+    def test_another_teams_model_is_not_reported(self):
+        """Params are just JSON, so a foreign id can sit in one. Echoing the row back would tell
+        this team a model name from another."""
+        model = LlmProviderModelFactory.create(type="openai", name="old-model", deprecated=True)
+        provider = LlmProviderFactory.create(team=model.team, type=model.type)
+        llm = llm_response_node(str(provider.id), str(model.id))
+        pipeline = create_pipeline_model([start_node(), llm, end_node()])
+
+        assert deprecated_models(pipeline) == {}
+
+    def test_a_live_model_is_not_reported(self):
+        model = LlmProviderModelFactory.create(type="openai", name="live-model")
+        pipeline, _ = self._pipeline_using(model)
+
+        assert deprecated_models(pipeline) == {}
+
+    def test_every_node_on_the_same_deprecated_model_is_reported(self):
+        model = LlmProviderModelFactory.create(type="openai", name="old-model", deprecated=True)
+        provider = LlmProviderFactory.create(team=model.team, type=model.type)
+        first = llm_response_node(str(provider.id), str(model.id), name="first")
+        second = llm_response_node(str(provider.id), str(model.id), name="second")
+        pipeline = create_pipeline_model(
+            [start_node(), first, second, end_node()], pipeline=PipelineFactory.create(team=model.team)
+        )
+
+        assert set(deprecated_models(pipeline)) == {first["id"], second["id"]}
+
+    def test_a_pipeline_with_no_llm_nodes_costs_no_query(self, django_assert_num_queries):
+        """Every read of a pipeline pays for this map, and most nodes name no model at all."""
+        pipeline = create_pipeline_model([start_node(), end_node()])
+
+        with django_assert_num_queries(1):
+            assert deprecated_models(pipeline) == {}
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            pytest.param(None, id="null"),
+            pytest.param("", id="empty-string"),
+            pytest.param("not-an-id", id="non-numeric"),
+            pytest.param([7], id="list"),
+            pytest.param(999999, id="absent-row"),
+        ],
+    )
+    def test_junk_in_the_model_param_is_not_a_crash(self, model_id):
+        """Params are unvalidated JSON, and `absent-row` is a node between `remove_deprecated_models`
+        deleting a row and the node being repointed. A bad id is validation's problem to report, not
+        this map's to raise on -- and raising here would take the whole editor read down with it."""
+        pipeline = create_pipeline_model([start_node(), end_node()])
+        Node.objects.create(
+            pipeline=pipeline,
+            flow_id="llm-junk",
+            type="LLMResponse",
+            params={"name": "llm-junk", "llm_provider_model_id": model_id},
+        )
+
+        assert deprecated_models(pipeline) == {}
