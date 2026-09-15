@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.events.forms import (
     ACTION_PARAMS_FORMS,
     EventActionForm,
@@ -25,11 +26,7 @@ def _get_events_url(team_slug, experiment_id):
 
 def _event_breadcrumbs(request, experiment_id, leaf: str) -> list[Crumb]:
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
-    return [
-        (_("Chatbots"), reverse("chatbots:chatbots_home", args=[request.team.slug])),
-        (experiment.name, reverse("chatbots:single_chatbot_home", args=[request.team.slug, experiment.id])),
-        (leaf, None),
-    ]
+    return [*chatbot_crumbs(request.team.slug, experiment), (leaf, None)]
 
 
 @login_and_team_required

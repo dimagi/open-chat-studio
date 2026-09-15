@@ -26,6 +26,7 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable, ParticipantSessionsTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
@@ -251,13 +252,6 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         return queryset
 
 
-def _chatbot_breadcrumbs(team_slug: str, experiment: Experiment) -> list[Crumb]:
-    return [
-        (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
-        (experiment.name, reverse("chatbots:single_chatbot_home", args=[team_slug, experiment.id])),
-    ]
-
-
 class CreateChatbot(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Experiment
     template_name = "chatbots/chatbot_form.html"
@@ -417,7 +411,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
-            "breadcrumbs": [*_chatbot_breadcrumbs(self.request.team.slug, experiment), (_("Edit"), None)],
+            "breadcrumbs": [*chatbot_crumbs(self.request.team.slug, experiment), (_("Edit"), None)],
             "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
             "default_values": get_node_default_values(self.request.team),
             "allow_edit_name": False,
@@ -475,7 +469,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         context["experiment"] = working_experiment
         context["page_title"] = f"Create Version - {working_experiment.name}"
         context["breadcrumbs"] = [
-            *_chatbot_breadcrumbs(self.request.team.slug, working_experiment),
+            *chatbot_crumbs(self.request.team.slug, working_experiment),
             (_("Create Version"), None),
         ]
         return context
@@ -836,7 +830,7 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
             "session": session,
             "session_token": issue_session_token(session),
             "active_tab": "chatbots",
-            "breadcrumbs": [*_chatbot_breadcrumbs(team_slug, experiment), (session.external_id, None)],
+            "breadcrumbs": [*chatbot_crumbs(team_slug, experiment), (session.external_id, None)],
             **version_specific_vars,
         },
     )
@@ -925,7 +919,7 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
             "invitation_form": form,
             "experiment": chatbot,
             "sessions": sessions,
-            "breadcrumbs": [*_chatbot_breadcrumbs(team_slug, chatbot), (_("Invitations"), None)],
+            "breadcrumbs": [*chatbot_crumbs(team_slug, chatbot), (_("Invitations"), None)],
             **version_specific_vars,
         },
     )
@@ -961,7 +955,7 @@ def _chatbot_chat_ui(request):
             "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
             "breadcrumbs": [
-                *_chatbot_breadcrumbs(request.team.slug, request.experiment),
+                *chatbot_crumbs(request.team.slug, request.experiment),
                 (request.experiment_session.external_id, None),
             ],
             **version_specific_vars,
