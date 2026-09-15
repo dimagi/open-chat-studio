@@ -1,4 +1,4 @@
-import {PipelineDiffPayload, PipelineType} from "./pipeline";
+import {DeprecatedModel, DeprecatedModelsType, PipelineDiffPayload, PipelineType} from "./pipeline";
 
 export type PipelineManagerStoreType = {
   currentPipeline: PipelineType | undefined;
@@ -26,6 +26,8 @@ export type PipelineManagerStoreType = {
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
   edgeHasErrors: (edgeId: string) => boolean;
   getPipelineError: () => string[];
+  deprecatedModels: DeprecatedModelsType;
+  getNodeDeprecatedModel: (nodeId: string) => DeprecatedModel | undefined;
 };
 
 export type ErrorsType = {

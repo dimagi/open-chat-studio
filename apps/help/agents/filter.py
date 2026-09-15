@@ -59,8 +59,7 @@ def make_get_options_tool(filter_class, team):
 
         if param not in _options_cache:
             try:
-                instance = filter_component.model_copy(deep=True)
-                instance.prepare(team)
+                instance = filter_component.prepare(team)
 
                 normalized = []
                 for opt in instance.options:

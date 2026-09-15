@@ -11,6 +11,7 @@ from django.db.models import Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -19,6 +20,7 @@ from django_tables2 import SingleTableView
 
 from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import Experiment
+from apps.pipelines.build_state import deprecated_models
 from apps.pipelines.exceptions import MissingNodeDataError
 from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
@@ -168,7 +170,10 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
         return {
             **data,
             "pipeline_id": kwargs["pk"],
-            "pipeline_name": pipeline.name,
+            "breadcrumbs": [
+                (_("Event Pipelines"), reverse("pipelines:home", args=[self.request.team.slug])),
+                (pipeline.name, None),
+            ],
             "node_schemas": get_node_schemas(),
             "parameter_values": get_node_parameter_values(
                 team=self.request.team,
@@ -245,6 +250,7 @@ def pipeline_data(request, team_slug: str, pk: int):
                 "data": pipeline.flow_data,
                 "edit_revision": pipeline.edit_revision,
                 "errors": pipeline.validate(),
+                "deprecated_models": deprecated_models(pipeline),
             }
         }
     )
@@ -278,6 +284,7 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
         {
             "data": pipeline.flow_data,
             "errors": pipeline.validate(),
+            "deprecated_models": deprecated_models(pipeline),
             "edit_revision": pipeline.edit_revision,
         }
     )
@@ -329,6 +336,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         {
             "data": pipeline.flow_data,
             "errors": pipeline.validate(),
+            "deprecated_models": deprecated_models(pipeline),
             "edit_revision": pipeline.edit_revision,
         }
     )

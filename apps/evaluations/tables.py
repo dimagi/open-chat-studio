@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
@@ -291,11 +292,6 @@ class EvaluationSessionsSelectionTable(tables.Table):
             "css_class": "checkbox checkbox-primary session-checkbox",
         },
     )
-    experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
-    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
-    last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
-    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
-    message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
     session = actions.ActionsColumn(
         actions=[
             chip_action(
@@ -305,7 +301,30 @@ class EvaluationSessionsSelectionTable(tables.Table):
             ),
         ],
         orderable=True,
+        # The default ActionsColumn attrs include overflow-hidden, which clips the button's
+        # label once the table's auto layout shrinks this column below the button's natural
+        # width (unavoidable with this many columns) — nowrap + visible overflow keeps the
+        # full "View Session" label intact and lets the table grow/scroll instead.
+        attrs={
+            "th": {"class": "py-3 px-3 text-center"},
+            "td": {"class": "py-3 px-3 text-center whitespace-nowrap overflow-visible"},
+        },
     )
+    session_id = TemplateColumn(
+        verbose_name="Session ID",
+        template_code='{% include "generic/session_id_chip.html" with external_id=record.external_id %}',
+        orderable=False,
+    )
+    experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
+    participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
+    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
+    last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
+    versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
+    message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
+
+    def render_tags(self, record, bound_column):
+        template = get_template(bound_column.column.template_name)
+        return template.render({"object": record.chat})
 
     class Meta:
         model = ExperimentSession

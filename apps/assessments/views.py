@@ -5,10 +5,12 @@ from typing import Any
 from django.contrib.contenttypes.models import ContentType
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.translation import gettext as _
 from django.views.generic import TemplateView
 from waffle import flag_is_active
 
 from apps.assessments.models import Score
+from apps.evaluations.breadcrumbs import evaluations_crumbs
 from apps.evaluations.models import EvaluationConfig, EvaluationMode
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem, AnnotationQueue
@@ -243,6 +245,7 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "page_title": "Concordance",
+            "breadcrumbs": [*evaluations_crumbs(team_slug), (_("Concordance"), None)],
             "eval_configs": EvaluationConfig.objects.filter(team=team, dataset__evaluation_mode=_SESSION_MODE).order_by(
                 "name"
             ),

@@ -8,7 +8,7 @@ from django.conf import settings
 from langchain_core.messages import HumanMessage
 
 from apps.chat.agent.constants import OCS_CITATION_PATTERN
-from apps.chat.exceptions import UserReportableError
+from apps.chat.exceptions import UserActionableError
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES, image_type_names
@@ -155,7 +155,7 @@ def _attachment_content_block(att, supported_image_content_types: frozenset[str]
     content_type = att.content_type or ""
     if content_type.startswith("image/"):
         if content_type not in supported_image_content_types:
-            raise UserReportableError(
+            raise UserActionableError(
                 f"The image `{att.name}` is not a supported image type. "
                 f"Supported types: {image_type_names(supported_image_content_types)}."
             )
@@ -197,7 +197,7 @@ def invoke_with_image_error_translation(agent, inputs, supported_image_content_t
         return agent.invoke(inputs)
     except openai.BadRequestError as e:
         if e.code in INVALID_IMAGE_ERROR_CODES:
-            raise UserReportableError(
+            raise UserActionableError(
                 "An attached image could not be processed. "
                 f"Supported types: {image_type_names(supported_image_content_types)}."
             ) from e

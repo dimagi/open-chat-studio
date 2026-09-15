@@ -14,7 +14,12 @@ from openai import OpenAI
 from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
-from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
+from apps.chat.exceptions import (
+    AudioSynthesizeException,
+    AudioTranscriptionException,
+    NoSpeechDetected,
+    NoSpeechReason,
+)
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.intron import INTRON_BASE_URL
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL, MINIMAX_BASE_URL
@@ -61,10 +66,18 @@ class SpeechService(pydantic.BaseModel):
 
     def transcribe_audio(self, audio: IO[bytes]) -> str:
         try:
-            return self._transcribe_audio(audio)
+            transcript = self._transcribe_audio(audio)
+        except NoSpeechDetected:
+            raise
         except Exception as e:
             log.exception(e)
-            raise UserReportableError("Unable to transcribe audio") from e
+            raise AudioTranscriptionException("Unable to transcribe audio") from e
+
+        # Azure reports silence outright; the rest return an empty transcript.
+        if not (transcript or "").strip():
+            log.info("No transcript returned by %s; treating as silence", self._type)
+            raise NoSpeechDetected(NoSpeechReason.SILENCE)
+        return transcript
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         raise NotImplementedError
@@ -76,7 +89,7 @@ class SpeechService(pydantic.BaseModel):
 class AWSSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.AWS
     aws_access_key_id: str
-    aws_secret_access_key: str
+    aws_secret_access_key: pydantic.SecretStr
     aws_region: str
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
@@ -87,7 +100,7 @@ class AWSSpeechService(SpeechService):
 
         polly_client = boto3.Session(
             aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key,
+            aws_secret_access_key=self.aws_secret_access_key.get_secret_value(),
             region_name=self.aws_region,
         ).client("polly")
 
@@ -106,10 +119,21 @@ class AWSSpeechService(SpeechService):
             return SynthesizedAudio(audio=BytesIO(audio_data), duration=duration_seconds, format="mp3")
 
 
+def _azure_cancellation_message(prefix: str, cancellation_details) -> str:
+    """Azure's cancellation reason, with the error details when it carries them."""
+    # keep heavy imports inline
+    import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
+
+    msg = f"{prefix}: {cancellation_details.reason.name}"
+    if cancellation_details.reason == speechsdk.CancellationReason.Error and cancellation_details.error_details:
+        msg += f". Error details: {cancellation_details.error_details}"
+    return msg
+
+
 class AzureSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.Azure
     supports_transcription: ClassVar[bool] = True
-    azure_subscription_key: str
+    azure_subscription_key: pydantic.SecretStr
     azure_region: str
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
@@ -119,7 +143,9 @@ class AzureSpeechService(SpeechService):
         # keep heavy imports inline
         import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
 
-        speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.azure_subscription_key.get_secret_value(), region=self.azure_region
+        )
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
             temp_file_name = temp_file.name
@@ -168,12 +194,9 @@ class AzureSpeechService(SpeechService):
 
                 return SynthesizedAudio(audio=BytesIO(file_content), duration=duration_seconds, format="wav")
             elif result.reason == speechsdk.ResultReason.Canceled:
-                cancellation_details = result.cancellation_details
-                msg = f"Azure speech synthesis failed: {cancellation_details.reason.name}"
-                if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                    if cancellation_details.error_details:
-                        msg += f". Error details: {cancellation_details.error_details}"
-                raise AudioSynthesizeException(msg)
+                raise AudioSynthesizeException(
+                    _azure_cancellation_message("Azure speech synthesis failed", result.cancellation_details)
+                )
             raise AudioSynthesizeException(f"Unexpected result: {result}")
         finally:
             if os.path.exists(temp_file_name):
@@ -183,7 +206,9 @@ class AzureSpeechService(SpeechService):
         # keep heavy imports inline
         import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
 
-        speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.azure_subscription_key.get_secret_value(), region=self.azure_region
+        )
         speech_config.speech_recognition_language = "en-US"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
@@ -195,25 +220,34 @@ class AzureSpeechService(SpeechService):
             speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
             result = speech_recognizer.recognize_once_async().get()
 
+        return self._transcript_from_result(result)
+
+    def _transcript_from_result(self, result) -> str:
+        """The recognized text, or the exception saying why there is none."""
+        # keep heavy imports inline
+        import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
+
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             return result.text
-        elif result.reason == speechsdk.ResultReason.NoMatch:
+        if result.reason == speechsdk.ResultReason.NoMatch:
             reason = result.no_match_details.reason
-            raise AudioTranscriptionException(f"No speech could be recognized: {reason}")
-        elif result.reason == speechsdk.ResultReason.Canceled:
-            cancellation_details = result.cancellation_details
-            msg = f"Azure speech transcription failed: {cancellation_details.reason.name}"
-            if cancellation_details.reason == speechsdk.CancellationReason.Error:
-                if cancellation_details.error_details:
-                    msg += f". Error details: {cancellation_details.error_details}"
-            raise AudioTranscriptionException(msg)
+            log.info("Azure recognized no speech in the audio: %s", reason)
+            # NotRecognized is the only reason that means speech was heard. The rest cover
+            # silence or noise, so an unrecognized future reason gets the safer message.
+            if reason == speechsdk.NoMatchReason.NotRecognized:
+                raise NoSpeechDetected(NoSpeechReason.NOT_UNDERSTOOD)
+            raise NoSpeechDetected(NoSpeechReason.SILENCE)
+        if result.reason == speechsdk.ResultReason.Canceled:
+            raise AudioTranscriptionException(
+                _azure_cancellation_message("Azure speech transcription failed", result.cancellation_details)
+            )
         raise AudioTranscriptionException(f"Unexpected result: {result}")
 
 
 class OpenAISpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAI
     supports_transcription: ClassVar[bool] = True
-    openai_api_key: str
+    openai_api_key: pydantic.SecretStr
     openai_api_base: str | None = None
     openai_organization: str | None = None
 
@@ -221,7 +255,11 @@ class OpenAISpeechService(SpeechService):
     def _client(self) -> "OpenAI":
         # keep heavy imports inline
 
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+        return OpenAI(
+            api_key=self.openai_api_key.get_secret_value(),
+            organization=self.openai_organization,
+            base_url=self.openai_api_base,
+        )
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         """
@@ -249,12 +287,12 @@ class ElevenLabsSpeechService(SpeechService):
     supports_transcription: ClassVar[bool] = True
     _output_format: ClassVar[str] = "mp3_44100_128"
     _stt_model: ClassVar[str] = "scribe_v2"
-    elevenlabs_api_key: str
+    elevenlabs_api_key: pydantic.SecretStr
     elevenlabs_model: str = "eleven_multilingual_v2"
 
     @property
     def _client(self):
-        return ElevenLabsClient(api_key=self.elevenlabs_api_key)
+        return ElevenLabsClient(api_key=self.elevenlabs_api_key.get_secret_value())
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         audio_iter = self._client.text_to_speech.convert(
@@ -279,13 +317,17 @@ class ElevenLabsSpeechService(SpeechService):
 class OpenAIVoiceEngineSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
     supports_transcription: ClassVar[bool] = True
-    openai_api_key: str
+    openai_api_key: pydantic.SecretStr
     openai_api_base: str | None = None
     openai_organization: str | None = None
 
     @property
     def _client(self) -> "OpenAI":
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+        return OpenAI(
+            api_key=self.openai_api_key.get_secret_value(),
+            organization=self.openai_organization,
+            base_url=self.openai_api_base,
+        )
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         """
@@ -296,7 +338,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         sample_audio = synthetic_voice.file
 
         url = "https://api.openai.com/v1/audio/synthesize"
-        headers = {"Authorization": f"Bearer {self.openai_api_key}"}
+        headers = {"Authorization": f"Bearer {self.openai_api_key.get_secret_value()}"}
 
         files = {"reference_audio": sample_audio.file}
         data = {
@@ -326,7 +368,7 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
 class IntronSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.Intron
-    intron_api_key: str
+    intron_api_key: pydantic.SecretStr
     poll_interval_seconds: float = 1.0
     poll_max_attempts: int = 120  # 2 minutes at 1s interval
     # Per-request timeout. Bounds enqueue + each status poll + audio download independently.
@@ -339,7 +381,7 @@ class IntronSpeechService(SpeechService):
         # Pool the TCP/TLS connection across enqueue + (up to 120) status polls against the Intron API.
         # The S3 audio download is intentionally made outside this client because S3 rejects the Bearer
         # header with a 400, and mixing hosts in the same pool wouldn't improve reuse anyway.
-        auth_headers = {"Authorization": f"Bearer {self.intron_api_key}"}
+        auth_headers = {"Authorization": f"Bearer {self.intron_api_key.get_secret_value()}"}
         with httpx.Client(headers=auth_headers, timeout=self.request_timeout_seconds) as client:
             enqueue = client.post(
                 f"{INTRON_BASE_URL}/tts/v1/enqueue",
@@ -429,7 +471,7 @@ class IntronSpeechService(SpeechService):
 
 class MinimaxSpeechService(SpeechService):
     _type: ClassVar[str] = SyntheticVoice.MiniMax
-    minimax_api_key: str
+    minimax_api_key: pydantic.SecretStr
     minimax_group_id: str
     minimax_model: str = DEFAULT_MINIMAX_TTS_MODEL
     request_timeout_seconds: float = 30.0
@@ -442,7 +484,7 @@ class MinimaxSpeechService(SpeechService):
         # https://platform.minimax.io/docs/api-reference/speech-t2a-http
         voice_id = synthetic_voice.external_id or synthetic_voice.name
         headers = {
-            "Authorization": f"Bearer {self.minimax_api_key}",
+            "Authorization": f"Bearer {self.minimax_api_key.get_secret_value()}",
             "Content-Type": "application/json",
         }
         resp = httpx.post(

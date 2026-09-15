@@ -134,8 +134,8 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
             _option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers
         ],
         OptionsSource.llm_provider_model_id: [
-            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
-            for provider in llm_provider_models
+            _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
+            for model in llm_provider_models
         ],
     }
 
@@ -237,12 +237,14 @@ def _option(
     type_: str | None = None,
     edit_url: str | None = None,
     max_token_limit: int | None = None,
+    deprecated: bool = False,
 ) -> dict:
     data = {"value": value, "label": label}
     data = data | ({"type": type_} if type_ else {})
     data = data | ({"edit_url": edit_url} if edit_url else {})
     # 0 is a real limit -- it disables history compression -- so only an absent one is dropped.
     data = data | ({"max_token_limit": max_token_limit} if max_token_limit is not None else {})
+    data = data | ({"deprecated": True} if deprecated else {})
     return data
 
 

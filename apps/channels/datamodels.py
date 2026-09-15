@@ -334,10 +334,12 @@ class WhatsAppMessage(BaseMessage):
         elif message_type in ("image", "document"):
             body = message.get(message_type, {}).get("caption", "")
 
-        media_payload = message.get(message_type, {})
+        _media_types = ("image", "document", "audio", "voice", "video", "sticker")
+        media_payload = message.get(message_type, {}) if message_type in _media_types else {}
         # For documents the provider gives us a real MIME type; for images we keep the
         # literal "image" marker (Twilio still uses image/* — the hydration stage handles both).
-        attachment_mime_type: str | None = message_type
+        # Non-media message types (contacts, location, etc.) have no attachment.
+        attachment_mime_type: str | None = message_type if message_type in _media_types else None
         if message_type == "document":
             attachment_mime_type = media_payload.get("mime_type") or "application/octet-stream"
 

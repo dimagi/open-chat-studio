@@ -5,7 +5,11 @@ from typing import Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.api.v2.inspect.serializers import OutputHandleSerializer, PipelineBuildErrorsSerializer
+from apps.api.v2.inspect.serializers import (
+    DeprecatedModelSerializer,
+    OutputHandleSerializer,
+    PipelineBuildErrorsSerializer,
+)
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.pipelines.build_state import node_output_handles
 from apps.pipelines.models import Node
@@ -124,11 +128,7 @@ class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
 
 
 class PipelineWriteSerializer(serializers.Serializer):
-    """What every façade write reports back about the pipeline it just changed.
-
-    The same three fields the `chatbot_inspect` endpoint publishes, so one shape is parsed across
-    read and write.
-    """
+    """What every façade write reports back about the pipeline it just changed."""
 
     pipeline_valid = serializers.BooleanField(
         help_text="Whether the pipeline validates cleanly: all three error buckets empty, and nothing more."
@@ -140,6 +140,14 @@ class PipelineWriteSerializer(serializers.Serializer):
             "Advisory 'what still needs wiring' map, keyed by ``node_id``: every output handle with "
             "no outgoing edge and every implicit ``input`` handle with no incoming edge. Never an "
             "error and never blocks a publish."
+        ),
+    )
+    deprecated_models = serializers.DictField(
+        child=DeprecatedModelSerializer(),
+        help_text=(
+            "Advisory map, keyed by ``node_id``, of nodes referencing a deprecated LLM model. The "
+            "model keeps working until it is removed, so this is never an error and never blocks a "
+            "publish -- but a new node may not be pointed at one."
         ),
     )
 

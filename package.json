@@ -76,6 +76,7 @@
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.13",
     "htmx.org": "^2.0.8",
+    "idiomorph": "^0.8.0",
     "immer": "^11.1.18",
     "js-cookie": "^3.0.8",
     "js-tiktoken": "^1.0.21",
@@ -90,6 +91,7 @@
     "short-unique-id": "^5.3.2",
     "tailwindcss": "^4.1.4",
     "tom-select": "^2.6.0",
+    "zundo": "^2.3.0",
     "zustand": "^5.0.13"
   },
   "pnpm": {

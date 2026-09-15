@@ -44,3 +44,37 @@ def test_lazy_pager_never_asks_for_a_count(rf):
 
     with pytest.raises(NotImplementedError):
         table.paginator.count  # noqa: B018
+
+
+def test_orderable_sort_header_is_a_real_link(rf):
+    """A sort header must be reachable by keyboard, not just mouse-clickable via a bare
+    `<th hx-get>` with no `tabindex` or `href` -- see #4463. The path is non-root so a
+    regression to a bare relative `href` (which resolves against the *outer* embedding
+    page's URL, not this fragment's own endpoint, since htmx swaps never change
+    `window.location`) produces a visibly different, wrong href, not a coincidental match."""
+    html = render("table/tailwind_js_pagination.html", rf.get("/members/table/"))
+
+    assert '<a href="/members/table/?sort=name"' in html
+    assert 'hx-get="/members/table/?sort=name"' in html
+    assert 'hx-ext="morph"' in html
+    assert 'hx-swap="morph"' in html
+
+
+def test_pagination_links_carry_a_real_href(rf):
+    """Same issue for prev/next: `hx-get` alone isn't keyboard-focusable, and the href
+    must match hx-get's own path exactly (see above)."""
+    html = render("table/tailwind_js_pagination.html", rf.get("/members/table/", {"page": "2"}))
+
+    assert 'href="/members/table/?page=1"' in html
+    assert 'hx-get="/members/table/?page=1"' in html
+    assert 'href="/members/table/?page=3"' in html
+    assert 'hx-get="/members/table/?page=3"' in html
+
+
+def test_disabled_prev_link_has_no_href(rf):
+    """Page 1 has no previous page -- the disabled link must stay inert, not gain a
+    dead `href=".../?page=0"` alongside it."""
+    html = render("table/tailwind_js_pagination.html", rf.get("/members/table/"))
+
+    assert "disabled" in html
+    assert "page=0" not in html

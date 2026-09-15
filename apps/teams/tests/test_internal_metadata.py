@@ -40,6 +40,10 @@ def test_staff_can_view(team, staff_member, settings):
     response = client.get(_url(team))
     assert response.status_code == 200
     assert b"Team Owner" in response.content
+    assert response.context["breadcrumbs"] == [
+        ("Team Settings", reverse("single_team:manage_team", args=[team.slug])),
+        ("Internal Metadata", None),
+    ]
 
 
 @pytest.mark.django_db()
