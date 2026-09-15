@@ -841,3 +841,275 @@ describe('ChatSessionService auth token', () => {
     expect(headersOf(0)['Authorization']).toBe('Bearer tok-late');
   });
 });
+
+describe('ChatSessionService session token renewal', () => {
+  const messageUrl = 'https://example.com/api/chat/s-1/message/';
+  const renewUrl = 'https://example.com/api/chat/s-1/token/';
+  let fetchMock: jest.Mock;
+  let now: number;
+  let expiredRefusals: number;
+
+  function response(status: number, body: unknown = {}) {
+    return {
+      ok: status < 400,
+      status,
+      statusText: String(status),
+      headers: { get: () => null },
+      json: () => Promise.resolve(body),
+    } as unknown as Response;
+  }
+
+  const secondsFromNow = (seconds: number) => new Date(now + seconds * 1000).toISOString();
+
+  /** Session-bound requests succeed once `expiredRefusals` 403s have been served; renewal always succeeds. */
+  function router(url: string) {
+    if (url.includes('/token/')) {
+      return response(200, { session_id: 's-1', session_token: 'sess-new', expires_at: secondsFromNow(3600) });
+    }
+    if (expiredRefusals > 0) {
+      expiredRefusals -= 1;
+      return response(403, { error: 'Session has expired', code: 'session_expired' });
+    }
+    return response(200, { task_id: 't-1', status: 'processing', messages: [], has_more: false, session_status: 'active' });
+  }
+
+  function service(options: Partial<ConstructorParameters<typeof ChatSessionService>[0]> = {}) {
+    return new ChatSessionService({
+      apiBaseUrl: 'https://example.com',
+      widgetVersion: '1.0.0',
+      csrfTokenProvider: () => undefined,
+      authTokenProvider: () => 'bearer-1',
+      sessionToken: 'sess-old',
+      sessionTokenExpiresAt: secondsFromNow(3600),
+      ...options,
+    });
+  }
+
+  const urlsCalled = () => fetchMock.mock.calls.map(([url]) => String(url));
+  const headersOf = (url: string, n = 0): Record<string, string> => fetchMock.mock.calls.filter(([u]) => String(u) === url)[n]?.[1]?.headers;
+
+  beforeEach(() => {
+    now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expiredRefusals = 0;
+    fetchMock = jest.fn((url: string) => Promise.resolve(router(url)));
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('leaves a token with time left alone', async () => {
+    await service().sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([messageUrl]);
+    expect(headersOf(messageUrl)['X-Session-Token']).toBe('sess-old');
+  });
+
+  it.each([
+    ['inside the lead window', 30],
+    ['already expired', -30],
+  ])('renews before the request when the token is %s', async (_label, secondsLeft) => {
+    await service({ sessionTokenExpiresAt: secondsFromNow(secondsLeft) }).sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl]);
+    expect(headersOf(renewUrl)['Authorization']).toBe('Bearer bearer-1');
+    expect(headersOf(messageUrl)['X-Session-Token']).toBe('sess-new');
+    expect(headersOf(messageUrl)).not.toHaveProperty('Authorization');
+  });
+
+  it('reports the renewed token so the host can persist it', async () => {
+    const onSessionTokenRenewed = jest.fn();
+    await service({ sessionTokenExpiresAt: secondsFromNow(30), onSessionTokenRenewed }).sendMessage('s-1', { message: 'hi' });
+
+    expect(onSessionTokenRenewed).toHaveBeenCalledWith('sess-new', secondsFromNow(3600));
+  });
+
+  it('tracks the renewed expiry so the next request does not renew again', async () => {
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+    await svc.sendMessage('s-1', { message: 'hi' });
+    await svc.sendMessage('s-1', { message: 'again' });
+
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
+  });
+
+  it('does not renew ahead of time without a provider', async () => {
+    await service({ authTokenProvider: undefined, sessionTokenExpiresAt: secondsFromNow(30) }).sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([messageUrl]);
+    expect(headersOf(messageUrl)['X-Session-Token']).toBe('sess-old');
+  });
+
+  it('waits for a refusal when the expiry is unknown', async () => {
+    await service({ sessionTokenExpiresAt: undefined }).sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([messageUrl]);
+  });
+
+  it.each([
+    ['sendMessage', (svc: ChatSessionService) => svc.sendMessage('s-1', { message: 'hi' }), messageUrl],
+    ['recordConsent', (svc: ChatSessionService) => svc.recordConsent('s-1', 3), 'https://example.com/api/chat/s-1/consent/'],
+    ['pollTaskOnce', (svc: ChatSessionService) => svc.pollTaskOnce('s-1', 't-1'), 'https://example.com/api/chat/s-1/t-1/poll/'],
+    ['fetchMessages', (svc: ChatSessionService) => svc.fetchMessages('s-1'), 'https://example.com/api/chat/s-1/poll/'],
+  ])('%s renews and retries once when the server reports session_expired', async (_name, call, url) => {
+    expiredRefusals = 1;
+
+    await call(service());
+
+    expect(urlsCalled()).toEqual([url, renewUrl, url]);
+    expect(headersOf(url, 0)['X-Session-Token']).toBe('sess-old');
+    expect(headersOf(url, 1)['X-Session-Token']).toBe('sess-new');
+  });
+
+  it('does not retry a 403 that is not session_expired', async () => {
+    fetchMock.mockResolvedValue(response(403, { error: 'Invalid session token', code: 'session_token_invalid' }));
+
+    await expect(service().sendMessage('s-1', { message: 'hi' })).rejects.toMatchObject({ code: 'session_token_invalid' });
+    expect(urlsCalled()).toEqual([messageUrl]);
+  });
+
+  it('does not retry a session_expired refusal without a provider', async () => {
+    expiredRefusals = 1;
+
+    await expect(service({ authTokenProvider: undefined }).sendMessage('s-1', { message: 'hi' })).rejects.toBeInstanceOf(SessionAccessError);
+    expect(urlsCalled()).toEqual([messageUrl]);
+  });
+
+  it('gives up after one retry rather than looping', async () => {
+    expiredRefusals = 2;
+
+    await expect(service().sendMessage('s-1', { message: 'hi' })).rejects.toMatchObject({ code: 'session_expired' });
+    expect(urlsCalled()).toEqual([messageUrl, renewUrl, messageUrl]);
+  });
+
+  it('surfaces the original refusal when renewal itself is refused', async () => {
+    expiredRefusals = 1;
+    const provider = jest.fn(() => 'bearer-1');
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.includes('/token/') ? response(401, { error: 'Authentication required', code: 'chat_access_denied' }) : router(url)),
+    );
+
+    await expect(service({ authTokenProvider: provider }).sendMessage('s-1', { message: 'hi' })).rejects.toMatchObject({ code: 'session_expired' });
+
+    // The renewal went through the same refresh-once path as a session start.
+    expect(provider.mock.calls).toEqual([[{ forceRefresh: false }], [{ forceRefresh: true }]]);
+    expect(urlsCalled()).toEqual([messageUrl, renewUrl]);
+    expect(console.warn).toHaveBeenCalledWith('[open-chat-studio-widget] session token renewal failed', expect.any(ChatAuthError));
+  });
+
+  it('still sends the request with the old token when an early renewal fails', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url.includes('/token/') ? response(500) : router(url)));
+
+    await service({ sessionTokenExpiresAt: secondsFromNow(30) }).sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl]);
+    expect(headersOf(messageUrl)['X-Session-Token']).toBe('sess-old');
+  });
+
+  it('renews once for requests that notice the expiry together', async () => {
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+
+    await Promise.all([svc.sendMessage('s-1', { message: 'hi' }), svc.fetchMessages('s-1')]);
+
+    expect(urlsCalled().filter(url => url === renewUrl)).toHaveLength(1);
+  });
+
+  it('discards a renewal that lands after the token was replaced', async () => {
+    let finishRenewal: (value: Response) => void;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/token/')) {
+        return new Promise<Response>(resolve => {
+          finishRenewal = resolve;
+        });
+      }
+      return Promise.resolve(router(url));
+    });
+    const onSessionTokenRenewed = jest.fn();
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30), onSessionTokenRenewed });
+
+    const pending = svc.sendMessage('s-1', { message: 'hi' });
+    while (!finishRenewal) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    svc.setSessionToken(undefined);
+    finishRenewal(response(200, { session_id: 's-1', session_token: 'sess-new', expires_at: secondsFromNow(3600) }));
+    await pending;
+
+    expect(svc['sessionToken']).toBeUndefined();
+    expect(onSessionTokenRenewed).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a refusal when the renewal landed on a cleared token', async () => {
+    expiredRefusals = 1;
+    const svc = service();
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/token/')) {
+        svc.setSessionToken(undefined);
+      }
+      return Promise.resolve(router(url));
+    });
+
+    await expect(svc.sendMessage('s-1', { message: 'hi' })).rejects.toMatchObject({ code: 'session_expired' });
+    expect(urlsCalled()).toEqual([messageUrl, renewUrl]);
+  });
+
+  it('retries without renewing when another request already replaced the refused token', async () => {
+    const svc = service();
+    fetchMock.mockImplementation((url: string, init: RequestInit) => {
+      if ((init.headers as Record<string, string>)['X-Session-Token'] === 'sess-old') {
+        svc.setSessionToken('sess-new', secondsFromNow(3600));
+        return Promise.resolve(response(403, { error: 'Session has expired', code: 'session_expired' }));
+      }
+      return Promise.resolve(router(url));
+    });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+
+    expect(urlsCalled()).toEqual([messageUrl, messageUrl]);
+    expect(headersOf(messageUrl, 1)['X-Session-Token']).toBe('sess-new');
+  });
+
+  it('waits before renewing again after a failed renewal', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url.includes('/token/') ? response(500) : router(url)));
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+    await svc.sendMessage('s-1', { message: 'again' });
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
+
+    (Date.now as jest.Mock).mockReturnValue(now + 30_000);
+    await svc.sendMessage('s-1', { message: 'later' });
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl, renewUrl, messageUrl]);
+  });
+
+  it('renews once per retry window when the renewed token still looks due on a fast clock', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(url.includes('/token/') ? response(200, { session_id: 's-1', session_token: 'sess-new', expires_at: secondsFromNow(30) }) : router(url)),
+    );
+    const svc = service({ sessionTokenExpiresAt: secondsFromNow(30) });
+
+    await svc.sendMessage('s-1', { message: 'hi' });
+    await svc.sendMessage('s-1', { message: 'again' });
+
+    expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
+  });
+
+  it('sessionFetch renews and retries a refused upload, and hands back any other refusal', async () => {
+    const uploadUrl = 'https://example.com/api/chat/s-1/upload/';
+    const svc = service();
+    const init = () => ({ method: 'POST', headers: svc.getUploadHeaders(), body: new FormData() });
+
+    expiredRefusals = 1;
+    const renewed = await svc.sessionFetch('s-1', uploadUrl, init);
+    expect(renewed.ok).toBe(true);
+    expect(urlsCalled()).toEqual([uploadUrl, renewUrl, uploadUrl]);
+    expect(headersOf(uploadUrl, 1)['X-Session-Token']).toBe('sess-new');
+
+    fetchMock.mockResolvedValue(response(403, { error: 'Consent is required', code: 'consent_required' }));
+    const refused = await svc.sessionFetch('s-1', uploadUrl, init);
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toMatchObject({ code: 'consent_required' });
+  });
+});
