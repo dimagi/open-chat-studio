@@ -514,7 +514,9 @@ class VoyageAILlmService(LlmService):
 
 
 class GoogleVertexAILlmService(LlmService):
-    credentials_json: dict
+    # The service account JSON holds a private key. SecretStr cannot wrap a dict, so the field is
+    # kept out of the model repr instead, which is what a Sentry stack-frame local serializes.
+    credentials_json: dict = pydantic.Field(repr=False)
     location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
     supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
