@@ -3041,6 +3041,7 @@ dependencies = [
     { name = "turn-python" },
     { name = "twilio" },
     { name = "urllib3" },
+    { name = "voyageai" },
     { name = "whitenoise", extra = ["brotli"] },
 ]
 
@@ -3161,6 +3162,7 @@ requires-dist = [
     { name = "turn-python", specifier = ">=1.0.0" },
     { name = "twilio" },
     { name = "urllib3", specifier = ">=2.7.0" },
+    { name = "voyageai", specifier = "==0.5.0" },
     { name = "whitenoise", extras = ["brotli"] },
 ]
 
