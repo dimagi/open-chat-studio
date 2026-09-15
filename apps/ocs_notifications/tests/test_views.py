@@ -523,7 +523,7 @@ class TestNotificationEventHome:
         response = client.get(url)
 
         assert response.status_code == 200
-        assert response.context["team"] == other_team
+        assert response.context["breadcrumbs"][1] == (other_team.name, None)
         assert other_team.name.encode() in response.content
 
 

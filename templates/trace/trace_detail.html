@@ -5,24 +5,6 @@
   <style>{% pygments_json_css %}</style>
 {% endblock page_head %}
 
-{% block breadcrumbs %}
-  <div class="breadcrumbs text-sm">
-    <ul>
-      <li>
-        <a href="{% url 'trace:home' request.team.slug %}"
-           class="link link-hover"><i class="fas fa-home mr-1"></i></a>
-      </li>
-      <li>
-        <a href="{% url 'trace:home' request.team.slug %}"
-           class="link link-hover">Traces</a>
-      </li>
-      <li>
-        <span class="text-base-content/60">{{ trace.experiment.name }}</span>
-      </li>
-    </ul>
-  </div>
-{% endblock breadcrumbs %}
-
 {% block app %}
   <div>
     <div class="py-6">

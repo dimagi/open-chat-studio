@@ -4,6 +4,7 @@ from collections import defaultdict
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Prefetch
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
@@ -77,6 +78,10 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["token_usage"] = trace_token_usage(self.object)
+        context["breadcrumbs"] = [
+            (_("Traces"), reverse("trace:home", args=[self.request.team.slug])),
+            (_("Trace %(trace_id)s") % {"trace_id": self.object.trace_id}, None),
+        ]
         return context
 
 

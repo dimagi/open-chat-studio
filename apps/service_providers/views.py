@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 
@@ -353,6 +354,14 @@ class CreateServiceProvider(
             return verb
         return f"{verb} and Verify"
 
+    def _breadcrumbs(self, instance):
+        manage_team_url = reverse("single_team:manage_team", args=[self.request.team.slug])
+        return [
+            (_("Team Settings"), manage_team_url),
+            (self.provider_type.label, f"{manage_team_url}#integrations"),
+            (_("Edit") if instance else _("Create"), None),
+        ]
+
     def _get_context(self, primary_form, config_form, subtype, instance):
         can_view_usages = self.request.user.has_perm(self.provider_type.get_permission("view"))
         ctx = {
@@ -368,6 +377,7 @@ class CreateServiceProvider(
             "active_tab": "manage-team",
             "active_provider_tab": _active_provider_tab(self.request, self.provider_type, instance, can_view_usages),
             "can_view_usages": can_view_usages,
+            "breadcrumbs": self._breadcrumbs(instance),
         }
         is_elevenlabs_voice = (
             isinstance(instance, VoiceProvider) and instance.type == VoiceProviderType.elevenlabs.value

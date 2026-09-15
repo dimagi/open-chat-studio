@@ -6,6 +6,7 @@ from django.http.response import HttpResponse as HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.generic import TemplateView, View
 from django_tables2 import SingleTableView
 
@@ -296,7 +297,7 @@ class MarkAllNotificationsReadView(LoginRequiredMixin, View):
 
 
 class NotificationEventHome(LoginRequiredMixin, TemplateView):
-    template_name = "ocs_notifications/notification_event_home.html"
+    template_name = "generic/object_home.html"
 
     @cached_property
     def event_type(self) -> EventType:
@@ -325,9 +326,13 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
             "subtitle": title or "",
             "table_url": table_url,
             "enable_search": False,
-            # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
-            # request.team), so the breadcrumb needs its own team indicator.
-            "team": self.event_type.team,
+            "breadcrumbs": [
+                (_("Notifications"), reverse("ocs_notifications:notifications_home")),
+                # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
+                # request.team), so the trail needs its own team indicator.
+                (self.event_type.team.name, None),
+                (title or "", None),
+            ],
         }
 
         return context
