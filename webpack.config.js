@@ -10,6 +10,7 @@ const config = {
     'site-base': './assets/site-base.js',  // base styles shared between frameworks
     'site-tailwind': './assets/site-tailwind.js',  // required for tailwindcss styles
     site: './assets/javascript/site.js',  // global site javascript
+    morphExtension: './assets/javascript/morph-extension.js',  // registers hx-ext="morph"; loaded via its own deferred <script>, see templates/web/base.html
     app: './assets/javascript/app.js',  // logged-in javascript
     'pipeline': './assets/javascript/apps/pipeline.tsx',
     adminDashboard: './assets/javascript/admin-dashboard.js',

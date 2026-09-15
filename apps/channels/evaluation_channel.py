@@ -11,6 +11,7 @@ from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPi
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import (
     ChatMessageCreationStage,
+    ErrorGuardStage,
     EvalsBotInteractionStage,
     MessageTypeValidationStage,
     QueryExtractionStage,
@@ -84,6 +85,7 @@ class EvaluationChannel(ChannelBase):
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ErrorGuardStage(),
                 EvalsBotInteractionStage(),
                 ResponseFormattingStage(),
             ],

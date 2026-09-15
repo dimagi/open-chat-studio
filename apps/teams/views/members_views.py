@@ -3,7 +3,6 @@ from django_tables2 import SingleTableView
 
 from apps.teams.backends import (
     ANNOTATION_REVIEWER_GROUP,
-    ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
     CHATBOT_ADMIN_GROUP,
     EVALUATION_ADMIN_GROUP,
@@ -19,7 +18,6 @@ ROLE_CHOICES = [
     TEAM_ADMIN_GROUP,
     CHATBOT_ADMIN_GROUP,
     EVENT_ADMIN_GROUP,
-    ASSISTANT_ADMIN_GROUP,
     CHAT_VIEWER_GROUP,
     EVALUATION_ADMIN_GROUP,
     ANNOTATION_REVIEWER_GROUP,
@@ -112,11 +110,16 @@ class MembersTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignor
 
     def get_template_names(self):
         table = self._table
-        if table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET:
-            # Pagination, sort, and "Load all" links all target `closest
-            # div.table-container` with an outerHTML swap (see
-            # table/tailwind_js_pagination_loadall.html), so the response must be
-            # exactly that container -- not the count text and wrapper around it, or
-            # each click nests another copy of them inside the last one.
+        wants_fragment = (
+            table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET
+        )
+        if wants_fragment and self.request.htmx:
+            # Pagination, sort, and "Load all" links all target `closest div.table-container`
+            # with a morph swap (see table/tailwind_js_pagination.html and
+            # table/tailwind_js_pagination_loadall.html), so an htmx request must get exactly
+            # that container -- not the count text and wrapper around it, or each click nests
+            # another copy of them inside the last one. They also carry a real href now, so a
+            # modified click (Ctrl/Cmd-click, middle-click) opens the same URL as a genuine
+            # non-htmx navigation, which needs the full page.
             return ["table/single_table.html"]
         return [self.template_name]
