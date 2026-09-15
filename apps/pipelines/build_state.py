@@ -206,12 +206,9 @@ def _router_output_map(
         instance = node_class.model_validate({**params, "node_id": node_id, "django_node": django_node})
     except (pydantic.ValidationError, PipelineNodeBuildError):
         fallback = dict(params)
-        if isinstance(fallback.get("keywords"), list):
-            fallback["keywords"] = [str(keyword).upper() for keyword in fallback["keywords"]]
-        else:
-            # Anything else -- missing, or explicitly None (what a type change (#1452) sends,
-            # since the frontend has no static default to offer for a default_factory field) --
-            # is "no keywords yet", not a value get_output_map() can enumerate().
-            fallback["keywords"] = []
+        # A type change (#1452) can send keywords as an explicit None; `or []` covers that the
+        # same as a missing key, unlike dict.get(key, default).
+        keywords = fallback.get("keywords") or []
+        fallback["keywords"] = [str(keyword).upper() for keyword in keywords]
         instance = node_class.model_construct(**fallback)
     return instance.get_output_map()

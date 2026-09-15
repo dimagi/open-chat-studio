@@ -57,7 +57,7 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
     for updated in diff.update:
         previous = node_map.get(updated.id)
         node_map[updated.id] = updated
-        _rewire_edges_for_update(flow, updated.id, previous, updated)
+        _rewire_edges(flow, previous, updated)
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:
@@ -72,8 +72,8 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
         flow.edges = [edge for edge in flow.edges if edge.source not in deleted_ids and edge.target not in deleted_ids]
 
 
-def _rewire_edges_for_update(flow: Flow, node_id: str, previous: FlowNode | None, updated: FlowNode) -> None:
-    """Follow or drop ``node_id``'s outgoing edges when this update changes its output handles.
+def _rewire_edges(flow: Flow, previous: FlowNode | None, updated: FlowNode) -> None:
+    """Follow or drop ``updated``'s outgoing edges when this update changes its output handles.
 
     Covers a param edit that changes a router's branches (the pre-existing gap this closes) and a
     type change (#1452) the same way, since both are just an update whose handles differ before
@@ -89,7 +89,7 @@ def _rewire_edges_for_update(flow: Flow, node_id: str, previous: FlowNode | None
     after = output_handle_labels(updated.data)
     if before == after:
         return
-    changed, deleted_ids = rewired_edges_for_node(flow.edges, node_id, before, after)
+    changed, deleted_ids = rewired_edges_for_node(flow.edges, updated.id, before, after)
     if not changed and not deleted_ids:
         return
     changed_by_id = {edge.id: edge for edge in changed}
@@ -107,7 +107,7 @@ def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
     # Update: replace in-place -- but never resurrect an id the node-update rewiring above
     # already dropped from this same flow (a caller's edge diff can carry a stale value for
     # an edge whose handle no longer exists once the node update lands; see
-    # _rewire_edges_for_update).
+    # _rewire_edges).
     for updated in diff.update:
         if updated.id in edge_map:
             edge_map[updated.id] = updated

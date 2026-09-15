@@ -208,10 +208,8 @@ const getWidgetsGeneric = (
       return 0;
     }
   });
-  // The "keywords" widget (widgets.tsx) already falls back to an empty list on its own when
-  // params.keywords is missing or not an array, so nothing here needs to lazily add it -- and
-  // mutating params in place is unsafe besides: a type change (#1452) can hand this an
-  // already-frozen object (immer auto-freezes every produce() result), which throws on write.
+  // Mutating params here is unsafe: a type change (#1452) can hand this an already-frozen
+  // object (immer auto-freezes every produce() result), which throws on write.
   return schemaProperties.map((name) => (
     <React.Fragment key={name}>
       {widgetGenerator({

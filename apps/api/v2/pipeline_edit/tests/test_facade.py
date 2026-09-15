@@ -230,7 +230,12 @@ class TestTheResponseEnvelope:
 #: the locked read and once for the rebuild after the write. They buy ``custom_actions`` being served
 #: from those rows rather than from the copy in params, and the count does not move with the number
 #: of nodes -- without them each node would read the table itself.
-QUERIES_UNDER_THE_LOCK = 29
+#:
+#: 28, not 29: ``Node.update_from_params`` used to sync a node's ``CustomActionOperation`` rows by
+#: checking its type, so an ``LLMResponseWithPrompt`` node always ran the sync unconditionally. It
+#: now checks whether there's anything to sync or clear instead, so a node with neither (this
+#: fixture's) stops one query short of running the clear.
+QUERIES_UNDER_THE_LOCK = 28
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
