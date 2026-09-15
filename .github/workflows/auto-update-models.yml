@@ -3,7 +3,7 @@
 # Daily reconciliation of the in-repo model catalogue and pricing seed against
 # LiteLLM's model_prices_and_context_window.json, which carries pricing, token
 # limits, provider, model kind and deprecation dates for ~3900 models and needs
-# no credentials. scripts/reconcile_models.py produces four signals:
+# no credentials. The scripts/auto_sync_models package produces four signals:
 #
 #   - new_models      candidates not yet registered in OCS
 #   - price_changes   existing seed entries whose upstream rate has moved
@@ -88,7 +88,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Stdlib-only - no dependency install needed.
-          python3 scripts/reconcile_models.py --output reconciliation.json
+          python3 -m scripts.auto_sync_models.run --output reconciliation.json
 
       - name: Upload reconciliation payload
         if: steps.reconcile.outputs.has_new_models == 'true' || steps.reconcile.outputs.has_deprecated_upstream == 'true'
@@ -256,7 +256,7 @@ jobs:
             You are adding newly released LLM models to Open Chat Studio.
 
             ## Input
-            `scripts/reconcile_models.py` has already read the LiteLLM price
+            `scripts/auto_sync_models` has already read the LiteLLM price
             table, removed models already registered in OCS, and resolved
             per-1K-token pricing and token limits. Its output is at
             `./reconciliation.json`. Do NOT re-fetch, re-dedup, or re-derive
@@ -311,7 +311,7 @@ jobs:
                  before registering it, and drop any that doesn't. Skip any
                  provider already in `already_registered_providers`.
                - When you deliberately skip a model, append it to
-                 `scripts/reconcile_ignored_models.json` as
+                 `scripts/auto_sync_models/ignored_models.json` as
                  `{"provider_type": ..., "model_name": ..., "reason": ...}`.
                  Candidates are selected by state, so a skip you don't record
                  is re-offered on every future run and holds a slot ahead of
@@ -395,7 +395,7 @@ jobs:
                   providers left unpriced, if any)
                 - **Reason:** <one-sentence rationale - why added/skipped, or
                   what info was missing>
-                - **Skip recorded:** <yes, in reconcile_ignored_models.json |
+                - **Skip recorded:** <yes, in auto_sync_models/ignored_models.json |
                   n/a>
                 - **Source:** <source_url>
 

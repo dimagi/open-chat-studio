@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Reconcile OCS's in-repo model catalogue and pricing seed against LiteLLM's
 ``model_prices_and_context_window.json``, which is the single upstream source:
@@ -16,7 +15,8 @@ workflow:
   the next run; recently-published ones are offered first, capped per run, with
   the remainder reported as ``backlog``. Feeds the Claude Code job that opens a
   "Register new models" PR. Models a reviewer looked at and rejected are
-  recorded in ``scripts/reconcile_ignored_models.json`` so they stop occupying
+  recorded in ``scripts/auto_sync_models/ignored_models.json`` so they stop
+  occupying
   a slot ahead of the backlog.
 * **price_changes** - existing seed entries whose upstream rate has moved.
   Rewrites ``llm_pricing.json`` in place and emits a
@@ -31,7 +31,7 @@ workflow:
 
 Usage (from the repo root)::
 
-    python scripts/reconcile_models.py \\
+    python3 -m scripts.auto_sync_models.run \\
         [--baseline-days 7] \\
         [--repo-root .] \\
         [--output reconciliation.json] \\
@@ -81,12 +81,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from reconcile_catalogue import (
+from .catalogue import (
     load_active_default_models,
     load_ignored_models,
     load_registered_models,
 )
-from reconcile_http import _get_json, _github_headers
+from .http import _get_json, _github_headers
 
 # Constants
 
@@ -1041,6 +1041,7 @@ def _missing_pricing_outputs(missing: list[MissingPricingEntry], body_path: Path
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog="python3 -m scripts.auto_sync_models.run",
         description="Reconcile OCS model catalogue + pricing seed against upstream sources.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,

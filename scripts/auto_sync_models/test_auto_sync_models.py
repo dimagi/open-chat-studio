@@ -1,6 +1,6 @@
-"""Unit tests for the reconcile_models script and its reconcile_* helper modules.
+"""Unit tests for the scripts.auto_sync_models package.
 
-Run with:  pytest scripts/test_reconcile_models.py -v
+Run with:  pytest scripts/auto_sync_models/test_auto_sync_models.py -v
 """
 
 from __future__ import annotations
@@ -16,22 +16,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import reconcile_http
-import reconcile_models
-from reconcile_catalogue import (
+
+from scripts.auto_sync_models import http as reconcile_http
+from scripts.auto_sync_models import run as reconcile_models
+from scripts.auto_sync_models.catalogue import (
     IGNORED_MODELS_REL_PATH,
     load_active_default_models,
     load_ignored_models,
     load_registered_models,
 )
-from reconcile_http import (
+from scripts.auto_sync_models.http import (
     DEFAULT_RETRY_AFTER_SECONDS,
     MAX_BACKOFF_SECONDS,
     MAX_TOTAL_BURST_WAIT_SECONDS,
     RATE_LIMIT_JITTER_SECONDS,
     _get_json,
 )
-from reconcile_models import (
+from scripts.auto_sync_models.run import (
     LITELLM_SOURCE_URL,
     MAX_NEW_MODELS_PER_RUN,
     REQUIRED_SERVICE_KINDS,
@@ -1618,8 +1619,9 @@ def test_select_candidates_still_offers_a_model_ignored_for_another_provider():
 
 
 def test_load_ignored_models_reads_the_file(tmp_path):
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / IGNORED_MODELS_REL_PATH).write_text(
+    ledger = tmp_path / IGNORED_MODELS_REL_PATH
+    ledger.parent.mkdir(parents=True)
+    ledger.write_text(
         json.dumps(
             [
                 {"provider_type": "perplexity", "model_name": "sonar-x", "reason": "preset, not a model"},

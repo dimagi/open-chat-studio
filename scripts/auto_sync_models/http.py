@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """GET JSON from an upstream that rate-limits, sleeping through the limit.
 
 Both upstreams the reconciliation reads - raw.githubusercontent.com for the
@@ -17,7 +16,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-GITHUB_USER_AGENT = "ocs-reconcile-models-script/1.0"
+GITHUB_USER_AGENT = "ocs-auto-sync-models-script/1.0"
 
 # Used when a rate limit arrives without a usable Retry-After. Doubles per
 # consecutive miss so a misbehaving server can't spin us in a tight loop.

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Read OCS's own model catalogue out of the repo.
 
 ``default_models.py`` is parsed as AST rather than imported: the reconciliation
@@ -13,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 DEFAULT_MODELS_REL_PATH = "apps/service_providers/llm_service/default_models.py"
-IGNORED_MODELS_REL_PATH = "scripts/reconcile_ignored_models.json"
+IGNORED_MODELS_REL_PATH = "scripts/auto_sync_models/ignored_models.json"
 
 
 def _model_call_name(node: ast.expr) -> str | None:
