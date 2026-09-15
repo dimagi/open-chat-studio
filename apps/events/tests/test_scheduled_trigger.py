@@ -19,7 +19,7 @@ from apps.experiments.models import VersionFieldDisplayFormatters
 from apps.utils.factories.events import EventActionFactory, ScheduledTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
-FUTURE_LOCAL = timezone.now() + timedelta(days=1)
+FUTURE_LOCAL = timezone.now() + timedelta(days=7)
 
 
 def _trigger(**kwargs):
