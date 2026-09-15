@@ -516,13 +516,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         blank=True,
         related_name="index_nodes",
     )
-    assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="nodes",
-    )
     synthetic_voice = models.ForeignKey(
         "experiments.SyntheticVoice",
         on_delete=models.SET_NULL,
