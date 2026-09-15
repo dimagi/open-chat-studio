@@ -4,7 +4,7 @@ from apps.experiments.versioning import VersionsMixin
 from apps.pipelines.models import Node
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.versioning import (
-    _NODE_PARAM_SPECS,
+    NODE_PARAM_SPECS,
     ParamArchiving,
     ParamVersioning,
     VersionedParamSpec,
@@ -15,7 +15,7 @@ from apps.utils.factories.pipelines import NodeFactory
 
 ALL_SPECS = [
     pytest.param(node_type, spec, id=f"{node_type}.{spec.param_name}")
-    for node_type, specs in _NODE_PARAM_SPECS.items()
+    for node_type, specs in NODE_PARAM_SPECS.items()
     for spec in specs
 ]
 
@@ -55,7 +55,7 @@ def test_revert_referenced_record_maps_version_to_working_id():
     node.update_from_params()  # mirror the versioned id into the source_material FK
     assert node.source_material_id == version.id
 
-    spec = {spec.param_name: spec for spec in _NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["source_material_id"]
+    spec = {spec.param_name: spec for spec in NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["source_material_id"]
     params = {"source_material_id": str(version.id)}
     spec.revert_referenced_record(node, params)
     assert params["source_material_id"] == str(source_material.id)
@@ -65,7 +65,7 @@ def test_revert_referenced_record_maps_version_to_working_id():
 def test_revert_referenced_record_leaves_live_reference_verbatim():
     """LIVE_REFERENCE params were never rewritten on publish, so revert must leave them as-is."""
     collection = CollectionFactory.create()
-    spec = {spec.param_name: spec for spec in _NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["collection_id"]
+    spec = {spec.param_name: spec for spec in NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["collection_id"]
     assert spec.versioning == ParamVersioning.LIVE_REFERENCE
 
     params = {"collection_id": str(collection.id)}
