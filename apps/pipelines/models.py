@@ -619,13 +619,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         self._sync_resource_fk_fields()
 
-        if self.type == LLMResponseWithPrompt.__name__:
+        custom_actions = self.params.get("custom_actions") or []
+        if custom_actions or self.custom_action_operations.exists():
             custom_action_infos = []
-            for custom_action_operation in self.params.get("custom_actions") or []:
+            for custom_action_operation in custom_actions:
                 custom_action_id, operation_id = custom_action_operation.split(":")
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 

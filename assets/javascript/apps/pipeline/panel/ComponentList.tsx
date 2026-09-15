@@ -1,9 +1,9 @@
 import React, {useCallback, useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {formatDocsForSchema, getCachedData} from "../utils";
+import {formatDocsForSchema, getCachedData, getDefaultParamValues} from "../utils";
 import ComponentHelp from "./ComponentHelp";
-import {JsonSchema, NodeData, NodeParams} from "../types/nodeParams";
+import {JsonSchema, NodeData} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
@@ -13,17 +13,8 @@ type ComponentListParams = {
 
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
   const addNode = usePipelineStore((state) => state.addNode);
-  const {defaultValues, nodeSchemas} = getCachedData();
+  const {nodeSchemas} = getCachedData();
   const schemaList = Array.from(nodeSchemas.values()).sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
-
-  function getDefaultParamValues(schema: JsonSchema): NodeParams {
-    const defaults: NodeParams = {name: ""};
-    for (const name in schema.properties) {
-      const property = schema.properties[name];
-      defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
-    }
-    return defaults;
-  }
 
   //** Help bubble state
   const [scrollPosition, setScrollPosition] = useState(0)

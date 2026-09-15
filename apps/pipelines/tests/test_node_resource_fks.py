@@ -101,6 +101,25 @@ class TestNodeResourceFKSync:
         assert node.synthetic_voice_id is None
         assert node.collection_indexes.count() == 0
 
+    def test_custom_action_operations_cleared_when_node_changes_away_from_llm_type(self):
+        """#1452: a type change resets params, dropping ``custom_actions``. The sync branch that
+        writes those rows only fires for the *current* type, so a plain reset leaves the old
+        LLMResponseWithPrompt-only rows orphaned on a node that is no longer that type."""
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"name": "llm", "custom_actions": []},
+        )
+        action = CustomActionFactory.create(allowed_operations=["weather_get"])
+        CustomActionOperationFactory.create(node=node, custom_action=action, operation_id="weather_get")
+        assert node.custom_action_operations.exists()
+
+        node.type = "RenderTemplate"
+        node.params = {"name": "llm"}
+        node.save(update_fields=["type", "params"])
+        node.update_from_params()
+
+        assert not node.custom_action_operations.exists()
+
     def test_stale_collection_index_id_is_silently_skipped(self):
         c1 = CollectionFactory.create()
         node = NodeFactory.create(

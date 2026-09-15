@@ -54,6 +54,26 @@ describe('getWidgets', () => {
   });
 });
 
+describe('getWidgets with a frozen params object (#1452)', () => {
+  it('does not throw when the node has no keywords param and params is frozen', () => {
+    // A type change (#1452) hands this an already-frozen params object -- immer's produce()
+    // auto-freezes its result -- with no "keywords" key, since baseSchema doesn't declare one.
+    const frozenParams = Object.freeze({name: 'x', greeting: 'hi'});
+
+    expect(() =>
+      getWidgets(
+        {
+          schema: baseSchema,
+          nodeId: 'node-1',
+          nodeData: {type: 'RenderTemplate', label: 'Test', params: frozenParams},
+          updateParamValue: noop,
+        },
+        {getNodeFieldError: () => undefined, readOnly: false},
+      ),
+    ).not.toThrow();
+  });
+});
+
 describe('VisibleWhenWrapper', () => {
   it('reapplies the hidden-on-mount clear when the field identity changes, even if visibility does not', () => {
     const onHideA = vi.fn();
