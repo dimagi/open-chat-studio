@@ -210,7 +210,7 @@ class FileHome(LoginAndTeamRequiredMixin, TemplateView):
         return {
             "active_tab": "files",
             "title": "Files",
-            "table_url": reverse("files:file_home", args=[team_slug]),
+            "table_url": reverse("files:file_table", args=[team_slug]),
             "enable_search": True,
             "allow_new": False,
         }
