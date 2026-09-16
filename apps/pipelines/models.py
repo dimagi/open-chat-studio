@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
+from apps.custom_actions.models import CustomActionOperation
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import (
@@ -177,6 +178,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
+        # One query for every node in this pipeline that already has a CustomActionOperation row,
+        # rather than one query per node inside the loop below (update_from_params's own check).
+        nodes_with_custom_actions = set(
+            CustomActionOperation.objects.filter(node__pipeline=self).values_list("node__flow_id", flat=True)
+        )
+
         for flow_id, node in node_data.items():
             if flow_id in membership_only:
                 continue
@@ -195,7 +202,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     **node_position_fields(node.position),
                 },
             )
-            created_node.update_from_params()
+            created_node.update_from_params(had_custom_actions=flow_id in nodes_with_custom_actions)
 
     def clear_node_caches(self) -> None:
         """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
@@ -617,16 +624,25 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self.save(update_fields=["params"])
         self._sync_resource_fk_fields()
 
-    def update_from_params(self):
-        """Callback to do DB related updates pertaining to the node params"""
+    def update_from_params(self, had_custom_actions: bool | None = None):
+        """Callback to do DB related updates pertaining to the node params.
+
+        ``had_custom_actions`` is whether this node already had any ``CustomActionOperation``
+        rows, if the caller already knows -- ``update_nodes_from_data`` computes it for its whole
+        batch in one query rather than paying one ``exists()`` here per node. Left unset, this
+        checks it itself, exactly as a caller with no batch to amortize across needs to.
+        """
         self._sync_resource_fk_fields()
 
         custom_actions = self.params.get("custom_actions") or []
-        if custom_actions or self.custom_action_operations.exists():
+        if had_custom_actions is None:
+            had_custom_actions = self.custom_action_operations.exists()
+        if custom_actions or had_custom_actions:
             custom_action_infos = []
-            for custom_action_operation in custom_actions:
-                custom_action_id, operation_id = custom_action_operation.split(":")
-                custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
+            if self.has_parameter("custom_actions"):
+                for custom_action_operation in custom_actions:
+                    custom_action_id, operation_id = custom_action_operation.split(":")
+                    custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
 
@@ -722,8 +738,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
             node_name = self.type
@@ -750,7 +764,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.type == LLMResponseWithPrompt.__name__ and self.params.get("custom_actions"):
+        if self.has_parameter("custom_actions") and self.params.get("custom_actions"):
             param_versions.append(
                 VersionField(
                     group_name=node_name,

@@ -92,7 +92,8 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
     // the caller (a generated id on add, the preserved name on a type change).
     if (name === "name") continue;
     const property = schema.properties[name];
-    defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
+    const fallback = property.type === "array" ? [] : null;
+    defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? fallback;
   }
   return defaults;
 }
@@ -109,11 +110,22 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
  */
 export function buildTypeChangeParams(newSchema: JsonSchema, currentParams: NodeParams): NodeParams {
   const params = getDefaultParamValues(newSchema);
-  params.name = currentParams.name;
+  params.name = currentParams.name ?? "";
   if (currentParams.color !== undefined) {
     params.color = currentParams.color;
   }
   return params;
+}
+
+/**
+ * Every schema a user can drag into the canvas or swap an existing node onto (#1452), sorted for
+ * a stable menu order. Shared so ComponentList's palette and PipelineNode's change-type menu
+ * can't drift apart.
+ */
+export function getCanAddNodeSchemas(): JsonSchema[] {
+  return Array.from(getCachedData().nodeSchemas.values())
+    .filter((schema) => schema["ui:can_add"])
+    .sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
 }
 
 export function concatenate(value: string | string[] | null | undefined): string {

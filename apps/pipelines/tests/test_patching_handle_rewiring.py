@@ -4,6 +4,7 @@ same way ``apps/api/v2/pipeline_edit`` already does it for a param-only edit --
 ``apply_pipeline_patch`` never did, for any update, until now.
 """
 
+import apps.pipelines.patching as patching_module
 from apps.pipelines.flow import EdgeDiff, FlowEdge, FlowNode, FlowNodeData, NodeDiff, PipelineDiffPayload
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, StaticRouterNode
 from apps.pipelines.patching import apply_pipeline_patch
@@ -156,6 +157,75 @@ class TestNodeUpdateRewiresHandles:
 
         assert node_data["src"].data.params["name"] == "llm"
         assert edge_data.edges == []
+
+    def test_position_only_update_does_not_touch_output_handles(self, monkeypatch):
+        """A drag or a selection is a position-only update -- the DB-touching handle computation
+        must not run at all, restoring the module docstring's "never touches the database
+        directly" claim for the common case."""
+        graph = self._graph(
+            StaticRouterNode.__name__,
+            {"name": "router", "route_key": "k", "keywords": ["a", "b"]},
+            edges=[make_flow_edge("e0", "src", "t0", source_handle="output_0")],
+        )
+        updated = make_flow_node(
+            "src", StaticRouterNode.__name__, params={"name": "router", "route_key": "k", "keywords": ["a", "b"]}
+        )
+        updated.position = {"x": 100, "y": 200}
+        calls = []
+        monkeypatch.setattr(patching_module, "output_handle_labels", lambda data: calls.append(data) or {})
+        patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
+
+        apply_pipeline_patch(graph, patch)
+
+        assert calls == []
+
+    def test_an_edge_added_in_the_same_patch_does_not_collide_with_a_rewired_edge(self):
+        """A combined patch can narrow a router's keywords and add a fresh edge in the same
+        request -- e.g. the builder coalesced a keyword edit and a new connection into one
+        autosave. The new edge has to be validated against the *post*-change handles, not land
+        unchecked because it didn't exist yet when the rewiring ran."""
+        graph = self._graph(
+            StaticRouterNode.__name__,
+            {"name": "router", "route_key": "k", "keywords": ["a", "b"]},
+            edges=[make_flow_edge("e1", "src", "t1", source_handle="output_1")],
+        )
+        updated_node = make_flow_node(
+            "src", StaticRouterNode.__name__, params={"name": "router", "route_key": "k", "keywords": ["b"]}
+        )
+        new_edge = make_flow_edge("eNew", "src", "t2", source_handle="output_0")
+        patch = PipelineDiffPayload(
+            base_revision=0,
+            nodes=NodeDiff(update=[updated_node]),
+            edges=EdgeDiff(add=[new_edge]),
+        )
+
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+
+        # e1 follows branch 'b' to its new position; eNew was added on the now-removed branch
+        # 'a''s old handle and is dropped rather than left colliding with e1 on output_0.
+        assert {(edge.id, edge.sourceHandle) for edge in edge_data.edges} == {("e1", "output_0")}
+
+    def test_an_edge_added_in_the_same_patch_on_a_dropped_handle_is_not_left_stranded(self):
+        """The mirror case: the added edge lands on a handle the update removes outright, with no
+        surviving branch to inherit it -- it must not be left pointing at nothing."""
+        graph = self._graph(
+            StaticRouterNode.__name__,
+            {"name": "router", "route_key": "k", "keywords": ["a", "b"]},
+            edges=[make_flow_edge("e0", "src", "t0", source_handle="output_0")],
+        )
+        updated_node = make_flow_node(
+            "src", StaticRouterNode.__name__, params={"name": "router", "route_key": "k", "keywords": ["a"]}
+        )
+        new_edge = make_flow_edge("new", "src", "t1", source_handle="output_1")
+        patch = PipelineDiffPayload(
+            base_revision=0,
+            nodes=NodeDiff(update=[updated_node]),
+            edges=EdgeDiff(add=[new_edge]),
+        )
+
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+
+        assert {edge.id for edge in edge_data.edges} == {"e0"}
 
     def test_an_explicit_edge_update_in_the_same_patch_does_not_resurrect_a_rewired_edge(self):
         """A combined patch can update a node and, in the same request, explicitly update one of

@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {formatDocsForSchema, getCachedData, getDefaultParamValues} from "../utils";
+import {formatDocsForSchema, getCachedData, getCanAddNodeSchemas, getDefaultParamValues} from "../utils";
 import ComponentHelp from "./ComponentHelp";
 import {JsonSchema, NodeData} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
@@ -87,7 +87,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.filter((schema) => schema["ui:can_add"]).map((schema) => {
+  const components = getCanAddNodeSchemas().map((schema) => {
     return (
       <Component
         key={schema.title}

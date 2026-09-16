@@ -6,10 +6,8 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
-from apps.pipelines.build_state import output_handle_labels, rewired_edges_for_node
 from apps.pipelines.flow import (
     REACT_FLOW_END_TYPE,
-    EdgeDiff,
     Flow,
     FlowNode,
     FlowNodeData,
@@ -74,13 +72,12 @@ def plan_update(flow: Flow, team: Team, node_id: str, label: str | None, params:
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
     changing one setting does not mean resending the whole node. An edit that changes which output
-    handles the node offers takes that node's edges with it -- see
-    :func:`~apps.pipelines.build_state.rewired_edges_for_node`. Start and End are refused outright,
-    label-only edits included.
+    handles the node offers takes that node's edges with it -- ``apply_pipeline_patch``'s own
+    rewiring handles that once the node update lands, so this sends none of its own. Start and End
+    are refused outright, label-only edits included.
     """
     node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
-    before = output_handle_labels(content)
     if params:
         # 404s a type the API does not publish. Only when there are params to write: renaming a
         # node of such a type is not something the API has to withhold.
@@ -94,9 +91,7 @@ def plan_update(flow: Flow, team: Team, node_id: str, label: str | None, params:
         content.params = stored_params(content)
     if label is not None:
         content.label = label
-    changed, deleted_ids = rewired_edges_for_node(flow.edges, node_id, before, output_handle_labels(content))
-    edges = EdgeDiff(update=changed, delete=deleted_ids)
-    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node]), edges=edges), written_ids=[node_id])
+    return PipelineEdit(diff=graph_diff(nodes=NodeDiff(update=[node])), written_ids=[node_id])
 
 
 def plan_delete(flow: Flow, node_id: str) -> PipelineEdit:

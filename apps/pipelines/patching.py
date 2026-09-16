@@ -38,26 +38,47 @@ def apply_pipeline_patch(
     flow = Flow(**current_flow)
     existing_node_ids = {node.id for node in flow.nodes}
 
-    _apply_node_diff(flow, patch.nodes)
+    handle_changes = _apply_node_diff(flow, patch.nodes)
     _apply_edge_diff(flow, patch.edges)
+    _rewire_edges(flow, handle_changes)
 
     edge_data, _ = split_flow_data(flow)
 
     return edge_data, _collect_node_data(flow, patch, existing_node_ids)
 
 
-def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
+#: ``(node_id, before, after)`` for one node whose output handles moved -- see _apply_node_diff.
+HandleChange = tuple[str, dict[str, str | None], dict[str, str | None]]
+
+
+def _apply_node_diff(flow: Flow, diff: NodeDiff) -> list[HandleChange]:
+    """Merge ``diff`` into ``flow.nodes`` and report which updates moved a node's output handles.
+
+    The edge rewiring those changes need runs later, over the fully-merged edge set; see
+    apply_pipeline_patch and _rewire_edges.
+    """
     node_map = {node.id: node for node in flow.nodes}
 
     # Delete: remove by id
     for node_id in diff.delete:
         node_map.pop(node_id, None)
 
-    # Update: replace in-place, following or dropping edges whose output handles moved
+    # Update: replace in-place, noting any whose output handles moved
+    handle_changes: list[HandleChange] = []
     for updated in diff.update:
         previous = node_map.get(updated.id)
         node_map[updated.id] = updated
-        _rewire_edges(flow, previous, updated)
+        previous_data = previous.data if previous else None
+        if previous_data is None or updated.data is None:
+            continue
+        # Handles are a pure function of type and params: skip anything else (a drag, a
+        # selection, a label edit) before it can validate a router through model_validate().
+        if previous_data.type == updated.data.type and previous_data.params == updated.data.params:
+            continue
+        before = output_handle_labels(previous_data)
+        after = output_handle_labels(updated.data)
+        if before != after:
+            handle_changes.append((updated.id, before, after))
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:
@@ -71,30 +92,24 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
     if deleted_ids:
         flow.edges = [edge for edge in flow.edges if edge.source not in deleted_ids and edge.target not in deleted_ids]
 
+    return handle_changes
 
-def _rewire_edges(flow: Flow, previous: FlowNode | None, updated: FlowNode) -> None:
-    """Follow or drop ``updated``'s outgoing edges when this update changes its output handles.
 
-    Covers a param edit that changes a router's branches (the pre-existing gap this closes) and a
-    type change (#1452) the same way, since both are just an update whose handles differ before
-    and after -- neither is special-cased. Runs before the edge diff below, so a caller that also
-    sends its own correct edge diff for the same node (the v2 API always does) just re-applies the
-    same values afterward -- harmless. A deleted edge is the one thing that step must not bring
-    back; see _apply_edge_diff.
+def _rewire_edges(flow: Flow, handle_changes: list[HandleChange]) -> None:
+    """Follow or drop each changed node's outgoing edges, over the fully-merged edge set.
+
+    Runs last -- after both diffs are applied -- so it has the final say: an edge the same patch
+    also adds or updates is rewired or dropped along with the rest instead of escaping validation
+    by not existing yet when this ran, and a stale edge-diff update naming a handle this drops
+    cannot resurrect it, because this runs after that update already landed.
     """
-    previous_data = previous.data if previous else None
-    if previous_data is None or updated.data is None:
-        return
-    before = output_handle_labels(previous_data)
-    after = output_handle_labels(updated.data)
-    if before == after:
-        return
-    changed, deleted_ids = rewired_edges_for_node(flow.edges, updated.id, before, after)
-    if not changed and not deleted_ids:
-        return
-    changed_by_id = {edge.id: edge for edge in changed}
-    deleted = set(deleted_ids)
-    flow.edges = [changed_by_id.get(edge.id, edge) for edge in flow.edges if edge.id not in deleted]
+    for node_id, before, after in handle_changes:
+        changed, deleted_ids = rewired_edges_for_node(flow.edges, node_id, before, after)
+        if not changed and not deleted_ids:
+            continue
+        changed_by_id = {edge.id: edge for edge in changed}
+        deleted = set(deleted_ids)
+        flow.edges = [changed_by_id.get(edge.id, edge) for edge in flow.edges if edge.id not in deleted]
 
 
 def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
@@ -104,13 +119,10 @@ def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
     for edge_id in diff.delete:
         edge_map.pop(edge_id, None)
 
-    # Update: replace in-place -- but never resurrect an id the node-update rewiring above
-    # already dropped from this same flow (a caller's edge diff can carry a stale value for
-    # an edge whose handle no longer exists once the node update lands; see
-    # _rewire_edges).
+    # Update: replace in-place (an upsert, like add below -- the rewiring above runs after this
+    # and has the final say over any handle it changes; see _rewire_edges)
     for updated in diff.update:
-        if updated.id in edge_map:
-            edge_map[updated.id] = updated
+        edge_map[updated.id] = updated
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:

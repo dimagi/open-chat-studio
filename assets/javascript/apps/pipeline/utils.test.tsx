@@ -1,6 +1,6 @@
 import {beforeAll, describe, expect, it} from 'vitest';
 import {buildTypeChangeParams, getCachedData, getDefaultParamValues} from './utils';
-import type {JsonSchema} from './types/nodeParams';
+import type {JsonSchema, NodeParams} from './types/nodeParams';
 
 beforeAll(() => {
   const setScript = (id: string, data: unknown) => {
@@ -84,6 +84,14 @@ describe('getDefaultParamValues', () => {
     const schema: JsonSchema = {...templateSchema, properties: {undeclared: {type: 'string'}}};
     expect(getDefaultParamValues(schema).undeclared).toBeNull();
   });
+
+  it('is an empty array, not null, for an array-typed property with no default', () => {
+    // pydantic emits no "default" for a default_factory field, so this is exactly the state a
+    // fresh or type-changed router lands in for `keywords` -- a `null` here disagrees with the
+    // server, which reports zero output handles for a router whose keywords are None (#1452).
+    const schema: JsonSchema = {...templateSchema, properties: {keywords: {type: 'array'}}};
+    expect(getDefaultParamValues(schema).keywords).toEqual([]);
+  });
 });
 
 describe('buildTypeChangeParams (#1452)', () => {
@@ -110,5 +118,12 @@ describe('buildTypeChangeParams (#1452)', () => {
   it('adds no color key when the node never had one', () => {
     const params = buildTypeChangeParams(templateSchema, {name: 'n'});
     expect(params).not.toHaveProperty('color');
+  });
+
+  it('falls back to an empty name rather than undefined when currentParams has none', () => {
+    // An undefined name serializes as a missing key on the PATCH body, which reports "Field
+    // required" instead of the empty-name error the builder UI is designed around.
+    const params = buildTypeChangeParams(templateSchema, {} as NodeParams);
+    expect(params.name).toBe('');
   });
 });

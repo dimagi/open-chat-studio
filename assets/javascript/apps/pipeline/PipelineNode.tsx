@@ -1,6 +1,6 @@
-import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
-import React, {ChangeEvent, MouseEvent} from "react";
-import {buildTypeChangeParams, concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
+import {Node, NodeProps, NodeToolbar, Position, useUpdateNodeInternals} from "reactflow";
+import React, {ChangeEvent, MouseEvent, useMemo} from "react";
+import {buildTypeChangeParams, concatenate, formatDocsForSchema, getCachedData, getCanAddNodeSchemas, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
@@ -35,6 +35,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deprecatedModel = usePipelineStore((state) => state.getNodeDeprecatedModel(id));
   const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -62,21 +63,23 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     }));
   };
 
-  // Other user-addable types this node could become (#1452). Start/End/Passthrough are never
-  // offered, in either direction: a node whose own schema isn't `ui:can_add` gets no control at
-  // all, and this list excludes them as targets the same way ComponentList's palette does.
-  const changeableTypes = nodeSchema["ui:can_add"]
-    ? Array.from(getCachedData().nodeSchemas.values())
-        .filter((schema) => schema["ui:can_add"] && schema.title !== data.type)
-        .sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]))
-    : [];
+  // Other user-addable types this node could become (#1452). A deprecated or removed type still
+  // offers the control -- that's the migration path off it -- but Start/End/Passthrough never do,
+  // since their schemas are neither addable nor deprecated/removed. Targets are always the
+  // addable list (getCanAddNodeSchemas), the same one ComponentList's palette uses.
+  const canBeChangeTypeSource = nodeSchema["ui:can_add"] || nodeSchema["ui:deprecated"] || nodeSchema["ui:removed"];
+  const changeableTypes = useMemo(
+    () => (canBeChangeTypeSource ? getCanAddNodeSchemas().filter((schema) => schema.title !== data.type) : []),
+    [canBeChangeTypeSource, data.type]
+  );
 
   const changeNodeType = (newSchema: JsonSchema) => {
     setNode(id, produce((next) => {
       next.data.type = newSchema.title;
       next.data.label = newSchema["ui:label"];
-      next.data.params = buildTypeChangeParams(newSchema, data.params);
+      next.data.params = buildTypeChangeParams(newSchema, next.data.params);
     }));
+    updateNodeInternals(id);
   };
 
   const currentColor = data.params["color"] || NODE_COLORS[0].value;
