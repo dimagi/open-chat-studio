@@ -29,6 +29,26 @@ def _openai_error(cls, status: int, message: str, code: str | None = None, type_
     return _status_error(cls, status, message, {"message": message, "code": code, "type": type_})
 
 
+def _innermost_detail(error: BaseException) -> str:
+    while error.__cause__ is not None:
+        error = error.__cause__
+    # Not every provider exception carries `.message` (LangChain's own ones do not).
+    return getattr(error, "message", None) or str(error)
+
+
+def _wrapped_by_langchain(inner: Exception):
+    """langchain-google-genai turns every InvalidArgument into one of its own errors."""
+    from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError  # noqa: PLC0415 - TID253: heavy lib
+
+    try:
+        raise inner
+    except type(inner) as e:
+        try:
+            raise ChatGoogleGenerativeAIError(f"Invalid argument provided to Gemini: {e}") from e
+        except ChatGoogleGenerativeAIError as wrapper:
+            return wrapper
+
+
 # Each case is an error seen in production, paired with the phrase the team needs to read.
 TEAM_ACTIONABLE = [
     pytest.param(
@@ -85,6 +105,11 @@ TEAM_ACTIONABLE = [
         id="google_permission_denied",
     ),
     pytest.param(
+        _wrapped_by_langchain(google_exceptions.InvalidArgument("API key not valid. Please pass a valid API key.")),
+        "rejected the credentials",
+        id="google_bad_key_wrapped_by_langchain",
+    ),
+    pytest.param(
         _openai_error(
             openai.BadRequestError,
             400,
@@ -110,6 +135,12 @@ LEFT_ALONE = [
     ),
     pytest.param(_status_error(anthropic.OverloadedError, 529, "Overloaded"), True, id="anthropic_overloaded"),
     pytest.param(ValueError("boom"), False, id="unrelated_exception"),
+    # A malformed request is wrapped the same way a bad key is, but nobody on the team can fix it.
+    pytest.param(
+        _wrapped_by_langchain(google_exceptions.InvalidArgument("Unable to submit request: empty text parameter.")),
+        False,
+        id="google_malformed_request_wrapped",
+    ),
 ]
 
 
@@ -120,8 +151,9 @@ def test_team_actionable_errors_are_translated(error, expected_phrase):
     assert isinstance(translated, ProviderConfigurationError)
     assert expected_phrase in str(translated)
     # The provider's own wording is preserved so the team can act without opening Sentry.
-    # Not every provider exception carries `.message` (LangChain's own ones do not).
-    assert (getattr(error, "message", None) or str(error)) in str(translated)
+    # It comes from whichever exception in the chain was classified, which for an error a
+    # LangChain adapter has wrapped is the cause rather than the wrapper.
+    assert _innermost_detail(error) in str(translated)
 
 
 @pytest.mark.parametrize(("error", "_expected_phrase"), TEAM_ACTIONABLE)
@@ -133,6 +165,14 @@ def test_team_actionable_errors_are_not_retried(error, _expected_phrase):
 def test_other_errors_keep_their_native_type(error, retryable):
     assert translate_provider_error(error) is None
     assert should_retry_exception(error) is retryable
+
+
+def test_an_already_translated_error_is_left_alone():
+    """Otherwise a second boundary would rebuild it from its own cause."""
+    original = _status_error(anthropic.AuthenticationError, 401, "API key is invalid.")
+    translated = translate_provider_error(original)
+
+    assert translate_provider_error(translated) is None
 
 
 def test_context_manager_translates_and_chains():

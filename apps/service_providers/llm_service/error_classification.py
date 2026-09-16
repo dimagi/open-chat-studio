@@ -9,6 +9,7 @@ and, where Anthropic offers nothing else, the message text. See ADR-0067.
 """
 
 import contextlib
+from collections.abc import Iterator
 
 import anthropic
 import openai
@@ -26,6 +27,14 @@ OPENAI_QUOTA_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"
 ANTHROPIC_QUOTA_PHRASES = (
     "credit balance is too low",
     "reached your specified api usage limits",
+)
+
+# Google reports a bad key as INVALID_ARGUMENT, the same status it uses for a malformed
+# request, so only the wording separates them.
+GOOGLE_BAD_KEY_PHRASES = (
+    "api key not valid",
+    "api key expired",
+    "invalid api key",
 )
 
 AUTHENTICATION_ERRORS: tuple[type[Exception], ...] = (
@@ -57,11 +66,29 @@ def translate_provider_error(error: BaseException) -> ProviderConfigurationError
 
     None covers both "transient, so leave the native type alone for the retry policy"
     and "not a provider error at all".
+
+    The whole ``__cause__`` chain is examined because LangChain's provider adapters
+    re-raise the SDK exception wrapped in one of their own -- langchain-google-genai
+    turns every ``InvalidArgument``, a bad API key among them, into a
+    ``ChatGoogleGenerativeAIError`` -- and the outer type says nothing useful.
     """
-    for classify in (_billing, _authentication, _not_found, _context_overflow):
-        if message := classify(error):
-            return ProviderConfigurationError(f"{message} {_detail(error)}".strip())
+    if isinstance(error, ProviderConfigurationError):
+        return None
+    for cause in _causes(error):
+        for classify in (_billing, _authentication, _not_found, _context_overflow):
+            if message := classify(cause):
+                return ProviderConfigurationError(f"{message} {_detail(cause)}".strip())
     return None
+
+
+def _causes(error: BaseException, depth: int = 4) -> Iterator[BaseException]:
+    """The exception and the ``raise ... from`` chain beneath it, depth-capped."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and len(seen) < depth and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__
 
 
 @contextlib.contextmanager
@@ -88,6 +115,10 @@ def _billing(error: BaseException) -> str | None:
 
 def _authentication(error: BaseException) -> str | None:
     if isinstance(error, AUTHENTICATION_ERRORS):
+        return AUTHENTICATION_MESSAGE
+    # Not every InvalidArgument is a bad key; a malformed request is one too, and that is
+    # not the team's to fix, so it stays unclassified.
+    if isinstance(error, google_exceptions.InvalidArgument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES):
         return AUTHENTICATION_MESSAGE
     return None
 
