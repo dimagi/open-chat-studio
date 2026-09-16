@@ -1556,11 +1556,6 @@ components:
           items:
             type: string
         state: {}
-        participant_data:
-          type: object
-          additionalProperties: {}
-          nullable: true
-          readOnly: true
       required:
       - created_at
       - experiment

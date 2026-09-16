@@ -162,15 +162,15 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        # Both prefetches below exist to avoid N+1 queries in ExperimentSessionSerializer.
-        # Resolution order: the serializer prefers the latest trace when one exists, and only falls
-        # back to experiment-level participant data when a session has no traces.
-        queryset = (
-            ExperimentSession.objects.filter(team=self.request.team)
-            .select_related("team", "experiment", "participant")
-            .prefetch_related(
-                "chat__tags",
-                "chat__messages__tags",
+        queryset = ExperimentSession.objects.filter(team=self.request.team).select_related(
+            "team", "experiment", "participant"
+        )
+        # Participant data is only serialized on the detail endpoint (see
+        # ExperimentSessionSerializer), so only pay for resolving it there. Resolution order in the
+        # serializer: it prefers the latest trace when one exists, and only falls back to
+        # experiment-level participant data when a session has no traces.
+        if self.action == "retrieve":
+            queryset = queryset.prefetch_related(
                 # The queryset fetches only the latest trace per session: participant_data is
                 # resolved from it directly, and any earlier trace would be discarded anyway. A
                 # plain prefetch_related("traces") would load every trace for every session.
@@ -194,7 +194,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     to_attr="_prefetched_participant_data",
                 ),
             )
-        )
+        queryset = queryset.prefetch_related("chat__tags", "chat__messages__tags")
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         if experiment_id := self.request.query_params.get("experiment"):

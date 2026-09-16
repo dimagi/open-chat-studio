@@ -226,6 +226,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
         if not self._include_messages:
             self.fields.pop("messages")
             self.fields.pop("usage")
+            self.fields.pop("participant_data")
         else:
             self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
 

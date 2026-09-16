@@ -143,8 +143,9 @@ def get_session_json(
         "platform": session.platform,
         "tags": expected_tags if expected_tags is not None else [],
         "state": session.state,
-        "participant_data": expected_participant_data if expected_participant_data is not None else {},
     }
+    if expected_participant_data is not None:
+        data["participant_data"] = expected_participant_data
     if expected_messages is not None:
         data["messages"] = expected_messages
         data["usage"] = expected_usage if expected_usage is not None else {"total_cost": "0.00000000", "by_model": []}
@@ -184,6 +185,7 @@ def test_retrieve_session(auth_method, session):
 
     assert response_json == get_session_json(
         session,
+        expected_participant_data={},
         expected_messages=[
             {
                 "created_at": "fake date",
@@ -291,7 +293,10 @@ def test_session_participant_data_uses_working_version_id_for_versioned_experime
     response = client.get(url)
     assert response.status_code == 200
     result = response.json()["results"][0] if "results" in response.json() else response.json()
-    assert result["participant_data"] == participant_data_value
+    if endpoint == "list":
+        assert "participant_data" not in result
+    else:
+        assert result["participant_data"] == participant_data_value
 
 
 @pytest.mark.django_db()
@@ -327,19 +332,15 @@ def test_session_participant_data(session, has_trace, has_participant_data):
     user = session.team.members.first()
     client = ApiTestClient(user, session.team)
 
-    for url in [
-        reverse("api:session-list"),
-        reverse("api:session-detail", kwargs={"id": session.external_id}),
-    ]:
-        response = client.get(url)
-        assert response.status_code == 200
-        result = response.json()["results"][0] if "results" in response.json() else response.json()
-        assert result["participant_data"] == participant_data_value
+    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
+    assert response.status_code == 200
+    result = response.json()
+    assert result["participant_data"] == participant_data_value
 
 
 @pytest.mark.django_db()
 def test_session_participant_data_with_diff(session):
-    """participant_data_diff is applied to the snapshot when both list and detail endpoints are hit."""
+    """participant_data_diff is applied to the snapshot on the detail endpoint."""
     snapshot = {"name": "Alice"}
     diff = [("add", "", [("age", 30)])]
 
@@ -353,14 +354,10 @@ def test_session_participant_data_with_diff(session):
     user = session.team.members.first()
     client = ApiTestClient(user, session.team)
 
-    for url in [
-        reverse("api:session-list"),
-        reverse("api:session-detail", kwargs={"id": session.external_id}),
-    ]:
-        response = client.get(url)
-        assert response.status_code == 200
-        result = response.json()["results"][0] if "results" in response.json() else response.json()
-        assert result["participant_data"] == {"name": "Alice", "age": 30}
+    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
+    assert response.status_code == 200
+    result = response.json()
+    assert result["participant_data"] == {"name": "Alice", "age": 30}
 
 
 @pytest.mark.django_db()
@@ -399,11 +396,11 @@ def test_participant_data_prefetch_uses_only_latest_trace_per_session(experiment
     TraceFactory.create(session=session1, team=experiment.team, participant_data={"s": "latest"})
     TraceFactory.create(session=session2, team=experiment.team, participant_data={"s": 2})
 
-    response = ApiTestClient(user, experiment.team).get(reverse("api:session-list"))
-    assert response.status_code == 200
-    by_id = {r["id"]: r for r in response.json()["results"]}
-    assert by_id[str(session1.external_id)]["participant_data"] == {"s": "latest"}
-    assert by_id[str(session2.external_id)]["participant_data"] == {"s": 2}
+    client = ApiTestClient(user, experiment.team)
+    for session_, expected in [(session1, {"s": "latest"}), (session2, {"s": 2})]:
+        response = client.get(reverse("api:session-detail", kwargs={"id": session_.external_id}))
+        assert response.status_code == 200
+        assert response.json()["participant_data"] == expected
 
 
 def _create_attachments(chat, message):
