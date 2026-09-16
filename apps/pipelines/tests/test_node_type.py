@@ -98,3 +98,52 @@ class TestInputHandles:
     @pytest.mark.parametrize("node_type", ["EndNode", "LLMResponseWithPrompt", "StaticRouterNode"])
     def test_every_other_type_accepts_the_standard_input(self, node_type):
         assert NodeType(node_type).input_handles() == ["input"]
+
+
+class TestOutputHandles:
+    def test_start_node_has_an_output_handle(self):
+        assert NodeType("StartNode").output_handles({"name": "start"}, "start-1") == [
+            {"handle": "output", "label": None}
+        ]
+
+    def test_end_node_has_no_output_handles(self):
+        assert NodeType("EndNode").output_handles({"name": "end"}, "end-1") == []
+
+    def test_router_handles_come_from_keywords_in_order_upper_cased(self):
+        params = {"name": "router", "route_key": "k", "keywords": ["schedule", "reschedule"]}
+        assert NodeType("StaticRouterNode").output_handles(params, "router-1") == [
+            {"handle": "output_0", "label": "SCHEDULE"},
+            {"handle": "output_1", "label": "RESCHEDULE"},
+        ]
+
+    def test_invalid_router_still_reports_handles(self):
+        # route_key is required, so full pydantic validation fails; the handles must still derive
+        # from the keywords (upper-cased) so an incrementally-built router shows its branches.
+        params = {"name": "router", "keywords": ["a", "b"]}
+        assert NodeType("StaticRouterNode").output_handles(params, "router-1") == [
+            {"handle": "output_0", "label": "A"},
+            {"handle": "output_1", "label": "B"},
+        ]
+
+    @pytest.mark.django_db()
+    def test_router_with_dangling_provider_model_still_reports_handles(self):
+        # A stale llm_provider_model_id makes the LLM mixin's before-validator raise
+        # PipelineNodeBuildError (not a pydantic error); handle derivation must fall back, not crash.
+        params = {
+            "name": "router",
+            "prompt": "route",
+            "keywords": ["a", "b"],
+            "llm_provider_id": 999999,
+            "llm_provider_model_id": 999999,
+        }
+        assert NodeType("RouterNode").output_handles(params, "router-1") == [
+            {"handle": "output_0", "label": "A"},
+            {"handle": "output_1", "label": "B"},
+        ]
+
+    def test_boolean_node_handles_are_static(self):
+        params = {"name": "bool", "input_equals": "hi"}
+        assert NodeType("BooleanNode").output_handles(params, "bool-1") == [
+            {"handle": "output_0", "label": "true"},
+            {"handle": "output_1", "label": "false"},
+        ]

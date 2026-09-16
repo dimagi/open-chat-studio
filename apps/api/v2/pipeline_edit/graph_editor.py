@@ -6,7 +6,6 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
-from apps.pipelines.build_state import output_handles
 from apps.pipelines.const import REACT_FLOW_END_TYPE
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
@@ -231,7 +230,9 @@ def _output_handles(content: FlowNodeData) -> OutputHandles:
     The label is what identifies a router's branch across an edit: the handle is only a position in
     ``keywords``, and positions move. A node whose type names no node class reports no handles.
     """
-    return {handle["handle"]: handle["label"] for handle in output_handles(content.type, content.params, content.id)}
+    return {
+        handle["handle"]: handle["label"] for handle in content.node_type.output_handles(content.params, content.id)
+    }
 
 
 def _rewired_edges(flow: Flow, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:

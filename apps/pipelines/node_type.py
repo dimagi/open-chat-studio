@@ -18,17 +18,22 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, cast
 
+import pydantic
+
 from apps.pipelines.const import (
     END_NODE_TYPE,
     REACT_FLOW_END_TYPE,
     REACT_FLOW_NODE_TYPE,
     REACT_FLOW_START_TYPE,
     STANDARD_INPUT_NAME,
+    STANDARD_OUTPUT_NAME,
     START_NODE_TYPE,
 )
+from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 
 if TYPE_CHECKING:
+    from apps.pipelines.models import Node
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 
 
@@ -106,6 +111,30 @@ class NodeType:
         """
         return [] if self.type == START_NODE_TYPE else [STANDARD_INPUT_NAME]
 
+    def output_handles(self, params: dict, node_id: str, django_node: "Node | None" = None) -> list[dict]:
+        """The output handles a node of this type and these params offers, as ``{handle, label}``.
+
+        Routers get one handle per branch from ``get_output_map()`` (``output_0``, ``output_1``, …,
+        labelled with the branch keyword); plain nodes get the single standard output with no label;
+        End has no outputs.
+
+        Takes the params rather than a stored :class:`~apps.pipelines.models.Node` so a caller holding
+        an unwritten edit can ask what the node *would* offer. ``django_node`` is what the row-backed
+        caller passes for full validation; without it a router falls back to the unvalidated path
+        below, which is enough because no router's branches depend on its row.
+        """
+        if self.type == END_NODE_TYPE:
+            return []
+        node_class = self.node_class
+        if node_class is None:
+            # A type naming no node class (removed since, or never one): validation reports it; we can't
+            # know its handles.
+            return []
+        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+            output_map = _router_output_map(node_class, params, node_id, django_node)
+            return [{"handle": handle, "label": label} for handle, label in output_map.items()]
+        return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
+
 
 @cache
 def server_managed_node_types() -> frozenset[str]:
@@ -130,3 +159,25 @@ def _nodes_base():
     from apps.pipelines.nodes import base  # noqa: PLC0415 - heavy: nodes→langgraph
 
     return base
+
+
+def _router_output_map(
+    node_class: "type[BasePipelineNode]", params: dict, node_id: str, django_node: "Node | None"
+) -> dict:
+    """A router's handle -> branch-label map, tolerant of invalid params.
+
+    Prefer full validation so every field normalization applies — a router type whose
+    ``get_output_map()`` depends on validated/derived fields stays correct at the cost of one
+    redundant validation per read. An incrementally-built router can be invalid in ways unrelated
+    to its branches (a missing required field, a broken resource reference raising
+    ``PipelineNodeBuildError``), and must still report its handles, so fall back to an unvalidated
+    instance with the keywords upper-cased to match ``RouterMixin.ensure_keywords_are_uppercase``.
+    """
+    try:
+        instance = node_class.model_validate({**params, "node_id": node_id, "django_node": django_node})
+    except (pydantic.ValidationError, PipelineNodeBuildError):
+        fallback = dict(params)
+        if isinstance(fallback.get("keywords"), list):
+            fallback["keywords"] = [str(keyword).upper() for keyword in fallback["keywords"]]
+        instance = node_class.model_construct(**fallback)
+    return instance.get_output_map()

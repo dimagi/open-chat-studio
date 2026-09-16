@@ -580,6 +580,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
         return self.node_type.declares(param_name)
 
+    def output_handles(self) -> list[dict]:
+        """The output handles this row offers, as ``{handle, label}``.
+
+        The type decides; this supplies the row. ``django_node`` goes along so a router's branches
+        derive from a fully validated instance.
+        """
+        return self.node_type.output_handles(self.params or {}, self.flow_id, django_node=self)
+
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node. Params that reference versioned records (see

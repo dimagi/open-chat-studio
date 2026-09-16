@@ -15,7 +15,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
-from apps.pipelines.build_state import NoOutputHandles, output_handles, why_no_output_handles
+from apps.pipelines.build_state import NoOutputHandles, why_no_output_handles
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData
 
 from .facade import PipelineEdit, graph_diff
@@ -205,7 +205,7 @@ class SourceSide(Side):
 
     @classmethod
     def handles_offered(cls, content: FlowNodeData) -> list[str]:
-        return [handle["handle"] for handle in output_handles(content.type, content.params, content.id)]
+        return [handle["handle"] for handle in content.node_type.output_handles(content.params, content.id)]
 
     @classmethod
     def no_handles_message(cls, content: FlowNodeData) -> str:
