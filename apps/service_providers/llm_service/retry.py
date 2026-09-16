@@ -38,7 +38,7 @@ RATE_LIMIT_EXCEPTIONS: tuple[type[Exception], ...] = (
     google_exceptions.ResourceExhausted,
 )
 
-# Default retry configuration
+# The single place retry timing is tuned; no caller overrides these.
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_INITIAL_INTERVAL = 1.0  # seconds
 DEFAULT_BACKOFF_FACTOR = 2.0
@@ -65,32 +65,16 @@ def should_retry_exception(exc: Exception) -> bool:
     return False
 
 
-def get_retry_policy(
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
-    initial_interval: float = DEFAULT_INITIAL_INTERVAL,
-    backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
-    max_interval: float = DEFAULT_MAX_INTERVAL,
-) -> RetryPolicy:
-    """
-    Get a LangGraph RetryPolicy configured for rate limit handling.
+def get_retry_policy() -> RetryPolicy:
+    """A LangGraph RetryPolicy for rate limit handling.
 
-    Use this with StateGraph.add_node(..., retry_policy=get_retry_policy())
-    for pipeline nodes.
-
-    Args:
-        max_attempts: Maximum number of retry attempts (default: 3)
-        initial_interval: Initial wait time between retries in seconds (default: 1.0)
-        backoff_factor: Multiplier for wait time after each retry (default: 2.0)
-        max_interval: Maximum wait time between retries in seconds (default: 60.0)
-
-    Returns:
-        RetryPolicy configured for rate limit handling
+    Use with StateGraph.add_node(..., retry_policy=get_retry_policy()) for pipeline nodes.
     """
     return RetryPolicy(
-        max_attempts=max_attempts,
-        initial_interval=initial_interval,
-        backoff_factor=backoff_factor,
-        max_interval=max_interval,
+        max_attempts=DEFAULT_MAX_ATTEMPTS,
+        initial_interval=DEFAULT_INITIAL_INTERVAL,
+        backoff_factor=DEFAULT_BACKOFF_FACTOR,
+        max_interval=DEFAULT_MAX_INTERVAL,
         jitter=True,
         retry_on=should_retry_exception,
     )
@@ -192,32 +176,17 @@ def with_llm_retry(
     )
 
 
-def get_retry_middleware(
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
-    initial_interval: float = DEFAULT_INITIAL_INTERVAL,
-    backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
-    max_interval: float = DEFAULT_MAX_INTERVAL,
-):
-    """
-    Get a LangGraph ModelRetryMiddleware configured for rate limit handling.
+def get_retry_middleware():
+    """A LangGraph ModelRetryMiddleware for rate limit handling.
 
-    Use this with create_agent(..., middleware=[get_retry_middleware()]).
-
-    Args:
-        max_attempts: Maximum number of retry attempts (default: 3)
-        initial_interval: Initial wait time between retries in seconds (default: 1.0)
-        backoff_factor: Multiplier for wait time after each retry (default: 2.0)
-        max_interval: Maximum wait time between retries in seconds (default: 60.0)
-
-    Returns:
-        ModelRetryMiddleware configured for rate limit handling
+    Use with create_agent(..., middleware=[get_retry_middleware()]).
     """
     return ModelRetryMiddleware(
-        max_retries=max_attempts,
+        max_retries=DEFAULT_MAX_ATTEMPTS,
         retry_on=should_retry_exception,
-        backoff_factor=backoff_factor,
-        initial_delay=initial_interval,
-        max_delay=max_interval,
+        backoff_factor=DEFAULT_BACKOFF_FACTOR,
+        initial_delay=DEFAULT_INITIAL_INTERVAL,
+        max_delay=DEFAULT_MAX_INTERVAL,
         on_failure="error",
         jitter=True,
     )
