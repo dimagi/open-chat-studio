@@ -1,6 +1,6 @@
 import {Edge, Node} from "@reactflow/core";
 
-export type ReactFlowJsonObject<NodeData = any, EdgeData = any> = {
+export type ReactFlowJsonObject<NodeData = unknown, EdgeData = unknown> = {
     nodes: Node<NodeData>[];
     edges: Edge<EdgeData>[];
 };
