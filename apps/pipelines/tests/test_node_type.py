@@ -37,3 +37,10 @@ class TestDeclaredParams:
     def test_declared_params_lists_the_type_s_fields(self):
         declared = NodeType("LLMResponseWithPrompt").declared_params
         assert {"name", "llm_provider_id", "prompt"} <= declared
+
+
+class TestSchema:
+    def test_a_node_type_carries_its_ui_schema(self):
+        schema = NodeType("LLMResponseWithPrompt").schema
+        assert schema is not None
+        assert schema.label

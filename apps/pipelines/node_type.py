@@ -15,10 +15,10 @@ these questions without dragging in the ``nodes -> langgraph -> apps.experiments
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    from apps.pipelines.nodes.base import BasePipelineNode
+    from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,16 @@ class NodeType:
     def declares(self, param_name: str) -> bool:
         """Whether this type declares ``param_name`` as a param."""
         return param_name in self.declared_params
+
+    @property
+    def schema(self) -> "NodeSchema | None":
+        """This type's ``NodeSchema`` -- its display label, and whether it can be added or deleted."""
+        node_class = self.node_class
+        if node_class is None:
+            return None
+        # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
+        # node class stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
+        return cast("NodeSchema", node_class.model_config["json_schema_extra"])
 
 
 def _nodes_base():
