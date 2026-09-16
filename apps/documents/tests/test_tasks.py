@@ -28,6 +28,13 @@ from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 
+def _drain(collection_files) -> list[CollectionFile]:
+    """The task passes ``QuerySet.iterator()``, i.e. a server-side cursor. Read it to the end:
+    abandoning it part-read leaves the cursor open past the test's transaction rollback, and the
+    error that surfaces when it is finally closed aborts the *next* test's transaction."""
+    return list(collection_files)
+
+
 @pytest.mark.django_db()
 def test_delete_collection_task_deletes_files_of_archived_collection():
     """delete_collection_task runs after Collection.archive() has already set is_archived=True, so it
@@ -68,15 +75,13 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
     assert add_files_to_index_mock.call_count == 2
 
     # The first call should be for the first file with chunking strategy 800/400
-    iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = next(iter(iterator_param))
-    assert collection_file.id == col_file_1.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[0].kwargs["collection_files"])
+    assert collection_files[0].id == col_file_1.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     # The second call should be for the second file with chunking strategy 1000/100
-    iterator_param = add_files_to_index_mock.mock_calls[1].kwargs["collection_files"]
-    collection_file = next(iter(iterator_param))
-    assert collection_file.id == col_file_2.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[1].kwargs["collection_files"])
+    assert collection_files[0].id == col_file_2.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=1000, chunk_overlap=100)
 
 
@@ -99,9 +104,8 @@ def test_migrate_vector_stores_does_cleanup(
         remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=previous_llm_provider.id
     )
     assert add_files_to_index_mock.call_count == 1
-    iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = next(iter(iterator_param))
-    assert collection_file.id == col_file.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[0].kwargs["collection_files"])
+    assert collection_files[0].id == col_file.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     remote_index_manager_mock.delete_remote_index.assert_called()
