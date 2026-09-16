@@ -18,7 +18,7 @@ The pipeline already has the tier these belong in. `CONFIGURATION_EXCEPTIONS` �
 
 ## Decision
 
-Team-actionable provider failures are classified as `ProviderConfigurationError`, a member of `CONFIGURATION_EXCEPTIONS`.
+We will classify team-actionable provider failures as `ProviderConfigurationError`, a member of `CONFIGURATION_EXCEPTIONS`.
 
 - The test is who holds the fix. A team member can add credit, replace a key, pick a different model or shorten the history; a participant cannot, and neither can an operator or an OCS developer. Transient faults — rate limits, overload, connection errors — fail this test and keep their native SDK type.
 - `translate_provider_error` does the classification, reading provider error codes and, where Anthropic offers nothing else, the message text. It is the single source of truth: `should_retry_exception` consults it first, so nothing classified here is ever retried.
