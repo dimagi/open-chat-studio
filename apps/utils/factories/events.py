@@ -1,3 +1,5 @@
+import datetime
+
 import factory
 import factory.django
 
@@ -5,6 +7,7 @@ from apps.events.models import (
     EventAction,
     EventActionType,
     ScheduledMessage,
+    ScheduledTrigger,
     StaticTrigger,
     StaticTriggerType,
     TimeoutTrigger,
@@ -36,6 +39,17 @@ class TimeoutTriggerFactory(factory.django.DjangoModelFactory):
     action = factory.SubFactory(EventActionFactory)
     delay = 1
     total_num_triggers = 1
+
+
+class ScheduledTriggerFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ScheduledTrigger
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    action = factory.SubFactory(EventActionFactory)
+    trigger_date = factory.LazyFunction(lambda: datetime.date.today() + datetime.timedelta(days=1))
+    trigger_time = factory.LazyFunction(lambda: datetime.time(9, 0))
+    timezone = "UTC"
 
 
 class ScheduledMessageFactory(factory.django.DjangoModelFactory):

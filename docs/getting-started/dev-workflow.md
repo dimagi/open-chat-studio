@@ -73,8 +73,9 @@ automatically on create:
   when discovery finds the wrong one.
 - Builds the frontend assets.
 
-On `wt remove` the branch database is dropped, its Redis DB is flushed, and its allocation is
-released, so worktrees leave nothing behind.
+On `wt remove` the branch database is dropped along with the `test_` databases a test run
+left behind, its Redis DB is flushed, and its allocation is released, so worktrees leave
+nothing behind.
 
 Once it's set up, run [`inv dev`](local-setup.md#running-the-dev-environment) in the worktree.
 

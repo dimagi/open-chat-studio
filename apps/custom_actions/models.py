@@ -136,13 +136,6 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         blank=True,
         related_name="versions",
     )
-    assistant = models.ForeignKey(
-        "assistants.OpenAiAssistant",
-        on_delete=models.CASCADE,
-        related_name="custom_action_operations",
-        null=True,
-        blank=True,
-    )
     node = models.ForeignKey(
         "pipelines.Node",
         on_delete=models.CASCADE,
@@ -160,13 +153,8 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         ordering = ("operation_id",)
         constraints = [
             models.CheckConstraint(
-                condition=Q(assistant__isnull=False) | Q(node__isnull=False),
-                name="assistant_or_node_required",
-            ),
-            models.UniqueConstraint(
-                fields=["assistant", "custom_action", "operation_id"],
-                condition=Q(assistant__isnull=False),
-                name="unique_assistant_custom_action_operation",
+                condition=Q(node__isnull=False),
+                name="node_required",
             ),
         ]
 
@@ -189,20 +177,14 @@ class CustomActionOperation(BaseModel, VersionsMixin):
         self._operation_schema = spec
 
     def get_model_id(self, with_holder=True):
-        holder_id = self.assistant_id if self.assistant_id else self.node_id
-        holder_id = holder_id if with_holder else ""
+        holder_id = self.node_id if with_holder else ""
         return make_model_id(holder_id, self.custom_action_id, self.operation_id)
 
     @transaction.atomic()
     def create_new_version(self, new_node=None, is_copy=False):  # ty: ignore[invalid-method-override]
-        # The assistant FK survives for Phase 2 but nothing creates a version against one, so a
-        # node is now the only holder a new version can have.
         if new_node is None:
             raise ValueError("new_node must be provided")
         new_instance = super().create_new_version(save=False, is_copy=is_copy)
-        # ``assistant`` is copied off the source row, so clear it: the check constraint allows
-        # either holder and a version must have exactly the node.
-        new_instance.assistant = None
         new_instance.node = new_node
         if not is_copy:
             new_instance.operation_schema = get_standalone_schema_for_action_operation(new_instance)

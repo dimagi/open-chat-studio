@@ -67,6 +67,7 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("events.eventaction", "event_actions", "pk"),
     ManifestEntry("events.statictrigger", "static_triggers", "pk"),
     ManifestEntry("events.timeouttrigger", "timeout_triggers", "pk"),
+    ManifestEntry("events.scheduledtrigger", "scheduled_triggers", "pk"),
     ManifestEntry("experiments.participant", "participants", "updated_at_id"),
     ManifestEntry("experiments.participantdata", "participant_data", "updated_at_id", secret=True),
     ManifestEntry("chat.chat", "chats", "updated_at_id"),
@@ -152,6 +153,7 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
     "documents.collectionfile": "collection__team",
     "events.statictrigger": "experiment__team",
     "events.timeouttrigger": "experiment__team",
+    "events.scheduledtrigger": "experiment__team",
     # EventAction has no team FK; StaticTrigger and TimeoutTrigger each hold a OneToOneField to it.
     "events.eventaction": [
         "static_trigger__experiment__team",
@@ -171,8 +173,8 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
 # Additional queryset filters applied after team scoping, for models that need row-level exclusions
 # beyond the team boundary (e.g. rows that reference a deliberately-excluded model).
 EXTRA_FILTERS: dict[str, Q] = {
-    # Only node-attached operations are synced, so the check constraint (assistant OR node
-    # non-null) is satisfied on import. The assistant arm is legacy — see #4254.
+    # Only node-attached operations are synced, so the node_required check constraint is
+    # satisfied on import.
     "custom_actions.customactionoperation": Q(node__isnull=False),
     # Data-export files are transient download bundles, so they're never shared across servers.
     "files.file": ~Q(purpose=FilePurpose.DATA_EXPORT),

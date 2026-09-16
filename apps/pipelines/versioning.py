@@ -141,8 +141,7 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
             model_label="experiments.SourceMaterial",
             display_name="source_material",
             versioning=ParamVersioning.REUSE_UNCHANGED,
-            # Archiving source material versions when the node is archived is still a TODO
-            archiving=ParamArchiving.KEEP,
+            archiving=ParamArchiving.ARCHIVE,
             fk_field="source_material",
         ),
         # ADR-0031: collections (media + index) are live shared resources. Only frozen
@@ -170,3 +169,8 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
 
 def get_versioned_param_specs(node_type: str) -> tuple[VersionedParamSpec, ...]:
     return _NODE_PARAM_SPECS.get(node_type, ())
+
+
+def all_versioned_param_specs() -> list[VersionedParamSpec]:
+    """Every spec across all node types, flattened."""
+    return [spec for specs in _NODE_PARAM_SPECS.values() for spec in specs]
