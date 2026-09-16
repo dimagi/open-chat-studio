@@ -7,7 +7,8 @@ a node holds (ADR-0046). The row questions stay on ``Node``.
 
 It is also a null object. ``Node.type`` is graph data with nothing validating it against the node
 classes, and ``REMOVED_NODE_TYPES`` makes an unresolvable type a supported state, so every accessor
-here answers for one -- empty, ``None`` or ``False`` -- rather than raising.
+here answers for one -- empty, ``None`` or ``False`` -- rather than raising. ``exists`` is the
+explicit question for a caller that has to tell the cases apart.
 
 Deliberately not in ``nodes/base.py``: nothing here imports ``apps.pipelines.nodes`` at module
 level, which is what lets ``models.py``, ``flow.py``, ``versioning.py`` and the API modules all ask
@@ -15,6 +16,7 @@ these questions without dragging in the ``nodes -> langgraph -> apps.experiments
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cache
 from typing import TYPE_CHECKING, cast
 
@@ -35,6 +37,23 @@ from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 if TYPE_CHECKING:
     from apps.pipelines.models import Node
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
+
+
+class NoOutputHandles(StrEnum):
+    """Why a node offers none, for a caller that has to explain an empty ``output_handles``.
+
+    Beside ``NodeType.output_handles`` because it reads that method's branches a second way: kept
+    apart, the two drift. Hence ``UNDETERMINED`` rather than a fall-through to ``TERMINAL``.
+    """
+
+    #: The End node. Nothing runs after the end of the pipeline, so nothing can be wired from it.
+    TERMINAL = "terminal"
+    #: A type naming no node class -- removed since, or never one. Its handles are unknowable.
+    UNKNOWN_TYPE = "unknown_type"
+    #: A router with no keywords yet: its handles *are* its branches, so it has none until they are set.
+    NO_BRANCHES = "no_branches"
+    #: Offers none for a reason this method does not recognise -- unreachable today.
+    UNDETERMINED = "undetermined"
 
 
 @dataclass(frozen=True)
@@ -134,6 +153,21 @@ class NodeType:
             output_map = _router_output_map(node_class, params, node_id, django_node)
             return [{"handle": handle, "label": label} for handle, label in output_map.items()]
         return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
+
+    def why_no_output_handles(self) -> NoOutputHandles:
+        """Which of the empty cases applies. Only meaningful once :meth:`output_handles` returned ``[]``.
+
+        Mirrors that method's branches in the same order, so the two are read together when a case is
+        added to either.
+        """
+        if self.type == END_NODE_TYPE:
+            return NoOutputHandles.TERMINAL
+        node_class = self.node_class
+        if node_class is None:
+            return NoOutputHandles.UNKNOWN_TYPE
+        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+            return NoOutputHandles.NO_BRANCHES
+        return NoOutputHandles.UNDETERMINED
 
 
 @cache

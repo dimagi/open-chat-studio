@@ -6,7 +6,7 @@ resource lookup carries a ``django_db`` marker.
 
 import pytest
 
-from apps.pipelines.node_type import NodeType, server_managed_node_types
+from apps.pipelines.node_type import NodeType, NoOutputHandles, server_managed_node_types
 from apps.pipelines.versioning import ParamVersioning
 
 
@@ -147,3 +147,17 @@ class TestOutputHandles:
             {"handle": "output_0", "label": "true"},
             {"handle": "output_1", "label": "false"},
         ]
+
+
+class TestWhyNoOutputHandles:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("EndNode", NoOutputHandles.TERMINAL, id="end"),
+            pytest.param("GhostNode", NoOutputHandles.UNKNOWN_TYPE, id="unknown-type"),
+            pytest.param("StaticRouterNode", NoOutputHandles.NO_BRANCHES, id="router-without-keywords"),
+            pytest.param("LLMResponseWithPrompt", NoOutputHandles.UNDETERMINED, id="unrecognised"),
+        ],
+    )
+    def test_names_the_empty_case(self, node_type, expected):
+        assert NodeType(node_type).why_no_output_handles() is expected

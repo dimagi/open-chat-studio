@@ -12,13 +12,9 @@ Validation never flags an unwired node or branch (the build only checks reachabl
 :func:`deprecated_models` reports the models on their way out the same way. Neither blocks anything.
 """
 
-from enum import StrEnum
-
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
-from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
-from apps.pipelines.nodes.nodes import EndNode
 from apps.service_providers.llm_service.default_models import get_deprecated_models
 from apps.service_providers.models import LlmProviderModel
 
@@ -95,36 +91,3 @@ def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tup
         if (node.flow_id, handle["handle"]) not in wired_outputs:
             dangling.append(handle)
     return dangling
-
-
-class NoOutputHandles(StrEnum):
-    """Why a node offers none, for a caller that has to explain an empty :func:`output_handles`.
-
-    Beside ``output_handles`` because it reads that function's branches a second way: kept apart,
-    the two drift. Hence ``UNDETERMINED`` rather than a fall-through to ``TERMINAL``.
-    """
-
-    #: The End node. Nothing runs after the end of the pipeline, so nothing can be wired from it.
-    TERMINAL = "terminal"
-    #: A type naming no node class -- removed since, or never one. Its handles are unknowable.
-    UNKNOWN_TYPE = "unknown_type"
-    #: A router with no keywords yet: its handles *are* its branches, so it has none until they are set.
-    NO_BRANCHES = "no_branches"
-    #: Offers none for a reason this function does not recognise -- unreachable today.
-    UNDETERMINED = "undetermined"
-
-
-def why_no_output_handles(node_type: str) -> NoOutputHandles:
-    """Which of the empty cases applies. Only meaningful once :func:`output_handles` returned ``[]``.
-
-    Mirrors that function's branches in the same order, so the two are read together when a case is
-    added to either.
-    """
-    if node_type == EndNode.__name__:
-        return NoOutputHandles.TERMINAL
-    node_class = resolve_node_class(node_type)
-    if node_class is None:
-        return NoOutputHandles.UNKNOWN_TYPE
-    if issubclass(node_class, PipelineRouterNode):
-        return NoOutputHandles.NO_BRANCHES
-    return NoOutputHandles.UNDETERMINED
