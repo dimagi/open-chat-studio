@@ -86,6 +86,11 @@ class NodeType:
             return REACT_FLOW_END_TYPE
         return REACT_FLOW_NODE_TYPE
 
+    @property
+    def render_order(self) -> int:
+        """Sort key that puts the start node first and the end node last, leaving the rest in order."""
+        return {START_NODE_TYPE: 0, END_NODE_TYPE: 2}.get(self.type, 1)
+
 
 @cache
 def server_managed_node_types() -> frozenset[str]:

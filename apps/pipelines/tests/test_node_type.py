@@ -72,3 +72,9 @@ class TestReactFlowType:
     )
     def test_maps_node_type_to_react_flow_type(self, node_type, expected):
         assert NodeType(node_type).react_flow_type == expected
+
+
+class TestRenderOrder:
+    def test_pins_start_first_and_end_last(self):
+        start, middle, end = NodeType("StartNode"), NodeType("LLMResponseWithPrompt"), NodeType("EndNode")
+        assert start.render_order < middle.render_order < end.render_order
