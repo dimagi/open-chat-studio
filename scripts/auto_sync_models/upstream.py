@@ -180,7 +180,7 @@ def translate(data: dict[str, Any], today: datetime.date) -> tuple[Catalogue, Ca
 def _keep_best(catalogue: Catalogue, key: Key, record: ModelRecord) -> None:
     """Several price-table keys can map to one model; keep the best-ranked one."""
     incumbent = catalogue.get(key)
-    if incumbent is None or _key_rank(record.source_key or "", key[0]) < _key_rank(incumbent.source_key or "", key[0]):
+    if incumbent is None or _rank(record, key) < _rank(incumbent, key):
         catalogue[key] = record
 
 
@@ -242,14 +242,15 @@ def _translate_key(source_key: str, litellm_provider: str | None) -> Key | None:
     return namespace.ocs_provider, name
 
 
-def _key_rank(source_key: str, ocs_provider: str) -> tuple[int, int]:
+def _rank(record: ModelRecord, key: Key) -> tuple[int, int]:
     """Lower is better.
 
     A namespaced key beats a bare one so pricing reads the reseller's own rate,
     and a plain one beats a regional variant of the same model so the seed does
     not inherit a region's premium.
     """
-    prefix = f"{PREFIX_BY_OCS_PROVIDER[ocs_provider]}/"
+    source_key = record.source_key or ""
+    prefix = f"{PREFIX_BY_OCS_PROVIDER[key[0]]}/"
     return (0 if source_key.startswith(prefix) else 1, source_key.count("/"))
 
 

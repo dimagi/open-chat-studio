@@ -29,6 +29,7 @@ from scripts.auto_sync_models.records import (
     ModelRecord,
     PricingGap,
     RateChange,
+    Reconciliation,
 )
 from scripts.auto_sync_models.run import (
     MAX_REMOVED_FRACTION,
@@ -45,16 +46,10 @@ def ours(provider, name, rates=None, deprecated=False, token_limit=1000):
     return ModelRecord(provider=provider, name=name, token_limit=token_limit, rates=rates or {}, deprecated=deprecated)
 
 
-def theirs(provider, name, rates=None, deprecated=False, deprecation_date=None, source_key=None, params=None):
-    return ModelRecord(
-        provider=provider,
-        name=name,
-        rates=rates or {},
-        deprecated=deprecated,
-        deprecation_date=deprecation_date,
-        source_key=source_key or f"{provider}/{name}",
-        params=params or {},
-    )
+def theirs(provider, name, rates=None, **fields):
+    """An upstream record; ``source_key`` defaults to the key LiteLLM would use."""
+    fields.setdefault("source_key", f"{provider}/{name}")
+    return ModelRecord(provider=provider, name=name, rates=rates or {}, **fields)
 
 
 def catalogue(*records):
@@ -784,12 +779,9 @@ def test_the_gate_variable_reaches_github_output(diff, expected, repo_root, tmp_
     gate = tmp_path / "gh-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(gate))
     dispatch(
-        diff=diff,
-        orphan_rows=[],
-        ledger={},
+        reconciliation=Reconciliation(diff=diff, orphan_rows=[], ledger={}, today=TODAY),
         repo_root=repo_root,
         output=tmp_path / "reconciliation.json",
-        today=TODAY,
     )
     assert expected in gate.read_text()
 
@@ -797,10 +789,7 @@ def test_the_gate_variable_reaches_github_output(diff, expected, repo_root, tmp_
 def test_no_gate_variable_outside_actions(repo_root, tmp_path, monkeypatch):
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
     dispatch(
-        diff=Diff(),
-        orphan_rows=[],
-        ledger={},
+        reconciliation=Reconciliation(diff=Diff(), orphan_rows=[], ledger={}, today=TODAY),
         repo_root=repo_root,
         output=tmp_path / "reconciliation.json",
-        today=TODAY,
     )

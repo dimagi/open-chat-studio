@@ -15,19 +15,16 @@ import os
 from pathlib import Path
 
 from .catalogue import LEDGER_REL_PATH, load_seed, write_ledger
-from .records import PENDING, Diff, Key, LedgerEntry, ModelRecord, RateChange
+from .records import PENDING, Diff, Key, LedgerEntry, ModelRecord, RateChange, Reconciliation
 from .upstream import SOURCE_URL
 
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 
 
 def dispatch(
-    diff: Diff,
-    orphan_rows: list[dict],
-    ledger: dict[Key, LedgerEntry],
+    reconciliation: Reconciliation,
     repo_root: Path,
     output: Path,
-    today: datetime.date,
     dry_run: bool = False,
 ) -> None:
     """Write everything this run can derive on its own.
@@ -37,12 +34,15 @@ def dispatch(
     migration the catalogue work needs, which only a reader of
     ``docs/developer_guides/managing_models.md`` can write.
     """
+    diff = reconciliation.diff
     _write_pricing_update(diff, repo_root, output, dry_run)
     if diff.added and not dry_run:
-        path = write_ledger(repo_root, advance_ledger(ledger, diff.added, today))
+        advanced = advance_ledger(reconciliation.ledger, diff.added, reconciliation.today)
+        path = write_ledger(repo_root, advanced)
         print(f"  -> recorded {len(diff.added)} model(s) as pending in {path.name}")
 
-    payload = build_payload(diff, orphan_rows, run_date=datetime.datetime.now(datetime.UTC).isoformat())
+    run_date = datetime.datetime.now(datetime.UTC).isoformat()
+    payload = build_payload(diff, reconciliation.orphan_rows, run_date=run_date)
     output.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"\n  Output -> {output}")
     for name, value in payload["summary"].items():

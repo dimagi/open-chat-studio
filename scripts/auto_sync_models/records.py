@@ -8,6 +8,7 @@ set algebra rather than per-model probing.
 from __future__ import annotations
 
 import dataclasses
+import datetime
 from dataclasses import dataclass, field
 
 # (provider, model_name)
@@ -114,3 +115,13 @@ class Diff:
     def has_work(self) -> bool:
         """Whether this run is worth an agent. ``unpriced`` is reported, never acted on."""
         return self.has_catalogue_work or self.has_pricing_work
+
+
+@dataclass(frozen=True)
+class Reconciliation:
+    """What layers 1-5 produced, and the date they were produced against."""
+
+    diff: Diff
+    orphan_rows: list[dict]
+    ledger: dict[Key, LedgerEntry]
+    today: datetime.date

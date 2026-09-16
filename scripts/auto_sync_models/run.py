@@ -7,7 +7,7 @@ The script is six layers, and ``main`` is those six calls in order::
     layer 3  theirs = fetch() |> translate()           -> Catalogue
     layer 4  ledger = read_ledger()                    -> the pipeline's memory
     layer 5  diff   = compare(...)                     -> six lists
-    layer 6  dispatch(diff)                            -> seed, ledger, payload
+    layer 6  dispatch(reconciliation)                  -> seed, ledger, payload
 
 Layer 5 yields one list per rule:
 
@@ -56,6 +56,7 @@ from .records import (
     ModelRecord,
     PricingGap,
     RateChange,
+    Reconciliation,
 )
 from .upstream import UpstreamUnavailable, fetch, translate
 
@@ -150,7 +151,7 @@ def _compare_pricing(
     return repriced, backfilled, gaps
 
 
-def run(repo_root: Path, today: datetime.date) -> tuple[Diff, list[dict], dict[Key, LedgerEntry]]:
+def run(repo_root: Path, today: datetime.date) -> Reconciliation:
     """The six layers, minus dispatch. Returns what dispatch needs to write."""
     print("  Layer 1: reading the OCS model catalogue ...")
     ours, deleted = read_default_models(repo_root)
@@ -177,7 +178,7 @@ def run(repo_root: Path, today: datetime.date) -> tuple[Diff, list[dict], dict[K
         f"  -> {len(diff.added)} added, {len(diff.removed)} removed, {len(diff.deprecated)} newly deprecated, "
         f"{len(diff.repriced)} repriced, {len(diff.backfilled)} to backfill, {len(diff.unpriced)} uncostable"
     )
-    return diff, orphan_rows, ledger
+    return Reconciliation(diff=diff, orphan_rows=orphan_rows, ledger=ledger, today=today)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -191,19 +192,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[auto-sync-models] repo_root={repo_root} today={today}")
 
     try:
-        diff, orphan_rows, ledger = run(repo_root, today)
+        reconciliation = run(repo_root, today)
     except UpstreamUnavailable as exc:
         print(f"  (!) {exc}")
         return 1
 
     print("  Layer 6: dispatching ...")
     dispatch.dispatch(
-        diff=diff,
-        orphan_rows=orphan_rows,
-        ledger=ledger,
+        reconciliation=reconciliation,
         repo_root=repo_root,
         output=args.output,
-        today=today,
         dry_run=args.dry_run,
     )
     return 0

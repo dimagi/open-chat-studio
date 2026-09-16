@@ -10,6 +10,7 @@ import ast
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TypeGuard
 
 from .records import PENDING, Catalogue, Key, LedgerEntry, ModelRecord
 
@@ -78,12 +79,20 @@ def _model_record(provider: str, node: ast.expr) -> ModelRecord | None:
 
 def _token_limit(node: ast.expr | None) -> int | None:
     """Read a literal limit, or the ``k(n)`` helper default_models.py uses for KiB."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool):
-        return node.value
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "k" and node.args:
-        multiplicand = _token_limit(node.args[0])
-        return multiplicand * KIBI if multiplicand is not None else None
-    return None
+    literal = _const_int(node)
+    if literal is not None:
+        return literal
+    if not _is_kibi_call(node):
+        return None
+    multiplicand = _token_limit(node.args[0])
+    return multiplicand * KIBI if multiplicand is not None else None
+
+
+def _is_kibi_call(node: ast.expr | None) -> TypeGuard[ast.Call]:
+    """``k(n)``, the KiB helper default_models.py writes token limits with."""
+    if not isinstance(node, ast.Call) or not node.args:
+        return False
+    return isinstance(node.func, ast.Name) and node.func.id == "k"
 
 
 def _deleted_keys(node: ast.expr | None) -> Iterator[Key]:
@@ -96,6 +105,13 @@ def _deleted_keys(node: ast.expr | None) -> Iterator[Key]:
         provider, model = _const_str(element.elts[0]), _const_str(element.elts[1])
         if provider is not None and model is not None:
             yield provider, model
+
+
+def _const_int(node: ast.expr | None) -> int | None:
+    """``True`` is an ``int`` in Python and is never a token limit."""
+    if not isinstance(node, ast.Constant) or isinstance(node.value, bool):
+        return None
+    return node.value if isinstance(node.value, int) else None
 
 
 def _const_str(node: ast.expr | None) -> str | None:
