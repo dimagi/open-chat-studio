@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS, Model
 from apps.service_providers.management.commands.check_llm_model_usage import Command
 
