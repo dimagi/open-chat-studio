@@ -14,7 +14,7 @@ class Command(IdempotentCommand):
         deprecated_with_replacement = get_deprecated_models()
         if not deprecated_with_replacement:
             self.stdout.write(self.style.SUCCESS("No deprecated models found"))
-            return
+            return None
 
         # Find DB records for each deprecated model
         db_models = []  # list of (db_model, model_name, replacement_name)
@@ -28,7 +28,7 @@ class Command(IdempotentCommand):
 
         if not db_models:
             self.stdout.write(self.style.SUCCESS("No deprecated models found in database"))
-            return
+            return None
 
         # For each deprecated model, find affected teams
         # Structure: {db_model_id: (teams_data, model_name, replacement)}

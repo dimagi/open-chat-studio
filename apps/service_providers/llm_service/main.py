@@ -45,13 +45,9 @@ logger = logging.getLogger("ocs.llm_service")
 class OpenAIBuiltinTool(dict):
     """A simple wrapper for OpenAI's builtin tools. This is used to easily distinquish OpenAI tools from dicts"""
 
-    pass
-
 
 class AnthropicBuiltinTool(dict):
     """A simple wrapper for Anthorpic's builtin tools. This is used to easily distinquish Anthorpic tools from dicts"""
-
-    pass
 
 
 class LlmService(pydantic.BaseModel):
@@ -145,10 +141,7 @@ class LlmService(pydantic.BaseModel):
                 Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
             ).all()
 
-        parsed_output = LlmChatResponse(
-            text=final_text, cited_files=set(cited_files), generated_files=set(generated_files)
-        )
-        return parsed_output
+        return LlmChatResponse(text=final_text, cited_files=set(cited_files), generated_files=set(generated_files))
 
     def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         raise NotImplementedError

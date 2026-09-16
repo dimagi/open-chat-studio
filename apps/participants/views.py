@@ -280,8 +280,7 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, S
         query = Participant.objects.filter(team=self.request.team)
         timezone = self.request.session.get("detected_tz", None)
         filter_set = ParticipantFilter()
-        query = filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
-        return query
+        return filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
         """Attach per-page cost to the table.

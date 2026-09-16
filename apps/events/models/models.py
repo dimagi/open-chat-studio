@@ -519,7 +519,7 @@ class ScheduledMessage(BaseTeamModel):
             experiment_session = self.participant.get_latest_session(experiment=self.experiment)
             if not experiment_session:
                 # Schedules probably created by the API
-                return
+                return None
             trace_info = TraceInfo(
                 name="scheduled message",
                 metadata={

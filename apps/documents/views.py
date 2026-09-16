@@ -624,8 +624,7 @@ class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Si
         if search := self.request.GET.get("search"):
             queryset = similarity_search(queryset, search_phase=search, columns=["name"])
 
-        queryset = queryset.annotate(file_count=Count("files"))
-        return queryset
+        return queryset.annotate(file_count=Count("files"))
 
 
 class CollectionFormMixin:

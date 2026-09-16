@@ -165,7 +165,7 @@ class Tracer(ABC):
         email routing) and the session is resolved partway through the
         pipeline. Default is a no-op for tracers that cannot back-fill.
         """
-        return None
+        return
 
     def set_trace_metadata(self, metadata: dict[str, Any]) -> None:
         return None

@@ -96,7 +96,7 @@ class CustomActionForm(forms.ModelForm):
 
     def clean(self):
         if self.errors:
-            return
+            return None
 
         schema = self.cleaned_data.get("api_schema")
         server_url = self.cleaned_data.get("server_url")

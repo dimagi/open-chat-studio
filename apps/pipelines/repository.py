@@ -20,8 +20,6 @@ if TYPE_CHECKING:
 class RepositoryLookupError(Exception):
     """Raised when a repository lookup finds no matching record."""
 
-    pass
-
 
 class CollectionFileInfo(NamedTuple):
     id: int

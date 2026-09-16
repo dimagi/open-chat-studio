@@ -223,7 +223,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        context = get_filter_context_data(
+        return get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
             filter_class=ExperimentSessionFilter,
@@ -231,7 +231,6 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
-        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -475,8 +474,7 @@ def update_message(request, team_slug, message_id):
         response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
-        response = reswap(response, "outerHTML")
-        return response
+        return reswap(response, "outerHTML")
     return HttpResponse("", status=200)
 
 

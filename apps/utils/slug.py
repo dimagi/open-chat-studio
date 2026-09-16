@@ -43,6 +43,7 @@ def _get_next_unique_value(value_iterator, model_class, field_name, model_instan
 
         if count > max_iterations:
             raise ValueError(f"Unable to generate a unique value after {max_iterations} attempts.")
+    return None
 
 
 def next_hash_id_iterator(inputs, length=8):

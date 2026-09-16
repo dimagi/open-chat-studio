@@ -244,8 +244,7 @@ def _option(
     data = data | ({"edit_url": edit_url} if edit_url else {})
     # 0 is a real limit -- it disables history compression -- so only an absent one is dropped.
     data = data | ({"max_token_limit": max_token_limit} if max_token_limit is not None else {})
-    data = data | ({"deprecated": True} if deprecated else {})
-    return data
+    return data | ({"deprecated": True} if deprecated else {})
 
 
 def get_node_default_values(team: Team, usable_models_only: bool = False) -> dict:

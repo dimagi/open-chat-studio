@@ -6,29 +6,27 @@ from apps.pipelines.flow import Flow, FlowNode, node_position_fields, react_flow
 def _full_flow():
     """A full graph: every node carries its content under ``data``."""
     return Flow(
-        **{
-            "nodes": [
-                {
-                    "id": "start-1",
-                    "type": "startNode",
-                    "position": {"x": 100, "y": 200},
-                    "data": {"id": "start-1", "type": "StartNode", "label": "", "params": {"name": "start"}},
-                },
-                {
+        nodes=[
+            {
+                "id": "start-1",
+                "type": "startNode",
+                "position": {"x": 100, "y": 200},
+                "data": {"id": "start-1", "type": "StartNode", "label": "", "params": {"name": "start"}},
+            },
+            {
+                "id": "llm-1",
+                "type": "pipelineNode",
+                "position": {"x": 300, "y": 0},
+                "data": {
                     "id": "llm-1",
-                    "type": "pipelineNode",
-                    "position": {"x": 300, "y": 0},
-                    "data": {
-                        "id": "llm-1",
-                        "type": "LLMResponseWithPrompt",
-                        "label": "LLM",
-                        "params": {"name": "llm-1", "prompt": "Be helpful"},
-                    },
+                    "type": "LLMResponseWithPrompt",
+                    "label": "LLM",
+                    "params": {"name": "llm-1", "prompt": "Be helpful"},
                 },
-            ],
-            "edges": [{"id": "e1", "source": "start-1", "target": "llm-1"}],
-            "viewport": {"x": 0, "y": 0, "zoom": 1},
-        }
+            },
+        ],
+        edges=[{"id": "e1", "source": "start-1", "target": "llm-1"}],
+        viewport={"x": 0, "y": 0, "zoom": 1},
     )
 
 
@@ -110,11 +108,11 @@ class TestNodePositionFields:
 
 class TestFlowNodeParsing:
     def test_parses_layout_only_node(self):
-        node = FlowNode(**{"id": "n1", "type": "pipelineNode", "position": {"x": 1, "y": 2}})
+        node = FlowNode(id="n1", type="pipelineNode", position={"x": 1, "y": 2})
 
         assert node.data is None
 
     def test_parses_full_node(self):
-        node = FlowNode(**{"id": "n1", "type": "pipelineNode", "data": {"id": "n1", "type": "StartNode", "params": {}}})
+        node = FlowNode(id="n1", type="pipelineNode", data={"id": "n1", "type": "StartNode", "params": {}})
 
         assert node.data.type == "StartNode"

@@ -98,9 +98,8 @@ def collect_team_admin_emails(team):
     Returns:
         List of email addresses (strings)
     """
-    admin_emails = [
+    return [
         membership.user.email
         for membership in team.membership_set.select_related("user").prefetch_related("groups")
         if membership.is_team_admin()
     ]
-    return admin_emails

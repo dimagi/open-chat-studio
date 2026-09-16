@@ -33,7 +33,7 @@ class Command(IdempotentCommand):
         teams_context = self._build_teams_context()
         if not teams_context:
             self.stdout.write(self.style.SUCCESS("No OpenAI Assistants found"))
-            return
+            return None
 
         total_teams = len(teams_context)
         total_assistants = sum(context["assistant_count"] for context in teams_context.values())

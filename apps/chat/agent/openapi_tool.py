@@ -162,7 +162,7 @@ class OpenAPIOperationExecutor:
             msg = Message()
             msg["content-disposition"] = content_disposition
             if msg.get_content_disposition() != "attachment":
-                return
+                return None
 
             filename = msg.get_filename()
         except Exception as e:

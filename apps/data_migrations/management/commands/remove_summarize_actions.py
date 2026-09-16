@@ -17,7 +17,7 @@ class Command(IdempotentCommand):
 
         if not summarize_actions.exists():
             self.stdout.write(self.style.SUCCESS("No summarize actions found"))
-            return
+            return None
 
         # Build affected experiments by team (only working versions for email notifications)
         teams_data = defaultdict(lambda: {"experiments": set()})

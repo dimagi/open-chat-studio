@@ -274,8 +274,7 @@ def _evaluator_parameter_values(team, llm_providers, llm_provider_models):
     def _option(value, label, type_=None, max_token_limit=None):
         data = {"value": value, "label": label}
         data = data | ({"type": type_} if type_ else {})
-        data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
-        return data
+        return data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
 
     return {
         "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],

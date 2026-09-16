@@ -153,8 +153,7 @@ class PipelineBot:
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
         raw_output = runner.invoke(runnable, input_state, config)
-        output = PipelineState(**raw_output).json_safe()
-        return output
+        return PipelineState(**raw_output).json_safe()
 
     def _process_interrupts(self, output):
         if interrupt := output.get("interrupt"):
@@ -294,8 +293,7 @@ class PipelineTestBot:
             config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
             output = runner.invoke(runnable, state, config)
-            output = PipelineState(**output).json_safe()
-        return output
+            return PipelineState(**output).json_safe()
 
 
 class EventBot:

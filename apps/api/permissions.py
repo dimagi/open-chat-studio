@@ -391,8 +391,7 @@ def _get_connect_secret_digest(data_bytes: bytes) -> bytes:
 
 def get_hmac_digest(key: bytes, data_bytes: bytes) -> bytes:
     digest = hmac.new(key, data_bytes, hashlib.sha256).digest()
-    digest_base64 = base64.b64encode(digest)
-    return digest_base64
+    return base64.b64encode(digest)
 
 
 def convert_to_bytestring_if_unicode(shared_key):

@@ -155,7 +155,7 @@ class RestrictedPythonExecutionMixin(BaseModel):
     @classmethod
     def _get_custom_globals(cls) -> dict[str, Any]:
         """Get the base global environment for code execution."""
-        custom_globals = {
+        return {
             "__builtins__": cls._get_custom_builtins(),
             "json": json,
             "re": re,
@@ -173,7 +173,6 @@ class RestrictedPythonExecutionMixin(BaseModel):
             "_write_": restricted_write,
             "_inplacevar_": restricted_inplacevar,
         }
-        return custom_globals
 
     @classmethod
     def _get_custom_builtins(cls) -> dict[str, Any]:

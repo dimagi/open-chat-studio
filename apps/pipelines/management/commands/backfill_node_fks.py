@@ -54,7 +54,7 @@ class Command(IdempotentCommand):
 
         if dry_run:
             self.stdout.write(f"Would backfill FK fields for {total} nodes")
-            return
+            return None
 
         self.stdout.write(f"Backfilling FK fields for {total} nodes...")
 

@@ -819,6 +819,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
+        return None
 
     def get_api_url(self):
         if self.is_working_version:
@@ -1721,8 +1722,7 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_metadata = trace_service.get_trace_metadata()
-                return trace_metadata
+                    return trace_service.get_trace_metadata()
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

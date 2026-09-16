@@ -135,12 +135,19 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PLC0415", "TID253"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "PLC0415", "TID253"]
 ignore = [
     "PT019",
     "SIM102",
     "SIM108",
     "SIM117",
+    # An explicit `else`/`elif` after a `return` is the clearer shape where the branches are
+    # parallel in meaning (dispatch on request method, on node type, on provider). 63 hits, all
+    # of them de-indenting a block for no behaviour change. RET501-RET504 stay on.
+    "RET505",
+    "RET506",
+    "RET507",
+    "RET508",
     # Unicode-confusable checks: the flagged characters are intentional in human-facing
     # strings, docstrings and comments (en dashes, ×, curly quotes).
     "RUF001",

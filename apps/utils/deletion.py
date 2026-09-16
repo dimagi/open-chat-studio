@@ -304,11 +304,10 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = No
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
-    pipelines = Node.objects.filter(
+    return Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}__contains": instance.id})
         | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
     )
-    return pipelines
 
 
 def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):

@@ -884,6 +884,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
         except Exception as e:
             logger.error(f"Error starting CSV upload for evaluation run {evaluation_run.id}: {e!s}")
             return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
+    return None
 
 
 @login_and_team_required

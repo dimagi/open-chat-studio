@@ -818,7 +818,7 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
-        return
+        return None
 
     auth_service = custom_action.get_auth_service()
     path = next(iter(spec.paths))

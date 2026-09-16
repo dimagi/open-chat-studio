@@ -249,13 +249,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         )
 
         # Add expensive annotations only to paginated data
-        queryset = queryset.annotate(
+        return queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
             interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
             last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
         ).order_by(F("last_activity").desc(nulls_last=True))
-        return queryset
 
 
 class CreateChatbot(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -672,10 +671,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         query_set = query_set.filter(self.extra_filters())
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
-        return query_set
+        return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
         """Configure the table, then attach the tag prefetch to the paginated page only.

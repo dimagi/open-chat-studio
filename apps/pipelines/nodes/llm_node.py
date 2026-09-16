@@ -209,8 +209,7 @@ def _get_search_tool(node):
         search_config = SearchToolConfig(
             index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
         )
-        search_tool = SearchIndexTool(search_config=search_config)
-        return search_tool
+        return SearchIndexTool(search_config=search_config)
 
     # Multiple collections: check if they're remote or local
     first_collection = collections[0]
@@ -227,12 +226,11 @@ def _get_search_tool(node):
         )
     else:
         # All local: use the multi-index search tool
-        search_tool = SearchCollectionByIdTool(
+        return SearchCollectionByIdTool(
             max_results=node.max_results,
             generate_citations=node.generate_citations,
             allowed_collection_ids=node.collection_index_ids,
         )
-        return search_tool
 
 
 def _get_final_ai_message(messages: list) -> AIMessage:
