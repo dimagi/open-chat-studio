@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS, Model
 from apps.service_providers.management.commands.check_llm_model_usage import Command
 
@@ -78,41 +80,39 @@ class TestGetSuggestedReplacement:
 # ---------------------------------------------------------------------------
 
 
-class TestGeminiVertexRegressionRealConfig:
+@pytest.mark.parametrize(
+    ("provider_type", "model_name"),
+    [
+        pytest.param("google_vertex_ai", "gemini-2.5-pro", id="vertex-gemini-2.5-pro"),
+        pytest.param("google_vertex_ai", "gemini-2.5-flash", id="vertex-gemini-2.5-flash"),
+        pytest.param("google_vertex_ai", "gemini-2.5-flash-lite", id="vertex-gemini-2.5-flash-lite"),
+    ],
+)
+def test_vertex_deprecated_model_uses_explicit_replacement(provider_type, model_name):
     """
-    Regression guard for the google_vertex_ai / gemini-2.5-pro case described
+    Regression guard for the google_vertex_ai / gemini-2.5-* cases described
     in issue #4509.
 
-    Real config (default_models.py):
+    The real config has e.g.:
         Model("gemini-2.5-pro", ..., deprecated=True, replacement="gemini-3.6-flash")
         Model("gemini-3.5-flash", ..., is_default=True)
 
     The old code returned "gemini-3.5-flash" (the provider default) instead of
     "gemini-3.6-flash" (the configured replacement), sending teams to the wrong
-    migration target when they ran ``check_llm_model_usage --deprecated-only``.
+    migration target when they ran ``check_llm_model_usage --deprecated-only``
+    before the Gemini 2.5 Vertex AI deprecation deadline (2026-10-20).
     """
+    cmd = Command()
+    db_model = _mock_db_model(provider_type, model_name)
+    result = cmd._get_suggested_replacement(db_model)
 
-    def _check_model(self, provider_type, model_name):
-        cmd = Command()
-        db_model = _mock_db_model(provider_type, model_name)
-        result = cmd._get_suggested_replacement(db_model)
+    provider_models = DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, [])
+    configured = next((m for m in provider_models if m.name == model_name), None)
+    assert configured is not None, f"{model_name} must still be listed under {provider_type}"
+    assert configured.replacement, f"{model_name} must still have an explicit replacement set"
 
-        provider_models = DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, [])
-        configured = next((m for m in provider_models if m.name == model_name), None)
-        assert configured is not None, f"{model_name} must still be listed under {provider_type}"
-        assert configured.replacement, f"{model_name} must still have an explicit replacement set"
-
-        assert result == configured.replacement, (
-            f"Expected '{configured.replacement}' but got '{result}'. "
-            "check_llm_model_usage must honour the explicit replacement, "
-            "not the provider default, to stay consistent with notify_deprecated_models."
-        )
-
-    def test_gemini_25_pro_vertex_uses_explicit_replacement(self):
-        self._check_model("google_vertex_ai", "gemini-2.5-pro")
-
-    def test_gemini_25_flash_vertex_uses_explicit_replacement(self):
-        self._check_model("google_vertex_ai", "gemini-2.5-flash")
-
-    def test_gemini_25_flash_lite_vertex_uses_explicit_replacement(self):
-        self._check_model("google_vertex_ai", "gemini-2.5-flash-lite")
+    assert result == configured.replacement, (
+        f"Expected '{configured.replacement}' but got '{result}'. "
+        "check_llm_model_usage must honour the explicit replacement, "
+        "not the provider default, to stay consistent with notify_deprecated_models."
+    )
