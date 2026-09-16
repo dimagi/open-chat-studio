@@ -152,10 +152,7 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        pickable = Q(is_archived=False)
-        if self.instance.pk:
-            pickable |= Q(id__in=self.instance.evaluators.values("id"))
-        evaluator_qs = Evaluator.objects.filter(team=team).filter(pickable)
+        evaluator_qs = self._pickable_evaluators(team)
         self.fields["evaluators"].queryset = evaluator_qs
         if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
             self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
@@ -198,6 +195,13 @@ class EvaluationConfigForm(forms.ModelForm):
     def _get_version_choices(self, experiment_id: int):
         """Get all versions for a specific experiment including working version"""
         return Experiment.objects.all_versions_queryset(experiment_id).filter(team=self.team)
+
+    def _pickable_evaluators(self, team):
+        """Active evaluators, plus the archived ones already on this config so they can be unticked."""
+        pickable = Q(is_archived=False)
+        if self.instance.pk:
+            pickable |= Q(id__in=self.instance.evaluators.values("id"))
+        return Evaluator.objects.filter(team=team).filter(pickable)
 
     def clean(self):
         cleaned_data = super().clean()

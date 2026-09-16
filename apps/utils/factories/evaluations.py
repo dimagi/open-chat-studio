@@ -197,11 +197,15 @@ class EvaluationRunFactory(DjangoModelFactory):
 
     @factory.post_generation
     def evaluator_ids(self, create, extracted, **kwargs):
-        """Freeze the config's members into the plan, as `EvaluationConfig.run()` does, unless given."""
+        """Freeze the config's members into the plan, as `EvaluationConfig.run()` does, unless given.
+
+        Only a created run has a saved config to read members from; a built one keeps
+        whatever plan it was given.
+        """
+        if extracted is None and create:
+            extracted = list(self.config.active_evaluators.values_list("id", flat=True))
         if extracted is not None:
             self.evaluator_ids = extracted
-        elif not self.evaluator_ids:
-            self.evaluator_ids = list(self.config.active_evaluators.values_list("id", flat=True))
         if create:
             self.save(update_fields=["evaluator_ids"])
 
