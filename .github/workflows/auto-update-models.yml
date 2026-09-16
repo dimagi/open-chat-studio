@@ -109,8 +109,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The ledger advances only when a PR merges, so the same models are
-          # re-offered while one sits open. Skip rather than stack a second PR.
           EXISTING=$(gh pr list --state open --search 'head:auto-models/' --limit 100 \
             --json number,headRefName \
             --jq '[.[] | select(.headRefName | startswith("auto-models/"))] | .[0].number // empty')
