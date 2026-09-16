@@ -15,11 +15,10 @@ import os
 from pathlib import Path
 
 from .catalogue import LEDGER_REL_PATH, load_seed, write_ledger
-from .records import PENDING, Diff, Key, LedgerEntry, ModelRecord, PricingGap, RateChange
+from .records import PENDING, Diff, Key, LedgerEntry, ModelRecord, RateChange
 from .upstream import SOURCE_URL
 
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
-MIGRATIONS_DIR_REL_PATH = "apps/cost_tracking/migrations"
 
 
 def dispatch(
@@ -31,9 +30,14 @@ def dispatch(
     today: datetime.date,
     dry_run: bool = False,
 ) -> None:
-    """Write every artefact this run produces, then the gate variables."""
-    pricing_body_path = _write_pricing_update(diff, repo_root, output, today, dry_run)
-    missing_body_path = _write_missing_pricing_issue(diff, output, dry_run)
+    """Write everything this run can derive on its own.
+
+    The seed rewrite, the payload and the ledger are mechanical. The migration
+    that loads the seed is not: it belongs in the same file as the model-list
+    migration the catalogue work needs, which only a reader of
+    ``docs/developer_guides/managing_models.md`` can write.
+    """
+    _write_pricing_update(diff, repo_root, output, dry_run)
     if diff.added and not dry_run:
         path = write_ledger(repo_root, advance_ledger(ledger, diff.added, today))
         print(f"  -> recorded {len(diff.added)} model(s) as pending in {path.name}")
@@ -44,32 +48,38 @@ def dispatch(
     for name, value in payload["summary"].items():
         print(f"  {name}: {value}")
 
-    _write_github_output(
-        github_outputs(diff, today=today, pricing_body_path=pricing_body_path, missing_body_path=missing_body_path)
-    )
+    _write_gate(diff)
 
 
-# The pricing PR: seed rewrite + migration + body
+def _write_gate(diff: Diff) -> None:
+    """One variable, so the workflow can skip the agent when there is nothing to do.
+
+    The script owns what counts as work; computing it again in YAML would be a
+    second definition to drift from this one.
+    """
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a") as handle:
+        handle.write(f"has_work={'true' if diff.has_work else 'false'}\n")
 
 
-def _write_pricing_update(
-    diff: Diff, repo_root: Path, output: Path, today: datetime.date, dry_run: bool
-) -> Path | None:
-    """Rewrite the seed, emit a migration, write the PR body. None when there is nothing to do."""
+# The pricing seed
+
+
+def _write_pricing_update(diff: Diff, repo_root: Path, output: Path, dry_run: bool) -> None:
+    """Rewrite the seed and render the rate table the PR description quotes."""
     if not diff.has_pricing_work:
-        return None
+        return
     if dry_run:
         print(f"  -> dry run: would apply {len(diff.repriced)} rate change(s) and {len(diff.backfilled)} backfill(s)")
-        return None
+        return
 
     seed_path = repo_root / LLM_PRICING_REL_PATH
     seed_path.write_text(json.dumps(apply_rate_changes(load_seed(repo_root), diff), indent=2) + "\n")
-    migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
-    print(f"  -> updated the seed and wrote {migration_path.name}")
-
     body_path = output.with_name(output.stem + ".pricing-body.md")
     body_path.write_text(render_pricing_pr_body(diff))
-    return body_path
+    print(f"  -> updated the seed; rate table in {body_path.name}")
 
 
 def apply_rate_changes(seed: list[dict], diff: Diff) -> list[dict]:
@@ -101,24 +111,6 @@ def _apply_to_row(row: dict, updates: dict[Key, dict[str, str]]) -> dict:
 
 def _rules(rates: dict[str, str]) -> list[dict]:
     return [{"service_kind": kind, "unit_price": price} for kind, price in rates.items()]
-
-
-def generate_migration(migrations_dir: Path, today: datetime.date) -> Path:
-    """Write a rate-update migration depending on the latest existing one."""
-    existing = sorted(path.stem for path in migrations_dir.glob("[0-9]*.py"))
-    if not existing:
-        raise RuntimeError(f"No existing migrations in {migrations_dir}")
-    previous = existing[-1]
-    number = int(previous.split("_", 1)[0]) + 1
-    target = migrations_dir / f"{number:04d}_rate_update_{today.strftime('%Y%m%d')}.py"
-    target.write_text(
-        "from django.db import migrations\n\n"
-        "from apps.cost_tracking.migration_utils import load_pricing_data\n\n\n"
-        "class Migration(migrations.Migration):\n"
-        f'    dependencies = [("cost_tracking", "{previous}")]\n'
-        "    operations = [load_pricing_data()]\n"
-    )
-    return target
 
 
 def render_pricing_pr_body(diff: Diff) -> str:
@@ -160,40 +152,6 @@ def render_pricing_pr_body(diff: Diff) -> str:
     return "\n".join(lines) + "\n"
 
 
-def pricing_pr_title(diff: Diff, today: datetime.date) -> str:
-    parts = []
-    if diff.repriced:
-        parts.append(f"{len(diff.repriced)} rate change(s)")
-    if diff.backfilled:
-        parts.append(f"{len(diff.backfilled)} backfilled")
-    return f"Pricing update: {', '.join(parts)} ({today.isoformat()})"
-
-
-# The missing-pricing issue
-
-
-def _write_missing_pricing_issue(diff: Diff, output: Path, dry_run: bool) -> Path | None:
-    if not diff.unpriced or dry_run:
-        return None
-    body_path = output.with_name(output.stem + ".missing-pricing-body.md")
-    body_path.write_text(render_missing_pricing_issue_body(diff.unpriced))
-    return body_path
-
-
-def render_missing_pricing_issue_body(gaps: list[PricingGap]) -> str:
-    lines = [
-        "These OCS-registered models have no usable pricing in",
-        "`apps/cost_tracking/seed_data/llm_pricing.json`, and LiteLLM has none to",
-        "backfill from. The dashboard cannot compute exact costs for their usage",
-        "until a seed entry is added by hand.",
-        "",
-        "| Provider | Model | Missing |",
-        "| --- | --- | --- |",
-        *(f"| {gap.provider} | {gap.model} | {', '.join(gap.kinds_missing)} |" for gap in gaps),
-    ]
-    return "\n".join(lines) + "\n"
-
-
 # The ledger
 
 
@@ -222,7 +180,7 @@ def advance_ledger(
     return advanced
 
 
-# The payload and the workflow gates
+# The payload
 
 
 def build_payload(diff: Diff, orphan_rows: list[dict], run_date: str) -> dict:
@@ -279,49 +237,3 @@ def _rate_entry(change: RateChange) -> dict:
         "old_price": change.old_price,
         "new_price": change.new_price,
     }
-
-
-def github_outputs(
-    diff: Diff,
-    today: datetime.date,
-    pricing_body_path: Path | None,
-    missing_body_path: Path | None,
-) -> list[str]:
-    """The gate variables the workflow reads back from ``$GITHUB_OUTPUT``.
-
-    The pricing PR is gated on its body having been written rather than on
-    changes being found: ``--dry-run`` finds them and writes nothing.
-    """
-    values: dict[str, object] = {
-        "has_catalogue_work": diff.has_catalogue_work,
-        "new_model_count": len(diff.added),
-        "new_model_ids": ",".join(f"{r.provider}/{r.name}" for r in diff.added),
-        "deprecated_count": len(diff.deprecated),
-        "removed_count": len(diff.removed),
-        "removed_model_ids": ",".join(f"{r.provider}/{r.name}" for r in diff.removed),
-        "has_price_changes": pricing_body_path is not None,
-        "price_change_count": len(diff.repriced),
-        "backfilled_count": len(diff.backfilled),
-        "pricing_pr_title": pricing_pr_title(diff, today) if pricing_body_path else "",
-        "pricing_pr_body_path": pricing_body_path,
-        "has_missing_pricing": missing_body_path is not None,
-        "missing_pricing_count": len(diff.unpriced),
-        "missing_pricing_issue_body_path": missing_body_path,
-    }
-    return [f"{name}={_render(value)}" for name, value in values.items()]
-
-
-def _render(value: object) -> str:
-    """Booleans as Actions expects them, and an absent path as an empty string."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return "" if value is None else str(value)
-
-
-def _write_github_output(lines: list[str]) -> None:
-    path = os.environ.get("GITHUB_OUTPUT")
-    if not path:
-        return
-    with open(path, "a") as handle:
-        for line in lines:
-            handle.write(f"{line}\n")

@@ -7,14 +7,15 @@ The script is six layers, and ``main`` is those six calls in order::
     layer 3  theirs = fetch() |> translate()           -> Catalogue
     layer 4  ledger = read_ledger()                    -> the pipeline's memory
     layer 5  diff   = compare(...)                     -> six lists
-    layer 6  dispatch(diff)                            -> files, bodies, gates
+    layer 6  dispatch(diff)                            -> seed, ledger, payload
 
 Layer 5 yields one list per rule:
 
 * ``added``       upstream has it, we do not, we never deleted it, and we have
   not rejected it. A model left undecided by an earlier run is still here, so
   nothing is stranded. Drives the catalogue PR.
-* ``removed``     we list it, LiteLLM no longer does at all. Report only.
+* ``removed``     we list it, LiteLLM no longer does at all. Drives the
+  catalogue PR, which retires it.
 * ``deprecated``  we still list it as active, its upstream deprecation date has
   passed. Drives the catalogue PR.
 * ``repriced``    a rate we hold has moved upstream. Drives the pricing PR.
@@ -29,8 +30,9 @@ Usage (from the repo root)::
         [--dry-run] \\
         [--today YYYY-MM-DD]    # deterministic-tests override
 
-Exit code is 1 when the price table cannot be read; every signal derives from
-it, so a run without it has nothing to say.
+Exit code is 1 when the price table cannot be read, or reads back too small or
+too destructive to be believed; every signal derives from it, so a run without a
+trustworthy copy has nothing to say.
 """
 
 from __future__ import annotations
@@ -57,6 +59,35 @@ from .records import (
 )
 from .upstream import UpstreamUnavailable, fetch, translate
 
+# The table carried 558 models that mapped to an OCS provider when this floor was
+# set. A structurally valid table translating to far fewer means LiteLLM changed
+# shape -- a renamed ``litellm_provider``, a restructured key -- not that upstream
+# retired its catalogue.
+MIN_UPSTREAM_MODELS = 300
+
+# Providers retire models a few at a time. A run proposing to drop more than this
+# share of what OCS serves has almost certainly lost a namespace rather than found
+# a mass retirement.
+MAX_REMOVED_FRACTION = 0.25
+
+
+def check_upstream_size(everything: Catalogue) -> None:
+    """Refuse a price table too small to have been read correctly."""
+    if len(everything) < MIN_UPSTREAM_MODELS:
+        raise UpstreamUnavailable(
+            f"the LiteLLM price table translated to {len(everything)} model(s), under the floor of "
+            f"{MIN_UPSTREAM_MODELS}; treating it as unreadable rather than as a mass retirement"
+        )
+
+
+def check_removal_scale(removed: list[ModelRecord], ours: Catalogue) -> None:
+    """Refuse a comparison that would retire an implausible share of the catalogue."""
+    if ours and len(removed) > len(ours) * MAX_REMOVED_FRACTION:
+        raise UpstreamUnavailable(
+            f"upstream would retire {len(removed)} of our {len(ours)} model(s), over the ceiling of "
+            f"{MAX_REMOVED_FRACTION:.0%}; treating the table as unreadable rather than deleting them"
+        )
+
 
 def compare(
     ours: Catalogue,
@@ -65,7 +96,7 @@ def compare(
     everything: Catalogue,
     ledger: dict[Key, LedgerEntry],
 ) -> Diff:
-    """The whole reconciliation: seven lists off two catalogues and a ledger."""
+    """The whole reconciliation: six lists off two catalogues and a ledger."""
     repriced, backfilled, unpriced = _compare_pricing(ours, everything)
     rejected = {key for key, entry in ledger.items() if entry.verdict == REJECTED}
     return Diff(
@@ -132,6 +163,7 @@ def run(repo_root: Path, today: datetime.date) -> tuple[Diff, list[dict], dict[K
 
     print("  Layer 3: fetching and translating the LiteLLM price table ...")
     live, everything = translate(fetch(), today)
+    check_upstream_size(everything)
     print(f"  -> {len(everything)} translated model(s), {len(live)} chat-capable and current")
 
     print("  Layer 4: reading the ledger ...")
@@ -140,6 +172,7 @@ def run(repo_root: Path, today: datetime.date) -> tuple[Diff, list[dict], dict[K
 
     print("  Layer 5: comparing ...")
     diff = compare(ours=ours, deleted=deleted, live=live, everything=everything, ledger=ledger)
+    check_removal_scale(removed=diff.removed, ours=ours)
     print(
         f"  -> {len(diff.added)} added, {len(diff.removed)} removed, {len(diff.deprecated)} newly deprecated, "
         f"{len(diff.repriced)} repriced, {len(diff.backfilled)} to backfill, {len(diff.unpriced)} uncostable"
@@ -189,7 +222,7 @@ def _arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Report only: leave the pricing seed, migrations and ledger untouched.",
+        help="Report only: leave the pricing seed and the ledger untouched.",
     )
     return parser
 

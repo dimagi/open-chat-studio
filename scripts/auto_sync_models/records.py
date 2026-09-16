@@ -109,3 +109,8 @@ class Diff:
     @property
     def has_catalogue_work(self) -> bool:
         return bool(self.added or self.deprecated or self.removed)
+
+    @property
+    def has_work(self) -> bool:
+        """Whether this run is worth an agent. ``unpriced`` is reported, never acted on."""
+        return self.has_catalogue_work or self.has_pricing_work

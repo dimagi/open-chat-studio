@@ -13,6 +13,7 @@ import datetime
 import enum
 import json
 import random
+import re
 import time
 import urllib.error
 import urllib.request
@@ -108,6 +109,11 @@ NAMESPACES: dict[str, Namespace] = {
 }
 
 PREFIX_BY_OCS_PROVIDER = {ns.ocs_provider: ns.prefix for ns in NAMESPACES.values()}
+
+# Model names reach the registered catalogue, a commit message and a PR body by
+# way of an agent that reads them. Upstream is a community-maintained file, so a
+# name not shaped like a model ID is skipped rather than passed on.
+MODEL_NAME = re.compile(r"^[A-Za-z0-9._/:+-]+$")
 
 
 class UpstreamUnavailable(RuntimeError):
@@ -231,6 +237,8 @@ def _translate_key(source_key: str, litellm_provider: str | None) -> Key | None:
             return None
         if namespace.extra_segments is ExtraSegments.REGION:
             name = name.rsplit("/", 1)[-1]
+    if not MODEL_NAME.match(name):
+        return None
     return namespace.ocs_provider, name
 
 
