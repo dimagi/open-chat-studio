@@ -152,8 +152,7 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
     shows a ``CodeNode`` carrying ``llm_provider_id`` and others it does not declare. Merging those
     back would write them to the row on any edit, label-only ones included.
     """
-    node_class = resolve_node_class(content.type)
-    declared = set(node_class.model_fields) if node_class is not None else set()
+    declared = content.node_type.declared_params
     mirrored = Node.resource_param_names()
     return {name: value for name, value in content.params.items() if name in declared or name not in mirrored}
 

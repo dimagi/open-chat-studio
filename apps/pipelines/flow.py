@@ -6,6 +6,7 @@ import pydantic
 from pydantic import Field
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
+from apps.pipelines.node_type import NodeType
 
 
 class FlowNodeData(pydantic.BaseModel):
@@ -13,6 +14,11 @@ class FlowNodeData(pydantic.BaseModel):
     type: str
     label: str = ""
     params: dict = Field(default_factory=dict)
+
+    @property
+    def node_type(self) -> NodeType:
+        """What this node's type decides, asked of an edit that may have no row yet."""
+        return NodeType(self.type)
 
 
 class FlowNode(pydantic.BaseModel):

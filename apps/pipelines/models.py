@@ -581,10 +581,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
-        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
-
-        node_class = resolve_node_class(self.type)
-        return node_class is not None and param_name in node_class.model_fields
+        return self.node_type.declares(param_name)
 
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """

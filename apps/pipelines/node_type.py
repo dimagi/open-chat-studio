@@ -37,6 +37,16 @@ class NodeType:
         """Whether the type names a usable node class at all."""
         return self.node_class is not None
 
+    @property
+    def declared_params(self) -> frozenset[str]:
+        """The param names this type declares. An unresolvable type declares none."""
+        node_class = self.node_class
+        return frozenset(node_class.model_fields) if node_class is not None else frozenset()
+
+    def declares(self, param_name: str) -> bool:
+        """Whether this type declares ``param_name`` as a param."""
+        return param_name in self.declared_params
+
 
 def _nodes_base():
     """``apps.pipelines.nodes.base``, imported on use.

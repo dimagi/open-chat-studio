@@ -4,6 +4,8 @@ Mostly DB-free — the type string is all a ``NodeType`` holds — so only the o
 resource lookup carries a ``django_db`` marker.
 """
 
+import pytest
+
 from apps.pipelines.node_type import NodeType
 
 
@@ -17,3 +19,21 @@ class TestNodeClassResolution:
     def test_a_type_naming_no_class_does_not_exist(self):
         assert NodeType("GhostNode").exists is False
         assert NodeType("GhostNode").node_class is None
+
+
+class TestDeclaredParams:
+    @pytest.mark.parametrize(
+        ("node_type", "param_name", "expected"),
+        [
+            pytest.param("LLMResponseWithPrompt", "llm_provider_id", True, id="declared"),
+            pytest.param("LLMResponseWithPrompt", "route_key", False, id="not-declared"),
+            pytest.param("RouterNode", "prompt", True, id="declared-on-other-type"),
+            pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
+        ],
+    )
+    def test_declares(self, node_type, param_name, expected):
+        assert NodeType(node_type).declares(param_name) is expected
+
+    def test_declared_params_lists_the_type_s_fields(self):
+        declared = NodeType("LLMResponseWithPrompt").declared_params
+        assert {"name", "llm_provider_id", "prompt"} <= declared
