@@ -11,7 +11,6 @@ from django.urls import reverse
 from apps.custom_actions.models import CustomActionOperation
 from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -97,7 +96,6 @@ class TestNodeResourceFKSync:
         assert node.llm_provider_model_id is None
         assert node.source_material_id is None
         assert node.collection_id is None
-        assert node.assistant_id is None
         assert node.synthetic_voice_id is None
         assert node.collection_indexes.count() == 0
 
@@ -574,7 +572,6 @@ def test_backfill_links_all_resources_when_they_exist():
     model = LlmProviderModelFactory.create()
     source_material = SourceMaterialFactory.create()
     collection = CollectionFactory.create()
-    assistant = OpenAiAssistantFactory.create()
     voice = SyntheticVoiceFactory.create()
     index = CollectionFactory.create(is_index=True)
 
@@ -583,7 +580,6 @@ def test_backfill_links_all_resources_when_they_exist():
         "llm_provider_model_id": model.id,
         "source_material_id": source_material.id,
         "collection_id": collection.id,
-        "assistant_id": assistant.id,
         "synthetic_voice_id": voice.id,
     }
     node = NodeFactory.create(
@@ -610,20 +606,17 @@ def test_backfill_keeps_scalar_fk_to_archived_resource():
     """
     collection = CollectionFactory.create(is_archived=True)
     source_material = SourceMaterialFactory.create(is_archived=True)
-    assistant = OpenAiAssistantFactory.create(is_archived=True)
     node = NodeFactory.create(
         type="LLMResponseWithPrompt",
         params={
             "collection_id": collection.id,
             "source_material_id": source_material.id,
-            "assistant_id": assistant.id,
         },
     )
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.collection_id == collection.id
     assert node.source_material_id == source_material.id
-    assert node.assistant_id == assistant.id
 
 
 @pytest.mark.django_db()
@@ -637,3 +630,10 @@ def test_backfill_drops_archived_collection_index():
     )
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     assert set(node.collection_indexes.values_list("id", flat=True)) == {valid_index.id}
+
+
+@pytest.mark.django_db()
+def test_assistant_is_not_a_resource_fk_field():
+    """resource_fk_fields drives the mirrored params, so a dropped FK must leave it (#4254)."""
+    assert "assistant" not in Node.resource_fk_fields()
+    assert "assistant_id" not in Node.resource_param_names()

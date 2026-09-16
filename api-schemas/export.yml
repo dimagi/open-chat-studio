@@ -2878,9 +2878,6 @@ components:
         working_version:
           type: integer
           nullable: true
-        assistant:
-          type: integer
-          nullable: true
         node:
           type: integer
           nullable: true
@@ -4706,9 +4703,6 @@ components:
         collection:
           type: integer
           nullable: true
-        assistant:
-          type: integer
-          nullable: true
         synthetic_voice:
           type: integer
           nullable: true
@@ -5180,14 +5174,12 @@ components:
       - results
     PurposeEnum:
       enum:
-      - assistant
       - collection
       - evaluation_dataset
       - data_export
       - message_media
       type: string
       description: |-
-        * `assistant` - Assistant
         * `collection` - Collection
         * `evaluation_dataset` - Evaluation Dataset
         * `data_export` - Data Export
