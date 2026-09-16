@@ -431,35 +431,12 @@ jobs:
             9. Commit the changes. The commit MUST include
                `scripts/auto_sync_models/model_ledger.json` — without it the
                verdicts are lost and every model you just judged is re-offered.
-            10. Push the branch and open a PR against `main` using the repo's PR
-                template (`.github/pull_request_template.md`).
-                - PR title: `Auto: update LLM model catalogue (YYYY-MM-DD)`
-                  (today's UTC date).
-                - The PR description MUST:
-                  * List each registered model with its provider and token limit.
-                  * List each deleted model with its provider and the
-                    replacement references were moved to, or state that they
-                    were cleared.
-                  * Include the line: `Model metadata, pricing and token limits
-                    from the
-                    [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
-                  * Include a `## Needs follow-up` section for anything unpriced
-                    or missing a token limit.
-                  * Handle the "The migrations are backwards compatible" box as
-                    follows. Check it when the PR only registers models:
-                    `llm_model_migration()` is additive, it only seeds rows.
-                    Leave it unchecked when the PR deletes one:
-                    `remove_deprecated_models` drops the `LlmProviderModel` row
-                    while the previous release is still serving that model.
-                    Either way, say in the description which case this is.
-            11. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            12. If after review there is nothing to register, nothing to
-                deprecate and nothing to delete, do NOT open an empty PR — but
-                you must still commit and push the ledger verdicts, since those
-                rejections are the whole value of the run. Open a PR containing
-                only the ledger change in that case.
-            13. ALWAYS write a decision report to `./decision_report.md` before
-                exiting, regardless of outcome. Use this exact structure:
+            10. Write the decision report to `./decision_report.md`. Do this
+                before opening the PR, so the description can carry it, and do
+                it whatever the outcome — including a failed run or one with
+                nothing to do. Leave `**PR:**` as `pending`; set it and
+                `**Outcome:**` to what actually happened once step 11 is done.
+                Use this exact structure:
 
                 ```markdown
                 # Auto Update Models - Decision Report
@@ -496,6 +473,41 @@ jobs:
                 Every entry in `added` MUST appear under "Per-model decisions"
                 with an explicit verdict and reason. This file is the audit
                 trail for the run.
+            11. Push the branch and open a PR against `main` using the repo's PR
+                template (`.github/pull_request_template.md`).
+                - PR title: `Auto: update LLM model catalogue (YYYY-MM-DD)`
+                  (today's UTC date).
+                - The PR description MUST:
+                  * List each registered model with its provider and token limit.
+                  * List each deleted model with its provider and the
+                    replacement references were moved to, or state that they
+                    were cleared.
+                  * Include the line: `Model metadata, pricing and token limits
+                    from the
+                    [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
+                  * Include a `## Needs follow-up` section for anything unpriced
+                    or missing a token limit.
+                  * Carry the decision report under a `## Decision report`
+                    heading, in one of two forms. Default to the whole of
+                    `./decision_report.md` pasted verbatim, minus its `**PR:**`
+                    line, which says nothing inside the PR it points at. If
+                    that makes the description unwieldy, link to this run
+                    instead — the workflow publishes the same text to the run
+                    summary:
+                    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  * Handle the "The migrations are backwards compatible" box as
+                    follows. Check it when the PR only registers models:
+                    `llm_model_migration()` is additive, it only seeds rows.
+                    Leave it unchecked when the PR deletes one:
+                    `remove_deprecated_models` drops the `LlmProviderModel` row
+                    while the previous release is still serving that model.
+                    Either way, say in the description which case this is.
+            12. Apply the `claude` and `auto-models` labels to the PR if they exist.
+            13. If after review there is nothing to register, nothing to
+                deprecate and nothing to delete, do NOT open an empty PR — but
+                you must still commit and push the ledger verdicts, since those
+                rejections are the whole value of the run. Open a PR containing
+                only the ledger change in that case.
 
             Branch: ${{ steps.branch.outputs.branch_name }} (already created and
             checked out).
