@@ -11,7 +11,6 @@ from apps.events.models import EventActionType
 from apps.service_providers.models import LlmProviderTypes, MessagingProviderType, TraceProviderType, VoiceProviderType
 from apps.service_providers.usages import MAX_INLINE_VERSIONS, get_provider_usages, search_providers_by_api_key
 from apps.service_providers.utils import ServiceProvider
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.evaluations import EvaluatorFactory
@@ -88,18 +87,6 @@ def test_chatbots_category_sorted_by_name(team_with_users):
 
     chatbots = next(c for c in usages.categories if c.label == "Chatbots")
     assert [c.name for c in chatbots.items] == ["apple", "Mango", "zebra"], "chatbots should be sorted case-insensitive"
-
-
-@pytest.mark.django_db()
-def test_get_usages_includes_assistants(anthropic_provider):
-    OpenAiAssistantFactory(team=anthropic_provider.team, llm_provider=anthropic_provider)
-
-    usages = get_provider_usages(anthropic_provider)
-
-    category_labels = {c.label for c in usages.categories}
-    assert any("Assistant" in label for label in category_labels)
-    assert not usages.is_empty()
-    assert usages.total >= 1
 
 
 @pytest.mark.django_db()
@@ -458,14 +445,23 @@ def test_versions_past_the_inline_limit_collapse_behind_a_toggle(team_with_users
 
 @pytest.mark.django_db()
 def test_versions_of_models_without_version_urls_are_not_linked(team_with_users, client, anthropic_provider):
-    """Only chatbots deep-link to a version. An assistant has no page at all since the feature
-    was removed (#4254), so its row is reported but rendered as plain text."""
-    assistant = OpenAiAssistantFactory(team=team_with_users, llm_provider=anthropic_provider)
-    # Built directly rather than via ``create_new_version``: assistants are no longer versionable.
-    OpenAiAssistantFactory(
+    """Only chatbots set has_version_specific_url, so every other family reports its versions as
+    plain badges -- the row name is the one link."""
+    # Share the EmbeddingProviderModel across both, or CollectionFactory trips the team-scoped
+    # unique constraint.
+    shared_embedding = EmbeddingProviderModelFactory(team=team_with_users)
+    collection = CollectionFactory(
         team=team_with_users,
         llm_provider=anthropic_provider,
-        working_version=assistant,
+        name="Handbook",
+        embedding_provider_model=shared_embedding,
+    )
+    CollectionFactory(
+        team=team_with_users,
+        llm_provider=anthropic_provider,
+        name="Handbook v1",
+        embedding_provider_model=shared_embedding,
+        working_version=collection,
         version_number=1,
     )
 
@@ -480,8 +476,8 @@ def test_versions_of_models_without_version_urls_are_not_linked(team_with_users,
 
     body = response.content.decode()
     assert "v1" in body, "the version is still reported"
-    assert assistant.name in body, "the row is still reported"
-    assert f'href="/a/{team_with_users.slug}/assistants/' not in body, "assistants have no page to link to"
+    assert collection.name in body, "the row is still reported"
+    assert body.count(f'href="{collection.get_absolute_url()}"') == 1, "only the row name links, not the version"
 
 
 def _add_provider_usage(provider, count: int) -> None:
