@@ -562,6 +562,16 @@ ocs_drop_database() {
     ocs_psql postgres -c "DROP DATABASE IF EXISTS \"$1\" WITH (FORCE)"
 }
 
+ocs_list_test_databases() {
+    local database_name="$1"
+
+    ocs_psql postgres -tAc "
+        SELECT datname
+        FROM pg_database
+        WHERE datname ~ '^test_${database_name}(_gw[0-9]+)?\$'
+    "
+}
+
 # Whether a database already carries the sample data `bootstrap_data` creates. A
 # setup that died between creating the database and finishing the seed would
 # otherwise leave that database empty forever, because every provisioning mode but
