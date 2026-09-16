@@ -1404,6 +1404,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScheduledMessageList'
           description: ''
+  /api/export/scheduled_triggers/:
+    get:
+      operationId: scheduled_triggers
+      summary: Scheduled Triggers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTriggerList'
+          description: ''
   /api/export/scores/:
     get:
       operationId: scores
@@ -5236,6 +5264,87 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScheduledMessageDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ScheduledTriggerDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        trigger_date:
+          type: string
+          format: date
+          description: The date on which the trigger should fire (YYYY-MM-DD)
+        trigger_time:
+          type: string
+          format: time
+          description: The local time at which the trigger should fire (HH:MM)
+        timezone:
+          type: string
+          description: IANA timezone name in which date/time are interpreted
+          maxLength: 64
+        scheduled_at:
+          type: string
+          format: date-time
+          description: The trigger moment converted to UTC at save time, used to determine
+            when the trigger is due
+        active_session_window_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Only fire against sessions with user activity in the last N
+            days. Leave blank to target all open sessions.
+        fired_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_archived:
+          type: boolean
+        is_active:
+          type: boolean
+        action:
+          type: integer
+        experiment:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - action
+      - created_at
+      - experiment
+      - id
+      - scheduled_at
+      - timezone
+      - trigger_date
+      - trigger_time
+      - updated_at
+    ScheduledTriggerList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledTriggerDetail'
       required:
       - cursor
       - has_more

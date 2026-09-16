@@ -50,6 +50,7 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledMessageFactory,
+    ScheduledTriggerFactory,
     StaticTriggerFactory,
     TimeoutTriggerFactory,
 )
@@ -948,6 +949,7 @@ FACTORIES = {
     "events.eventaction": EventActionFactory,
     "events.statictrigger": StaticTriggerFactory,
     "events.timeouttrigger": TimeoutTriggerFactory,
+    "events.scheduledtrigger": ScheduledTriggerFactory,
     "experiments.participant": ParticipantFactory,
     "experiments.participantdata": ParticipantDataFactory,
     "chat.chat": ChatFactory,
