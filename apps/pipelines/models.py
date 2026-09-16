@@ -33,7 +33,6 @@ from apps.pipelines.flow import (
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, server_managed_node_types
-from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -370,7 +369,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # to_flow_node reads each node's resource relations — prefetch rather than query per row.
         for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
-            for spec in get_versioned_param_specs(version_node.type):
+            for spec in version_node.node_type.versioned_param_specs:
                 spec.revert_referenced_record(version_node, flow_node.data.params)
             node_data[version_node.flow_id] = flow_node
 
@@ -598,7 +597,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 new_version.params["name"] = new_flow_id
 
         if not is_copy:
-            for spec in get_versioned_param_specs(self.type):
+            for spec in self.node_type.versioned_param_specs:
                 spec.version_referenced_record(new_version.params)
 
         if pipeline is not None:
@@ -734,7 +733,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         node_name = self.display_name
 
-        specs_by_param = {spec.param_name: spec for spec in get_versioned_param_specs(self.type)}
+        specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
         param_versions = []
         for name, value in self.params.items():
             display_formatter = None
@@ -784,7 +783,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         Archive related params that were also versioned along with this node
         """
-        for spec in get_versioned_param_specs(self.type):
+        for spec in self.node_type.versioned_param_specs:
             spec.archive_referenced_record(self.params)
 
 

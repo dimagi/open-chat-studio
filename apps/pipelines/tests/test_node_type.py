@@ -7,6 +7,7 @@ resource lookup carries a ``django_db`` marker.
 import pytest
 
 from apps.pipelines.node_type import NodeType, server_managed_node_types
+from apps.pipelines.versioning import ParamVersioning
 
 
 class TestNodeClassResolution:
@@ -78,3 +79,13 @@ class TestRenderOrder:
     def test_pins_start_first_and_end_last(self):
         start, middle, end = NodeType("StartNode"), NodeType("LLMResponseWithPrompt"), NodeType("EndNode")
         assert start.render_order < middle.render_order < end.render_order
+
+
+class TestVersionedParamSpecs:
+    def test_a_type_with_referenced_records_lists_them(self):
+        specs = NodeType("LLMResponseWithPrompt").versioned_param_specs
+        assert {spec.param_name for spec in specs} >= {"source_material_id", "collection_id"}
+        assert all(isinstance(spec.versioning, ParamVersioning) for spec in specs)
+
+    def test_a_type_with_none_lists_none(self):
+        assert NodeType("RenderTemplate").versioned_param_specs == ()

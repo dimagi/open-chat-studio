@@ -25,6 +25,7 @@ from apps.pipelines.const import (
     REACT_FLOW_START_TYPE,
     START_NODE_TYPE,
 )
+from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
@@ -90,6 +91,11 @@ class NodeType:
     def render_order(self) -> int:
         """Sort key that puts the start node first and the end node last, leaving the rest in order."""
         return {START_NODE_TYPE: 0, END_NODE_TYPE: 2}.get(self.type, 1)
+
+    @property
+    def versioned_param_specs(self) -> tuple[VersionedParamSpec, ...]:
+        """The params of this type that reference database records (``apps.pipelines.versioning``)."""
+        return NODE_PARAM_SPECS.get(self.type, ())
 
 
 @cache
