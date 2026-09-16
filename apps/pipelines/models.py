@@ -30,7 +30,6 @@ from apps.pipelines.flow import (
     FlowNodeData,
     FlowWithoutNodes,
     node_position_fields,
-    react_flow_node_type,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, server_managed_node_types
@@ -569,7 +568,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return FlowNode(
             id=self.flow_id,
             position=self.position or {"x": 0, "y": 0},
-            type=react_flow_node_type(self.type),
+            type=self.node_type.react_flow_type,
             data=FlowNodeData(
                 id=self.flow_id,
                 type=self.type,

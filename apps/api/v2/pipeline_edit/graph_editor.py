@@ -7,16 +7,8 @@ from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
 from apps.pipelines.build_state import output_handles
-from apps.pipelines.flow import (
-    REACT_FLOW_END_TYPE,
-    EdgeDiff,
-    Flow,
-    FlowEdge,
-    FlowNode,
-    FlowNodeData,
-    NodeDiff,
-    react_flow_node_type,
-)
+from apps.pipelines.const import REACT_FLOW_END_TYPE
+from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
 from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
@@ -64,7 +56,7 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     position = parking_position(flow)
     node = FlowNode(
         id=node_id,
-        type=react_flow_node_type(node_type),
+        type=resolved.react_flow_type,
         position=position,
         data=FlowNodeData(
             id=node_id,

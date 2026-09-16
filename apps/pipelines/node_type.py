@@ -18,6 +18,14 @@ from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, cast
 
+from apps.pipelines.const import (
+    END_NODE_TYPE,
+    REACT_FLOW_END_TYPE,
+    REACT_FLOW_NODE_TYPE,
+    REACT_FLOW_START_TYPE,
+    START_NODE_TYPE,
+)
+
 if TYPE_CHECKING:
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 
@@ -68,6 +76,15 @@ class NodeType:
         """
         schema = self.schema
         return schema is not None and not schema.can_delete
+
+    @property
+    def react_flow_type(self) -> str:
+        """This type's react-flow node type, which is what the editor renders it as."""
+        if self.type == START_NODE_TYPE:
+            return REACT_FLOW_START_TYPE
+        if self.type == END_NODE_TYPE:
+            return REACT_FLOW_END_TYPE
+        return REACT_FLOW_NODE_TYPE
 
 
 @cache

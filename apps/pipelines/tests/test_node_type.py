@@ -58,3 +58,17 @@ class TestSchema:
 
     def test_server_managed_node_types_is_exactly_the_types_that_report_it(self):
         assert server_managed_node_types() == {"StartNode", "EndNode"}
+
+
+class TestReactFlowType:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", "startNode", id="start"),
+            pytest.param("EndNode", "endNode", id="end"),
+            pytest.param("LLMResponseWithPrompt", "pipelineNode", id="regular"),
+            pytest.param("RenderTemplate", "pipelineNode", id="another-regular"),
+        ],
+    )
+    def test_maps_node_type_to_react_flow_type(self, node_type, expected):
+        assert NodeType(node_type).react_flow_type == expected

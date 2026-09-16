@@ -97,22 +97,6 @@ class FullFlow(Flow):
     nodes: list[FlowNode]
 
 
-#: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
-#: these for the editor; the reserved start/end classes get their own types.
-REACT_FLOW_START_TYPE = "startNode"
-REACT_FLOW_END_TYPE = "endNode"
-REACT_FLOW_NODE_TYPE = "pipelineNode"
-
-
-def react_flow_node_type(node_type: str) -> str:
-    """Map a ``Node.type`` (pipeline node class name) onto its react-flow node type."""
-    if node_type == "StartNode":
-        return REACT_FLOW_START_TYPE
-    if node_type == "EndNode":
-        return REACT_FLOW_END_TYPE
-    return REACT_FLOW_NODE_TYPE
-
-
 def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
     """Split a graph into the part ``Pipeline.data`` stores — the edges, no ``nodes``
     (ADR-0049) — and the complete node membership: content-carrying nodes map to themselves,
