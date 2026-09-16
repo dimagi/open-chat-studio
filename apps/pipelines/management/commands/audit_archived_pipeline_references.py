@@ -1,3 +1,6 @@
+from functools import reduce
+from operator import or_
+
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
@@ -6,19 +9,18 @@ from apps.pipelines.versioning import all_versioned_param_specs
 
 # collection_indexes (many=True) is handled separately as an M2M check below.
 _SCALAR_FK_FIELDS = tuple(dict.fromkeys(spec.fk_field for spec in all_versioned_param_specs() if not spec.many))
+_M2M_FK_FIELDS = tuple(dict.fromkeys(spec.fk_field for spec in all_versioned_param_specs() if spec.many))
+_ARCHIVED_REFERENCE = reduce(
+    or_, (Q(**{f"{field}__is_archived": True}) for field in _SCALAR_FK_FIELDS + _M2M_FK_FIELDS)
+)
 
 
 class Command(BaseCommand):
-    help = "Read-only: list live pipeline nodes whose assistant/collection/source material reference is archived."
+    help = "Read-only: list live pipeline nodes whose collection/source material reference is archived."
 
     def handle(self, *args, **options):
         degraded_nodes = list(
-            Node.objects.filter(
-                Q(assistant__is_archived=True)
-                | Q(source_material__is_archived=True)
-                | Q(collection__is_archived=True)
-                | Q(collection_indexes__is_archived=True)
-            )
+            Node.objects.filter(_ARCHIVED_REFERENCE)
             .distinct()
             .select_related("pipeline", "pipeline__team", *_SCALAR_FK_FIELDS)
             .prefetch_related("collection_indexes")
