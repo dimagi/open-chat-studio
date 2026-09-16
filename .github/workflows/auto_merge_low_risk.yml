@@ -26,9 +26,12 @@
 # - Merging to `main` deploys to production, so the script refuses by default:
 #   an absent label, a check that has not reported, a missing review verdict and
 #   an unknown mergeability all block. Nothing here has an override
-# - The `Classify risk` check is required *by name on the head commit*, which is
-#   what keeps the label honest — a push after the label was applied gets a fresh
-#   check, so it cannot inherit the old verdict
+# - **The `risk:low` label is not trusted.** It only decides which pull requests are
+#   worth looking at; the gate is then re-run here, from this checkout of the
+#   default branch, against the pull request's live file list. The label is
+#   applied by a workflow GitHub runs from the *pull request's* head ref, and
+#   anyone with write access can apply it by hand — neither is a basis for merging
+#   to production. The merge is also pinned to the commit that was judged
 # - Polled rather than event-driven: the merge becomes possible when the last of
 #   several independent workflows finishes, and there is no single event for that.
 #   Fifteen minutes of latency on an unattended merge costs nothing
@@ -78,7 +81,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts/auto_merge_low_risk.py
+          sparse-checkout: |
+            scripts/auto_merge_low_risk.py
+            scripts/pr_risk_gate.py
           sparse-checkout-cone-mode: false
 
       - name: Set up Python

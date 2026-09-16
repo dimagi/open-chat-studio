@@ -10,14 +10,20 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import auto_merge_low_risk  # noqa: E402
 from auto_merge_low_risk import (  # noqa: E402
     REQUIRED_CHECKS,
-    find_blockers,
     latest_check_runs,
     latest_review_states,
 )
 
 REPO = "dimagi/open-chat-studio"
+LOW = "risk:low"
+
+
+def find_blockers(pull, check_runs, reviews, repo=REPO, *, risk=LOW):
+    """The gate's own verdict defaults to low here so each test varies one thing."""
+    return auto_merge_low_risk.find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk)
 
 
 def pull(**overrides):
@@ -197,3 +203,30 @@ def test_latest_review_states_ignores_pending():
 def test_blockers_accumulate():
     blockers = find_blockers(pull(draft=True, mergeable_state="dirty"), [], [], REPO)
     assert len(blockers) == 2 + len(REQUIRED_CHECKS)
+
+
+def test_latest_check_runs_breaks_a_timestamp_tie_on_id():
+    runs = [
+        {**check("a", conclusion="failure"), "id": 2},
+        {**check("a", conclusion="success"), "id": 1},
+    ]
+    assert latest_check_runs(runs)["a"]["conclusion"] == "failure"
+
+
+def test_merge_pins_the_head_commit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(auto_merge_low_risk, "gh", lambda *args: calls.append(args) or "")
+    auto_merge_low_risk.merge(REPO, 7, "merge", "abc123")
+    assert "sha=abc123" in calls[0]
+
+
+@pytest.mark.parametrize("risk", ["risk:medium", "risk:high"])
+def test_the_recomputed_gate_overrides_the_label(risk):
+    blockers = find_blockers(pull(), passing_checks(), [], risk=risk)
+    assert blockers == [f"the gate re-runs this as {risk}, whatever the label says"]
+
+
+def test_a_hand_applied_label_cannot_merge_a_medium_pull_request():
+    """Anyone with write access can apply `risk:low`; only the gate's own verdict counts."""
+    labelled = pull(labels=[{"name": "risk:low"}])
+    assert find_blockers(labelled, passing_checks(), [], risk="risk:medium") != []

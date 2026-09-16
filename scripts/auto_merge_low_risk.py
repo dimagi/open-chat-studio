@@ -6,14 +6,21 @@ Driven by `.github/workflows/auto_merge_low_risk.yml`. Reports only unless
 against what humans actually merged.
 
 Merging to `main` deploys to production, so every condition here is a refusal by
-default: a check that has not reported, a verdict that is missing, a label that
-is absent or stale all block the merge. `risk:low` alone is never enough --
-`scripts/pr_risk_gate.py` decides the label, and this decides whether the rest of
-the pull request agrees.
+default: a check that has not reported, a verdict that is missing, a label that is
+absent all block the merge.
 
-The required checks are demanded by name on the head commit, which is what makes
-the label trustworthy: `Classify risk` only succeeds on the commit it classified,
-so a push after the label was applied cannot inherit it.
+**The `risk:low` label is not trusted.** It is only a cheap filter for which pull
+requests to look at; the gate in `pr_risk_gate.py` is then re-run here, from this
+checkout of the default branch, against the pull request's live file list. Trusting
+the label would mean trusting two things that a pull request author controls: the
+label itself, which anyone with write access can apply by hand, and
+`pr_risk_label.yml`, which GitHub runs *from the pull request's head ref* -- so a
+pull request could rewrite the labeller to call itself low while keeping the job
+name its own check is looked up by. Re-running the gate here closes both, and a
+pull request that edits `.github/**` classifies as high on its own rules anyway.
+
+The merge is pinned to the commit that was judged, so a push landing mid-run aborts
+it rather than merging unjudged code.
 
     python3 scripts/auto_merge_low_risk.py --repo dimagi/open-chat-studio
     python3 scripts/auto_merge_low_risk.py --repo dimagi/open-chat-studio --execute
@@ -26,12 +33,16 @@ import subprocess
 import sys
 from typing import Any
 
+import pr_risk_gate
+
 REQUIRED_LABEL = "risk:low"
 BLOCKING_LABELS = frozenset({"wip"})
 BASE_BRANCH = "main"
 
-# `Classify risk` ties the label to this exact commit; the verdict is the code review.
+# `Classify risk` shows the labeller ran on this exact commit; the verdict is the code
+# review. Neither is load-bearing for the risk decision -- that is recomputed below.
 REQUIRED_CHECKS = ("Classify risk", "Automated review verdict")
+
 
 # A check that deliberately did not apply to this diff is not a failure.
 ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
@@ -44,7 +55,9 @@ MERGEABLE_STATES = frozenset({"clean", "unstable"})
 def latest_check_runs(check_runs: list[dict]) -> dict[str, dict]:
     """The most recent run per check name, since a re-run leaves the old one in place."""
     latest: dict[str, dict] = {}
-    for run in sorted(check_runs, key=lambda run: run.get("started_at") or ""):
+    # `id` breaks ties: two runs of the same check can share a `started_at` to the second,
+    # and the list order the API returns them in is not chronological.
+    for run in sorted(check_runs, key=lambda run: (run.get("started_at") or "", run.get("id") or 0)):
         latest[run["name"]] = run
     return latest
 
@@ -61,7 +74,9 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def find_blockers(pull: dict, check_runs: list[dict], reviews: list[dict], repo: str) -> list[str]:
+def find_blockers(
+    pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, *, recomputed_risk: str
+) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -80,6 +95,8 @@ def find_blockers(pull: dict, check_runs: list[dict], reviews: list[dict], repo:
         blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
     if pull.get("mergeable_state") not in MERGEABLE_STATES:
         blockers.append(f"its mergeable_state is {pull.get('mergeable_state')}")
+    if recomputed_risk != pr_risk_gate.LOW:
+        blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
 
     latest = latest_check_runs(check_runs)
     for name in REQUIRED_CHECKS:
@@ -103,9 +120,15 @@ def find_blockers(pull: dict, check_runs: list[dict], reviews: list[dict], repo:
     return blockers
 
 
+def gh(*args: str) -> str:
+    result = subprocess.run(["gh", *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"`gh {' '.join(args)}` exited {result.returncode}: {result.stderr.strip()}")
+    return result.stdout
+
+
 def gh_api(*args: str) -> Any:
-    result = subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=True)
-    return json.loads(result.stdout)
+    return json.loads(gh("api", *args))
 
 
 def gh_paginated(path: str) -> list[dict]:
@@ -113,15 +136,39 @@ def gh_paginated(path: str) -> list[dict]:
     return [entry for page in pages for entry in page]
 
 
+def check_runs_for(repo: str, sha: str) -> list[dict]:
+    """Every check run on a commit. A busy commit with re-runs can exceed one page."""
+    pages: list[dict] = gh_api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100", "--paginate", "--slurp")
+    return [run for page in pages for run in page["check_runs"]]
+
+
+def recompute_risk(repo: str, number: int, head_repo: str | None) -> str:
+    """Re-run the gate here rather than believing the label or the check that applied it.
+
+    Trust is "the branch lives in this repo", which takes write access to create. Not
+    `author_association`, which reads CONTRIBUTOR for anyone whose org membership is
+    private and would quietly withhold `risk:low` from most of the team.
+    """
+    files = gh_paginated(f"repos/{repo}/pulls/{number}/files?per_page=100")
+    return pr_risk_gate.classify(files, untrusted=head_repo != repo).risk
+
+
 def open_low_risk_pulls(repo: str) -> list[dict]:
     pulls = gh_paginated(f"repos/{repo}/pulls?state=open&per_page=100")
     return [pull for pull in pulls if any(label["name"] == REQUIRED_LABEL for label in pull.get("labels", []))]
 
 
-def merge(repo: str, number: int, method: str) -> None:
-    subprocess.run(
-        ["gh", "api", "-X", "PUT", f"repos/{repo}/pulls/{number}/merge", "-f", f"merge_method={method}"],
-        check=True,
+def merge(repo: str, number: int, method: str, head_sha: str) -> None:
+    """Merge, refusing if the head moved since it was judged -- GitHub 409s on a stale `sha`."""
+    gh(
+        "api",
+        "-X",
+        "PUT",
+        f"repos/{repo}/pulls/{number}/merge",
+        "-f",
+        f"merge_method={method}",
+        "-f",
+        f"sha={head_sha}",
     )
 
 
@@ -153,31 +200,41 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     merged = 0
+    failed = 0
     for candidate in candidates:
         number = candidate["number"]
         # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
         pull: dict = gh_api(f"repos/{args.repo}/pulls/{number}")
         head_sha = pull["head"]["sha"]
-        check_runs = gh_api(f"repos/{args.repo}/commits/{head_sha}/check-runs?per_page=100")["check_runs"]
+        check_runs = check_runs_for(args.repo, head_sha)
         reviews = gh_paginated(f"repos/{args.repo}/pulls/{number}/reviews?per_page=100")
+        risk = recompute_risk(args.repo, number, (pull["head"].get("repo") or {}).get("full_name"))
 
-        blockers = find_blockers(pull, check_runs, reviews, args.repo)
+        blockers = find_blockers(pull, check_runs, reviews, args.repo, recomputed_risk=risk)
         lines.append(f"### #{number} {pull['title']}")
         if blockers:
             lines.append("Held back because:")
             lines.extend(f"- {blocker}" for blocker in blockers)
         elif args.execute:
-            merge(args.repo, number, args.merge_method)
-            merged += 1
-            lines.append("Merged.")
+            # One refusal must not cost the run its summary or the candidates behind it.
+            try:
+                merge(args.repo, number, args.merge_method, head_sha)
+            except RuntimeError as exc:
+                failed += 1
+                lines.append(f"Merge failed: {exc}")
+            else:
+                merged += 1
+                lines.append("Merged.")
         else:
             lines.append("**Would merge.**")
         lines.append("")
 
     if args.execute:
         lines.append(f"Merged {merged} of {len(candidates)} candidate(s).")
+        if failed:
+            lines.append(f"{failed} merge(s) failed.")
     report(lines)
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

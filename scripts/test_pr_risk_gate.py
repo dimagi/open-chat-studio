@@ -252,3 +252,8 @@ def test_a_blocked_app_still_blocks_its_non_test_files():
 def test_deleting_a_test_file_under_a_blocked_app_is_still_high():
     files = [pr_file("apps/teams/tests/test_membership.py", status="removed", patch="-gone")]
     assert classify(files).risk == HIGH
+
+
+def test_a_test_named_file_outside_apps_does_not_escape_a_blocker():
+    assert classify([pr_file(".github/workflows/test_deploy.py")]).risk == HIGH
+    assert classify([pr_file("config/test_settings.py")]).risk == HIGH

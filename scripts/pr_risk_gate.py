@@ -13,9 +13,9 @@ The decision is evaluated in order:
 2. Every file on the low allowlist, within the size caps, yields ``low``.
 3. Everything else yields ``medium``.
 
-``--untrusted`` caps the result at ``medium`` for forks and authors without write
-access: an outsider's docs typo is not high risk, but it is not eligible for
-unattended merge either.
+``--untrusted`` withholds ``low`` from forks and authors without write access:
+an outsider's docs typo is not high risk, but it is not eligible for unattended
+merge either. A blocker still reports ``high``.
 
 Reads the GitHub "list pull request files" payload, one array per page:
 
@@ -167,7 +167,9 @@ def find_blockers(files: list[dict]) -> list[str]:
         for path in _paths_of(entry):
             # A test file under a blocked app is still only ever imported by pytest, so the
             # path blockers do not apply to it. Losing or disabling one below still counts.
-            if is_test(path):
+            # Confined to `apps/` -- outside it a `test_*.py` name proves nothing about what
+            # loads the file, and `.github/` and `config/` would hand out the exemption on a name.
+            if path.startswith("apps/") and is_test(path):
                 continue
             if status == "added" and any(glob_match(path, pattern) for pattern in BLOCKED_ONLY_WHEN_MODIFIED):
                 continue

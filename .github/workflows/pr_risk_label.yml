@@ -74,11 +74,17 @@ jobs:
       - name: Classify
         id: gate
         env:
-          # An outsider's change is never eligible for unattended merge, whatever it touches.
-          UNTRUSTED: >-
-            ${{ github.event.pull_request.head.repo.full_name != github.repository
-            || !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
+          # Trust is "the branch lives in this repo", which takes write access to create.
+          # Not `author_association`: that reports CONTRIBUTOR for anyone whose org
+          # membership is private, so it would withhold risk:low from most of the team
+          # and give no visible reason for it.
+          UNTRUSTED: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
+          if [[ ! -f scripts/pr_risk_gate.py ]]; then
+            echo "::error::scripts/pr_risk_gate.py is missing from the base commit." \
+                 "A pull request that adds or renames it cannot be classified by it."
+            exit 1
+          fi
           args=()
           if [[ "$UNTRUSTED" == "true" ]]; then
             args+=(--untrusted)

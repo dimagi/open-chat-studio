@@ -26,6 +26,12 @@
 #   step, so it does not depend on the plugin's internals
 # - `verdict` is skipped exactly when `review` is, so a draft or fork PR has no
 #   verdict check at all. Auto-merge treats a missing verdict as a refusal
+# - **Unconfirmed:** only inline review comments are counted. `claude_args` also
+#   permits `gh pr comment` and `gh pr review`, so a review reported as a review
+#   body or a conversation comment would count as zero findings and pass. Counting
+#   those too risks the opposite failure — an "I found nothing" review body, or the
+#   action's own progress comment, would fail every verdict. Confirm which channel
+#   the reviewer actually uses during the auto-merge dry run, then widen this
 
 name: Claude Code Review
 
@@ -77,6 +83,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
           gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
             | jq -r 'add // [] | .[].id' | sort > review-comments-before.txt
 
@@ -99,6 +106,9 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          # Without pipefail a failed `gh api` leaves an empty "after" list, which counts as
+          # zero findings and passes the verdict. The count has to fail instead.
+          set -euo pipefail
           gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
             | jq -r 'add // [] | .[].id' | sort > review-comments-after.txt
           count=$(comm -13 review-comments-before.txt review-comments-after.txt | wc -l | tr -d ' ')
