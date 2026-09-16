@@ -38,13 +38,13 @@ The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens,
 
 `.github/workflows/auto-update-models.yml` runs `python3 -m scripts.auto_sync_models.sync` daily. The script is a six-layer pipeline: `default_models.py` and `llm_pricing.json` are read into one mapping keyed by `(provider, model)`, LiteLLM's `model_prices_and_context_window.json` is translated into the same shape, and comparing the two yields every signal the workflow acts on:
 
-- `added` - upstream serves it, we do not, we never deleted it, and it has not been offered before. Claude Code opens a PR to register it following `docs/developer_guides/managing_models.md`.
+- `added` - upstream serves it, we do not, we never deleted it, and we have not rejected it (anything still undecided from an earlier run is included). Claude Code opens a PR to register it following `docs/developer_guides/managing_models.md`.
 - `deprecated` - models still listed as active whose upstream `deprecation_date` has passed. Claude Code marks them `deprecated=True`.
 - `repriced` / `backfilled` - a rate that has moved upstream, or one the seed lacks entirely. The script rewrites `llm_pricing.json` and emits a `NNNN_rate_update_YYYYMMDD.py` data migration; the workflow opens a mechanical "Pricing update" PR. Rows with no `default_models.py` entry are carried through untouched, so a `DELETED_MODELS` entry keeps the price its historical usage is costed against.
 - `unpriced` - active models the seed cannot cost and LiteLLM cannot fill. The workflow opens or updates a tracked GitHub issue.
-- `removed` / `backlog` - models LiteLLM no longer lists at all, and models offered on an earlier run that nobody has decided on. Reported, never acted on.
+- `removed` - models LiteLLM no longer lists at all. Reported, never acted on.
 
-`scripts/auto_sync_models/model_ledger.json` is the pipeline's only memory: every model is offered exactly once, and the PR that registers or rejects it records the verdict there. The ledger advances only when that PR merges, so a run that fails or opens nothing loses no candidates.
+`scripts/auto_sync_models/model_ledger.json` is the pipeline's only memory: it holds the models seen upstream and not registered, each with its verdict and the parameter-relevant capability flags LiteLLM reports. Only a `rejected` verdict takes a model off the list, so anything left undecided is offered again on the next run; registering a model deletes its entry, leaving `default_models.py` as the single record that OCS serves it.
 
 Rates are resolved per provider, from each provider's own price-table key: Azure resells OpenAI models at its own rate, so one rate copied across providers bills the rest wrong.
 
