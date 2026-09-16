@@ -383,7 +383,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
         """
         message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return cast(str, message.status)
+        return cast("str", message.status)
 
     def send_text_message(
         self,

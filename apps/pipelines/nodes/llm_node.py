@@ -6,16 +6,12 @@ from typing import TYPE_CHECKING, Annotated, cast
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.chat.models import ChatMessageMetadataKeys
-from apps.experiments.models import ExperimentSession
-from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
-from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
@@ -26,7 +22,12 @@ from apps.service_providers.llm_service.utils import (
 )
 
 if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
+
+    from apps.experiments.models import ExperimentSession
+    from apps.files.models import File
     from apps.pipelines.nodes.context import NodeContext
+    from apps.service_providers.llm_service.datamodels import LlmChatResponse
 
 
 class StateSchema(AgentState):
@@ -184,7 +185,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if node.disabled_tools:
         # Model builtin tools doesn't have a name attribute and are dicts
         return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return cast(list[dict | BaseTool], tools)
+    return cast("list[dict | BaseTool]", tools)
 
 
 def _get_search_tool(node):

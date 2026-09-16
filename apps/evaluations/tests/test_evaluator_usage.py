@@ -130,7 +130,7 @@ def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_prov
         create_chat_messages=True,
     )
     dataset = EvaluationDatasetFactory.create(messages=[message])
-    config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    config = cast("EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
     run = EvaluationRun.objects.create(team=config.team, config=config)
 
     evaluate_message(run.id, [evaluator.id], message.id)
@@ -182,7 +182,7 @@ def test_evaluator_run_without_context_records_nothing(get_llm_service, llm_prov
 def test_usage_context_links_generation_experiment_working_version():
     """Judge spend lands on the same chatbot as the bot generation it scores, which
     OCSTracer attributes to the working version rather than the version snapshot."""
-    config = cast(EvaluationConfig, EvaluationConfigFactory.create())
+    config = cast("EvaluationConfig", EvaluationConfigFactory.create())
     working = ExperimentFactory.create(team=config.team)
     version = ExperimentFactory.create(team=config.team, working_version=working, version_number=2)
     run = EvaluationRun.objects.create(team=config.team, config=config, generation_experiment=version)
@@ -202,7 +202,7 @@ def test_usage_context_links_generation_experiment_working_version():
 def test_usage_context_for_carries_evaluator_id():
     """`_usage_context_for` threads the evaluator id through so judge-call usage can be
     broken down per evaluator on the run detail page."""
-    config = cast(EvaluationConfig, EvaluationConfigFactory.create())
+    config = cast("EvaluationConfig", EvaluationConfigFactory.create())
     run = EvaluationRun.objects.create(team=config.team, config=config)
     evaluator = EvaluatorFactory.create(team=config.team)
 

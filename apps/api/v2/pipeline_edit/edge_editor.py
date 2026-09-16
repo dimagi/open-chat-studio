@@ -132,8 +132,8 @@ def _endpoints(flow: Flow, source: str, target: str) -> tuple[FlowNodeData, Flow
         raise serializers.ValidationError(missing)
     # `flow_data` rebuilds every node's content from its row, so `data` is always populated.
     return (
-        cast(FlowNodeData, nodes[source].data),
-        cast(FlowNodeData, nodes[target].data),
+        cast("FlowNodeData", nodes[source].data),
+        cast("FlowNodeData", nodes[target].data),
     )
 
 

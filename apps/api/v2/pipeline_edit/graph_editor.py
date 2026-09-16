@@ -56,7 +56,7 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
     # and
     # `get_node_type_schema` has already refused any other name, so this cannot come back None.
-    node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
+    node_class = cast("type[BasePipelineNode]", resolve_node_class(node_type))
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
     node = FlowNode(
@@ -141,7 +141,7 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     for node in flow.nodes:
         if node.id == node_id:
             found = node.model_copy(deep=True)
-            return found, cast(FlowNodeData, found.data)
+            return found, cast("FlowNodeData", found.data)
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
@@ -206,7 +206,7 @@ def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
     """A node class's ``NodeSchema``: its display label, and whether it can be added or deleted."""
     # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
     # node class here stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
-    return cast(NodeSchema, node_class.model_config["json_schema_extra"])
+    return cast("NodeSchema", node_class.model_config["json_schema_extra"])
 
 
 def _unused_node_id(flow: Flow, node_type: str) -> str:
@@ -232,7 +232,7 @@ def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
             continue
         reparked = node.model_copy(deep=True)
         reparked.position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
-        content = cast(FlowNodeData, reparked.data)
+        content = cast("FlowNodeData", reparked.data)
         content.params = stored_params(content)
         moved.append(reparked)
     return moved

@@ -9,7 +9,7 @@ import datetime
 import json
 import textwrap
 from decimal import Decimal
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from reconcile_models import (
@@ -44,6 +44,9 @@ from reconcile_models import (
     resolve_pricing_from_llm_stats,
     seed_index,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Unit-conversion helpers
 

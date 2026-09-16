@@ -152,7 +152,7 @@ def parse_history_text(history_text: str) -> list:
             }
         elif current_message:
             # Continuation of current message content
-            current_message["content"] = cast(str, current_message["content"]) + "\n" + line_stripped
+            current_message["content"] = cast("str", current_message["content"]) + "\n" + line_stripped
 
     if current_message:
         history.append(current_message)

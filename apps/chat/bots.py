@@ -5,7 +5,6 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 import dictdiffer
-from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
@@ -25,6 +24,8 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
+
     from apps.channels.datamodels import Attachment
 
 

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
-
-from langchain_core.callbacks import BaseCallbackHandler
-
-from apps.service_providers.tracing.const import SpanLevel
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from uuid import UUID
+
+    from langchain_core.callbacks import BaseCallbackHandler
+
     from apps.experiments.models import ExperimentSession
+    from apps.service_providers.tracing.const import SpanLevel
 
 
 class ServiceReentryException(Exception):

@@ -57,12 +57,14 @@ import csv
 import os
 import sys
 import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 try:
     import tiktoken

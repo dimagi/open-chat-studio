@@ -3,18 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from functools import cached_property
-from io import BytesIO
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.db.models import Q
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
-from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
-from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -37,7 +33,13 @@ from apps.service_providers.llm_service.utils import (
 )
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
     from langchain.agents.middleware import AgentMiddleware
+    from langchain_core.language_models import BaseChatModel
+    from openai._base_client import SyncAPIClient
+
+    from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger("ocs.llm_service")
 

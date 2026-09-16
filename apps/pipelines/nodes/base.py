@@ -369,7 +369,7 @@ class PipelineNode(BasePipelineNode, ABC):
         process_params["context"] = context
         output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
-            return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
+            return Command(goto=output.goto, update=self._augment_output(state, cast("PipelineState", output.update)))
         if not isinstance(output, dict):
             return output
         return self._augment_output(state, output)

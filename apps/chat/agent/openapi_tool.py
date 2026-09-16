@@ -344,7 +344,7 @@ def _get_enum_type(schema) -> type[enum.Enum]:
     if schema.type == DataType.STRING:
         type_ = enum.StrEnum(_make_model_name(schema.title, "Enum"), [(v, v) for v in schema.enum if v])
         type_.__doc__ = schema.description
-        return cast(type[enum.Enum], type_)
+        return cast("type[enum.Enum]", type_)
     else:
         raise ValueError(f"Unsupported enum type: {schema.type}")
 

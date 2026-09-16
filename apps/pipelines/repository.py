@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from apps.chat.conversation import COMPRESSION_MARKER
@@ -10,11 +9,14 @@ from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
-from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
     from langchain_core.messages import BaseMessage
+
+    from apps.service_providers.llm_service import LlmService
 
 
 class RepositoryLookupError(Exception):

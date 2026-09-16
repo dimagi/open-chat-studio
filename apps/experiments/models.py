@@ -445,7 +445,7 @@ class AgentTools(models.TextChoices):
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return cast(
-            list[Self],
+            "list[Self]",
             [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
         )
 

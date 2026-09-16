@@ -76,7 +76,7 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         return None
 
     def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
-        return cast(str, messages[1].content)
+        return cast("str", messages[1].content)
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):

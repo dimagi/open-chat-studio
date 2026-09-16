@@ -135,7 +135,7 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "PLC0415", "TID253"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "PLC0415", "TID253"]
 ignore = [
     "PT019",
     "SIM102",
@@ -175,6 +175,12 @@ line-ending = "auto"
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
 "docs/plans/*.py" = ["PLC0415"]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves annotations at runtime, so an import only a pydantic model references
+# must stay at module level. Covers the pydantic-derived hierarchies in apps/pipelines/nodes
+# and apps/channels/datamodels.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = true
