@@ -20,7 +20,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.const import FINALIZATION_GRACE, PREVIEW_SAMPLE_SIZE
-from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError
+from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
@@ -686,6 +686,12 @@ class EvaluationConfig(BaseTeamModel):
         DELTA scoping takes ids rather than instances so large appends never have to hold
         the message objects in memory.
         """
+        evaluator_ids = list(self.active_evaluators.values_list("id", flat=True))
+        if not evaluator_ids:
+            raise NoActiveEvaluatorsError(
+                f"'{self.name}' has no active evaluators, so a run would produce no results. "
+                "Add an evaluator to this configuration first."
+            )
         generation_experiment = self.get_generation_experiment_version()
 
         with transaction.atomic():
@@ -696,7 +702,7 @@ class EvaluationConfig(BaseTeamModel):
                 status=EvaluationRunStatus.PENDING,
                 type=run_type,
                 job_id=str(uuid.uuid4()),
-                evaluator_ids=list(self.active_evaluators.values_list("id", flat=True)),
+                evaluator_ids=evaluator_ids,
             )
 
             if run_type == EvaluationRunType.PREVIEW:

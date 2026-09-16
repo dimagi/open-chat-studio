@@ -179,13 +179,14 @@ class EvaluationConfigFactory(DjangoModelFactory):
 
     @factory.post_generation
     def evaluators(self, create, extracted, **kwargs):
+        """Add the given evaluators, or one default; an explicit empty list leaves the config with none."""
         if not create:
             return
-        if extracted:
-            for evaluator in extracted:
-                self.evaluators.add(evaluator)
-        else:
+        if extracted is None:
             self.evaluators.add(EvaluatorFactory.create())
+            return
+        for evaluator in extracted:
+            self.evaluators.add(evaluator)
 
 
 class EvaluationRunFactory(DjangoModelFactory):

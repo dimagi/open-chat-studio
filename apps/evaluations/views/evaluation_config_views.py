@@ -35,7 +35,7 @@ from apps.cost_tracking.services.reporting import (
 )
 from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
-from apps.evaluations.exceptions import InFlightRunsError
+from apps.evaluations.exceptions import InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import (
     CategoricalColumn,
     categorical_columns_for_evaluators,
@@ -862,35 +862,31 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
         return render(request, "evaluations/components/evaluation_result_detail_panel.html", context)
 
 
-def _no_active_evaluators_response(request: HttpRequest, config: EvaluationConfig) -> HttpResponseRedirect | None:
-    """A redirect to the config's runs home with an error message, or None when it has an active evaluator."""
-    if config.active_evaluators.exists():
-        return None
-    messages.error(
-        request,
-        f"'{config.name}' has no active evaluators, so a run would produce no results. "
-        "Add an evaluator to this configuration first.",
-    )
+def _refused_run_response(request: HttpRequest, config: EvaluationConfig, error: NoActiveEvaluatorsError):
+    """Redirect to the config's runs home carrying the refusal as an error message."""
+    messages.error(request, ", ".join(error.messages))
     return HttpResponseRedirect(reverse("evaluations:evaluation_runs_home", args=[request.team.slug, config.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
-    """Start a full run of the config, refusing when it has no active evaluators."""
+    """Start a full run of the config; a config with no active evaluators is refused with a message."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
-    if refusal := _no_active_evaluators_response(request, config):
-        return refusal
-    run = config.run()
+    try:
+        run = config.run()
+    except NoActiveEvaluatorsError as e:
+        return _refused_run_response(request, config, e)
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_preview(request, team_slug, evaluation_pk):
-    """Start a preview run of the config, refusing when it has no active evaluators."""
+    """Start a preview run of the config; a config with no active evaluators is refused with a message."""
     config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
-    if refusal := _no_active_evaluators_response(request, config):
-        return refusal
-    run = config.run_preview()
+    try:
+        run = config.run_preview()
+    except NoActiveEvaluatorsError as e:
+        return _refused_run_response(request, config, e)
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
