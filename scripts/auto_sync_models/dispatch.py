@@ -202,17 +202,22 @@ def advance_ledger(
     added: list[ModelRecord],
     today: datetime.date,
 ) -> dict[Key, LedgerEntry]:
-    """Record each newly-offered model as pending.
+    """Record each offered model as pending, keeping any verdict already set.
 
-    Every model is offered exactly once. The Claude Code job replaces the verdict
-    with ``registered`` or ``rejected``; until it does, the entry keeps the model
-    out of later runs and shows up as backlog.
+    Only ``rejected`` takes a model out of later runs, so an entry left pending
+    is offered again until the Claude Code job decides it.
     """
     advanced = dict(ledger)
     for record in added:
         advanced.setdefault(
             record.key,
-            LedgerEntry(provider=record.provider, model=record.name, first_seen=today.isoformat(), verdict=PENDING),
+            LedgerEntry(
+                provider=record.provider,
+                model=record.name,
+                first_seen=today.isoformat(),
+                verdict=PENDING,
+                params=record.params,
+            ),
         )
     return advanced
 
@@ -227,7 +232,6 @@ def build_payload(diff: Diff, orphan_rows: list[dict], run_date: str) -> dict:
         "ledger_path": LEDGER_REL_PATH,
         "summary": {
             "added": len(diff.added),
-            "backlog": len(diff.backlog),
             "removed": len(diff.removed),
             "deprecated": len(diff.deprecated),
             "repriced": len(diff.repriced),
@@ -236,7 +240,6 @@ def build_payload(diff: Diff, orphan_rows: list[dict], run_date: str) -> dict:
             "seed_rows_without_catalogue_entry": len(orphan_rows),
         },
         "added": [_added_entry(record) for record in diff.added],
-        "backlog": [{"provider": e.provider, "model": e.model, "first_seen": e.first_seen} for e in diff.backlog],
         "removed": [{"provider": r.provider, "model": r.name} for r in diff.removed],
         "deprecated": [
             {"provider": r.provider, "model": r.name, "deprecation_date": r.deprecation_date} for r in diff.deprecated
@@ -254,6 +257,7 @@ def _added_entry(record: ModelRecord) -> dict:
         "provider": record.provider,
         "model": record.name,
         "token_limit": record.token_limit,
+        "params": record.params,
         "rates": record.rates,
         "deprecation_date": record.deprecation_date,
         "litellm_key": record.source_key,

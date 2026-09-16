@@ -7,6 +7,7 @@ import pytest
 
 from scripts.auto_sync_models import upstream
 from scripts.auto_sync_models.catalogue import (
+    LEDGER_REL_PATH,
     load_seed,
     read_default_models,
     read_ledger,
@@ -24,7 +25,6 @@ from scripts.auto_sync_models.dispatch import (
 )
 from scripts.auto_sync_models.records import (
     PENDING,
-    REGISTERED,
     REJECTED,
     Diff,
     LedgerEntry,
@@ -41,7 +41,7 @@ def ours(provider, name, rates=None, deprecated=False, token_limit=1000):
     return ModelRecord(provider=provider, name=name, token_limit=token_limit, rates=rates or {}, deprecated=deprecated)
 
 
-def theirs(provider, name, rates=None, deprecated=False, deprecation_date=None, source_key=None):
+def theirs(provider, name, rates=None, deprecated=False, deprecation_date=None, source_key=None, params=None):
     return ModelRecord(
         provider=provider,
         name=name,
@@ -49,6 +49,7 @@ def theirs(provider, name, rates=None, deprecated=False, deprecation_date=None, 
         deprecated=deprecated,
         deprecation_date=deprecation_date,
         source_key=source_key or f"{provider}/{name}",
+        params=params or {},
     )
 
 
@@ -353,6 +354,42 @@ def test_translate_reads_the_token_limit(fields, expected):
     assert everything[("openai", "m")].token_limit == expected
 
 
+@pytest.mark.parametrize(
+    ("fields", "expected"),
+    [
+        pytest.param({}, {}, id="no-flags-at-all"),
+        pytest.param({"supports_vision": True}, {}, id="flag-ocs-has-no-parameter-for"),
+        pytest.param({"supports_reasoning": True}, {"reasoning": True}, id="reasoning"),
+        pytest.param({"supports_reasoning": False}, {"reasoning": False}, id="present-false-is-kept"),
+        pytest.param({"supports_adaptive_thinking": True}, {"adaptive_thinking": True}, id="adaptive-thinking"),
+        pytest.param({"supports_sampling_params": False}, {"sampling": False}, id="sampling-refused"),
+        pytest.param(
+            {"supports_anthropic_thinking_payload": True}, {"thinking_payload": True}, id="anthropic-thinking"
+        ),
+        pytest.param({"supports_legacy_thinking": True}, {"legacy_thinking": True}, id="legacy-thinking"),
+        pytest.param(
+            {"supports_none_reasoning_effort": True, "supports_xhigh_reasoning_effort": True},
+            {"effort_levels": ["none", "xhigh"]},
+            id="effort-levels",
+        ),
+        pytest.param(
+            {"supports_xhigh_reasoning_effort": True, "supports_low_reasoning_effort": True},
+            {"effort_levels": ["low", "xhigh"]},
+            id="effort-levels-in-canonical-order",
+        ),
+        pytest.param(
+            {"supports_max_reasoning_effort": False},
+            {"effort_levels": []},
+            id="effort-key-present-but-unsupported",
+        ),
+    ],
+)
+def test_translate_captures_the_flags_that_map_to_a_model_parameter(fields, expected):
+    """LiteLLM carries 43 supports_* keys; only those OCS expresses as a parameter are kept."""
+    _, everything = upstream.translate({"openai/m": entry("openai", **fields)}, TODAY)
+    assert everything[("openai", "m")].params == expected
+
+
 # Layer 4 - the ledger
 
 
@@ -367,6 +404,22 @@ def test_ledger_round_trips(repo_root):
     }
     write_ledger(repo_root, entries)
     assert read_ledger(repo_root) == entries
+
+
+def test_ledger_round_trips_params(repo_root):
+    entries = {
+        ("openai", "gpt-9"): LedgerEntry(
+            "openai", "gpt-9", "2026-09-15", PENDING, params={"reasoning": True, "effort_levels": ["low"]}
+        )
+    }
+    write_ledger(repo_root, entries)
+    assert read_ledger(repo_root) == entries
+
+
+def test_ledger_omits_params_for_an_entry_that_has_none(repo_root):
+    """The 227 entries written before this field existed must stay byte-identical."""
+    write_ledger(repo_root, {("openai", "gpt-9"): LedgerEntry("openai", "gpt-9", "2026-09-15", PENDING)})
+    assert "params" not in json.loads((repo_root / LEDGER_REL_PATH).read_text())["openai/gpt-9"]
 
 
 def test_ledger_key_splits_on_the_first_slash_only(repo_root):
@@ -403,30 +456,24 @@ def test_added_is_upstream_minus_everything_we_know_about():
     assert [r.name for r in diff.added] == ["gpt-9"]
 
 
-def test_a_model_already_in_the_ledger_is_never_offered_again():
-    ledger = {("openai", "gpt-9"): LedgerEntry("openai", "gpt-9", "2026-01-01", PENDING)}
-    diff = compare_with(live_records=[theirs("openai", "gpt-9")], ledger=ledger)
-    assert diff.added == []
-
-
 @pytest.mark.parametrize(
-    ("verdict", "in_backlog"),
+    ("verdict", "offered"),
     [
-        pytest.param(PENDING, True, id="pending"),
-        pytest.param(REJECTED, False, id="rejected"),
-        pytest.param(REGISTERED, False, id="registered"),
+        pytest.param(PENDING, True, id="pending-is-re-offered-until-decided"),
+        pytest.param(REJECTED, False, id="rejected-stays-suppressed"),
     ],
 )
-def test_backlog_holds_only_undecided_entries(verdict, in_backlog):
+def test_only_a_rejected_model_is_kept_out_of_added(verdict, offered):
+    """Presence used to suppress, which stranded anything left pending."""
     ledger = {("openai", "gpt-9"): LedgerEntry("openai", "gpt-9", "2026-01-01", verdict)}
-    diff = compare_with(ledger=ledger)
-    assert bool(diff.backlog) is in_backlog
+    diff = compare_with(live_records=[theirs("openai", "gpt-9")], ledger=ledger)
+    assert bool(diff.added) is offered
 
 
-def test_backlog_drops_an_entry_once_we_register_it():
+def test_a_pending_model_we_have_since_registered_is_not_offered_again():
     ledger = {("openai", "gpt-9"): LedgerEntry("openai", "gpt-9", "2026-01-01", PENDING)}
-    diff = compare_with(ours_records=[ours("openai", "gpt-9")], ledger=ledger)
-    assert diff.backlog == []
+    diff = compare_with(ours_records=[ours("openai", "gpt-9")], live_records=[theirs("openai", "gpt-9")], ledger=ledger)
+    assert diff.added == []
 
 
 def test_removed_is_what_upstream_no_longer_lists_at_all():
@@ -580,6 +627,17 @@ def test_advance_ledger_does_not_overwrite_a_recorded_verdict():
     assert advanced[("openai", "gpt-9")].verdict == REJECTED
 
 
+def test_advance_ledger_records_the_models_params():
+    advanced = advance_ledger({}, [theirs("openai", "gpt-9", params={"reasoning": True})], TODAY)
+    assert advanced[("openai", "gpt-9")].params == {"reasoning": True}
+
+
+def test_advance_ledger_keeps_the_original_first_seen_when_a_model_is_re_offered():
+    existing = {("openai", "gpt-9"): LedgerEntry("openai", "gpt-9", "2026-01-01", PENDING)}
+    advanced = advance_ledger(existing, [theirs("openai", "gpt-9")], TODAY)
+    assert advanced[("openai", "gpt-9")].first_seen == "2026-01-01"
+
+
 @pytest.mark.parametrize(
     ("diff", "expected"),
     [
@@ -653,6 +711,12 @@ def test_payload_has_no_pricing_entry_for_an_unpriceable_model():
     assert payload["added"][0]["pricing_entry"] is None
 
 
+def test_payload_carries_the_params_job_two_needs_to_pick_a_class():
+    added = theirs("openai", "gpt-9", params={"reasoning": True, "effort_levels": ["low", "xhigh"]})
+    payload = build_payload(Diff(added=[added]), orphan_rows=[], run_date="x")
+    assert payload["added"][0]["params"] == {"reasoning": True, "effort_levels": ["low", "xhigh"]}
+
+
 def test_payload_summary_counts_every_section():
     diff = Diff(
         added=[theirs("openai", "a")],
@@ -662,7 +726,6 @@ def test_payload_summary_counts_every_section():
     payload = build_payload(diff, orphan_rows=[{}], run_date="x")
     assert payload["summary"] == {
         "added": 1,
-        "backlog": 0,
         "removed": 1,
         "deprecated": 0,
         "repriced": 1,

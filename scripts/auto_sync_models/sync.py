@@ -6,14 +6,14 @@ The script is six layers, and ``main`` is those six calls in order::
     layer 2  ours   = with_pricing(ours, seed)         -> Catalogue (rates filled)
     layer 3  theirs = fetch() |> translate()           -> Catalogue
     layer 4  ledger = read_ledger()                    -> the pipeline's memory
-    layer 5  diff   = compare(...)                     -> seven lists
+    layer 5  diff   = compare(...)                     -> six lists
     layer 6  dispatch(diff)                            -> files, bodies, gates
 
 Layer 5 yields one list per rule:
 
-* ``added``       upstream has it, we do not, we never deleted it, and it has
-  not been offered before. Drives the catalogue PR.
-* ``backlog``     offered before, still undecided, still not ours. Report only.
+* ``added``       upstream has it, we do not, we never deleted it, and we have
+  not rejected it. A model left undecided by an earlier run is still here, so
+  nothing is stranded. Drives the catalogue PR.
 * ``removed``     we list it, LiteLLM no longer does at all. Report only.
 * ``deprecated``  we still list it as active, its upstream deprecation date has
   passed. Drives the catalogue PR.
@@ -45,7 +45,7 @@ from pathlib import Path
 from . import dispatch
 from .catalogue import load_seed, read_default_models, read_ledger, with_pricing
 from .records import (
-    PENDING,
+    REJECTED,
     REQUIRED_SERVICE_KINDS,
     Catalogue,
     Diff,
@@ -67,9 +67,9 @@ def compare(
 ) -> Diff:
     """The whole reconciliation: seven lists off two catalogues and a ledger."""
     repriced, backfilled, unpriced = _compare_pricing(ours, everything)
+    rejected = {key for key, entry in ledger.items() if entry.verdict == REJECTED}
     return Diff(
-        added=[live[key] for key in sorted(live.keys() - ours.keys() - deleted - ledger.keys())],
-        backlog=[entry for key, entry in sorted(ledger.items()) if entry.verdict == PENDING and key not in ours],
+        added=[live[key] for key in sorted(live.keys() - ours.keys() - deleted - rejected)],
         removed=[ours[key] for key in sorted(ours.keys() - everything.keys())],
         deprecated=_newly_deprecated(ours, everything),
         repriced=repriced,
@@ -142,8 +142,7 @@ def run(repo_root: Path, today: datetime.date) -> tuple[Diff, list[dict], dict[K
     diff = compare(ours=ours, deleted=deleted, live=live, everything=everything, ledger=ledger)
     print(
         f"  -> {len(diff.added)} added, {len(diff.removed)} removed, {len(diff.deprecated)} newly deprecated, "
-        f"{len(diff.repriced)} repriced, {len(diff.backfilled)} to backfill, {len(diff.unpriced)} uncostable, "
-        f"{len(diff.backlog)} in backlog"
+        f"{len(diff.repriced)} repriced, {len(diff.backfilled)} to backfill, {len(diff.unpriced)} uncostable"
     )
     return diff, orphan_rows, ledger
 

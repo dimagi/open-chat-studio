@@ -9,15 +9,13 @@
 # LiteLLM table are read into the same shape, and every signal below falls out
 # of one comparison between them.
 #
-#   added       upstream has it, we do not, we never deleted it, and it has not
-#               been offered before
+#   added       upstream has it, we do not, we never deleted it, and we have
+#               not rejected it (so anything still undecided is still here)
 #   deprecated  we still list it as active, its upstream end-of-life has passed
 #   repriced    a rate we hold has moved upstream
 #   backfilled  a rate we lack and upstream has
 #   unpriced    still uncostable after backfill
 #   removed     we list it, LiteLLM no longer does at all (report only)
-#   backlog     offered before, still undecided, and still not in our
-#               catalogue (report only)
 #
 # Job 1 (reconcile) runs the script. The pricing side effects (rewrite seed +
 # emit migration) are mechanical, so the same job opens the "Pricing update" PR
@@ -26,19 +24,15 @@
 # per docs/developer_guides/managing_models.md.
 #
 # Discovery has one memory: scripts/auto_sync_models/model_ledger.json, keyed
-# "provider/model", holding a first_seen date and a verdict (plus a reason when
-# rejected). Job 1 records each new candidate as "pending" without committing
-# it; job 2 replaces that with "registered" or "rejected" and commits the file
-# as part of its PR. The ledger therefore advances only when a PR merges, so a
-# run that fails or opens nothing loses no candidates.
+# "provider/model". It holds the models we have seen upstream and not
+# registered -- each with a first_seen date, a verdict, the parameter-relevant
+# capability flags LiteLLM reports for it, and a reason once rejected.
 #
-# `added` subtracts the ledger's keys, not its verdicts. A "pending" entry
-# therefore keeps the model out of every later run exactly as a "rejected" one
-# does; the only difference is that it also shows up in the backlog report.
-# Setting a verdict removes it from that report but does not make the model
-# re-offerable -- deleting its line from the JSON is the only way to do that.
-# So job 2 must always commit its verdicts: a run that leaves entries "pending"
-# strands those models until someone edits the file by hand.
+# `added` subtracts only the rejected keys, so a model stays on offer until it
+# has a verdict and a failed run strands nothing. Job 2 closes each one out:
+# rejecting sets the verdict and a reason, registering deletes the entry --
+# default_models.py is then the record that we serve it, and a second copy in
+# the ledger would only drift from it.
 #
 # Triggered on: daily schedule, or manual dispatch
 # Requirements: ANTHROPIC_API_KEY secret (job 2). Job 1 needs no credentials
@@ -318,10 +312,11 @@ jobs:
 
             - `added[]` — candidates to consider. Fields: `provider`, `model`,
               `token_limit` (that provider's context window, may be null),
-              `rates` (per-1K-token prices keyed by service kind, may be empty),
-              `deprecation_date`, `litellm_key` (the upstream key it came from),
-              and `pricing_entry` — a ready-to-paste `llm_pricing.json` entry,
-              or null when LiteLLM had no rates.
+              `params` (what the model supports, for choosing a parameters
+              class — see step 3), `rates` (per-1K-token prices keyed by service
+              kind, may be empty), `deprecation_date`, `litellm_key` (the
+              upstream key it came from), and `pricing_entry` — a ready-to-paste
+              `llm_pricing.json` entry, or null when LiteLLM had no rates.
             - `deprecated[]` — models we still list as active whose upstream
               deprecation date has passed. This can be non-empty on a run with
               no new models at all, which is reason enough to open a PR.
@@ -330,8 +325,6 @@ jobs:
               upstream is weak evidence a provider retired the model, and OCS
               deliberately keeps deprecated models registered so existing
               chatbots keep working. Mention them in the report, change nothing.
-            - `backlog[]` — offered on an earlier run, still undecided. Not your
-              concern for this PR.
 
             ${{ needs.reconcile.outputs.new_model_count }} new (provider, model)
             pair(s): ${{ needs.reconcile.outputs.new_model_ids }}
@@ -339,20 +332,18 @@ jobs:
             upstream deprecation date.
 
             ## The ledger — read this before you start
-            `scripts/auto_sync_models/model_ledger.json` is the pipeline's only
-            memory. Every model is offered exactly **once**. The script has
-            already written each `added` entry into it with
-            `"verdict": "pending"`.
+            `scripts/auto_sync_models/model_ledger.json` records the models we
+            have seen upstream and have not registered. The script has already
+            written each `added` entry into it with `"verdict": "pending"`.
 
-            You MUST set a final verdict on every `added` entry before you
-            finish, in the same PR:
-            - registered it  -> `"verdict": "registered"`
-            - decided against it -> `"verdict": "rejected"` plus a one-line
-              `"reason"`.
-
-            Leaving an entry `pending` is not a neutral act: it keeps the model
-            in the backlog report forever without ever being re-offered. Set a
-            verdict on all of them.
+            Only a `rejected` verdict takes a model off the list, so anything
+            you leave pending comes back on the next run rather than being
+            lost. Still, close out every `added` entry in this same PR:
+            - decided against it -> set `"verdict": "rejected"` plus a one-line
+              `"reason"`. It is never offered again.
+            - registered it -> **delete its entry**. `default_models.py` is the
+              record that OCS serves the model; a second copy of that fact in
+              the ledger would only drift from it.
 
             ## Your task
             1. Read `reconciliation.json`,
@@ -376,8 +367,16 @@ jobs:
                  provider, using that entry's own `token_limit`. Resellers
                  differ — Azure serves gpt-5-pro at 272k where OpenAI serves
                  400k — so never reuse one provider's number for another.
-               - Pick an existing parameters class that matches the model
-                 family; only create a new one if none fits.
+               - Pick the parameters class from that entry's `params`:
+                 `reasoning` says whether an `effort` field applies at all;
+                 `effort_levels` lists the levels the model accepts (low,
+                 medium and high are the unflagged baseline, so they are not
+                 listed); `adaptive_thinking` maps to the field of that name;
+                 and `sampling: false` means the model refuses `temperature`,
+                 so its class must not declare one. Match an existing class;
+                 only create one if none fits. An absent or empty `params`
+                 means LiteLLM reported nothing, not that the model supports
+                 nothing.
                - Create a new Django migration that calls `llm_model_migration()`.
                - Strip `llm_model_migration()` (and any `notify_deprecated_models`
                  / `remove_deprecated_models` data migrations) from earlier

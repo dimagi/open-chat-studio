@@ -38,6 +38,7 @@ class ModelRecord:
     deprecation_date: str | None = None
     replacement: str | None = None
     source_key: str | None = None
+    params: dict = field(default_factory=dict)
 
     @property
     def key(self) -> Key:
@@ -59,6 +60,7 @@ class LedgerEntry:
     first_seen: str
     verdict: str = PENDING
     reason: str | None = None
+    params: dict = field(default_factory=dict)
 
     @property
     def key(self) -> Key:
@@ -94,7 +96,6 @@ class Diff:
     """Everything one comparison yields. Each field is one rule; see ``sync.compare``."""
 
     added: list[ModelRecord] = field(default_factory=list)
-    backlog: list[LedgerEntry] = field(default_factory=list)
     removed: list[ModelRecord] = field(default_factory=list)
     deprecated: list[ModelRecord] = field(default_factory=list)
     repriced: list[RateChange] = field(default_factory=list)

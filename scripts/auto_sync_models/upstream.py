@@ -41,6 +41,20 @@ CHAT_MODES = frozenset({"chat", "responses"})
 # models). Where the field is present it is the more reliable signal.
 TEXT_MODALITY = "text"
 
+# Price-table capability flag -> the key we record under. LiteLLM carries 43
+# supports_* keys; these are the ones that decide a field in model_parameters.py.
+PARAM_FLAGS = {
+    "supports_reasoning": "reasoning",
+    "supports_adaptive_thinking": "adaptive_thinking",
+    "supports_sampling_params": "sampling",
+    "supports_anthropic_thinking_payload": "thinking_payload",
+    "supports_legacy_thinking": "legacy_thinking",
+}
+
+# Ordered weakest to strongest; low/medium/high are the unflagged baseline, so
+# the table only marks the ends of the range.
+EFFORT_LEVELS = ("none", "minimal", "low", "max", "xhigh")
+
 # Price-table cost field -> OCS service kind.
 COST_FIELDS = {
     "input_cost_per_token": "llm_input",
@@ -174,7 +188,24 @@ def _record(key: Key, source_key: str, entry: dict, today: datetime.date) -> Mod
         deprecated=_deprecation_passed(entry, today),
         deprecation_date=entry.get("deprecation_date"),
         source_key=source_key,
+        params=params_from(entry),
     )
+
+
+def params_from(entry: dict) -> dict:
+    """The model's parameter-relevant capabilities, as the ledger records them.
+
+    A flag the table omits is unknown, not false, so only keys actually present
+    are recorded -- ``supports_sampling_params: false`` is what tells us a model
+    refuses ``temperature``, and dropping it would lose that.
+    """
+    params: dict[str, bool | list[str]] = {
+        name: bool(entry[flag]) for flag, name in PARAM_FLAGS.items() if flag in entry
+    }
+    effort_keys = [f"supports_{level}_reasoning_effort" for level in EFFORT_LEVELS]
+    if any(key in entry for key in effort_keys):
+        params["effort_levels"] = [level for level in EFFORT_LEVELS if entry.get(f"supports_{level}_reasoning_effort")]
+    return params
 
 
 def _translate_key(source_key: str, litellm_provider: str | None) -> Key | None:

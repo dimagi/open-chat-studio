@@ -150,6 +150,7 @@ def read_ledger(repo_root: Path) -> dict[Key, LedgerEntry]:
             first_seen=value.get("first_seen", ""),
             verdict=value.get("verdict", PENDING),
             reason=value.get("reason"),
+            params=value.get("params") or {},
         )
         entries[entry.key] = entry
     return entries
@@ -169,4 +170,6 @@ def _ledger_value(entry: LedgerEntry) -> dict:
     value = {"first_seen": entry.first_seen, "verdict": entry.verdict}
     if entry.reason:
         value["reason"] = entry.reason
+    if entry.params:
+        value["params"] = entry.params
     return value
