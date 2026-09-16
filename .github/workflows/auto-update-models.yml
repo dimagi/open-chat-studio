@@ -297,220 +297,128 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            You are adding newly released LLM models to Open Chat Studio.
+            Register newly released LLM models in Open Chat Studio and retire
+            the ones their providers have dropped.
 
             ## Input
-            `scripts/auto_sync_models` has already read the LiteLLM price
-            table, translated it into OCS's own shape, and compared the two.
-            Its output is at `./reconciliation.json`. Do NOT re-fetch,
-            re-translate or re-derive pricing — that work is done and
-            unit-tested. You care about `added[]`, `deprecated[]` and
-            `removed[]`; the `repriced`, `backfilled` and `unpriced` sections
-            are handled in a separate job and are not your concern.
+            `./reconciliation.json`, already built from the LiteLLM price
+            table. Do NOT re-fetch or re-derive pricing. Act on `added[]`,
+            `deprecated[]` and `removed[]` only — `repriced`, `backfilled` and
+            `unpriced` are another job's. Each entry is one **(provider, model)
+            pair** carrying that provider's own rates and context window, so a
+            model on openai and azure appears twice.
 
-            Each entry is one **(provider, model) pair**, not a model with a
-            list of providers. A model served by both openai and azure appears
-            as two entries, each with that provider's own rates and limit.
+            - `added[]` — candidates: `provider`, `model`, `token_limit` (may
+              be null), `params` (step 3), `rates`, `deprecation_date`,
+              `litellm_key`, `pricing_entry` (a ready-to-paste
+              `llm_pricing.json` entry, or null when upstream had no rates).
+            - `deprecated[]` — we list it active, upstream end-of-life passed.
+            - `removed[]` — we list it, upstream dropped it entirely.
 
-            - `added[]` — candidates to consider. Fields: `provider`, `model`,
-              `token_limit` (that provider's context window, may be null),
-              `params` (what the model supports, for choosing a parameters
-              class — see step 3), `rates` (per-1K-token prices keyed by service
-              kind, may be empty), `deprecation_date`, `litellm_key` (the
-              upstream key it came from), and `pricing_entry` — a ready-to-paste
-              `llm_pricing.json` entry, or null when LiteLLM had no rates.
-            - `deprecated[]` — models we still list as active whose upstream
-              deprecation date has passed. This can be non-empty on a run with
-              no new models at all, which is reason enough to open a PR.
-            - `removed[]` — models we list that LiteLLM no longer lists at
-              all. Delete these, but confirm each one first: a key disappearing
-              upstream is evidence that a provider retired a model, not proof,
-              and the upstream table churns for its own reasons. See step 5.
+            This run: ${{ needs.reconcile.outputs.new_model_count }} added
+            (${{ needs.reconcile.outputs.new_model_ids }});
+            ${{ needs.reconcile.outputs.deprecated_count }} deprecated;
+            ${{ needs.reconcile.outputs.removed_count }} gone upstream
+            (${{ needs.reconcile.outputs.removed_model_ids }}). Any one of the
+            three on its own is reason for a PR.
 
-            ${{ needs.reconcile.outputs.new_model_count }} new (provider, model)
-            pair(s): ${{ needs.reconcile.outputs.new_model_ids }}
-            ${{ needs.reconcile.outputs.deprecated_count }} model(s) past their
-            upstream deprecation date.
-            ${{ needs.reconcile.outputs.removed_count }} model(s) no longer
-            listed upstream: ${{ needs.reconcile.outputs.removed_model_ids }}
-
-            ## The ledger — read this before you start
-            `scripts/auto_sync_models/model_ledger.json` records the models we
-            have seen upstream and have not registered. The script has already
-            written each `added` entry into it with `"verdict": "pending"`.
-
-            Only a `rejected` verdict takes a model off the list, so anything
-            you leave pending comes back on the next run rather than being
-            lost. Still, close out every `added` entry in this same PR:
-            - decided against it -> set `"verdict": "rejected"` plus a one-line
-              `"reason"`. It is never offered again.
-            - registered it -> **delete its entry**. `default_models.py` is the
-              record that OCS serves the model; a second copy of that fact in
-              the ledger would only drift from it.
+            ## The ledger
+            `scripts/auto_sync_models/model_ledger.json` records models seen
+            upstream and not registered. Every `added` entry is in it as
+            `"verdict": "pending"`, and only `rejected` takes one off the list,
+            so anything left pending returns next run. Close them all out here.
+            Rejected: set `"verdict": "rejected"` and a one-line `"reason"`.
+            Registered: **delete the entry** — `default_models.py` becomes the
+            record, and a second copy would only drift from it.
 
             ## Your task
             1. Read `reconciliation.json`,
-               `apps/service_providers/llm_service/default_models.py`, and
-               `scripts/auto_sync_models/model_ledger.json`.
-            2. For each entry in `added`, decide whether to register it:
-               - Skip models that make no sense for OCS as a chatbot: embedding-
-                 or image-only, audio/realtime/transcription variants, guard and
-                 safety classifiers, robotics or domain models, and preview
-                 models already superseded by a release.
-               - Skip dated snapshot aliases (`gpt-5.4-2026-03-05`,
-                 `claude-opus-4-7-20260416`) when OCS already registers the
-                 undated name — they are the same model under a pinned label.
-               - `provider` comes from LiteLLM's tagging. It is usually right
-                 but it is still upstream metadata: check that provider really
-                 serves the model under that exact name before registering it.
-               - Record every decision in the ledger as described above.
-            3. Follow `docs/developer_guides/managing_models.md` exactly when
-               adding:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` under its own
-                 provider, using that entry's own `token_limit`. Resellers
-                 differ — Azure serves gpt-5-pro at 272k where OpenAI serves
-                 400k — so never reuse one provider's number for another.
-               - Pick the parameters class from that entry's `params`:
-                 `reasoning` says whether an `effort` field applies at all;
-                 `effort_levels` lists the levels the model accepts (low,
-                 medium and high are the unflagged baseline, so they are not
-                 listed); `adaptive_thinking` maps to the field of that name;
-                 and `sampling: false` means the model refuses `temperature`,
-                 so its class must not declare one. Match an existing class;
-                 only create one if none fits. An absent or empty `params`
-                 means LiteLLM reported nothing, not that the model supports
-                 nothing.
-               - Create a new Django migration that calls `llm_model_migration()`.
-               - Strip `llm_model_migration()` (and any `notify_deprecated_models`
-                 / `remove_deprecated_models` data migrations) from earlier
-                 migrations in `apps/service_providers/migrations/` so they only
-                 run once.
-            4. For each entry in `deprecated[]`, mark that model
-               `deprecated=True` in `default_models.py` if it isn't already, and
-               set `replacement=` where an obvious successor exists. If the file
-               already marks it, leave it alone and say so in the report.
-            5. For each entry in `removed[]`, check the provider's own model
-               list (WebFetch) before touching anything. Two outcomes:
-               - The provider still serves it — leave it registered exactly as
-                 it is and record why in the report. LiteLLM dropping a key is
-                 not a reason to break working chatbots.
-               - The provider has retired it — delete it per
-                 `docs/developer_guides/managing_models.md`:
-                 * Remove it from `DEFAULT_LLM_PROVIDER_MODELS`.
-                 * Add it to `DELETED_MODELS`. Give the tuple a third element
-                   naming a replacement whenever a clear successor exists, so
-                   references move to it instead of being cleared to null.
-                 * Add `RunDataMigration("remove_deprecated_models",
-                   command_options={"force": True})` to the migration from
-                   step 3, after `llm_model_migration()`.
-               Deleting a model clears or repoints live references and emails
-               the affected teams, so an entry you are not sure about belongs
-               under `## Needs follow-up`, not in `DELETED_MODELS`.
-            6. Apply pricing: for each model you register, append its
-               `pricing_entry` to `apps/cost_tracking/seed_data/llm_pricing.json`
-               verbatim. Each entry already carries its own provider's rates — do
-               not merge or share rates between providers. Trust the unit
-               conversion but sanity-check the magnitudes. Do NOT invent prices:
-               an entry whose `pricing_entry` is null goes under
-               `## Needs follow-up` instead. Leave the seed rows of a model you
-               deleted in place; they cost nothing and keep historical usage
-               costable. After editing, confirm the file is still valid JSON.
-            7. If an entry's `token_limit` is null, LiteLLM had no context window
-               for it — consult the LiteLLM price table with WebFetch, or use
-               what you know about the family. If you still cannot determine it,
-               register it with a conservative placeholder (e.g. 128000) and a
-               `# TODO: verify token_limit` comment, and flag it under
+               `apps/service_providers/llm_service/default_models.py`, the
+               ledger, and `docs/developer_guides/managing_models.md`, which
+               governs steps 3-5.
+            2. Decide every `added` entry and record the verdict. Reject what
+               is not a chatbot model — embedding, image, audio/realtime, guard
+               and safety classifiers, robotics, superseded previews — and
+               dated snapshot aliases where OCS registers the undated name.
+               `provider` is upstream metadata: confirm it really serves the
+               model under that exact name.
+            3. Register the keepers:
+               - Add to `DEFAULT_LLM_PROVIDER_MODELS` under its own provider
+                 with that entry's own `token_limit`, never another provider's.
+               - Choose the parameters class from `params`: `reasoning` gates
+                 `effort` entirely; `effort_levels` lists what it takes beyond
+                 the unflagged low/medium/high baseline; `adaptive_thinking`
+                 maps to the field of that name; `sampling: false` means the
+                 class must not declare `temperature`. Reuse a class unless
+                 none fits. Empty `params` means upstream said nothing, not
+                 that the model supports nothing.
+               - Follow the instructions from docs/developer_guides/managing_models.md.
+            4. `deprecated[]`: set `deprecated=True` where it is not already,
+               plus `replacement=` where the successor is obvious. Report, and
+               leave alone, the ones the file already marks.
+            5. `removed[]`: check the provider's own model list (WebFetch)
+               first. Still served — leave it registered and say why; upstream
+               dropping a key is no reason to break live chatbots. Retired —
+               drop it from `DEFAULT_LLM_PROVIDER_MODELS`, add it to
+               `DELETED_MODELS` with a third tuple element naming a replacement
+               where one exists so references move rather than clear, and add
+               `RunDataMigration("remove_deprecated_models",
+               command_options={"force": True})` to the step-3 migration. That
+               repoints or clears live references and emails the affected
+               teams, so anything doubtful goes under `## Needs follow-up`.
+            6. Append each registered model's `pricing_entry` to
+               `apps/cost_tracking/seed_data/llm_pricing.json` verbatim; rates
+               are per-provider, never shared. Sanity-check the magnitudes and
+               never invent a price — a null `pricing_entry` goes under
+               `## Needs follow-up`. Keep a deleted model's rows so past usage
+               stays costable. Confirm the file still parses.
+            7. Null `token_limit`: use the LiteLLM table (WebFetch) or the
+               model family, else a conservative placeholder (e.g. 128000) with
+               a `# TODO: verify token_limit` comment, flagged under
                `## Needs follow-up`.
-            8. Lint and test the changed files:
+            8. Lint and test what you changed:
                - `uv run ruff check apps/ --fix`
                - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
                - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
                - `uv run pytest apps/data_migrations/tests/test_remove_deprecated_models.py -v`
                  if you deleted anything.
-               Lint/test any other files your migration touched.
-            9. Commit the changes. The commit MUST include
-               `scripts/auto_sync_models/model_ledger.json` — without it the
-               verdicts are lost and every model you just judged is re-offered.
-            10. Write the decision report to `./decision_report.md`. Do this
-                before opening the PR, so the description can carry it, and do
-                it whatever the outcome — including a failed run or one with
-                nothing to do. Leave `**PR:**` as `pending`; set it and
-                `**Outcome:**` to what actually happened once step 11 is done.
-                Use this exact structure:
+            9. Commit, including the ledger — without it every verdict is lost
+               and every model is re-offered next run.
+            10. Write `./decision_report.md` before opening the PR, whatever
+                the outcome, failed and empty runs included. Follow
+                `scripts/auto_sync_models/decision_report_template.md` exactly.
+                Leave `**PR:**` as `pending`; set it and `**Outcome:**` once
+                step 11 is done.
+            11. Push and open a PR against `main` on
+                `.github/pull_request_template.md`, titled `Auto: update LLM
+                model catalogue (YYYY-MM-DD)` (today, UTC). Its description
+                MUST:
+                - List each registered model with provider and token limit, and
+                  each deleted model with the replacement its references moved
+                  to, or that they were cleared.
+                - Include the line: `Model metadata, pricing and token limits
+                  from the
+                  [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
+                - Have a `## Needs follow-up` section for anything unpriced or
+                  missing a token limit.
+                - Carry the report under `## Decision report`: all of
+                  `./decision_report.md` verbatim, minus its `**PR:**` line, or
+                  — if that is unwieldy — a link to this run, which publishes
+                  the same text:
+                  ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                - Check "The migrations are backwards compatible" only when the
+                  PR merely registers models, since `llm_model_migration()`
+                  just seeds rows. A deletion leaves it unchecked:
+                  `remove_deprecated_models` drops the `LlmProviderModel` row
+                  while the previous release still serves it. Say which case
+                  this is.
+            12. Apply the `claude` and `auto-models` labels if they exist.
+            13. Nothing to register, deprecate or delete: do NOT open an empty
+                PR, but still push the ledger verdicts, that run's whole value,
+                as a ledger-only PR.
 
-                ```markdown
-                # Auto Update Models - Decision Report
-
-                **Run date (UTC):** <YYYY-MM-DD HH:MM>
-                **Candidates considered:** <count>
-                **Outcome:** <PR opened | Nothing to add | Error>
-                **PR:** <PR URL if opened, else "n/a">
-
-                ## Per-model decisions
-
-                ### `<provider>/<model>`
-                - **Verdict:** Registered | Rejected | Needs follow-up
-                - **Token limit:** <value, or "placeholder - needs verifying">
-                - **Pricing:** <applied | none available>
-                - **Reason:** <one-sentence rationale>
-                - **Ledger verdict set:** <registered | rejected>
-                - **Source key:** <litellm_key>
-
-                <repeat for every entry in added>
-
-                ## Deprecations
-                <one line per deprecated[] entry: model, date, what you did>
-
-                ## Removed upstream
-                <one line per removed[] entry: model, what the provider's own
-                docs say, and either the replacement it was deleted in favour
-                of or the reason it stays registered>
-
-                ## Notes
-                <sources consulted, edge cases, anything deferred>
-                ```
-
-                Every entry in `added` MUST appear under "Per-model decisions"
-                with an explicit verdict and reason. This file is the audit
-                trail for the run.
-            11. Push the branch and open a PR against `main` using the repo's PR
-                template (`.github/pull_request_template.md`).
-                - PR title: `Auto: update LLM model catalogue (YYYY-MM-DD)`
-                  (today's UTC date).
-                - The PR description MUST:
-                  * List each registered model with its provider and token limit.
-                  * List each deleted model with its provider and the
-                    replacement references were moved to, or state that they
-                    were cleared.
-                  * Include the line: `Model metadata, pricing and token limits
-                    from the
-                    [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
-                  * Include a `## Needs follow-up` section for anything unpriced
-                    or missing a token limit.
-                  * Carry the decision report under a `## Decision report`
-                    heading, in one of two forms. Default to the whole of
-                    `./decision_report.md` pasted verbatim, minus its `**PR:**`
-                    line, which says nothing inside the PR it points at. If
-                    that makes the description unwieldy, link to this run
-                    instead — the workflow publishes the same text to the run
-                    summary:
-                    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-                  * Handle the "The migrations are backwards compatible" box as
-                    follows. Check it when the PR only registers models:
-                    `llm_model_migration()` is additive, it only seeds rows.
-                    Leave it unchecked when the PR deletes one:
-                    `remove_deprecated_models` drops the `LlmProviderModel` row
-                    while the previous release is still serving that model.
-                    Either way, say in the description which case this is.
-            12. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            13. If after review there is nothing to register, nothing to
-                deprecate and nothing to delete, do NOT open an empty PR — but
-                you must still commit and push the ledger verdicts, since those
-                rejections are the whole value of the run. Open a PR containing
-                only the ledger change in that case.
-
-            Branch: ${{ steps.branch.outputs.branch_name }} (already created and
-            checked out).
+            Branch: ${{ steps.branch.outputs.branch_name }} (already created
+            and checked out).
           claude_args: |
             --allowedTools "Bash(uv run:*),Bash(uv sync:*),Bash(python manage.py:*),Bash(pnpm run lint:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
 
