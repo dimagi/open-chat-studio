@@ -25,27 +25,53 @@ KIBI = 1024
 # Layer 1: the model catalogue
 
 
+class CatalogueUnreadable(RuntimeError):
+    """``default_models.py`` did not parse into a catalogue, so there is nothing to compare."""
+
+
 def read_default_models(repo_root: Path) -> tuple[Catalogue, set[Key]]:
     """``(catalogue, deleted)`` parsed from ``default_models.py``.
 
     ``DELETED_MODELS`` is kept apart from the catalogue: those models are gone,
     but a model OCS deliberately removed must not be offered back as new.
+
+    An empty parse is refused rather than returned. Read as "we register
+    nothing" it makes the whole upstream table look new, and the removal-scale
+    guard has no catalogue left to measure against.
     """
     assignments = _module_assignments(repo_root / DEFAULT_MODELS_REL_PATH)
     catalogue = {record.key: record for record in _model_records(assignments.get("DEFAULT_LLM_PROVIDER_MODELS"))}
+    if not catalogue:
+        raise CatalogueUnreadable(
+            f"{DEFAULT_MODELS_REL_PATH} parsed to no models; treating it as unreadable rather than as an empty "
+            "catalogue, which would offer every upstream model as new"
+        )
     return catalogue, set(_deleted_keys(assignments.get("DELETED_MODELS")))
 
 
 def _module_assignments(path: Path) -> dict[str, ast.expr]:
     """``{assigned_name: value_node}`` for every top-level assignment."""
     tree = ast.parse(path.read_text())
-    return {
-        target.id: node.value
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
+    return dict(binding for node in tree.body for binding in _bindings(node))
+
+
+def _bindings(node: ast.stmt) -> Iterator[tuple[str, ast.expr]]:
+    """``(name, value)`` for each name one statement binds.
+
+    Annotated assignments count: a type hint on either name we read must not
+    hide it. A bare annotation binds nothing and yields nothing.
+    """
+    if isinstance(node, ast.AnnAssign):
+        targets, value = [node.target], node.value
+    elif isinstance(node, ast.Assign):
+        targets, value = node.targets, node.value
+    else:
+        return
+    if value is None:
+        return
+    for target in targets:
+        if isinstance(target, ast.Name):
+            yield target.id, value
 
 
 def _model_records(node: ast.expr | None) -> Iterator[ModelRecord]:

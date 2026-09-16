@@ -7,7 +7,9 @@ import pytest
 
 from scripts.auto_sync_models import upstream
 from scripts.auto_sync_models.catalogue import (
+    DEFAULT_MODELS_REL_PATH,
     LEDGER_REL_PATH,
+    CatalogueUnreadable,
     load_seed,
     read_default_models,
     read_ledger,
@@ -190,6 +192,48 @@ def test_deleted_models_are_kept_out_of_the_catalogue(repo_root, key):
     parsed, deleted = read_default_models(repo_root)
     assert key in deleted
     assert key not in parsed
+
+
+ANNOTATED_MODELS_SOURCE = """
+import dataclasses
+
+
+@dataclasses.dataclass
+class Model:
+    name: str
+    token_limit: int
+
+
+DEFAULT_LLM_PROVIDER_MODELS: dict[str, list[Model]] = {
+    "openai": [Model("gpt-4.1", 1000000)],
+}
+
+DELETED_MODELS: list[tuple[str, ...]] = [("openai", "o1-preview")]
+"""
+
+
+def test_catalogue_reads_an_annotated_assignment(repo_root):
+    """A type hint on either name must not read as "we register nothing"."""
+    (repo_root / DEFAULT_MODELS_REL_PATH).write_text(ANNOTATED_MODELS_SOURCE)
+    parsed, deleted = read_default_models(repo_root)
+    assert set(parsed) == {("openai", "gpt-4.1")}
+    assert deleted == {("openai", "o1-preview")}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("DELETED_MODELS = []\n", id="catalogue-name-absent"),
+        pytest.param("DEFAULT_LLM_PROVIDER_MODELS = {}\n", id="catalogue-empty"),
+        pytest.param("DEFAULT_LLM_PROVIDER_MODELS: dict[str, list]\n", id="annotated-but-unassigned"),
+        pytest.param("DEFAULT_LLM_PROVIDER_MODELS = _build()\n", id="catalogue-not-a-literal"),
+    ],
+)
+def test_a_catalogue_that_parses_to_nothing_is_unreadable(repo_root, source):
+    """Reading nothing would offer the whole upstream table as new, past every guard."""
+    (repo_root / DEFAULT_MODELS_REL_PATH).write_text(source)
+    with pytest.raises(CatalogueUnreadable):
+        read_default_models(repo_root)
 
 
 # Layer 2 - pricing enrichment

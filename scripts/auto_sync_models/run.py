@@ -30,9 +30,9 @@ Usage (from the repo root)::
         [--dry-run] \\
         [--today YYYY-MM-DD]    # deterministic-tests override
 
-Exit code is 1 when the price table cannot be read, or reads back too small or
-too destructive to be believed; every signal derives from it, so a run without a
-trustworthy copy has nothing to say.
+Exit code is 1 when our own catalogue does not parse, or the price table cannot
+be read, or reads back too small or too destructive to be believed; every signal
+derives from those two, so a run without a trustworthy copy has nothing to say.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from . import dispatch
-from .catalogue import load_seed, read_default_models, read_ledger, with_pricing
+from .catalogue import CatalogueUnreadable, load_seed, read_default_models, read_ledger, with_pricing
 from .records import (
     REJECTED,
     REQUIRED_SERVICE_KINDS,
@@ -193,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         reconciliation = run(repo_root, today)
-    except UpstreamUnavailable as exc:
+    except (CatalogueUnreadable, UpstreamUnavailable) as exc:
         print(f"  (!) {exc}")
         return 1
 
