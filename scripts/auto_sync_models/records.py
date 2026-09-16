@@ -108,4 +108,4 @@ class Diff:
 
     @property
     def has_catalogue_work(self) -> bool:
-        return bool(self.added or self.deprecated)
+        return bool(self.added or self.deprecated or self.removed)

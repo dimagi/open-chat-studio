@@ -644,6 +644,7 @@ def test_advance_ledger_keeps_the_original_first_seen_when_a_model_is_re_offered
         pytest.param(Diff(), "false", id="nothing-to-do"),
         pytest.param(Diff(added=[theirs("openai", "m")]), "true", id="a-new-model"),
         pytest.param(Diff(deprecated=[theirs("openai", "m")]), "true", id="only-a-deprecation"),
+        pytest.param(Diff(removed=[theirs("openai", "m")]), "true", id="only-a-removal"),
     ],
 )
 def test_has_catalogue_work_gates_the_claude_job(diff, expected):
@@ -668,6 +669,13 @@ def test_gate_variables_name_the_body_files(tmp_path):
 def test_new_model_ids_are_provider_qualified():
     diff = Diff(added=[theirs("azure", "gpt-9"), theirs("openai", "gpt-9")])
     assert "new_model_ids=azure/gpt-9,openai/gpt-9" in github_outputs(diff, TODAY, None, None)
+
+
+def test_removed_model_ids_are_provider_qualified():
+    diff = Diff(removed=[theirs("azure", "gpt-9"), theirs("openai", "gpt-9")])
+    outputs = github_outputs(diff, TODAY, None, None)
+    assert "removed_count=2" in outputs
+    assert "removed_model_ids=azure/gpt-9,openai/gpt-9" in outputs
 
 
 def test_pricing_pr_body_tables_every_change():

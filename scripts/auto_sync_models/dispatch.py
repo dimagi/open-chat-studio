@@ -297,6 +297,8 @@ def github_outputs(
         "new_model_count": len(diff.added),
         "new_model_ids": ",".join(f"{r.provider}/{r.name}" for r in diff.added),
         "deprecated_count": len(diff.deprecated),
+        "removed_count": len(diff.removed),
+        "removed_model_ids": ",".join(f"{r.provider}/{r.name}" for r in diff.removed),
         "has_price_changes": pricing_body_path is not None,
         "price_change_count": len(diff.repriced),
         "backfilled_count": len(diff.backfilled),
