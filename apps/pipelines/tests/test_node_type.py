@@ -7,6 +7,7 @@ resource lookup carries a ``django_db`` marker.
 import pytest
 
 from apps.pipelines.node_type import NodeType, NoOutputHandles, server_managed_node_types
+from apps.pipelines.tests.utils import NON_NODE_ATTRIBUTES
 from apps.pipelines.versioning import ParamVersioning
 
 
@@ -20,6 +21,31 @@ class TestNodeClassResolution:
     def test_a_type_naming_no_class_does_not_exist(self):
         assert NodeType("GhostNode").exists is False
         assert NodeType("GhostNode").node_class is None
+
+
+class TestNullObject:
+    """Every accessor answers for a type naming no node class rather than raising.
+
+    ``Node.type`` is unvalidated graph data and ``REMOVED_NODE_TYPES`` makes an unresolvable type a
+    supported state, so the empty answers are the contract callers rely on to stop branching.
+    """
+
+    @pytest.mark.parametrize("node_type", [*NON_NODE_ATTRIBUTES, pytest.param("GhostNode", id="no-such-attribute")])
+    def test_whole_surface_answers(self, node_type):
+        unresolvable = NodeType(node_type)
+
+        assert unresolvable.exists is False
+        assert unresolvable.node_class is None
+        assert unresolvable.declared_params == frozenset()
+        assert unresolvable.declares("name") is False
+        assert unresolvable.schema is None
+        assert unresolvable.is_server_managed is False
+        assert unresolvable.versioned_param_specs == ()
+        assert unresolvable.output_handles({"name": "odd"}, "odd-1") == []
+        assert unresolvable.why_no_output_handles() is NoOutputHandles.UNKNOWN_TYPE
+        assert unresolvable.input_handles() == ["input"]
+        assert unresolvable.react_flow_type == "pipelineNode"
+        assert unresolvable.render_order == 1
 
 
 class TestDeclaredParams:
