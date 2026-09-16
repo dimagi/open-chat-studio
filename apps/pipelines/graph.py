@@ -10,6 +10,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
+from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState, resolve_node_class
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 from apps.service_providers.llm_service.retry import get_retry_policy
@@ -26,7 +27,7 @@ class Node(pydantic.BaseModel):
     def pipeline_node_class(self):
         """This node's class. Raises for a type that names no node class, which is what a removed
         type has always done — so a caller guarding against one guards against both."""
-        node_class = resolve_node_class(self.type)
+        node_class = NodeType(self.type).node_class
         if node_class is None:
             raise AttributeError(f"Unknown pipeline node type: {self.type}")
         return node_class

@@ -33,6 +33,7 @@ from apps.pipelines.flow import (
     react_flow_node_type,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
+from apps.pipelines.node_type import NodeType
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -267,9 +268,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @staticmethod
     def _node_validation_errors(node) -> dict:
         """Field -> message errors for one node's params; non-field failures land under "root"."""
-        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
-
-        node_class = resolve_node_class(node.type)
+        node_class = node.node_type.node_class
         if node_class is None:
             # A type naming no node class — removed since, or never one — must be reported, not crash
             # validation.
@@ -546,6 +545,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def mcp_tool_refs(self) -> list[str]:
         """The MCP tools this node has selected, each as ``"<server id>:<tool name>"``."""
         return self.params.get("mcp_tools", [])
+
+    @property
+    def node_type(self) -> NodeType:
+        """What this row's type decides, as opposed to what the row itself holds."""
+        return NodeType(self.type)
 
     @property
     def position(self) -> dict | None:
