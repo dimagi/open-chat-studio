@@ -1,0 +1,87 @@
+# Auto-merge Low Risk PRs
+#
+# Polls for open pull requests labelled `risk:low` and merges the ones that have
+# passed every check, including the automated code review's verdict. The rules
+# live in `scripts/auto_merge_low_risk.py`.
+#
+# Triggered on: every 15 minutes, or manual dispatch
+# Requirements: none beyond the default GITHUB_TOKEN
+#
+# Notes:
+# - **Dry run until `AUTO_MERGE_LOW_RISK` is set to `enabled`** in the repository
+#   variables. Until then every run reports what it would have merged to the job
+#   summary and merges nothing. That variable is the only switch
+# - **Setting that variable is necessary but not sufficient.** `main` is protected
+#   with `required_approving_review_count: 1`, `require_last_push_approval: true`
+#   and `enforce_admins: true`, so every candidate will sit at
+#   `mergeable_state: blocked` until a human approves it. Auto-merge only becomes
+#   real once that protection is relaxed, or an identity in the bypass list does
+#   the merging — both are governance calls, not settings changes
+# - Merging to `main` deploys to production, so the script refuses by default:
+#   an absent label, a check that has not reported, a missing review verdict and
+#   an unknown mergeability all block. Nothing here has an override
+# - The `Classify risk` check is required *by name on the head commit*, which is
+#   what keeps the label honest — a push after the label was applied gets a fresh
+#   check, so it cannot inherit the old verdict
+# - Polled rather than event-driven: the merge becomes possible when the last of
+#   several independent workflows finishes, and there is no single event for that.
+#   Fifteen minutes of latency on an unattended merge costs nothing
+# - Runs are serialized repo-wide. Two runs merging into `main` at once would
+#   race each other's mergeability
+# - GitHub computes mergeability lazily, so a pull request can report
+#   `mergeable: null` on first read. That blocks the merge for this run and the
+#   read itself starts the computation, so the next poll has an answer
+
+name: Auto-merge Low Risk PRs
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-merge-low-risk
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  auto-merge:
+    name: Merge eligible pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Check out the merge rules
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/auto_merge_low_risk.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Merge what qualifies
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ENABLED: ${{ vars.AUTO_MERGE_LOW_RISK == 'enabled' }}
+        run: |
+          args=()
+          if [[ "$ENABLED" == "true" ]]; then
+            args+=(--execute)
+          fi
+          python3 scripts/auto_merge_low_risk.py "${args[@]}"
