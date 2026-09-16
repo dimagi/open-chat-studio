@@ -52,7 +52,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   //** end help bubble state
 
   function onDragStart(
-    event: React.DragEvent<any>,
+    event: React.DragEvent<HTMLDivElement>,
     schema: JsonSchema
   ): void {
     hideHelp();
@@ -66,7 +66,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
   }
 
   function onClick(
-      event: React.MouseEvent<any>,
+      event: React.MouseEvent<HTMLDivElement>,
       schema: JsonSchema
   ): void {
       hideHelp();

@@ -82,7 +82,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     updateNodeInternals(id);
   };
 
-  const currentColor = data.params["color"] || NODE_COLORS[0].value;
+  const currentColor = concatenate(data.params["color"]) || NODE_COLORS[0].value;
   const nodeClasses = `${nodeBorderClass(hasErrors, selected, !!deprecatedModel)} ${currentColor}`;
 
   return (
