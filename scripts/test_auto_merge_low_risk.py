@@ -66,6 +66,7 @@ def test_a_clean_low_risk_pull_request_has_no_blockers():
         pytest.param({"mergeable_state": "dirty"}, "mergeable_state is dirty", id="conflicted"),
         pytest.param({"mergeable_state": "blocked"}, "mergeable_state is blocked", id="protection"),
         pytest.param({"mergeable_state": "behind"}, "mergeable_state is behind", id="behind"),
+        pytest.param({"mergeable_state": "unstable"}, "mergeable_state is unstable", id="unstable"),
     ],
 )
 def test_pull_request_state_blocks(overrides, fragment):
@@ -230,3 +231,45 @@ def test_a_hand_applied_label_cannot_merge_a_medium_pull_request():
     """Anyone with write access can apply `risk:low`; only the gate's own verdict counts."""
     labelled = pull(labels=[{"name": "risk:low"}])
     assert find_blockers(labelled, passing_checks(), [], risk="risk:medium") != []
+
+
+@pytest.fixture()
+def one_mergeable_candidate(monkeypatch):
+    """Stub the API so main() sees exactly one pull request with nothing holding it back."""
+    candidate = pull()
+    monkeypatch.setattr(auto_merge_low_risk, "open_low_risk_pulls", lambda repo: [candidate])
+    monkeypatch.setattr(auto_merge_low_risk, "gh_api", lambda *args: candidate)
+    monkeypatch.setattr(auto_merge_low_risk, "check_runs_for", lambda repo, sha: passing_checks())
+    monkeypatch.setattr(auto_merge_low_risk, "gh_paginated", lambda path: [])
+    monkeypatch.setattr(auto_merge_low_risk, "recompute_risk", lambda *args: LOW)
+    merges = []
+    monkeypatch.setattr(auto_merge_low_risk, "merge", lambda *args: merges.append(args))
+    return merges
+
+
+def test_dry_run_never_merges(one_mergeable_candidate, capsys):
+    """The whole rollout rests on this: without --execute nothing reaches the merge API."""
+    assert auto_merge_low_risk.main(["--repo", REPO]) == 0
+    assert one_mergeable_candidate == []
+    assert "Would merge" in capsys.readouterr().out
+
+
+def test_execute_merges_the_same_candidate(one_mergeable_candidate, capsys):
+    assert auto_merge_low_risk.main(["--repo", REPO, "--execute"]) == 0
+    assert len(one_mergeable_candidate) == 1
+    assert "Merged." in capsys.readouterr().out
+
+
+def test_a_blocked_candidate_is_not_merged_even_with_execute(monkeypatch, one_mergeable_candidate):
+    monkeypatch.setattr(auto_merge_low_risk, "recompute_risk", lambda *args: "risk:medium")
+    assert auto_merge_low_risk.main(["--repo", REPO, "--execute"]) == 0
+    assert one_mergeable_candidate == []
+
+
+def test_an_unreadable_candidate_does_not_abort_the_run(monkeypatch, one_mergeable_candidate, capsys):
+    def explode(*args):
+        raise RuntimeError("502 Bad Gateway")
+
+    monkeypatch.setattr(auto_merge_low_risk, "gh_api", explode)
+    assert auto_merge_low_risk.main(["--repo", REPO]) == 0
+    assert "could not be read" in capsys.readouterr().out

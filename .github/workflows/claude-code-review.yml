@@ -26,6 +26,9 @@
 #   step, so it does not depend on the plugin's internals
 # - `verdict` is skipped exactly when `review` is, so a draft or fork PR has no
 #   verdict check at all. Auto-merge treats a missing verdict as a refusal
+# - The verdict demands a positive signal on both axes: the action's own `conclusion`
+#   output *and* a finding count of zero. Counting alone would read "the review never
+#   got as far as commenting" as "the review found nothing"
 # - **Unconfirmed:** only inline review comments are counted. `claude_args` also
 #   permits `gh pr comment` and `gh pr review`, so a review reported as a review
 #   body or a conversation comment would count as zero findings and pass. Counting
@@ -62,6 +65,7 @@ jobs:
 
     outputs:
       findings: ${{ steps.findings.outputs.count }}
+      conclusion: ${{ steps.claude.outputs.conclusion }}
 
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
@@ -85,9 +89,10 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
-            | jq -r 'add // [] | .[].id' | sort > review-comments-before.txt
+            | jq -r 'add // [] | .[].id' | sort > "$RUNNER_TEMP/review-comments-before.txt"
 
       - name: Run Claude Code Review
+        id: claude
         uses: anthropics/claude-code-action@v1.0.206
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -110,8 +115,9 @@ jobs:
           # zero findings and passes the verdict. The count has to fail instead.
           set -euo pipefail
           gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
-            | jq -r 'add // [] | .[].id' | sort > review-comments-after.txt
-          count=$(comm -13 review-comments-before.txt review-comments-after.txt | wc -l | tr -d ' ')
+            | jq -r 'add // [] | .[].id' | sort > "$RUNNER_TEMP/review-comments-after.txt"
+          count=$(comm -13 "$RUNNER_TEMP/review-comments-before.txt" "$RUNNER_TEMP/review-comments-after.txt" \
+            | wc -l | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "The review added $count inline comment(s) on this push." >> "$GITHUB_STEP_SUMMARY"
 
@@ -130,9 +136,16 @@ jobs:
         env:
           RESULT: ${{ needs.review.result }}
           FINDINGS: ${{ needs.review.outputs.findings }}
+          CONCLUSION: ${{ needs.review.outputs.conclusion }}
         run: |
           if [[ "$RESULT" != "success" ]]; then
             echo "::error::The review job did not complete (result: $RESULT)."
+            exit 1
+          fi
+          # Zero findings has to mean "the review ran and found nothing", not "the review
+          # never got as far as looking". Demand the action's own conclusion as well.
+          if [[ "$CONCLUSION" != "success" ]]; then
+            echo "::error::The review reported conclusion '${CONCLUSION:-<none>}', not success."
             exit 1
           fi
           # An empty count means the counting step never ran. Fail closed.

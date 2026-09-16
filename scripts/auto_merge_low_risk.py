@@ -47,9 +47,10 @@ REQUIRED_CHECKS = ("Classify risk", "Automated review verdict")
 # A check that deliberately did not apply to this diff is not a failure.
 ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 
-# `unstable` means a non-required check is red -- every check is judged below, so
-# GitHub's own idea of which ones are required does not get a say.
-MERGEABLE_STATES = frozenset({"clean", "unstable"})
+# `clean` only. `unstable` also covers a red or pending legacy *commit status*, which
+# external integrations post and the Check Runs API below cannot see -- accepting it
+# would let an integration's red signal through the moment one is installed.
+MERGEABLE_STATES = frozenset({"clean"})
 
 
 def latest_check_runs(check_runs: list[dict]) -> dict[str, dict]:
@@ -203,15 +204,21 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     for candidate in candidates:
         number = candidate["number"]
-        # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
-        pull: dict = gh_api(f"repos/{args.repo}/pulls/{number}")
-        head_sha = pull["head"]["sha"]
-        check_runs = check_runs_for(args.repo, head_sha)
-        reviews = gh_paginated(f"repos/{args.repo}/pulls/{number}/reviews?per_page=100")
-        risk = recompute_risk(args.repo, number, (pull["head"].get("repo") or {}).get("full_name"))
+        lines.append(f"### #{number} {candidate['title']}")
+        try:
+            # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
+            pull: dict = gh_api(f"repos/{args.repo}/pulls/{number}")
+            head_sha = pull["head"]["sha"]
+            check_runs = check_runs_for(args.repo, head_sha)
+            reviews = gh_paginated(f"repos/{args.repo}/pulls/{number}/reviews?per_page=100")
+            head_repo = (pull["head"].get("repo") or {}).get("full_name")
+            risk = recompute_risk(args.repo, number, head_repo)
+        except RuntimeError as exc:
+            # One unreachable candidate must not cost the run its summary or the rest of the queue.
+            lines.extend([f"Held back, could not be read: {exc}", ""])
+            continue
 
         blockers = find_blockers(pull, check_runs, reviews, args.repo, recomputed_risk=risk)
-        lines.append(f"### #{number} {pull['title']}")
         if blockers:
             lines.append("Held back because:")
             lines.extend(f"- {blocker}" for blocker in blockers)
@@ -224,7 +231,15 @@ def main(argv: list[str] | None = None) -> int:
                 lines.append(f"Merge failed: {exc}")
             else:
                 merged += 1
-                lines.append("Merged.")
+                lines.extend(
+                    [
+                        "Merged.",
+                        "",
+                        "Stopping here: `main` has moved, so every candidate behind this one was "
+                        "judged against a base that no longer exists. The next poll re-reads them.",
+                    ]
+                )
+                break
         else:
             lines.append("**Would merge.**")
         lines.append("")

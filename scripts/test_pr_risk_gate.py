@@ -68,6 +68,11 @@ def test_glob_match(path, pattern, expected):
         pytest.param("apps/experiments/urls.py", "URL routing", id="urls"),
         pytest.param("docs/adr/0049-usage-source.md", "architecture decision record", id="adr"),
         pytest.param("api-schemas/openapi.yml", "generated API schema", id="schema"),
+        pytest.param("CLAUDE.md", "automated reviewer reads", id="claude-md"),
+        pytest.param("apps/chat/AGENTS.md", "automated reviewer reads", id="nested-agents-md"),
+        pytest.param(".claude/agents/reviewer.md", "agent configuration", id="agent-config"),
+        pytest.param(".mcp.json", "agent configuration", id="mcp-config"),
+        pytest.param("scripts/pr_risk_gate.py", "checks that gate CI", id="gate-script"),
     ],
 )
 def test_blocked_paths_are_high(filename, reason_fragment):
@@ -257,3 +262,18 @@ def test_deleting_a_test_file_under_a_blocked_app_is_still_high():
 def test_a_test_named_file_outside_apps_does_not_escape_a_blocker():
     assert classify([pr_file(".github/workflows/test_deploy.py")]).risk == HIGH
     assert classify([pr_file("config/test_settings.py")]).risk == HIGH
+
+
+def test_the_suite_guarding_this_gate_cannot_merge_itself():
+    """`scripts/**` is blocked, so the tests protecting the gate need human eyes."""
+    assert classify([pr_file("scripts/test_pr_risk_gate.py")]).risk == HIGH
+
+
+def test_a_doc_full_of_test_samples_is_not_a_loss_of_coverage():
+    patch = "@@\n-def test_example():\n-def test_another():\n"
+    assert classify([pr_file("docs/plans/some-plan.md", patch=patch)]).risk == LOW
+
+
+def test_a_doc_mentioning_skip_does_not_disable_a_test():
+    patch = "@@\n+Use `@pytest.mark.skip` to park a test.\n"
+    assert classify([pr_file("docs/testing-guide.md", patch=patch)]).risk == LOW

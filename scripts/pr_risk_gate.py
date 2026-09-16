@@ -64,6 +64,11 @@ BLOCKED_PATHS: list[tuple[str, str]] = [
     ("apps/cost_tracking/**", "billing"),
     ("apps/usage_metrics/**", "billing"),
     ("**/urls.py", "URL routing surface"),
+    ("**/CLAUDE.md", "instructions the automated reviewer reads"),
+    ("**/AGENTS.md", "instructions the automated reviewer reads"),
+    (".claude/**", "agent configuration the automated reviewer reads"),
+    (".mcp.json", "agent configuration the automated reviewer reads"),
+    ("scripts/**", "developer tooling and the checks that gate CI"),
     ("docs/adr/**", "accepted architecture decision record"),
     ("api-schemas/**", "generated API schema"),
 ]
@@ -75,7 +80,7 @@ LOW_RISK_PATHS: list[tuple[str, str]] = [
     ("mkdocs.yml", "documentation"),
     ("apps/*/tests/**", "tests"),
     ("apps/*/tests.py", "tests"),
-    ("**/test_*.py", "tests"),
+    ("apps/**/test_*.py", "tests"),
 ]
 
 DOCS_PATHS = [pattern for pattern, reason in LOW_RISK_PATHS if reason == "documentation"]
@@ -147,9 +152,15 @@ def _paths_of(entry: dict) -> list[str]:
 
 
 def count_lost_tests(files: list[dict]) -> int:
-    """Net test functions the diff drops. Renaming or re-signaturing a test nets to zero."""
+    """Net test functions the diff drops. Renaming or re-signaturing a test nets to zero.
+
+    Python files only: `docs/` carries plan documents with `def test_` samples in them,
+    and deleting one of those is not a loss of coverage.
+    """
     added = removed = 0
     for entry in files:
+        if not entry["filename"].endswith(".py"):
+            continue
         for line in (entry.get("patch") or "").splitlines():
             match = TEST_DEF.match(line)
             if match:
@@ -178,7 +189,7 @@ def find_blockers(files: list[dict]) -> list[str]:
                 blockers.append(f"{path}: {reason}")
         if status in ("removed", "renamed") and not all(is_docs(p) for p in _paths_of(entry)):
             blockers.append(f"{entry['filename']}: file {status}")
-        for line in (entry.get("patch") or "").splitlines():
+        for line in (entry.get("patch") or "").splitlines() if entry["filename"].endswith(".py") else []:
             if DISABLED_TEST.match(line):
                 blockers.append(f"{entry['filename']}: disables a test")
                 break
