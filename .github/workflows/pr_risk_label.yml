@@ -1,0 +1,116 @@
+# PR Risk Label
+#
+# Applies exactly one of `risk:low`, `risk:medium` or `risk:high` to every pull
+# request, from the deterministic gate in `scripts/pr_risk_gate.py`. The gate
+# reads only the PR's file list and diff — no model, no judgement.
+#
+# Triggered on: PR opened, reopened, pushed, or marked ready for review
+# Requirements: none beyond the default GITHUB_TOKEN
+#
+# Notes:
+# - Merging to `main` deploys to production (`deploy.yml`), so `risk:low` is the
+#   gate for unattended auto-merge. The rubric lives in the script's docstring
+# - The gate script is read from the PR's **base** commit, not its head, so a PR
+#   cannot relax the rules it is judged by. The checkout is sparse for the same
+#   reason — nothing else from the repo is on disk
+# - Nothing from the PR branch is executed here. The diff is fetched through the
+#   API and only ever parsed as text
+# - Fork PRs get a read-only GITHUB_TOKEN, so the label cannot be applied to
+#   them. The verdict is still computed and written to the job summary. A fork PR
+#   carrying no risk label is the safe outcome: auto-merge requires `risk:low`
+# - The label is recomputed on every push, so it cannot outlive the diff it
+#   describes. Anything gating on it must also require this workflow's check on
+#   the head commit, or a push can land under a stale `risk:low`
+# - A new push cancels any in-progress run — its verdict is about to be stale
+
+name: PR Risk Label
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: pr-risk-label-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Classify risk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Check out the gate from the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/pr_risk_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Fetch the pull request file list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api "repos/$REPO/pulls/$PR/files?per_page=100" --paginate --slurp > files.json
+
+      - name: Classify
+        id: gate
+        env:
+          # An outsider's change is never eligible for unattended merge, whatever it touches.
+          UNTRUSTED: >-
+            ${{ github.event.pull_request.head.repo.full_name != github.repository
+            || !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
+        run: |
+          args=()
+          if [[ "$UNTRUSTED" == "true" ]]; then
+            args+=(--untrusted)
+          fi
+          python3 scripts/pr_risk_gate.py files.json "${args[@]}"
+
+      - name: Apply the label
+        # Fork PRs downgrade GITHUB_TOKEN to read-only; labelling would 403.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          RISK: ${{ steps.gate.outputs.risk }}
+        run: |
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=$RISK" --silent
+          for label in risk:low risk:medium risk:high; do
+            if [[ "$label" != "$RISK" ]]; then
+              gh api -X DELETE "repos/$REPO/issues/$PR/labels/$label" --silent || true
+            fi
+          done
+
+      - name: Write the job summary
+        if: always() && steps.gate.outputs.risk != ''
+        env:
+          RISK: ${{ steps.gate.outputs.risk }}
+          REASONS: ${{ steps.gate.outputs.reasons }}
+        run: |
+          {
+            echo "## \`$RISK\`"
+            if [[ -n "$REASONS" ]]; then
+              echo
+              echo "$REASONS"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
