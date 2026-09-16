@@ -14,6 +14,8 @@
       "Bash(rg:*)",
       "Bash(pnpm run build:*)",
       "Bash(pnpm run type-check:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm run test:*)",
       "Bash(pnpm exec stencil test:*)",
       "WebFetch(domain:docs.openchatstudio.com)",
       "Bash(pnpm run lint:*)",

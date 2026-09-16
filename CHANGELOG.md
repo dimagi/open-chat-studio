@@ -24,6 +24,12 @@ version section when a release is cut.
 ### Upgrading
 <!-- Manual steps, in the order they must run relative to the deploy. Omit if
      the upgrade is "pull the new tag and deploy". -->
+- **After** deploying, run `python manage.py retire_assistant_file_purpose`. It re-points files
+  the retired OpenAI Assistants feature left attached to a collection or a chat message onto
+  their real purpose, and deletes the ones nothing references any more (reclaiming their
+  storage). Archived files are left untouched. `--dry-run` reports what it would do. Safe to run
+  later; until it runs, those rows keep a `purpose` value that is no longer a valid choice, which
+  nothing reads. (#4254)
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
@@ -32,6 +38,23 @@ version section when a release is cut.
   operator or team sets one. (#4371)
 - `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
+- Every OpenAI Assistant is deleted, along with its tool resources and any custom action
+  operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
+  stripped from stored pipeline node params. Any `Banner` pinned to the removed
+  `assistants_home` location is deleted; it had nowhere left to render. This is deliberate,
+  irreversible data loss for a feature whose upstream API OpenAI retired on 26 August 2026;
+  the audit log retains the history.
+  The `assistants` tables and the two FK columns still exist and are dropped in the following
+  release. (#4254)
+
+### Deprecations and removals
+- The OpenAI Assistants feature is fully removed (#4254). The `Assistant Admin` role is gone —
+  members holding it lose add/change/delete on files, which no other role grants; re-grant file
+  access through another role if a team relied on it. `Attachment.upload_to_assistant` no longer
+  exists, so a Python node that assigns it will now fail at runtime. `FilePurpose.ASSISTANT` and
+  the `assistants_home` banner location are removed, as is the `assistant` field from the
+  `CustomActionOperation` and `Node` export-API schemas (it was always `null` in exports) and the
+  `assistant` value from `PurposeEnum`.
 
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
@@ -51,6 +74,11 @@ version section when a release is cut.
   pages that read them are gone (see Deployment below). Setting them is now a
   no-op rather than an error, so no action is required, but they can be dropped
   from your environment. (#4389)
+- `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS`, `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS`:
+  new, optional, default `36000` and `60`. Lifetime in seconds of OAuth access
+  tokens issued at `/o/token/`; the second applies to client-credentials tokens
+  requested with the `chat:start` scope alone, which are meant for the chat
+  widget. Previously every token lived 36000 seconds. (#4472)
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
@@ -83,9 +111,9 @@ version section when a release is cut.
   still opens in the editor — the node renders as a "Removed Node" — but the
   pipeline no longer builds, so it cannot run. OpenAI retired the Assistants API
   on 26 August 2026, so these pipelines were already failing at the provider.
-  No migration and no data loss: the `OpenAiAssistant` rows and their Django
-  admin survive this release, and a later phase drops the tables and the FK
-  columns. (#4372, #4254)
+  The `OpenAiAssistant` rows are deleted by this release (see Migrations above)
+  and the Django admin for them is gone; the `assistants` tables and the FK
+  columns are dropped in the following release. (#4372, #4254)
 - **Breaking (API):** `/api/v2/.../inspect/` no longer returns an `assistant`
   key on a node, and the `AssistantNodeParams` component is gone from the node
   params union. The key was already conditional — omitted for nodes not
@@ -97,10 +125,7 @@ version section when a release is cut.
   it now 404s, the nav entry is removed, and `assistant_file:` links in
   historical chat messages render as plain text instead of downloads. OpenAI
   retired the Assistants API on 26 August 2026, so the feature had no working
-  backend to keep. No migration and no data loss — the `OpenAiAssistant` rows
-  and the Django admin for them survive this release; a later phase drops the
-  tables. Pipelines holding an assistant node are unaffected by this PR. (#4328,
-  #4254)
+  backend to keep. (#4328, #4254)
 
 ### Security
 <!-- Also list here anything requiring operator action, e.g. credential

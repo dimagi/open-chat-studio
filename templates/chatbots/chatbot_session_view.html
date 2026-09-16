@@ -1,18 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags humanize i18n json_tags static waffle_tags %}
 
-{% block breadcrumbs %}
-  {% if request.user.is_authenticated %}
-    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-      <ul>
-        <li><a href="{% url 'chatbots:chatbots_home' request.team.slug %}">Chatbots</a></li>
-        <li><a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
-        <li class="pg-breadcrumb-active" aria-current="page">{{ experiment_session.external_id }}</li>
-      </ul>
-    </div>
-  {% endif %}
-{% endblock breadcrumbs %}
-
 {% block app %}
   <div id="scroll-progress-bar" class="fixed top-0 left-0 h-1 bg-primary z-50" style="width: 0%"></div>
   <div class="app-card">

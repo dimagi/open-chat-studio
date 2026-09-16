@@ -2,7 +2,12 @@ import pytest
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.events.versioning import TriggerSyncMode, sync_triggers
-from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory, TimeoutTriggerFactory
+from apps.utils.factories.events import (
+    EventActionFactory,
+    ScheduledTriggerFactory,
+    StaticTriggerFactory,
+    TimeoutTriggerFactory,
+)
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 
@@ -58,6 +63,53 @@ class TestSyncTriggers:
 
         assert not target.static_triggers.exists()
         assert not target.timeout_triggers.exists()
+
+
+@pytest.mark.django_db()
+class TestSyncScheduledTriggers:
+    def test_publish_copies_scheduled_trigger_and_resets_fired_at(self):
+        source = ExperimentFactory()
+        target = ExperimentFactory(team=source.team)
+        source_trigger = ScheduledTriggerFactory(
+            experiment=source,
+            action=EventActionFactory(action_type=EventActionType.LOG, params={"key": "value"}),
+            fired_at="2024-01-01 00:00:00+00:00",
+        )
+
+        sync_triggers(source, target, mode=TriggerSyncMode.PUBLISH)
+
+        new_trigger = target.scheduled_triggers.get()
+        assert new_trigger.trigger_date == source_trigger.trigger_date
+        assert new_trigger.trigger_time == source_trigger.trigger_time
+        assert new_trigger.timezone == source_trigger.timezone
+        assert new_trigger.working_version_id == source_trigger.id
+        assert new_trigger.action_id != source_trigger.action_id
+        assert new_trigger.action.action_type == source_trigger.action.action_type
+        assert new_trigger.action.params == source_trigger.action.params
+        assert new_trigger.fired_at is None
+
+    def test_copy_preserves_schedule_and_clears_working_version_link(self):
+        source = ExperimentFactory()
+        target = ExperimentFactory(team=source.team)
+        ScheduledTriggerFactory(experiment=source, timezone="Africa/Lagos")
+
+        sync_triggers(source, target, mode=TriggerSyncMode.COPY)
+
+        new_trigger = target.scheduled_triggers.get()
+        assert new_trigger.working_version_id is None
+        assert new_trigger.timezone == "Africa/Lagos"
+
+    def test_archives_target_scheduled_trigger_absent_from_source(self):
+        source = ExperimentFactory()
+        target = ExperimentFactory(team=source.team)
+        stale = ScheduledTriggerFactory(experiment=target)
+        source_trigger = ScheduledTriggerFactory(experiment=source)
+
+        sync_triggers(source, target)
+
+        stale.refresh_from_db()
+        assert stale.is_archived
+        assert [t.working_version_id for t in target.scheduled_triggers.all()] == [source_trigger.id]
 
 
 def _pipeline_start_trigger(experiment, pipeline_id):

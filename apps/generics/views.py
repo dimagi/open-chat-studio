@@ -6,6 +6,7 @@ from waffle import flag_is_active
 
 from apps.annotations.models import Tag
 from apps.annotations.prefetch import chat_tagged_items_prefetch
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.cost_tracking.services.reporting import session_usage
 from apps.events.models import StaticTrigger, StaticTriggerType
 from apps.events.tables import SchedulesTable
@@ -54,6 +55,7 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             "experiment": experiment,
             "experiment_session": session,
             "active_tab": active_tab,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, experiment), (session.external_id, None)],
             "annotation_queue_names": annotation_queue_names,
             "show_usage_summary": show_usage_summary,
             "usage_summary": session_usage(session) if show_usage_summary else None,

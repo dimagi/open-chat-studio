@@ -47,6 +47,11 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus, participant_data_from_trace
+from apps.utils.deletion import (
+    get_related_experiment_versions_queryset,
+    get_related_pipeline_nodes_queryset,
+    has_related_pipeline_references,
+)
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
@@ -86,6 +91,9 @@ class VersionFieldDisplayFormatters:
             if static_trigger.trigger_type == "TimeoutTrigger":
                 seconds = seconds_to_human(static_trigger.delay)
                 string = f"{string} no response for {seconds}"
+            elif static_trigger.trigger_type == "ScheduledTrigger":
+                scheduled = f"{static_trigger.trigger_date} {static_trigger.trigger_time} ({static_trigger.timezone})"
+                string = f"{string} {scheduled}"
             else:
                 string = f"{string} {static_trigger.get_type_display().lower()}"
             trigger_action = static_trigger.action.get_action_type_display().lower()
@@ -176,6 +184,20 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
+
+    def get_related_nodes_queryset(self) -> models.QuerySet:
+        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        return get_related_experiment_versions_queryset(self, "source_material_id")
+
+    @transaction.atomic()
+    def archive(self):
+        """Mirrors Collection.archive()'s in-use guard."""
+        if has_related_pipeline_references(self, "source_material_id"):
+            return False
+        super().archive()
+        return True
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -658,7 +680,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def event_triggers(self):
-        return [*self.timeout_triggers.all(), *self.static_triggers.all()]
+        return [*self.timeout_triggers.all(), *self.static_triggers.all(), *self.scheduled_triggers.all()]
 
     @property
     def version_display(self) -> str:
@@ -950,6 +972,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
+        self.scheduled_triggers.update(is_archived=True)
 
         if self.is_working_version:
             self.delete_experiment_channels()
@@ -965,6 +988,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
+        self.scheduled_triggers.get_all().update(is_archived=False)
         # Mirrors archive(), which leaves the working version's pipeline alone.
         if not self.is_working_version and self.pipeline:
             self.pipeline.unarchive()
@@ -1055,6 +1079,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Triggers",
                 name="timeout_triggers",
                 queryset=self.timeout_triggers.all(),
+                to_display=VersionFieldDisplayFormatters.format_trigger,
+            ),
+            VersionField(
+                group_name="Triggers",
+                name="scheduled_triggers",
+                queryset=self.scheduled_triggers.all(),
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]
@@ -1458,7 +1488,7 @@ class ExperimentSessionObjectManager(models.Manager):
         if experiment_id:
             queryset = queryset.filter(experiment__id=experiment_id)
 
-        queryset = queryset.select_related("experiment", "participant__user", "chat")
+        queryset = queryset.select_related("experiment", "participant__user", "chat", "experiment_channel")
         # Order by the same expression the "Last activity" column renders, so a session whose
         # `last_activity_at` is null doesn't sort to the bottom while displaying a recent
         # `created_at`. Backed by `expsession_team_lastact_c_idx`.

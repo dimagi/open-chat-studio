@@ -20,6 +20,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
@@ -31,6 +32,7 @@ from apps.cost_tracking.services.reporting import (
     evaluation_run_cost,
     evaluation_run_costs,
 )
+from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import (
@@ -42,6 +44,8 @@ from apps.evaluations.export import (
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import (
     EvaluationConfig,
+    EvaluationMessage,
+    EvaluationMode,
     EvaluationResult,
     EvaluationRun,
     EvaluationRunStatus,
@@ -57,6 +61,8 @@ from apps.evaluations.tasks import (
 )
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
+from apps.generics import actions
+from apps.generics.actions import chip_action
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
@@ -107,6 +113,7 @@ class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Creat
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        context["breadcrumbs"] = [*evaluations_crumbs(self.request.team.slug), (_("Create"), None)]
         return context
 
     def get_form_kwargs(self):
@@ -136,6 +143,7 @@ class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateV
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["available_evaluators"] = get_evaluators_with_schema(self.request.team)
+        context["breadcrumbs"] = [*evaluations_crumbs(self.request.team.slug, self.object), (_("Edit"), None)]
         return context
 
     def get_queryset(self):
@@ -180,6 +188,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
         return {
             **super().get_context_data(**kwargs),
             "config": config,
+            "breadcrumbs": [*evaluations_crumbs(team_slug), (config_runs_label(config), None)],
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
             "cost_summary": evaluation_config_cost_summary(config),
@@ -288,7 +297,10 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         evaluation_run = get_object_or_404(
-            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team=self.request.team
+            EvaluationRun.objects.select_related("config__dataset"),
+            id=kwargs["evaluation_run_pk"],
+            config_id=kwargs["evaluation_pk"],
+            team=self.request.team,
         )
 
         title = (
@@ -298,10 +310,15 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
+            "breadcrumbs": [
+                *evaluations_crumbs(team_slug, evaluation_run.config),
+                (run_label(evaluation_run), None),
+            ],
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
             "run_cost": run_cost,
+            "is_session_mode": evaluation_run.config.dataset.evaluation_mode == EvaluationMode.SESSION,
         }
 
         # Calculate duration if finished
@@ -428,9 +445,29 @@ class EvaluationResultDataMixin:
     @cached_property
     def evaluation_run(self) -> EvaluationRun:
         return get_object_or_404(
-            EvaluationRun.objects.select_related("generation_experiment").filter(team=self.request.team),
+            EvaluationRun.objects.select_related("generation_experiment", "config__dataset").filter(
+                team=self.request.team
+            ),
             pk=self.kwargs["evaluation_run_pk"],
         )
+
+    @cached_property
+    def is_session_mode(self) -> bool:
+        return self.evaluation_run.config.dataset.evaluation_mode == EvaluationMode.SESSION
+
+    @cached_property
+    def session_previews(self) -> dict[int, str]:
+        """message_id -> a short session-history preview, for session-mode rows.
+
+        Queried independently of `_table_rows` (not derived from it) - `_table_rows`
+        stamps this dict's values onto each row, so deriving message ids from it here
+        would recurse.
+        """
+        if not self.is_session_mode:
+            return {}
+        message_ids = self.evaluation_run.results.values_list("message_id", flat=True).distinct()
+        messages = EvaluationMessage.objects.filter(id__in=message_ids).only("id", "history")
+        return {message.id: message.history_preview() for message in messages}
 
     @cached_property
     def evaluators(self) -> list[Evaluator]:
@@ -487,6 +524,7 @@ class EvaluationResultDataMixin:
         for row in data:
             row["Tokens"] = self.tokens_by_message.get(row.get("id"))
             row["Cost"] = self.cost_by_message.get(row.get("id"))
+            row["Session Preview"] = self.session_previews.get(row.get("id"), "")
         return data
 
     def get_table_data(self):
@@ -561,7 +599,10 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
         filter_field = self.get_filter_field()
         filter_value = self.get_filter_value()
 
-        column_keys = ["#", "Dataset Input", "Generated Response"]
+        if self.is_session_mode:
+            column_keys = ["#", "Links", "Session Preview"]
+        else:
+            column_keys = ["#", "Dataset Input", "Generated Response"]
         column_keys += [key for key, _label in self.dynamic_columns]
         column_keys.append("Cost")
         attrs = {key: self.get_column(key) for key in column_keys}
@@ -657,6 +698,43 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     template_code="{{ value|add:1 }}",
                     verbose_name="#",
                     orderable=False,
+                )
+            case "Links":
+                # Session-mode row: the source session (always known), and a
+                # permanently-disabled "Message" chip - a session-mode result has no
+                # single message to jump to.
+                def _session_url(_, request, record, __):
+                    return reverse(
+                        "chatbots:chatbot_session_view",
+                        args=[request.team.slug, record.get("source_experiment_id"), record.get("source_session")],
+                    )
+
+                return actions.ActionsColumn(
+                    actions=[
+                        chip_action(
+                            label="Session",
+                            url_factory=_session_url,
+                            enabled_condition=lambda _, record: bool(record.get("source_session")),
+                            open_url_in_new_tab=True,
+                        ),
+                        chip_action(
+                            label="Message",
+                            url_factory=_session_url,
+                            enabled_condition=lambda _, record: False,
+                        ),
+                    ],
+                    align="left",
+                    verbose_name="Links",
+                    extra_context={"join_class": "join join-vertical"},
+                    # The row itself opens the detail panel on click (see the hx-get row
+                    # attrs below) - without this, clicking a chip both follows its link
+                    # and triggers that row-level hx-get.
+                    attrs={"td": {"onclick": "event.stopPropagation()"}},
+                )
+            case "Session Preview":
+                return columns.TemplateColumn(
+                    template_name="evaluations/components/truncated_text_column.html",
+                    verbose_name="Preview",
                 )
             case "Dataset Input" | "Generated Response":
                 # Clamped to 2 lines - these are free-text dataset/model output and can run
@@ -856,6 +934,10 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
             "title": "Upload Results",
             "page_title": "Upload Results",
             "evaluation_run": evaluation_run,
+            "breadcrumbs": [
+                *evaluations_crumbs(team_slug, evaluation_run.config, evaluation_run),
+                (_("Upload Results"), None),
+            ],
         }
         return render(request, "evaluations/evaluation_run_update.html", context)
     elif request.method == "POST":
