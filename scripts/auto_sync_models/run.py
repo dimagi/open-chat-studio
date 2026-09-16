@@ -26,9 +26,11 @@ Usage (from the repo root)::
 
     python3 -m scripts.auto_sync_models.run \\
         [--repo-root .] \\
-        [--output reconciliation.json] \\
         [--dry-run] \\
         [--today YYYY-MM-DD]    # deterministic-tests override
+
+``reconciliation.json`` and ``reconciliation.pricing-body.md`` are written into
+the repo root, where .gitignore already covers them.
 
 Exit code is 1 when our own catalogue does not parse, or the price table cannot
 be read, or reads back too small or too destructive to be believed; every signal
@@ -201,7 +203,6 @@ def main(argv: list[str] | None = None) -> int:
     dispatch.dispatch(
         reconciliation=reconciliation,
         repo_root=repo_root,
-        output=args.output,
         dry_run=args.dry_run,
     )
     return 0
@@ -215,7 +216,6 @@ def _arg_parser() -> argparse.ArgumentParser:
         epilog=__doc__,
     )
     parser.add_argument("--repo-root", type=Path, default=Path("."), metavar="PATH")
-    parser.add_argument("--output", type=Path, default=Path("reconciliation.json"), metavar="FILE")
     parser.add_argument("--today", help="YYYY-MM-DD override (for tests).")
     parser.add_argument(
         "--dry-run",

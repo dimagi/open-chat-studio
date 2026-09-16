@@ -17,6 +17,8 @@ from scripts.auto_sync_models.catalogue import (
     write_ledger,
 )
 from scripts.auto_sync_models.dispatch import (
+    PRICING_BODY_REL_PATH,
+    RECONCILIATION_REL_PATH,
     advance_ledger,
     apply_rate_changes,
     build_payload,
@@ -826,7 +828,6 @@ def test_the_gate_variable_reaches_github_output(diff, expected, repo_root, tmp_
     dispatch(
         reconciliation=Reconciliation(diff=diff, orphan_rows=[], ledger={}, today=TODAY),
         repo_root=repo_root,
-        output=tmp_path / "reconciliation.json",
     )
     assert expected in gate.read_text()
 
@@ -836,5 +837,16 @@ def test_no_gate_variable_outside_actions(repo_root, tmp_path, monkeypatch):
     dispatch(
         reconciliation=Reconciliation(diff=Diff(), orphan_rows=[], ledger={}, today=TODAY),
         repo_root=repo_root,
-        output=tmp_path / "reconciliation.json",
     )
+
+
+def test_dispatch_writes_both_artifacts_under_the_repo_root(repo_root):
+    """The paths are fixed, so there is no caller-supplied directory to be missing."""
+    diff = Diff(repriced=[RateChange("openai", "gpt-4.1", "llm_input", "0.002", "0.004")])
+    dispatch(
+        reconciliation=Reconciliation(diff=diff, orphan_rows=[], ledger={}, today=TODAY),
+        repo_root=repo_root,
+    )
+    payload = json.loads((repo_root / RECONCILIATION_REL_PATH).read_text())
+    assert payload["summary"]["repriced"] == 1
+    assert "| openai | gpt-4.1 | llm_input | 0.002 | 0.004 |" in (repo_root / PRICING_BODY_REL_PATH).read_text()

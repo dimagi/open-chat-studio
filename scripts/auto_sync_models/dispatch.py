@@ -20,11 +20,15 @@ from .upstream import SOURCE_URL
 
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 
+# Both are written into the repo root and read from there by the Claude Code
+# step. .gitignore covers them so no `git add` can sweep them into the PR.
+RECONCILIATION_REL_PATH = "reconciliation.json"
+PRICING_BODY_REL_PATH = "reconciliation.pricing-body.md"
+
 
 def dispatch(
     reconciliation: Reconciliation,
     repo_root: Path,
-    output: Path,
     dry_run: bool = False,
 ) -> None:
     """Write everything this run can derive on its own.
@@ -35,7 +39,7 @@ def dispatch(
     ``docs/developer_guides/managing_models.md`` can write.
     """
     diff = reconciliation.diff
-    _write_pricing_update(diff, repo_root, output, dry_run)
+    _write_pricing_update(diff, repo_root, dry_run)
     if diff.added and not dry_run:
         advanced = advance_ledger(reconciliation.ledger, diff.added, reconciliation.today)
         path = write_ledger(repo_root, advanced)
@@ -43,6 +47,7 @@ def dispatch(
 
     run_date = datetime.datetime.now(datetime.UTC).isoformat()
     payload = build_payload(diff, reconciliation.orphan_rows, run_date=run_date)
+    output = repo_root / RECONCILIATION_REL_PATH
     output.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"\n  Output -> {output}")
     for name, value in payload["summary"].items():
@@ -67,7 +72,7 @@ def _write_gate(diff: Diff) -> None:
 # The pricing seed
 
 
-def _write_pricing_update(diff: Diff, repo_root: Path, output: Path, dry_run: bool) -> None:
+def _write_pricing_update(diff: Diff, repo_root: Path, dry_run: bool) -> None:
     """Rewrite the seed and render the rate table the PR description quotes."""
     if not diff.has_pricing_work:
         return
@@ -77,7 +82,7 @@ def _write_pricing_update(diff: Diff, repo_root: Path, output: Path, dry_run: bo
 
     seed_path = repo_root / LLM_PRICING_REL_PATH
     seed_path.write_text(json.dumps(apply_rate_changes(load_seed(repo_root), diff), indent=2) + "\n")
-    body_path = output.with_name(output.stem + ".pricing-body.md")
+    body_path = repo_root / PRICING_BODY_REL_PATH
     body_path.write_text(render_pricing_pr_body(diff))
     print(f"  -> updated the seed; rate table in {body_path.name}")
 

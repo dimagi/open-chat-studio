@@ -130,7 +130,7 @@ jobs:
           BRANCH_NAME="auto-models/$(date -u +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
           echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
-          python3 -m scripts.auto_sync_models.run --output reconciliation.json
+          python3 -m scripts.auto_sync_models.run
 
       - name: Run Claude Code
         id: claude
