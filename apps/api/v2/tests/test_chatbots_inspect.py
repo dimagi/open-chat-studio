@@ -585,7 +585,7 @@ def _full_bot():
                         "id": "assist",
                         "type": "AssistantNode",
                         "label": "Assistant",
-                        "params": {"name": "Assistant", "assistant_id": str(assistant.id), "citations_enabled": True},
+                        "params": {"name": "Assistant", "citations_enabled": True},
                     },
                 },
             ],
@@ -745,8 +745,7 @@ def _expected_pipeline_nodes(bot):
             },
         },
         # A node whose type was removed (#4254). It still renders: the type is reported verbatim
-        # and its stored params come through the generic shape. ``assistant_id`` is suppressed --
-        # there is no resource key left to lift it into, so it would otherwise leak an internal id.
+        # and its stored params come through the generic shape.
         {
             "node_id": "assist",
             "type": "AssistantNode",
