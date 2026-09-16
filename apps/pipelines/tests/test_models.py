@@ -816,9 +816,7 @@ class TestPipelineValidation:
                 "sourceHandle": "output_0",
             },
         ]
-        flow_nodes = []
-        for node in nodes:
-            flow_nodes.append({"id": node["id"], "data": node})
+        flow_nodes = [{"id": node["id"], "data": node} for node in nodes]
 
         pipeline = PipelineFactory.create()
         layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))

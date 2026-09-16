@@ -53,8 +53,7 @@ def process_transcript_analysis(self, analysis_id):
             queries = list(analysis.queries.all().order_by("order"))
 
             # Add query names to header
-            for query in queries:
-                header_row.append(query.name or query.prompt[:50])
+            header_row.extend(query.name or query.prompt[:50] for query in queries)
 
             # Add header row to results
             results.append(header_row)

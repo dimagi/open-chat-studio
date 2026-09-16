@@ -292,8 +292,7 @@ def get_node_schemas() -> list[dict]:
         if issubclass(cls, pipeline_nodes.PipelineNode | pipeline_nodes.PipelineRouterNode)
         and cls not in (pipeline_nodes.PipelineNode, pipeline_nodes.PipelineRouterNode)
     ]
-    for node_class in node_classes:
-        schemas.append(_get_node_schema(node_class))
+    schemas.extend(_get_node_schema(node_class) for node_class in node_classes)
 
     schemas.extend(_removed_node_schema(node_type, message) for node_type, message in REMOVED_NODE_TYPES.items())
 

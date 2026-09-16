@@ -438,17 +438,16 @@ def add_collection_files(request, team_slug: str, pk: int):
 
     with transaction.atomic():
         # Create File objects
-        created_files = []
-        for uploaded_file in files:
-            created_files.append(
-                File.objects.create(
-                    team=request.team,
-                    name=uploaded_file.name,
-                    file=uploaded_file,
-                    summary=request.POST[uploaded_file.name] if not collection.is_index else "",
-                    purpose=FilePurpose.COLLECTION,
-                )
+        created_files = [
+            File.objects.create(
+                team=request.team,
+                name=uploaded_file.name,
+                file=uploaded_file,
+                summary=request.POST[uploaded_file.name] if not collection.is_index else "",
+                purpose=FilePurpose.COLLECTION,
             )
+            for uploaded_file in files
+        ]
 
         # Create file links
         status = FileStatus.PENDING if collection.is_index else ""

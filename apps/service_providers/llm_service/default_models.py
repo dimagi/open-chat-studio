@@ -239,7 +239,7 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
 
 
 LLM_MODEL_PARAMETERS = {}
-for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
+for models in DEFAULT_LLM_PROVIDER_MODELS.values():
     for model in models:
         if model.parameters:
             LLM_MODEL_PARAMETERS[model.name] = model.parameters

@@ -51,9 +51,9 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             model_name = llm_provider_model.name
             params = get_model_parameters(model_name, temperature=0.1)
             llm = with_llm_retry(llm_service.get_chat_model(model_name, **params))
-            message_data = []
-            for msg in messages_to_translate:
-                message_data.append({"id": str(msg.id), "content": msg.content, "role": msg.role})
+            message_data = [
+                {"id": str(msg.id), "content": msg.content, "role": msg.role} for msg in messages_to_translate
+            ]
 
             language_names = dict(choice for choice in LANGUAGE_CHOICES if choice[0])
             target_lang_name = language_names.get(target_language, target_language)

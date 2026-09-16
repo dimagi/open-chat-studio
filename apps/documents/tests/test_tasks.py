@@ -260,7 +260,7 @@ def _make_open_mock(exc: Exception):
     @contextmanager
     def _open(*args, **kwargs):
         raise exc
-        yield  # noqa: unreachable — satisfies context manager protocol
+        yield  # unreachable, but satisfies the context manager protocol
 
     return _open
 

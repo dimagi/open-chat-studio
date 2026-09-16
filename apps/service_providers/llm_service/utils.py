@@ -33,9 +33,7 @@ def detangle_file_ids(file_ids: list[str]) -> list[str]:
 
 
 def extract_file_ids_from_ocs_citations(text: str) -> list[str]:
-    file_ids = []
-    for match in re.finditer(OCS_CITATION_PATTERN, text):
-        file_ids.append(match.group("file_id"))
+    file_ids = [match.group("file_id") for match in re.finditer(OCS_CITATION_PATTERN, text)]
     return file_ids
 
 

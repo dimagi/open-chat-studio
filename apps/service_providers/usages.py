@@ -178,8 +178,10 @@ def get_provider_usages(provider) -> ProviderUsages:
     categories: list[UsageCategory] = []
     if chatbots:
         categories.append(UsageCategory(label="Chatbots", items=sorted(chatbots.values(), key=_display_key)))
-    for label in sorted(other_grouped):
-        categories.append(UsageCategory(label=label, items=sorted(other_grouped[label].values(), key=_display_key)))
+    categories.extend(
+        UsageCategory(label=label, items=sorted(other_grouped[label].values(), key=_display_key))
+        for label in sorted(other_grouped)
+    )
     categories.extend(trailing_categories)
 
     return ProviderUsages(provider=provider, categories=categories)

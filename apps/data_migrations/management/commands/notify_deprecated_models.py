@@ -48,7 +48,7 @@ class Command(IdempotentCommand):
         if self.verbosity > 1:
             all_team_ids = {tid for td, _, _ in affected_by_model.values() for tid in td}
             teams = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
-            for _db_model_id, (teams_data, model_name, replacement) in affected_by_model.items():
+            for teams_data, model_name, replacement in affected_by_model.values():
                 self.stdout.write(f"\n  Model: {model_name} → {replacement}")
                 for team_id, data in teams_data.items():
                     self.stdout.write(f"    Team: {teams[team_id].name}")
@@ -64,7 +64,7 @@ class Command(IdempotentCommand):
         teams_objs = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
 
         total_notified = 0
-        for _db_model_id, (teams_data, model_name, replacement) in affected_by_model.items():
+        for teams_data, model_name, replacement in affected_by_model.values():
             for team_id, data in teams_data.items():
                 deprecated_model_notification(
                     team=teams_objs[team_id],

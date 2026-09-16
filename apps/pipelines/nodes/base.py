@@ -48,9 +48,7 @@ def add_temp_state_messages(left: dict, right: dict):
         output["outputs"].update(right["outputs"])
     except KeyError:
         output["outputs"] = right.get("outputs", {})
-    for key, value in right.items():
-        if key != "outputs":
-            output[key] = value
+    output.update({key: value for key, value in right.items() if key != "outputs"})
 
     return output
 

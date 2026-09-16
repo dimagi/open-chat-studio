@@ -42,7 +42,7 @@ class TestGetFilterRegistry:
 
     def test_excludes_unslugged_subclasses(self):
         registry = get_filter_registry()
-        for slug, _cls in registry.items():
+        for slug in registry:
             assert slug != ""
 
 

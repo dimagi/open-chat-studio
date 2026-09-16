@@ -241,8 +241,7 @@ def _evaluator_schemas():
         if issubclass(cls, evaluators.BaseEvaluator) and cls != evaluators.BaseEvaluator
     ]
 
-    for evaluator_class in evaluator_classes:
-        schemas.append(_get_evaluator_schema(evaluator_class))
+    schemas.extend(_get_evaluator_schema(evaluator_class) for evaluator_class in evaluator_classes)
 
     return schemas
 

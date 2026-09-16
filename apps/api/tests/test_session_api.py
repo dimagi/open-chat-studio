@@ -252,9 +252,7 @@ def _create_attachments(chat, message):
         tool_type="file_search",
     )
     file_ids = ["file_1", "file_2"]
-    files = []
-    for external_id in file_ids:
-        files.append(FileFactory.create(name=external_id, external_id=external_id))
+    files = [FileFactory.create(name=external_id, external_id=external_id) for external_id in file_ids]
     tool_resource.files.add(*files)
     message.metadata = {"openai_file_ids": file_ids}
     message.save()

@@ -161,8 +161,7 @@ def evaluator_output_columns(evaluators: "list[Evaluator]") -> list[tuple[str, s
     columns = []
     for evaluator in evaluators:
         schema = (evaluator.params or {}).get("output_schema") or {}
-        for field_name in schema:
-            columns.append((f"{field_name} ({evaluator.name})", _field_label(field_name)))
+        columns.extend((f"{field_name} ({evaluator.name})", _field_label(field_name)) for field_name in schema)
     return columns
 
 

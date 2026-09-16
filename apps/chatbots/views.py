@@ -1119,10 +1119,7 @@ def _get_events_context(experiment: Experiment, team_slug: str):
         )
         .all()
     )
-    for event in static_events:
-        combined_events.append({**event, "team_slug": team_slug})
-    for event in timeout_events:
-        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    for event in scheduled_events:
-        combined_events.append({**event, "type": "__scheduled__", "team_slug": team_slug})
+    combined_events.extend({**event, "team_slug": team_slug} for event in static_events)
+    combined_events.extend({**event, "type": "__timeout__", "team_slug": team_slug} for event in timeout_events)
+    combined_events.extend({**event, "type": "__scheduled__", "team_slug": team_slug} for event in scheduled_events)
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}
