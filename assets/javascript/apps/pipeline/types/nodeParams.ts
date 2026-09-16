@@ -1,11 +1,11 @@
 export type NodeParams = {
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type VisibleWhenCondition = {
   field: string;
-  value: any;
+  value: unknown;
   operator?: "==" | "!=" | "in" | "not_in" | "is_empty" | "is_not_empty";
 }
 
@@ -13,14 +13,26 @@ export type PropertySchema = {
   type: string;
   title?: string | undefined;
   description?: string | undefined;
-  default?: any | undefined;
+  default?: unknown;
+  items?: PropertySchema | undefined;
   enum?: string[] | undefined;
   "ui:optionsSource"?: string | undefined;
   "ui:widget"?: string | undefined;
   "ui:enumLabels"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
   "ui:visibleWhen"?: VisibleWhenCondition | VisibleWhenCondition[] | undefined;
-  [k: string]: any;
+  "ui:rows"?: number | undefined;
+  [k: string]: unknown;
+}
+
+/**
+ * A config field for a built-in tool, served under the `tool_config` parameter values. Carries
+ * its own name and labels because it is rendered outside the node's own property schema.
+ */
+export type ToolConfigField = PropertySchema & {
+  name: string;
+  label: string;
+  helpText?: string;
 }
 
 // cut down version of JsonSchema
@@ -37,9 +49,10 @@ export type JsonSchema = {
   "ui:removed"?: boolean;
   "ui:deprecation_message"?: string;
   "ui:documentation_link"?: string;
+  "ui:icon"?: string;
   "ui:order"?: string[];
   properties: Record<string, PropertySchema>;
-  [k: string]: any;
+  [k: string]: unknown;
 }
 
 export type NodeData = {
