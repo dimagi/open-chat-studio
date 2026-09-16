@@ -68,17 +68,8 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> list[HandleChange]:
     for updated in diff.update:
         previous = node_map.get(updated.id)
         node_map[updated.id] = updated
-        previous_data = previous.data if previous else None
-        if previous_data is None or updated.data is None:
-            continue
-        # Handles are a pure function of type and params: skip anything else (a drag, a
-        # selection, a label edit) before it can validate a router through model_validate().
-        if previous_data.type == updated.data.type and previous_data.params == updated.data.params:
-            continue
-        before = output_handle_labels(previous_data)
-        after = output_handle_labels(updated.data)
-        if before != after:
-            handle_changes.append((updated.id, before, after))
+        if change := _handle_change_for_update(previous, updated):
+            handle_changes.append(change)
 
     # Add: insert, skip if already present (idempotent)
     for added in diff.add:
@@ -93,6 +84,25 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> list[HandleChange]:
         flow.edges = [edge for edge in flow.edges if edge.source not in deleted_ids and edge.target not in deleted_ids]
 
     return handle_changes
+
+
+def _handle_change_for_update(previous: FlowNode | None, updated: FlowNode) -> HandleChange | None:
+    """Whether this update moved ``updated``'s output handles, and what moved if so.
+
+    Handles are a pure function of type and params, so a drag, a selection, or a label edit
+    never reaches ``output_handle_labels`` -- only a type or param change can validate a router
+    through ``model_validate()``.
+    """
+    previous_data = previous.data if previous else None
+    if previous_data is None or updated.data is None:
+        return None
+    if previous_data.type == updated.data.type and previous_data.params == updated.data.params:
+        return None
+    before = output_handle_labels(previous_data)
+    after = output_handle_labels(updated.data)
+    if before == after:
+        return None
+    return (updated.id, before, after)
 
 
 def _rewire_edges(flow: Flow, handle_changes: list[HandleChange]) -> None:
