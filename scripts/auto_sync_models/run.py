@@ -24,7 +24,7 @@ Layer 5 yields one list per rule:
 
 Usage (from the repo root)::
 
-    python3 -m scripts.auto_sync_models.sync \\
+    python3 -m scripts.auto_sync_models.run \\
         [--repo-root .] \\
         [--output reconciliation.json] \\
         [--dry-run] \\
@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python3 -m scripts.auto_sync_models.sync",
+        prog="python3 -m scripts.auto_sync_models.run",
         description="Reconcile the OCS model catalogue and pricing seed against LiteLLM.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,

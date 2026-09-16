@@ -30,7 +30,7 @@ from scripts.auto_sync_models.records import (
     PricingGap,
     RateChange,
 )
-from scripts.auto_sync_models.sync import (
+from scripts.auto_sync_models.run import (
     MAX_REMOVED_FRACTION,
     MIN_UPSTREAM_MODELS,
     check_removal_scale,
