@@ -230,11 +230,11 @@ jobs:
             write the migration that loads it; without one, the new prices never
             reach production.
 
-            One migration, per `docs/developer_guides/managing_models.md`:
-            `llm_model_migration()` and `load_pricing_data()` in the same file,
-            plus `RunDataMigration(...)` if you deleted anything. Do its Step 4
-            — strip `llm_model_migration()` from earlier migrations that still
-            call it.
+            Read `docs/developer_guides/managing_models.md` and follow it. It is
+            the authority on what the migration contains and on stripping
+            `llm_model_migration()` from the earlier migrations that still call
+            it. One migration covers the run, whatever mix of registering,
+            deprecating and deleting it did.
 
             ## 5. Check the script's work
 
