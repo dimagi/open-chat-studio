@@ -817,7 +817,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
 
 
 @shared_task(bind=True, queue=Queues.BACKGROUND)
-def create_dataset_from_csv_task(
+def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped CSV column and row-level error
     self,
     dataset_id: int,
     file_id: int,
@@ -1197,7 +1197,7 @@ def _upload_evaluation_run_results(
         return {"success": False, "error": str(e)}
 
 
-def process_evaluation_results_csv_rows(
+def process_evaluation_results_csv_rows(  # noqa: C901 - parser: one branch per mapped column and row-level error
     evaluation_run: EvaluationRun,
     csv_data: list[dict],
     column_mappings: dict,

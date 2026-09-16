@@ -11,7 +11,7 @@ class Command(IdempotentCommand):
     migration_name = "remove_summarize_actions_2026_01_20"
     disable_audit = True
 
-    def perform_migration(self, dry_run=False):
+    def perform_migration(self, dry_run=False):  # noqa: C901 - one-shot migration: a branch per trigger kind
         # Collect all affected data (all versions)
         summarize_actions = EventAction.objects.filter(action_type="summarize").select_related()
 

@@ -909,7 +909,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             )
         return validated_pairs
 
-    def _clean_csv(self):
+    def _clean_csv(self):  # noqa: C901 - validator: one branch per CSV column-mapping failure mode
         column_mapping_str = self.data.get("column_mapping", "")
         csv_file_id_str = self.data.get("csv_file_id", "")
         history_column = self.data.get("history_column", "").strip()
