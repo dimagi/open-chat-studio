@@ -873,3 +873,25 @@ class TestPipelineValidation:
 )
 def test_node_has_parameter(node_type, param_name, expected):
     assert Node(type=node_type).has_parameter(param_name) is expected
+
+
+class TestNodeDisplayName:
+    """One concept the codebase used to spell three ways, so its edges are pinned here.
+
+    The auto-assigned name is the node's own flow id, which is an address rather than something a
+    person chose, so it reads as no name at all.
+    """
+
+    @pytest.mark.parametrize(
+        ("params", "expected"),
+        [
+            pytest.param({"name": "Greeter"}, "Greeter", id="named"),
+            pytest.param(
+                {"name": "LLMResponseWithPrompt-a1b2c"}, "LLMResponseWithPrompt", id="named-after-its-flow-id"
+            ),
+            pytest.param({}, "LLMResponseWithPrompt", id="unnamed"),
+        ],
+    )
+    def test_display_name(self, params, expected):
+        node = Node(flow_id="LLMResponseWithPrompt-a1b2c", type="LLMResponseWithPrompt", params=params)
+        assert node.display_name == expected

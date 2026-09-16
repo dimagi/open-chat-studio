@@ -445,13 +445,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     def _get_version_details(self) -> VersionDetails:
         reserved_types = ["StartNode", "EndNode"]
-
-        def node_name(node):
-            name = node.params.get("name")
-            if name == node.flow_id:
-                return node.type
-            return name
-
         return VersionDetails(
             instance=self,
             fields=[
@@ -459,7 +452,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 VersionField(
                     name="nodes",
                     queryset=self.node_set.exclude(type__in=reserved_types),
-                    to_display=node_name,
+                    to_display=lambda node: node.display_name,
                 ),
             ],
         )
@@ -531,6 +524,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     @property
     def name(self):
         return self.params.get("name", None)
+
+    @property
+    def display_name(self) -> str:
+        """What to call this node in front of a person: its name, falling back to its type.
+
+        A node with no name of its own is named after its flow id by the builder, which is an
+        address rather than anything someone chose, so it reads here as no name at all.
+        """
+        name = self.name
+        if name is None or name == self.flow_id:
+            return self.type
+        return name
 
     @property
     def position(self) -> dict | None:
@@ -718,9 +723,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def _get_version_details(self) -> VersionDetails:
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
-        node_name = self.params.get("name", self.type)
-        if node_name == self.flow_id:
-            node_name = self.type
+        node_name = self.display_name
 
         specs_by_param = {spec.param_name: spec for spec in get_versioned_param_specs(self.type)}
         param_versions = []
