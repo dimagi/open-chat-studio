@@ -14,18 +14,9 @@
 
 {% block body %}
   <div class="app-card max-w-5xl mx-auto">
-    {% block breadcrumbs %}
-      {% if user.is_authenticated %}
-        <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-          <ul>
-            <li>Experiments</li>
-            <li><a href="{% url 'chatbots:single_chatbot_home' request.team.slug experiment.id %}">{{ experiment.name }}</a></li>
-          </ul>
-        </div>
-      {% endif %}
-    {% endblock breadcrumbs %}
+    {% block breadcrumbs %}{{ block.super }}{% endblock %}
     <h1 class="pg-title">Experiment Review</h1>
-    <div class="prose max-w-none!">
+    <div class="prose">
       <p>Thanks for completing the experiment!</p>
       <p>
         Please click the button below to end the experiment and submit your chat details.

@@ -2,7 +2,9 @@
 <dialog id="schedule-logs-{{ schedule.external_id }}" class="modal">
   <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg">{% translate "Manage schedule" %} - {{ schedule.name }}</h3>
-    <p class="text-sm text-base-content/60 mt-1">{{ schedule.experiment }} · {{ schedule.prompt }}</p>
+    <p class="text-sm text-base-content/60 mt-1">
+      {% if schedule.experiment %}{{ schedule.experiment }} ·&nbsp;{% endif %}{{ schedule.prompt }}
+    </p>
     <h4 class="font-semibold text-sm mt-4">{% translate "Message Logs" %}</h4>
     {% if not schedule.attempts %}
       <p class="text-sm text-base-content/60 mt-2">{% translate "No message logs yet." %}</p>
@@ -50,6 +52,7 @@
                 class="btn btn-outline btn-error"
                 {% if schedule.is_cancelled or schedule.is_complete %}disabled{% endif %}
                 hx-post="{% url 'participants:cancel_schedule' request.team.slug participant_id schedule.external_id %}"
+                hx-vals='{"show_chatbot": "{% if schedule.experiment %}1{% endif %}"}'
                 hx-trigger="confirmed"
                 hx-target="#schedule_{{ schedule.external_id }}"
                 hx-swap="outerHTML"

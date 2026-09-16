@@ -22,6 +22,7 @@ chat_patterns = [
     path("<uuid:session_id>/poll/", views.chat_poll_response, name="poll-response"),
     path("<uuid:session_id>/<str:task_id>/poll/", views.chat_poll_task_response, name="task-poll-response"),
     path("<uuid:session_id>/consent/", views.chat_record_consent, name="record-consent"),
+    path("<uuid:session_id>/token/", views.chat_renew_session_token, name="renew-session-token"),
 ]
 
 # The v1 API surface. v1 is frozen against today's URLs and serializers; new endpoints and the

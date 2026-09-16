@@ -44,6 +44,7 @@ from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
 from apps.documents.utils import delete_collection_file
 from apps.files.models import File, FileChunkEmbedding, FilePurpose
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
 from apps.generics.referenced_objects import render_referenced_objects_modal
@@ -56,6 +57,10 @@ from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger("ocs.documents.views")
+
+
+def _collections_crumb(team_slug: str) -> Crumb:
+    return _("Collections"), reverse("documents:collection_home", args=[team_slug])
 
 
 def _visible_source_types(request) -> list[SourceType]:
@@ -115,6 +120,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": _visible_source_types(request),
         "read_only": collection.is_a_version,
+        "breadcrumbs": [_collections_crumb(team_slug), (collection.name, None)],
         **_indexing_progress(collection),
     }
     return render(request, "documents/single_collection_home.html", context)
@@ -178,10 +184,16 @@ class QueryView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView
         team_slug: str,
         pk: str,
     ):
+        collection = Collection.objects.get(id=pk, team=self.request.team)
         return {
             "active_tab": "collections",
             "title": "Query Collection",
-            "collection": Collection.objects.get(id=pk, team=self.request.team),
+            "collection": collection,
+            "breadcrumbs": [
+                _collections_crumb(team_slug),
+                (collection.name, collection.get_absolute_url()),
+                (_("Inspect"), None),
+            ],
         }
 
 
@@ -639,7 +651,9 @@ class CollectionFormMixin:
         return context
 
 
-class CreateCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, CreateView):
+class CreateCollection(
+    BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, CreateView
+):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -649,6 +663,9 @@ class CreateCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Colle
         "button_text": "Create",
         "active_tab": "collections",
     }
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [_collections_crumb(self.request.team.slug), (_("Create"), None)]
 
     def get_success_url(self):
         return reverse("documents:single_collection_home", args=[self.request.team.slug, self.object.id])
@@ -665,7 +682,9 @@ class CreateCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Colle
         return response
 
 
-class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, UpdateView):
+class EditCollection(
+    BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CollectionFormMixin, UpdateView
+):
     model = Collection
     form_class = CollectionForm
     template_name = "documents/collection_form.html"
@@ -675,6 +694,13 @@ class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Collect
         "button_text": "Update",
         "active_tab": "collections",
     }
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [
+            _collections_crumb(self.request.team.slug),
+            (self.object.name, self.object.get_absolute_url()),
+            (_("Edit"), None),
+        ]
 
     def get_queryset(self):
         return Collection.objects.filter(team=self.request.team)
@@ -692,7 +718,9 @@ class EditCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Collect
             with transaction.atomic():
                 collection.openai_vector_store_id = None  # Reset the vector store ID
                 collection.ensure_remote_index_created()
-                CollectionFile.objects.filter(collection_id=collection.id).update(status=FileStatus.PENDING)
+                CollectionFile.objects.filter(collection_id=collection.id).update(
+                    status=FileStatus.PENDING, failure_reason=""
+                )
 
             tasks.migrate_vector_stores.delay(
                 collection_id=form.instance.id,
@@ -830,6 +858,11 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 "chunk_overlap": chunking_strategy.chunk_overlap,
                 "collection": collection_file.collection,
                 "file": collection_file.file,
+                "breadcrumbs": [
+                    _collections_crumb(self.request.team.slug),
+                    (collection_file.collection.name, collection_file.collection.get_absolute_url()),
+                    (_("%(file_name)s Chunks") % {"file_name": collection_file.file.name}, None),
+                ],
             }
         )
 

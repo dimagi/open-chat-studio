@@ -11,6 +11,8 @@ from django_tables2 import SingleTableView
 
 from apps.experiments.models import SourceMaterial
 from apps.experiments.tables import SourceMaterialTable
+from apps.generics.chips import Chip
+from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
@@ -104,6 +106,25 @@ class DeleteSourceMaterial(LoginAndTeamRequiredMixin, PermissionRequiredMixin, V
 
     def delete(self, request, team_slug: str, pk: int):
         source_material = get_object_or_404(SourceMaterial, id=pk, team=request.team)
-        source_material.archive()
-        messages.success(request, "Source Material deleted")
-        return HttpResponse()
+
+        if source_material.archive():
+            messages.success(request, "Source Material deleted")
+            return HttpResponse()
+
+        pipeline_node_chips = [
+            Chip(label=node.pipeline.name, url=node.pipeline.get_absolute_url())
+            for node in source_material.get_related_nodes_queryset().select_related("pipeline")
+        ]
+        experiment_chips = [
+            Chip(
+                label=f"{experiment.name} {experiment.get_version_name()}"
+                + ("" if experiment.is_working_version else " [published]"),
+                url=experiment.get_absolute_url(),
+            )
+            for experiment in source_material.get_related_experiments_queryset()
+        ]
+        return render_referenced_objects_modal(
+            "source material",
+            pipeline_nodes=pipeline_node_chips,
+            experiments_with_pipeline_nodes=experiment_chips,
+        )

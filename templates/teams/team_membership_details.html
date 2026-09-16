@@ -1,13 +1,5 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags i18n static %}
-{% block breadcrumbs %}
-  <nav aria-label="breadcrumbs">
-    <ol class="pg-breadcrumbs">
-      <li><a href="{% url 'single_team:manage_team' request.team.slug %}">{{ request.team.name }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{{ membership.user.get_display_name }}</li>
-    </ol>
-  </nav>
-{% endblock breadcrumbs %}
 
 {% block app %}
   <section class="app-card">

@@ -128,9 +128,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [
-        # Upstream catalogues list this model under its dated open-weights name
-        # (deepseek-v4-flash-0731), but api.deepseek.com only serves the undated alias,
-        # which is what we have to send.
+        # DeepSeek-V4.1-Flash (llm-stats id `deepseek-v4.1-flash`). api.deepseek.com serves it as
+        # `deepseek-flash`; the two dated names below are still accepted but now route here.
+        Model("deepseek-flash", 1000000),
+        # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
+        # api.deepseek.com only serves the undated alias, which is what we have to send.
         Model("deepseek-v4-flash", 1000000, is_default=True),
         Model("deepseek-v4-pro", 1000000, is_translation_default=True),
         # Experimental vision variant of deepseek-v4-flash. Same 1M context and text rates as
@@ -257,6 +259,16 @@ def get_default_model(provider_type: str) -> Model | None:
     only), so a missing provider is a legitimate miss rather than a programming error.
     """
     return next((m for m in DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, ()) if m.is_default), None)
+
+
+def get_deprecated_models() -> dict[tuple[str, str], str | None]:
+    """``{(provider_type, model_name): replacement}`` for every deprecated model."""
+    return {
+        (provider_type, model.name): model.replacement
+        for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items()
+        for model in models
+        if model.deprecated
+    }
 
 
 def get_default_translation_models_by_provider() -> dict:

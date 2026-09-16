@@ -19,15 +19,6 @@
   </script>
 {% endblock page_js %}
 
-{% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-    <ul>
-      <li><a href="{% url 'participants:participant_home' request.team.slug %}">{% translate "Participants" %}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{{ participant.name|default:participant.identifier }}</li>
-    </ul>
-  </div>
-{% endblock breadcrumbs %}
-
 {% block app %}
   <div class="app-card rounded-2xl border border-base-300 bg-base-100">
     <div class="flex flex-wrap items-start justify-between gap-5">

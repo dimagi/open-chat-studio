@@ -16,7 +16,7 @@ from django.utils.html import escape
 from time_machine import travel
 
 from apps.annotations.models import Tag
-from apps.api.session_tokens import validate_session_token
+from apps.api.session_tokens import parse_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.tables import ChatbotSessionsTable, ParticipantSessionsTable
@@ -44,6 +44,7 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.events import ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
@@ -152,6 +153,10 @@ def test_single_chatbot_home(client, team_with_users):
 
     assert response.status_code == 200
     assert "chatbots/single_chatbot_home.html" in [t.name for t in response.templates]
+    assert response.context["breadcrumbs"] == [
+        ("Chatbots", reverse("chatbots:chatbots_home", args=[team.slug])),
+        ("Test Experiment", None),
+    ]
 
 
 @pytest.mark.django_db()
@@ -567,6 +572,47 @@ def test_participant_scoped_sessions_table_view_ignores_a_non_numeric_chatbot_pa
 
 
 @pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_paginates(client, team_with_users):
+    """Regression for #4452: this table used to render every session in one response."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    ExperimentSessionFactory.create_batch(30, team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    table = response.context_data["table"]
+    assert table.paginator.count == 30
+    assert len(table.page.object_list) == 25
+    assert table.paginator.num_pages == 2
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_shows_the_record_count(client, team_with_users):
+    """Regression for #4452: replaces the removed "N of M sessions" pill text."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team)
+    ExperimentSessionFactory.create_batch(3, team=team, experiment=experiment, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url)
+
+    assert "3 records" in response.content.decode()
+
+
+@pytest.mark.django_db()
 def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, team_with_users):
     """A date range built from two filters on the same column must exclude out-of-range sessions.
 
@@ -653,7 +699,7 @@ def test_continue_chat_action_opens_widget(client, team_with_users):
     assert "ocsContinueSessionChat(this)" in content
     assert f'data-session-id="{session.external_id}"' in content
     token = re.search(r'data-session-token="([^"]+)"', content).group(1)
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
     assert chat_url not in content
 
 
@@ -1142,7 +1188,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
     token = response.context_data["session_token"]
     assert token
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
 
 
 @pytest.mark.django_db()
@@ -1181,7 +1227,7 @@ def test_chatbot_chat_session_includes_valid_session_token(client, team_with_use
 
     assert response.status_code == 200
     token = response.context["session_token"]
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
 
 
 @pytest.mark.django_db()
@@ -1267,6 +1313,38 @@ def test_session_view_shows_participant_data_for_published_version_session(clien
     response = client.get(url)
     assert response.status_code == 200
     assert "docs-reader" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_session_view_schedules_table_excludes_the_chatbot_column(client, team_with_users):
+    """A session's own schedules table is already scoped to one chatbot, so it must not show
+    the Chatbot column the participant-wide table needs."""
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    ScheduledMessageFactory.create(
+        experiment=session.experiment,
+        team=team,
+        participant=session.participant,
+        action=None,
+        custom_schedule_params={
+            "name": "Test",
+            "time_period": "days",
+            "frequency": 1,
+            "repetitions": 1,
+            "prompt_text": "hi",
+        },
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "experiment" not in response.context["schedules_table"].columns.names()
 
 
 @pytest.mark.django_db()

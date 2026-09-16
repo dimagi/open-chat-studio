@@ -64,10 +64,11 @@ class TeamFilter(ChoiceColumnFilter):
     column: str = "team_id"
     label: str = "Team"
 
-    def prepare(self, team, **kwargs):
+    def prepare(self, team, **kwargs) -> "TeamFilter":
         user = kwargs.get("user")
         teams = user.teams.all().order_by("name") if user else []
-        self.options = [{"id": t.id, "label": t.name} for t in teams]
+        options = [{"id": t.id, "label": t.name} for t in teams]
+        return self.model_copy(update={"options": options})
 
     def parse_query_value(self, value) -> list[int] | None:  # ty: ignore[invalid-method-override]
         values = []

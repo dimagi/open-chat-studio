@@ -193,6 +193,10 @@ class TestEvaluatorPickerInitialState:
             "llm_provider_id": evaluator.llm_provider_id,
             "llm_provider_model_id": evaluator.llm_provider_model_id,
         }
+        assert response.context_data["breadcrumbs"] == [
+            ("Evaluators", reverse("evaluations:evaluator_home", args=[team.slug])),
+            (evaluator.name, None),
+        ]
 
     def test_creating_starts_on_the_teams_first_provider(self, client_with_user, team):
         """The pair has to be one the form accepts, so the model must be one this provider can serve."""

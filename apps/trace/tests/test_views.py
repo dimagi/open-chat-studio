@@ -63,6 +63,28 @@ def test_trace_detail_view_renders_filter_links(client, team_with_users):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "with_experiment", [pytest.param(True, id="experiment"), pytest.param(False, id="no-experiment")]
+)
+def test_trace_detail_view_breadcrumb_leaf(client, team_with_users, with_experiment):
+    team = team_with_users
+    client.force_login(team.members.first())
+    trace = _make_trace(team)
+    if not with_experiment:
+        trace.experiment = None
+        trace.save(update_fields=["experiment"])
+
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    expected_leaf = trace.experiment.name if with_experiment else f"Trace {trace.trace_id}"
+    assert response.context["breadcrumbs"] == [
+        ("Traces", reverse("trace:home", args=[team.slug])),
+        (expected_leaf, None),
+    ]
+
+
+@pytest.mark.django_db()
 def test_trace_detail_view_reads_tokens_from_usage_records(client, team_with_users):
     """The token card is fed by UsageRecord rows for the trace, not by counters on the row."""
     team = team_with_users
@@ -236,9 +258,14 @@ def test_trace_table_renders_chips_like_other_tables(client, team_with_users):
     client.force_login(user)
     response = client.get(reverse("trace:table", args=[team.slug]))
 
-    chips = re.findall(r'<a [^>]*class="([^"]*)"', response.content.decode())
+    html = response.content.decode()
+    # Sort headers also render as a real <a> now (see #4463), not just the bot/session
+    # chips this test is about -- exclude them by their own hx-ext="morph" marker rather
+    # than assume every <a class=...> on the page is a chip.
+    anchor_tags = [tag for tag in re.findall(r"<a [^>]*>", html) if 'hx-ext="morph"' not in tag]
+    chips = [re.search(r'class="([^"]*)"', tag).group(1) for tag in anchor_tags]
     assert chips
     for classes in chips:
         assert CHIP_BUTTON_STYLE in classes
         assert "max-w-xs" in classes
-    assert response.content.decode().count("min-w-0 truncate") == 2
+    assert html.count("min-w-0 truncate") == 2
