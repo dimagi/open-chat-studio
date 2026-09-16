@@ -434,7 +434,7 @@ class AddSessionToQueueFromSession(LoginAndTeamRequiredMixin, PermissionRequired
             )
         queue = get_object_or_404(AnnotationQueue, id=queue_id, team=request.team, status=QueueStatus.ACTIVE)
         try:
-            item, created = AnnotationItem.objects.get_or_create(
+            _item, created = AnnotationItem.objects.get_or_create(
                 queue=queue,
                 session=session,
                 defaults={

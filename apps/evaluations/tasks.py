@@ -812,7 +812,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         finally:
             csv_file.delete()
     except Exception as e:
-        logger.error(f"Error in CSV upload task for dataset {dataset_id}: {str(e)}")
+        logger.error(f"Error in CSV upload task for dataset {dataset_id}: {e!s}")
         return {"success": False, "error": str(e)}
 
 
@@ -1141,7 +1141,7 @@ def process_csv_rows(
                 stats["created_count"] += 1
 
         except Exception as e:
-            stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
+            stats["error_messages"].append(f"Row {row_index + 1}: {e!s}")
             continue
 
         processed_rows = row_index + 1
@@ -1193,7 +1193,7 @@ def _upload_evaluation_run_results(
             }
 
     except Exception as e:
-        logger.error(f"Error in CSV upload task for evaluation run {evaluation_run_id}: {str(e)}")
+        logger.error(f"Error in CSV upload task for evaluation run {evaluation_run_id}: {e!s}")
         return {"success": False, "error": str(e)}
 
 
@@ -1294,7 +1294,7 @@ def process_evaluation_results_csv_rows(
                 else:
                     stats["error_messages"].append(f"Row {row_index + 1}: No results foundand message {message_id}")
         except Exception as e:
-            stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
+            stats["error_messages"].append(f"Row {row_index + 1}: {e!s}")
             continue
 
         processed_rows = row_index + 1

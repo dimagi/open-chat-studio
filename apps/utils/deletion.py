@@ -212,9 +212,9 @@ def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list
             continue
 
         # get the other side of the relationship (the one that is not the origin)
-        related_field = [
+        related_field = next(
             f for f in through_model._meta.get_fields() if f.is_relation and f.related_model == related_model
-        ][0]
+        )
 
         field = related.field
         qs = collector.related_objects(through_model, [field], objs)

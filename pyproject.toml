@@ -135,8 +135,26 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "PLC0415", "TID253"]
-ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PLC0415", "TID253"]
+ignore = [
+    "PT019",
+    "SIM102",
+    "SIM108",
+    "SIM117",
+    # Unicode-confusable checks: the flagged characters are intentional in human-facing
+    # strings, docstrings and comments (en dashes, ×, curly quotes).
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Django/DRF declarative class config (`Meta.fields`, `widgets`, `list_display`,
+    # serializer `Meta` lists) is class-level by design; annotating each as ClassVar is noise.
+    "RUF012",
+    # `# noqa: PLC0415 - <reason>` is a justification marker read by
+    # scripts/check_inline_imports.py. TID253's banned-module-level-imports already exempts
+    # those imports from PLC0415, so RUF100 sees the directives as unused and strips the
+    # reason the checker needs. Its fix also mangles comments that merely mention `# noqa`.
+    "RUF100",
+]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"

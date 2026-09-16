@@ -67,7 +67,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
                 translated_data = json.loads(response.text)
             except json.JSONDecodeError as e:
                 raise TranslationError(
-                    f"Failed to parse LLM response as JSON for {target_language} translation. Error: {str(e)}"
+                    f"Failed to parse LLM response as JSON for {target_language} translation. Error: {e!s}"
                 ) from e
 
             messages_by_id = {str(msg.id): msg for msg in messages_to_translate}
@@ -90,7 +90,7 @@ def translate_messages_with_llm(messages, target_language, llm_provider, llm_pro
             return messages
 
     except Exception as e:
-        raise TranslationError(f"Failed to translate messages to {target_language}: {str(e)}") from e
+        raise TranslationError(f"Failed to translate messages to {target_language}: {e!s}") from e
 
 
 def get_message_content(message, target_language=None):

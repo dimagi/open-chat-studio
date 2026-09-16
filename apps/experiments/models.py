@@ -255,7 +255,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default"]
+        return [*super().get_fields_to_exclude(), "is_default"]
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -944,7 +944,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
+        return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
     def archive(self):

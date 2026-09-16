@@ -645,7 +645,7 @@ class Command(BaseCommand):
                     executor.submit(_process_single_trace, trace_info): trace_info for trace_info in trace_list.data
                 }
                 for future in as_completed(futures):
-                    status, trace_id = future.result()
+                    status, _trace_id = future.result()
                     if status == "migrated":
                         total_migrated += 1
                     elif status == "failed_fetch":

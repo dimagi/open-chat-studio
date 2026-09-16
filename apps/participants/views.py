@@ -514,7 +514,7 @@ def import_participants(request, team_slug: str):
                     messages.success(request, success_msg)
                     return redirect("participants:participant_home", team_slug=team_slug)
             except Exception as e:
-                messages.error(request, f"Import failed: {str(e)}")
+                messages.error(request, f"Import failed: {e!s}")
 
     return render(
         request,

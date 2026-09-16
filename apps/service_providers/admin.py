@@ -31,7 +31,7 @@ class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     def related_assistants(self, obj):
         assistants = OpenAiAssistant.objects.filter(llm_provider_model_id=str(obj.id))
         assistant_urls = [
-            f"<a href={reverse('admin:assistants_openaiassistant_change', args=[assistant.id])} >{str(assistant)}</a>"
+            f"<a href={reverse('admin:assistants_openaiassistant_change', args=[assistant.id])} >{assistant!s}</a>"
             for assistant in assistants
         ]
         return format_html("<br>".join(assistant_urls))
@@ -42,7 +42,7 @@ class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
         pipelines = set(node.pipeline for node in nodes)
         pipeline_urls = [
-            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{str(pipeline)}</a>"
+            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{pipeline!s}</a>"
             for pipeline in pipelines
         ]
         return format_html("<br>".join(pipeline_urls))

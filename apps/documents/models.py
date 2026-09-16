@@ -421,7 +421,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         experiments. When check_versions is True, it will return all experiments that reference any version of this
         collection.
         """
-        ids = list(self.versions.values_list("id", flat=True)) + [self.id]
+        ids = [*self.versions.values_list("id", flat=True), self.id]
 
         index_references = get_related_pipeline_experiments_queryset_list_param(ids, "collection_index_ids").filter(
             models.Q(is_default_version=True) | models.Q(working_version__id__isnull=True),

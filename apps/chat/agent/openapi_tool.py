@@ -102,9 +102,9 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPStatusError as e:
                 if e.response and e.response.status_code == 400:
                     raise ToolException(f"Bad request: {e.response.text}") from None
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
             except httpx.HTTPError as e:
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
 
     def call_api_with_notifications(self, **kwargs) -> Any:
         """Wrapper around call_api that creates notifications for monitoring custom action health.
@@ -166,7 +166,7 @@ class OpenAPIOperationExecutor:
 
             filename = msg.get_filename()
         except Exception as e:
-            raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
+            raise ToolException(f"Invalid content-disposition header: {e!s}") from e
         return filename or str(uuid.uuid4())
 
     def _get_url(self, path_params):
@@ -268,7 +268,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
         if p.param_schema:
             schema = spec.get_schema(p.param_schema)
         else:
-            media_type_schema = list(p.content.values())[0].media_type_schema
+            media_type_schema = next(iter(p.content.values())).media_type_schema
             schema = spec.get_schema(media_type_schema)
         if p.name and not schema.title:
             schema.title = p.name

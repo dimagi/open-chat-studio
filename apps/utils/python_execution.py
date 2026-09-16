@@ -248,7 +248,7 @@ class RestrictedPythonExecutionMixin(BaseModel):
 
 
 def get_code_error_message(filename: str, code: str) -> str:
-    exc_type, exc_value, exc_traceback = sys.exc_info()
+    _exc_type, exc_value, exc_traceback = sys.exc_info()
     error_message = f"Error: {exc_value!r}"
 
     try:

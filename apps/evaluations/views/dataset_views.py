@@ -697,7 +697,7 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:
-        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
+        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {e!s}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 

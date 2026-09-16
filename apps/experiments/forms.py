@@ -69,7 +69,7 @@ class TranslateMessagesForm(forms.Form):
         providers = get_llm_provider_by_team(team)
         provider_choices = [(provider.id, str(provider)) for provider in providers]
 
-        self.fields["llm_provider"].choices = [("", "Choose a model for translation")] + provider_choices
+        self.fields["llm_provider"].choices = [("", "Choose a model for translation"), *provider_choices]
         if provider_choices:
             self.fields["llm_provider"].choices = provider_choices
             self.fields["llm_provider"].initial = provider_choices[0][0]
@@ -95,7 +95,7 @@ class TranslateMessagesForm(forms.Form):
             self.fields["target_language"].choices = language_choices
             self.fields["target_language"].initial = "eng"
         else:
-            self.fields["target_language"].choices = [("", "Choose a language")] + language_choices
+            self.fields["target_language"].choices = [("", "Choose a language"), *language_choices]
 
         if is_translate_all_form:
             self.fields["target_language"].label = "Target Language for All Messages"

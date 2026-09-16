@@ -801,7 +801,7 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
         )
     except Exception as e:
         logging.exception("Error translating messages")
-        messages.error(request, f"Translation failed: {str(e)}")
+        messages.error(request, f"Translation failed: {e!s}")
         return redirect_to_messages_view(request, session)
 
     return redirect_to_messages_view(request, session)

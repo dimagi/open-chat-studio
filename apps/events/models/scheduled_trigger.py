@@ -174,7 +174,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
         return new_instance
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs", "fired_at"]
+        return [*super().get_fields_to_exclude(), "action", "experiment", "event_logs", "fired_at"]
 
     def _get_version_details(self):
         event_action_type = EventActionType(self.action.action_type).label

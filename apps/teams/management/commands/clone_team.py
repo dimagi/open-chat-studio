@@ -350,7 +350,7 @@ class Command(BaseCommand):
         # Fail if unmapped params have values (these reference objects we don't clone)
         unmapped_params = ["collection_id", "collection_index_ids", "synthetic_voice_id"]
         for param in unmapped_params:
-            if param in params and params[param]:
+            if params.get(param):
                 raise CommandError(
                     f"Pipeline node '{node.label}' has {param}={params[param]} which cannot be cloned. "
                     f"Remove or clear this reference in the source pipeline before cloning."
@@ -363,7 +363,7 @@ class Command(BaseCommand):
             changed = True
 
         # Remap llm_provider_id
-        if "llm_provider_id" in params and params["llm_provider_id"]:
+        if params.get("llm_provider_id"):
             old_id = int(params["llm_provider_id"])
             if old_id in ctx.llm_providers:
                 params["llm_provider_id"] = ctx.llm_providers[old_id].id
@@ -377,7 +377,7 @@ class Command(BaseCommand):
             # else: global provider, leave as-is
 
         # Remap llm_provider_model_id
-        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
+        if params.get("llm_provider_model_id"):
             old_id = int(params["llm_provider_model_id"])
             if old_id in ctx.llm_provider_models:
                 params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
@@ -391,7 +391,7 @@ class Command(BaseCommand):
             # else: global model, leave as-is
 
         # Remap source_material_id
-        if "source_material_id" in params and params["source_material_id"]:
+        if params.get("source_material_id"):
             old_id = int(params["source_material_id"])
             if old_id not in ctx.source_materials:
                 raise CommandError(

@@ -929,7 +929,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             csv_reader = csv.DictReader(StringIO(file_content))
             csv_columns = set(csv_reader.fieldnames or [])
         except Exception as err:
-            raise forms.ValidationError(f"Error reading CSV file: {str(err)}") from err
+            raise forms.ValidationError(f"Error reading CSV file: {err!s}") from err
 
         column_mapping = {}
         if column_mapping_str:
