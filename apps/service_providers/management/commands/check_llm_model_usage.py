@@ -104,9 +104,20 @@ class Command(BaseCommand):
         }
 
     def _get_suggested_replacement(self, model):
-        """Get suggested replacement model for a deprecated model."""
-        # Try to find the default model for the same provider
+        """Get suggested replacement model for a deprecated model.
+
+        Prefers the explicit ``replacement`` field configured on the matching
+        ``Model`` dataclass entry in ``DEFAULT_LLM_PROVIDER_MODELS``.  Falls
+        back to the provider's ``is_default=True`` model only when no explicit
+        replacement is set.  This keeps the suggestion consistent with what
+        ``notify_deprecated_models`` reports.
+        """
         provider_models = DEFAULT_LLM_PROVIDER_MODELS.get(model.type, [])
+        # First pass: honour the explicit replacement for the matched model
+        for provider_model in provider_models:
+            if provider_model.name == model.name and provider_model.replacement:
+                return provider_model.replacement
+        # Second pass: fall back to the provider's default model
         for provider_model in provider_models:
             if provider_model.is_default:
                 return provider_model.name
