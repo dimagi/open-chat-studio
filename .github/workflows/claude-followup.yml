@@ -216,6 +216,7 @@ jobs:
             - `uv run ty check apps/` (Python types)
             - `pnpm run build` (frontend build)
             - `pnpm run type-check` (TypeScript types)
+            - `pnpm test` (JS/TS tests)
             - `pytest path/to/relevant/tests.py -v` (relevant tests)
 
             ### Step 4: Push and comment
@@ -227,7 +228,7 @@ jobs:
 
             If CI passed and there are no actionable review comments:
             1. Comment on the PR noting that no changes were needed
-          claude_args: '--allowedTools "Bash(pnpm run lint:*),Bash(pnpm run type-check:*),Bash(pnpm run build:*),Bash(pnpm run dev:*),Bash(pnpm install:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(ty check:*),Bash(ty:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(pnpm run lint:*),Bash(pnpm run type-check:*),Bash(pnpm test:*),Bash(pnpm run test:*),Bash(pnpm run build:*),Bash(pnpm run dev:*),Bash(pnpm install:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ruff:*),Bash(ty check:*),Bash(ty:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(uv lock:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh run download:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh api:*),Read,Write,Edit"'
 
       - name: Add followup-done label
         if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''
