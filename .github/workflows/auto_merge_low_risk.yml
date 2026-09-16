@@ -5,18 +5,24 @@
 # live in `scripts/auto_merge_low_risk.py`.
 #
 # Triggered on: every 15 minutes, or manual dispatch
-# Requirements: none beyond the default GITHUB_TOKEN
+# Requirements: vars.OCS_AUTOMERGE_APP_ID and secrets.OCS_AUTOMERGE_PRIVATE_KEY
 #
 # Notes:
 # - **Dry run until `AUTO_MERGE_LOW_RISK` is set to `enabled`** in the repository
 #   variables. Until then every run reports what it would have merged to the job
 #   summary and merges nothing. That variable is the only switch
-# - **Setting that variable is necessary but not sufficient.** `main` is protected
-#   with `required_approving_review_count: 1`, `require_last_push_approval: true`
-#   and `enforce_admins: true`, so every candidate will sit at
-#   `mergeable_state: blocked` until a human approves it. Auto-merge only becomes
-#   real once that protection is relaxed, or an identity in the bypass list does
-#   the merging — both are governance calls, not settings changes
+# - `main` requires an approving review, so the merge is made by the `ocs-automerge`
+#   GitHub App, which sits in that branch protection's
+#   `bypass_pull_request_allowances`. Humans still need an approval; only this one
+#   identity does not
+# - **`ocs-automerge` is deliberately not `ocs-agent`.** `update-generated-files.yml`
+#   hands `ocs-agent`'s token to a job that runs code from the pull request branch
+#   (`uv sync`, ruff, `makemigrations`), so a hostile PR can reach that token. An
+#   identity that can both be reached from PR code and bypass review is a path
+#   from "open a PR" to "merge to production unreviewed". This workflow never
+#   checks out or executes PR code — it reads one script from the default branch
+#   — so its token stays out of a PR author's reach. Do not reuse this app
+#   anywhere that builds, tests, or checks out a pull request
 # - Merging to `main` deploys to production, so the script refuses by default:
 #   an absent label, a check that has not reported, a missing review verdict and
 #   an unknown mergeability all block. Nothing here has an override
@@ -43,10 +49,9 @@ concurrency:
   group: auto-merge-low-risk
   cancel-in-progress: false
 
+# The app token does the work; GITHUB_TOKEN only needs to read the script.
 permissions:
-  contents: write
-  pull-requests: write
-  checks: read
+  contents: read
 
 jobs:
   auto-merge:
@@ -62,6 +67,13 @@ jobs:
         with:
           egress-policy: audit
 
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.OCS_AUTOMERGE_APP_ID }}
+          private-key: ${{ secrets.OCS_AUTOMERGE_PRIVATE_KEY }}
+
       - name: Check out the merge rules
         uses: actions/checkout@v7
         with:
@@ -76,7 +88,7 @@ jobs:
 
       - name: Merge what qualifies
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           ENABLED: ${{ vars.AUTO_MERGE_LOW_RISK == 'enabled' }}
         run: |
