@@ -150,10 +150,9 @@ jobs:
             It has rewritten `apps/cost_tracking/seed_data/llm_pricing.json` for
             models we already register, recorded every candidate in
             `scripts/auto_sync_models/model_ledger.json` as `pending`, and
-            written `./reconciliation.json` plus a rate table at
-            `./reconciliation.pricing-body.md`. The last two are gitignored. You
-            are on branch `${{ steps.sync.outputs.branch_name }}`, already
-            checked out, with git identity configured.
+            written `./reconciliation.json`, which is gitignored. You are on
+            branch `${{ steps.sync.outputs.branch_name }}`, already checked
+            out, with git identity configured.
 
             ## 1. Read
 
