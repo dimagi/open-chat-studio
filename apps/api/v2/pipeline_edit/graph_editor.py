@@ -119,15 +119,8 @@ def plan_delete(flow: Flow, node_id: str) -> PipelineEdit:
 
 
 def refuse_if_server_managed(node_type: str) -> None:
-    """Refuse to touch a node the server owns — Start and End, the two the API will not create.
-
-    ``can_delete`` is the UI builder's own flag for this and is False for exactly those two, so the
-    API withholds the same nodes rather than keeping a list of its own.
-    """
-    schema = NodeType(node_type).schema
-    # A type naming no node class -- removed since, or never one -- has no flag to consult, and is
-    # exactly the sort of node a pipeline has to be able to shed. So it is not withheld.
-    if schema is not None and not schema.can_delete:
+    """Refuse to touch a node the server owns — Start and End, the two the API will not create."""
+    if NodeType(node_type).is_server_managed:
         raise NodeIsServerManaged(
             f"'{node_type}' is part of the pipeline's structure: it cannot be edited or deleted through the API."
         )

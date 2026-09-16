@@ -6,7 +6,7 @@ resource lookup carries a ``django_db`` marker.
 
 import pytest
 
-from apps.pipelines.node_type import NodeType
+from apps.pipelines.node_type import NodeType, server_managed_node_types
 
 
 class TestNodeClassResolution:
@@ -44,3 +44,17 @@ class TestSchema:
         schema = NodeType("LLMResponseWithPrompt").schema
         assert schema is not None
         assert schema.label
+
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", True, id="start"),
+            pytest.param("EndNode", True, id="end"),
+            pytest.param("LLMResponseWithPrompt", False, id="regular"),
+        ],
+    )
+    def test_is_server_managed_follows_can_delete(self, node_type, expected):
+        assert NodeType(node_type).is_server_managed is expected
+
+    def test_server_managed_node_types_is_exactly_the_types_that_report_it(self):
+        assert server_managed_node_types() == {"StartNode", "EndNode"}

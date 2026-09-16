@@ -33,7 +33,7 @@ from apps.pipelines.flow import (
     react_flow_node_type,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.node_type import NodeType
+from apps.pipelines.node_type import NodeType, server_managed_node_types
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -443,14 +443,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         )
 
     def _get_version_details(self) -> VersionDetails:
-        reserved_types = ["StartNode", "EndNode"]
         return VersionDetails(
             instance=self,
             fields=[
                 VersionField(name="name", raw_value=self.name),
                 VersionField(
                     name="nodes",
-                    queryset=self.node_set.exclude(type__in=reserved_types),
+                    queryset=self.node_set.exclude(type__in=server_managed_node_types()),
                     to_display=lambda node: node.display_name,
                 ),
             ],
@@ -596,7 +595,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
             new_version.flow_id = new_flow_id
-            if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
+            if not self.node_type.is_server_managed and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
         if not is_copy:

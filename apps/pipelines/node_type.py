@@ -15,6 +15,7 @@ these questions without dragging in the ``nodes -> langgraph -> apps.experiments
 """
 
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -56,6 +57,30 @@ class NodeType:
         # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
         # node class stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
         return cast("NodeSchema", node_class.model_config["json_schema_extra"])
+
+    @property
+    def is_server_managed(self) -> bool:
+        """Whether the server owns nodes of this type -- Start and End, the two the API will not create.
+
+        ``can_delete`` is the UI builder's own flag for this, so callers withhold the same nodes the
+        builder does rather than keeping a list of their own. An unresolvable type has no flag to
+        consult and reports ``False``: it is exactly the sort of node a pipeline has to be able to shed.
+        """
+        schema = self.schema
+        return schema is not None and not schema.can_delete
+
+
+@cache
+def server_managed_node_types() -> frozenset[str]:
+    """Every type :attr:`NodeType.is_server_managed` is true of, for a caller that needs the set in SQL.
+
+    Derived from the same ``can_delete`` flag rather than listed, so the two cannot disagree. Memoised
+    because the schemas are static per deploy. A function rather than a module constant: building it
+    imports the node classes, which is the import this module exists to keep out of its callers.
+    """
+    from apps.pipelines.nodes.node_metadata import get_node_schemas  # noqa: PLC0415 - heavy: nodes→langgraph
+
+    return frozenset(schema["title"] for schema in get_node_schemas() if not schema.get("ui:can_delete"))
 
 
 def _nodes_base():
