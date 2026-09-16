@@ -24,8 +24,6 @@ def apply_temporary_superuser_access(request, grant):
 
     elevated_privileges = request.session.get("elevated_privileges", [])
     if len(elevated_privileges) >= MAX_CONCURRENT_PRIVILEGES:
-        # Logged here rather than at the call sites: one turns this into a form error and the
-        # other falls through to deny, so neither would leave a trace of the denial.
         logger.warning(
             f"Denied temporary superuser access for '{request.user.email}' to '{grant}': "
             f"already holding {len(elevated_privileges)} (max {MAX_CONCURRENT_PRIVILEGES})"
