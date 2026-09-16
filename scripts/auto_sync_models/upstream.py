@@ -273,10 +273,17 @@ def _deprecation_passed(entry: dict, today: datetime.date) -> bool:
 
 def _token_limit(entry: dict) -> int | None:
     for field_name in ("max_input_tokens", "max_tokens"):
-        value = entry.get(field_name)
-        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
-            return value
+        limit = _positive_int(entry.get(field_name))
+        if limit is not None:
+            return limit
     return None
+
+
+def _positive_int(value: Any) -> int | None:
+    """``True`` is an ``int`` in Python and is never a token limit."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None
+    return value if value > 0 else None
 
 
 def rates_from(entry: dict) -> dict[str, str]:

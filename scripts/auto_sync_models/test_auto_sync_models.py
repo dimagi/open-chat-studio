@@ -403,6 +403,7 @@ def test_translate_omits_rates_the_table_does_not_carry():
         pytest.param({"max_tokens": 128000}, 128000, id="falls-back-to-max-tokens"),
         pytest.param({}, None, id="absent"),
         pytest.param({"max_input_tokens": 0}, None, id="zero-ignored"),
+        pytest.param({"max_input_tokens": True}, None, id="bool-is-not-a-limit"),
     ],
 )
 def test_translate_reads_the_token_limit(fields, expected):
