@@ -1,0 +1,74 @@
+# OpenCodeReview PR Review
+#
+# Second automated reviewer on pull requests, alongside claude-code-review.yml.
+# Runs alibaba/open-code-review, which pairs a deterministic file-selection and
+# rule-matching pipeline with an LLM agent per file bundle.
+#
+# Triggered on: PR opened, marked ready for review, or pushed
+# Requirements: ANTHROPIC_API_KEY secret must be configured
+#
+# Notes:
+# - SHADOW MODE. `route_severity_below: critical` routes every finding, at any
+#   severity, into the sticky summary comment instead of onto the diff, so this
+#   does not add a second set of inline comments while its output is being
+#   assessed against the Claude review. Drop that input to go inline
+# - Fork PRs are skipped. Upstream's own example uses pull_request_target to
+#   reach secrets from forks; this uses pull_request instead, matching the fork
+#   posture of the other review workflows in this repo
+# - Runs triggered by Dependabot are excluded, as in claude-code-review.yml
+# - Draft PRs are skipped; the review runs when the PR is marked ready
+# - No checkout step: the action performs its own fetch-depth: 0 checkout and
+#   fetches the PR head as git objects without materializing them into the tree
+# - The action installs the OCR CLI from npm at run time, so pinning the action
+#   alone does not freeze behaviour — ocr_version is pinned to the same release
+# - A new push cancels any in-progress review of the same PR
+
+name: OpenCodeReview PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+concurrency:
+  group: ocr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+      && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Run OpenCodeReview
+        uses: alibaba/open-code-review@f1101fd7f51304c82e4a4f292bbee88aea0823cf # v1.12.4
+        with:
+          ocr_version: '1.12.4'
+          llm_url: https://api.anthropic.com
+          llm_auth_token: ${{ secrets.ANTHROPIC_API_KEY }}
+          llm_model: claude-sonnet-5
+          llm_use_anthropic: 'true'
+          # Unset, the client defaults to `authorization` (Bearer), which the
+          # Anthropic API does accept. Pinned anyway to match OCR's own built-in
+          # Anthropic provider entry, which sets x-api-key — configuring through
+          # the action's inputs does not go through that entry.
+          llm_auth_header: 'x-api-key'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          sticky_summary: 'true'
+          incremental: 'false'
+          route_severity_below: 'critical'
+          upload_artifacts: 'true'
