@@ -89,3 +89,12 @@ class TestVersionedParamSpecs:
 
     def test_a_type_with_none_lists_none(self):
         assert NodeType("RenderTemplate").versioned_param_specs == ()
+
+
+class TestInputHandles:
+    def test_start_accepts_no_input(self):
+        assert NodeType("StartNode").input_handles() == []
+
+    @pytest.mark.parametrize("node_type", ["EndNode", "LLMResponseWithPrompt", "StaticRouterNode"])
+    def test_every_other_type_accepts_the_standard_input(self, node_type):
+        assert NodeType(node_type).input_handles() == ["input"]

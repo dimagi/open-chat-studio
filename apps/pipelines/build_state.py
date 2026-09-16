@@ -16,12 +16,12 @@ from enum import StrEnum
 
 import pydantic
 
-from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
+from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineNodeBuildError, has_errors
 from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
-from apps.pipelines.nodes.nodes import EndNode, StartNode
+from apps.pipelines.nodes.nodes import EndNode
 from apps.service_providers.llm_service.default_models import get_deprecated_models
 from apps.service_providers.models import LlmProviderModel
 
@@ -92,21 +92,12 @@ def unwired_handles(pipeline: Pipeline) -> dict:
 
 def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tuple[str, str]]) -> list[dict]:
     """One node's unwired handles: the implicit input plus any output with no edge."""
-    unwired_inputs = [] if node.flow_id in wired_inputs else input_handles(node.type)
+    unwired_inputs = [] if node.flow_id in wired_inputs else node.node_type.input_handles()
     dangling = [{"handle": handle, "label": None} for handle in unwired_inputs]
     for handle in node_output_handles(node):
         if (node.flow_id, handle["handle"]) not in wired_outputs:
             dangling.append(handle)
     return dangling
-
-
-def input_handles(node_type: str) -> list[str]:
-    """The input handles a node of this type accepts an edge on.
-
-    Every type has one implicit ``input`` handle -- bar Start, which has none. A list rather than a
-    flag so a caller reads inputs and outputs the same way.
-    """
-    return [] if node_type == StartNode.__name__ else [STANDARD_INPUT_NAME]
 
 
 def node_output_handles(node: Node) -> list[dict]:

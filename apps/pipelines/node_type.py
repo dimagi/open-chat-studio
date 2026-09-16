@@ -23,6 +23,7 @@ from apps.pipelines.const import (
     REACT_FLOW_END_TYPE,
     REACT_FLOW_NODE_TYPE,
     REACT_FLOW_START_TYPE,
+    STANDARD_INPUT_NAME,
     START_NODE_TYPE,
 )
 from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
@@ -96,6 +97,14 @@ class NodeType:
     def versioned_param_specs(self) -> tuple[VersionedParamSpec, ...]:
         """The params of this type that reference database records (``apps.pipelines.versioning``)."""
         return NODE_PARAM_SPECS.get(self.type, ())
+
+    def input_handles(self) -> list[str]:
+        """The input handles a node of this type accepts an edge on.
+
+        Every type has one implicit ``input`` handle -- bar Start, which has none. A list rather than a
+        flag so a caller reads inputs and outputs the same way.
+        """
+        return [] if self.type == START_NODE_TYPE else [STANDARD_INPUT_NAME]
 
 
 @cache
