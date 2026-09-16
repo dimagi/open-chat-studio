@@ -230,7 +230,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:
-            name_to_flow_id[node.params.get("name")].append(node.flow_id)
+            name_to_flow_id[node.name].append(node.flow_id)
 
         for _name, flow_ids in name_to_flow_id.items():
             if len(flow_ids) > 1:
@@ -536,6 +536,16 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if name is None or name == self.flow_id:
             return self.type
         return name
+
+    @property
+    def tool_names(self) -> list[str]:
+        """The built-in tools this node has selected."""
+        return self.params.get("tools") or []
+
+    @property
+    def mcp_tool_refs(self) -> list[str]:
+        """The MCP tools this node has selected, each as ``"<server id>:<tool name>"``."""
+        return self.params.get("mcp_tools", [])
 
     @property
     def position(self) -> dict | None:
