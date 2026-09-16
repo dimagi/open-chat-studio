@@ -16,7 +16,8 @@
 #   backfilled  a rate we lack and upstream has
 #   unpriced    still uncostable after backfill
 #   removed     we list it, LiteLLM no longer does at all (report only)
-#   backlog     offered before, still undecided (report only)
+#   backlog     offered before, still undecided, and still not in our
+#               catalogue (report only)
 #
 # Job 1 (reconcile) runs the script. The pricing side effects (rewrite seed +
 # emit migration) are mechanical, so the same job opens the "Pricing update" PR
@@ -24,9 +25,20 @@
 # or newly-deprecated models and invokes Claude Code for the judgement calls,
 # per docs/developer_guides/managing_models.md.
 #
-# Discovery has one memory: scripts/auto_sync_models/model_ledger.json. Every
-# model is offered exactly once; the ledger advances only when a PR merges, so
-# a run that fails or opens nothing loses no candidates.
+# Discovery has one memory: scripts/auto_sync_models/model_ledger.json, keyed
+# "provider/model", holding a first_seen date and a verdict (plus a reason when
+# rejected). Job 1 records each new candidate as "pending" without committing
+# it; job 2 replaces that with "registered" or "rejected" and commits the file
+# as part of its PR. The ledger therefore advances only when a PR merges, so a
+# run that fails or opens nothing loses no candidates.
+#
+# `added` subtracts the ledger's keys, not its verdicts. A "pending" entry
+# therefore keeps the model out of every later run exactly as a "rejected" one
+# does; the only difference is that it also shows up in the backlog report.
+# Setting a verdict removes it from that report but does not make the model
+# re-offerable -- deleting its line from the JSON is the only way to do that.
+# So job 2 must always commit its verdicts: a run that leaves entries "pending"
+# strands those models until someone edits the file by hand.
 #
 # Triggered on: daily schedule, or manual dispatch
 # Requirements: ANTHROPIC_API_KEY secret (job 2). Job 1 needs no credentials
