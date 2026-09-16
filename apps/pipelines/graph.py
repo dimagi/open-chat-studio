@@ -11,7 +11,7 @@ from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState, resolve_node_class
+from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 from apps.service_providers.llm_service.retry import get_retry_policy
 
@@ -130,7 +130,7 @@ class PipelineGraph(pydantic.BaseModel):
         """
         if node_id not in self._output_maps:
             node = self.nodes_by_id[node_id]
-            if resolve_node_class(node.type) is None:
+            if not NodeType(node.type).exists:
                 self._output_maps[node_id] = None  # unknown node type; the node stage names it
                 return self._output_maps[node_id]
             try:

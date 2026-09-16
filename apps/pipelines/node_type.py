@@ -32,6 +32,11 @@ class NodeType:
         """The node class this type names, or ``None`` if it names no usable one."""
         return _nodes_base().resolve_node_class(self.type)
 
+    @property
+    def exists(self) -> bool:
+        """Whether the type names a usable node class at all."""
+        return self.node_class is not None
+
 
 def _nodes_base():
     """``apps.pipelines.nodes.base``, imported on use.
