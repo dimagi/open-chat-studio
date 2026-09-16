@@ -19,7 +19,11 @@ from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
 from apps.web.health_checks import CHECK_SUBSETS
 from apps.web.search import get_searchable_models
-from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
+from apps.web.superuser_utils import (
+    TooManyElevatedPrivileges,
+    apply_temporary_superuser_access,
+    remove_temporary_superuser_access,
+)
 
 UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
 
@@ -62,11 +66,19 @@ def acquire_superuser_powers(request, slug):
             if not request.user.check_password(form.cleaned_data["password"]):
                 form.add_error("password", "Invalid password")
             else:
-                apply_temporary_superuser_access(request, slug)
-                redirect_to = form.cleaned_data["redirect"]
-                if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
-                    redirect_to = "/"
-                return HttpResponseRedirect(redirect_to)
+                try:
+                    apply_temporary_superuser_access(request, slug)
+                except TooManyElevatedPrivileges:
+                    form.add_error(
+                        None,
+                        "You already hold the maximum number of elevated privileges. "
+                        "Release one of them and try again.",
+                    )
+                else:
+                    redirect_to = form.cleaned_data["redirect"]
+                    if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
+                        redirect_to = "/"
+                    return HttpResponseRedirect(redirect_to)
     else:
         redirect_to = request.GET.get("next", "")
         if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
