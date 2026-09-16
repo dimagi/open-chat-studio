@@ -195,6 +195,16 @@ class EvaluationRunFactory(DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
 
+    @factory.post_generation
+    def evaluator_ids(self, create, extracted, **kwargs):
+        """Freeze the config's members into the plan, as `EvaluationConfig.run()` does, unless given."""
+        if extracted is not None:
+            self.evaluator_ids = extracted
+        elif not self.evaluator_ids:
+            self.evaluator_ids = list(self.config.active_evaluators.values_list("id", flat=True))
+        if create:
+            self.save(update_fields=["evaluator_ids"])
+
 
 class EvaluationResultFactory(DjangoModelFactory):
     class Meta:

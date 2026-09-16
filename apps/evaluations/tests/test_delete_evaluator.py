@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
@@ -232,3 +234,26 @@ def test_unarchive_without_delete_perm_is_forbidden(client, team_with_users):
     assert response.status_code == 403
     evaluator.refresh_from_db()
     assert evaluator.is_archived is True
+
+
+@pytest.mark.django_db()
+def test_delete_evaluator_archives_when_a_result_lands_after_the_history_check(client, team_with_users):
+    """A result written between the history check and the delete makes PROTECT refuse; the view archives instead."""
+    evaluator = EvaluatorFactory.create(team=team_with_users, name="Scorer")
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+    run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
+
+    def result_lands_then_delete(self, *args, **kwargs):
+        EvaluationResultFactory.create(team=team_with_users, run=run, evaluator=evaluator)
+        return original_delete(self, *args, **kwargs)
+
+    original_delete = Evaluator.delete
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id])
+    with patch.object(Evaluator, "delete", result_lands_then_delete):
+        response = client.delete(url)
+
+    assert response.status_code == 200
+    evaluator.refresh_from_db()
+    assert evaluator.is_archived is True
+    assert "Archived" in response.content.decode()

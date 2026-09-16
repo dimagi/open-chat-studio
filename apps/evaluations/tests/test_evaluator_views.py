@@ -9,6 +9,7 @@ from django.urls import reverse
 
 from apps.evaluations import evaluators
 from apps.evaluations.models import ConditionType, EvaluationRunStatus
+from apps.evaluations.tables import EvaluationConfigTable
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
@@ -387,8 +388,11 @@ class _StubResult:
 
 @pytest.mark.django_db()
 def test_archived_evaluator_renders_a_badge_and_an_unarchive_action(client, team_with_users):
-    """The evaluator table shows an Archived badge and an unarchive action for an archived evaluator."""
+    """The evaluator table shows an Archived badge and an unarchive action for an archived evaluator with history."""
     archived = EvaluatorFactory.create(team=team_with_users, name="Retired scorer")
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[archived])
+    run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
+    EvaluationResultFactory.create(team=team_with_users, run=run, evaluator=archived)
     archived.archive()
 
     client.force_login(team_with_users.members.first())
@@ -425,3 +429,30 @@ def test_delete_confirm_copy_matches_whether_the_evaluator_has_history(
 
     assert expected in html
     assert unexpected not in html
+
+
+@pytest.mark.django_db()
+def test_archived_evaluator_without_history_still_offers_delete(client, team_with_users):
+    """Once an archived evaluator's history is gone, it can be deleted outright without unarchiving first."""
+    archived = EvaluatorFactory.create(team=team_with_users, name="Retired scorer")
+    archived.archive()
+
+    client.force_login(team_with_users.members.first())
+    url = reverse("evaluations:evaluator_table", args=[team_with_users.slug])
+    html = client.get(url).content.decode()
+
+    assert reverse("evaluations:evaluator_delete", args=[team_with_users.slug, archived.id]) in html
+    assert reverse("evaluations:evaluator_unarchive", args=[team_with_users.slug, archived.id]) in html
+
+
+@pytest.mark.django_db()
+def test_config_table_flags_archived_members(team_with_users):
+    """The evaluations table marks an archived evaluator so a config that cannot run says why."""
+    archived = EvaluatorFactory.create(team=team_with_users, name="Retired scorer")
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[archived])
+    archived.archive()
+
+    html = str(EvaluationConfigTable([config]).render_evaluators(config.evaluators, config))
+
+    assert "Retired scorer" in html
+    assert "Archived" in html

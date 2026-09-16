@@ -78,12 +78,20 @@ class EvaluationConfigTable(tables.Table):
             label = type_info.get("label") or ""
             # icon_class and label come from get_evaluator_type_display (developer-controlled),
             # safe to interpolate. evaluator.name is user-controlled — format_html escapes it.
-            rows.append((icon_class, evaluator.name, label))
+            rows.append((icon_class, evaluator.name, label, evaluator.is_archived))
 
         items = format_html_join(
             "",
-            "<li>{}{} ({})</li>",
-            ((format_html('<i class="fa {}"></i> ', icon) if icon else "", name, label) for icon, name, label in rows),
+            "<li>{}{} ({}){}</li>",
+            (
+                (
+                    format_html('<i class="fa {}"></i> ', icon) if icon else "",
+                    name,
+                    label,
+                    format_html(' <span class="badge badge-ghost badge-sm">Archived</span>') if archived else "",
+                )
+                for icon, name, label, archived in rows
+            ),
         )
         return format_html('<ul class="list-disc list-inside">{}</ul>', items)
 
@@ -212,7 +220,7 @@ class EvaluatorTable(tables.Table):
                 icon_class="fa-solid fa-trash",
                 confirm_message_factory=_evaluator_delete_confirm,
                 hx_method="delete",
-                display_condition=lambda request, record: not record.is_archived,
+                display_condition=lambda request, record: not record.is_archived or not record.has_history,
             ),
             actions.AjaxAction(
                 "evaluations:evaluator_unarchive",

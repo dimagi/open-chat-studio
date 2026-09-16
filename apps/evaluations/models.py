@@ -661,6 +661,11 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
 
+    @property
+    def active_evaluators(self):
+        """Members that are not archived: the only ones a new run freezes into its plan."""
+        return self.evaluators.filter(is_archived=False)
+
     def run(
         self,
         run_type: EvaluationRunType = EvaluationRunType.FULL,
@@ -691,7 +696,7 @@ class EvaluationConfig(BaseTeamModel):
                 status=EvaluationRunStatus.PENDING,
                 type=run_type,
                 job_id=str(uuid.uuid4()),
-                evaluator_ids=list(self.evaluators.filter(is_archived=False).values_list("id", flat=True)),
+                evaluator_ids=list(self.active_evaluators.values_list("id", flat=True)),
             )
 
             if run_type == EvaluationRunType.PREVIEW:

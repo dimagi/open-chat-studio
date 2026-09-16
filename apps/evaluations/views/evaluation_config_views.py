@@ -864,7 +864,7 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
 
 def _no_active_evaluators_response(request: HttpRequest, config: EvaluationConfig) -> HttpResponseRedirect | None:
     """A redirect to the config's runs home with an error message, or None when it has an active evaluator."""
-    if config.evaluators.filter(is_archived=False).exists():
+    if config.active_evaluators.exists():
         return None
     messages.error(
         request,

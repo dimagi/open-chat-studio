@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, QuerySet
+from django.db.models import Count, Exists, OuterRef, ProtectedError, QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -207,16 +207,32 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
     def delete(self, request, team_slug: str, pk: int):
         """Archive the evaluator if it has history, else delete it; 409 while a related run is in flight."""
-        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        evaluator = get_object_or_404(annotated_evaluators(request.team), pk=pk)
         try:
-            if evaluator.evaluationresult_set.exists() or evaluator.evaluationrunaggregate_set.exists():
-                evaluator.archive()
-                row = annotated_evaluators(request.team).get(pk=evaluator.pk)
-                return render_table_row(request, EvaluatorTable, row)
-            evaluator.delete()
+            archived = _delete_or_archive(evaluator)
         except InFlightRunsError as e:
             return HttpResponse(", ".join(e.messages), status=409)
-        return HttpResponse(status=200)
+        if not archived:
+            return HttpResponse(status=200)
+        return render_table_row(request, EvaluatorTable, evaluator)
+
+
+def _delete_or_archive(evaluator: Evaluator) -> bool:
+    """Archive the evaluator when it has history, else delete it; returns True when archived.
+
+    `evaluator` carries the `has_history` annotation from `annotated_evaluators`. A result
+    can still land between that check and the delete, in which case the protected foreign
+    keys refuse the delete and the evaluator is archived instead.
+    """
+    if evaluator.has_history:
+        evaluator.archive()
+        return True
+    try:
+        evaluator.delete()
+    except ProtectedError:
+        evaluator.archive()
+        return True
+    return False
 
 
 class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
