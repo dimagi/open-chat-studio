@@ -1504,8 +1504,8 @@ def create_dataset_from_sessions_task(
         return {"success": False, "error": message}
 
 
-def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[dict]:
-    """Yield *rows*, calling ``report(current, total)`` in steps of roughly one percent.
+def _report_row_progress(rows: Iterable[dict], total: int, recorder: ProgressRecorder) -> Iterator[dict]:
+    """Yield *rows*, reporting progress to *recorder* in steps of roughly one percent.
 
     Reporting per row would be one backend write per row, which on a large export is more
     traffic than the export itself.
@@ -1513,8 +1513,21 @@ def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[d
     step = max(1, math.ceil(total / 100))
     for current, row in enumerate(rows, start=1):
         if current % step == 0 or current == total:
-            report(current, total)
+            recorder.set_progress(current, total, description=f"Processed {current} of {total} messages")
         yield row
+
+
+def _create_export_file(rows: Iterable[dict], team: Team, filename: str) -> File:
+    """Write *rows* out as a CSV in team storage, expiring in a week."""
+    with export_evaluation_csv_to_tempfile(rows) as csv_file:
+        return File.objects.create(
+            name=filename,
+            team=team,
+            content_type="text/csv",
+            file=DjangoFile(csv_file, name=filename),
+            purpose=FilePurpose.DATA_EXPORT,
+            expiry_date=timezone.now() + timedelta(days=7),
+        )
 
 
 def _count_bulk_export_rows(config: EvaluationConfig, team: Team) -> int:
@@ -1567,31 +1580,34 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
         team = config.team
 
         with current_team(team):
-            recorder = ProgressRecorder(self)
             # Counting up front costs a query the streaming read would not otherwise make, but
             # it is what lets the UI show a percentage rather than an unbounded spinner.
             total = _count_bulk_export_rows(config, team)
+            rows = iter_evaluation_table_rows(_get_bulk_results_queryset(config, team))
+            rows = _report_row_progress(rows, total, ProgressRecorder(self))
 
-            def report(current: int, row_total: int) -> None:
-                recorder.set_progress(current, row_total, description=f"Processed {current} of {row_total} messages")
-
-            results = _get_bulk_results_queryset(config, team)
-            rows = _report_row_progress(iter_evaluation_table_rows(results), total, report)
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-
-            # Two spooled temp files: one holds the rows until the header is known, one the CSV.
-            with export_evaluation_csv_to_tempfile(rows) as csv_file:
-                file_obj = File.objects.create(
-                    name=filename,
-                    team=team,
-                    content_type="text/csv",
-                    file=DjangoFile(csv_file, name=filename),
-                    purpose=FilePurpose.DATA_EXPORT,
-                    expiry_date=timezone.now() + timedelta(days=7),
-                )
-
-            return {"file_id": file_obj.id}
+            return {"file_id": _create_export_file(rows, team, filename).id}
 
     except Exception as e:
         logger.exception(f"Error exporting bulk evaluation results for config {evaluation_config_id}: {e}")
+        return {"error": str(e)}
+
+
+@shared_task(queue=Queues.BACKGROUND)
+def export_evaluation_run_results_task(evaluation_run_id: int, team_id: int) -> dict:
+    """Async export of a single evaluation run's results.
+
+    Peak memory is flat in the number of results. Returns {"file_id": <id>} on success.
+    """
+    try:
+        run = EvaluationRun.objects.select_related("team", "config").get(id=evaluation_run_id, team_id=team_id)
+
+        with current_team(run.team):
+            rows = iter_evaluation_table_rows(run.get_export_results().order_by("message_id"))
+            filename = f"{run.config.name}_results_{run.id}.csv"
+            return {"file_id": _create_export_file(rows, run.team, filename).id}
+
+    except Exception as e:
+        logger.exception(f"Error exporting results for evaluation run {evaluation_run_id}: {e}")
         return {"error": str(e)}

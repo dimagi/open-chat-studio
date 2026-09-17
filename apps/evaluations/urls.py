@@ -63,9 +63,9 @@ urlpatterns = [
         name="evaluation_run_aggregates",
     ),
     path(
-        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/download",
-        evaluation_config_views.download_evaluation_run_csv,
-        name="evaluation_run_download",
+        "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/download/start/",
+        evaluation_config_views.start_run_download,
+        name="evaluation_run_download_start",
     ),
     path(
         "<int:evaluation_pk>/evaluation_runs/<int:evaluation_run_pk>/update",

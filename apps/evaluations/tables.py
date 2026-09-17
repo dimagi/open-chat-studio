@@ -150,18 +150,15 @@ class EvaluationRunTable(tables.Table):
 
     cost = columns.Column(verbose_name="Cost", orderable=False, empty_values=())
 
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.Action(
-                url_name="evaluations:evaluation_run_download",
-                url_factory=lambda url_name, request, record, _: reverse(
-                    url_name, args=[request.team.slug, record.config_id, record.id]
-                ),
-                icon_class="fa-solid fa-download",
-                title="Download CSV",
-                enabled_condition=lambda _, record: record.status == "completed",
-            ),
-        ]
+    actions = TemplateColumn(
+        template_code=(
+            '{% url "evaluations:evaluation_run_download_start" request.team.slug record.config_id record.id'
+            " as run_export_url %}"
+            '{% include "evaluations/partials/export_button.html" with export_id=record.id'
+            ' start_url=run_export_url button_class="btn-sm" disabled=record.is_running only %}'
+        ),
+        verbose_name="",
+        orderable=False,
     )
 
     def render_cost(self, record):

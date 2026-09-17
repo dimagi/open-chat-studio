@@ -742,6 +742,11 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     @property
+    def is_running(self) -> bool:
+        """The run has not reached a terminal state yet."""
+        return self.status in NON_TERMINAL_RUN_STATUSES
+
+    @property
     def is_finalizing(self) -> bool:
         """The run is complete but its aggregates have not landed yet.
 
@@ -767,13 +772,15 @@ class EvaluationRun(BaseTeamModel):
         if save:
             self.save(update_fields=["finished_at", "status", "error_message"])
 
-    def get_table_data(self, include_ids: bool = False):
-        results_qs = annotate_export_fields(self.results.all()).order_by("created_at")
+    def get_export_results(self):
+        """The run's results, annotated with the related values the export rows read."""
+        results_qs = annotate_export_fields(self.results.all())
         if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
-            scoped_ids = self.scoped_messages.values_list("id", flat=True)
-            results_qs = results_qs.filter(message_id__in=scoped_ids)
+            results_qs = results_qs.filter(message_id__in=self.scoped_messages.values_list("id", flat=True))
+        return results_qs
 
-        return build_evaluation_table_data(results_qs, include_ids=include_ids)
+    def get_table_data(self, include_ids: bool = False):
+        return build_evaluation_table_data(self.get_export_results().order_by("created_at"), include_ids=include_ids)
 
 
 class EvaluationResult(BaseTeamModel):

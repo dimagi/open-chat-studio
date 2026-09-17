@@ -37,7 +37,6 @@ from apps.evaluations.export import (
     CategoricalColumn,
     categorical_columns_for_evaluators,
     evaluator_output_columns,
-    write_evaluation_csv,
 )
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import (
@@ -55,6 +54,7 @@ from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.evaluations.tasks import (
     export_evaluation_bulk_results_task,
+    export_evaluation_run_results_task,
     upload_evaluation_run_results_task,
 )
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
@@ -873,17 +873,6 @@ def create_evaluation_preview(request, team_slug, evaluation_pk):
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
-@permission_required("evaluations.view_evaluationrun")
-def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
-    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
-    filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
-    table_data = list(evaluation_run.get_table_data(include_ids=True))
-    response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = f"attachment; filename={filename}"
-    write_evaluation_csv(csv.writer(response), table_data)
-    return response
-
-
 @login_and_team_required
 @require_http_methods(["GET"])
 def load_experiment_versions(request, team_slug: str):
@@ -1018,8 +1007,14 @@ def start_bulk_download(request, team_slug: str, evaluation_pk: int):
     """Start an async bulk export of the most recent results per dataset item."""
     config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
     task = export_evaluation_bulk_results_task.delay(config.id, request.team.id)
-    return TemplateResponse(
-        request,
-        "evaluations/partials/bulk_download.html",
-        {"config": config, "task_id": task.id},
-    )
+    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+@require_POST
+def start_run_download(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
+    """Start an async export of one evaluation run's results."""
+    run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
+    task = export_evaluation_run_results_task.delay(run.id, request.team.id)
+    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})
