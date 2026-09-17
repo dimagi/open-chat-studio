@@ -205,6 +205,20 @@ def server_managed_node_types() -> frozenset[str]:
     return frozenset(schema["title"] for schema in get_node_schemas() if not schema.get("ui:can_delete"))
 
 
+@cache
+def node_types_declaring(param_name: str) -> frozenset[str]:
+    """Every type whose :attr:`NodeType.declared_params` includes ``param_name``, for a caller that
+    needs the set in SQL -- ``Node.objects.filter(type__in=...)``.
+
+    Derived from the node classes rather than listed, as :func:`server_managed_node_types` is, so a
+    type that gains or loses the param cannot leave a hand-written list behind. Memoised because the
+    declarations are static per deploy.
+    """
+    from apps.pipelines.nodes.node_metadata import get_node_schemas  # noqa: PLC0415 - heavy: nodes→langgraph
+
+    return frozenset(schema["title"] for schema in get_node_schemas() if NodeType(schema["title"]).declares(param_name))
+
+
 def _nodes_base():
     """``apps.pipelines.nodes.base``, imported on use.
 

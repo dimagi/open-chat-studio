@@ -5,7 +5,7 @@ from django.db import transaction
 
 from apps.custom_actions.models import CustomAction
 from apps.pipelines.models import Node
-from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+from apps.pipelines.node_type import node_types_declaring
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class Command(BaseCommand):
     def _llm_nodes_with_custom_actions():
         # Skip empty lists and nulls at the DB level so unrelated rows never leave Postgres.
         return (
-            Node.objects.filter(type=LLMResponseWithPrompt.__name__)
+            Node.objects.filter(type__in=node_types_declaring("custom_actions"))
             .exclude(params__custom_actions__isnull=True)
             .exclude(params__custom_actions=[])
         )

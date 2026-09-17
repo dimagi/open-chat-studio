@@ -32,7 +32,7 @@ from apps.pipelines.flow import (
     node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.node_type import NodeType, server_managed_node_types
+from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -58,10 +58,7 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
-    def llm_response_with_prompt_nodes(self):
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
+    pass
 
 
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
@@ -418,8 +415,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in self.node_set.get_all().filter(is_archived=True):
             node.unarchive()
 
-    def get_node_param_values(self, node_cls, param_name: str) -> list:
-        return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
+    def get_node_param_values(self, param_name: str) -> list:
+        """Every value stored for ``param_name``, across the nodes whose type declares it.
+
+        The types come from :func:`~apps.pipelines.node_type.node_types_declaring` rather than from
+        the caller, so a caller asking for a param needs neither the node classes nor a list of which
+        types carry it.
+        """
+        return list(
+            self.node_set.filter(type__in=node_types_declaring(param_name)).values_list(
+                f"params__{param_name}", flat=True
+            )
+        )
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         return self.experiment_set.filter(is_archived=False)

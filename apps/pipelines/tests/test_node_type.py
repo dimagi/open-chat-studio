@@ -6,7 +6,12 @@ resource lookup carries a ``django_db`` marker.
 
 import pytest
 
-from apps.pipelines.node_type import NodeType, NoOutputHandles, server_managed_node_types
+from apps.pipelines.node_type import (
+    NodeType,
+    NoOutputHandles,
+    node_types_declaring,
+    server_managed_node_types,
+)
 from apps.pipelines.tests.utils import NON_NODE_ATTRIBUTES
 from apps.pipelines.versioning import ParamVersioning
 
@@ -66,6 +71,22 @@ class TestDeclaredParams:
     def test_declared_params_lists_the_type_s_fields(self):
         declared = NodeType("LLMResponseWithPrompt").declared_params
         assert {"name", "llm_provider_id", "prompt"} <= declared
+
+    @pytest.mark.parametrize(
+        ("param_name", "expected"),
+        [
+            pytest.param("prompt", {"LLMResponseWithPrompt", "RouterNode"}, id="two-types"),
+            pytest.param("custom_actions", {"LLMResponseWithPrompt"}, id="one-type"),
+            pytest.param("no_such_param", set(), id="no-type"),
+        ],
+    )
+    def test_node_types_declaring_is_exactly_the_types_that_declare_it(self, param_name, expected):
+        assert node_types_declaring(param_name) == expected
+
+    def test_node_types_declaring_agrees_with_declares(self):
+        """The set a SQL caller filters on and the per-type answer cannot disagree."""
+        for node_type in node_types_declaring("prompt"):
+            assert NodeType(node_type).declares("prompt") is True
 
 
 class TestIsRouter:
