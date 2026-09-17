@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from typing import Literal
 from unittest import mock
@@ -575,7 +576,7 @@ class TestRouterNode:
         "LLMClass", [RefusingFakeLlmEcho, PydanticValidationErrorLlmEcho, StructuredOutputValidationErrorLlmEcho]
     )
     def test_router_node_uses_default_keyword_on_error(
-        self, get_llm_service, LLMClass, provider, provider_model, experiment_session
+        self, get_llm_service, LLMClass, provider, provider_model, experiment_session, caplog
     ):
         refusing_llm = LLMClass(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm)
@@ -599,9 +600,54 @@ class TestRouterNode:
             last_node_input="a",
         )
 
-        keyword, is_default_keyword = node._process_conditional(NodeContext(state))
+        with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+            keyword, is_default_keyword = node._process_conditional(NodeContext(state))
         assert keyword == "DEFAULT"
         assert is_default_keyword
+        if LLMClass is RefusingFakeLlmEcho:
+            assert "Refused by OpenAI" in caplog.text
+
+    @pytest.mark.django_db()
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    @pytest.mark.parametrize(
+        "reply",
+        [
+            pytest.param(AIMessage(content="I can't help with that."), id="prose-reply"),
+            pytest.param(AIMessage(content=[], response_metadata={"stop_reason": "refusal"}), id="anthropic-refusal"),
+        ],
+    )
+    def test_router_node_uses_default_keyword_when_the_model_returns_no_route(
+        self, get_llm_service, reply, provider, provider_model, experiment_session, caplog
+    ):
+        llm = FakeLlmSimpleTokenCount(responses=[reply])
+        llm.calls = []
+        get_llm_service.return_value = FakeLlmService(llm=llm)
+        node = RouterNode(
+            node_id="test",
+            django_node=None,
+            name="test router",
+            prompt="PD: {participant_data}",
+            keywords=["default", "a", "b"],
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        node._repo = ORMRepository(session=experiment_session)
+        node.default_keyword_index = 0
+        state = PipelineState(
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_inputs=["a"],
+            last_node_input="a",
+        )
+
+        with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+            keyword, is_default_keyword = node._process_conditional(NodeContext(state))
+
+        assert keyword == "DEFAULT"
+        assert is_default_keyword
+        assert len(llm.get_calls()) == 1
+        assert "test router" in caplog.text
 
 
 class TestStaticRouterNode:

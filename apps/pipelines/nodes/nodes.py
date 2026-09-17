@@ -733,13 +733,17 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             # block is rejected by Anthropic. See `ensure_non_empty_text`.
             agent_input = {"messages": [HumanMessage(content=ensure_non_empty_text(node_input))]}
             result = agent.invoke(agent_input, config=self._config)
-            structured_response = result["structured_response"]
-            keyword = structured_response.route.upper()  # ensure case-insensitive matching
+            structured_response = result.get("structured_response")
+            if structured_response is None:
+                logger.warning("Router %s got no route from the model: %s", self.name, result["messages"][-1].text)
+                keyword = None
+            else:
+                keyword = structured_response.route.upper()  # ensure case-insensitive matching
         except PydanticValidationError:
             keyword = None
-        except OpenAIRefusalError:
-            keyword = default_keyword
-            is_default_keyword = True
+        except OpenAIRefusalError as e:
+            logger.warning("Router %s got a refusal from the model: %s", self.name, e)
+            keyword = None
         except StructuredOutputValidationError:
             logger.exception("Structured output validation error in RouterNode")
             keyword = None
