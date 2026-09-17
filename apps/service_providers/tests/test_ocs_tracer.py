@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.chat.exceptions import ProviderConfigurationError
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Trace
@@ -231,6 +232,42 @@ class TestOCSTracerNotifications:
                 self._run_trace_with_span_error(tracer, session, trace_context, span_context)
 
         mock_fire.assert_not_called()
+
+    def test_provider_configuration_error_fires_the_team_notification(self, experiment):
+        """A team-actionable provider failure notifies, and carries the provider's own wording.
+
+        The executor catches ProviderConfigurationError above the spans and does not re-raise
+        it (ADR-0067), so the notification has to come from the span it crossed on the way up
+        rather than from the handler that swallows it.
+        """
+        published = experiment.create_new_version()
+        tracer = self._make_tracer(published)
+        session = ExperimentSessionFactory.create()
+        config = SpanNotificationConfig(permissions=["experiments.change_experiment"])
+
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        span_context = TraceContext(id=uuid4(), name="Run Pipeline", notification_config=config)
+        error = ProviderConfigurationError("The LLM provider account has no credit or quota remaining: nope")
+
+        fired = []
+
+        def capture_fire(self_):
+            fired.append((self_.error_span_name, self_.error_message, self_.error_notification_config))
+
+        def run():
+            with tracer.trace(trace_context=trace_context, session=session):
+                with tracer.span(span_context=span_context, inputs={}):
+                    raise error
+
+        with patch.object(OCSTracer, "_fire_trace_error_notification", capture_fire):
+            with pytest.raises(ProviderConfigurationError):
+                run()
+
+        assert len(fired) == 1
+        span_name, message, notification_config = fired[0]
+        assert span_name == "Run Pipeline"
+        assert notification_config == config
+        assert "no credit or quota remaining" in message
 
     def test_notification_not_fired_when_span_has_no_config(self, experiment):
         """Notification is NOT fired when the erroring span had no notification_config."""

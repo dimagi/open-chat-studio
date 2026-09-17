@@ -767,7 +767,7 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.params.get("tools") or []
+    tool_names = node.tool_names
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
@@ -779,7 +779,7 @@ def get_node_tools(
 def get_mcp_tool_instances(node: Node, team: Team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
 
-    mcp_tools = node.params.get("mcp_tools", [])
+    mcp_tools = node.mcp_tool_refs
     if not mcp_tools:
         return []
 

@@ -33,10 +33,10 @@ const localCache = {
   loaded: false,
   nodeSchemas: null as unknown as Map<string, JsonSchema>,
   parameterValues: null as unknown as NodeParameterValues,
-  defaultValues: null as unknown as Record<string, any>,
+  defaultValues: null as unknown as Record<string, unknown>,
   flagsEnabled: null as unknown as Array<string>,
   modelParams: null as unknown as Record<string, string>,
-  modelParamSchemas: null as unknown as Record<string, any>,
+  modelParamSchemas: null as unknown as Record<string, JsonSchema>,
 };
 
 export const getCachedData: () => typeof localCache = () => {
@@ -44,7 +44,7 @@ export const getCachedData: () => typeof localCache = () => {
     localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
     const schemas = JSON.parse(document.getElementById("node-schemas")?.textContent || "[]");
-    localCache.nodeSchemas = new Map(schemas.map((schema: any) => [schema.title, schema]));
+    localCache.nodeSchemas = new Map(schemas.map((schema: JsonSchema) => [schema.title, schema]));
     localCache.flagsEnabled = JSON.parse(document.getElementById("flags-enabled")?.textContent || "[]");
     localCache.modelParams = JSON.parse(document.getElementById("llm-model-params")?.textContent || "{}");
     localCache.modelParamSchemas = JSON.parse(document.getElementById("llm-model-parameter-schemas")?.textContent || "{}");
@@ -79,9 +79,13 @@ export function getDocumentationLink(schema: JsonSchema) {
 }
 
 
-export function concatenate(value: string | string[] | null | undefined): string {
+/**
+ * Coerce a node param to a string. Takes `unknown` because node params are backend-supplied
+ * JSON with no compile-time shape -- see `NodeParams`.
+ */
+export function concatenate(value: unknown): string {
   if (!value) return "";
-  return Array.isArray(value) ? value.join("") : value;
+  return Array.isArray(value) ? value.join("") : String(value);
 }
 
 /**

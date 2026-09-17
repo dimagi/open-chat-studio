@@ -31,11 +31,6 @@ def inspect_node_queryset():
     )
 
 
-def node_render_order(node) -> int:
-    """Sort key that puts the start node first and the end node last, leaving the rest in order."""
-    return {"StartNode": 0, "EndNode": 2}.get(node.type, 1)
-
-
 def nodes_in_render_order(pipeline) -> list:
     """The pipeline's nodes in a stable order: start node first, end node last, the rest by id.
 
@@ -44,7 +39,7 @@ def nodes_in_render_order(pipeline) -> list:
     requests. Sorting happens in Python rather than via ``order_by`` so it reads the prefetched rows
     (see ``inspect_node_queryset``) instead of costing another query.
     """
-    return sorted(pipeline.node_set.all(), key=lambda node: (node_render_order(node), node.id))
+    return sorted(pipeline.node_set.all(), key=lambda node: (node.node_type.render_order, node.id))
 
 
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:

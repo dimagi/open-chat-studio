@@ -747,6 +747,10 @@ if SENTRY_DSN:
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
     # so Django correctly rejects them with a 400. These are pure noise in Sentry.
     ignore_logger("django.security.DisallowedHost")
+    # OTel logs and swallows its own delivery failures, across both the batch processor
+    # and the OTLP exporter; a tracing provider being slow never breaks the chat. Matched
+    # as a glob (ignore_logger uses fnmatch) so a private module rename cannot reopen it.
+    ignore_logger("opentelemetry.*")
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
