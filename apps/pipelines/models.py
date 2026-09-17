@@ -535,8 +535,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     @property
     def tool_names(self) -> list[str]:
-        """The built-in tools this node has selected."""
-        return self.params.get("tools") or []
+        """The built-in tools this node has selected. A copy -- callers append to it."""
+        return list(self.params.get("tools") or [])
 
     @property
     def mcp_tool_refs(self) -> list[str]:
