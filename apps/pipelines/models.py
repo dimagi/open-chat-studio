@@ -107,14 +107,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         node = None
         if llm_provider_id and llm_provider_model:
-            llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
+            llm_node_type = NodeType("LLMResponseWithPrompt")
+            llm_id = f"{llm_node_type.type}-{uuid4().hex[:5]}"
             node = FlowNode(
                 id=llm_id,
-                type="pipelineNode",
+                type=llm_node_type.react_flow_type,
                 position={"x": 300, "y": 0},
                 data=FlowNodeData(
                     id=llm_id,
-                    type="LLMResponseWithPrompt",
+                    type=llm_node_type.type,
                     label="LLM",
                     params={
                         "name": llm_id,
