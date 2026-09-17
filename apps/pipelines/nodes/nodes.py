@@ -822,6 +822,9 @@ class ExtractStructuredData(
         output = json.dumps(output_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
+    def get_unextracted_output(self, context) -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output="{}")
+
 
 class ExtractParticipantData(
     ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
@@ -878,6 +881,9 @@ class ExtractParticipantData(
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=context.input, participant_data=output_data
         )
+
+    def get_unextracted_output(self, context) -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):

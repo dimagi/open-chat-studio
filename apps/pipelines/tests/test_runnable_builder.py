@@ -1001,6 +1001,68 @@ class TestDataExtraction:
         assert extracted_data == '{"name": "james"}'
 
     @pytest.mark.django_db()
+    def test_extract_structured_data_outputs_empty_object_when_the_model_declines(
+        self, provider, provider_model, pipeline
+    ):
+        session = ExperimentSessionFactory.create()
+        llm = FakeLlmSimpleTokenCount(responses=[AIMessage(content="I can't help with that.")])
+
+        with self.extract_structured_data_pipeline(provider, provider_model, pipeline, llm) as graph:
+            state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+
+            assert graph.invoke(state, config=config)["messages"][-1] == "{}"
+
+    @pytest.mark.django_db()
+    def test_extract_structured_data_skips_a_chunk_the_model_declines(self, provider, provider_model, pipeline):
+        session = ExperimentSessionFactory.create()
+        llm = FakeLlmSimpleTokenCount(
+            responses=[
+                AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content=""),
+                AIMessage(content="I can't help with that."),
+            ]
+        )
+
+        with (
+            self.extract_structured_data_pipeline(provider, provider_model, pipeline, llm) as graph,
+            mock.patch(
+                "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
+                return_value=["james bond", "something the model declines"],
+            ),
+        ):
+            state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+
+            assert graph.invoke(state, config=config)["messages"][-1] == '{"name": "james"}'
+
+    @pytest.mark.django_db()
+    def test_extract_participant_data_leaves_data_unchanged_when_the_model_declines(
+        self, provider, provider_model, pipeline
+    ):
+        session = ExperimentSessionFactory.create()
+        service = build_fake_llm_service(responses=[AIMessage(content="I can't help with that.")])
+
+        with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+            nodes = [
+                start_node(),
+                extract_participant_data_node(
+                    str(provider.id), str(provider_model.id), '{"name": "the name of the user"}', "profile"
+                ),
+                end_node(),
+            ]
+            runnable = create_runnable(pipeline, nodes)
+            state = PipelineState(
+                messages=["ai: hi user\nhuman: hi there"],
+                experiment_session=session,
+                participant_data={"name": "Ann"},
+            )
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+            result = runnable.invoke(state, config=config)
+
+        assert result["participant_data"] == {"name": "Ann"}
+        assert result["messages"][-1] == "ai: hi user\nhuman: hi there"
+
+    @pytest.mark.django_db()
     def test_extract_participant_data(self, provider, provider_model, pipeline):
         """Test the pipeline to extract and update participant data. First we run it when no data is linked to the
         participant to make sure it creates data. Then we run it again a few times to test that it updates the data
