@@ -44,6 +44,11 @@ class Grant:
     kind: GrantKind
     team_slug: str = ""
 
+    def __post_init__(self):
+        # `may_be_held_by` and `label` branch on `kind is GrantKind.TEAM`, so a raw string
+        # kind has to become the enum member or a team grant takes the staff branch.
+        object.__setattr__(self, "kind", GrantKind(self.kind))
+
     @classmethod
     def team(cls, slug: str) -> "Grant":
         if not slug:

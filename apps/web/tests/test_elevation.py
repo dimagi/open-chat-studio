@@ -202,3 +202,8 @@ def test_an_entry_that_no_longer_parses_is_pruned(request_with_real_session):
 
     assert active_elevations(request) == {}
     assert request.session.modified is True
+
+
+def test_a_grant_built_with_a_raw_kind_still_requires_a_superuser():
+    staff = mock.Mock(is_staff=True, is_superuser=False)
+    assert Grant("team", "acme").may_be_held_by(staff) is False
