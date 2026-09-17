@@ -1,11 +1,29 @@
 from django.urls import path
 
-from . import views
+from . import engagement_views, views
 
 app_name = "dashboard"
 urlpatterns = [
     # Main dashboard page
     path("", views.DashboardView.as_view(), name="index"),
+    # Engagement dashboard (standalone page, #2927)
+    path("engagement/", engagement_views.EngagementDashboardView.as_view(), name="engagement"),
+    path("api/engagement/summary/", engagement_views.EngagementSummaryApiView.as_view(), name="api_engagement_summary"),
+    path(
+        "api/engagement/frequency/",
+        engagement_views.EngagementFrequencyApiView.as_view(),
+        name="api_engagement_frequency",
+    ),
+    path(
+        "api/engagement/new-vs-returning/",
+        engagement_views.NewVsReturningApiView.as_view(),
+        name="api_new_vs_returning",
+    ),
+    path(
+        "api/engagement/session-duration/",
+        engagement_views.AverageSessionDurationApiView.as_view(),
+        name="api_average_session_duration",
+    ),
     # API endpoints for chart data
     path("api/overview/", views.OverviewStatsApiView.as_view(), name="api_overview"),
     path("api/session-analytics/", views.SessionAnalyticsApiView.as_view(), name="api_session_analytics"),
