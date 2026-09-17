@@ -4,7 +4,7 @@
 # passed every check, including the automated code review's verdict. The rules
 # live in `scripts/auto_merge_low_risk.py`.
 #
-# Triggered on: every 15 minutes, or manual dispatch
+# Triggered on: every 15 minutes
 # Requirements: vars.OCS_AUTOMERGE_APP_ID and secrets.OCS_AUTOMERGE_PRIVATE_KEY
 #
 # Notes:
@@ -43,10 +43,13 @@
 
 name: Auto-merge Low Risk PRs
 
+# Schedule only. `workflow_dispatch` would let anyone with write access choose the ref
+# the job runs from, and GitHub takes the workflow definition from that ref — so a branch
+# could rewrite this file to print the app token, which holds the review bypass. There is
+# nothing to gain from it either: the poll comes round every 15 minutes anyway.
 on:
   schedule:
     - cron: '*/15 * * * *'
-  workflow_dispatch:
 
 concurrency:
   group: auto-merge-low-risk
