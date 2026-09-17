@@ -12,6 +12,7 @@ from apps.ocs_notifications.utils import create_notification, get_slack_notifica
 from apps.teams.flags import Flags
 from apps.utils.factories.notifications import NotificationChannelFactory, NotificationEventFactory
 from apps.utils.factories.team import TeamFactory
+from apps.web.meta import absolute_url
 
 
 def _create_event(team, level=LevelChoices.WARNING):
@@ -161,3 +162,30 @@ class TestCreateNotificationSchedulesSlack:
         call_args, call_kwargs = mock_delay.call_args
         assert call_args == (channel.id,)
         assert "notification_event_id" in call_kwargs
+
+
+@pytest.mark.django_db()
+class TestNotificationEventAbsoluteLinks:
+    @pytest.mark.parametrize(
+        ("url", "expand"),
+        [
+            pytest.param("/a/team/bots/1/", True, id="relative-path"),
+            pytest.param("https://traces.example.com/t/1", False, id="already-absolute"),
+            pytest.param("//cdn.example.com/docs", False, id="protocol-relative"),
+        ],
+    )
+    def test_absolute_links(self, url, expand):
+        event = NotificationEventFactory.create(links={"View": url})
+        assert event.absolute_links == {"View": absolute_url(url) if expand else url}
+
+    def test_absolute_links_without_links(self):
+        assert NotificationEventFactory.create(links=None).absolute_links == {}
+
+    def test_slack_message_links_are_absolute(self):
+        event = NotificationEventFactory.create(links={"View Bot": "/a/team/bots/1/"})
+
+        message = build_slack_message(event)
+
+        expected = absolute_url("/a/team/bots/1/")
+        assert f"<{expected}|View Bot>" in message["text"]
+        assert any(expected in b["elements"][0]["text"] for b in message["blocks"] if b["type"] == "context")

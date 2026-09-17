@@ -14,6 +14,7 @@ from apps.ocs_notifications.models import (
     NotificationEvent,
     UserNotificationPreferences,
 )
+from apps.ocs_notifications.tasks import send_notification_email
 from apps.ocs_notifications.utils import (
     ALL_TEAMS_CACHE_KEY,
     CACHE_KEY_FORMAT,
@@ -33,6 +34,7 @@ from apps.teams.backends import add_user_to_team
 from apps.utils.factories.notifications import EventTypeFactory, EventUserFactory, NotificationEventFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+from apps.web.meta import absolute_url
 
 
 @pytest.mark.django_db()
@@ -90,6 +92,21 @@ class TestSendNotificationEmail:
         # should_send_email determines if email should be sent for this user/event
         user_email_info = user_info[user]
         assert should_send_email(user_email_info, event_level=notification_level) == should_send
+
+    def test_email_links_are_absolute(self, team_with_users, mailoutbox):
+        user = team_with_users.members.first()
+        event_type = EventTypeFactory.create(team=team_with_users, level=LevelChoices.ERROR)
+        notification_event = NotificationEventFactory.create(
+            team=team_with_users,
+            event_type=event_type,
+            links={"View Bot": "/a/team/bots/1/", "View Trace": "https://traces.example.com/t/1"},
+        )
+
+        send_notification_email([user], notification_event)
+
+        body = mailoutbox[0].alternatives[0][0]
+        assert f'href="{absolute_url("/a/team/bots/1/")}"' in body
+        assert 'href="https://traces.example.com/t/1"' in body
 
 
 @pytest.mark.django_db()
