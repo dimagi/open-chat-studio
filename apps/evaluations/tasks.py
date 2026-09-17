@@ -9,7 +9,7 @@ import taskbadger
 from celery import current_app, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import PROGRESS_STATE, ProgressRecorder
-from django.core.files.base import ContentFile
+from django.core.files import File as DjangoFile
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
@@ -25,7 +25,11 @@ from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.export import build_evaluation_table_data, write_evaluation_csv
+from apps.evaluations.export import (
+    annotate_export_fields,
+    export_evaluation_csv_to_tempfile,
+    iter_evaluation_table_rows,
+)
 from apps.evaluations.models import (
     NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
@@ -1499,30 +1503,34 @@ def create_dataset_from_sessions_task(
 
 
 def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
-    """Return the most recent EvaluationResult per (message, evaluator) across all
-    completed FULL/DELTA runs for *config*, pushing deduplication into the DB via
-    DISTINCT ON so only the latest-run row per pair is fetched."""
-    return (
+    """The latest EvaluationResult per (message, evaluator) across *config*'s completed
+    FULL/DELTA runs, deduplicated in the DB via DISTINCT ON.
+
+    Annotations go on an outer query over the surviving ids: Postgres projects a correlated
+    subquery below the DISTINCT ON, so annotating the inner query would run the applied-tags
+    subquery once per result of every run. Ordering by message id is what lets the export
+    emit a row per message as it reads.
+    """
+    latest_per_message_and_evaluator = (
         EvaluationResult.objects.filter(
             run__config=config,
             run__status=EvaluationRunStatus.COMPLETED,
             run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
             team=team,
         )
-        .select_related("message__session__experiment", "evaluator", "session", "run")
-        .prefetch_related("applied_tags__tag")
         .order_by("message_id", "evaluator_id", "-run__created_at")
         .distinct("message_id", "evaluator_id")
     )
+    surviving = EvaluationResult.objects.filter(id__in=latest_per_message_and_evaluator.values("id"))
+    return annotate_export_fields(surviving).order_by("message_id")
 
 
 @shared_task(queue=Queues.BACKGROUND)
 def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
-    """
-    Async export of the most recent evaluation result for each dataset item,
-    across all completed evaluation runs for the given config.
+    """Async export of the most recent evaluation result for each dataset item, across all
+    completed evaluation runs for the given config.
 
-    Returns {"file_id": <id>} on success.
+    Peak memory is flat in the number of results. Returns {"file_id": <id>} on success.
     """
     try:
         config = EvaluationConfig.objects.select_related("team").get(id=evaluation_config_id, team_id=team_id)
@@ -1530,20 +1538,18 @@ def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int)
 
         with current_team(team):
             results = _get_bulk_results_queryset(config, team)
-            table_data = build_evaluation_table_data(results)
-
-            csv_buffer = StringIO()
-            write_evaluation_csv(csv.writer(csv_buffer), table_data)
-
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-            file_obj = File.objects.create(
-                name=filename,
-                team=team,
-                content_type="text/csv",
-                file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
-                purpose=FilePurpose.DATA_EXPORT,
-                expiry_date=timezone.now() + timedelta(days=7),
-            )
+
+            # Two spooled temp files: one holds the rows until the header is known, one the CSV.
+            with export_evaluation_csv_to_tempfile(iter_evaluation_table_rows(results)) as csv_file:
+                file_obj = File.objects.create(
+                    name=filename,
+                    team=team,
+                    content_type="text/csv",
+                    file=DjangoFile(csv_file, name=filename),
+                    purpose=FilePurpose.DATA_EXPORT,
+                    expiry_date=timezone.now() + timedelta(days=7),
+                )
 
             return {"file_id": file_obj.id}
 
