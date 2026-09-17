@@ -20,7 +20,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.const import FINALIZATION_GRACE, PREVIEW_SAMPLE_SIZE
-from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError
+from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
@@ -99,6 +99,7 @@ class Evaluator(BaseTeamModel):
     params = SanitizedJSONField(
         default=dict
     )  # This is different for each evaluator. Usage is similar to how we define Nodes in pipelines
+    is_archived = models.BooleanField(default=False, db_default=False)
     evaluation_mode = models.CharField(
         max_length=10,
         choices=EvaluationMode.choices,
@@ -132,10 +133,37 @@ class Evaluator(BaseTeamModel):
             label = self.type
         return f"{self.name} ({label})"
 
+    def _in_flight_runs(self):
+        """Runs that would be stranded by removing this evaluator.
+
+        Matches both current config membership and the plan frozen on the run at
+        creation, because a run executes from `evaluator_ids` rather than from live
+        membership.
+        """
+        return EvaluationRun.objects.filter(
+            models.Q(config__evaluators=self) | models.Q(evaluator_ids__contains=[self.id])
+        )
+
     def delete(self, *args, **kwargs):
         """Block deletion while any config using this evaluator has an in-flight run."""
-        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__evaluators=self), "evaluator")
+        raise_if_runs_in_flight(self._in_flight_runs(), "evaluator")
         return super().delete(*args, **kwargs)
+
+    def archive(self):
+        """Retire the evaluator, keeping the results and aggregates it produced.
+
+        Config membership is left in place: the concordance report
+        (`apps/assessments/views.py:41`) and the config table read it, and the
+        `evaluator_ids` freeze is filtered instead so archiving stops future runs.
+        """
+        raise_if_runs_in_flight(self._in_flight_runs(), "evaluator")
+        self.is_archived = True
+        self.save(update_fields=["is_archived"])
+
+    def unarchive(self):
+        """Restore an archived evaluator so it can run again."""
+        self.is_archived = False
+        self.save(update_fields=["is_archived"])
 
     @cached_property
     def evaluator(self):
@@ -633,6 +661,11 @@ class EvaluationConfig(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("evaluations:evaluation_runs_home", args=[get_slug_for_team(self.team_id), self.id])
 
+    @property
+    def active_evaluators(self):
+        """Members that are not archived: the only ones a new run freezes into its plan."""
+        return self.evaluators.filter(is_archived=False)
+
     def run(
         self,
         run_type: EvaluationRunType = EvaluationRunType.FULL,
@@ -653,6 +686,12 @@ class EvaluationConfig(BaseTeamModel):
         DELTA scoping takes ids rather than instances so large appends never have to hold
         the message objects in memory.
         """
+        evaluator_ids = list(self.active_evaluators.values_list("id", flat=True))
+        if not evaluator_ids:
+            raise NoActiveEvaluatorsError(
+                f"'{self.name}' has no active evaluators, so a run would produce no results. "
+                "Add an evaluator to this configuration first."
+            )
         generation_experiment = self.get_generation_experiment_version()
 
         with transaction.atomic():
@@ -663,7 +702,7 @@ class EvaluationConfig(BaseTeamModel):
                 status=EvaluationRunStatus.PENDING,
                 type=run_type,
                 job_id=str(uuid.uuid4()),
-                evaluator_ids=list(self.evaluators.values_list("id", flat=True)),
+                evaluator_ids=evaluator_ids,
             )
 
             if run_type == EvaluationRunType.PREVIEW:
@@ -781,7 +820,7 @@ class EvaluationRun(BaseTeamModel):
 
 
 class EvaluationResult(BaseTeamModel):
-    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.PROTECT)
     message = models.ForeignKey(EvaluationMessage, on_delete=models.CASCADE)
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
     session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, null=True)
@@ -824,7 +863,7 @@ class EvaluationRunAggregate(BaseModel):
     """Stores aggregated results for an evaluation run, per evaluator."""
 
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="aggregates")
-    evaluator = models.ForeignKey(Evaluator, on_delete=models.CASCADE)
+    evaluator = models.ForeignKey(Evaluator, on_delete=models.PROTECT)
     aggregates = models.JSONField(default=dict)
     computed_at = models.DateTimeField(auto_now_add=True)
 

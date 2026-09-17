@@ -212,3 +212,23 @@ class TestReverseStaleTags:
         reverse_stale_tags(run)
 
         assert not chat.tags.filter(pk=tag_a.pk).exists()
+
+
+class TestFrozenPlan:
+    def test_only_evaluators_in_the_frozen_plan_decide_stale_tags(self, team, evaluator, tag_a, tag_rule):
+        """A member left out of the run's frozen plan never ran, so its tags are not stale, even once unarchived."""
+        message = EvaluationMessageFactory.create(create_chat_messages=True)
+        chat_message = message.expected_output_chat_message
+        chat_message.tags.add(tag_a, through_defaults={"team": team})
+        active = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
+        dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
+        config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator, active])
+        evaluator.archive()
+        run = config.run()
+        evaluator.unarchive()
+        EvaluationResultFactory.create(team=team, evaluator=active, message=message, run=run, output={})
+
+        reverse_stale_tags(run)
+
+        assert run.evaluator_ids == [active.id]
+        assert chat_message.tags.filter(pk=tag_a.pk).exists()
