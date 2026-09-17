@@ -10,7 +10,7 @@ from django.conf import settings
 from rest_framework.exceptions import NotFound
 
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource, PipelineRouterNode
+from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
@@ -103,10 +103,7 @@ def _available_schemas() -> list[dict]:
 def _output_topology(schema: dict) -> dict:
     """How edges leave this node type. ``EndNode`` is the only terminating type and it is unlisted,
     so there is no zero-output case."""
-    node_class = NodeType(schema["title"]).node_class
-    if node_class is not None and issubclass(node_class, PipelineRouterNode):
-        return PER_KEYWORD_OUTPUT
-    return SINGLE_OUTPUT
+    return PER_KEYWORD_OUTPUT if NodeType(schema["title"]).is_router else SINGLE_OUTPUT
 
 
 def _schema(node_schema: dict) -> dict:

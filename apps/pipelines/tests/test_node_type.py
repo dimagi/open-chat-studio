@@ -39,6 +39,7 @@ class TestNullObject:
         assert unresolvable.declared_params == frozenset()
         assert unresolvable.declares("name") is False
         assert unresolvable.schema is None
+        assert unresolvable.is_router is False
         assert unresolvable.is_server_managed is False
         assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
@@ -65,6 +66,22 @@ class TestDeclaredParams:
     def test_declared_params_lists_the_type_s_fields(self):
         declared = NodeType("LLMResponseWithPrompt").declared_params
         assert {"name", "llm_provider_id", "prompt"} <= declared
+
+
+class TestIsRouter:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("RouterNode", True, id="llm-router"),
+            pytest.param("StaticRouterNode", True, id="static-router"),
+            pytest.param("BooleanNode", True, id="boolean-router"),
+            pytest.param("LLMResponseWithPrompt", False, id="plain-node"),
+            pytest.param("EndNode", False, id="terminal"),
+            pytest.param("GhostNode", False, id="unknown-type"),
+        ],
+    )
+    def test_only_router_types_branch(self, node_type, expected):
+        assert NodeType(node_type).is_router is expected
 
 
 class TestSchema:

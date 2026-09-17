@@ -104,6 +104,16 @@ class NodeType:
         return schema is not None and not schema.can_delete
 
     @property
+    def is_router(self) -> bool:
+        """Whether nodes of this type branch: one output handle per branch rather than one output.
+
+        A type naming no node class reports ``False`` -- its handles are unknowable either way, and
+        :meth:`output_handles` already answers ``[]`` for it.
+        """
+        node_class = self.node_class
+        return node_class is not None and issubclass(node_class, _nodes_base().PipelineRouterNode)
+
+    @property
     def is_structural(self) -> bool:
         """Whether this is a live type the builder does not offer in its node picker.
 
@@ -161,7 +171,7 @@ class NodeType:
             # A type naming no node class (removed since, or never one): validation reports it; we can't
             # know its handles.
             return []
-        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+        if self.is_router:
             output_map = _router_output_map(node_class, params, node_id, django_node)
             return [{"handle": handle, "label": label} for handle, label in output_map.items()]
         return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
@@ -177,7 +187,7 @@ class NodeType:
         node_class = self.node_class
         if node_class is None:
             return NoOutputHandles.UNKNOWN_TYPE
-        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+        if self.is_router:
             return NoOutputHandles.NO_BRANCHES
         return NoOutputHandles.UNDETERMINED
 
