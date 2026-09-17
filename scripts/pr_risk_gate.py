@@ -10,7 +10,8 @@ The decision is evaluated in order:
 
 1. Any blocker -- a blocked path, a non-docs deletion, or a diff that loses or
    disables test coverage -- wins outright and yields ``high``.
-2. Every file on the low allowlist, within the size caps, yields ``low``.
+2. Every file on the low allowlist, within the size caps and none of them agent
+   instructions, yields ``low``.
 3. Everything else yields ``medium``.
 
 ``--untrusted`` withholds ``low`` from forks and authors without write access:
@@ -65,13 +66,20 @@ BLOCKED_PATHS: list[tuple[str, str]] = [
     ("apps/cost_tracking/**", "billing"),
     ("apps/usage_metrics/**", "billing"),
     ("**/urls.py", "URL routing surface"),
+    ("scripts/**", "developer tooling and the checks that gate CI"),
+    ("docs/adr/**", "accepted architecture decision record"),
+    ("api-schemas/**", "generated API schema"),
+]
+
+# Instructions the automated reviewer and the coding agents read. A change here cannot
+# reach running code, but it can change how the next pull request is reviewed, so it is
+# never eligible for unattended merge. Listed separately because these are markdown and
+# would otherwise pass as documentation.
+DISQUALIFYING_PATHS: list[tuple[str, str]] = [
     ("**/CLAUDE.md", "instructions the automated reviewer reads"),
     ("**/AGENTS.md", "instructions the automated reviewer reads"),
     (".claude/**", "agent configuration the automated reviewer reads"),
     (".mcp.json", "agent configuration the automated reviewer reads"),
-    ("scripts/**", "developer tooling and the checks that gate CI"),
-    ("docs/adr/**", "accepted architecture decision record"),
-    ("api-schemas/**", "generated API schema"),
 ]
 
 # Change shapes that cannot reach running code.
@@ -223,7 +231,10 @@ def find_disqualifiers(files: list[dict]) -> list[str]:
         disqualifiers.append(f"changes {changed_lines} lines (cap is {MAX_CHANGED_LINES})")
     for entry in files:
         path = entry["filename"]
-        if not match_category(path, LOW_RISK_PATHS):
+        reason = match_category(path, DISQUALIFYING_PATHS)
+        if reason:
+            disqualifiers.append(f"{path}: {reason}")
+        elif not match_category(path, LOW_RISK_PATHS):
             disqualifiers.append(f"{path}: not on the low-risk allowlist")
         elif entry.get("patch") is None and entry.get("status") != "removed":
             # No patch means the content blockers could not be evaluated for this file.

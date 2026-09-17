@@ -68,10 +68,6 @@ def test_glob_match(path, pattern, expected):
         pytest.param("apps/experiments/urls.py", "URL routing", id="urls"),
         pytest.param("docs/adr/0049-usage-source.md", "architecture decision record", id="adr"),
         pytest.param("api-schemas/openapi.yml", "generated API schema", id="schema"),
-        pytest.param("CLAUDE.md", "automated reviewer reads", id="claude-md"),
-        pytest.param("apps/chat/AGENTS.md", "automated reviewer reads", id="nested-agents-md"),
-        pytest.param(".claude/agents/reviewer.md", "agent configuration", id="agent-config"),
-        pytest.param(".mcp.json", "agent configuration", id="mcp-config"),
         pytest.param("scripts/pr_risk_gate.py", "checks that gate CI", id="gate-script"),
     ],
 )
@@ -79,6 +75,36 @@ def test_blocked_paths_are_high(filename, reason_fragment):
     verdict = classify([pr_file(filename)])
     assert verdict.risk == HIGH
     assert any(reason_fragment in reason for reason in verdict.reasons)
+
+
+@pytest.mark.parametrize(
+    ("filename", "reason_fragment"),
+    [
+        pytest.param("CLAUDE.md", "automated reviewer reads", id="claude-md"),
+        pytest.param("apps/chat/AGENTS.md", "automated reviewer reads", id="nested-agents-md"),
+        pytest.param(".claude/agents/reviewer.md", "agent configuration", id="agent-config"),
+        pytest.param(".claude/skills/extract-adrs/SKILL.md", "agent configuration", id="agent-skill"),
+        pytest.param(".mcp.json", "agent configuration", id="mcp-config"),
+    ],
+)
+def test_agent_config_is_medium(filename, reason_fragment):
+    verdict = classify([pr_file(filename)])
+    assert verdict.risk == MEDIUM
+    assert any(reason_fragment in reason for reason in verdict.reasons)
+
+
+def test_agent_config_does_not_soften_a_blocker():
+    files = [pr_file("AGENTS.md"), pr_file("config/settings.py")]
+    verdict = classify(files)
+    assert verdict.risk == HIGH
+    assert verdict.reasons == ["config/settings.py: deploy-wide Django configuration"]
+
+
+def test_a_rename_into_agent_config_is_medium_not_low():
+    files = [{**pr_file(".claude/moved.md", status="renamed"), "previous_filename": "docs/moved.md"}]
+    verdict = classify(files)
+    assert verdict.risk == MEDIUM
+    assert any("agent configuration" in reason for reason in verdict.reasons)
 
 
 def test_editing_an_accepted_adr_beats_the_docs_allowlist():
