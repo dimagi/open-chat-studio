@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from apps.service_providers.tracing.base import TraceContext
-from apps.service_providers.tracing.langfuse import LangFuseTracer, _discard_sdk_resources
+from apps.service_providers.tracing.langfuse import LangFuseTracer, _detach_sdk_resources
 from apps.service_providers.tracing.service import TracingService
 
 
@@ -34,9 +34,9 @@ def public_key():
 def exported_spans(public_key):
     """A real Langfuse client whose spans are collected in memory instead of sent.
 
-    Both halves are torn down: the SDK's resource manager releases its consumer threads,
-    and the provider is shut down separately because the span processor's worker thread
-    belongs to the provider, not to the resource manager.
+    All three parts are torn down: the key is unregistered so the next test builds its
+    own resource manager, the client releases its consumer threads, and the provider is shut
+    down separately because the span processor's worker thread belongs to the provider.
     """
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
@@ -48,7 +48,8 @@ def exported_spans(public_key):
         span_exporter=exporter,
     )
     yield client, exporter
-    _discard_sdk_resources(public_key)
+    _detach_sdk_resources(public_key)
+    client.shutdown()
     provider.shutdown()
 
 

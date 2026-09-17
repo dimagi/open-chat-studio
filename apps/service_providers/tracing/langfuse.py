@@ -18,7 +18,7 @@ from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
     from uuid import UUID
 
     from langchain_core.callbacks.base import BaseCallbackHandler
@@ -289,8 +289,8 @@ class LangFuseTracer(Tracer):
         pass
 
 
-def _discard_sdk_resources(public_key: str) -> None:
-    """Drop the SDK's cached resources for ``public_key`` and stop its background threads.
+def _detach_sdk_resources(public_key: str) -> LangfuseResourceManager | None:
+    """Unregister the SDK's cached resources for ``public_key`` and return them.
 
     ``LangfuseResourceManager`` is a process-wide singleton keyed by public_key alone and the
     SDK gives no way to retire one: ``Langfuse.shutdown()`` stops the consumer threads but
@@ -298,13 +298,30 @@ def _discard_sdk_resources(public_key: str) -> None:
     that will never flush again. Removing the registry entry is therefore what makes a
     credential or sample-rate change take effect, and what releases an idle team's threads.
 
+    The returned instance still owns live threads. Shutting it down is left to the caller,
+    via ``_shutdown_detached``, so it can happen outside ``ClientManager._lock``.
+
     This is the only place OCS touches Langfuse internals; ``test_sdk_registry_seam_exists``
     fails if either attribute goes away.
     """
     with LangfuseResourceManager._lock:
-        instance = LangfuseResourceManager._instances.pop(public_key, None)
-    if instance is not None:
-        instance.shutdown()
+        return LangfuseResourceManager._instances.pop(public_key, None)
+
+
+def _shutdown_detached(instances: list[LangfuseResourceManager]) -> None:
+    """Shut down instances that ``_detach_sdk_resources`` has already unregistered.
+
+    ``shutdown()`` flushes and joins the instance's queues, so it can block for as long as
+    the flush takes and, if a consumer thread has died, indefinitely. Callers run it with no
+    lock of theirs held, so one team's stuck flush cannot stall every other team's ``get()``.
+    Detaching first is what makes that safe: the instance is already out of the registry, so
+    a concurrent ``get()`` for the same public_key builds a fresh one rather than waiting.
+    """
+    for instance in instances:
+        try:
+            instance.shutdown()
+        except Exception:
+            logger.exception("Failed to shut down Langfuse client resources")
 
 
 @dataclasses.dataclass
@@ -345,25 +362,30 @@ class ClientManager:
 
         public_key = config.get("public_key")
         config_hash = self._config_hash(config)
+        detached: list[LangfuseResourceManager] = []
         with self._lock:
             entry = self._entries.get(config_hash)
             if entry is None:
-                self._evict_public_key(public_key, keep=config_hash)
+                detached = self._evict_public_key(public_key, keep=config_hash)
                 logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
                 entry = _CachedClient(client=Langfuse(**config), public_key=public_key)
                 self._entries[config_hash] = entry
             entry.last_used = time.time()
-            return entry.client
+            client = entry.client
+        _shutdown_detached(detached)
+        return client
 
-    def _evict_public_key(self, public_key, keep: int) -> None:
+    def _evict_public_key(self, public_key, keep: int) -> list[LangfuseResourceManager]:
         """Remove any entry cached under a different config hash for this public_key.
 
         Without this, a config change for a public_key we've already seen would still find
         the SDK's stale singleton for that key and silently reuse it.
         """
-        for other_hash, other_entry in list(self._entries.items()):
-            if other_hash != keep and other_entry.public_key == public_key:
-                self._remove_client(other_hash)
+        return self._remove_clients(
+            other_hash
+            for other_hash, other_entry in list(self._entries.items())
+            if other_hash != keep and other_entry.public_key == public_key
+        )
 
     def _start_prune_thread(self):
         self._prune_thread = threading.Thread(target=self._prune_worker, daemon=True)
@@ -375,31 +397,38 @@ class ClientManager:
             self._prune_stale()
 
     def _prune_stale(self):
+        detached: list[LangfuseResourceManager] = []
         with self._lock:
-            if not self._entries:
-                return
+            if self._entries:
+                logger.debug("Pruning clients...")
+                now = time.time()
+                stale = [h for h, entry in self._entries.items() if now - entry.last_used > self.stale_timeout]
+                if stale:
+                    logger.debug("Pruning %d stale clients", len(stale))
+                    detached += self._remove_clients(stale)
 
-            logger.debug("Pruning clients...")
-            now = time.time()
-            for config_hash, entry in list(self._entries.items()):
-                if now - entry.last_used > self.stale_timeout:
-                    logger.debug("Pruning old client for public_key '%s'", entry.public_key)
-                    self._remove_client(config_hash)
+                if len(self._entries) > self.max_clients:
+                    # remove the oldest clients until we are below the max
+                    by_age = sorted(self._entries, key=lambda h: self._entries[h].last_used)
+                    over_limit = by_age[: len(self._entries) - self.max_clients]
+                    logger.debug("Pruned %d clients above max limit", len(over_limit))
+                    detached += self._remove_clients(over_limit)
+        _shutdown_detached(detached)
 
-            if len(self._entries) > self.max_clients:
-                # remove the oldest clients until we are below the max
-                sorted_hashes = sorted(self._entries, key=lambda h: self._entries[h].last_used)
-                hashes_to_remove = sorted_hashes[: len(self._entries) - self.max_clients]
-                logger.debug("Pruned %d clients above max limit", len(hashes_to_remove))
-                for config_hash in hashes_to_remove:
-                    self._remove_client(config_hash)
+    def _remove_clients(self, config_hashes: Iterable[int]) -> list[LangfuseResourceManager]:
+        """Drop these cache entries and return the SDK resources the caller must shut down.
 
-    def _remove_client(self, config_hash: int):
-        # Callers hold `self._lock`, so a background prune can't interleave with a concurrent
-        # `get()` and leave `_entries` inconsistent with the SDK's registry.
-        entry = self._entries.pop(config_hash, None)
-        if entry is not None and entry.public_key is not None:
-            _discard_sdk_resources(entry.public_key)
+        Callers hold `self._lock`, so a background prune can't interleave with a concurrent
+        `get()` and leave `_entries` inconsistent with the SDK's registry. They shut the
+        returned instances down once they have released that lock.
+        """
+        entries = [self._entries.pop(config_hash, None) for config_hash in config_hashes]
+        detached = [
+            _detach_sdk_resources(entry.public_key)
+            for entry in entries
+            if entry is not None and entry.public_key is not None
+        ]
+        return [instance for instance in detached if instance is not None]
 
     def shutdown(self):
         with self._lock:

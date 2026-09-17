@@ -64,6 +64,26 @@ def _hash(client_manager, config):
     return client_manager._config_hash(config)
 
 
+def _lock_is_free(client_manager) -> bool:
+    """Whether another thread could take the manager's lock right now.
+
+    Probed from a second thread because `_lock` is an RLock: the thread that holds it can
+    re-acquire it and so cannot tell the difference.
+    """
+    result = []
+
+    def probe():
+        acquired = client_manager._lock.acquire(blocking=False)
+        result.append(acquired)
+        if acquired:
+            client_manager._lock.release()
+
+    thread = threading.Thread(target=probe)
+    thread.start()
+    thread.join()
+    return result[0]
+
+
 def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_client_registry):
     # Act
     client = client_manager.get(config)
@@ -142,6 +162,45 @@ def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_ma
 
     first_client.shutdown.assert_called_once()
     assert LangfuseResourceManager._instances[config["public_key"]] is not first_client
+
+
+def test_config_change_shuts_the_stale_client_down_without_holding_the_lock(client_manager, config, langfuse_mock):
+    """`shutdown()` flushes and can block indefinitely if a consumer thread has died, so
+    holding `_lock` across it would stall every other team's `get()`.
+    """
+    lock_state = []
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    first_client.shutdown.side_effect = lambda: lock_state.append(_lock_is_free(client_manager))
+
+    client_manager.get({**config, "sample_rate": 0.9})
+
+    assert lock_state == [True]
+
+
+def test_prune_shuts_clients_down_without_holding_the_lock(client_manager, config, langfuse_mock):
+    lock_state = []
+    first_client = client_manager.get(config)
+    first_client.shutdown.side_effect = lambda: lock_state.append(_lock_is_free(client_manager))
+    client_manager._entries[_hash(client_manager, config)].last_used -= client_manager.stale_timeout + 1
+
+    client_manager._prune_stale()
+
+    assert lock_state == [True]
+
+
+def test_a_failing_shutdown_does_not_abort_the_prune_pass(client_manager, langfuse_mock):
+    """One team's broken client must not leave every later entry in the pass unpruned."""
+    configs = [{"public_key": f"key_{i}", "secret_key": f"secret_{i}"} for i in range(3)]
+    clients = [client_manager.get(c) for c in configs]
+    clients[0].shutdown.side_effect = RuntimeError("flush blew up")
+    for c in configs:
+        client_manager._entries[_hash(client_manager, c)].last_used -= client_manager.stale_timeout + 1
+
+    client_manager._prune_stale()
+
+    assert client_manager._entries == {}
+    for client in clients:
+        client.shutdown.assert_called_once()
 
 
 def test_prune_stale_clients(client_manager, config, langfuse_mock):

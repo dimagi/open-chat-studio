@@ -9,7 +9,7 @@ from langfuse.langchain import CallbackHandler
 
 
 def test_sdk_registry_seam_exists():
-    """`_discard_sdk_resources` needs these to retire a cached client -- see its docstring."""
+    """`_detach_sdk_resources` needs these to retire a cached client -- see its docstring."""
     assert isinstance(LangfuseResourceManager._instances, dict)
     assert hasattr(LangfuseResourceManager._lock, "acquire")
     assert callable(LangfuseResourceManager.reset)
