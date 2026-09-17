@@ -44,6 +44,9 @@ BASE_BRANCH = "main"
 REQUIRED_CHECKS = ("Classify risk", "Automated review verdict")
 
 
+# A review that only comments leaves the reviewer's standing position unchanged.
+IGNORED_REVIEW_STATES = ("COMMENTED", "PENDING")
+
 # A check that deliberately did not apply to this diff is not a failure.
 ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 
@@ -68,17 +71,16 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     states: dict[str, str] = {}
     for review in reviews:
         state = review.get("state")
-        login = (review.get("user") or {}).get("login")
-        if not state or not login or state in ("COMMENTED", "PENDING"):
+        if not state or state in IGNORED_REVIEW_STATES:
             continue
-        states[login] = state
+        login = (review.get("user") or {}).get("login")
+        if login:
+            states[login] = state
     return states
 
 
-def find_blockers(
-    pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, *, recomputed_risk: str
-) -> list[str]:
-    """Every reason this pull request may not be merged unattended."""
+def pull_blockers(pull: dict, repo: str, recomputed_risk: str) -> list[str]:
+    """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
 
@@ -86,8 +88,7 @@ def find_blockers(
         blockers.append("it is a draft")
     if REQUIRED_LABEL not in labels:
         blockers.append(f"it is not labelled {REQUIRED_LABEL}")
-    for label in sorted(BLOCKING_LABELS & labels):
-        blockers.append(f"it carries the {label} label")
+    blockers.extend(f"it carries the {label} label" for label in sorted(BLOCKING_LABELS & labels))
     if pull["base"]["ref"] != BASE_BRANCH:
         blockers.append(f"it targets {pull['base']['ref']}, not {BASE_BRANCH}")
     if ((pull["head"].get("repo") or {}).get("full_name")) != repo:
@@ -98,7 +99,11 @@ def find_blockers(
         blockers.append(f"its mergeable_state is {pull.get('mergeable_state')}")
     if recomputed_risk != pr_risk_gate.LOW:
         blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
+    return blockers
 
+
+def check_blockers(check_runs: list[dict]) -> list[str]:
+    blockers = []
     latest = latest_check_runs(check_runs)
     for name in REQUIRED_CHECKS:
         run = latest.get(name)
@@ -113,12 +118,26 @@ def find_blockers(
             blockers.append(f"the check {name!r} is still {run.get('status')}")
         elif run.get("conclusion") not in ACCEPTABLE_CONCLUSIONS:
             blockers.append(f"the check {name!r} concluded {run.get('conclusion')}")
-
-    for login, state in sorted(latest_review_states(reviews).items()):
-        if state == "CHANGES_REQUESTED":
-            blockers.append(f"{login} requested changes")
-
     return blockers
+
+
+def review_blockers(reviews: list[dict]) -> list[str]:
+    return [
+        f"{login} requested changes"
+        for login, state in sorted(latest_review_states(reviews).items())
+        if state == "CHANGES_REQUESTED"
+    ]
+
+
+def find_blockers(
+    pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, *, recomputed_risk: str
+) -> list[str]:
+    """Every reason this pull request may not be merged unattended."""
+    return [
+        *pull_blockers(pull, repo, recomputed_risk),
+        *check_blockers(check_runs),
+        *review_blockers(reviews),
+    ]
 
 
 def gh(*args: str) -> str:
