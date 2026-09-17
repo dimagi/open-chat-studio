@@ -188,7 +188,6 @@ jobs:
   type-check:
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.

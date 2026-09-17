@@ -11,7 +11,6 @@ from apps.api.v2.inspect.serializers import (
     PipelineBuildErrorsSerializer,
 )
 from apps.api.v2.write.base import RejectsUnknownKeys
-from apps.pipelines.build_state import node_output_handles
 from apps.pipelines.models import Node
 
 from .graph_editor import settable_params
@@ -105,7 +104,7 @@ class WrittenNodeSerializer(serializers.Serializer):
     def get_output_handles(self, node: Node) -> list:
         # Server-derived (W5). Returned on every write so the next call can wire an edge from a
         # handle without a re-read.
-        return node_output_handles(node)
+        return node.output_handles()
 
 
 class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):

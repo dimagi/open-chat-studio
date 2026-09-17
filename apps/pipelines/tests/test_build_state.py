@@ -7,17 +7,13 @@ from unittest.mock import patch
 import pytest
 from pydantic import model_validator
 
-from apps.pipelines.build_state import (
-    deprecated_models,
-    node_output_handles,
-    pipeline_build_state,
-    unwired_handles,
-)
+from apps.pipelines.build_state import deprecated_models, pipeline_build_state, unwired_handles
 from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.tests.utils import (
+    NON_NODE_ATTRIBUTES,
     create_pipeline_model,
     end_node,
     llm_response_node,
@@ -29,18 +25,6 @@ from apps.service_providers.llm_service import default_models
 from apps.service_providers.llm_service.default_models import Model
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-
-# ``Node.type`` is graph data, so it can name any module-level attribute of
-# ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
-# each must be reported like a removed type rather than crashing whatever the resolved object is
-# then handed to.
-NON_NODE_ATTRIBUTES = [
-    pytest.param("logger", id="module-level-instance"),
-    pytest.param("json", id="imported-module"),
-    pytest.param("send_email_from_pipeline", id="module-level-function"),
-    pytest.param("BaseModel", id="class-that-is-not-a-node"),
-    pytest.param("END", id="string-constant"),
-]
 
 
 class TestNodeValidationErrors:
@@ -68,76 +52,6 @@ class TestNodeValidationErrors:
     def test_node_type_naming_a_non_node_attribute_is_reported_as_unknown(self, node_type):
         node = Node(flow_id="odd-1", type=node_type, params={"name": "odd"})
         assert Pipeline._node_validation_errors(node) == {"root": f"Unknown node type: {node_type}"}
-
-
-class TestNodeOutputHandles:
-    def test_start_node_has_an_output_handle(self):
-        node = Node(flow_id="start-1", type="StartNode", params={"name": "start"})
-        assert node_output_handles(node) == [{"handle": "output", "label": None}]
-
-    def test_end_node_has_no_output_handles(self):
-        node = Node(flow_id="end-1", type="EndNode", params={"name": "end"})
-        assert node_output_handles(node) == []
-
-    def test_router_handles_come_from_keywords_in_order_upper_cased(self):
-        node = Node(
-            flow_id="router-1",
-            type="StaticRouterNode",
-            params={"name": "router", "route_key": "k", "keywords": ["schedule", "reschedule"]},
-        )
-        assert node_output_handles(node) == [
-            {"handle": "output_0", "label": "SCHEDULE"},
-            {"handle": "output_1", "label": "RESCHEDULE"},
-        ]
-
-    def test_invalid_router_still_reports_handles(self):
-        # route_key is required, so full pydantic validation fails; the handles must still derive
-        # from the keywords (upper-cased) so an incrementally-built router shows its branches.
-        node = Node(
-            flow_id="router-1",
-            type="StaticRouterNode",
-            params={"name": "router", "keywords": ["a", "b"]},
-        )
-        assert node_output_handles(node) == [
-            {"handle": "output_0", "label": "A"},
-            {"handle": "output_1", "label": "B"},
-        ]
-
-    @pytest.mark.django_db()
-    def test_router_with_dangling_provider_model_still_reports_handles(self):
-        # A stale llm_provider_model_id makes the LLM mixin's before-validator raise
-        # PipelineNodeBuildError (not a pydantic error); handle derivation must fall back, not crash.
-        node = Node(
-            flow_id="router-1",
-            type="RouterNode",
-            params={
-                "name": "router",
-                "prompt": "route",
-                "keywords": ["a", "b"],
-                "llm_provider_id": 999999,
-                "llm_provider_model_id": 999999,
-            },
-        )
-        assert node_output_handles(node) == [
-            {"handle": "output_0", "label": "A"},
-            {"handle": "output_1", "label": "B"},
-        ]
-
-    def test_unknown_node_type_has_no_output_handles(self):
-        node = Node(flow_id="ghost-1", type="GhostNode", params={"name": "ghost"})
-        assert node_output_handles(node) == []
-
-    @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
-    def test_node_type_naming_a_non_node_attribute_has_no_output_handles(self, node_type):
-        node = Node(flow_id="odd-1", type=node_type, params={"name": "odd"})
-        assert node_output_handles(node) == []
-
-    def test_boolean_node_handles_are_static(self):
-        node = Node(flow_id="bool-1", type="BooleanNode", params={"name": "bool", "input_equals": "hi"})
-        assert node_output_handles(node) == [
-            {"handle": "output_0", "label": "true"},
-            {"handle": "output_1", "label": "false"},
-        ]
 
 
 @pytest.mark.django_db()
