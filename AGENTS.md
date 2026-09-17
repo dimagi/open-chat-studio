@@ -112,6 +112,7 @@ Consult these guides when working in the relevant area:
 * `docs/agents/django_performance.md` — when optimizing queries or addressing N+1 issues
 * `docs/agents/django_view_security.md` — when adding or modifying views (permissions, auth)
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
+* `docs/agents/pipeline_node_types.md` — when writing code that branches on a pipeline node's type
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature

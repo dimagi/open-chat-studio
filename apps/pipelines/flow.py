@@ -6,6 +6,7 @@ import pydantic
 from pydantic import Field
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
+from apps.pipelines.node_type import NodeType
 
 
 class FlowNodeData(pydantic.BaseModel):
@@ -13,6 +14,11 @@ class FlowNodeData(pydantic.BaseModel):
     type: str
     label: str = ""
     params: dict = Field(default_factory=dict)
+
+    @property
+    def node_type(self) -> NodeType:
+        """What this node's type decides, asked of an edit that may have no row yet."""
+        return NodeType(self.type)
 
 
 class FlowNode(pydantic.BaseModel):
@@ -89,22 +95,6 @@ class FullFlow(Flow):
     """
 
     nodes: list[FlowNode]
-
-
-#: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
-#: these for the editor; the reserved start/end classes get their own types.
-REACT_FLOW_START_TYPE = "startNode"
-REACT_FLOW_END_TYPE = "endNode"
-REACT_FLOW_NODE_TYPE = "pipelineNode"
-
-
-def react_flow_node_type(node_type: str) -> str:
-    """Map a ``Node.type`` (pipeline node class name) onto its react-flow node type."""
-    if node_type == "StartNode":
-        return REACT_FLOW_START_TYPE
-    if node_type == "EndNode":
-        return REACT_FLOW_END_TYPE
-    return REACT_FLOW_NODE_TYPE
 
 
 def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
