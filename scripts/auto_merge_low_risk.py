@@ -154,6 +154,16 @@ def recompute_risk(repo: str, number: int, head_repo: str | None) -> str:
     return pr_risk_gate.classify(files, untrusted=head_repo != repo).risk
 
 
+def judge(repo: str, number: int) -> tuple[dict, list[str]]:
+    """Read everything this pull request is judged on, and return it with its blockers."""
+    # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
+    pull: dict = gh_api(f"repos/{repo}/pulls/{number}")
+    check_runs = check_runs_for(repo, pull["head"]["sha"])
+    reviews = gh_paginated(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
+    risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
+    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk)
+
+
 def open_low_risk_pulls(repo: str) -> list[dict]:
     pulls = gh_paginated(f"repos/{repo}/pulls?state=open&per_page=100")
     return [pull for pull in pulls if any(label["name"] == REQUIRED_LABEL for label in pull.get("labels", []))]
@@ -206,43 +216,37 @@ def main(argv: list[str] | None = None) -> int:
         number = candidate["number"]
         lines.append(f"### #{number} {candidate['title']}")
         try:
-            # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
-            pull: dict = gh_api(f"repos/{args.repo}/pulls/{number}")
-            head_sha = pull["head"]["sha"]
-            check_runs = check_runs_for(args.repo, head_sha)
-            reviews = gh_paginated(f"repos/{args.repo}/pulls/{number}/reviews?per_page=100")
-            head_repo = (pull["head"].get("repo") or {}).get("full_name")
-            risk = recompute_risk(args.repo, number, head_repo)
+            pull, blockers = judge(args.repo, number)
         except RuntimeError as exc:
             # One unreachable candidate must not cost the run its summary or the rest of the queue.
             lines.extend([f"Held back, could not be read: {exc}", ""])
             continue
 
-        blockers = find_blockers(pull, check_runs, reviews, args.repo, recomputed_risk=risk)
         if blockers:
             lines.append("Held back because:")
-            lines.extend(f"- {blocker}" for blocker in blockers)
-        elif args.execute:
-            # One refusal must not cost the run its summary or the candidates behind it.
-            try:
-                merge(args.repo, number, args.merge_method, head_sha)
-            except RuntimeError as exc:
-                failed += 1
-                lines.append(f"Merge failed: {exc}")
-            else:
-                merged += 1
-                lines.extend(
-                    [
-                        "Merged.",
-                        "",
-                        "Stopping here: `main` has moved, so every candidate behind this one was "
-                        "judged against a base that no longer exists. The next poll re-reads them.",
-                    ]
-                )
-                break
-        else:
-            lines.append("**Would merge.**")
-        lines.append("")
+            lines.extend([*(f"- {blocker}" for blocker in blockers), ""])
+            continue
+        if not args.execute:
+            lines.extend(["**Would merge.**", ""])
+            continue
+
+        try:
+            merge(args.repo, number, args.merge_method, pull["head"]["sha"])
+        except RuntimeError as exc:
+            failed += 1
+            lines.extend([f"Merge failed: {exc}", ""])
+            continue
+
+        merged += 1
+        lines.extend(
+            [
+                "Merged.",
+                "",
+                "Stopping here: `main` has moved, so every candidate behind this one was judged "
+                "against a base that no longer exists. The next poll re-reads them.",
+            ]
+        )
+        break
 
     if args.execute:
         lines.append(f"Merged {merged} of {len(candidates)} candidate(s).")
