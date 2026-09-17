@@ -6,6 +6,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
+from django.contrib.sites.models import Site
 from django.db.models import Q
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
@@ -31,6 +32,7 @@ from apps.service_providers.llm_service.utils import (
     extract_file_ids_from_ocs_citations,
     get_openai_container_file_contents,
 )
+from apps.web.meta import get_server_root
 
 if TYPE_CHECKING:
     from io import BytesIO
@@ -244,10 +246,6 @@ class OpenRouterLlmService(OpenAIGenericService):
         # Only derive from Site when the caller didn't supply explicit headers.
         # ``super()._get_model_kwargs`` already merges ``self.default_headers`` when set.
         if "default_headers" not in model_kwargs:
-            from django.contrib.sites.models import Site  # noqa: PLC0415
-
-            from apps.web.meta import get_server_root  # noqa: PLC0415
-
             site = Site.objects.get_current()
             model_kwargs["default_headers"] = {
                 "HTTP-Referer": get_server_root(),

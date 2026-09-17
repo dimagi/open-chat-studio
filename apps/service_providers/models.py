@@ -167,11 +167,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AzureLlmService(**config)
             case LlmProviderTypes.anthropic:
                 return llm_service.AnthropicLlmService(**config)
-            case (
-                LlmProviderTypes.groq
-                | LlmProviderTypes.perplexity
-                | LlmProviderTypes.minimax
-            ):
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.openrouter:
                 return llm_service.OpenRouterLlmService(**config)

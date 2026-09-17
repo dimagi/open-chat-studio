@@ -113,7 +113,7 @@ def test_openrouter_does_not_use_responses_api():
     mock_site = MagicMock(name="test-site", domain="example.com")
     mock_site.name = "Test OCS"
     with (
-        patch("apps.web.meta.get_server_root", return_value="https://example.com"),
+        patch("apps.service_providers.llm_service.main.get_server_root", return_value="https://example.com"),
         patch("django.contrib.sites.models.Site.objects.get_current", return_value=mock_site),
     ):
         service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
@@ -206,7 +206,7 @@ def test_openrouter_attribution_headers_injected_from_site():
     mock_site = MagicMock()
     mock_site.name = "My OCS Instance"
     with (
-        patch("apps.web.meta.get_server_root", return_value="https://example.com"),
+        patch("apps.service_providers.llm_service.main.get_server_root", return_value="https://example.com"),
         patch("django.contrib.sites.models.Site.objects.get_current", return_value=mock_site),
     ):
         service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
