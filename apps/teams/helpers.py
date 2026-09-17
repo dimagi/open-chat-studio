@@ -29,7 +29,7 @@ def get_team_for_request(request, view_kwargs):
         return Team.objects.filter(slug=team_slug).first()
 
     if not request.user.is_authenticated:
-        return
+        return None
 
     return get_default_team_from_request(request)
 
@@ -42,7 +42,6 @@ def get_default_team_from_request(request: HttpRequest) -> Team:
             # user wasn't member of team from session, or it didn't exist.
             # fall back to default behavior
             del request.session["team"]
-            pass
     return get_default_team_for_user(request.user)
 
 
@@ -88,6 +87,7 @@ def get_team_membership_for_request(request: HttpRequest):
         if not membership and request.user.is_superuser and has_temporary_superuser_access(request, request.team.slug):
             membership = SuperuserMembership(request.user, request.team)
         return membership
+    return None
 
 
 class SuperuserMembership:

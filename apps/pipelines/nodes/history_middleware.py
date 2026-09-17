@@ -73,9 +73,10 @@ class BaseNodeHistoryMiddleware(SummarizationMiddleware):
         for i in range(len(messages) - 2, -1, -1):
             if "id" in messages[i].additional_kwargs:
                 return messages[i].additional_kwargs["id"]
+        return None
 
     def _get_compression_marker(self, messages: list[BaseMessage]) -> str:
-        return cast(str, messages[1].content)
+        return cast("str", messages[1].content)
 
 
 class SummarizeHistoryMiddleware(BaseNodeHistoryMiddleware):

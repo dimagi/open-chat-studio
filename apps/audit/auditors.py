@@ -62,3 +62,4 @@ def _report_missing_team(request):
 def _get_view_name(request):
     if resolver_match := getattr(request, "resolver_match", None):
         return resolver_match.view_name
+    return None

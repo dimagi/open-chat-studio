@@ -49,9 +49,7 @@ def add_temp_state_messages(left: dict, right: dict):
         output["outputs"].update(right["outputs"])
     except KeyError:
         output["outputs"] = right.get("outputs", {})
-    for key, value in right.items():
-        if key != "outputs":
-            output[key] = value
+    output.update({key: value for key, value in right.items() if key != "outputs"})
 
     return output
 
@@ -373,7 +371,7 @@ class PipelineNode(BasePipelineNode, ABC):
         with translate_provider_errors():
             output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
-            return Command(goto=output.goto, update=self._augment_output(state, cast(PipelineState, output.update)))
+            return Command(goto=output.goto, update=self._augment_output(state, cast("PipelineState", output.update)))
         if not isinstance(output, dict):
             return output
         return self._augment_output(state, output)

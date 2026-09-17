@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import ast
 import json
-from collections.abc import Iterator
-from pathlib import Path
-from typing import TypeGuard
+from typing import TYPE_CHECKING, TypeGuard
 
 from .records import PENDING, Catalogue, Key, LedgerEntry, ModelRecord
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
 DEFAULT_MODELS_REL_PATH = "apps/service_providers/llm_service/default_models.py"
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"

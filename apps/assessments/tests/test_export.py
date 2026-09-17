@@ -68,7 +68,7 @@ def test_export_concordance_csv(client, concordance_flags):
     user = team.members.first()
     client.force_login(user)
 
-    eval_config, queue, session = _make_concordance_data(team)
+    eval_config, queue, _session = _make_concordance_data(team)
 
     url = reverse("assessments:concordance_export", args=[team.slug])
     response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "field": "verdict", "show": "all"})

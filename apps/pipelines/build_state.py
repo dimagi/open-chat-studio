@@ -87,7 +87,5 @@ def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tup
     """One node's unwired handles: the implicit input plus any output with no edge."""
     unwired_inputs = [] if node.flow_id in wired_inputs else node.node_type.input_handles()
     dangling = [{"handle": handle, "label": None} for handle in unwired_inputs]
-    for handle in node.output_handles():
-        if (node.flow_id, handle["handle"]) not in wired_outputs:
-            dangling.append(handle)
+    dangling.extend(handle for handle in node.output_handles() if (node.flow_id, handle["handle"]) not in wired_outputs)
     return dangling

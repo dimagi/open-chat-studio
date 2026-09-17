@@ -33,7 +33,7 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
         """
         response = super().authenticate(request)
         if response is None:
-            return
+            return None
 
         user, access_token = response
         set_request_attrs(request, team=access_token.team)
@@ -210,5 +210,3 @@ class TokenHasOAuthScope(TokenHasScope):
 
 class TokenHasOAuthResourceScope(TokenHasResourceScope, TokenHasOAuthScope):
     """An implementation of TokenHasResourceScope that uses TokenHasOAuthScope"""
-
-    pass

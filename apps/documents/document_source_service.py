@@ -289,7 +289,7 @@ class DocumentSourceManager:
         )
 
         # Create CollectionFile relationship
-        collection_file = CollectionFile.objects.create(
+        return CollectionFile.objects.create(
             collection=self.collection,
             document_source=self.document_source,
             file=file,
@@ -297,7 +297,6 @@ class DocumentSourceManager:
             metadata=CollectionFileMetadata(chunking_strategy=ChunkingStrategy(chunk_size=800, chunk_overlap=400)),
             external_id=identifier,
         )
-        return collection_file
 
     def _update_file(self, collection_file: CollectionFile, document: SourceDocument, identifier: str):
         """Update an existing file with new document content.

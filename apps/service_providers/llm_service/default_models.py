@@ -239,7 +239,7 @@ DEFAULT_EMBEDDING_PROVIDER_MODELS = {
 
 
 LLM_MODEL_PARAMETERS = {}
-for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
+for models in DEFAULT_LLM_PROVIDER_MODELS.values():
     for model in models:
         if model.parameters:
             LLM_MODEL_PARAMETERS[model.name] = model.parameters
@@ -421,7 +421,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
     Return the custom model (existing or new)
     """
 
-    id_key = (team_object.team_id,) + key
+    id_key = (team_object.team_id, *key)
     custom_model = existing_custom_by_team.get(id_key)
     if not custom_model:
         custom_model = LlmProviderModel.objects.create(

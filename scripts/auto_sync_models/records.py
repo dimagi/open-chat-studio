@@ -8,8 +8,11 @@ set algebra rather than per-model probing.
 from __future__ import annotations
 
 import dataclasses
-import datetime
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import datetime
 
 # (provider, model_name)
 Key = tuple[str, str]
