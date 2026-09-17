@@ -7,7 +7,15 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 
-from ..engagement_service import TRAILING_MONTHS, _add_months, trailing_window, weekly_activity_by_month
+from ..engagement_service import (
+    TRAILING_MONTHS,
+    EngagementDashboardService,
+    _add_months,
+    _cache_key,
+    trailing_window,
+    weekly_activity_by_month,
+)
+from ..models import DashboardCache
 
 
 def _create_session(experiment, participant, team):
@@ -86,3 +94,47 @@ class TestWeeklyActivityByMonth:
         activity = weekly_activity_by_month(team, filters={}, now=now)
 
         assert activity[date(2026, 3, 1)] == {}
+
+
+@pytest.mark.django_db()
+class TestGetEngagementSummaryData:
+    def test_returns_seven_months_with_mau_and_core_users_rate_for_current_month(self, team, experiment, participant):
+        other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
+        session = _create_session(experiment, participant, team)
+        other_session = _create_session(experiment, other_participant, team)
+
+        now = timezone.now()
+        month_start = date(now.year, now.month, 1)
+        week_one = timezone.datetime.combine(
+            month_start, timezone.datetime.min.time(), tzinfo=ZoneInfo("UTC")
+        ) + timezone.timedelta(days=7, hours=9)
+        week_two = week_one + timezone.timedelta(days=7)
+
+        _create_message(session, week_one)
+        _create_message(session, week_two)
+        _create_message(other_session, week_one)
+
+        data = EngagementDashboardService(team).get_engagement_summary_data()
+
+        assert len(data) == TRAILING_MONTHS + 1
+        current = data[-1]
+        assert current["month"] == month_start.isoformat()
+        assert current["mau"] == 2
+        assert current["core_users_rate"] == pytest.approx(50.0)
+        assert current["in_progress"] is True
+        assert all(month["in_progress"] is False for month in data[:-1])
+
+    def test_month_with_no_active_participants_has_zero_core_users_rate(self, team):
+        data = EngagementDashboardService(team).get_engagement_summary_data()
+
+        oldest = data[0]
+        assert oldest["mau"] == 0
+        assert oldest["core_users_rate"] == 0
+
+    def test_result_is_cached(self, team):
+        service = EngagementDashboardService(team)
+        first = service.get_engagement_summary_data()
+
+        cached = DashboardCache.get_cached_data(team, f"engagement_summary_{_cache_key({})}")
+
+        assert cached == first

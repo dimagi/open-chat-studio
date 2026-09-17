@@ -1,6 +1,10 @@
+import hashlib
+import json
 from datetime import date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import QuerySet
 from django.db.models.functions import TruncWeek
 from django.utils import timezone as django_timezone
@@ -9,6 +13,8 @@ from apps.teams.models import Team
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.usage_metrics.filters import HUMAN_AUTHORED
 from apps.usage_metrics.metrics import bucket_date
+
+from .models import DashboardCache
 
 TZ = ZoneInfo("UTC")
 TRAILING_MONTHS = 6
@@ -61,3 +67,46 @@ def weekly_activity_by_month(team: Team, *, filters: dict, now: datetime | None 
         result[month_key][participant_id] = result[month_key].get(participant_id, 0) + 1
 
     return result
+
+
+def _cache_key(filters: dict) -> str:
+    def normalize(obj):
+        if isinstance(obj, dict):
+            return {k: normalize(obj[k]) for k in sorted(obj)}
+        if isinstance(obj, list):
+            return sorted(normalize(v) for v in obj)
+        return obj
+
+    normalized = normalize(filters or {})
+    json_str = json.dumps(normalized, separators=(",", ":"), sort_keys=True, cls=DjangoJSONEncoder)
+    return hashlib.sha1(json_str.encode()).hexdigest()
+
+
+class EngagementDashboardService:
+    def __init__(self, team: Team):
+        self.team = team
+
+    def get_engagement_summary_data(self, **filters) -> list[dict[str, Any]]:
+        cache_key = f"engagement_summary_{_cache_key(filters)}"
+        cached = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached is not None:
+            return cached
+
+        activity = weekly_activity_by_month(self.team, filters=filters)
+        current_month = max(activity)
+        data = []
+        for month in sorted(activity):
+            participants = activity[month]
+            mau = len(participants)
+            core_users = sum(1 for weeks in participants.values() if weeks >= 2)
+            data.append(
+                {
+                    "month": month.isoformat(),
+                    "mau": mau,
+                    "core_users_rate": (core_users / mau * 100) if mau else 0,
+                    "in_progress": month == current_month,
+                }
+            )
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
