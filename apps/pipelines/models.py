@@ -460,9 +460,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
     # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
-    # Null until the row is saved, or until migration 0030 backfills it from the old blob.
-    position_x = models.FloatField(null=True, blank=True)
-    position_y = models.FloatField(null=True, blank=True)
+    # A row saved without one sits at the origin, which is what reads have always served.
+    # Still nullable until migration 0030 has been backfilled everywhere.
+    position_x = models.FloatField(null=True, blank=True, default=0)
+    position_y = models.FloatField(null=True, blank=True, default=0)
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,

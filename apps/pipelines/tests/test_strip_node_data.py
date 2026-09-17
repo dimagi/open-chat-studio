@@ -42,6 +42,10 @@ def _create_old_format_pipeline(team, with_rows=True):
                 flow_id=node["id"],
                 type=node["data"]["type"],
                 params=node["data"]["params"],
+                # The rows this helper stands in for predate the position columns, so they are
+                # NULL rather than at the origin — which is what the backfill looks for.
+                position_x=None,
+                position_y=None,
             )
     return pipeline
 
@@ -227,7 +231,9 @@ class TestBackfillPositions:
 
     def test_non_archived_row_wins_flow_id_collision(self, team):
         pipeline = _create_old_format_pipeline(team)
-        archived = Node.objects.create(pipeline=pipeline, flow_id="start-1", type="StartNode", is_archived=True)
+        archived = Node.objects.create(
+            pipeline=pipeline, flow_id="start-1", type="StartNode", is_archived=True, position_x=None, position_y=None
+        )
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
