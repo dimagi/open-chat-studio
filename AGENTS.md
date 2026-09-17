@@ -71,7 +71,13 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * Run the app with `uv run inv runserver` and drive the affected flow (the `/run` and `/verify` skills automate this if available).
 * Chat/pipeline changes emit `Trace`/`Span` records (`apps/trace/models.py`) — inspect them to confirm a pipeline actually took the path you expect, rather than inferring from logs alone.
 * For UI/UX regressions, the `dogfood` skill drives the browser and captures reproduction screenshots.
-* When fixing a bug, reproduce it first (failing test or observed trace), then confirm the fix flips that same signal.
+* When fixing a bug, reproduce it first (failing test or observed trace), then confirm the fix turns that failing test green or changes that trace.
+
+## Writing style
+
+Applies to everything written here: commit messages, PR and issue bodies, ADRs and docs, code comments, and replies in the session.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying," the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell. That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what you mean. When a literal phrase is available, use it.
 
 ## Do
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
@@ -79,7 +85,7 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
-* A comment earns its place by carrying context the file cannot show — keep it when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
+* Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 
