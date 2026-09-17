@@ -66,6 +66,12 @@ class WhatsappChannelForm(WebhookUrlFormBase):
             return self.data.get("number")
         return (self.channel.extra_data or {}).get("number") if self.channel else None
 
+    def _saved_number_for(self, provider: MessagingProvider) -> str | None:
+        """The number the channel already uses, but only when `provider` is the channel's own."""
+        if not self.channel or self.channel.messaging_provider_id != provider.id:
+            return None
+        return (self.channel.extra_data or {}).get("number")
+
     @cached_property
     def _numbers_by_provider(self) -> dict:
         """The number options and provider page URL for each of the team's Meta providers.
@@ -75,26 +81,29 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         during `clean()` is still reflected here.
         """
         team = self.experiment.team
-        saved_number = (self.channel.extra_data or {}).get("number") if self.channel else None
-        options = {}
-        for provider in MessagingProvider.objects.filter(team=team, type=MessagingProviderType.meta_cloud_api):
-            numbers = [
-                {"value": number["number"], "label": whatsapp_number_label(number)}
-                for number in provider.whatsapp_numbers
-                if number.get("number")
-            ]
-            # Keep a number the channel already uses selectable, even if Meta no longer lists it.
-            is_channels_provider = bool(self.channel) and self.channel.messaging_provider_id == provider.id
-            if saved_number and is_channels_provider and saved_number not in {n["value"] for n in numbers}:
-                numbers.append({"value": saved_number, "label": saved_number})
-            options[str(provider.id)] = {
-                "numbers": numbers,
+        providers = MessagingProvider.objects.filter(team=team, type=MessagingProviderType.meta_cloud_api)
+        return {
+            str(provider.id): {
+                "numbers": self._number_options(provider),
                 "provider_url": reverse(
                     "service_providers:edit",
                     kwargs={"team_slug": team.slug, "provider_type": "messaging", "pk": provider.id},
                 ),
             }
-        return options
+            for provider in providers
+        }
+
+    def _number_options(self, provider: MessagingProvider) -> list[dict]:
+        numbers = [
+            {"value": number["number"], "label": whatsapp_number_label(number)}
+            for number in provider.whatsapp_numbers
+            if number.get("number")
+        ]
+        # Keep a number the channel already uses selectable, even if Meta no longer lists it.
+        saved_number = self._saved_number_for(provider)
+        if saved_number and saved_number not in {n["value"] for n in numbers}:
+            numbers.append({"value": saved_number, "label": saved_number})
+        return numbers
 
     def clean_number(self):
         try:
@@ -142,11 +151,9 @@ class WhatsappChannelForm(WebhookUrlFormBase):
         re-checking one here would block every later edit to the channel -- a rename included --
         on a number the operator cannot change from this form. It was resolved when it was saved.
         """
-        if not self.channel or self.channel.messaging_provider_id != provider.id:
+        if not self.channel or self._saved_number_for(provider) != number:
             return None
         saved = self.channel.extra_data or {}
-        if saved.get("number") != number:
-            return None
         config = {"number": number}
         if phone_number_id := saved.get("phone_number_id"):
             config["phone_number_id"] = phone_number_id

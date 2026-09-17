@@ -86,21 +86,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["credential_mode"].widget = CredentialModeSelect(
             experiment=self.experiment, choices=CredentialMode.choices
         )
-        if self.channel:
-            self.initial["credential_mode"] = self.channel.credential_mode
-            self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
-            allowed_domains = self.channel.extra_data.get("allowed_domains", [])
-            self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
-            if not self.is_bound:
-                # only set this if the form is not bound to avoid overriding the value from request.POST
-                self.initial["allow_all_domains"] = any(domain == ALL_DOMAINS for domain in allowed_domains)
-
-            widget_token = self.channel.extra_data.get("widget_token")
-            if widget_token:
-                self.initial["widget_token"] = widget_token
-                self.fields["widget_token"].widget = WidgetParams(
-                    experiment=self.channel.experiment, widget_token=widget_token, channel=self.channel
-                )
+        self._seed_initial_from_channel()
 
         self.form_attrs = {
             "x-data": json.dumps(
@@ -116,6 +102,25 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
+    def _seed_initial_from_channel(self):
+        if not self.channel:
+            return
+
+        self.initial["credential_mode"] = self.channel.credential_mode
+        self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
+        allowed_domains = self.channel.extra_data.get("allowed_domains", [])
+        self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
+        if not self.is_bound:
+            # only set this if the form is not bound to avoid overriding the value from request.POST
+            self.initial["allow_all_domains"] = ALL_DOMAINS in allowed_domains
+
+        widget_token = self.channel.extra_data.get("widget_token")
+        if widget_token:
+            self.initial["widget_token"] = widget_token
+            self.fields["widget_token"].widget = WidgetParams(
+                experiment=self.channel.experiment, widget_token=widget_token, channel=self.channel
+            )
 
     def _credential_mode_help_text(self):
         return format_html(
@@ -150,16 +155,10 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
             raise ValidationError({"session_token_lifetime": "The session lifetime must be at least 5 minutes."})
         return lifetime
 
-    def clean(self):
-        """Generate or preserve the widget token"""
-        cleaned_data = super().clean()
-
-        self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
-        self._credential_mode = self._pop_credential_mode(cleaned_data)
-
-        allow_all_domains = cleaned_data.pop("allow_all_domains", False)
-        no_domains = not allow_all_domains and not cleaned_data.get("allowed_domains")
-        if no_domains and self._credential_mode == CredentialMode.EMBED_KEY:
+    def _validate_allowed_domains(self, cleaned_data, allow_all_domains):
+        if allow_all_domains or cleaned_data.get("allowed_domains"):
+            return
+        if self._credential_mode == CredentialMode.EMBED_KEY:
             # An embed key with no domain list would admit a stolen key from anywhere, so the
             # list is mandatory there. Under `oauth` a blank list is a real configuration: it
             # means server-only, and the token is what authorises the caller.
@@ -167,13 +166,26 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
                 {"allowed_domains": "You must specify at least one domain or select 'Allow all domains'."}
             )
 
-        # If editing existing channel, preserve the token
-        if self.channel and self.channel.extra_data.get("widget_token"):
-            cleaned_data["widget_token"] = self.channel.extra_data["widget_token"]
-        else:
-            # Generate token here so it's available when check_usage_by_another_experiment is called
-            cleaned_data["widget_token"] = secrets.token_urlsafe(24)
+    def _widget_token(self) -> str:
+        """The channel's existing token, or a fresh one.
 
+        Generated during `clean()` so it is available when `check_usage_by_another_experiment`
+        is called.
+        """
+        if not self.channel:
+            return secrets.token_urlsafe(24)
+        return self.channel.extra_data.get("widget_token") or secrets.token_urlsafe(24)
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
+        self._credential_mode = self._pop_credential_mode(cleaned_data)
+
+        allow_all_domains = cleaned_data.pop("allow_all_domains", False)
+        self._validate_allowed_domains(cleaned_data, allow_all_domains)
+
+        cleaned_data["widget_token"] = self._widget_token()
         if allow_all_domains:
             cleaned_data["allowed_domains"] = [ALL_DOMAINS]
 

@@ -197,7 +197,7 @@ class ExtraFormBase(forms.Form):
 
 
 class WebhookUrlFormBase(ExtraFormBase):
-    webook_url = forms.CharField(
+    webhook_url = forms.CharField(
         widget=forms.TextInput(attrs={"readonly": "readonly"}),
         label="Webhook URL",
         disabled=True,
@@ -208,11 +208,11 @@ class WebhookUrlFormBase(ExtraFormBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.channel:
-            self.initial["webook_url"] = self.channel.webhook_url
+            self.initial["webhook_url"] = self.channel.webhook_url
 
         if not self.channel:
             # We only show the webhook URL field when there is something to show
-            self.fields["webook_url"].widget = forms.HiddenInput()
+            self.fields["webhook_url"].widget = forms.HiddenInput()
 
     def post_save(self, channel: ExperimentChannel):
         self.success_message = f"Use the following URL when setting up the webhook: {channel.webhook_url}"
