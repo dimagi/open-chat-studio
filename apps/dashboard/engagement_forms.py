@@ -1,10 +1,3 @@
-"""Filter form for the standalone Engagement dashboard (#2927).
-
-Deliberately has no date-range, granularity, or saved-filter fields -
-see the client-confirmed scope in
-docs/superpowers/specs/2026-09-10-engagement-retention-metrics-design.md.
-"""
-
 from typing import Any
 
 from django import forms
@@ -15,9 +8,6 @@ from apps.experiments.models import Experiment, Participant
 
 
 class EngagementFilterForm(forms.Form):
-    """Chatbot/participant/channel/tag filters only - no date range, no
-    granularity, no saved-filter fields."""
-
     experiments = forms.ModelMultipleChoiceField(
         queryset=Experiment.objects.none(), required=False, widget=forms.SelectMultiple()
     )
@@ -48,8 +38,6 @@ class EngagementFilterForm(forms.Form):
         self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(category=TagCategories.EXPERIMENT_VERSION)
 
     def get_filter_params(self) -> dict[str, Any]:
-        """Cleaned filter parameters for `EngagementDashboardService`,
-        matching the keyword names `filtered_querysets` accepts."""
         if not self.is_valid():
             return {}
 
