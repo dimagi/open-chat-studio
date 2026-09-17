@@ -11,6 +11,7 @@ from apps.evaluations.tasks import export_evaluation_run_results_task
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
+    EvaluationMessageFactory,
     EvaluationResultFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
@@ -36,6 +37,13 @@ def _read_csv_rows(file_id: int) -> tuple[list[str], list[dict]]:
     reader = csv.DictReader(io.StringIO(content))
     rows = list(reader)
     return list(reader.fieldnames or []), rows
+
+
+@pytest.fixture(autouse=True)
+def _stub_progress_recorder():
+    """ProgressRecorder needs a live Celery request; these tests call the task directly."""
+    with patch("apps.evaluations.tasks.ProgressRecorder"):
+        yield
 
 
 def _completed_run(team, config=None):
@@ -129,6 +137,28 @@ def test_export_evaluation_run_results_task_includes_all_context_columns():
     assert rows[1]["topic"] == "programming"
     assert rows[1]["user_location"] == ""
     assert rows[1][f"accuracy ({evaluator.name})"] == ""
+
+
+@pytest.mark.django_db()
+def test_export_evaluation_run_results_task_drives_progress_to_completion():
+    """The UI bar is fed by the recorder, so the task must reach total/total."""
+    config = EvaluationConfigFactory.create()
+    team = config.team
+    evaluator = EvaluatorFactory.create(team=team)
+    run = _completed_run(team, config)
+    for index in range(3):
+        EvaluationResultFactory.create(
+            team=team,
+            run=run,
+            evaluator=evaluator,
+            message=EvaluationMessageFactory.create(),
+            output=_evaluator_output({"score": index}, f"response {index}"),
+        )
+
+    with patch("apps.evaluations.tasks.ProgressRecorder") as recorder_class:
+        export_evaluation_run_results_task(run.id, team.id)
+
+    assert recorder_class.return_value.set_progress.call_args.args == (3, 3)
 
 
 @pytest.mark.django_db()

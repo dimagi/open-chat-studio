@@ -1594,8 +1594,8 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
         return {"error": str(e)}
 
 
-@shared_task(queue=Queues.BACKGROUND)
-def export_evaluation_run_results_task(evaluation_run_id: int, team_id: int) -> dict:
+@shared_task(bind=True, queue=Queues.BACKGROUND)
+def export_evaluation_run_results_task(self, evaluation_run_id: int, team_id: int) -> dict:
     """Async export of a single evaluation run's results.
 
     Peak memory is flat in the number of results. Returns {"file_id": <id>} on success.
@@ -1604,7 +1604,11 @@ def export_evaluation_run_results_task(evaluation_run_id: int, team_id: int) -> 
         run = EvaluationRun.objects.select_related("team", "config").get(id=evaluation_run_id, team_id=team_id)
 
         with current_team(run.team):
-            rows = iter_evaluation_table_rows(run.get_export_results().order_by("message_id"))
+            results = run.export_results
+            total = results.values("message_id").distinct().count()
+            rows = iter_evaluation_table_rows(annotate_export_fields(results).order_by("message_id"))
+            rows = _report_row_progress(rows, total, ProgressRecorder(self))
+
             filename = f"{run.config.name}_results_{run.id}.csv"
             return {"file_id": _create_export_file(rows, run.team, filename).id}
 

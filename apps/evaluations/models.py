@@ -772,15 +772,21 @@ class EvaluationRun(BaseTeamModel):
         if save:
             self.save(update_fields=["finished_at", "status", "error_message"])
 
-    def get_export_results(self):
-        """The run's results, annotated with the related values the export rows read."""
-        results_qs = annotate_export_fields(self.results.all())
+    @property
+    def export_results(self) -> models.QuerySet[EvaluationResult]:
+        """The results this run contributes to an export, before the export annotations.
+
+        Unannotated so a caller can count the rows without the annotations landing in the
+        GROUP BY.
+        """
+        results = self.results.all()
         if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
-            results_qs = results_qs.filter(message_id__in=self.scoped_messages.values_list("id", flat=True))
-        return results_qs
+            results = results.filter(message_id__in=self.scoped_messages.values_list("id", flat=True))
+        return results
 
     def get_table_data(self, include_ids: bool = False):
-        return build_evaluation_table_data(self.get_export_results().order_by("created_at"), include_ids=include_ids)
+        results = annotate_export_fields(self.export_results).order_by("created_at")
+        return build_evaluation_table_data(results, include_ids=include_ids)
 
 
 class EvaluationResult(BaseTeamModel):
