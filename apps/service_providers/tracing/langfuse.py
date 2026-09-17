@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import dataclasses
 import logging
 import threading
 import time
@@ -8,10 +9,10 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 
 from django.utils import timezone
-from langfuse import propagate_attributes
-from langfuse._client.get_client import _create_client_from_instance
+from langfuse import LangfuseOtelSpanAttributes, propagate_attributes
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
+from opentelemetry import trace as otel_trace_api
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
@@ -113,6 +114,8 @@ class LangFuseTracer(Tracer):
         self.client = None
         self.trace_record = None
         self._langfuse_trace_id: str | None = None
+        self._root_otel_span: otel_trace_api.Span | None = None
+        self._trace_tags: list[str] = []
 
     @property
     def ready(self) -> bool:
@@ -157,6 +160,7 @@ class LangFuseTracer(Tracer):
                 ) as trace:
                     self.trace_record = trace
                     self._langfuse_trace_id = self.client.get_current_trace_id()
+                    self._root_otel_span = otel_trace_api.get_current_span()
                     try:
                         yield trace_context
                     except Exception as exc:
@@ -173,6 +177,8 @@ class LangFuseTracer(Tracer):
             self.client = None
             self.trace_record = None
             self._langfuse_trace_id = None
+            self._root_otel_span = None
+            self._trace_tags = []
             self.session = None
 
     @contextmanager
@@ -252,10 +258,26 @@ class LangFuseTracer(Tracer):
         )
 
     def add_trace_tags(self, tags: list[str]) -> None:
+        """Add tags to the trace.
+
+        Langfuse reads trace-level attributes off the root observation, and ``span.update()``
+        does not accept tags. Tags arrive mid-trace, from the output message, when a nested
+        span is current, so they go straight onto the root span: the same attribute
+        ``propagate_attributes`` writes, on the span Langfuse reads it from.
+
+        Each call rewrites the attribute with the accumulated set, since a later call would
+        otherwise replace earlier tags.
+        """
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
-        # span.update() no longer accepts tags in v4; use the ingestion API directly
-        self.client._create_trace_tags_via_ingestion(trace_id=self._langfuse_trace_id, tags=tags)
+
+        new_tags = [tag for tag in tags if tag not in self._trace_tags]
+        if not new_tags:
+            return
+        self._trace_tags.extend(new_tags)
+
+        if self._root_otel_span is not None and self._root_otel_span.is_recording():
+            self._root_otel_span.set_attribute(LangfuseOtelSpanAttributes.TRACE_TAGS, tuple(self._trace_tags))
 
     def set_output_message_id(self, output_message_id: str) -> None:
         pass
@@ -267,21 +289,48 @@ class LangFuseTracer(Tracer):
         pass
 
 
-class ClientManager:
-    """This class manages the langfuse clients to avoid creating a new client for every request.
-    On requests for a client it will also remove any clients that have been inactive for a
-    certain amount of time.
+def _discard_sdk_resources(public_key: str) -> None:
+    """Drop the SDK's cached resources for ``public_key`` and stop its background threads.
 
-    Cached per config hash rather than public_key alone, so any config change (a rotated key, a
-    changed sample_rate, ...) misses the cache and builds a fresh client instead of needing a
-    separate invalidation path. `LangfuseResourceManager` -- the SDK's own client cache -- is
-    still keyed by public_key only, so a config change for a public_key already cached here
-    evicts that stale SDK-level entry too, rather than leaving it to the next stale-prune pass.
+    ``LangfuseResourceManager`` is a process-wide singleton keyed by public_key alone and the
+    SDK gives no way to retire one: ``Langfuse.shutdown()`` stops the consumer threads but
+    leaves the instance registered, so the next ``Langfuse(**config)`` hands back a manager
+    that will never flush again. Removing the registry entry is therefore what makes a
+    credential or sample-rate change take effect, and what releases an idle team's threads.
+
+    This is the only place OCS touches Langfuse internals; ``test_sdk_registry_seam_exists``
+    fails if either attribute goes away.
+    """
+    with LangfuseResourceManager._lock:
+        instance = LangfuseResourceManager._instances.pop(public_key, None)
+    if instance is not None:
+        instance.shutdown()
+
+
+@dataclasses.dataclass
+class _CachedClient:
+    client: Langfuse
+    public_key: str | None
+    last_used: float = 0.0
+
+
+class ClientManager:
+    """Caches one Langfuse client per trace provider config, and retires idle ones.
+
+    The SDK already caches the expensive per-key state — exporter, consumer threads, httpx
+    client — on its own ``LangfuseResourceManager`` singleton, so this class exists for the
+    two things that singleton does not do:
+
+    * it is keyed by public_key alone, so a rotated secret or a changed sample_rate for a
+      public_key already seen would be silently ignored. Caching by config hash and evicting
+      the SDK's entry on a miss makes the new config take effect.
+    * it never releases a key, so every team that has ever traced in this process keeps its
+      threads and connections. Pruning by last use and by ``max_clients`` bounds that.
     """
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
-        self.key_timestamps: dict[int, float] = {}
-        self._public_keys: dict[int, str | None] = {}
+        self._lock = threading.RLock()
+        self._entries: dict[int, _CachedClient] = {}
         self.stale_timeout = stale_timeout
         self.max_clients = max_clients
         self.prune_interval = prune_interval
@@ -296,28 +345,24 @@ class ClientManager:
 
         public_key = config.get("public_key")
         config_hash = self._config_hash(config)
-        with LangfuseResourceManager._lock:
-            if config_hash not in self.key_timestamps:
+        with self._lock:
+            entry = self._entries.get(config_hash)
+            if entry is None:
                 self._evict_public_key(public_key, keep=config_hash)
-
-            active_instances = LangfuseResourceManager._instances
-            if target_instance := active_instances.get(public_key, None):
-                client = _create_client_from_instance(target_instance, public_key)
-            else:
                 logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
-                client = Langfuse(**config)
-            self.key_timestamps[config_hash] = time.time()
-            self._public_keys[config_hash] = public_key
-        return client
+                entry = _CachedClient(client=Langfuse(**config), public_key=public_key)
+                self._entries[config_hash] = entry
+            entry.last_used = time.time()
+            return entry.client
 
     def _evict_public_key(self, public_key, keep: int) -> None:
         """Remove any entry cached under a different config hash for this public_key.
 
         Without this, a config change for a public_key we've already seen would still find
-        `LangfuseResourceManager`'s stale singleton for that key and silently reuse it.
+        the SDK's stale singleton for that key and silently reuse it.
         """
-        for other_hash, other_key in list(self._public_keys.items()):
-            if other_hash != keep and other_key == public_key:
+        for other_hash, other_entry in list(self._entries.items()):
+            if other_hash != keep and other_entry.public_key == public_key:
                 self._remove_client(other_hash)
 
     def _start_prune_thread(self):
@@ -330,45 +375,38 @@ class ClientManager:
             self._prune_stale()
 
     def _prune_stale(self):
-        if not self.key_timestamps:
-            return
+        with self._lock:
+            if not self._entries:
+                return
 
-        logger.debug("Pruning clients...")
-        for config_hash in list(self.key_timestamps.keys()):
-            timestamp = self.key_timestamps[config_hash]
-            if time.time() - timestamp > self.stale_timeout:
-                logger.debug("Pruning old client for public_key '%s'", self._public_keys.get(config_hash))
-                self._remove_client(config_hash)
+            logger.debug("Pruning clients...")
+            now = time.time()
+            for config_hash, entry in list(self._entries.items()):
+                if now - entry.last_used > self.stale_timeout:
+                    logger.debug("Pruning old client for public_key '%s'", entry.public_key)
+                    self._remove_client(config_hash)
 
-        if len(self.key_timestamps) > self.max_clients:
-            # remove the oldest clients until we are below the max
-            sorted_keys = sorted(self.key_timestamps.items(), key=lambda x: x[1])
-            keys_to_remove = sorted_keys[: len(self.key_timestamps) - self.max_clients]
-            logger.debug("Pruned %d clients above max limit", len(keys_to_remove))
-            for config_hash, _ in keys_to_remove:
-                self._remove_client(config_hash)
+            if len(self._entries) > self.max_clients:
+                # remove the oldest clients until we are below the max
+                sorted_hashes = sorted(self._entries, key=lambda h: self._entries[h].last_used)
+                hashes_to_remove = sorted_hashes[: len(self._entries) - self.max_clients]
+                logger.debug("Pruned %d clients above max limit", len(hashes_to_remove))
+                for config_hash in hashes_to_remove:
+                    self._remove_client(config_hash)
 
     def _remove_client(self, config_hash: int):
-        # All bookkeeping happens under the same lock `get()` holds for its whole body, so a
-        # background prune (this method's other caller, from `_prune_worker`'s thread) can't
-        # interleave with a concurrent `get()` and leave the two dicts and
-        # `LangfuseResourceManager._instances` inconsistent with each other.
-        with LangfuseResourceManager._lock:
-            public_key = self._public_keys.pop(config_hash, None)
-            self.key_timestamps.pop(config_hash, None)
-            if public_key is None:
-                return
-            active_instances = LangfuseResourceManager._instances
-            if target_instance := active_instances.pop(public_key, None):
-                target_instance.shutdown()
+        # Callers hold `self._lock`, so a background prune can't interleave with a concurrent
+        # `get()` and leave `_entries` inconsistent with the SDK's registry.
+        entry = self._entries.pop(config_hash, None)
+        if entry is not None and entry.public_key is not None:
+            _discard_sdk_resources(entry.public_key)
 
     def shutdown(self):
-        if self.key_timestamps:
-            logger.debug("Shutting down all langfuse clients (%s)", len(self.key_timestamps))
-        with LangfuseResourceManager._lock:
+        with self._lock:
+            if self._entries:
+                logger.debug("Shutting down all langfuse clients (%s)", len(self._entries))
             LangfuseResourceManager.reset()
-            self.key_timestamps.clear()
-            self._public_keys.clear()
+            self._entries.clear()
 
 
 client_manager = ClientManager()
@@ -393,6 +431,9 @@ class LangfuseCallbackHandler(CallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
+        # LangChain's run_id -> observation map is internal to the handler and there is no
+        # public accessor, so a custom event can only be parented via the private lookup.
+        # ``test_langchain_parent_observation_seam_exists`` fails if it goes away.
         if span := self._get_parent_observation(run_id):
             span.create_event(name=name, input=data, metadata=metadata)
         return None
