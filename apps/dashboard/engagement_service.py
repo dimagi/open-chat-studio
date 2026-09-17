@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from django.db.models import QuerySet
 from django.db.models.functions import TruncWeek
 from django.utils import timezone as django_timezone
 
@@ -36,7 +37,7 @@ def trailing_window(now: datetime | None = None) -> tuple[datetime, datetime, li
     return start, now, months
 
 
-def _human_messages(team: Team, *, start: datetime, end: datetime, filters: dict):
+def _human_messages(team: Team, *, start: datetime, end: datetime, filters: dict) -> QuerySet:
     return filtered_querysets(team, start_date=start, end_date=end, **filters)["messages"].filter(HUMAN_AUTHORED)
 
 
