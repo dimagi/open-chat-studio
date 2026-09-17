@@ -55,7 +55,7 @@ def get_node_class(node_type: str) -> type[BasePipelineNode]:
     The served types are exactly the resolvable node classes, so past the lookup this cannot be None.
     """
     get_node_type_schema(node_type)
-    return cast(type[BasePipelineNode], NodeType(node_type).node_class)
+    return cast("type[BasePipelineNode]", NodeType(node_type).node_class)
 
 
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:

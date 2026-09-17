@@ -152,7 +152,7 @@ def _numeric_value(field_def: dict, quality: float, jitter: float, field_type: s
     low = field_def.get("ge", 1)
     high = field_def.get("le", 10)
     scaled = low + (high - low) * min(max(quality + jitter * 0.15, 0), 1)
-    return int(round(scaled)) if field_type == "int" else round(scaled, 2)
+    return round(scaled) if field_type == "int" else round(scaled, 2)
 
 
 @dataclass(frozen=True)

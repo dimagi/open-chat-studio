@@ -15,7 +15,6 @@ class BaseAggregator(ABC):
     @abstractmethod
     def compute(cls, values: list) -> Any:
         """Compute the aggregation for a list of values."""
-        pass
 
     @classmethod
     def accepts(cls, value: Any) -> bool:

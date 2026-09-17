@@ -42,7 +42,7 @@ def test_group_evaluation_with_multiple_evaluators():
 
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
     evaluation_config = cast(
-        EvaluationConfig,
+        "EvaluationConfig",
         EvaluationConfigFactory.create(evaluators=[evaluator1, evaluator2, evaluator3], dataset=dataset),
     )
 
@@ -61,7 +61,7 @@ def test_group_evaluation_with_multiple_evaluators():
 def test_empty_evaluation_config():
     """Test that empty evaluation config is handled correctly"""
     # Create config with no evaluators
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[]))
+    evaluation_config = cast("EvaluationConfig", EvaluationConfigFactory.create(evaluators=[]))
 
     evaluation_run = evaluation_config.run()
 

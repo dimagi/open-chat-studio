@@ -4,7 +4,6 @@ import importlib
 import itertools
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Iterable
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -38,6 +37,8 @@ from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from apps.evaluations.evaluators import EvaluatorResult
     from apps.evaluations.usage import EvaluatorUsageContext
 

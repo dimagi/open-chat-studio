@@ -249,13 +249,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         )
 
         # Add expensive annotations only to paginated data
-        queryset = queryset.annotate(
+        return queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
             interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
             last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
         ).order_by(F("last_activity").desc(nulls_last=True))
-        return queryset
 
 
 class CreateChatbot(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -672,10 +671,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         query_set = query_set.filter(self.extra_filters())
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
-        query_set = session_filter.apply(
-            query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone
-        )
-        return query_set
+        return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
         """Configure the table, then attach the tag prefetch to the paginated page only.
@@ -1119,10 +1115,7 @@ def _get_events_context(experiment: Experiment, team_slug: str):
         )
         .all()
     )
-    for event in static_events:
-        combined_events.append({**event, "team_slug": team_slug})
-    for event in timeout_events:
-        combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
-    for event in scheduled_events:
-        combined_events.append({**event, "type": "__scheduled__", "team_slug": team_slug})
+    combined_events.extend({**event, "team_slug": team_slug} for event in static_events)
+    combined_events.extend({**event, "type": "__timeout__", "team_slug": team_slug} for event in timeout_events)
+    combined_events.extend({**event, "type": "__scheduled__", "team_slug": team_slug} for event in scheduled_events)
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}

@@ -57,12 +57,14 @@ import csv
 import os
 import sys
 import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 try:
     import tiktoken
@@ -72,8 +74,6 @@ except ImportError:
 try:
     import anthropic
 except ImportError:
-    # Optional: only the Claude models need it. ty declares the name as the module, so rebinding
-    # it to None is an error it cannot express away.
     anthropic = None  # ty: ignore[invalid-assignment]
 
 

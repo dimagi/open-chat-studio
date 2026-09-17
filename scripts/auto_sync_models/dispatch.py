@@ -12,11 +12,14 @@ from __future__ import annotations
 import datetime
 import json
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .catalogue import LEDGER_REL_PATH, load_seed, write_ledger
 from .records import PENDING, Diff, Key, LedgerEntry, ModelRecord, RateChange, Reconciliation
 from .upstream import SOURCE_URL
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 
