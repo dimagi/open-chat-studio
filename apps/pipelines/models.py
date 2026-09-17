@@ -633,11 +633,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         self._sync_resource_fk_fields()
 
-        if self.type == LLMResponseWithPrompt.__name__:
+        if self.node_type.declares("custom_actions"):
             custom_action_infos = []
             for custom_action_operation in self.params.get("custom_actions") or []:
                 custom_action_id, operation_id = custom_action_operation.split(":")
@@ -737,8 +735,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         node_name = self.display_name
 
         specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
@@ -763,7 +759,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.type == LLMResponseWithPrompt.__name__ and self.params.get("custom_actions"):
+        if self.node_type.declares("custom_actions") and self.params.get("custom_actions"):
             param_versions.append(
                 VersionField(
                     group_name=node_name,
