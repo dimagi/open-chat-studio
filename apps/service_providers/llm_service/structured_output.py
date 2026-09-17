@@ -1,5 +1,6 @@
 from typing import Any
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable, RunnableLambda
@@ -18,7 +19,17 @@ class NoStructuredOutputError(Exception):
 
 def structured_output_runnable(llm: BaseChatModel, schema: type[BaseModel]) -> Runnable[Any, BaseModel]:
     """Return a runnable that yields a `schema` instance or raises `NoStructuredOutputError`."""
-    return llm.with_structured_output(schema, include_raw=True).pipe(RunnableLambda(unwrap_structured_output))
+    # Parser errors are captured as `parsing_error` inside this step, so an OutputParserException
+    # escaping it is the provider adapter reporting that the model made no tool call.
+    structured = llm.with_structured_output(schema, include_raw=True).with_fallbacks(
+        [RunnableLambda(_raise_no_tool_call)],
+        exceptions_to_handle=(OutputParserException,),
+    )
+    return structured.pipe(RunnableLambda(unwrap_structured_output))
+
+
+def _raise_no_tool_call(_input: Any) -> dict:
+    raise NoStructuredOutputError(reason="no tool call")
 
 
 def unwrap_structured_output(result: dict) -> BaseModel:

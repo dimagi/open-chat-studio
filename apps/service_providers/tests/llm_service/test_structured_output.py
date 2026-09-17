@@ -1,5 +1,7 @@
 import pytest
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel, ValidationError
 
 from apps.service_providers.llm_service.structured_output import (
@@ -13,6 +15,14 @@ from apps.utils.tests.langchain import FakeLlmSimpleTokenCount
 
 class Verdict(BaseModel):
     sentiment: str
+
+
+class _NoToolCallUnderThinking(FakeLlmSimpleTokenCount):
+    def with_structured_output(self, schema, **kwargs):
+        def _raise(_input):
+            raise OutputParserException("structured output via forced tool calling is not guaranteed")
+
+        return RunnableLambda(_raise)
 
 
 def _invoke(reply: AIMessage):
@@ -83,3 +93,22 @@ def test_a_refusal_wins_over_the_parsing_error_it_caused():
 def test_stop_reason_reads_the_provider_metadata():
     assert stop_reason(AIMessage(content="", response_metadata={"stop_reason": "refusal"})) == "refusal"
     assert stop_reason(AIMessage(content="no metadata")) == ""
+
+
+def test_a_missing_tool_call_raised_by_the_provider_adapter_is_no_structured_output():
+    llm = _NoToolCallUnderThinking(responses=["unused"])
+
+    with pytest.raises(NoStructuredOutputError) as exc_info:
+        structured_output_runnable(llm, Verdict).invoke("judge this")
+
+    assert exc_info.value.reason == "no tool call"
+    assert exc_info.value.model_text == ""
+
+
+def test_a_parsing_error_is_still_reraised_when_it_is_an_output_parser_exception():
+    raw = AIMessage(content="not json")
+
+    with pytest.raises(OutputParserException):
+        unwrap_structured_output(
+            {"raw": raw, "parsed": None, "parsing_error": OutputParserException("Invalid json output")}
+        )
