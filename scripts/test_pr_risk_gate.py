@@ -107,6 +107,21 @@ def test_a_rename_into_agent_config_is_medium_not_low():
     assert any("agent configuration" in reason for reason in verdict.reasons)
 
 
+def test_a_rename_out_of_agent_config_is_caught_by_the_source():
+    # Both ends are markdown, so the non-docs rename blocker does not fire here.
+    files = [{**pr_file("docs/moved.md", status="renamed"), "previous_filename": ".claude/agents/reviewer.md"}]
+    verdict = classify(files)
+    assert verdict.risk == MEDIUM
+    assert any(".claude/agents/reviewer.md" in reason for reason in verdict.reasons)
+
+
+def test_deleting_agent_config_is_medium():
+    files = [pr_file(".claude/skills/gone/SKILL.md", status="removed", additions=0, deletions=9, patch="-old")]
+    verdict = classify(files)
+    assert verdict.risk == MEDIUM
+    assert any("agent configuration" in reason for reason in verdict.reasons)
+
+
 def test_editing_an_accepted_adr_beats_the_docs_allowlist():
     assert classify([pr_file("docs/adr/0001-example.md")]).risk == HIGH
 

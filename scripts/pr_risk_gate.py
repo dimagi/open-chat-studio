@@ -231,9 +231,16 @@ def find_disqualifiers(files: list[dict]) -> list[str]:
         disqualifiers.append(f"changes {changed_lines} lines (cap is {MAX_CHANGED_LINES})")
     for entry in files:
         path = entry["filename"]
-        reason = match_category(path, DISQUALIFYING_PATHS)
-        if reason:
-            disqualifiers.append(f"{path}: {reason}")
+        # Both ends of a rename: moving a file out of `.claude/` changes what the agents
+        # read as much as editing it in place, and the rename blocker does not catch it
+        # because markdown at both ends reads as documentation.
+        agent_config = [
+            f"{candidate}: {reason}"
+            for candidate in _paths_of(entry)
+            if (reason := match_category(candidate, DISQUALIFYING_PATHS))
+        ]
+        if agent_config:
+            disqualifiers.extend(agent_config)
         elif not match_category(path, LOW_RISK_PATHS):
             disqualifiers.append(f"{path}: not on the low-risk allowlist")
         elif entry.get("patch") is None and entry.get("status") != "removed":
