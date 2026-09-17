@@ -271,7 +271,7 @@ class LangFuseTracer(Tracer):
         if not self.ready:
             raise ServiceNotInitializedException("Service not initialized.")
 
-        new_tags = [tag for tag in tags if tag not in self._trace_tags]
+        new_tags = list(dict.fromkeys(tag for tag in tags if tag not in self._trace_tags))
         if not new_tags:
             return
         self._trace_tags.extend(new_tags)

@@ -106,6 +106,17 @@ def test_repeated_tag_calls_accumulate_instead_of_replacing(tracer, exported_spa
     assert root.attributes[LangfuseOtelSpanAttributes.TRACE_TAGS] == ("first", "second")
 
 
+def test_tags_repeated_within_one_call_are_exported_once(tracer, exported_spans, mock_session):
+    """Langfuse trace tags are a set of strings; a repeat carries no meaning."""
+    _client, exporter = exported_spans
+
+    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=mock_session):
+        tracer.add_trace_tags(["dup", "other", "dup"])
+
+    root = _span_by_name(exporter, "root-trace")
+    assert root.attributes[LangfuseOtelSpanAttributes.TRACE_TAGS] == ("dup", "other")
+
+
 def test_tags_do_not_leak_between_traces(tracer, exported_spans, mock_session):
     _client, exporter = exported_spans
 
