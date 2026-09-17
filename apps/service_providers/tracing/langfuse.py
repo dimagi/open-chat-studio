@@ -363,16 +363,22 @@ class ClientManager:
         public_key = config.get("public_key")
         config_hash = self._config_hash(config)
         detached: list[LangfuseResourceManager] = []
-        with self._lock:
-            entry = self._entries.get(config_hash)
-            if entry is None:
-                detached = self._evict_public_key(public_key, keep=config_hash)
-                logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
-                entry = _CachedClient(client=Langfuse(**config), public_key=public_key)
-                self._entries[config_hash] = entry
-            entry.last_used = time.time()
-            client = entry.client
-        _shutdown_detached(detached)
+        try:
+            with self._lock:
+                entry = self._entries.get(config_hash)
+                if entry is None:
+                    detached = self._evict_public_key(public_key, keep=config_hash)
+                    logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
+                    entry = _CachedClient(client=Langfuse(**config), public_key=public_key)
+                    self._entries[config_hash] = entry
+                entry.last_used = time.time()
+                client = entry.client
+        finally:
+            # A detached instance is out of both `_entries` and the SDK registry, so nothing
+            # else will ever reach it. If `Langfuse()` raises -- `RuntimeError: can't start
+            # new thread` under thread exhaustion, say -- this is the only chance to stop its
+            # threads, and a leak there would feed the exhaustion that caused it.
+            _shutdown_detached(detached)
         return client
 
     def _evict_public_key(self, public_key, keep: int) -> list[LangfuseResourceManager]:

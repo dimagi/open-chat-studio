@@ -203,6 +203,21 @@ def test_a_failing_shutdown_does_not_abort_the_prune_pass(client_manager, langfu
         client.shutdown.assert_called_once()
 
 
+def test_a_failed_client_build_still_shuts_the_detached_instance_down(client_manager, config, langfuse_mock):
+    """A detached instance is out of both caches, so `get()` is the last thing that can stop
+    its threads. Reachable on any provider serving two chatbots with different sample rates,
+    which alternate config hashes under one public_key.
+    """
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    langfuse_mock.side_effect = RuntimeError("can't start new thread")
+
+    with pytest.raises(RuntimeError, match="can't start new thread"):
+        client_manager.get({**config, "sample_rate": 0.9})
+
+    first_client.shutdown.assert_called_once()
+    assert client_manager._entries == {}
+
+
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
