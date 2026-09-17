@@ -132,16 +132,12 @@ def _rerank(
     how the collection query preview knows which number it is looking at.
     """
     if top_k <= 0:
-        # A caller that wants nothing back gets it without a billed call.
         return []
     if len(candidates) <= 1:
-        # A single candidate cannot be reordered, and the provider would still bill the call.
         return candidates[:top_k]
 
     query = query.strip()
     if not query:
-        # Nothing to score the candidates against. Dense search still ranks a blank query by
-        # whatever its embedding came out as, but a reranker has no such fallback.
         return candidates[:top_k]
 
     try:
