@@ -32,17 +32,24 @@ def public_key():
 
 @pytest.fixture()
 def exported_spans(public_key):
-    """A real Langfuse client whose spans are collected in memory instead of sent."""
+    """A real Langfuse client whose spans are collected in memory instead of sent.
+
+    Both halves are torn down: the SDK's resource manager releases its consumer threads,
+    and the provider is shut down separately because the span processor's worker thread
+    belongs to the provider, not to the resource manager.
+    """
     exporter = InMemorySpanExporter()
+    provider = TracerProvider()
     client = Langfuse(
         public_key=public_key,
         secret_key="sk-otel-test",
         base_url="http://localhost:1",
-        tracer_provider=TracerProvider(),
+        tracer_provider=provider,
         span_exporter=exporter,
     )
     yield client, exporter
     _discard_sdk_resources(public_key)
+    provider.shutdown()
 
 
 @pytest.fixture()

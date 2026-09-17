@@ -7,9 +7,12 @@ the result the way `api.ingestion.batch` does.
 """
 
 import datetime as dt
+import json
+import typing
 
 import pytest
 from langfuse.api import (
+    IngestionEvent,
     IngestionEvent_GenerationCreate,
     IngestionEvent_ScoreCreate,
     IngestionEvent_SpanCreate,
@@ -20,6 +23,8 @@ from langfuse.api import (
     TraceWithFullDetails,
     Usage,
 )
+from langfuse.api.core.jsonable_encoder import jsonable_encoder
+from langfuse.api.core.serialization import convert_and_respect_annotation_metadata
 
 from apps.service_providers.management.commands.migrate_langfuse_data import (
     _transform_trace_to_ingestion_batch,
@@ -142,12 +147,19 @@ def test_transform_attaches_scores_to_the_remapped_observation():
     ids=["span", "generation", "event"],
 )
 def test_ingestion_events_serialize_for_the_batch_endpoint(observation_type):
-    """`api.ingestion.batch` JSON-serializes these bodies; a model change that the transform
-    survives can still fail here.
+    """A model change the transform survives can still fail on the way out, so run the batch
+    through the same serializer `api.ingestion.batch` posts with.
     """
     batch = _transform_trace_to_ingestion_batch(_trace([_observation(type=observation_type)]))
 
-    for event in batch:
-        payload = event.dict(by_alias=True, exclude_none=True)
-        assert payload["type"]
-        assert payload["body"]
+    payload = jsonable_encoder(
+        convert_and_respect_annotation_metadata(
+            object_=batch, annotation=typing.Sequence[IngestionEvent], direction="write"
+        )
+    )
+    json.dumps(payload)
+
+    assert len(payload) == len(batch)
+    for event in payload:
+        assert event["type"]
+        assert event["body"]
