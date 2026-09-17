@@ -3,10 +3,7 @@
 
 {% block app %}
   <section class="app-card">
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="pg-title">{% translate "Find provider by API key" %}</h1>
-      <a href="{% url 'ocs_admin:home' %}" class="btn btn-ghost btn-sm">{% translate "Back to admin" %}</a>
-    </div>
+    <h1 class="pg-title mb-4">{% translate "Find provider by API key" %}</h1>
     <p class="text-sm text-gray-500 mb-4">
       {% translate "Paste a full API key, the last few characters, or any substring, then pick a provider type. The search iterates all providers of that type and decrypts each config to match against its secret fields. Use \"Suffix\" or \"Contains\" when you only have part of the key." %}
     </p>

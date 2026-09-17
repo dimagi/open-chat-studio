@@ -248,12 +248,8 @@ class ParticipantSessionsTable(ChatbotSessionsTable):
     """Sessions table for the participant details page.
 
     Adds a "Started" column and a single-version display, and swaps the "Session Details"
-    action for a plain "View" chip. Static, matching the #4231 mockup: no sortable
-    columns and no django-tables2 record-count line (the filter bar's own "N of M
-    sessions" text already covers that).
+    action for a plain "View" chip. Static, matching the #4231 mockup: no sortable columns.
     """
-
-    show_record_count = False
 
     chatbot = columns.Column(verbose_name="Chatbot", accessor="experiment", orderable=False)
     started = columns.Column(accessor="created_at", verbose_name="Started")

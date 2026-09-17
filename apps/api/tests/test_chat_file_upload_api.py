@@ -19,8 +19,7 @@ def api_client():
 @pytest.fixture()
 def authed_client(team_with_users):
     user = team_with_users.members.first()
-    client = ApiTestClient(user, team_with_users)
-    return client
+    return ApiTestClient(user, team_with_users)
 
 
 @pytest.fixture()
@@ -97,7 +96,7 @@ class TestChatFileUploadAPI:
         file_obj = File.objects.get(id=uploaded_file["id"])
         assert file_obj.name == "small_text.txt"
         assert file_obj.team == session.team
-        # Participant uploads are conversation media, not assistant config.
+        # Participant uploads are conversation media.
         assert file_obj.purpose == FilePurpose.MESSAGE_MEDIA
 
     def test_successful_multiple_file_upload(self, api_client, session):

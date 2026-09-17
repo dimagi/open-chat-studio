@@ -32,6 +32,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.timesince import timesince
+from django.utils.translation import gettext as _
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -47,6 +48,7 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
@@ -124,7 +126,7 @@ def _process_uploaded_files(request, session):
         )
 
         # Participant uploads within a conversation are message media, regardless of
-        # which tool they feed. ASSISTANT is reserved for bot-configuration files.
+        # which tool they feed.
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(
                 name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
@@ -364,6 +366,7 @@ def _run_public_consent_flow(request, team_slug: str, experiment, experiment_ver
         {
             "active_tab": "experiments",
             "experiment": experiment,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, experiment), (_("Start Session"), None)],
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -504,6 +507,7 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
         {
             "active_tab": "experiments",
             "experiment": published_version,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Start Session"), None)],
             "consent_notice": mark_safe(consent_notice),
             "form": form,
             **version_specific_vars,
@@ -561,6 +565,41 @@ def _set_messages_view_push_url(response, request, team_slug, experiment, sessio
     response["HX-Push-Url"] = f"{session_url}?{querystring}" if querystring else session_url
 
 
+def _tag_filter_context_ids(chat, matched_ids: set[int]) -> set[int]:
+    """The message immediately before and after each match, so a reviewer can see what was
+    said around a tagged message rather than just the tagged message on its own.
+
+    IDs aren't guaranteed contiguous per chat, so this walks the chat's own ordered id list
+    rather than doing id +/- 1 arithmetic.
+    """
+    ordered_ids = list(ChatMessage.objects.filter(chat=chat).order_by("created_at", "id").values_list("id", flat=True))
+    context_ids = set()
+    for index, message_id in enumerate(ordered_ids):
+        if message_id not in matched_ids:
+            continue
+        if index > 0:
+            context_ids.add(ordered_ids[index - 1])
+        if index < len(ordered_ids) - 1:
+            context_ids.add(ordered_ids[index + 1])
+    return context_ids - matched_ids
+
+
+def _apply_tag_filter(messages_queryset, chat, selected_tags):
+    """Narrow the queryset to matched messages plus one message of context on each side."""
+    if not selected_tags:
+        return messages_queryset, set(), set()
+    matched_ids = set(messages_queryset.filter(tags__name__in=selected_tags).distinct().values_list("id", flat=True))
+    context_ids = _tag_filter_context_ids(chat, matched_ids)
+    return messages_queryset.filter(id__in=matched_ids | context_ids), matched_ids, context_ids
+
+
+def _mark_tag_context(messages, selected_tags, matched_ids):
+    if not selected_tags:
+        return
+    for message in messages:
+        message.is_tag_context = message.id not in matched_ids
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -580,7 +619,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
 
     messages_queryset = (
         ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at")
+        .order_by("created_at", "id")
         .prefetch_related(
             Prefetch(
                 "tagged_items",
@@ -596,8 +635,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
             ),
         )
     )
-    if selected_tags:
-        messages_queryset = messages_queryset.filter(tags__name__in=selected_tags).distinct()
+    messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
         messages_queryset = messages_queryset.annotate(
@@ -631,6 +669,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
 
+    _mark_tag_context(current_page_messages, selected_tags, matched_ids)
+
     context = {
         "experiment_session": session,
         "experiment": experiment,
@@ -641,6 +681,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         "page_size": page_size,
         "page_start_index": page_start_index,
         "selected_tags": selected_tags,
+        "tag_match_count": len(matched_ids),
+        "tag_context_count": len(context_ids),
         "language": language,
         "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
         "has_missing_translations": False,
@@ -759,7 +801,7 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
         )
     except Exception as e:
         logging.exception("Error translating messages")
-        messages.error(request, f"Translation failed: {str(e)}")
+        messages.error(request, f"Translation failed: {e!s}")
         return redirect_to_messages_view(request, session)
 
     return redirect_to_messages_view(request, session)
@@ -823,6 +865,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
             "experiment_session": request.experiment_session,
             "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Review"), None)],
             "form": form,
             "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             **version_specific_vars,
@@ -841,6 +884,7 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
             "experiment": request.experiment,
             "experiment_session": request.experiment_session,
             "active_tab": "experiments",
+            "breadcrumbs": [*chatbot_crumbs(team_slug, request.experiment), (_("Complete"), None)],
         },
     )
 

@@ -33,38 +33,38 @@ def get_integration_rows(request, team) -> list[dict]:
     """
     rows = []
     for provider in ServiceProvider:
-        for obj in provider.model.objects.filter(team=team):
-            rows.append(
-                {
-                    "id": f"{provider.slug}-{obj.pk}",
-                    "kind": "service_provider",
-                    "provider_type": provider.slug,
-                    "pk": obj.pk,
-                    "name": obj.name,
-                    "category": provider.category,
-                    "icon_class": _CATEGORY_ICONS[provider.category],
-                    "provider": obj.type_enum.label,
-                    "status": "Connected",
-                    "edit_perm": provider.get_permission("change"),
-                    "delete_perm": provider.get_permission("delete"),
-                }
-            )
+        rows.extend(
+            {
+                "id": f"{provider.slug}-{obj.pk}",
+                "kind": "service_provider",
+                "provider_type": provider.slug,
+                "pk": obj.pk,
+                "name": obj.name,
+                "category": provider.category,
+                "icon_class": _CATEGORY_ICONS[provider.category],
+                "provider": obj.type_enum.label,
+                "status": "Connected",
+                "edit_perm": provider.get_permission("change"),
+                "delete_perm": provider.get_permission("delete"),
+            }
+            for obj in provider.model.objects.filter(team=team)
+        )
     if flag_is_active(request, "flag_mcp"):
-        for obj in McpServer.objects.filter(team=team):
-            rows.append(
-                {
-                    "id": f"mcp-{obj.pk}",
-                    "kind": "mcp",
-                    "pk": obj.pk,
-                    "name": obj.name,
-                    "category": MCP_CATEGORY,
-                    "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
-                    "provider": "MCP Server",
-                    "status": "Connected",
-                    "edit_perm": "mcp_integrations.change_mcpserver",
-                    "delete_perm": "mcp_integrations.delete_mcpserver",
-                }
-            )
+        rows.extend(
+            {
+                "id": f"mcp-{obj.pk}",
+                "kind": "mcp",
+                "pk": obj.pk,
+                "name": obj.name,
+                "category": MCP_CATEGORY,
+                "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
+                "provider": "MCP Server",
+                "status": "Connected",
+                "edit_perm": "mcp_integrations.change_mcpserver",
+                "delete_perm": "mcp_integrations.delete_mcpserver",
+            }
+            for obj in McpServer.objects.filter(team=team)
+        )
     rows.sort(key=lambda row: (row["category"], row["name"]))
     return rows
 
@@ -117,12 +117,12 @@ def build_integration_filter_pills(
     counts = Counter(row["category"] for row in rows)
     categories = [category for category in _CATEGORY_ORDER if category != MCP_CATEGORY or show_mcp]
     pills = [IntegrationFilterPill(label="All", value=None, count=len(rows), active=active_category is None)]
-    for category in categories:
-        pills.append(
-            IntegrationFilterPill(
-                label=category, value=category, count=counts[category], active=active_category == category
-            )
+    pills.extend(
+        IntegrationFilterPill(
+            label=category, value=category, count=counts[category], active=active_category == category
         )
+        for category in categories
+    )
     return pills
 
 
@@ -155,10 +155,15 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
 
     def get_template_names(self):
         table = self._table
-        if table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET:
-            # Pagination/sort links target `closest div.table-container` with an
-            # outerHTML swap (see table/tailwind_js_pagination.html), so the response
-            # must be exactly that container -- not the filter-pill bar and wrapper
-            # around it, or each click nests another copy of them inside the last one.
+        wants_fragment = (
+            table.prefixed_page_field in self.request.GET or table.prefixed_order_by_field in self.request.GET
+        )
+        if wants_fragment and self.request.htmx:
+            # Pagination/sort links target `closest div.table-container` with a morph
+            # swap (see table/tailwind_js_pagination.html), so an htmx request must get
+            # exactly that container -- not the filter-pill bar and wrapper around it,
+            # or each click nests another copy of them inside the last one. They also
+            # carry a real href now, so a modified click (Ctrl/Cmd-click, middle-click)
+            # opens the same URL as a genuine non-htmx navigation, needing the full page.
             return ["table/single_table.html"]
         return [self.template_name]

@@ -43,8 +43,6 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
-    NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
-
     PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
 
     TESTING_CUSTOM_ACTIONS = (
@@ -55,6 +53,8 @@ class Flags(FlagInfo, Enum):
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
     EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
+
+    SLACK_NOTIFICATIONS = ("flag_slack_notifications", "Slack notifications channel", "", [], True)
 
     JSON_COLLECTION_LOADER = (
         "flag_json_collection_loader",

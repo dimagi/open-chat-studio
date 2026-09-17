@@ -18,17 +18,24 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from apps.documents.models import Collection
-from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
+from apps.events.models import (
+    EventActionType,
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
 from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
 from .utils import ServiceProvider
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -173,8 +180,10 @@ def get_provider_usages(provider) -> ProviderUsages:
     categories: list[UsageCategory] = []
     if chatbots:
         categories.append(UsageCategory(label="Chatbots", items=sorted(chatbots.values(), key=_display_key)))
-    for label in sorted(other_grouped):
-        categories.append(UsageCategory(label=label, items=sorted(other_grouped[label].values(), key=_display_key)))
+    categories.extend(
+        UsageCategory(label=label, items=sorted(other_grouped[label].values(), key=_display_key))
+        for label in sorted(other_grouped)
+    )
     categories.extend(trailing_categories)
 
     return ProviderUsages(provider=provider, categories=categories)
@@ -318,6 +327,7 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
     for trigger_qs in (
         StaticTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
         TimeoutTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
+        ScheduledTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
     ):
         for trigger in trigger_qs:
             raw_pipeline_id = trigger.action.params.get("pipeline_id")

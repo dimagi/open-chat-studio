@@ -122,6 +122,11 @@
               </div>
             </div>
           </div>
+          {% if selected_tags %}
+            <p class="text-xs text-gray-500">
+              {% blocktranslate count count=tag_match_count %}{{ count }} match{% plural %}{{ count }} matches{% endblocktranslate %}<span>{% if tag_context_count %}, {{ tag_context_count }} {% translate "for context" %}{% endif %}</span>
+            </p>
+          {% endif %}
         {% endif %}
       </div>
 

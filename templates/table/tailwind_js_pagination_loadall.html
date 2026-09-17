@@ -3,7 +3,9 @@
 {% comment %}
 Replaces prev/next paging with a single "Load all" action. The first page shows by
 default; one click re-requests page 1 at a page size covering every row, through the
-same full-container swap already used for pagination and sort clicks.
+same full-container morph swap already used for pagination and sort clicks (see
+table/tailwind_js_pagination.html) -- an outerHTML swap here would destroy the link
+being clicked and drop keyboard focus to <body>, same as #4425.
 {% endcomment %}
 
 {% block pagination %}
@@ -13,7 +15,8 @@ same full-container swap already used for pagination and sort clicks.
                hx-get="{{ request.path_info }}{% querystring table.prefixed_page_field=1 table.prefixed_per_page_field=table.paginator.count %}"
                hx-trigger="click"
                hx-target="closest div.table-container"
-               hx-swap="outerHTML">
+               hx-ext="morph"
+               hx-swap="morph">
                 {% translate "Load all" %}
             </a>
         </div>

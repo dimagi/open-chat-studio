@@ -7,11 +7,11 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SourceMaterial
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
-from apps.pipelines.nodes.nodes import LLMResponseWithPrompt, RouterNode
+from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     boolean_node,
@@ -206,6 +206,7 @@ class TestArchivingNodes:
         collection_index = CollectionFactory.create(
             is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
         )
+        source_material = SourceMaterialFactory.create()
 
         # Build the pipeline
         pipeline = PipelineFactory.create()
@@ -215,6 +216,7 @@ class TestArchivingNodes:
             params={
                 "collection_id": str(collection.id),
                 "collection_index_ids": [str(collection_index.id)],
+                "source_material_id": str(source_material.id),
             },
         )
         pipeline.create_new_version()
@@ -292,6 +294,39 @@ class TestArchivingNodes:
         frozen_media.refresh_from_db()
         assert frozen_media.is_archived is True
         assert working_media.is_archived is False
+
+    def test_archiving_one_node_version_leaves_a_shared_source_material_version_intact(self):
+        """REUSE_UNCHANGED can leave one version shared by two separately-published nodes."""
+        source_material = SourceMaterialFactory.create()
+
+        pipeline_a = PipelineFactory.create()
+        node_a = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline_a,
+            params={"source_material_id": str(source_material.id)},
+        )
+        node_a_version = node_a.create_new_version()
+        shared_version_id = node_a_version.params["source_material_id"]
+        assert shared_version_id != str(source_material.id), "pre-condition: first publish versions it"
+
+        pipeline_b = PipelineFactory.create()
+        node_b = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline_b,
+            params={"source_material_id": str(source_material.id)},
+        )
+        node_b_version = node_b.create_new_version()
+        assert node_b_version.params["source_material_id"] == shared_version_id, (
+            "pre-condition: unchanged content reuses the existing version rather than creating a new one"
+        )
+
+        node_a_version.archive()
+        shared_version = SourceMaterial.objects.get(id=shared_version_id)
+        assert shared_version.is_archived is False, "node_b_version still references this version"
+
+        node_b_version.archive()
+        shared_version.refresh_from_db()
+        assert shared_version.is_archived is True
 
 
 class TestPipeline:
@@ -413,40 +448,6 @@ class TestUpdateNodesFromData:
         assert node.type == "RenderTemplate"
         assert node.label == "Template"
         assert node.params["template_string"] == "{{ input }}"
-
-    def test_position_is_written_to_the_row(self):
-        """A mapping entry's position lands on the row's position columns (floats kept
-        verbatim); the columns are the authoritative layout source for reads (ADR-0049)."""
-        pipeline = PipelineFactory.create()
-        pipeline.data = {"edges": []}
-        pipeline.update_nodes_from_data(
-            {"n1": content_flow_node("n1", "StartNode", params={"name": "start"}, position={"x": 10.7, "y": -3.2})}
-        )
-
-        node = Node.objects.get(pipeline=pipeline, flow_id="n1")
-        assert node.position_x == 10.7
-        assert node.position_y == -3.2
-        assert node.position == {"x": 10.7, "y": -3.2}
-
-    @pytest.mark.parametrize(
-        "position",
-        [
-            pytest.param({}, id="absent"),
-            pytest.param({"x": "abc", "y": 2}, id="non-numeric"),
-            pytest.param({"x": 1}, id="missing-axis"),
-        ],
-    )
-    def test_unusable_position_is_not_written(self, position):
-        """Raw import files bypass wire validation; a bad position must not crash the
-        save or write garbage — the row keeps its previous position columns."""
-        pipeline = PipelineFactory.create()
-        pipeline.data = {"edges": []}
-        pipeline.update_nodes_from_data(
-            {"n1": content_flow_node("n1", "StartNode", params={"name": "start"}, position=position)}
-        )
-
-        node = Node.objects.get(pipeline=pipeline, flow_id="n1")
-        assert node.position is None
 
     @pytest.mark.parametrize(
         "make_entry",
@@ -669,18 +670,6 @@ class TestLayoutOnlyData:
         assert template_node["data"]["type"] == "RenderTemplate"
         assert template_node["data"]["params"]["template_string"] == template["params"]["template_string"]
 
-    def test_flow_data_defaults_position_to_origin_when_row_not_backfilled(self):
-        """An unpositioned row must serve a real coordinate pair — react-flow does arithmetic
-        on position.x/y, so an empty dict yields NaN layout that persists on the next save."""
-        start, end = start_node(), end_node()
-        pipeline = create_pipeline_model([start, end])
-        # create_pipeline_model does not carry positions, so the rows stay unpositioned
-        assert pipeline.node_set.get(flow_id=start["id"]).position is None
-
-        nodes_by_id = {node["id"]: node for node in pipeline.flow_data["nodes"]}
-
-        assert nodes_by_id[start["id"]]["position"] == {"x": 0, "y": 0}
-
     def test_data_without_positions_serves_node_content_from_rows(self):
         start, template, end = start_node(), render_template_node(), end_node()
         pipeline = create_pipeline_model([start, template, end])
@@ -816,9 +805,7 @@ class TestPipelineValidation:
                 "sourceHandle": "output_0",
             },
         ]
-        flow_nodes = []
-        for node in nodes:
-            flow_nodes.append({"id": node["id"], "data": node})
+        flow_nodes = [{"id": node["id"], "data": node} for node in nodes]
 
         pipeline = PipelineFactory.create()
         layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
@@ -827,14 +814,21 @@ class TestPipelineValidation:
         assert not has_errors(pipeline.validate())
 
 
-@pytest.mark.parametrize(
-    ("node_type", "param_name", "expected"),
-    [
-        pytest.param(LLMResponseWithPrompt.__name__, "llm_provider_id", True, id="declared"),
-        pytest.param(LLMResponseWithPrompt.__name__, "route_key", False, id="not-declared"),
-        pytest.param(RouterNode.__name__, "prompt", True, id="declared-on-other-type"),
-        pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
-    ],
-)
-def test_node_has_parameter(node_type, param_name, expected):
-    assert Node(type=node_type).has_parameter(param_name) is expected
+class TestNodeDisplayName:
+    """The auto-assigned name is the node's own flow id, which is an address rather than something a
+    person chose, so it reads as no name at all.
+    """
+
+    @pytest.mark.parametrize(
+        ("params", "expected"),
+        [
+            pytest.param({"name": "Greeter"}, "Greeter", id="named"),
+            pytest.param(
+                {"name": "LLMResponseWithPrompt-a1b2c"}, "LLMResponseWithPrompt", id="named-after-its-flow-id"
+            ),
+            pytest.param({}, "LLMResponseWithPrompt", id="unnamed"),
+        ],
+    )
+    def test_display_name(self, params, expected):
+        node = Node(flow_id="LLMResponseWithPrompt-a1b2c", type="LLMResponseWithPrompt", params=params)
+        assert node.display_name == expected

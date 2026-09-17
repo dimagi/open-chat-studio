@@ -5,7 +5,11 @@ from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from apps.web.superuser_utils import apply_temporary_superuser_access, has_temporary_superuser_access
+from apps.web.superuser_utils import (
+    TooManyElevatedPrivileges,
+    apply_temporary_superuser_access,
+    has_temporary_superuser_access,
+)
 
 
 class TeamAccessDenied(Http404):
@@ -13,8 +17,6 @@ class TeamAccessDenied(Http404):
 
     See 404.html.
     """
-
-    pass
 
 
 # Marker attribute stamped on views wrapped by the team-auth decorators below.
@@ -71,7 +73,11 @@ def check_superuser_team_access(request, team_slug):
             return True
         if settings.DEBUG:
             # allow superusers to access any team in DEBUG mode
-            apply_temporary_superuser_access(request, team_slug)
-            return True
+            try:
+                apply_temporary_superuser_access(request, team_slug)
+            except TooManyElevatedPrivileges:
+                pass
+            else:
+                return True
 
     raise TeamAccessDenied

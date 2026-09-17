@@ -8,16 +8,6 @@
   {% endif %}
 {% endblock page_head %}
 
-{% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-    <ul>
-      <li><a href="{% url 'evaluations:home' request.team.slug %}">Evaluations</a></li>
-      <li><a href="{% url 'evaluations:evaluation_runs_home' request.team.slug evaluation_run.config_id %}">{{ evaluation_run.config.name }} Runs</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Run {{ evaluation_run.id }}</li>
-    </ul>
-  </div>
-{% endblock breadcrumbs %}
-
 {% block app %}
   <div class="py-8">
     {% url 'evaluations:edit' request.team.slug evaluation_run.config.id as config_url %}
@@ -142,19 +132,21 @@
                 {% endfor %}
               </div>
             </div>
-            <div>
-              <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Generation chatbot</div>
-              {% if evaluation_run.generation_experiment %}
-                <div class="flex items-center gap-1">
-                  {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
-                  {% if evaluation_run.generation_experiment.version_display %}
-                    <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
-                  {% endif %}
-                </div>
-              {% else %}
-                <span class="text-sm text-base-content/40">None configured</span>
-              {% endif %}
-            </div>
+            {% if not is_session_mode %}
+              <div>
+                <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Generation chatbot</div>
+                {% if evaluation_run.generation_experiment %}
+                  <div class="flex items-center gap-1">
+                    {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
+                    {% if evaluation_run.generation_experiment.version_display %}
+                      <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <span class="text-sm text-base-content/40">None configured</span>
+                {% endif %}
+              </div>
+            {% endif %}
             {% if evaluation_run.error_message %}
               <div class="w-full">
                 <div class="text-xs uppercase tracking-wide text-base-content/60 mb-1">Error</div>

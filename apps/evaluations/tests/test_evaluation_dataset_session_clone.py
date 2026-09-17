@@ -210,6 +210,37 @@ def test_create_messages_from_sessions_includes_history():
     assert eval_messages[3].full_history == "assistant: session2 message0 ai"
 
 
+@pytest.mark.parametrize(
+    ("history", "num_exchanges", "expected"),
+    [
+        pytest.param([], 3, "", id="empty-history"),
+        pytest.param(
+            [
+                {"message_type": ChatMessageType.HUMAN, "content": "hi"},
+                {"message_type": ChatMessageType.AI, "content": "hello"},
+            ],
+            3,
+            "user: hi\nassistant: hello",
+            id="fewer-entries-than-requested",
+        ),
+        pytest.param(
+            [
+                {"message_type": ChatMessageType.HUMAN, "content": "one"},
+                {"message_type": ChatMessageType.AI, "content": "two"},
+                {"message_type": ChatMessageType.HUMAN, "content": "three"},
+                {"message_type": ChatMessageType.AI, "content": "four"},
+            ],
+            1,
+            "user: one\nassistant: two",
+            id="truncates-to-requested-exchanges",
+        ),
+    ],
+)
+def test_history_preview(history, num_exchanges, expected):
+    message = EvaluationMessage(history=history)
+    assert message.history_preview(num_exchanges=num_exchanges) == expected
+
+
 @pytest.mark.django_db()
 def test_create_messages_from_sessions_includes_comments(team_with_users):
     session_1 = ExperimentSessionFactory.create(team=team_with_users)

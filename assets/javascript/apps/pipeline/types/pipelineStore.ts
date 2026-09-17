@@ -1,4 +1,16 @@
 import {Connection, Edge, Node, OnEdgesChange, OnNodesChange, ReactFlowInstance} from "reactflow";
+import {NodeData} from "./nodeParams";
+
+/**
+ * A node about to be dropped on the canvas. `addNode` assigns the final id and position,
+ * so neither is meaningful on the way in.
+ */
+export type NewNode = {
+  id?: string;
+  type?: string;
+  position: { x: number; y: number };
+  data: NodeData & { id?: string };
+};
 
 export type PipelineStoreType = {
   reactFlowInstance: ReactFlowInstance | null;
@@ -19,11 +31,13 @@ export type PipelineStoreType = {
   deleteEdge: (edgeId: string | Array<string>) => void;
   onConnect: (connection: Connection) => void;
   addNode: (
-    node: any,
+    node: NewNode,
     position: { x: number; y: number; paneX?: number; paneY?: number }
   ) => void;
   resetFlow: (flow: {
     nodes: Node[];
     edges: Edge[];
   }) => void;
+  undoLastChange: () => void;
+  redoLastChange: () => void;
 };

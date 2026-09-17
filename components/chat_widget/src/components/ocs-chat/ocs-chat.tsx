@@ -36,9 +36,18 @@ interface SessionStorageData {
   sessionId?: string;
   messages: ChatMessage[];
   sessionToken?: string;
+  sessionTokenExpiresAt?: string;
 }
 
 type PersistenceMode = 'off' | 'local' | 'tab';
+
+function setOrRemoveItem(storage: Storage, key: string, value?: string): void {
+  if (value) {
+    storage.setItem(key, value);
+  } else {
+    storage.removeItem(key);
+  }
+}
 
 @Component({
   tag: 'open-chat-studio-widget',
@@ -130,7 +139,8 @@ export class OcsChat {
   /**
    * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel
    * requires one. Mint it in the host application's backend and return it here;
-   * the widget asks once per session start and never writes one to local storage.
+   * the widget asks once per session start, again whenever the session token is
+   * about to expire and must be renewed, and never writes one to local storage.
    * `forceRefresh` is set when the previous token was rejected. Being
    * a function, this is a JavaScript property with no HTML attribute equivalent.
    */
@@ -343,6 +353,7 @@ export class OcsChat {
   private internalPageContext?: Record<string, any>;
   private sessionEpoch: number = 0;
   private currentSessionToken?: string;
+  private currentSessionTokenExpiresAt?: string;
   @Element() host: HTMLElement;
 
   /**
@@ -377,11 +388,11 @@ export class OcsChat {
     } else {
       if (this.isStorageAvailable()) {
         // Always try to load existing session if storage is available
-        const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
+        const { sessionId, messages, sessionToken, sessionTokenExpiresAt } = this.loadSessionFromStorage();
         if (sessionId && messages) {
           this.activeSessionId = sessionId;
           this.messages = messages;
-          this.applySessionToken(sessionToken);
+          this.applySessionToken(sessionToken, sessionTokenExpiresAt);
         }
       }
     }
@@ -458,9 +469,16 @@ export class OcsChat {
     );
   }
 
-  private applySessionToken(token?: string): void {
+  private applySessionToken(token?: string, expiresAt?: string | null): void {
     this.currentSessionToken = token;
-    this.chatService?.setSessionToken(token);
+    this.currentSessionTokenExpiresAt = token && expiresAt ? expiresAt : undefined;
+    this.chatService?.setSessionToken(token, expiresAt);
+  }
+
+  /** The service renewed the token itself; record it so a reload resumes with the live one. */
+  private handleSessionTokenRenewed(token: string, expiresAt: string): void {
+    this.applySessionToken(token, expiresAt);
+    this.saveSessionTokenToStorage();
   }
 
   private getChatService(): ChatSessionService {
@@ -473,7 +491,9 @@ export class OcsChat {
         taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
         messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
         sessionToken: this.currentSessionToken,
+        sessionTokenExpiresAt: this.currentSessionTokenExpiresAt,
         authTokenProvider: this.authTokenProvider,
+        onSessionTokenRenewed: (token, expiresAt) => this.handleSessionTokenRenewed(token, expiresAt),
       });
     }
     return this.chatService;
@@ -756,7 +776,7 @@ export class OcsChat {
       const data = await this.getChatService().startSession(requestBody);
       if (epoch !== this.sessionEpoch) return;
       this.activeSessionId = data.session_id;
-      this.applySessionToken(data.session_token ?? undefined);
+      this.applySessionToken(data.session_token ?? undefined, data.expires_at);
       this.saveSessionToStorage();
       this.dispatchWidgetEvent('ocs:session:started', { sessionId: this.activeSessionId });
 
@@ -823,12 +843,14 @@ export class OcsChat {
 
     this.isUploadingFiles = true;
     try {
+      const service = this.getChatService();
+      const sessionId = this.activeSessionId;
       const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
         apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
-        sessionId: this.activeSessionId,
+        sessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
-        headers: this.getChatService().getUploadHeaders(),
+        send: (url, body) => service.sessionFetch(sessionId, url, () => ({ method: 'POST', headers: service.getUploadHeaders(), body })),
       });
       this.selectedFiles = uploadResult.selectedFiles;
       if (uploadResult.consent) {
@@ -1873,6 +1895,7 @@ export class OcsChat {
       lastActivity: `ocs-chat-activity-${this.chatbotId}`,
       visible: `ocs-chat-visible-${this.chatbotId}`,
       sessionToken: `ocs-chat-token-${this.chatbotId}`,
+      sessionTokenExpiresAt: `ocs-chat-token-expires-${this.chatbotId}`,
       consent: `ocs-chat-consent-${this.chatbotId}`,
     };
   }
@@ -1887,16 +1910,31 @@ export class OcsChat {
       if (this.activeSessionId) {
         storage.setItem(keys.sessionId, this.activeSessionId);
         storage.setItem(keys.lastActivity, new Date().toISOString());
-        if (this.currentSessionToken) {
-          storage.setItem(keys.sessionToken, this.currentSessionToken);
-        } else {
-          storage.removeItem(keys.sessionToken);
-        }
+        this.writeSessionTokenKeys(storage);
       }
       storage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
       console.warn('Failed to save chat session to storage:', error);
     }
+  }
+
+  /** Persist only the token pair: a renewal is not activity and must not touch `lastActivity`. */
+  private saveSessionTokenToStorage(): void {
+    const storage = this.getStorage();
+    if (!storage || this.isSessionBound() || !this.activeSessionId) {
+      return;
+    }
+    try {
+      this.writeSessionTokenKeys(storage);
+    } catch (error) {
+      console.warn('Failed to save chat session to storage:', error);
+    }
+  }
+
+  private writeSessionTokenKeys(storage: Storage): void {
+    const keys = this.getStorageKeys();
+    setOrRemoveItem(storage, keys.sessionToken, this.currentSessionToken);
+    setOrRemoveItem(storage, keys.sessionTokenExpiresAt, this.currentSessionTokenExpiresAt);
   }
 
   private loadSessionFromStorage(): SessionStorageData {
@@ -1933,8 +1971,9 @@ export class OcsChat {
       }
 
       const sessionToken = storage.getItem(keys.sessionToken) ?? undefined;
+      const sessionTokenExpiresAt = storage.getItem(keys.sessionTokenExpiresAt) ?? undefined;
 
-      return { sessionId, messages, sessionToken };
+      return { sessionId, messages, sessionToken, sessionTokenExpiresAt };
     } catch (error) {
       // fall back to starting a new session
       console.warn('Failed to load chat session from storage, starting new session:', error);
@@ -2031,6 +2070,7 @@ export class OcsChat {
       store.removeItem(keys.lastActivity);
       store.removeItem(keys.visible);
       store.removeItem(keys.sessionToken);
+      store.removeItem(keys.sessionTokenExpiresAt);
     } catch (error) {
       console.warn('Failed to clear chat session from storage:', error);
     }

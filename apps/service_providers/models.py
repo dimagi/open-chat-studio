@@ -728,11 +728,11 @@ class MessagingProviderType(models.TextChoices):
         """Finds all provider types supporting the platform specified by `platform`"""
         from . import messaging_service  # noqa: PLC0415 - lazy: optional messaging provider deps
 
-        provider_types = []
-        for service in messaging_service.MessagingService.__subclasses__():
-            if platform in service.supported_platforms:
-                provider_types.append(MessagingProviderType(service._type))
-        return provider_types
+        return [
+            MessagingProviderType(service._type)
+            for service in messaging_service.MessagingService.__subclasses__()
+            if platform in service.supported_platforms
+        ]
 
 
 @audit_fields(*model_audit_fields.MESSAGING_PROVIDER_FIELDS, audit_special_queryset_writes=True)

@@ -5,10 +5,12 @@ from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views import View
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
+from ..breadcrumbs import queues_crumbs
 from ..forms import build_annotation_form
 from ..models import (
     Annotation,
@@ -105,6 +107,10 @@ def _build_annotations_context(item, user, queue):
     ]
 
 
+def _annotate_crumbs(team_slug, queue):
+    return [*queues_crumbs(team_slug, queue), (_("Annotate"), None)]
+
+
 class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.add_annotation"
 
@@ -136,6 +142,7 @@ class AnnotateQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": _annotate_crumbs(request.team.slug, queue),
             },
         )
 
@@ -183,6 +190,7 @@ class AnnotateItem(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": _annotate_crumbs(request.team.slug, queue),
             },
         )
 
@@ -232,6 +240,7 @@ class SubmitAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                     "progress": progress,
                     "item_content": item_content,
                     "active_tab": "annotation_queues",
+                    "breadcrumbs": _annotate_crumbs(request.team.slug, queue),
                 },
             )
 
@@ -274,6 +283,7 @@ class EditAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": _annotate_crumbs(request.team.slug, queue),
             },
         )
 
@@ -305,6 +315,7 @@ class EditAnnotation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 "progress": progress,
                 "item_content": item_content,
                 "active_tab": "annotation_queues",
+                "breadcrumbs": _annotate_crumbs(request.team.slug, queue),
             },
         )
 

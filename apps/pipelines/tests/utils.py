@@ -1,15 +1,29 @@
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from langgraph.graph.state import CompiledStateGraph
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, react_flow_node_type, split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, split_flow_data
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
+from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes import nodes
 from apps.pipelines.nodes.nodes import ToolConfigModel
 from apps.utils.factories.pipelines import PipelineFactory
+
+# ``Node.type`` is graph data, so it can name any module-level attribute of
+# ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
+# each must be reported like a removed type rather than crashing whatever the resolved object is
+# then handed to.
+NON_NODE_ATTRIBUTES = [
+    pytest.param("logger", id="module-level-instance"),
+    pytest.param("json", id="imported-module"),
+    pytest.param("send_email_from_pipeline", id="module-level-function"),
+    pytest.param("BaseModel", id="class-that-is-not-a-node"),
+    pytest.param("END", id="string-constant"),
+]
 
 
 def _make_edges(nodes) -> list[dict]:
@@ -72,9 +86,7 @@ def create_pipeline_model(
         edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]
     if edges and isinstance(edges[0], str):
         edges = _edges_from_strings(edges, nodes)  # ty: ignore[invalid-assignment]
-    flow_nodes = []
-    for node in nodes:
-        flow_nodes.append({"id": node["id"], "data": node})
+    flow_nodes = [{"id": node["id"], "data": node} for node in nodes]
     layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
     pipeline.data = layout.model_dump()
     pipeline.update_nodes_from_data(node_data)
@@ -87,7 +99,7 @@ def content_flow_node(
     """A content-carrying ``FlowNode``, ready to pass to ``Pipeline.update_nodes_from_data``."""
     return FlowNode(
         id=flow_id,
-        type=react_flow_node_type(node_type),
+        type=NodeType(node_type).react_flow_type,
         position=position or {},
         data=FlowNodeData(id=flow_id, type=node_type, label=label, params=params or {}),
     )
@@ -208,12 +220,10 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str], n
         {
             "type": nodes.RouterNode.__name__,
             "params": {
-                **{
-                    "prompt": "You are a router",
-                    "keywords": keywords,
-                    "llm_provider_id": provider_id,
-                    "llm_provider_model_id": provider_model_id,
-                },
+                "prompt": "You are a router",
+                "keywords": keywords,
+                "llm_provider_id": provider_id,
+                "llm_provider_model_id": provider_model_id,
                 **kwargs,
             },
         },

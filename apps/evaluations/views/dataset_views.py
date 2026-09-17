@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView
@@ -24,6 +25,7 @@ from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chat.models import ChatMessage
+from apps.evaluations.breadcrumbs import datasets_crumbs
 from apps.evaluations.dataset_clone import (
     MESSAGE_MODE_ALL_MATCHING_LIMIT,
     dispatch_clone_task,
@@ -143,6 +145,7 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
+        context["breadcrumbs"] = [*datasets_crumbs(self.request.team.slug), (self.object.name, None)]
         context["celery_job_id"] = self.object.job_id
         context["auto_population_rules_table"] = DatasetAutoPopulationRuleTable(
             self.object.auto_population_rules.select_related("source_experiment"),
@@ -220,7 +223,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        context = get_filter_context_data(
+        return get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
             filter_class=ExperimentSessionFilter,
@@ -228,11 +231,11 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
-        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
+        context["breadcrumbs"] = [*datasets_crumbs(self.request.team.slug), (_("Create"), None)]
         context["message_mode_all_matching_limit"] = MESSAGE_MODE_ALL_MATCHING_LIMIT
         return context
 
@@ -471,8 +474,7 @@ def update_message(request, team_slug, message_id):
         response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
-        response = reswap(response, "outerHTML")
-        return response
+        return reswap(response, "outerHTML")
     return HttpResponse("", status=200)
 
 
@@ -693,7 +695,7 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:
-        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
+        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {e!s}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 
@@ -752,6 +754,10 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
                 "dataset": dataset,
                 "form": form,
                 "active_tab": "evaluation_datasets",
+                "breadcrumbs": [
+                    *datasets_crumbs(request.team.slug, dataset),
+                    (_("Import from Annotation Queue"), None),
+                ],
             },
         )
 
@@ -883,6 +889,7 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 "dataset": dataset,
                 "sessions_count_url": count_url,
                 "active_tab": "evaluation_datasets",
+                "breadcrumbs": [*datasets_crumbs(team_slug, dataset), (_("Add Sessions"), None)],
                 "message_mode_all_matching_limit": MESSAGE_MODE_ALL_MATCHING_LIMIT,
                 **filter_context,
             },

@@ -100,6 +100,12 @@ if [[ "$statement" == *"SELECT 1 FROM pg_database"* ]]; then
     exit 0
 fi
 
+if [[ "$statement" == *"datname ~ '^test_"* ]]; then
+    pattern=$(tr '\n' ' ' <<< "$statement" | sed -E "s/.*datname ~ '([^']*)'.*/\1/")
+    grep -E "$pattern" "$registry" || true
+    exit 0
+fi
+
 if [[ "$statement" == *"FROM pg_database"* ]]; then
     # Newest first, matching the real ordering by object id.
     grep '^ocs_tmpl_' "$registry" | tac || true
@@ -1029,6 +1035,31 @@ def test_teardown_removes_only_the_worktree_resources(
     )
     assert lookup.returncode != 0
     assert str(redis_database) not in lookup.stdout
+
+
+def test_teardown_removes_the_databases_a_test_run_left_behind(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _allocate_redis_database(worktree, env, "codex_a1b2")
+    # The worktree's own database, the test databases pytest-django and pytest-xdist
+    # derive from it, and a neighbouring worktree whose name this one is a prefix of.
+    Path(env["OCS_TEST_DATABASE_REGISTRY"]).write_text(
+        "codex_a1b2\n"
+        "test_codex_a1b2\n"
+        "test_codex_a1b2_gw0\n"
+        "test_codex_a1b2_gw1\n"
+        "codex_a1b2_other\n"
+        "test_codex_a1b2_other\n"
+    )
+
+    _run(TEARDOWN_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    for database in ("codex_a1b2", "test_codex_a1b2", "test_codex_a1b2_gw0", "test_codex_a1b2_gw1"):
+        assert f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)' in command_output
+    for database in ("codex_a1b2_other", "test_codex_a1b2_other"):
+        assert f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)' not in command_output
 
 
 def test_teardown_refuses_to_clean_the_root_checkout(

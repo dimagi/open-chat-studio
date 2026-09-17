@@ -47,7 +47,7 @@ def test_output_message_tagging(pipeline: Pipeline, session: ExperimentSession):
 
     tags = list(result.tags.all())
     version_tag = (f"v{session.experiment.version_number}-unreleased", TagCategories.EXPERIMENT_VERSION.value)
-    _assert_tags(tags, output_message_tags + [version_tag])
+    _assert_tags(tags, [*output_message_tags, version_tag])
 
 
 @pytest.mark.django_db()

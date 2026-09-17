@@ -4,7 +4,6 @@ import importlib
 import itertools
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Iterable
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -38,6 +37,8 @@ from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from apps.evaluations.evaluators import EvaluatorResult
     from apps.evaluations.usage import EvaluatorUsageContext
 
@@ -293,6 +294,15 @@ class EvaluationMessage(BaseModel):
             additional_kwargs={"id": self.id, "chat_message_id": self.expected_output_chat_message_id},
         )
 
+    def _format_history_lines(self, entries) -> list[str]:
+        lines = []
+        for message in entries:
+            message_type = message.get("message_type", "")
+            content = message.get("content", "")
+            display_type = ChatMessageType(message_type).role
+            lines.append(f"{display_type}: {content}")
+        return lines
+
     @property
     def full_history(self) -> str:
         """
@@ -301,15 +311,13 @@ class EvaluationMessage(BaseModel):
         """
         if not self.history:
             return ""
+        return "\n".join(self._format_history_lines(self.history))
 
-        history_lines = []
-        for message in self.history:
-            message_type = message.get("message_type", "")
-            content = message.get("content", "")
-            display_type = ChatMessageType(message_type).role
-            history_lines.append(f"{display_type}: {content}")
-
-        return "\n".join(history_lines)
+    def history_preview(self, num_exchanges: int = 3) -> str:
+        """First `num_exchanges` human/AI turns, for a compact session-mode row preview."""
+        if not self.history:
+            return ""
+        return "\n".join(self._format_history_lines(self.history[: num_exchanges * 2]))
 
     def as_result_dict(self) -> dict:
         """Returns a dict representation to be stored in any evaluator result"""

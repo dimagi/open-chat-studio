@@ -84,7 +84,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform, None)
 
-        return cast(dict[Self, bool], platform_availability)
+        return cast("dict[Self, bool]", platform_availability)
 
     @classmethod
     def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:
@@ -295,7 +295,7 @@ class ExperimentChannel(BaseTeamModel):
         blank=True,
         verbose_name="Session lifetime",
         help_text=(
-            "How long a chat session stays usable after it is created. Leave blank to use the "
+            "How long each session token issued for this channel stays usable. Leave blank to use the "
             "system default. Format: <code>HH:MM:SS</code>, or <code>D HH:MM:SS</code> for days "
             "(e.g. <code>12:00:00</code> for 12 hours, <code>2 00:00:00</code> for 2 days)."
         ),
