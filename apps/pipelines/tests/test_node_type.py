@@ -43,6 +43,8 @@ class TestNullObject:
         assert unresolvable.node_class is None
         assert unresolvable.declared_params == frozenset()
         assert unresolvable.declares("name") is False
+        assert unresolvable.declared_field("name") is None
+        assert unresolvable.default_params() == {}
         assert unresolvable.schema is None
         assert unresolvable.is_router is False
         assert unresolvable.label == node_type
@@ -106,6 +108,36 @@ class TestIsRouter:
     )
     def test_only_router_types_branch(self, node_type, expected):
         assert NodeType(node_type).is_router is expected
+
+
+class TestDeclaredField:
+    def test_a_declared_param_carries_its_field(self):
+        field = NodeType("StaticRouterNode").declared_field("keywords")
+        assert field is not None
+        assert field.annotation is not None
+
+    @pytest.mark.parametrize(
+        ("node_type", "param_name"),
+        [
+            pytest.param("LLMResponseWithPrompt", "route_key", id="not-declared"),
+            pytest.param("GhostNode", "name", id="unknown-type"),
+        ],
+    )
+    def test_anything_else_has_no_field(self, node_type, param_name):
+        assert NodeType(node_type).declared_field(param_name) is None
+
+
+class TestDefaultParams:
+    def test_defaults_cover_the_optional_params_and_leave_out_the_required_ones(self):
+        defaults = NodeType("StaticRouterNode").default_params()
+
+        assert "keywords" in defaults
+        # `route_key` is required, so there is no value to start a new node from.
+        assert "route_key" not in defaults
+
+    def test_every_default_is_a_param_the_type_declares(self):
+        node_type = NodeType("LLMResponseWithPrompt")
+        assert set(node_type.default_params()) <= node_type.declared_params
 
 
 class TestSchema:

@@ -36,6 +36,8 @@ from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 
 if TYPE_CHECKING:
+    from pydantic.fields import FieldInfo
+
     from apps.pipelines.models import Node
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 
@@ -82,6 +84,30 @@ class NodeType:
     def declares(self, param_name: str) -> bool:
         """Whether this type declares ``param_name`` as a param."""
         return param_name in self.declared_params
+
+    def declared_field(self, param_name: str) -> "FieldInfo | None":
+        """What this type declares *about* ``param_name`` -- its annotation, default and exclusions.
+
+        ``None`` where :meth:`declares` is false, so a caller reading one param's declaration asks
+        here rather than reaching into the node class for its fields.
+        """
+        node_class = self.node_class
+        return node_class.model_fields.get(param_name) if node_class is not None else None
+
+    def default_params(self) -> dict:
+        """The params a new node of this type starts with: every declared param that has a default.
+
+        Required params are left out -- they have no value to start from, and the caller supplies
+        them. An unresolvable type starts with none.
+        """
+        node_class = self.node_class
+        if node_class is None:
+            return {}
+        return {
+            name: field.get_default(call_default_factory=True)
+            for name, field in node_class.model_fields.items()
+            if not field.is_required()
+        }
 
     @property
     def schema(self) -> "NodeSchema | None":

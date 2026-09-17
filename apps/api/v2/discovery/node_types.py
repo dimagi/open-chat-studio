@@ -4,13 +4,12 @@
 import hashlib
 import json
 from functools import cache
-from typing import cast
 
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource
+from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
@@ -49,13 +48,14 @@ def get_node_type_schema(node_type: str) -> dict:
     raise unknown_node_type(node_type)
 
 
-def get_node_class(node_type: str) -> type[BasePipelineNode]:
-    """The node class behind a type this API publishes, or :func:`get_node_type_schema`'s 404.
+def served_node_type(node_type: str) -> NodeType:
+    """The named type this API publishes, or :func:`get_node_type_schema`'s 404.
 
-    The served types are exactly the resolvable node classes, so past the lookup this cannot be None.
+    The lookup is the point: it refuses a name the API does not serve before the caller asks the
+    type anything.
     """
     get_node_type_schema(node_type)
-    return cast(type[BasePipelineNode], NodeType(node_type).node_class)
+    return NodeType(node_type)
 
 
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:

@@ -11,19 +11,20 @@ from typing import Any
 
 from django.db import DatabaseError
 
-from apps.pipelines.nodes.base import BasePipelineNode, UiSchema
+from apps.pipelines.node_type import NodeType
+from apps.pipelines.nodes.base import UiSchema
 
 
-def writable_params(node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, Any]:
+def writable_params(node_type: NodeType, params: dict[str, Any]) -> dict[str, Any]:
     """``params`` narrowed to the ones a client may set on this type.
 
     Drops a name the type does not declare -- it would be stored and then ignored at run time -- and
     one the discovery API withholds via ``UiSchema.api_exclude``: never offered, so not settable.
     """
-    return {name: value for name, value in params.items() if _is_writable(node_class, name)}
+    return {name: value for name, value in params.items() if _is_writable(node_type, name)}
 
 
-def node_params(node_class: type[BasePipelineNode], node_id: str, merged: dict[str, Any]) -> dict[str, Any]:
+def node_params(node_type: NodeType, node_id: str, merged: dict[str, Any]) -> dict[str, Any]:
     """``merged`` as the type defines it: normalised where it parses, filtered where it does not.
 
     Validation reports rather than refuses — a node that does not parse is stored and its errors come
@@ -31,7 +32,10 @@ def node_params(node_class: type[BasePipelineNode], node_id: str, merged: dict[s
     builder saves one. ``Pipeline.validate`` tolerates every way a node can fail to parse, so this
     cannot wedge a later read.
     """
-    declared = {name: value for name, value in merged.items() if name in node_class.model_fields}
+    declared = {name: value for name, value in merged.items() if node_type.declares(name)}
+    node_class = node_type.node_class
+    if node_class is None:
+        return declared
     try:
         model = node_class.model_validate({**declared, "node_id": node_id, "django_node": None})
     except DatabaseError:
@@ -43,20 +47,20 @@ def node_params(node_class: type[BasePipelineNode], node_id: str, merged: dict[s
     return model.model_dump(mode="json")
 
 
-def is_list_param(node_class: type[BasePipelineNode], name: str) -> bool:
+def is_list_param(node_type: NodeType, name: str) -> bool:
     """Whether the type declares this param list-valued.
 
     By the declaration, not the value: reading a one-element array as a list is what let a wrapped
     scalar id pass the resource check.
     """
-    field = node_class.model_fields.get(name)
+    field = node_type.declared_field(name)
     if field is None:
         return False
     return _is_list_annotation(field.annotation)
 
 
-def _is_writable(node_class: type[BasePipelineNode], name: str) -> bool:
-    field = node_class.model_fields.get(name)
+def _is_writable(node_type: NodeType, name: str) -> bool:
+    field = node_type.declared_field(name)
     if field is None:
         return False
     if field.exclude:
