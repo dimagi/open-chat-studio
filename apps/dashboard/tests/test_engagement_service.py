@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -171,3 +171,42 @@ class TestGetEngagementFrequencyData:
         cached = DashboardCache.get_cached_data(team, f"engagement_frequency_{_cache_key({})}")
 
         assert cached == frequency
+
+
+@pytest.mark.django_db()
+class TestGetNewVsReturningData:
+    def test_classifies_new_and_returning_and_ignores_inactive_participants(self, team, experiment):
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        message_time = timezone.datetime(2026, 3, 3, 9, 0, tzinfo=ZoneInfo("UTC"))
+
+        new_participant = Participant.objects.create(team=team, platform="web", identifier="new@example.com")
+        Participant.objects.filter(id=new_participant.id).update(created_at=message_time)
+
+        returning_participant = Participant.objects.create(
+            team=team, platform="web", identifier="returning@example.com"
+        )
+        Participant.objects.filter(id=returning_participant.id).update(created_at=message_time - timedelta(days=30))
+
+        # Created inside the window but never sends a message - must not appear in either bucket.
+        Participant.objects.create(team=team, platform="web", identifier="idle@example.com")
+
+        new_session = _create_session(experiment, new_participant, team)
+        returning_session = _create_session(experiment, returning_participant, team)
+        _create_message(new_session, message_time)
+        _create_message(returning_session, message_time)
+
+        data = EngagementDashboardService(team).get_new_vs_returning_data(now=now)
+
+        week_key = (message_time.date() - timedelta(days=message_time.weekday())).isoformat()
+        matching_week = next(row for row in data if row["week"] == week_key)
+        assert matching_week["new"] == 1
+        assert matching_week["returning"] == 1
+        assert sum(row["new"] + row["returning"] for row in data) == 2
+
+    def test_result_is_cached(self, team):
+        service = EngagementDashboardService(team)
+        first = service.get_new_vs_returning_data()
+
+        cached = DashboardCache.get_cached_data(team, f"new_vs_returning_{_cache_key({})}")
+
+        assert cached == first

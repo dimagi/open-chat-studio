@@ -9,6 +9,7 @@ from django.db.models import QuerySet
 from django.db.models.functions import TruncWeek
 from django.utils import timezone as django_timezone
 
+from apps.experiments.models import Participant
 from apps.teams.models import Team
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.usage_metrics.filters import HUMAN_AUTHORED
@@ -125,6 +126,40 @@ class EngagementDashboardService:
             for weeks in activity[month].values():
                 buckets[WEEK_BUCKET_KEYS.get(weeks, "4_plus_weeks")] += 1
             data.append({"month": month.isoformat(), **buckets, "in_progress": month == current_month})
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
+
+    def get_new_vs_returning_data(self, now: datetime | None = None, **filters) -> list[dict[str, Any]]:
+        cache_key = f"new_vs_returning_{_cache_key(filters)}"
+        cached = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached is not None:
+            return cached
+
+        start, end, _months = trailing_window(now)
+        messages = _human_messages(self.team, start=start, end=end, filters=filters)
+        rows = (
+            messages.annotate(week=TruncWeek("created_at", tzinfo=TZ))
+            .values("chat__experiment_session__participant_id", "week")
+            .distinct()
+        )
+
+        weekly_participants: dict[date, set[int]] = {}
+        for row in rows:
+            week_start = bucket_date(row["week"], TZ)
+            weekly_participants.setdefault(week_start, set()).add(row["chat__experiment_session__participant_id"])
+
+        participant_ids = {pid for ids in weekly_participants.values() for pid in ids}
+        created_week = {
+            p.id: _week_start(p.created_at)
+            for p in Participant.objects.filter(team=self.team, id__in=participant_ids).only("id", "created_at")
+        }
+
+        data = []
+        for week in sorted(weekly_participants):
+            active_ids = weekly_participants[week]
+            new_count = sum(1 for pid in active_ids if created_week.get(pid) == week)
+            data.append({"week": week.isoformat(), "new": new_count, "returning": len(active_ids) - new_count})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
