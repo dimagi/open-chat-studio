@@ -417,3 +417,78 @@ def test_evaluator_interpolates_participant_data_and_session_state(get_llm_servi
     assert "Participant Ada is at step onboarding." in str(prompt_sent)
     # An unknown key resolves to "" rather than raising, as for {context.*}
     assert "Absent: []" in str(prompt_sent)
+
+
+def _run_single_message_evaluation(get_llm_service, llm_provider, llm_provider_model, response):
+    service = build_fake_llm_service(responses=[response])
+    # FakeLlm.calls is a class-level list shared by every instance
+    service.llm.calls = []
+    get_llm_service.return_value = service
+    evaluation_message = EvaluationMessageFactory.create(
+        input={"content": "How do I do kangaroo mother care?", "role": "human"},
+        output={"content": "I can't provide that.", "role": "ai"},
+        create_chat_messages=True,
+    )
+    llm_evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="rate the accuracy of {output.content}",
+        output_schema={"accuracy_result": {"type": "string", "description": "accurate or inaccurate"}},
+    )
+    evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
+    dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
+    config = cast("EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    run = EvaluationRun.objects.create(team=config.team, config=config)
+
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
+
+    return run.results.get()
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+@pytest.mark.parametrize(
+    ("response", "expected_text"),
+    [
+        pytest.param(
+            AIMessage(content="accuracy_result: inaccurate. The reply declined to answer."),
+            "accuracy_result: inaccurate. The reply declined to answer.",
+            id="prose-instead-of-tool-call",
+        ),
+        pytest.param(
+            AIMessage(content="", additional_kwargs={"refusal": "accuracy_result: inaccurate"}),
+            "accuracy_result: inaccurate",
+            id="openai-refusal-field",
+        ),
+    ],
+)
+def test_evaluator_stores_the_model_text_when_no_structured_result_is_returned(
+    get_llm_service, llm_provider, llm_provider_model, response, expected_text
+):
+    result = _run_single_message_evaluation(get_llm_service, llm_provider, llm_provider_model, response)
+
+    assert result.output == {"error": f"The model did not return structured output: {expected_text}"}
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_missing_structured_result_is_logged_as_a_warning_not_an_error(
+    get_llm_service, llm_provider, llm_provider_model
+):
+    with mock.patch("apps.evaluations.tasks.logger") as task_logger:
+        _run_single_message_evaluation(
+            get_llm_service, llm_provider, llm_provider_model, AIMessage(content="I can't help with that.")
+        )
+
+    task_logger.warning.assert_called_once()
+    task_logger.exception.assert_not_called()
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_missing_structured_result_is_not_retried(get_llm_service, llm_provider, llm_provider_model):
+    _run_single_message_evaluation(
+        get_llm_service, llm_provider, llm_provider_model, AIMessage(content="I can't help with that.")
+    )
+
+    assert len(get_llm_service.return_value.llm.get_calls()) == 1

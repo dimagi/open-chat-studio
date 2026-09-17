@@ -19,6 +19,7 @@ from apps.service_providers.llm_service.default_models import get_model_paramete
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
 from apps.service_providers.llm_service.retry import RATE_LIMIT_EXCEPTIONS
+from apps.service_providers.llm_service.structured_output import structured_output_runnable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 
@@ -120,7 +121,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     ) -> EvaluatorResult:
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
-        llm = self.get_chat_model().with_structured_output(output_model)
+        llm = structured_output_runnable(self.get_chat_model(), output_model)
 
         llm_with_retry = llm.with_retry(
             stop_after_attempt=3,

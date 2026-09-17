@@ -370,10 +370,11 @@ class TestPromptVariables:
             prompt=" ".join(f"{{{name}}}" for name in sorted(offered)),
             output_schema={},
         )
-        with patch.object(evaluators.LlmEvaluator, "get_chat_model") as get_chat_model:
-            get_chat_model.return_value.with_structured_output.return_value.with_retry.return_value.invoke.return_value = (  # noqa: E501
-                _StubResult()
-            )
+        with (
+            patch.object(evaluators.LlmEvaluator, "get_chat_model"),
+            patch.object(evaluators, "structured_output_runnable") as structured_output,
+        ):
+            structured_output.return_value.with_retry.return_value.invoke.return_value = _StubResult()
             evaluator.run(message, "a response")  # no KeyError => every offered variable is supplied
 
 

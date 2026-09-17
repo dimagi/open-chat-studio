@@ -50,6 +50,7 @@ from apps.evaluations.utils import (
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues
@@ -149,6 +150,10 @@ def _run_evaluator_on_message(
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
         output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
+    except NoStructuredOutputError as e:
+        logger.warning("Evaluator %s returned no structured output for message %s: %s", evaluator.id, message.id, e)
+        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        return
     except Exception as e:
         logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
         _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
