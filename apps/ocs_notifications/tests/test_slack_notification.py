@@ -172,6 +172,7 @@ class TestNotificationEventAbsoluteLinks:
             pytest.param("/a/team/bots/1/", True, id="relative-path"),
             pytest.param("https://traces.example.com/t/1", False, id="already-absolute"),
             pytest.param("//cdn.example.com/docs", False, id="protocol-relative"),
+            pytest.param("//[invalid", False, id="unparseable"),
         ],
     )
     def test_absolute_links(self, url, expand):
