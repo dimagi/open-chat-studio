@@ -21,7 +21,10 @@ class CeleryQueueCheck(HealthCheck):
     label: str
     queue: str
     app: celery.Celery = dataclasses.field(default_factory=app_or_default, repr=False)
-    timeout: datetime.timedelta = dataclasses.field(default=datetime.timedelta(seconds=1), repr=False)
+    #: Budget for each of the two broadcast RPCs below. One second is not enough when the broker is
+    #: busy, e.g. while a deploy restarts workers, and a slow reply is indistinguishable from no
+    #: worker at all.
+    timeout: datetime.timedelta = dataclasses.field(default=datetime.timedelta(seconds=3), repr=False)
 
     def run(self):
         timeout = self.timeout.total_seconds()
