@@ -279,7 +279,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     max_file_size_mb: ClassVar[int] = 16
 
     account_sid: str
-    auth_token: str
+    auth_token: pydantic.SecretStr
 
     TWILIO_CHANNEL_PREFIXES: ClassVar[dict[ChannelPlatform, str]] = {
         ChannelPlatform.WHATSAPP: "whatsapp",
@@ -295,7 +295,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     def client(self) -> "Client":
         from twilio.rest import Client  # noqa: PLC0415 - lazy: optional provider dep (twilio SDK)
 
-        return Client(self.account_sid, self.auth_token)
+        return Client(self.account_sid, self.auth_token.get_secret_value())
 
     @property
     def s3_client(self):
@@ -432,7 +432,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
         """Fetch raw bytes and content type for any inbound Twilio media (image, audio, etc.)."""
         if not message.media_url:
             raise ValueError("Cannot download Twilio media: message.media_url is empty")
-        auth = (self.account_sid, self.auth_token)
+        auth = (self.account_sid, self.auth_token.get_secret_value())
         response = httpx.get(message.media_url, auth=auth, follow_redirects=True, timeout=MEDIA_DOWNLOAD_TIMEOUT)
         response.raise_for_status()
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
@@ -472,13 +472,13 @@ class TurnIOService(HttpMediaDownloadMixin, MessagingService):
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
     supports_multimedia = True
 
-    auth_token: str
+    auth_token: pydantic.SecretStr
 
     @property
     def client(self) -> "TurnClient":
         from turn import TurnClient  # noqa: PLC0415 - lazy: optional provider dep (Turn SDK)
 
-        return TurnClient(token=self.auth_token)
+        return TurnClient(token=self.auth_token.get_secret_value())
 
     def send_text_message(
         self,
@@ -518,7 +518,7 @@ class TurnIOService(HttpMediaDownloadMixin, MessagingService):
         if message.media_url:
             response = httpx.get(
                 message.media_url,
-                headers={"Authorization": f"Bearer {self.auth_token}"},
+                headers={"Authorization": f"Bearer {self.auth_token.get_secret_value()}"},
                 follow_redirects=True,
                 timeout=MEDIA_DOWNLOAD_TIMEOUT,
             )
@@ -571,7 +571,7 @@ class SureAdhereService(MessagingService):
     supported_message_types = [MESSAGE_TYPES.TEXT]
 
     client_id: str
-    client_secret: str
+    client_secret: pydantic.SecretStr
     client_scope: str
     base_url: str
     auth_url: str
@@ -580,7 +580,7 @@ class SureAdhereService(MessagingService):
         auth_data = {
             "grant_type": "client_credentials",
             "client_id": self.client_id,
-            "client_secret": self.client_secret,
+            "client_secret": self.client_secret.get_secret_value(),
             "scope": self.client_scope,
         }
         response = httpx.post(self.auth_url, data=auth_data)
@@ -653,10 +653,10 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
     voice_replies_supported: ClassVar[bool] = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
     supports_multimedia: ClassVar[bool] = True
-    access_token: str
+    access_token: pydantic.SecretStr
     business_id: str
-    app_secret: str = ""
-    verify_token: str = ""
+    app_secret: pydantic.SecretStr = pydantic.SecretStr("")
+    verify_token: pydantic.SecretStr = pydantic.SecretStr("")
     template_language_code: str = "en"
 
     META_API_BASE_URL: ClassVar[str] = "https://graph.facebook.com/v25.0"
@@ -671,7 +671,7 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
     @property
     def _headers(self) -> dict:
         return {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": f"Bearer {self.access_token.get_secret_value()}",
             "Content-Type": "application/json",
         }
 
@@ -887,7 +887,7 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
         file_obj = BytesIO(file_data) if isinstance(file_data, bytes) else file_data
         response = httpx.post(
             url,
-            headers={"Authorization": f"Bearer {self.access_token}"},
+            headers={"Authorization": f"Bearer {self.access_token.get_secret_value()}"},
             data={"messaging_product": "whatsapp", "type": mime_type},
             files={"file": (filename, file_obj, mime_type)},
             timeout=self.META_API_TIMEOUT,
@@ -999,13 +999,15 @@ class SlackService(MessagingService):
         platform: ChannelPlatform,
         last_activity_at: datetime | None = None,
         thread_ts: str | None = None,
+        blocks: list[dict] | None = None,
         **kwargs,
     ):
-        self.client.chat_postMessage(
-            channel=to,
-            text=message,
-            thread_ts=thread_ts,
-        )
+        kwargs = {"channel": to, "text": message}
+        if thread_ts is not None:
+            kwargs["thread_ts"] = thread_ts
+        if blocks is not None:
+            kwargs["blocks"] = blocks
+        self.client.chat_postMessage(**kwargs)
 
     @property
     def client(self) -> "WebClient":

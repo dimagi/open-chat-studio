@@ -12,7 +12,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment
 from apps.files.models import File
-from apps.pipelines.tests.utils import create_pipeline_model, end_node, start_node
+from apps.pipelines.tests.utils import create_pipeline_model, end_node, llm_response_node, start_node
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -420,6 +420,27 @@ def test_build_state_valid_and_fully_wired():
 
 
 @pytest.mark.django_db()
+def test_build_state_reports_a_nodes_deprecated_model():
+    """Deprecation is a migration window, not a fault, so it rides alongside a clean build state
+    rather than in the errors report. The mapping itself is covered in ``test_build_state``."""
+    team = TeamWithUsersFactory.create()
+    provider = LlmProviderFactory.create(team=team, type="openai")
+    # A name absent from DEFAULT_LLM_PROVIDER_MODELS, so no replacement is declared for it.
+    model = LlmProviderModelFactory.create(team=team, type="openai", name="retired-model", deprecated=True)
+    llm = llm_response_node(str(provider.id), str(model.id))
+    pipeline = PipelineFactory.create(team=team)
+    create_pipeline_model([start_node(), llm, end_node()], pipeline=pipeline)
+    pipeline.save()
+    experiment = ExperimentFactory.create(team=team, pipeline=pipeline)
+
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+
+    assert payload["deprecated_models"] == {llm["id"]: {"model": "retired-model", "replacement": None}}
+    assert payload["pipeline_valid"] is True
+    assert payload["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
+
+
+@pytest.mark.django_db()
 def test_build_state_reports_node_errors_and_unwired_handles_together():
     """An off-graph node missing a required param: the param error lands in errors.node, while its
     dangling input/output land in the advisory unwired_handles map."""
@@ -564,7 +585,7 @@ def _full_bot():
                         "id": "assist",
                         "type": "AssistantNode",
                         "label": "Assistant",
-                        "params": {"name": "Assistant", "assistant_id": str(assistant.id), "citations_enabled": True},
+                        "params": {"name": "Assistant", "citations_enabled": True},
                     },
                 },
             ],
@@ -724,8 +745,7 @@ def _expected_pipeline_nodes(bot):
             },
         },
         # A node whose type was removed (#4254). It still renders: the type is reported verbatim
-        # and its stored params come through the generic shape. ``assistant_id`` is suppressed --
-        # there is no resource key left to lift it into, so it would otherwise leak an internal id.
+        # and its stored params come through the generic shape.
         {
             "node_id": "assist",
             "type": "AssistantNode",
@@ -861,6 +881,7 @@ def _expected_full_response(bot):
         },
         # `assist` has no derivable handles, so nothing of its is reported unwired.
         "unwired_handles": {"llm": [{"handle": "input", "label": None}]},
+        "deprecated_models": {},
         "events": _expected_events(bot),
     }
 
@@ -958,8 +979,9 @@ def _adversarial_bot():
 # every mode, so folding it into the measured block keeps the count constant. The top-level build-state
 # fields run Pipeline.validate(), whose LLM-node validators each look the provider model up through
 # ORMRepository (not the prefetched relation) — the same cost the builder pays on save; that adds a
-# fixed number of queries for this bot's two LLM-bearing nodes.
-EXPECTED_RENDER_QUERIES = 17
+# fixed number of queries for this bot's two LLM-bearing nodes. ``deprecated_models`` adds one more:
+# a single lookup covering every model the graph references, whatever the node fan-out.
+EXPECTED_RENDER_QUERIES = 18
 
 
 @pytest.mark.django_db()

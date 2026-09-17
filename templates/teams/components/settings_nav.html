@@ -1,8 +1,16 @@
-{% load i18n %}
+{% load i18n team_tags waffle_tags %}
 <nav class="flex flex-col gap-1 mb-4">
   <a href="#integrations" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
     <span><i class="fa-solid fa-plug mr-2"></i>{% translate "Integrations" %}</span><span class="nav-count">{{ stats.integrations }}</span>
   </a>
+  {% flag "flag_slack_notifications" %}
+    {% has_perm "ocs_notifications" "view_notificationchannel" as can_view_notification_channels %}
+    {% if can_view_notification_channels %}
+      <a href="#notifications" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
+        <span><i class="fa-solid fa-bell mr-2"></i>{% translate "Notifications" %}</span>
+      </a>
+    {% endif %}
+  {% endflag %}
   <a href="#members" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
     <span><i class="fa-solid fa-users mr-2"></i>{% translate "Members" %}</span><span class="nav-count">{{ stats.members }}</span>
   </a>

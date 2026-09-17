@@ -1,5 +1,5 @@
 {% load humanize %}
-<div id="do-not-disturb-container" class="flex items-center gap-1 flex-wrap">
+<div id="do-not-disturb-container" class="flex items-center gap-1 flex-wrap" hx-ext="morph">
   {% for pref in silenced_preferences %}
     <button
       type="button"
@@ -7,7 +7,7 @@
       data-tip="{{ pref.team.name }}: automatically unmutes {{ pref.do_not_disturb_until|naturaltime }}"
       hx-post="{% url 'ocs_notifications:cancel_do_not_disturb' pref.team_id %}"
       hx-target="#do-not-disturb-container"
-      hx-swap="outerHTML">
+      hx-swap="morph">
       <i class="fa fa-bell"></i> {{ pref.team.name }}
     </button>
   {% endfor %}

@@ -34,7 +34,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
-from apps.pipelines.build_state import node_output_handles, pipeline_build_state
+from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -504,12 +504,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "indexed_collections": ("collection_index_ids",),
     }
     _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
-    # ``assistant_id`` is suppressed rather than lifted: ``_RESOURCE_PARAM_KEYS`` is derived from
-    # ``_CONDITIONAL_KEY_PARAMS`` and no render key claims it, so hiding it keeps an internal id
-    # out of the generic ``params`` payload. Stripping it from the stored rows instead needs
-    # ``Node.assistant`` gone -- ``Node._sync_resource_fk_fields`` re-derives the id from that
-    # column -- so it waits for the data-model removal in #4254.
-    _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS | {"assistant_id"}
+    _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -566,7 +561,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     def get_output_handles(self, node) -> list:
         # Server-derived (W5): routers get one handle per branch keyword, plain nodes the single
         # standard output, End none — so a caller can wire edges from any node it reads back.
-        return node_output_handles(node)
+        return node.output_handles()
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
@@ -741,6 +736,16 @@ class PipelineBuildErrorsSerializer(serializers.Serializer):
     )
 
 
+class DeprecatedModelSerializer(serializers.Serializer):
+    """The model a node still points at, and what to move it to."""
+
+    model = serializers.CharField(help_text="Name of the deprecated model the node references.")
+    replacement = serializers.CharField(
+        allow_null=True,
+        help_text="Name of the model to migrate to, or null where none is declared.",
+    )
+
+
 class ChatbotInspectSerializer(serializers.ModelSerializer):
     """The whole chatbot configuration in one read-only response (ADR-0024).
 
@@ -770,6 +775,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     pipeline_valid = serializers.SerializerMethodField(help_text=("Whether this chatbot's pipeline validates cleanly"))
     pipeline_errors = serializers.SerializerMethodField()
     unwired_handles = serializers.SerializerMethodField()
+    deprecated_models = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
 
     class Meta:
@@ -793,6 +799,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "pipeline_valid",
             "pipeline_errors",
             "unwired_handles",
+            "deprecated_models",
             "events",
         ]
 
@@ -834,6 +841,19 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     )
     def get_unwired_handles(self, experiment) -> dict:
         return self._build_state(experiment)["unwired_handles"]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=DeprecatedModelSerializer(),
+            help_text=(
+                "Advisory map, keyed by ``node_id``, of nodes referencing a deprecated LLM model. "
+                "The model keeps working until it is removed, so this is never an error and never "
+                "blocks a publish."
+            ),
+        )
+    )
+    def get_deprecated_models(self, experiment) -> dict:
+        return self._build_state(experiment)["deprecated_models"]
 
 
 # ── Schema extensions ──────────────────────────────────────────────────────────────────────────

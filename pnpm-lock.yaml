@@ -80,6 +80,9 @@ importers:
       htmx.org:
         specifier: ^2.0.8
         version: 2.0.10
+      idiomorph:
+        specifier: ^0.8.0
+        version: 0.8.0
       immer:
         specifier: ^11.1.18
         version: 11.1.18
@@ -93,8 +96,8 @@ importers:
         specifier: ^4.17.23
         version: 4.18.1
       open-chat-studio-widget:
-        specifier: ^0.12.0
-        version: 0.12.0
+        specifier: ^0.13.0
+        version: 0.13.0
       react:
         specifier: ^19.2.3
         version: 19.2.8
@@ -122,6 +125,9 @@ importers:
       tom-select:
         specifier: ^2.6.0
         version: 2.6.2
+      zundo:
+        specifier: ^2.3.0
+        version: 2.3.0(zustand@5.0.14(@types/react@19.2.18)(immer@11.1.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8)))
       zustand:
         specifier: ^5.0.13
         version: 5.0.14(@types/react@19.2.18)(immer@11.1.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -2469,6 +2475,9 @@ packages:
     peerDependencies:
       postcss: ^8.1.0
 
+  idiomorph@0.8.0:
+    resolution: {integrity: sha512-R47JBL+6jHDQvcnbppIUtXXcxi5h6+wuCEEZXnRhUltsgzPFKzThL5PuHppP9ypJuy+7WawcY1TsSBD/iQbMhw==}
+
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
@@ -2937,8 +2946,8 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
-  open-chat-studio-widget@0.12.0:
-    resolution: {integrity: sha512-9WzaR7pe0MsW0Nr4W91UufpAWMuVPmhFIMf3FyLWQpkB5SnXT0TxqNMF4CDxoCevme8Ol0+aVv5+9JzfQGa1Fw==}
+  open-chat-studio-widget@0.13.0:
+    resolution: {integrity: sha512-jZexVf0O35L+WMdAeuuNWQwa2JFu8rFr2aaCHP7HQUd7iC2v5bx5n7OCVRa+50JWUsnYW71C6YK6DITC6Hzlgg==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -3689,6 +3698,11 @@ packages:
 
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
+  zundo@2.3.0:
+    resolution: {integrity: sha512-4GXYxXA17SIKYhVbWHdSEU04P697IMyVGXrC2TnzoyohEAWytFNOKqOp5gTGvaW93F/PM5Y0evbGtOPF0PWQwQ==}
+    peerDependencies:
+      zustand: ^4.3.0 || ^5.0.0
 
   zustand@4.5.7:
     resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
@@ -6332,6 +6346,8 @@ snapshots:
     dependencies:
       postcss: 8.5.26
 
+  idiomorph@0.8.0: {}
+
   ignore@5.3.2: {}
 
   ignore@7.0.6: {}
@@ -6670,7 +6686,7 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  open-chat-studio-widget@0.12.0:
+  open-chat-studio-widget@0.13.0:
     dependencies:
       '@stencil/core': 4.44.1
       dompurify: 3.4.13
@@ -7314,6 +7330,10 @@ snapshots:
       zod: 4.5.4
 
   zod@4.5.4: {}
+
+  zundo@2.3.0(zustand@5.0.14(@types/react@19.2.18)(immer@11.1.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))):
+    dependencies:
+      zustand: 5.0.14(@types/react@19.2.18)(immer@11.1.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
 
   zustand@4.5.7(@types/react@19.2.18)(immer@11.1.18)(react@19.2.8):
     dependencies:

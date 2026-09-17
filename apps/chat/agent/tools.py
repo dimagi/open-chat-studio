@@ -28,13 +28,12 @@ from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
 from apps.files.models import File, FileChunkEmbedding
-from apps.ocs_notifications.notifications import tool_error_notification
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import Intents
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
-from apps.teams.utils import get_current_team, get_slug_for_team
+from apps.teams.utils import get_slug_for_team
 from apps.utils.time import pretty_date
 
 if TYPE_CHECKING:
@@ -246,18 +245,7 @@ class CustomBaseTool(BaseTool):
     def _run(self, *args, **kwargs):
         if self.requires_session and not self.experiment_session:
             return "I am unable to do this"
-        try:
-            return self.action(*args, **kwargs)
-        except Exception as e:
-            logger.exception("Error executing tool: %s", self.name)
-            tool_error_notification(
-                team=get_current_team(),
-                tool_name=self.name,
-                error_message=str(e),
-                session=self.experiment_session,
-            )
-
-            return "Something went wrong"
+        return self.action(*args, **kwargs)
 
     async def _arun(self, *args, **kwargs) -> str:
         """Use the tool asynchronously."""
@@ -779,7 +767,7 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.params.get("tools") or []
+    tool_names = node.tool_names
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
@@ -791,7 +779,7 @@ def get_node_tools(
 def get_mcp_tool_instances(node: Node, team: Team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
 
-    mcp_tools = node.params.get("mcp_tools", [])
+    mcp_tools = node.mcp_tool_refs
     if not mcp_tools:
         return []
 

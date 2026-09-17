@@ -1,6 +1,6 @@
 import pytest
 
-from apps.pipelines.flow import Flow, FlowNode, node_position_fields, react_flow_node_type, split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, node_position_fields, split_flow_data
 
 
 def _full_flow():
@@ -74,20 +74,6 @@ class TestSplitFlowData:
 
         assert edge_data.edges == []
         assert node_data == {}
-
-
-class TestReactFlowNodeType:
-    @pytest.mark.parametrize(
-        ("node_type", "expected"),
-        [
-            pytest.param("StartNode", "startNode", id="start"),
-            pytest.param("EndNode", "endNode", id="end"),
-            pytest.param("LLMResponseWithPrompt", "pipelineNode", id="regular"),
-            pytest.param("RenderTemplate", "pipelineNode", id="another-regular"),
-        ],
-    )
-    def test_maps_node_type_to_react_flow_type(self, node_type, expected):
-        assert react_flow_node_type(node_type) == expected
 
 
 class TestNodePositionFields:

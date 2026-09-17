@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, UpdateView, View
 
+from apps.evaluations.breadcrumbs import datasets_crumbs
 from apps.evaluations.forms import DatasetAutoPopulationRuleForm
 from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset, EvaluationMode
 from apps.evaluations.tables import DatasetAutoPopulationRuleTable
@@ -55,6 +56,7 @@ class _RuleViewMixin(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
         context = super().get_context_data(**kwargs)
         dataset = self.get_dataset()
         context["dataset"] = dataset
+        context["breadcrumbs"] = [*datasets_crumbs(self.request.team.slug, dataset), (context["page_title"], None)]
         team = self.request.team
         context.update(
             get_filter_context_data(

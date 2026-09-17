@@ -9,6 +9,7 @@ from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -19,12 +20,22 @@ from apps.custom_actions.models import CustomAction, CustomActionOperation, Heal
 from apps.custom_actions.tables import CustomActionTable
 from apps.custom_actions.tasks import check_single_custom_action_health
 from apps.experiments.models import Experiment
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 logger = logging.getLogger(__name__)
+
+
+def _custom_actions_crumbs(team_slug: str) -> list[Crumb]:
+    """Custom actions are managed from the "Developers" section of the team settings page."""
+    manage_team_url = reverse("single_team:manage_team", args=[team_slug])
+    return [
+        (_("Team Settings"), manage_team_url),
+        (_("Custom Actions"), f"{manage_team_url}#automation"),
+    ]
 
 
 class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -49,7 +60,7 @@ class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         return CustomAction.objects.filter(team=self.request.team)
 
 
-class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateCustomAction(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "custom_actions/custom_actions_form.html"
@@ -59,6 +70,9 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
         "active_tab": "custom_actions",
     }
     permission_required = "custom_actions.add_customaction"
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [*_custom_actions_crumbs(self.request.team.slug), (_("Create"), None)]
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "request": self.request}
@@ -75,7 +89,7 @@ class CreateCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Cre
         return resp
 
 
-class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditCustomAction(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = CustomAction
     form_class = CustomActionForm
     template_name = "custom_actions/custom_actions_form.html"
@@ -85,6 +99,9 @@ class EditCustomAction(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Updat
         "active_tab": "custom_actions",
     }
     permission_required = "custom_actions.change_customaction"
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [*_custom_actions_crumbs(self.request.team.slug), (self.object.name, None)]
 
     def get_form_kwargs(self):
         return {**super().get_form_kwargs(), "request": self.request}
@@ -105,12 +122,6 @@ def _find_live_custom_action_references(custom_action):
     - Versioned pipelines with a live op are surfaced as the non-archived Experiment
       version(s) that still reference them, so the user can see exactly which experiment
       version is affected.
-
-    Operations attached to an assistant rather than a node are ignored: the assistant feature
-    is removed (#4254), so nothing live can be broken through one. Deliberately not a blocker --
-    there is no assistants UI left for the user to clear the reference from, so blocking would
-    leave the action undeletable. The trade-off is that deleting the action CASCADEs those
-    assistant-attached operation rows away before phase 2 gets to them.
     """
     operations = CustomActionOperation.objects.filter(custom_action=custom_action).select_related("node__pipeline")
 
@@ -215,6 +226,11 @@ class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMi
             "operations": custom_action.operations,
             "operations_data": operations_data,
             "active_tab": "custom_actions",
+            "breadcrumbs": [
+                *_custom_actions_crumbs(self.request.team.slug),
+                (custom_action.name, custom_action.get_absolute_url()),
+                (_("Test Endpoints"), None),
+            ],
         }
 
 

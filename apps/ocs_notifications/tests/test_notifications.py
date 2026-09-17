@@ -14,7 +14,6 @@ from apps.ocs_notifications.notifications import (
     deprecated_model_notification,
     file_delivery_failure_notification,
     message_delivery_failure_notification,
-    tool_error_notification,
     trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -256,77 +255,6 @@ class TestMessageDeliveryFailureNotification:
         kwargs = mock_create_notification.call_args.kwargs
         assert "+27820001111" in kwargs["message"]
         assert kwargs["links"] == {"View Bot": experiment.get_absolute_url()}
-
-
-class TestToolErrorNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_session(self, mock_create_notification):
-        # Arrange
-        team = TeamFactory.create()
-        tool_name = "weather_api"
-        error_message = "API rate limit exceeded"
-        session = ExperimentSessionFactory.create()
-
-        # Act
-        tool_error_notification(team, tool_name, error_message, session)
-
-        # Assert
-        expected_event_data = {"tool_name": tool_name, "error_message": error_message}
-        expected_links = {
-            "View Bot": session.experiment.get_absolute_url(),
-            "View Session": session.get_absolute_url(),
-        }
-        mock_create_notification.assert_called_once_with(
-            title="Tool Error Detected",
-            message=error_message,
-            level=LevelChoices.ERROR,
-            team=team,
-            slug="tool-error",
-            event_data=expected_event_data,
-            permissions=None,
-            links=expected_links,
-        )
-
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_without_session(self, mock_create_notification):
-        # Arrange
-        team = TeamFactory.create()
-        tool_name = "database_connector"
-        error_message = "Connection timeout"
-
-        # Act
-        tool_error_notification(team, tool_name, error_message)
-
-        # Assert
-        expected_event_data = {"tool_name": tool_name, "error_message": error_message}
-        expected_links = {}
-        mock_create_notification.assert_called_once_with(
-            title="Tool Error Detected",
-            message=error_message,
-            level=LevelChoices.ERROR,
-            team=team,
-            slug="tool-error",
-            event_data=expected_event_data,
-            permissions=None,
-            links=expected_links,
-        )
-
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_handles_none_session(self, mock_create_notification):
-        # Arrange
-        team = TeamFactory.create()
-        tool_name = "test_tool"
-        error_message = "Test error"
-
-        # Act
-        tool_error_notification(team, tool_name, error_message, session=None)
-
-        # Assert
-        call_args = mock_create_notification.call_args[1]
-        assert call_args["links"] == {}
 
 
 class TestTraceErrorNotification:

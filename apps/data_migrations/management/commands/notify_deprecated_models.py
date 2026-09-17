@@ -1,6 +1,6 @@
 from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
 from apps.ocs_notifications.notifications import AffectedResources, deprecated_model_notification
-from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
+from apps.service_providers.llm_service.default_models import get_deprecated_models
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
 
@@ -11,13 +11,7 @@ class Command(IdempotentCommand):
     disable_audit = True
 
     def perform_migration(self, dry_run=False):
-        # Find all deprecated models (with or without a replacement)
-        deprecated_with_replacement = {}
-        for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
-            for model in provider_models:
-                if model.deprecated:
-                    deprecated_with_replacement[(provider_type, model.name)] = model.replacement or None
-
+        deprecated_with_replacement = get_deprecated_models()
         if not deprecated_with_replacement:
             self.stdout.write(self.style.SUCCESS("No deprecated models found"))
             return

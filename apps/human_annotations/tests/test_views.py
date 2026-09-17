@@ -67,6 +67,15 @@ def test_queue_home(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_queue_detail_breadcrumbs(client, team_with_users, queue):
+    response = client.get(reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk]))
+    assert response.context["breadcrumbs"] == [
+        ("Annotations", reverse("human_annotations:queue_home", args=[team_with_users.slug])),
+        (queue.name, None),
+    ]
+
+
+@pytest.mark.django_db()
 def test_queue_table(client, team_with_users, queue):
     url = reverse("human_annotations:queue_table", args=[team_with_users.slug])
     response = client.get(url)

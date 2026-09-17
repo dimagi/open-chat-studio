@@ -23,15 +23,6 @@ Expected Context Variables:
 {% extends "web/app/app_base.html" %}
 {% load static %}
 
-{% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-    <ul>
-      <li><a href="{% url 'custom_actions:edit' request.team.slug custom_action.id %}">{{ custom_action.name }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">Test Endpoints</li>
-    </ul>
-  </div>
-{% endblock breadcrumbs %}
-
 {% block app %}
   {% csrf_token %}
   <div class="max-w-4xl mx-auto" id="endpoint-tester">

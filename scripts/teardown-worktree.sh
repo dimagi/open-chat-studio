@@ -22,8 +22,15 @@ if ocs_is_root_worktree "$CURRENT_PATH" "$ROOT_WORKTREE_PATH"; then
 fi
 
 resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
+test_databases=$(ocs_list_test_databases "$resource_name")
 
 ocs_drop_database "$resource_name"
+
+while IFS= read -r test_database; do
+    [[ -n "$test_database" ]] || continue
+    echo "[ocs] Dropping the test database $test_database."
+    ocs_drop_database "$test_database"
+done <<< "$test_databases"
 
 if redis_database=$(ocs_lookup_redis_database "$resource_name"); then
     ocs_redis_cli -n "$redis_database" FLUSHDB
