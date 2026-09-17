@@ -1,6 +1,7 @@
 import csv
 import io
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from django.db import connection
@@ -15,7 +16,11 @@ from apps.evaluations.models import (
     EvaluationRunStatus,
     EvaluationRunType,
 )
-from apps.evaluations.tasks import export_evaluation_bulk_results_task
+from apps.evaluations.tasks import (
+    _count_bulk_export_rows,
+    _report_row_progress,
+    export_evaluation_bulk_results_task,
+)
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     AppliedTagFactory,
@@ -26,6 +31,13 @@ from apps.utils.factories.evaluations import (
     EvaluatorFactory,
     EvaluatorTagRuleFactory,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stub_progress_recorder():
+    """ProgressRecorder needs a live Celery request; these tests call the task directly."""
+    with patch("apps.evaluations.tasks.ProgressRecorder"):
+        yield
 
 
 def _completed_run(config=None) -> EvaluationRun:
@@ -207,3 +219,65 @@ def test_export_query_count_does_not_grow_with_result_count():
         f"query count grew from {len(small_ctx.captured_queries)} (2 messages) to "
         f"{len(large_ctx.captured_queries)} (200 messages) - the export is not streaming"
     )
+
+
+@pytest.mark.django_db()
+def test_count_bulk_export_rows_counts_messages_not_results():
+    """The progress denominator is CSV rows, which is one per message however many
+    evaluators and runs contributed to it."""
+    config = EvaluationConfigFactory.create()
+    team = config.team
+    evaluators = [EvaluatorFactory.create(team=team, name=f"Evaluator {i}") for i in range(2)]
+    messages = [EvaluationMessageFactory.create() for _ in range(3)]
+    for run in (_completed_run(config), _completed_run(config)):
+        for evaluator in evaluators:
+            for message in messages:
+                EvaluationResultFactory.create(
+                    team=team, run=run, evaluator=evaluator, message=message, output=_evaluator_output(1.0, "r")
+                )
+
+    assert _count_bulk_export_rows(config, team) == 3
+
+
+def test_report_row_progress_yields_every_row_but_reports_in_steps():
+    """Reporting once per row would be one backend write per row on a large export."""
+    rows = [{"#": index} for index in range(250)]
+    reported = []
+
+    yielded = list(_report_row_progress(rows, len(rows), lambda current, total: reported.append((current, total))))
+
+    assert yielded == rows
+    assert reported[-1] == (250, 250)
+    assert len(reported) <= 101
+
+
+@pytest.mark.django_db()
+def test_export_drives_progress_to_completion(monkeypatch):
+    """The UI bar is fed by the recorder, so the task must reach total/total."""
+    run = _completed_run()
+    evaluator = EvaluatorFactory.create(team=run.team)
+    for _ in range(3):
+        EvaluationResultFactory.create(
+            team=run.team,
+            run=run,
+            evaluator=evaluator,
+            message=EvaluationMessageFactory.create(),
+            output=_evaluator_output(1.0, "r"),
+        )
+
+    calls = []
+
+    class _Recorder:
+        def __init__(self, task):
+            pass
+
+        def set_progress(self, current, total, description=""):
+            calls.append((current, total))
+
+    monkeypatch.setattr("apps.evaluations.tasks.ProgressRecorder", _Recorder)
+
+    result = export_evaluation_bulk_results_task(run.config_id, run.team_id)
+
+    assert "file_id" in result
+    assert calls
+    assert calls[-1] == (3, 3)

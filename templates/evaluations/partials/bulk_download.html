@@ -1,5 +1,6 @@
-<div class="flex flex-row gap-2" id="eval-bulk-download">
-  <button class="btn btn-outline"
+<div class="flex flex-col gap-1" id="eval-bulk-download">
+  <button id="eval-bulk-download-button"
+          class="btn btn-outline"
           hx-post="{% url 'evaluations:evaluation_bulk_download_start' request.team.slug config.id %}"
           hx-trigger="click"
           hx-swap="outerHTML"
@@ -14,24 +15,87 @@
   </button>
 
   {% if task_id %}
-    <div hx-get="{% url 'evaluations:evaluation_bulk_download_link' request.team.slug config.id task_id %}"
-         hx-trigger="every 2s"
-         hx-swap="outerHTML"
-         hx-target="#eval-bulk-download">
+    <div id="eval-export-progress" class="w-56">
+      <div class="h-1.5 w-full bg-base-300 rounded-full overflow-hidden">
+        <div id="eval-export-progress-bar"
+             class="h-full bg-primary transition-all duration-300 ease-out"
+             style="width: 0%"></div>
+      </div>
+      <div id="eval-export-progress-message" class="mt-1 text-xs text-center text-base-content/70">
+        Waiting for the export to start...
+      </div>
     </div>
-  {% endif %}
 
-  {% if export_download_url %}
-    <a class="btn btn-success" href="{{ export_download_url }}">
+    <a id="eval-export-download" class="btn btn-success" style="display: none;" href="#">
       <i class="fa-solid fa-download"></i>
       Download CSV
     </a>
-  {% endif %}
 
-  {% if export_error %}
-    <span class="text-error text-sm flex items-center gap-1">
+    <span id="eval-export-error" class="text-error text-sm items-center gap-1" style="display: none;">
       <i class="fa-solid fa-triangle-exclamation"></i>
-      {{ export_error }}
+      <span id="eval-export-error-message"></span>
+      <button class="btn btn-ghost btn-xs" onclick="location.reload()">Try again</button>
     </span>
+
+    <script>
+      (function () {
+        const downloadBaseUrl = "{% url 'files:base' request.team.slug 0 %}";
+        const startButton = document.getElementById("eval-bulk-download-button");
+        const progressPanel = document.getElementById("eval-export-progress");
+        const downloadLink = document.getElementById("eval-export-download");
+        const errorPanel = document.getElementById("eval-export-error");
+        const errorMessage = document.getElementById("eval-export-error-message");
+
+        // Once the task has finished, the button is a disabled "Generating" with nothing left
+        // to generate, so every terminal state clears it along with the bar.
+        function finish() {
+          startButton.style.display = "none";
+          progressPanel.style.display = "none";
+        }
+
+        function fail(message) {
+          finish();
+          errorMessage.textContent = message;
+          errorPanel.style.display = "flex";
+        }
+
+        CeleryProgressBar.initProgressBar("{% url 'celery_progress:task_status' task_id %}", {
+          pollInterval: 500,
+          progressBarId: "eval-export-progress-bar",
+          progressBarMessageId: "eval-export-progress-message",
+
+          onProgress: function (bar, message, progress) {
+            bar.style.width = (progress.percent || 0) + "%";
+            message.textContent = progress.description || "Starting...";
+          },
+
+          // The task returns its failure rather than raising, so a task that completed
+          // successfully can still carry an error and onTaskError never fires for it.
+          onSuccess: function (_bar, _message, result) {
+            if (result && result.file_id) {
+              finish();
+              downloadLink.href =
+                downloadBaseUrl.replace(/\/0(\/?$)/, "/" + result.file_id + "$1") + "?allow_s3=1";
+              downloadLink.style.display = "";
+            } else {
+              fail((result && result.error) || "Export failed.");
+            }
+          },
+
+          onError: function (_bar, _message, error) {
+            fail((error && error.message) || "Export failed.");
+          },
+          onTaskError: function (_bar, _message, excMessage) {
+            fail(excMessage || "Export failed.");
+          },
+          onNetworkError: function () {
+            fail("Network error — check your connection.");
+          },
+          onHttpError: function () {
+            fail("Server error — please try again.");
+          },
+        });
+      })();
+    </script>
   {% endif %}
 </div>

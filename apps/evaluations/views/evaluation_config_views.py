@@ -8,8 +8,6 @@ from functools import cached_property
 from io import StringIO
 from typing import Any
 
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -1024,29 +1022,4 @@ def start_bulk_download(request, team_slug: str, evaluation_pk: int):
         request,
         "evaluations/partials/bulk_download.html",
         {"config": config, "task_id": task.id},
-    )
-
-
-@login_and_team_required
-@permission_required("evaluations.view_evaluationrun")
-def get_bulk_download_link(request, team_slug: str, evaluation_pk: int, task_id: str):
-    """Poll the bulk export task and return a download link when ready."""
-    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
-    info = Progress(AsyncResult(task_id)).get_info()
-    context: dict = {"config": config}
-    if info["complete"] and info["success"]:
-        file_id = info["result"].get("file_id")
-        if file_id:
-            download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
-            context["export_download_url"] = download_url
-        else:
-            context["export_error"] = info["result"].get("error", "Export failed.")
-    elif info["complete"]:
-        context["export_error"] = "Export failed."
-    else:
-        context["task_id"] = task_id
-    return TemplateResponse(
-        request,
-        "evaluations/partials/bulk_download.html",
-        context,
     )

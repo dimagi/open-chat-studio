@@ -1,6 +1,8 @@
 import contextlib
 import csv
+import math
 from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 from io import StringIO
@@ -1502,6 +1504,34 @@ def create_dataset_from_sessions_task(
         return {"success": False, "error": message}
 
 
+def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[dict]:
+    """Yield *rows*, calling ``report(current, total)`` in steps of roughly one percent.
+
+    Reporting per row would be one backend write per row, which on a large export is more
+    traffic than the export itself.
+    """
+    step = max(1, math.ceil(total / 100))
+    for current, row in enumerate(rows, start=1):
+        if current % step == 0 or current == total:
+            report(current, total)
+        yield row
+
+
+def _count_bulk_export_rows(config: EvaluationConfig, team: Team) -> int:
+    """Number of CSV rows the bulk export will produce, which is one per message."""
+    return (
+        EvaluationResult.objects.filter(
+            run__config=config,
+            run__status=EvaluationRunStatus.COMPLETED,
+            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+            team=team,
+        )
+        .values("message_id")
+        .distinct()
+        .count()
+    )
+
+
 def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
     """The latest EvaluationResult per (message, evaluator) across *config*'s completed
     FULL/DELTA runs, deduplicated in the DB via DISTINCT ON.
@@ -1525,8 +1555,8 @@ def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet
     return annotate_export_fields(surviving).order_by("message_id")
 
 
-@shared_task(queue=Queues.BACKGROUND)
-def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
+@shared_task(bind=True, queue=Queues.BACKGROUND)
+def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id: int) -> dict:
     """Async export of the most recent evaluation result for each dataset item, across all
     completed evaluation runs for the given config.
 
@@ -1537,11 +1567,20 @@ def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int)
         team = config.team
 
         with current_team(team):
+            recorder = ProgressRecorder(self)
+            # Counting up front costs a query the streaming read would not otherwise make, but
+            # it is what lets the UI show a percentage rather than an unbounded spinner.
+            total = _count_bulk_export_rows(config, team)
+
+            def report(current: int, row_total: int) -> None:
+                recorder.set_progress(current, row_total, description=f"Processed {current} of {row_total} messages")
+
             results = _get_bulk_results_queryset(config, team)
+            rows = _report_row_progress(iter_evaluation_table_rows(results), total, report)
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
             # Two spooled temp files: one holds the rows until the header is known, one the CSV.
-            with export_evaluation_csv_to_tempfile(iter_evaluation_table_rows(results)) as csv_file:
+            with export_evaluation_csv_to_tempfile(rows) as csv_file:
                 file_obj = File.objects.create(
                     name=filename,
                     team=team,
