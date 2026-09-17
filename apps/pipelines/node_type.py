@@ -104,6 +104,18 @@ class NodeType:
         return schema is not None and not schema.can_delete
 
     @property
+    def is_structural(self) -> bool:
+        """Whether this is a live type the builder does not offer in its node picker.
+
+        ``can_add`` is the builder's own flag, read as ``is_server_managed`` reads ``can_delete``.
+        Deprecated types are excluded because ``NodeSchema`` clears ``can_add`` for them too, and a
+        type on its way out is not the same as one that was never on offer. A type naming no node
+        class reports ``False``: it is not withheld, it is simply not a type.
+        """
+        schema = self.schema
+        return schema is not None and not schema.can_add and not schema.deprecated
+
+    @property
     def react_flow_type(self) -> str:
         """This type's react-flow node type, which is what the editor renders it as."""
         if self.type == START_NODE_TYPE:

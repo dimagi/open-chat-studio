@@ -40,6 +40,7 @@ class TestNullObject:
         assert unresolvable.declares("name") is False
         assert unresolvable.schema is None
         assert unresolvable.is_server_managed is False
+        assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
         assert unresolvable.output_handles({"name": "odd"}, "odd-1") == []
         assert unresolvable.why_no_output_handles() is NoOutputHandles.UNKNOWN_TYPE
@@ -85,6 +86,20 @@ class TestSchema:
 
     def test_server_managed_node_types_is_exactly_the_types_that_report_it(self):
         assert server_managed_node_types() == {"StartNode", "EndNode"}
+
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", True, id="server-managed"),
+            pytest.param("EndNode", True, id="server-managed-too"),
+            pytest.param("Passthrough", True, id="deletable-but-never-offered"),
+            pytest.param("LLMResponseWithPrompt", False, id="on-offer"),
+            pytest.param("BooleanNode", False, id="deprecated-is-on-its-way-out-not-withheld"),
+            pytest.param("AssistantNode", False, id="removed-names-no-class"),
+        ],
+    )
+    def test_is_structural_follows_can_add(self, node_type, expected):
+        assert NodeType(node_type).is_structural is expected
 
 
 class TestReactFlowType:

@@ -79,7 +79,7 @@ def served_option_keys() -> frozenset[str]:
 
 def unknown_node_type(requested_type: str) -> NotFound:
     """A 404 carrying why the name failed and what the client could have asked for instead."""
-    if requested_type in _structural_types():
+    if NodeType(requested_type).is_structural:
         detail = (
             f"Node type '{requested_type}' is managed by the server and cannot be created or "
             f"configured. It may appear as a node's `type` in /inspect/ responses."
@@ -182,17 +182,6 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type
-
-
-@cache
-def _structural_types() -> frozenset[str]:
-    """Types the server creates and manages. Unlisted, but ``/inspect/`` still reports them as the
-    ``type`` of real nodes."""
-    return frozenset(
-        schema["title"]
-        for schema in get_node_schemas()
-        if not schema.get("ui:can_add") and not schema.get("ui:deprecated")
-    )
 
 
 def _valid_type_names() -> list[str]:
