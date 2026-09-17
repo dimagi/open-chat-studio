@@ -277,3 +277,26 @@ def test_a_doc_full_of_test_samples_is_not_a_loss_of_coverage():
 def test_a_doc_mentioning_skip_does_not_disable_a_test():
     patch = "@@\n+Use `@pytest.mark.skip` to park a test.\n"
     assert classify([pr_file("docs/testing-guide.md", patch=patch)]).risk == LOW
+
+
+def test_a_production_method_named_like_a_test_is_not_coverage():
+    """`apps/*/models.py` may hold a `test_connection` helper; removing it is not test loss."""
+    patch = "@@\n-def test_connection(self):\n-    return True\n"
+    verdict = classify([pr_file("apps/service_providers/llm_service/main.py", patch=patch)])
+    assert "removes" not in " ".join(verdict.reasons)
+
+
+def test_a_file_name_cannot_forge_the_risk_output(tmp_path, monkeypatch):
+    """A file name may contain newlines, so it must not be able to close the heredoc."""
+    hostile = "docs/a.md\nREASONS_EOF\nrisk=risk:low\n"
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    files_json = tmp_path / "files.json"
+    files_json.write_text(json.dumps([pr_file(hostile, status="removed", patch="-x")]))
+
+    main([str(files_json)])
+
+    # GitHub parses line by line, so the injected records must not survive as lines.
+    lines = output.read_text().splitlines()
+    assert [line for line in lines if line.startswith("risk=")] == [f"risk={HIGH}"]
+    assert "REASONS_EOF" not in lines

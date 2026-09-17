@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -154,45 +155,57 @@ def _paths_of(entry: dict) -> list[str]:
 def count_lost_tests(files: list[dict]) -> int:
     """Net test functions the diff drops. Renaming or re-signaturing a test nets to zero.
 
-    Python files only: `docs/` carries plan documents with `def test_` samples in them,
-    and deleting one of those is not a loss of coverage.
+    Test files only: `docs/` carries plan documents with `def test_` samples in them, and
+    production code carries methods that merely start with `test_`. Neither is coverage.
     """
     added = removed = 0
     for entry in files:
-        if not entry["filename"].endswith(".py"):
+        if not is_test(entry["filename"]):
             continue
         for line in (entry.get("patch") or "").splitlines():
             match = TEST_DEF.match(line)
-            if match:
-                if match.group(1) == "+":
-                    added += 1
-                else:
-                    removed += 1
+            if not match:
+                continue
+            if match.group(1) == "+":
+                added += 1
+            else:
+                removed += 1
     return max(removed - added, 0)
+
+
+def path_blockers(entry: dict) -> list[str]:
+    """Blockers that follow from where a file sits, and from the file appearing or leaving."""
+    status = entry.get("status", "modified")
+    blockers = []
+    for path in _paths_of(entry):
+        # A test file under a blocked app is still only ever imported by pytest, so the
+        # path blockers do not apply to it. Losing or disabling one below still counts.
+        # Confined to `apps/` -- outside it a `test_*.py` name proves nothing about what
+        # loads the file, and `.github/` and `config/` would hand out the exemption on a name.
+        if path.startswith("apps/") and is_test(path):
+            continue
+        if status == "added" and any(glob_match(path, pattern) for pattern in BLOCKED_ONLY_WHEN_MODIFIED):
+            continue
+        reason = match_category(path, BLOCKED_PATHS)
+        if reason:
+            blockers.append(f"{path}: {reason}")
+    if status in ("removed", "renamed") and not all(is_docs(path) for path in _paths_of(entry)):
+        blockers.append(f"{entry['filename']}: file {status}")
+    return blockers
+
+
+def disables_a_test(entry: dict) -> bool:
+    if not entry["filename"].endswith(".py"):
+        return False
+    return any(DISABLED_TEST.match(line) for line in (entry.get("patch") or "").splitlines())
 
 
 def find_blockers(files: list[dict]) -> list[str]:
     blockers = []
     for entry in files:
-        status = entry.get("status", "modified")
-        for path in _paths_of(entry):
-            # A test file under a blocked app is still only ever imported by pytest, so the
-            # path blockers do not apply to it. Losing or disabling one below still counts.
-            # Confined to `apps/` -- outside it a `test_*.py` name proves nothing about what
-            # loads the file, and `.github/` and `config/` would hand out the exemption on a name.
-            if path.startswith("apps/") and is_test(path):
-                continue
-            if status == "added" and any(glob_match(path, pattern) for pattern in BLOCKED_ONLY_WHEN_MODIFIED):
-                continue
-            reason = match_category(path, BLOCKED_PATHS)
-            if reason:
-                blockers.append(f"{path}: {reason}")
-        if status in ("removed", "renamed") and not all(is_docs(p) for p in _paths_of(entry)):
-            blockers.append(f"{entry['filename']}: file {status}")
-        for line in (entry.get("patch") or "").splitlines() if entry["filename"].endswith(".py") else []:
-            if DISABLED_TEST.match(line):
-                blockers.append(f"{entry['filename']}: disables a test")
-                break
+        blockers.extend(path_blockers(entry))
+        if disables_a_test(entry):
+            blockers.append(f"{entry['filename']}: disables a test")
 
     lost = count_lost_tests(files)
     if lost:
@@ -249,12 +262,16 @@ def write_github_output(verdict: Verdict) -> None:
     path = os.environ.get("GITHUB_OUTPUT")
     if not path:
         return
+    # A file name can contain newlines, and reasons quote file names. A fixed delimiter
+    # would let one close the heredoc and append output records of its own -- including a
+    # second `risk=` that wins by being last.
+    delimiter = f"REASONS_EOF_{uuid.uuid4().hex}"
     with open(path, "a") as fh:
         fh.write(f"risk={verdict.risk}\n")
-        fh.write("reasons<<REASONS_EOF\n")
+        fh.write(f"reasons<<{delimiter}\n")
         for reason in verdict.reasons:
-            fh.write(f"- {reason}\n")
-        fh.write("REASONS_EOF\n")
+            fh.write("- " + " ".join(reason.splitlines()) + "\n")
+        fh.write(f"{delimiter}\n")
 
 
 def main(argv: list[str] | None = None) -> int:
