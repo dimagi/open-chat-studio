@@ -20,6 +20,7 @@ from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
 from apps.pipelines.nodes.context import NodeContext
+from apps.service_providers.llm_service.error_classification import translate_provider_errors
 
 if TYPE_CHECKING:
     from apps.pipelines.repository import ORMRepository
@@ -367,7 +368,8 @@ class PipelineNode(BasePipelineNode, ABC):
 
         context = NodeContext(state)
         process_params["context"] = context
-        output = self._process(**process_params)
+        with translate_provider_errors():
+            output = self._process(**process_params)
         if isinstance(output, Command) and output.goto != END:
             return Command(goto=output.goto, update=self._augment_output(state, cast("PipelineState", output.update)))
         if not isinstance(output, dict):
@@ -401,7 +403,8 @@ class PipelineRouterNode(BasePipelineNode):
             state = PipelineState(state)
             state = self._prepare_state(self.node_id, incoming_edges, state)
             context = NodeContext(state)
-            conditional_branch, is_default_keyword = self._process_conditional(context)
+            with translate_provider_errors():
+                conditional_branch, is_default_keyword = self._process_conditional(context)
             output_handle = next((k for k, v in output_map.items() if v == conditional_branch), None)
             tags = self.get_output_tags(conditional_branch, is_default_keyword)
             # edge map won't contain the conditional branch if that handle isn't connected to another node

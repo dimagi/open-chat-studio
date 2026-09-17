@@ -31,7 +31,7 @@ export default function ComponentHelp({label, parentRef, scrollPosition, showHel
 
 export function HelpContent(props: {
   children: React.ReactNode,
-  style?: any
+  style?: React.CSSProperties
 }) {
   return (
     <div className="card dropdown-content bg-base-100 rounded-box z-20 w-64 shadow-sm border border-neutral-500"
