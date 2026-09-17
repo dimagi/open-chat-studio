@@ -8,7 +8,7 @@
       <div>
         <h2 class="mt-6 text-center text-2xl font-bold text-gray-900">
           You are requesting access to:<br/>
-          {% if is_team_request %}Team "{{ team_slug }}"{% else %}the Admin Site{% endif %}
+          {{ grant.label }}
         </h2>
         <form class="mt-4" method="post">
           <p class="text-center">Please confirm your identity:</p>
