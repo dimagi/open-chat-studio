@@ -601,7 +601,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
             new_version.flow_id = new_flow_id
-            if not self.node_type.is_server_managed and new_version.name == old_flow_id:
+            if not new_version.node_type.is_server_managed and new_version.name == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
         if not is_copy:
