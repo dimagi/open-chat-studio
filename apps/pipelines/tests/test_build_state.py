@@ -123,6 +123,19 @@ class TestNodeOutputHandles:
             {"handle": "output_1", "label": "B"},
         ]
 
+    def test_router_with_none_keywords_reports_no_handles(self):
+        # #1452: an older client, a raw import, or any other caller that predates the frontend's
+        # own empty-list default for `keywords` can still send an explicit `None` for a
+        # default_factory field, rather than a missing key. route_key is also missing here, so
+        # full validation fails and falls back to the unvalidated instance -- which must treat
+        # None the same as "no keywords yet", not enumerate() it directly.
+        node = Node(
+            flow_id="router-1",
+            type="StaticRouterNode",
+            params={"name": "router", "keywords": None},
+        )
+        assert node_output_handles(node) == []
+
     def test_unknown_node_type_has_no_output_handles(self):
         node = Node(flow_id="ghost-1", type="GhostNode", params={"name": "ghost"})
         assert node_output_handles(node) == []

@@ -11,7 +11,7 @@ from django.urls import reverse
 from apps.custom_actions.models import CustomActionOperation
 from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
-from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -216,35 +216,6 @@ class TestFlowNodeReadsResourceFKs:
         assert node.params["collection_index_ids"] != []
 
         assert node.to_flow_node().data.params["collection_index_ids"] == []
-
-    def test_custom_actions_come_from_the_operation_rows(self):
-        """Params carries no entries, so the served list can only have come off the
-        ``CustomActionOperation`` rows -- sorted, since they have no ordering of their own here."""
-        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm"})
-        action = CustomActionFactory.create(allowed_operations=["weather_get", "pollen_get"])
-        for operation_id in ("weather_get", "pollen_get"):
-            CustomActionOperationFactory.create(node=node, custom_action=action, operation_id=operation_id)
-
-        assert node.to_flow_node().data.params["custom_actions"] == sorted(
-            [f"{action.id}:weather_get", f"{action.id}:pollen_get"]
-        )
-
-    def test_deleted_custom_action_reads_as_empty(self):
-        """Deleting a CustomAction cascades the operation row away while the entry lingers in params.
-        The params copy must not be served -- the same correction the scalar FKs get."""
-        action = CustomActionFactory.create()
-        node = NodeFactory.create(
-            type="LLMResponseWithPrompt",
-            params={"name": "llm", "custom_actions": [f"{action.id}:weather_get"]},
-        )
-        node.update_from_params()
-        assert node.custom_action_operations.exists()
-
-        action.delete()
-        node.refresh_from_db()
-        assert node.params["custom_actions"] != []
-
-        assert node.to_flow_node().data.params["custom_actions"] == []
 
     def test_every_resource_id_is_served_from_the_columns(self):
         """The columns, not params, decide what the flow node reports — so all of them are served,

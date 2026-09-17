@@ -1,6 +1,6 @@
-import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
-import React, {ChangeEvent, MouseEvent} from "react";
-import {concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
+import {Node, NodeProps, NodeToolbar, Position, useUpdateNodeInternals} from "reactflow";
+import React, {ChangeEvent, MouseEvent, useMemo} from "react";
+import {buildTypeChangeParams, concatenate, formatDocsForSchema, getCachedData, getCanAddNodeSchemas, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
@@ -35,6 +35,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const deprecatedModel = usePipelineStore((state) => state.getNodeDeprecatedModel(id));
   const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -62,6 +63,25 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     }));
   };
 
+  // Other user-addable types this node could become (#1452). A deprecated or removed type still
+  // offers the control -- that's the migration path off it -- but Start/End/Passthrough never do,
+  // since their schemas are neither addable nor deprecated/removed. Targets are always the
+  // addable list (getCanAddNodeSchemas), the same one ComponentList's palette uses.
+  const canBeChangeTypeSource = nodeSchema["ui:can_add"] || nodeSchema["ui:deprecated"] || nodeSchema["ui:removed"];
+  const changeableTypes = useMemo(
+    () => (canBeChangeTypeSource ? getCanAddNodeSchemas().filter((schema) => schema.title !== data.type) : []),
+    [canBeChangeTypeSource, data.type]
+  );
+
+  const changeNodeType = (newSchema: JsonSchema) => {
+    setNode(id, produce((next) => {
+      next.data.type = newSchema.title;
+      next.data.label = newSchema["ui:label"];
+      next.data.params = buildTypeChangeParams(newSchema, next.data.params);
+    }));
+    updateNodeInternals(id);
+  };
+
   const currentColor = concatenate(data.params["color"]) || NODE_COLORS[0].value;
   const nodeClasses = `${nodeBorderClass(hasErrors, selected, !!deprecatedModel)} ${currentColor}`;
 
@@ -78,6 +98,21 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
               <button className="btn btn-xs join-item" onClick={() => editNode()}>
                   <i className="fa fa-pencil"></i>
               </button>
+            )}
+            {changeableTypes.length > 0 && (
+              <div className="dropdown dropdown-bottom">
+                  <button className="btn btn-xs join-item" aria-label="Change node type">
+                      <i className="fa-solid fa-right-left"></i>
+                  </button>
+                  <ul tabIndex={0} className="dropdown-content z-[1] menu flex-nowrap p-2 shadow bg-base-100 rounded-box w-52 max-h-60 overflow-y-auto">
+                    <li className="menu-title">Change type</li>
+                    {changeableTypes.map((schema) => (
+                      <li key={schema.title}>
+                        <button type="button" onClick={() => changeNodeType(schema)}>{schema["ui:label"]}</button>
+                      </li>
+                    ))}
+                  </ul>
+              </div>
             )}
             {nodeDocs && (
               <div className="dropdown dropdown-right">

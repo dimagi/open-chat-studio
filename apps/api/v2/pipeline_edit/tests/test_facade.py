@@ -230,9 +230,13 @@ class TestTheResponseEnvelope:
 #: the locked read and once for the rebuild after the write. They buy ``custom_actions`` being served
 #: from those rows rather than from the copy in params, and the count does not move with the number
 #: of nodes -- without them each node would read the table itself.
-#: One is ``deprecated_models``, a single statement for the whole graph that does not move with the
-#: number of nodes.
-QUERIES_UNDER_THE_LOCK = 30
+#:
+#: Two independent moves since this was last pinned at 29: ``Node.update_from_params`` used to sync
+#: a node's ``CustomActionOperation`` rows by checking its type, so an ``LLMResponseWithPrompt`` node
+#: always ran the sync unconditionally; it now checks whether there's anything to sync or clear
+#: instead, costing one query less on a node with neither (this fixture's). ``deprecated_models`` adds
+#: one statement for the whole graph that does not move with the number of nodes. Net: still 29.
+QUERIES_UNDER_THE_LOCK = 29
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.

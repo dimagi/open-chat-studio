@@ -208,9 +208,8 @@ const getWidgetsGeneric = (
       return 0;
     }
   });
-   if (!Array.isArray(nodeData.params.keywords)) {
-    nodeData.params.keywords = [""]; // initialize keywords with size 1
-  }
+  // Mutating params here is unsafe: a type change (#1452) can hand this an already-frozen
+  // object (immer auto-freezes every produce() result), which throws on write.
   return schemaProperties.map((name) => (
     <React.Fragment key={name}>
       {widgetGenerator({
