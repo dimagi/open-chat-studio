@@ -370,6 +370,40 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_evaluator_restores_output_field_names_with_invalid_characters(
+    get_llm_service, llm_provider, llm_provider_model
+):
+    """Anthropic rejects tool schema property keys with characters outside `[a-zA-Z0-9_.-]`, so
+    `schema_to_pydantic_model` sanitizes a field name like "score (1-5)" before it reaches the LLM.
+    The LLM answers using that sanitized name -- the evaluator must map it back to the field name
+    the user actually configured before it's stored."""
+    response = AIMessage(
+        content="",
+        tool_calls=[{"name": "DynamicModel", "args": {"score_1-5_": 4}, "id": "call_1"}],
+    )
+    service = build_fake_llm_service(responses=[response])
+    get_llm_service.return_value = service
+
+    message = EvaluationMessageFactory.create(
+        input={"content": "Hello", "role": "human"},
+        output={"content": "Hi", "role": "ai"},
+        create_chat_messages=True,
+    )
+
+    llm_evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Rate this: {input.content}",
+        output_schema={"score (1-5)": {"type": "int", "description": "the rating"}},
+    )
+
+    result = llm_evaluator.run(message, "Hi")
+
+    assert result.result == {"score (1-5)": 4}
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_evaluator_interpolates_participant_data_and_session_state(get_llm_service, llm_provider, llm_provider_model):
     """Both are captured on the message, so the prompt can read them."""
     response = AIMessage(

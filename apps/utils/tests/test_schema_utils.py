@@ -3,7 +3,7 @@ from typing import Any, Literal
 import pytest
 from pydantic import create_model
 
-from apps.utils.schema_utils import collapse_optional_types, resolve_references
+from apps.utils.schema_utils import collapse_optional_types, resolve_references, sanitize_property_name
 
 
 def test_resolve_simple_reference():
@@ -180,3 +180,42 @@ def test_a_union_with_no_single_type_is_left_as_pydantic_wrote_it(annotation):
 
     assert "anyOf" in schema["properties"]["field"]
     assert "type" not in schema["properties"]["field"]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("score", "score", id="already-valid-is-untouched"),
+        pytest.param("test__id__get", "test__id__get", id="valid-double-underscore-is-untouched"),
+        pytest.param("X-Custom-Header", "X-Custom-Header", id="hyphens-are-untouched"),
+        pytest.param("score (1-5)", "score_1-5_", id="spaces-and-parens-become-underscores"),
+        pytest.param("my field", "my_field", id="single-space-becomes-underscore"),
+        pytest.param("a/b\\c", "a_b_c", id="slashes-become-underscores"),
+        pytest.param("!!!", "_", id="all-invalid-chars-collapse-to-one-underscore"),
+        pytest.param("", "field", id="empty-string-falls-back-to-field"),
+        pytest.param("a" * 100, "a" * 64, id="over-64-chars-is-truncated"),
+    ],
+)
+def test_sanitize_property_name(name, expected):
+    assert sanitize_property_name(name) == expected
+
+
+def test_sanitize_property_name_is_idempotent():
+    """Anthropic's pattern allows `_`, so re-sanitizing an already-sanitized name must be a no-op --
+    otherwise a caller that sanitizes twice (e.g. once per provider) would keep reshaping it."""
+    once = sanitize_property_name("score (1-5)!!")
+    assert sanitize_property_name(once) == once
+
+
+def test_sanitize_property_name_avoids_collisions_when_truncating_or_replacing():
+    """Two distinct field names that sanitize to the same string must not collapse into one --
+    that would silently drop a field from a dynamically-built schema."""
+    taken: set[str] = set()
+
+    first = sanitize_property_name("my field!", taken)
+    taken.add(first)
+    second = sanitize_property_name("my field?", taken)
+    taken.add(second)
+
+    assert first != second
+    assert {first, second} == taken

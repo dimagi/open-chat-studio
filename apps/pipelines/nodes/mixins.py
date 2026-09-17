@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -43,6 +42,7 @@ from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETE
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.utils.json import dict_to_json_schema
+from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
@@ -453,16 +453,11 @@ class ExtractStructuredDataNodeMixin:
         return dict_to_json_schema(data)
 
 
-# Anthropic requires tool property keys to match this pattern. Mirror it here so we can surface a friendly
-# validation error instead of a 500 from a rejected API call.
-_SCHEMA_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
-
-
 def _collect_invalid_schema_keys(schema: dict) -> list[str]:
     """Recursively collect property keys that violate Anthropic's naming rules, mirroring ``dict_to_json_schema``."""
     invalid = []
     for key, val in schema.items():
-        if not _SCHEMA_KEY_PATTERN.match(key):
+        if not VALID_PROPERTY_NAME_PATTERN.match(key):
             invalid.append(key)
         if isinstance(val, list) and val and isinstance(val[0], dict):
             invalid.extend(_collect_invalid_schema_keys(val[0]))

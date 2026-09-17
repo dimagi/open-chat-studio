@@ -17,6 +17,7 @@ from apps.evaluations.field_definitions import FieldDefinition
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
+from apps.utils.schema_utils import sanitize_property_name
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -509,6 +510,11 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
             "field_name": FieldDefinition(...)
         }
 
+    Field names are sanitized so the model's JSON schema keys are valid tool/property names for
+    every provider (notably Anthropic's `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original
+    mapping is stashed on the returned model as `__field_name_mapping__` so callers can restore
+    the original names once the LLM result comes back.
+
     Args:
         schema: Dictionary mapping field names to FieldDefinition objects
         model_name: Name for the generated Pydantic model
@@ -518,14 +524,21 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
     """
 
     pydantic_fields = {}
+    field_name_mapping: dict[str, str] = {}
+    taken: set[str] = set()
 
     for field_name, field_def in schema.items():
-        pydantic_fields[field_name] = (
+        sanitized_name = sanitize_property_name(field_name, taken)
+        taken.add(sanitized_name)
+        field_name_mapping[sanitized_name] = field_name
+        pydantic_fields[sanitized_name] = (
             field_def.python_type,
             Field(**field_def.pydantic_fields),
         )
 
-    return create_model(model_name, **pydantic_fields)
+    model = create_model(model_name, **pydantic_fields)
+    model.__field_name_mapping__ = field_name_mapping
+    return model
 
 
 def get_use_in_aggregations(field_def: dict) -> bool:
