@@ -13,6 +13,7 @@ from oauth2_provider.exceptions import OAuthToolkitError
 from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationView
 from oauthlib.oauth2 import AccessDeniedError
 
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.teams.helpers import get_default_team_from_request
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Team
@@ -118,7 +119,7 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         return super().form_valid(form)
 
 
-class TeamApplicationBreadcrumbsMixin:
+class ApplicationBreadcrumbsMixin(BreadcrumbsMixin):
     """Name the list this form was reached from.
 
     The team-scoped and global application forms share a template but live in different URL
@@ -126,11 +127,22 @@ class TeamApplicationBreadcrumbsMixin:
     that a create view has no object to read it off.
     """
 
-    def get_context_data(self, **kwargs):
-        return super().get_context_data(**kwargs) | {
-            "breadcrumb_parent_url": manage_applications_url(self.request.team.slug),
-            "breadcrumb_parent_label": "OAuth Applications",
-        }
+    def get_parent_crumb(self) -> Crumb:
+        raise NotImplementedError
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        leaf = self.object.name if self.object else gettext("Register")
+        return [self.get_parent_crumb(), (leaf, None)]
+
+
+class TeamApplicationBreadcrumbsMixin(ApplicationBreadcrumbsMixin):
+    def get_parent_crumb(self) -> Crumb:
+        return gettext("OAuth Applications"), manage_applications_url(self.request.team.slug)
+
+
+class GlobalApplicationBreadcrumbsMixin(ApplicationBreadcrumbsMixin):
+    def get_parent_crumb(self) -> Crumb:
+        return gettext("Global OAuth Applications"), reverse("oauth2_provider:global_application_home")
 
 
 class ApplicationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -274,7 +286,7 @@ class GlobalApplicationTableView(SuperuserRequiredMixin, SingleTableView):  # ty
         return OAuth2Application.objects.filter(team__isnull=True).order_by("-created")
 
 
-class CreateGlobalApplication(SuperuserRequiredMixin, CreateView):
+class CreateGlobalApplication(GlobalApplicationBreadcrumbsMixin, SuperuserRequiredMixin, CreateView):
     """Register a new global OAuth application."""
 
     model = OAuth2Application
@@ -284,8 +296,6 @@ class CreateGlobalApplication(SuperuserRequiredMixin, CreateView):
     extra_context = {
         "title": "Register New Global Application",
         "button_text": "Register",
-        "breadcrumb_parent_url": reverse_lazy("oauth2_provider:global_application_home"),
-        "breadcrumb_parent_label": "Global OAuth Applications",
     }
 
     def get_initial(self):
@@ -300,7 +310,7 @@ class CreateGlobalApplication(SuperuserRequiredMixin, CreateView):
         return super().form_valid(form)
 
 
-class EditGlobalApplication(SuperuserRequiredMixin, UpdateView):
+class EditGlobalApplication(GlobalApplicationBreadcrumbsMixin, SuperuserRequiredMixin, UpdateView):
     """Update a global OAuth application."""
 
     model = OAuth2Application
@@ -310,8 +320,6 @@ class EditGlobalApplication(SuperuserRequiredMixin, UpdateView):
     extra_context = {
         "title": "Update Global Application",
         "button_text": "Update",
-        "breadcrumb_parent_url": reverse_lazy("oauth2_provider:global_application_home"),
-        "breadcrumb_parent_label": "Global OAuth Applications",
     }
 
     def get_queryset(self):

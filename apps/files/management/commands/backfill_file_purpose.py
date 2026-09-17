@@ -12,16 +12,13 @@ EXPORT_EXPIRY = timezone.timedelta(days=7)
 
 # Conditions that reliably identify a file's purpose, in precedence order. A
 # file is assigned to the first rule it matches; anything that matches nothing is
-# left untouched. ASSISTANT is reserved for bot-configuration files (assistant
-# tool resources and openai-synced files); any file attached to a conversation
-# (ChatAttachment, any tool_type) is MESSAGE_MEDIA. The conversation rule sits
-# above the export patterns so a user-uploaded ZIP attached to a chat is treated
-# as media rather than a (short-lived) export.
+# left untouched. Any file attached to a conversation (ChatAttachment, any
+# tool_type) is MESSAGE_MEDIA. The conversation rule sits above the export
+# patterns so a user-uploaded ZIP attached to a chat is treated as media rather
+# than a (short-lived) export.
 RULES: list[tuple[str, Q]] = [
     (FilePurpose.COLLECTION, Q(collections__isnull=False) | Q(document_sources__isnull=False)),
-    (FilePurpose.ASSISTANT, Q(toolresources__isnull=False)),
     (FilePurpose.MESSAGE_MEDIA, Q(chatattachment__isnull=False)),
-    (FilePurpose.ASSISTANT, Q(external_source="openai")),
     # Chat exports are named "<experiment> Chat Export <timestamp>.csv[.gz]". Current
     # exports are gzipped (application/gzip); older ones are plain text/csv. Match both.
     (FilePurpose.DATA_EXPORT, Q(name__icontains="Chat Export") & Q(content_type__in=["application/gzip", "text/csv"])),

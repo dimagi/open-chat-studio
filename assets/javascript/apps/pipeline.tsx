@@ -4,7 +4,12 @@ import {createRoot} from "react-dom/client";
 import App from "./pipeline/App";
 
 declare global {
-  const alertify: any;
+  // `alertifyjs` ships no type declarations. Only the notifier methods reached for from the
+  // pipeline app are declared; widen this as more of the library gets used.
+  const alertify: {
+    error: (message: string) => void;
+    success: (message: string) => void;
+  };
 }
 
 export function renderPipeline(containerId: string, team_slug: string, pipelineId: number | undefined) {

@@ -87,17 +87,6 @@
   </script>
 {% endblock page_head %}
 
-{% block breadcrumbs %}
-  {% if not create %}
-    <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-      <ul>
-        <li><a href="{% url 'dashboard:index' request.team.slug %}">{{ team.name }}</a></li>
-        <li class="pg-breadcrumb-active" aria-current="page">{% translate "Team settings" %}</li>
-      </ul>
-    </div>
-  {% endif %}
-{% endblock breadcrumbs %}
-
 {% block app %}
   <div id="team-settings-page">
   {% if create %}

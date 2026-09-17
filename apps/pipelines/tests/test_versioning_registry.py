@@ -1,25 +1,41 @@
 import pytest
 
+from apps.documents.models import Collection
+from apps.experiments.models import SourceMaterial
 from apps.experiments.versioning import VersionsMixin
 from apps.pipelines.models import Node
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.versioning import (
-    _NODE_PARAM_SPECS,
+    NODE_PARAM_SPECS,
     ParamArchiving,
     ParamVersioning,
     VersionedParamSpec,
+    all_versioned_param_specs,
 )
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
-from apps.utils.factories.pipelines import NodeFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 ALL_SPECS = [
     pytest.param(node_type, spec, id=f"{node_type}.{spec.param_name}")
-    for node_type, specs in _NODE_PARAM_SPECS.items()
+    for node_type, specs in NODE_PARAM_SPECS.items()
     for spec in specs
 ]
 
 assert ALL_SPECS, "Versioned param registry must not be empty"
+
+# Specs whose model has a get_related_nodes_queryset guard (not OpenAiAssistant, which has its own).
+GUARD_FACTORIES = {
+    Collection: CollectionFactory,
+    SourceMaterial: SourceMaterialFactory,
+}
+GUARD_SPECS = [
+    pytest.param(spec, id=f"{spec.model_label}.{spec.param_name}")
+    for spec in all_versioned_param_specs()
+    if hasattr(spec.model_cls, "get_related_nodes_queryset")
+]
+
+assert GUARD_SPECS, "Expected at least one guard-participating spec"
 
 
 @pytest.mark.parametrize(("node_type", "spec"), ALL_SPECS)
@@ -55,7 +71,7 @@ def test_revert_referenced_record_maps_version_to_working_id():
     node.update_from_params()  # mirror the versioned id into the source_material FK
     assert node.source_material_id == version.id
 
-    spec = {spec.param_name: spec for spec in _NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["source_material_id"]
+    spec = {spec.param_name: spec for spec in NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["source_material_id"]
     params = {"source_material_id": str(version.id)}
     spec.revert_referenced_record(node, params)
     assert params["source_material_id"] == str(source_material.id)
@@ -65,7 +81,7 @@ def test_revert_referenced_record_maps_version_to_working_id():
 def test_revert_referenced_record_leaves_live_reference_verbatim():
     """LIVE_REFERENCE params were never rewritten on publish, so revert must leave them as-is."""
     collection = CollectionFactory.create()
-    spec = {spec.param_name: spec for spec in _NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["collection_id"]
+    spec = {spec.param_name: spec for spec in NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["collection_id"]
     assert spec.versioning == ParamVersioning.LIVE_REFERENCE
 
     params = {"collection_id": str(collection.id)}
@@ -84,3 +100,14 @@ def test_versioning_multi_id_params_is_unsupported():
             fk_field="collection_indexes",
             many=True,
         )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("spec", GUARD_SPECS)
+def test_in_use_guard_param_key_matches_registry(spec):
+    """Guards against registry drift: the guard's hardcoded param key must match the registry."""
+    instance = GUARD_FACTORIES[spec.model_cls].create()
+    value = [str(instance.id)] if spec.many else str(instance.id)
+    NodeFactory.create(pipeline=PipelineFactory.create(team=instance.team), params={spec.param_name: value})
+
+    assert instance.get_related_nodes_queryset().exists()

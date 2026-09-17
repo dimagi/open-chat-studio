@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
-from apps.chat.exceptions import ChatException, UserActionableError
+from apps.chat.exceptions import ChatException, ProviderConfigurationError, UserActionableError
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -159,7 +159,8 @@ class MessageProcessingPipeline:
        consent withdrawn).
     3. Configuration error -- the chatbot is misconfigured (e.g. a
        deprecated model, an unreachable node, a broken template, code that
-       raised). This is a user configuration problem, not a bug, so it
+       raised) or its LLM provider account is out of credit or using a
+       revoked key. This is a user configuration problem, not a bug, so it
        replies with the generic DEFAULT_ERROR_RESPONSE_TEXT, runs terminal
        stages, and is logged as a warning WITHOUT being re-raised (which
        would report it to Sentry and fail the task with no useful retry).
@@ -177,7 +178,13 @@ class MessageProcessingPipeline:
 
     # Errors in how the chatbot was configured, not bugs: they get the canned reply
     # and are never re-raised.
-    CONFIGURATION_EXCEPTIONS = (PipelineBuildError, PipelineNodeBuildError, CodeNodeRunError, NodeUserConfigRunError)
+    CONFIGURATION_EXCEPTIONS = (
+        PipelineBuildError,
+        PipelineNodeBuildError,
+        CodeNodeRunError,
+        NodeUserConfigRunError,
+        ProviderConfigurationError,
+    )
 
     def __init__(
         self,

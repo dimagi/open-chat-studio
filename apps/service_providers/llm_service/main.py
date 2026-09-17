@@ -195,7 +195,7 @@ class LlmService(pydantic.BaseModel):
 
 
 class OpenAIGenericService(LlmService):
-    openai_api_key: str
+    openai_api_key: pydantic.SecretStr
     openai_api_base: str
     # Subclasses can override this to enable the OpenAI Responses API.
     # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
@@ -227,7 +227,11 @@ class OpenAIGenericService(LlmService):
         if effort := kwargs.pop("effort", None):
             kwargs["reasoning"] = {"effort": effort}
 
-        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
+        return {
+            "openai_api_key": self.openai_api_key.get_secret_value(),
+            "openai_api_base": self.openai_api_base,
+            **kwargs,
+        }
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -246,7 +250,11 @@ class OpenAILlmService(OpenAIGenericService):
         }
 
     def get_raw_client(self) -> OpenAI:
-        return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
+        return OpenAI(
+            api_key=self.openai_api_key.get_secret_value(),
+            organization=self.openai_organization,
+            base_url=self.openai_api_base,
+        )
 
     def transcribe_audio(self, audio: BytesIO) -> str:
         transcript = self.get_raw_client().audio.transcriptions.create(
@@ -271,7 +279,7 @@ class OpenAILlmService(OpenAIGenericService):
 
     def get_local_index_manager(self, embedding_model_name: str, contextualizer=None) -> IndexManager:
         return OpenAILocalIndexManager(
-            api_key=self.openai_api_key,
+            api_key=self.openai_api_key.get_secret_value(),
             embedding_model_name=embedding_model_name,
             openai_api_base=self.openai_api_base,
             contextualizer=contextualizer,
@@ -340,7 +348,7 @@ class OpenAILlmService(OpenAIGenericService):
                 file_contents = get_openai_container_file_contents(
                     container_id,
                     openai_file_id=file_external_id,
-                    openai_api_key=self.openai_api_key,
+                    openai_api_key=self.openai_api_key.get_secret_value(),
                     openai_organization=self.openai_organization,
                 )
                 new_file = File.from_external_source(
@@ -369,7 +377,7 @@ class OpenAILlmService(OpenAIGenericService):
 
 
 class AzureLlmService(LlmService):
-    openai_api_key: str
+    openai_api_key: pydantic.SecretStr
     openai_api_base: str
     openai_api_version: str
 
@@ -379,7 +387,7 @@ class AzureLlmService(LlmService):
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,
-            openai_api_key=self.openai_api_key,
+            openai_api_key=self.openai_api_key.get_secret_value(),
             deployment_name=llm_model,
             **kwargs,
         )
@@ -389,14 +397,14 @@ class AzureLlmService(LlmService):
 
 
 class AnthropicLlmService(LlmService):
-    anthropic_api_key: str
+    anthropic_api_key: pydantic.SecretStr
     anthropic_api_base: str
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_anthropic import ChatAnthropic  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatAnthropic(
-            anthropic_api_key=self.anthropic_api_key,
+            anthropic_api_key=self.anthropic_api_key.get_secret_value(),
             anthropic_api_url=self.anthropic_api_base,
             model=llm_model,
             **self._get_model_kwargs(**kwargs),
@@ -450,14 +458,17 @@ class AnthropicLlmService(LlmService):
 
 
 class DeepSeekLlmService(LlmService):
-    deepseek_api_key: str
+    deepseek_api_key: pydantic.SecretStr
     deepseek_api_base: str
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import ChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
         return ChatOpenAI(
-            model=llm_model, openai_api_key=self.deepseek_api_key, openai_api_base=self.deepseek_api_base, **kwargs
+            model=llm_model,
+            openai_api_key=self.deepseek_api_key.get_secret_value(),
+            openai_api_base=self.deepseek_api_base,
+            **kwargs,
         )
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
@@ -465,13 +476,13 @@ class DeepSeekLlmService(LlmService):
 
 
 class GoogleLlmService(LlmService):
-    google_api_key: str
+    google_api_key: pydantic.SecretStr
     supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key, **kwargs)
+        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key.get_secret_value(), **kwargs)
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
@@ -489,14 +500,14 @@ class GoogleLlmService(LlmService):
 
     def get_local_index_manager(self, embedding_model_name: str, contextualizer=None) -> IndexManager:
         return GoogleLocalIndexManager(
-            api_key=self.google_api_key,
+            api_key=self.google_api_key.get_secret_value(),
             embedding_model_name=embedding_model_name,
             contextualizer=contextualizer,
         )
 
 
 class VoyageAILlmService(LlmService):
-    voyage_api_key: str
+    voyage_api_key: pydantic.SecretStr
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
@@ -506,7 +517,7 @@ class VoyageAILlmService(LlmService):
 
     def get_local_index_manager(self, embedding_model_name: str, contextualizer=None) -> IndexManager:
         return VoyageAILocalIndexManager(
-            api_key=self.voyage_api_key,
+            api_key=self.voyage_api_key.get_secret_value(),
             embedding_model_name=embedding_model_name,
             contextualizer=contextualizer,
         )
@@ -516,7 +527,9 @@ class VoyageAILlmService(LlmService):
 
 
 class GoogleVertexAILlmService(LlmService):
-    credentials_json: dict
+    # The service account JSON holds a private key. SecretStr cannot wrap a dict, so the field is
+    # kept out of the model repr instead, which is what a Sentry stack-frame local serializes.
+    credentials_json: dict = pydantic.Field(repr=False)
     location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
     supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES

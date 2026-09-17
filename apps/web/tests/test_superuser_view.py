@@ -7,6 +7,7 @@ from time_machine import travel
 
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+from apps.web.superuser_utils import MAX_CONCURRENT_PRIVILEGES
 from apps.web.views import ADMIN_SLUG
 
 
@@ -109,3 +110,20 @@ def test_sudo_access_expires_after_30_minutes(superuser, authed_client):
         freezer.shift(datetime.timedelta(minutes=2))
         response = authed_client.get(admin_url)
         assert response.status_code == 302  # Should redirect to sudo page
+
+
+@pytest.mark.django_db()
+def test_acquire_beyond_the_concurrency_cap_reports_an_error(superuser, authed_client):
+    for team in TeamFactory.create_batch(MAX_CONCURRENT_PRIVILEGES):
+        setup = authed_client.post(reverse("web:sudo", args=[team.slug]), {"password": "password", "redirect": "/"})
+        assert setup.status_code == 302
+
+    extra = TeamFactory.create()
+    response = authed_client.post(reverse("web:sudo", args=[extra.slug]), {"password": "password", "redirect": "/"})
+
+    assert response.status_code == 200
+    assertFormError(
+        response.context["form"],
+        None,
+        ["You already hold the maximum number of elevated privileges. Release one of them and try again."],
+    )

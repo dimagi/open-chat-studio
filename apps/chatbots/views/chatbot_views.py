@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, FormView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
@@ -25,12 +26,19 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable, ParticipantSessionsTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
-from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
+from apps.events.models import (
+    EventLogStatusChoices,
+    ScheduledTrigger,
+    StaticTrigger,
+    StaticTriggerType,
+    TimeoutTrigger,
+)
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
@@ -51,6 +59,7 @@ from apps.experiments.views.experiment import (
 from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
@@ -249,7 +258,7 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         return queryset
 
 
-class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateChatbot(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = Experiment
     template_name = "chatbots/chatbot_form.html"
     form_class = ChatbotForm
@@ -264,6 +273,12 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         kwargs = super().get_form_kwargs()
         kwargs["request"] = self.request
         return kwargs
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [
+            (_("Chatbots"), reverse("chatbots:chatbots_home", args=[self.request.team.slug])),
+            (_("Create"), None),
+        ]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -325,6 +340,10 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "usage_summary": usage_summary,
         "broadcast_form": BroadcastMessageForm(experiment),
+        "breadcrumbs": [
+            (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
+            (experiment.name, None),
+        ],
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -398,9 +417,9 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
+            "breadcrumbs": [*chatbot_crumbs(self.request.team.slug, experiment), (_("Edit"), None)],
             "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
             "default_values": get_node_default_values(self.request.team),
-            "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [
                 name
@@ -455,6 +474,10 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         context["has_versions"] = self.latest_version is not None
         context["experiment"] = working_experiment
         context["page_title"] = f"Create Version - {working_experiment.name}"
+        context["breadcrumbs"] = [
+            *chatbot_crumbs(self.request.team.slug, working_experiment),
+            (_("Create Version"), None),
+        ]
         return context
 
     def form_valid(self, form):
@@ -813,6 +836,7 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
             "session": session,
             "session_token": issue_session_token(session),
             "active_tab": "chatbots",
+            "breadcrumbs": [*chatbot_crumbs(team_slug, experiment), (session.external_id, None)],
             **version_specific_vars,
         },
     )
@@ -897,7 +921,13 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
     return TemplateResponse(
         request,
         "chatbots/chatbot_invitations.html",
-        {"invitation_form": form, "experiment": chatbot, "sessions": sessions, **version_specific_vars},
+        {
+            "invitation_form": form,
+            "experiment": chatbot,
+            "sessions": sessions,
+            "breadcrumbs": [*chatbot_crumbs(team_slug, chatbot), (_("Invitations"), None)],
+            **version_specific_vars,
+        },
     )
 
 
@@ -930,6 +960,10 @@ def _chatbot_chat_ui(request):
             "session": request.experiment_session,
             "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
+            "breadcrumbs": [
+                *chatbot_crumbs(request.team.slug, request.experiment),
+                (request.experiment_session.external_id, None),
+            ],
             **version_specific_vars,
         },
     )
@@ -1032,6 +1066,9 @@ def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session
 
 
 def _get_events_context(experiment: Experiment, team_slug: str):
+    # Three separate queries, one per trigger type, by design — each model has a distinct
+    # shape (e.g. ScheduledTrigger has trigger_date/timezone; TimeoutTrigger has delay).
+    # A follow-up ticket should union-query or batch these in one DB round trip.
     combined_events = []
     static_events = (
         StaticTrigger.objects.filter(experiment=experiment)
@@ -1062,8 +1099,30 @@ def _get_events_context(experiment: Experiment, team_slug: str):
         )
         .all()
     )
+    scheduled_events = (
+        ScheduledTrigger.objects.filter(experiment=experiment)
+        .annotate(
+            failure_count=Count(
+                Case(When(event_logs__status=EventLogStatusChoices.FAILURE, then=1), output_field=IntegerField())
+            )
+        )
+        .values(
+            "id",
+            "experiment_id",
+            "trigger_date",
+            "trigger_time",
+            "timezone",
+            "action__action_type",
+            "action__params",
+            "failure_count",
+            "is_active",
+        )
+        .all()
+    )
     for event in static_events:
         combined_events.append({**event, "team_slug": team_slug})
     for event in timeout_events:
         combined_events.append({**event, "type": "__timeout__", "team_slug": team_slug})
+    for event in scheduled_events:
+        combined_events.append({**event, "type": "__scheduled__", "team_slug": team_slug})
     return {"show_events": len(combined_events) > 0, "events_table": EventsTable(combined_events)}

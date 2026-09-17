@@ -485,6 +485,10 @@ class TestJSONCollectionSourceCreation:
         response = client.get(url)
         assert response.status_code == 200
         assert SourceType.JSON_COLLECTION in response.context["document_source_types"]
+        assert response.context["breadcrumbs"] == [
+            ("Collections", reverse("documents:collection_home", args=[collection.team.slug])),
+            (collection.name, None),
+        ]
 
     @override_flag("flag_json_collection_loader", active=False)
     def test_picker_excludes_json_collection_when_flag_off(self, collection, client):

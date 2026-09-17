@@ -33,6 +33,9 @@
           {% include "teams/migration_lock_banner.html" %}
         {% endif %}
         {% block breadcrumbs %}
+          {% if breadcrumbs and request.user.is_authenticated %}
+            {% include "generic/breadcrumbs.html" %}
+          {% endif %}
         {% endblock breadcrumbs %}
         {% block app %}
         {% endblock app %}

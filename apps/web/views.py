@@ -19,7 +19,11 @@ from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
 from apps.web.health_checks import CHECK_SUBSETS
 from apps.web.search import get_searchable_models
-from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
+from apps.web.superuser_utils import (
+    TooManyElevatedPrivileges,
+    apply_temporary_superuser_access,
+    remove_temporary_superuser_access,
+)
 
 UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
 
@@ -49,6 +53,34 @@ class ConfirmIdentityForm(forms.Form):
     redirect = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
+def _safe_redirect(url: str) -> str:
+    """Where to send the user once they are done here, falling back to the site root."""
+    if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
+        return "/"
+    return url
+
+
+def _grant_on_confirmed_identity(request, slug, form):
+    """Grant `slug` if the submitted password checks out.
+
+    Returns the redirect to follow, or None having populated the form's errors.
+    """
+    if not request.user.check_password(form.cleaned_data["password"]):
+        form.add_error("password", "Invalid password")
+        return None
+
+    try:
+        apply_temporary_superuser_access(request, slug)
+    except TooManyElevatedPrivileges:
+        form.add_error(
+            None,
+            "You already hold the maximum number of elevated privileges. Release one of them and try again.",
+        )
+        return None
+
+    return HttpResponseRedirect(_safe_redirect(form.cleaned_data["redirect"]))
+
+
 @user_passes_test(lambda u: u.is_superuser)
 @sensitive_post_parameters()
 def acquire_superuser_powers(request, slug):
@@ -59,18 +91,10 @@ def acquire_superuser_powers(request, slug):
     if request.method == "POST":
         form = ConfirmIdentityForm(request.POST)
         if form.is_valid():
-            if not request.user.check_password(form.cleaned_data["password"]):
-                form.add_error("password", "Invalid password")
-            else:
-                apply_temporary_superuser_access(request, slug)
-                redirect_to = form.cleaned_data["redirect"]
-                if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
-                    redirect_to = "/"
-                return HttpResponseRedirect(redirect_to)
+            if response := _grant_on_confirmed_identity(request, slug, form):
+                return response
     else:
-        redirect_to = request.GET.get("next", "")
-        if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
-            redirect_to = "/"
+        redirect_to = _safe_redirect(request.GET.get("next", ""))
         if is_team_request and Membership.objects.filter(team__slug=slug, user=request.user).exists():
             return HttpResponseRedirect(redirect_to)
 

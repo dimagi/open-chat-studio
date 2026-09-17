@@ -16,7 +16,7 @@ from django.utils.html import escape
 from time_machine import travel
 
 from apps.annotations.models import Tag
-from apps.api.session_tokens import validate_session_token
+from apps.api.session_tokens import parse_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.tables import ChatbotSessionsTable, ParticipantSessionsTable
@@ -25,10 +25,10 @@ from apps.chatbots.views import (
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
-    _chatbot_chat_ui,
     chatbot_session_pagination_view,
     home,
 )
+from apps.chatbots.views.chatbot_views import _chatbot_chat_ui
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import (
@@ -153,6 +153,10 @@ def test_single_chatbot_home(client, team_with_users):
 
     assert response.status_code == 200
     assert "chatbots/single_chatbot_home.html" in [t.name for t in response.templates]
+    assert response.context["breadcrumbs"] == [
+        ("Chatbots", reverse("chatbots:chatbots_home", args=[team.slug])),
+        ("Test Experiment", None),
+    ]
 
 
 @pytest.mark.django_db()
@@ -695,7 +699,7 @@ def test_continue_chat_action_opens_widget(client, team_with_users):
     assert "ocsContinueSessionChat(this)" in content
     assert f'data-session-id="{session.external_id}"' in content
     token = re.search(r'data-session-token="([^"]+)"', content).group(1)
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
     assert chat_url not in content
 
 
@@ -882,7 +886,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
 @patch("apps.channels.channel_base.ChannelBase.start_new_session")
-@patch("apps.chatbots.views.send_bot_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
 ):
@@ -1184,7 +1188,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
     token = response.context_data["session_token"]
     assert token
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
 
 
 @pytest.mark.django_db()
@@ -1223,7 +1227,7 @@ def test_chatbot_chat_session_includes_valid_session_token(client, team_with_use
 
     assert response.status_code == 200
     token = response.context["session_token"]
-    assert validate_session_token(token, session.external_id)
+    assert parse_session_token(token, session.external_id) is not None
 
 
 @pytest.mark.django_db()

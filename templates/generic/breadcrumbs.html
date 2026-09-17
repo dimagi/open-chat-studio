@@ -1,0 +1,13 @@
+<nav class="text-sm breadcrumbs" aria-label="breadcrumbs">
+  <ul>
+    {% for label, url in breadcrumbs %}
+      {% if forloop.last %}
+        <li class="pg-breadcrumb-active" aria-current="page">{{ label }}</li>
+      {% elif url %}
+        <li><a href="{{ url }}">{{ label }}</a></li>
+      {% else %}
+        <li>{{ label }}</li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</nav>

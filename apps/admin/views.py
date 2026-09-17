@@ -16,10 +16,12 @@ from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext
 from django.views.decorators.http import require_http_methods
 from django_htmx.http import push_url
 from field_audit.models import AuditEvent
 
+from apps.admin.breadcrumbs import admin_crumb
 from apps.admin.forms import (
     DateRangeForm,
     DateRanges,
@@ -328,6 +330,7 @@ def team_metadata(request):
         "admin/team_metadata.html",
         context={
             "active_tab": "admin",
+            "breadcrumbs": [admin_crumb(), (gettext("Manage Team Metadata"), None)],
             "import_form": import_form,
             "result": result,
             "metadata_fields": get_team_metadata_fields(),
@@ -472,6 +475,11 @@ def flag_detail(request, flag_name):
         "admin/flags/detail.html",
         context={
             "active_tab": "flags",
+            "breadcrumbs": [
+                admin_crumb(),
+                (gettext("Feature Flags"), reverse("ocs_admin:flags_home")),
+                (flag.name, None),
+            ],
             "flag": flag,
             "flag_info": flag_info_map.get(flag.name),
             "audit_events": audit_events,
@@ -692,6 +700,7 @@ def configuration(request):
         "admin/configuration.html",
         context={
             "active_tab": "configuration",
+            "breadcrumbs": [admin_crumb(), (gettext("Site Configuration"), None)],
             "form": form,
             "config_instance": config_instance,
         },
@@ -727,6 +736,7 @@ def find_provider_by_key(request):
         "admin/find_provider_by_key.html",
         context={
             "active_tab": "admin",
+            "breadcrumbs": [admin_crumb(), (gettext("Find provider by API key"), None)],
             "form": form,
             "results": results,
         },
