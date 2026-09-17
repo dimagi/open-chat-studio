@@ -57,7 +57,7 @@ class ChannelFormWrapper:
         except ExperimentChannelException as e:
             self.channel_form.add_error(None, str(e))
 
-    def save(self, commit=True):
+    def save(self):
         """Save both forms"""
         config_data = {}
         if self.extra_form and self.extra_form.is_valid():
