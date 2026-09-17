@@ -5,7 +5,7 @@ import pytest
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 
 from ..engagement_service import (
     TRAILING_MONTHS,
@@ -208,5 +208,41 @@ class TestGetNewVsReturningData:
         first = service.get_new_vs_returning_data()
 
         cached = DashboardCache.get_cached_data(team, f"new_vs_returning_{_cache_key({})}")
+
+        assert cached == first
+
+
+@pytest.mark.django_db()
+class TestGetAverageSessionDuration:
+    def test_averages_directly_over_sessions_not_per_bot_averages(self, team, experiment, participant, user):
+        other_experiment = Experiment.objects.create(name="Other bot", description="Other bot", team=team, owner=user)
+        other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
+        now = timezone.now()
+
+        def _completed_session(exp, part, minutes):
+            session = ExperimentSession.objects.create(
+                experiment=exp, participant=part, team=team, status=SessionStatus.ACTIVE, ended_at=now
+            )
+            ExperimentSession.objects.filter(id=session.id).update(created_at=now - timedelta(minutes=minutes))
+            _create_message(session, now - timedelta(minutes=minutes // 2))
+            return session
+
+        _completed_session(experiment, participant, 10)
+        _completed_session(experiment, participant, 10)
+        _completed_session(other_experiment, other_participant, 100)
+        unfinished_session = ExperimentSession.objects.create(
+            experiment=experiment, participant=participant, team=team, status=SessionStatus.ACTIVE
+        )
+        _create_message(unfinished_session, now)
+
+        minutes = EngagementDashboardService(team).get_average_session_duration(now=now)
+
+        assert minutes == pytest.approx(40.0)
+
+    def test_result_is_cached(self, team):
+        service = EngagementDashboardService(team)
+        first = service.get_average_session_duration()
+
+        cached = DashboardCache.get_cached_data(team, f"engagement_avg_session_duration_{_cache_key({})}")
 
         assert cached == first

@@ -5,7 +5,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import QuerySet
+from django.db.models import Avg, DurationField, ExpressionWrapper, F, QuerySet
 from django.db.models.functions import TruncWeek
 from django.utils import timezone as django_timezone
 
@@ -163,3 +163,19 @@ class EngagementDashboardService:
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
+
+    def get_average_session_duration(self, now: datetime | None = None, **filters) -> float:
+        cache_key = f"engagement_avg_session_duration_{_cache_key(filters)}"
+        cached = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached is not None:
+            return cached
+
+        start, end, _months = trailing_window(now)
+        sessions = filtered_querysets(self.team, start_date=start, end_date=end, **filters)["sessions"]
+        avg_duration = sessions.filter(ended_at__isnull=False).aggregate(
+            avg=Avg(ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField()))
+        )["avg"]
+        minutes = (avg_duration or timedelta()).total_seconds() / 60
+
+        DashboardCache.set_cached_data(self.team, cache_key, minutes)
+        return minutes
