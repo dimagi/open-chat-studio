@@ -86,13 +86,13 @@ class EngagementDashboardService:
     def __init__(self, team: Team):
         self.team = team
 
-    def get_engagement_summary_data(self, **filters) -> list[dict[str, Any]]:
+    def get_engagement_summary_data(self, now: datetime | None = None, **filters) -> list[dict[str, Any]]:
         cache_key = f"engagement_summary_{_cache_key(filters)}"
         cached = DashboardCache.get_cached_data(self.team, cache_key)
         if cached is not None:
             return cached
 
-        activity = weekly_activity_by_month(self.team, filters=filters)
+        activity = weekly_activity_by_month(self.team, filters=filters, now=now)
         current_month = max(activity)
         data = []
         for month in sorted(activity):
@@ -107,6 +107,24 @@ class EngagementDashboardService:
                     "in_progress": month == current_month,
                 }
             )
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
+
+    def get_engagement_frequency_data(self, now: datetime | None = None, **filters) -> list[dict[str, Any]]:
+        cache_key = f"engagement_frequency_{_cache_key(filters)}"
+        cached = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached is not None:
+            return cached
+
+        activity = weekly_activity_by_month(self.team, filters=filters, now=now)
+        current_month = max(activity)
+        data = []
+        for month in sorted(activity):
+            buckets = {"1_week": 0, "2_weeks": 0, "3_weeks": 0, "4_plus_weeks": 0}
+            for weeks in activity[month].values():
+                buckets[WEEK_BUCKET_KEYS.get(weeks, "4_plus_weeks")] += 1
+            data.append({"month": month.isoformat(), **buckets, "in_progress": month == current_month})
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data

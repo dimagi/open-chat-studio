@@ -103,18 +103,16 @@ class TestGetEngagementSummaryData:
         session = _create_session(experiment, participant, team)
         other_session = _create_session(experiment, other_participant, team)
 
-        now = timezone.now()
-        month_start = date(now.year, now.month, 1)
-        week_one = timezone.datetime.combine(
-            month_start, timezone.datetime.min.time(), tzinfo=ZoneInfo("UTC")
-        ) + timezone.timedelta(days=7, hours=9)
-        week_two = week_one + timezone.timedelta(days=7)
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        month_start = date(2026, 3, 1)
+        week_one = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        week_two = timezone.datetime(2026, 3, 15, 9, 0, tzinfo=ZoneInfo("UTC"))
 
         _create_message(session, week_one)
         _create_message(session, week_two)
         _create_message(other_session, week_one)
 
-        data = EngagementDashboardService(team).get_engagement_summary_data()
+        data = EngagementDashboardService(team).get_engagement_summary_data(now=now)
 
         assert len(data) == TRAILING_MONTHS + 1
         current = data[-1]
@@ -138,3 +136,38 @@ class TestGetEngagementSummaryData:
         cached = DashboardCache.get_cached_data(team, f"engagement_summary_{_cache_key({})}")
 
         assert cached == first
+
+
+@pytest.mark.django_db()
+class TestGetEngagementFrequencyData:
+    def test_buckets_participants_by_distinct_weeks_active_this_month(self, team, experiment):
+        now = timezone.datetime(2026, 3, 30, 12, 0, tzinfo=ZoneInfo("UTC"))
+        month_start = date(2026, 3, 1)
+        mondays = [timezone.datetime(2026, 3, day, 9, 0, tzinfo=ZoneInfo("UTC")) for day in (2, 9, 16, 23)]
+
+        for weeks_active in (1, 2, 3, 4):
+            participant = Participant.objects.create(
+                team=team, platform="web", identifier=f"p{weeks_active}@example.com"
+            )
+            session = _create_session(experiment, participant, team)
+            for message_time in mondays[:weeks_active]:
+                _create_message(session, message_time)
+
+        data = EngagementDashboardService(team).get_engagement_frequency_data(now=now)
+
+        current = data[-1]
+        assert current["month"] == month_start.isoformat()
+        assert current["1_week"] == 1
+        assert current["2_weeks"] == 1
+        assert current["3_weeks"] == 1
+        assert current["4_plus_weeks"] == 1
+        assert current["in_progress"] is True
+
+    def test_result_is_cached_separately_from_summary(self, team):
+        service = EngagementDashboardService(team)
+        now = timezone.now()
+        frequency = service.get_engagement_frequency_data(now=now)
+
+        cached = DashboardCache.get_cached_data(team, f"engagement_frequency_{_cache_key({})}")
+
+        assert cached == frequency
