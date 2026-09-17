@@ -456,10 +456,12 @@ def test_versions_of_models_without_version_urls_are_not_linked(team_with_users,
         name="Handbook",
         embedding_provider_model=shared_embedding,
     )
-    CollectionFactory(
+    # The name deliberately omits "v1" so that the badge is the only thing that can put it in the
+    # body, and differs from the working version's so the two links can be told apart.
+    version = CollectionFactory(
         team=team_with_users,
         llm_provider=anthropic_provider,
-        name="Handbook v1",
+        name="Handbook snapshot",
         embedding_provider_model=shared_embedding,
         working_version=collection,
         version_number=1,
@@ -477,6 +479,7 @@ def test_versions_of_models_without_version_urls_are_not_linked(team_with_users,
     body = response.content.decode()
     assert "v1" in body, "the version is still reported"
     assert collection.name in body, "the row is still reported"
+    assert f'href="{version.get_absolute_url()}"' not in body, "the version badge is not a link"
     assert body.count(f'href="{collection.get_absolute_url()}"') == 1, "only the row name links, not the version"
 
 
