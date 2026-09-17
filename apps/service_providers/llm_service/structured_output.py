@@ -34,7 +34,7 @@ def unwrap_structured_output(result: dict) -> BaseModel:
 def _refusal_text(message: AIMessage) -> str:
     if refusal := message.additional_kwargs.get("refusal"):
         return refusal
-    for block in message.content:
+    for block in message.content_blocks:
         if isinstance(block, dict):
             # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
             value = block.get("value") if block.get("type") == "non_standard" else block
