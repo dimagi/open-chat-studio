@@ -5,7 +5,7 @@
 import Chart from "chart.js/auto";
 import {formatCost, p95ChartSeries, providerTotals, serviceKindSeries} from "./costBreakdown.js";
 
-class ChartManager {
+export class ChartManager {
     constructor() {
         this.charts = {};
         this.colorPalette = {
