@@ -863,11 +863,7 @@ class TestPipelineValidation:
 
 
 class TestNodeDisplayName:
-    """One concept the codebase used to spell three ways, so its edges are pinned here.
     """The auto-assigned name is the node's own flow id, which is an address rather than something a
-    person chose, so it reads as no name at all.
-    """
-    The auto-assigned name is the node's own flow id, which is an address rather than something a
     person chose, so it reads as no name at all.
     """
 
