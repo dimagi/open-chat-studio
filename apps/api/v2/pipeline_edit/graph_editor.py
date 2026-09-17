@@ -47,7 +47,7 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     """
     # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
     # and `get_node_type_schema` has already refused any other name, so neither of these can come
-    # back None.
+    # back None. Both casts drop that `| None` and nothing else.
     resolved = NodeType(node_type)
     node_class = cast(type[BasePipelineNode], resolved.node_class)
     schema = cast(NodeSchema, resolved.schema)
