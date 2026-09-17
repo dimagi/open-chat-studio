@@ -28,13 +28,18 @@
 #   verdict check at all. Auto-merge treats a missing verdict as a refusal
 # - The verdict demands a positive signal on both axes: the action's own `conclusion`
 #   output *and* a finding count of zero. Counting alone would read "the review never
-#   got as far as commenting" as "the review found nothing"
-# - **Unconfirmed:** only inline review comments are counted. `claude_args` also
-#   permits `gh pr comment` and `gh pr review`, so a review reported as a review
-#   body or a conversation comment would count as zero findings and pass. Counting
-#   those too risks the opposite failure — an "I found nothing" review body, or the
-#   action's own progress comment, would fail every verdict. Confirm which channel
-#   the reviewer actually uses during the auto-merge dry run, then widen this
+#   got as far as commenting" as "the review found nothing" — which is not
+#   hypothetical: the action declines to run at all when this workflow file differs
+#   from the copy on the default branch, and *exits successfully* when it declines,
+#   leaving a green `review` job and zero findings. It sets no `conclusion` on that
+#   path (`skipped_due_to_workflow_validation_mismatch` instead), so the verdict
+#   catches it. Every PR that edits this file will fail the verdict, by design
+# - Findings are counted as inline review comments because that is the channel the
+#   plugin uses — the action buffers them and posts them in its own
+#   "Post buffered inline comments" step. `claude_args` does also permit `gh pr
+#   comment`, `gh pr review` and `gh api`, so a review that chose to summarise
+#   itself elsewhere would count as zero; the `conclusion` check is what stops that
+#   being a silent pass
 
 name: Claude Code Review
 
@@ -66,6 +71,7 @@ jobs:
     outputs:
       findings: ${{ steps.findings.outputs.count }}
       conclusion: ${{ steps.claude.outputs.conclusion }}
+      validation_skip: ${{ steps.claude.outputs.skipped_due_to_workflow_validation_mismatch }}
 
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
@@ -137,9 +143,16 @@ jobs:
           RESULT: ${{ needs.review.result }}
           FINDINGS: ${{ needs.review.outputs.findings }}
           CONCLUSION: ${{ needs.review.outputs.conclusion }}
+          VALIDATION_SKIP: ${{ needs.review.outputs.validation_skip }}
         run: |
           if [[ "$RESULT" != "success" ]]; then
             echo "::error::The review job did not complete (result: $RESULT)."
+            exit 1
+          fi
+          if [[ "$VALIDATION_SKIP" == "true" ]]; then
+            echo "::error::No review ran. The action refuses to run when this workflow file" \
+                 "differs from the copy on the default branch, and exits successfully when it" \
+                 "declines. Expected on a pull request that edits this file."
             exit 1
           fi
           # Zero findings has to mean "the review ran and found nothing", not "the review
