@@ -1,0 +1,111 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "Engagement Dashboard" %} - {{ block.super }}{% endblock %}
+
+{% block app %}
+  <div class="container mx-auto px-4 py-6" x-data="engagementDashboard()">
+    {# Page is one path segment deeper than its API endpoints, so pass {% url %}-resolved URLs instead of relying on relative fetches. #}
+    <div id="engagementDashboardConfig"
+         hidden
+         data-summary-url="{% url 'dashboard:api_engagement_summary' request.team.slug %}"
+         data-frequency-url="{% url 'dashboard:api_engagement_frequency' request.team.slug %}"
+         data-new-vs-returning-url="{% url 'dashboard:api_new_vs_returning' request.team.slug %}"
+         data-session-duration-url="{% url 'dashboard:api_average_session_duration' request.team.slug %}"></div>
+
+    <div>
+      <h1 data-cy="title" class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% translate "Engagement Dashboard" %}</h1>
+      <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        {% translate "Monthly and weekly engagement trends across your chatbots." %}
+      </p>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl mb-8 mt-6">
+      <div class="card-body">
+        <div class="card-title">{% translate "Filters" %}</div>
+
+        <form id="engagementFilterForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" @change="handleFilterChange()">
+          <div class="form-control col-span-2">
+            <label class="label label-text">{% translate "Chatbots" %}</label>
+            {% with field=filter_form.experiments %}
+              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                {% for option in field %}{{ option }}{% endfor %}
+              </select>
+            {% endwith %}
+          </div>
+
+          <div class="form-control">
+            <label class="label label-text">{% translate "Channels" %}</label>
+            {% with field=filter_form.channels %}
+              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                {% for option in field %}{{ option }}{% endfor %}
+              </select>
+            {% endwith %}
+          </div>
+
+          <div class="form-control">
+            <label class="label label-text">{% translate "Participants" %}</label>
+            {% with field=filter_form.participants %}
+              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                {% for option in field %}{{ option }}{% endfor %}
+              </select>
+            {% endwith %}
+          </div>
+
+          <div class="form-control">
+            <label class="label label-text">{% translate "Tags" %}</label>
+            {% with field=filter_form.tags %}
+              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
+                {% for option in field %}{{ option }}{% endfor %}
+              </select>
+            {% endwith %}
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="engagementStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <template x-for="stat in summaryStats" :key="stat.label">
+        <div class="stat-card fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="stat-value" x-text="stat.value"></span>
+              <span x-show="stat.inProgress" class="badge badge-sm badge-outline ml-2">{% translate "In progress" %}</span>
+              <div class="stat-label" x-text="stat.label"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center gap-1 justify-between">
+            <span>{% translate "Engagement Frequency" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.frequency"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="engagementFrequencyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="card-title flex items-center gap-1 justify-between">
+            <span>{% translate "New vs. Returning Users" %}</span>
+            <div class="loading loading-spinner loading-sm" x-show="loadingStates.newVsReturning"></div>
+          </div>
+          <div class="h-80">
+            <canvas id="newVsReturningChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block page_js %}
+  <script src="{% static 'js/engagementDashboard-bundle.js' %}"></script>
+{% endblock page_js %}
