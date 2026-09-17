@@ -13,7 +13,6 @@ on:
       - 'docker-compose-dev.yml'
       - 'heroku.yml'
       - 'app.json'
-      - 'scripts/**'
       - 'media/**'
 
   push:
@@ -31,7 +30,6 @@ on:
       - 'docker-compose-dev.yml'
       - 'heroku.yml'
       - 'app.json'
-      - 'scripts/**'
       - 'media/**'
 
 
@@ -208,7 +206,7 @@ jobs:
           uv venv
           uv sync --locked --dev
       - name: Run ty type checker
-        run: uv run ty check apps/
+        run: uv run ty check apps/ scripts/
 
   inline-imports:
     if: github.event_name == 'pull_request'
