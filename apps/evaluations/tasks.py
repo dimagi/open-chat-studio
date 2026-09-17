@@ -151,7 +151,12 @@ def _run_evaluator_on_message(
     try:
         output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
     except NoStructuredOutputError as e:
-        logger.warning("Evaluator %s returned no structured output for message %s: %s", evaluator.id, message.id, e)
+        logger.warning(
+            "Evaluator %s returned no structured output for message %s (stop reason: %s)",
+            evaluator.id,
+            message.id,
+            e.reason or "none",
+        )
         _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
         return
     except Exception as e:

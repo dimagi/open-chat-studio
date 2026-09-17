@@ -392,7 +392,9 @@ class ExtractStructuredDataNodeMixin:
             try:
                 output = chain.invoke(message_chunk, config=self._config).model_dump()
             except NoStructuredOutputError as e:
-                logger.warning("Node %s extracted nothing from a chunk: %s", self.name, e)
+                logger.warning(
+                    "Node %s extracted nothing from a chunk (stop reason: %s)", self.name, e.reason or "none"
+                )
                 continue
             extracted = True
             # TOOO: tracing

@@ -28,7 +28,7 @@ def unwrap_structured_output(result: dict) -> BaseModel:
     refusal = _refusal_text(raw)
     if result["parsing_error"] is not None and not refusal:
         raise result["parsing_error"]
-    raise NoStructuredOutputError(model_text=refusal or raw.text, reason=_stop_reason(raw))
+    raise NoStructuredOutputError(model_text=refusal or raw.text, reason=stop_reason(raw))
 
 
 def _refusal_text(message: AIMessage) -> str:
@@ -43,6 +43,6 @@ def _refusal_text(message: AIMessage) -> str:
     return ""
 
 
-def _stop_reason(message: AIMessage) -> str:
+def stop_reason(message: AIMessage) -> str:
     metadata = message.response_metadata or {}
     return metadata.get("stop_reason") or metadata.get("finish_reason") or ""

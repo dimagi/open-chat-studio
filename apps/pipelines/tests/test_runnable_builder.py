@@ -605,7 +605,8 @@ class TestRouterNode:
         assert keyword == "DEFAULT"
         assert is_default_keyword
         if LLMClass is RefusingFakeLlmEcho:
-            assert "Refused by OpenAI" in caplog.text
+            assert "test router" in caplog.text
+            assert "Refused by OpenAI" not in caplog.text
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
@@ -620,7 +621,6 @@ class TestRouterNode:
         self, get_llm_service, reply, provider, provider_model, experiment_session, caplog
     ):
         llm = FakeLlmSimpleTokenCount(responses=[reply])
-        llm.calls = []
         get_llm_service.return_value = FakeLlmService(llm=llm)
         node = RouterNode(
             node_id="test",
@@ -648,6 +648,9 @@ class TestRouterNode:
         assert is_default_keyword
         assert len(llm.get_calls()) == 1
         assert "test router" in caplog.text
+        assert "I can't help with that." not in caplog.text
+        if reply.response_metadata.get("stop_reason"):
+            assert "refusal" in caplog.text
 
 
 class TestStaticRouterNode:
@@ -1048,7 +1051,7 @@ class TestDataExtraction:
 
     @pytest.mark.django_db()
     def test_extract_structured_data_outputs_empty_object_when_the_model_declines(
-        self, provider, provider_model, pipeline
+        self, provider, provider_model, pipeline, caplog
     ):
         session = ExperimentSessionFactory.create()
         llm = FakeLlmSimpleTokenCount(responses=[AIMessage(content="I can't help with that.")])
@@ -1057,7 +1060,11 @@ class TestDataExtraction:
             state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
             config = {"configurable": {"repo": ORMRepository(session=session)}}
 
-            assert graph.invoke(state, config=config)["messages"][-1] == "{}"
+            with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+                assert graph.invoke(state, config=config)["messages"][-1] == "{}"
+
+        assert "extracted nothing" in caplog.text
+        assert "I can't help with that." not in caplog.text
 
     @pytest.mark.django_db()
     def test_extract_structured_data_skips_a_chunk_the_model_declines(self, provider, provider_model, pipeline):

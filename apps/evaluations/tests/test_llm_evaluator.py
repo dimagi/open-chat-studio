@@ -421,8 +421,6 @@ def test_evaluator_interpolates_participant_data_and_session_state(get_llm_servi
 
 def _run_single_message_evaluation(get_llm_service, llm_provider, llm_provider_model, response):
     service = build_fake_llm_service(responses=[response])
-    # FakeLlm.calls is a class-level list shared by every instance
-    service.llm.calls = []
     get_llm_service.return_value = service
     evaluation_message = EvaluationMessageFactory.create(
         input={"content": "How do I do kangaroo mother care?", "role": "human"},
@@ -482,6 +480,7 @@ def test_missing_structured_result_is_logged_as_a_warning_not_an_error(
 
     task_logger.warning.assert_called_once()
     task_logger.exception.assert_not_called()
+    assert "I can't help with that." not in str(task_logger.warning.call_args)
 
 
 @pytest.mark.django_db()

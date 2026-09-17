@@ -4,6 +4,7 @@ from pydantic import BaseModel, ValidationError
 
 from apps.service_providers.llm_service.structured_output import (
     NoStructuredOutputError,
+    stop_reason,
     structured_output_runnable,
     unwrap_structured_output,
 )
@@ -77,3 +78,8 @@ def test_a_refusal_wins_over_the_parsing_error_it_caused():
         unwrap_structured_output({"raw": raw, "parsed": None, "parsing_error": RuntimeError("refused")})
 
     assert exc_info.value.model_text == "declined"
+
+
+def test_stop_reason_reads_the_provider_metadata():
+    assert stop_reason(AIMessage(content="", response_metadata={"stop_reason": "refusal"})) == "refusal"
+    assert stop_reason(AIMessage(content="no metadata")) == ""

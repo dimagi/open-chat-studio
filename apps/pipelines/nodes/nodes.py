@@ -61,6 +61,7 @@ from apps.service_providers.llm_service.prompt_context import (
     SafeAccessWrapper,
 )
 from apps.service_providers.llm_service.retry import with_llm_retry
+from apps.service_providers.llm_service.structured_output import stop_reason
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
@@ -735,14 +736,16 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             result = agent.invoke(agent_input, config=self._config)
             structured_response = result.get("structured_response")
             if structured_response is None:
-                logger.warning("Router %s got no route from the model: %s", self.name, result["messages"][-1].text)
+                messages = result.get("messages") or []
+                reason = stop_reason(messages[-1]) if messages else ""
+                logger.warning("Router %s got no route from the model (stop reason: %s)", self.name, reason or "none")
                 keyword = None
             else:
                 keyword = structured_response.route.upper()  # ensure case-insensitive matching
         except PydanticValidationError:
             keyword = None
-        except OpenAIRefusalError as e:
-            logger.warning("Router %s got a refusal from the model: %s", self.name, e)
+        except OpenAIRefusalError:
+            logger.warning("Router %s got a refusal from the model", self.name)
             keyword = None
         except StructuredOutputValidationError:
             logger.exception("Structured output validation error in RouterNode")
