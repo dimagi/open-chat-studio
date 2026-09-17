@@ -734,14 +734,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             # block is rejected by Anthropic. See `ensure_non_empty_text`.
             agent_input = {"messages": [HumanMessage(content=ensure_non_empty_text(node_input))]}
             result = agent.invoke(agent_input, config=self._config)
-            structured_response = result.get("structured_response")
-            if structured_response is None:
-                messages = result.get("messages") or []
-                reason = stop_reason(messages[-1]) if messages else ""
-                logger.warning("Router %s got no route from the model (stop reason: %s)", self.name, reason or "none")
-                keyword = None
-            else:
-                keyword = structured_response.route.upper()  # ensure case-insensitive matching
+            keyword = self._route_from_agent_result(result)
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
@@ -758,6 +751,16 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         if session:
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
+
+    def _route_from_agent_result(self, result: dict) -> str | None:
+        """Return the route the model chose in upper case, or None when it chose none."""
+        structured_response = result.get("structured_response")
+        if structured_response is not None:
+            return structured_response.route.upper()
+        messages = result.get("messages") or []
+        reason = stop_reason(messages[-1]) if messages else ""
+        logger.warning("Router %s got no route from the model (stop reason: %s)", self.name, reason or "none")
+        return None
 
 
 class StaticRouterNode(RouterMixin, PipelineRouterNode):
