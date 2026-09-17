@@ -45,6 +45,9 @@ class TestNullObject:
         assert unresolvable.declares("name") is False
         assert unresolvable.schema is None
         assert unresolvable.is_router is False
+        assert unresolvable.label == node_type
+        assert unresolvable.reserved_name is None
+        assert unresolvable.routes_itself is False
         assert unresolvable.is_server_managed is False
         assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
@@ -138,6 +141,44 @@ class TestSchema:
     )
     def test_is_structural_follows_can_add(self, node_type, expected):
         assert NodeType(node_type).is_structural is expected
+
+
+class TestLabel:
+    def test_a_resolvable_type_reports_its_schema_label(self):
+        assert NodeType("StartNode").label == "Start"
+        assert NodeType("EndNode").label == "End"
+
+    def test_an_unresolvable_type_names_itself(self):
+        """A caller putting the label in a build error still has to name something."""
+        assert NodeType("GhostNode").label == "GhostNode"
+
+
+class TestReservedName:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", "start", id="start"),
+            pytest.param("EndNode", "end", id="end"),
+            pytest.param("LLMResponseWithPrompt", None, id="params-decide"),
+            pytest.param("GhostNode", None, id="unknown-type"),
+        ],
+    )
+    def test_only_the_server_owned_types_fix_their_name(self, node_type, expected):
+        assert NodeType(node_type).reserved_name == expected
+
+
+class TestRoutesItself:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("CodeNode", True, id="code"),
+            pytest.param("RouterNode", False, id="router-is-wired-conditionally"),
+            pytest.param("LLMResponseWithPrompt", False, id="plain-node"),
+            pytest.param("GhostNode", False, id="unknown-type"),
+        ],
+    )
+    def test_only_code_dispatches_its_own_edges(self, node_type, expected):
+        assert NodeType(node_type).routes_itself is expected
 
 
 class TestReactFlowType:

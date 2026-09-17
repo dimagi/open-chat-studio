@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, cast
 import pydantic
 
 from apps.pipelines.const import (
+    CODE_NODE_TYPE,
     END_NODE_TYPE,
     REACT_FLOW_END_TYPE,
     REACT_FLOW_NODE_TYPE,
@@ -124,6 +125,41 @@ class NodeType:
         """
         schema = self.schema
         return schema is not None and not schema.can_add and not schema.deprecated
+
+    @property
+    def label(self) -> str:
+        """This type's display label -- what the editor calls it.
+
+        A type naming no node class has none and answers with the type string: a caller putting a
+        label in a message still has to name something.
+        """
+        schema = self.schema
+        return schema.label if schema is not None else self.type
+
+    @property
+    def reserved_name(self) -> str | None:
+        """The name every node of this type runs under, or ``None`` where the node's params decide.
+
+        Start and End are the two: the server creates them, there is never more than one, and their
+        ``name`` field carries the fixed value as its default. Read off that default so the two
+        cannot drift apart.
+        """
+        node_class = self.node_class
+        if node_class is None:
+            return None
+        field = node_class.model_fields.get("name")
+        if field is None or field.is_required():
+            return None
+        return field.get_default()
+
+    @property
+    def routes_itself(self) -> bool:
+        """Whether nodes of this type dispatch their own outgoing edges.
+
+        A self-routing node returns a langgraph ``Command`` naming where the turn goes next, so
+        wiring its static edges into the graph as well would run both paths.
+        """
+        return self.type == CODE_NODE_TYPE
 
     @property
     def react_flow_type(self) -> str:
