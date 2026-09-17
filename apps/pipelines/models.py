@@ -461,9 +461,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
     # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
     # A row saved without one sits at the origin, which is what reads have always served.
-    # Still nullable until migration 0030 has been backfilled everywhere.
-    position_x = models.FloatField(null=True, blank=True, default=0)
-    position_y = models.FloatField(null=True, blank=True, default=0)
+    position_x = models.FloatField(default=0)
+    position_y = models.FloatField(default=0)
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -550,10 +549,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return NodeType(self.type)
 
     @property
-    def position(self) -> dict | None:
-        """The react-flow position, or None when the row has not been backfilled yet."""
-        if self.position_x is None or self.position_y is None:
-            return None
+    def position(self) -> dict:
+        """The react-flow position."""
         return {"x": self.position_x, "y": self.position_y}
 
     def to_flow_node(self) -> FlowNode:
@@ -567,7 +564,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         params.update(self.resource_params())
         return FlowNode(
             id=self.flow_id,
-            position=self.position or {"x": 0, "y": 0},
+            position=self.position,
             type=self.node_type.react_flow_type,
             data=FlowNodeData(
                 id=self.flow_id,
