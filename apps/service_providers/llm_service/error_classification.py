@@ -82,11 +82,16 @@ def translate_provider_error(error: BaseException) -> ProviderConfigurationError
 
 
 def _causes(error: BaseException, depth: int = 4) -> Iterator[BaseException]:
-    """The exception and the ``raise ... from`` chain beneath it, depth-capped."""
-    seen: set[int] = set()
+    """The exception and the ``raise ... from`` chain beneath it.
+
+    The depth cap is what terminates this: a ``__cause__`` chain can be cyclic, and
+    bounding the walk is enough to make that harmless, since classifying the same
+    exception twice yields the same answer.
+    """
     current: BaseException | None = error
-    while current is not None and len(seen) < depth and id(current) not in seen:
-        seen.add(id(current))
+    for _ in range(depth):
+        if current is None:
+            return
         yield current
         current = current.__cause__
 
