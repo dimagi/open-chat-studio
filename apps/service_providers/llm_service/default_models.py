@@ -6,7 +6,6 @@ from django.db import connection, transaction
 from pydantic import BaseModel
 
 from apps.service_providers.llm_service.model_parameters import (
-    AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
     BasicParameters,
     ClaudeOpus4_20250514Parameters,
@@ -83,7 +82,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
             replacement="claude-opus-4-7",
             parameters=ClaudeOpus4_20250514Parameters,
         ),
-        Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
@@ -103,8 +101,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5.2", k(400), parameters=GPT52Parameters),
         Model("gpt-5.2-pro", k(400), parameters=GPT52Parameters),
-        Model("gpt-5.3", k(400), parameters=GPT51Parameters),
-        Model("gpt-5.3-instant", k(400), parameters=GPT51Parameters),
         Model("gpt-5.4", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.4-pro", 1050000, parameters=GPT5ProParameters),
         Model("gpt-5.4-mini", 400000, parameters=GPT52Parameters),
@@ -203,6 +199,7 @@ DELETED_MODELS = [
     ("anthropic", "claude-instant-1.2"),
     ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
     ("anthropic", "claude-3-5-haiku-latest", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-3-7-sonnet-20250219", "claude-sonnet-4-6"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
@@ -211,6 +208,8 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
+    ("openai", "gpt-5.3", "gpt-5.4"),
+    ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
     # Groq
     ("groq", "whisper-large-v3"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
