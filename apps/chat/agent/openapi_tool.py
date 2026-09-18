@@ -22,6 +22,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 if TYPE_CHECKING:
@@ -93,7 +94,7 @@ class OpenAPIOperationExecutor:
         if "body_data" in kwargs:
             kwargs["json"] = kwargs.pop("body_data")
 
-        kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
+        kwargs = {k: _dump_with_original_names(v) if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
         url = self._get_url(path_params)
         with self.auth_service.get_http_client() as client:
@@ -172,7 +173,7 @@ class OpenAPIOperationExecutor:
     def _get_url(self, path_params):
         url = self.function_def.url
         if path_params:
-            url = _format_url(url, path_params.model_dump())
+            url = _format_url(url, _dump_with_original_names(path_params))
 
         try:
             validate_user_input_url(url, strict=not settings.DEBUG)
@@ -235,7 +236,9 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
 
     # Assemble final model
     api_op = APIOperation.from_openapi_spec(spec, path, method)
-    function_name = api_op.operation_id
+    # Sanitized so it's a valid Anthropic tool name -- operation IDs are usually already safe, but
+    # a hand-written OpenAPI spec can give one that isn't (spaces, punctuation, non-ASCII, ...).
+    function_name = sanitize_property_name(api_op.operation_id)
     args_schema = _create_model(
         function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
     )
@@ -363,7 +366,41 @@ def _get_basic_type(data_type: DataType) -> type:
 
 
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
-    return create_model(_make_model_name(name), **properties, **kwargs)
+    """Builds a Pydantic model from OpenAPI-derived `properties`, sanitizing each key so the
+    resulting JSON schema is valid for every provider (notably Anthropic's
+    `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original mapping is stashed on the model as
+    `__param_name_mapping__` so `_dump_with_original_names` can undo it before an actual API call,
+    which must use the real parameter names the OpenAPI spec defines.
+    """
+    sanitized_properties = {}
+    param_name_mapping: dict[str, str] = {}
+    taken: set[str] = set()
+
+    for prop_name, prop_value in properties.items():
+        sanitized_name = sanitize_property_name(prop_name, taken)
+        taken.add(sanitized_name)
+        param_name_mapping[sanitized_name] = prop_name
+        sanitized_properties[sanitized_name] = prop_value
+
+    model = create_model(_make_model_name(name), **sanitized_properties, **kwargs)
+    model.__param_name_mapping__ = param_name_mapping
+    return model
+
+
+def _dump_with_original_names(value: Any) -> Any:
+    """Like `value.model_dump()`, but restores each field's original (pre-sanitization) name so
+    the real API call uses the parameter names the OpenAPI spec actually defines."""
+    if isinstance(value, BaseModel):
+        mapping = getattr(type(value), "__param_name_mapping__", {})
+        return {
+            mapping.get(field_name, field_name): _dump_with_original_names(getattr(value, field_name))
+            for field_name in type(value).model_fields
+        }
+    if isinstance(value, list):
+        return [_dump_with_original_names(item) for item in value]
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
 
 
 def _make_model_name(name, suffix="Model"):

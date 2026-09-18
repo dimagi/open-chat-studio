@@ -1,6 +1,36 @@
 """JSON Schema / OpenAPI helpers shared across apps."""
 
+import hashlib
+import re
 from copy import deepcopy
+
+# Anthropic requires tool names and JSON schema `properties` keys to match this pattern; reused
+# wherever we build a schema or tool name from a user-supplied string (evaluator output fields,
+# OpenAPI operation/parameter names) so it survives being sent to Anthropic.
+VALID_PROPERTY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
+
+_INVALID_PROPERTY_CHARS = re.compile(r"[^a-zA-Z0-9_.-]")
+_REPEATED_UNDERSCORES = re.compile(r"_{2,}")
+_MAX_PROPERTY_NAME_LENGTH = 64
+
+
+def sanitize_property_name(name: str, taken: set[str] | None = None) -> str:
+    """Rewrites `name` so it matches `VALID_PROPERTY_NAME_PATTERN`."""
+    if VALID_PROPERTY_NAME_PATTERN.match(name):
+        sanitized = name
+    else:
+        sanitized = _REPEATED_UNDERSCORES.sub("_", _INVALID_PROPERTY_CHARS.sub("_", name))
+        sanitized = sanitized[:_MAX_PROPERTY_NAME_LENGTH] or "field"
+
+    if taken is None or sanitized not in taken:
+        return sanitized
+
+    suffix = f"_{hashlib.sha1(name.encode()).hexdigest()[:8]}"
+    while True:
+        candidate = f"{sanitized[: _MAX_PROPERTY_NAME_LENGTH - len(suffix)]}{suffix}"
+        if candidate not in taken:
+            return candidate
+        suffix = f"_{hashlib.sha1((name + suffix).encode()).hexdigest()[:8]}"
 
 
 def resolve_references(openapi_spec: dict) -> dict:

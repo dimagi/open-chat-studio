@@ -34,6 +34,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger("ocs.tools")
@@ -808,10 +809,19 @@ def get_tool_instances(
 
 def get_custom_action_tools(action_holder: Union[Experiment, "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
-    return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
+    # LangGraph's ToolNode indexes tools by name and silently drops earlier duplicates, so two
+    # operations whose sanitized names collide (e.g. "get foo" and "get/foo" both -> "get_foo")
+    # must be told apart here, before the tool list reaches `create_agent`.
+    taken_names: set[str] = set()
+    tools = []
+    for operation in operations:
+        tool = get_tool_for_custom_action_operation(operation, taken_names)
+        if tool:
+            tools.append(tool)
+    return tools
 
 
-def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
+def get_tool_for_custom_action_operation(custom_action_operation, taken_names: set[str]) -> BaseTool | None:
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
@@ -821,6 +831,8 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
+    function_def.name = sanitize_property_name(function_def.name, taken_names)
+    taken_names.add(function_def.name)
     return function_def.build_tool(auth_service, custom_action)
 
 
