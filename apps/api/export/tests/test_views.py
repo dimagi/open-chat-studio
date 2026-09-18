@@ -101,9 +101,7 @@ def test_resource_rejects_unlisted_model(team):
 
 
 def test_resource_isolates_other_teams_data(team):
-    """Paged to exhaustion rather than read off the first page: this resource also serves the global
-    team-less rows, which the migrations seed in larger numbers than one page holds, so a single-page
-    read tests nothing about team scoping once the seed list outgrows the page size."""
+    """This resource also serves global team-less rows, seeded by migrations in numbers exceeding one page, so scoping has to be checked across every page."""
     other = TeamWithUsersFactory()
     mine = LlmProviderModelFactory(team=team)
     theirs = LlmProviderModelFactory(team=other)
