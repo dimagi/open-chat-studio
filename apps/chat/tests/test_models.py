@@ -3,7 +3,6 @@ import pytest
 from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.pipelines.models import PipelineChatHistoryModes
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -11,12 +10,10 @@ from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 @pytest.mark.django_db()
 def test_get_attached_files():
-    assistant = OpenAiAssistantFactory.create()
+    """Ids resolve through the chat's own attachments, not by external_id across the team."""
     session = ExperimentSessionFactory.create()
-    assistant_file1 = FileFactory.create(external_id="assistant-file-id-1", team=session.chat.team)
-    assistant_file2 = FileFactory.create(external_id="assistant-file-id-2", team=session.chat.team)
-    tool_resource = assistant.tool_resources.create(tool_type="code_interpreter")
-    tool_resource.files.add(*[assistant_file1, assistant_file2])
+    unattached1 = FileFactory.create(external_id="unattached-file-id-1", team=session.chat.team)
+    unattached2 = FileFactory.create(external_id="unattached-file-id-2", team=session.chat.team)
 
     chat_file1 = FileFactory.create(external_id="chat-file-id-1", team=session.chat.team)
     chat_file2 = FileFactory.create(external_id="chat-file-id-2", team=session.chat.team)
@@ -24,16 +21,15 @@ def test_get_attached_files():
     attachment = chat.attachments.create(tool_type="code_interpreter")
     attachment.files.add(*[chat_file1, chat_file2])
 
-    # Add message with a reference to both the chat and assistant level files
     metadata = {
-        "openai_file_ids": ["assistant-file-id-1", "chat-file-id-1", "assistant-file-id-2", "chat-file-id-2"],
+        "openai_file_ids": ["unattached-file-id-1", "chat-file-id-1", "unattached-file-id-2", "chat-file-id-2"],
     }
     message = ChatMessage.objects.create(chat=chat, message_type="ai", content="Hi", metadata=metadata)
     files = message.get_attached_files()
     assert chat_file1 in files
     assert chat_file2 in files
-    assert assistant_file1 not in files
-    assert assistant_file2 not in files
+    assert unattached1 not in files
+    assert unattached2 not in files
 
 
 @pytest.mark.django_db()
