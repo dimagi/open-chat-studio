@@ -154,27 +154,27 @@ def _retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float:
 
 
 def translate(data: dict[str, Any], today: datetime.date) -> tuple[Catalogue, Catalogue]:
-    """``(live, everything)`` in the layer-1 shape.
+    """``(live, all_chat)`` in the layer-1 shape.
 
     ``live`` holds what OCS could run today: chat-capable and not yet past its
-    deprecation date. ``everything`` holds every key that maps to an OCS provider
-    at all, filters included, because "LiteLLM no longer lists this model" and
+    deprecation date. ``all_chat`` holds the same models whatever their
+    deprecation state, because "LiteLLM no longer offers this model" and
     "LiteLLM lists it as deprecated" are different findings — and because a model
     OCS still serves needs its price compared even once upstream deprecates it.
     """
     live: Catalogue = {}
-    everything: Catalogue = {}
+    all_chat: Catalogue = {}
     for source_key, entry in data.items():
-        if not isinstance(entry, dict):
+        if not isinstance(entry, dict) or not _serves_chat(entry):
             continue
         key = _translate_key(source_key, entry.get("litellm_provider"))
         if key is None:
             continue
         record = _record(key, source_key, entry, today)
-        _keep_best(everything, key, record)
-        if _serves_chat(entry) and not record.deprecated:
+        _keep_best(all_chat, key, record)
+        if not record.deprecated:
             _keep_best(live, key, record)
-    return live, everything
+    return live, all_chat
 
 
 def _keep_best(catalogue: Catalogue, key: Key, record: ModelRecord) -> None:
