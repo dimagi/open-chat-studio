@@ -16,7 +16,7 @@ from apps.teams.export import seal as seal_mod
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ParticipantFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -90,10 +90,10 @@ def test_resource_rejects_unlisted_model(team):
 
 def test_resource_isolates_other_teams_data(team):
     other = TeamWithUsersFactory()
-    mine = LlmProviderModelFactory(team=team)
-    theirs = LlmProviderModelFactory(team=other)
+    mine = ConsentFormFactory(team=team)
+    theirs = ConsentFormFactory(team=other)
     client = ApiTestClient(_admin(team), team)
-    ids = [r["id"] for r in client.get(_resource_url("llm_provider_models")).json()["results"]]
+    ids = [r["id"] for r in client.get(_resource_url("consent_forms")).json()["results"]]
     assert mine.id in ids
     assert theirs.id not in ids
 
