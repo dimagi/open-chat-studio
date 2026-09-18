@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
 from pydantic import BaseModel
 
+from apps.documents.rerankers import Reranker, VoyageReranker
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -149,6 +150,15 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_local_index_manager(self, embedding_model_name: str, contextualizer=None) -> IndexManager:
+        raise NotImplementedError
+
+    def get_reranker(self, model: str) -> Reranker:
+        """A reranker backed by this provider's credentials.
+
+        Raises NotImplementedError for the providers that have no rerank endpoint, which is all
+        of them but Voyage. `Collection.get_reranker` treats that as "skip the rerank stage"
+        rather than as a failed search.
+        """
         raise NotImplementedError
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
@@ -506,6 +516,9 @@ class VoyageAILlmService(LlmService):
             embedding_model_name=embedding_model_name,
             contextualizer=contextualizer,
         )
+
+    def get_reranker(self, model: str) -> Reranker:
+        return VoyageReranker(api_key=self.voyage_api_key, model=model)
 
 
 class GoogleVertexAILlmService(LlmService):
