@@ -201,7 +201,7 @@ class GithubDocumentSourceForm(DocumentSourceForm):
         try:
             validate_user_input_url(github_repo_url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+            raise forms.ValidationError(f"The URL is invalid: {e!s}") from None
 
         return github_repo_url
 
@@ -287,7 +287,7 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
         try:
             validate_user_input_url(base_url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+            raise forms.ValidationError(f"The URL is invalid: {e!s}") from None
 
         return base_url
 
@@ -337,7 +337,7 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
                 max_pages=max_pages,
             )
         except pydantic.ValidationError as e:
-            raise forms.ValidationError(f"Invalid config: {str(e)}") from None
+            raise forms.ValidationError(f"Invalid config: {e!s}") from None
 
         cleaned_data["config"] = DocumentSourceConfig(confluence=config)
         return cleaned_data
@@ -403,7 +403,7 @@ class JSONCollectionDocumentSourceForm(DocumentSourceForm):
         try:
             validate_user_input_url(json_url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise forms.ValidationError(f"The URL is invalid: {str(e)}") from None
+            raise forms.ValidationError(f"The URL is invalid: {e!s}") from None
         return json_url
 
     def clean_source_type(self):
@@ -426,7 +426,7 @@ class JSONCollectionDocumentSourceForm(DocumentSourceForm):
                 unsupported_file_types=file_types,
             )
         except pydantic.ValidationError as e:
-            raise forms.ValidationError(f"Invalid config: {str(e)}") from None
+            raise forms.ValidationError(f"Invalid config: {e!s}") from None
 
         cleaned_data["config"] = DocumentSourceConfig(json_collection=json_collection_config)
         return cleaned_data

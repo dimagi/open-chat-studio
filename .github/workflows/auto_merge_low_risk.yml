@@ -1,0 +1,107 @@
+# Auto-merge Low Risk PRs
+#
+# Polls for open pull requests labelled `risk:low` and merges the ones that have
+# passed every check, including the automated code review's verdict. The rules
+# live in `scripts/auto_merge_low_risk.py`.
+#
+# Triggered on: every 15 minutes
+# Requirements: vars.OCS_AUTOMERGE_APP_ID and secrets.OCS_AUTOMERGE_PRIVATE_KEY
+#
+# Notes:
+# - **Dry run until `AUTO_MERGE_LOW_RISK` is set to `enabled`** in the repository
+#   variables. Until then every run reports what it would have merged to the job
+#   summary and merges nothing. That variable is the only switch
+# - `main` requires an approving review, so the merge is made by the `ocs-automerge`
+#   GitHub App, which sits in that branch protection's
+#   `bypass_pull_request_allowances`. Humans still need an approval; only this one
+#   identity does not
+# - **`ocs-automerge` is deliberately not `ocs-agent`.** `update-generated-files.yml`
+#   hands `ocs-agent`'s token to a job that runs code from the pull request branch
+#   (`uv sync`, ruff, `makemigrations`), so a hostile PR can reach that token. An
+#   identity that can both be reached from PR code and bypass review is a path
+#   from "open a PR" to "merge to production unreviewed". This workflow never
+#   checks out or executes PR code — it reads one script from the default branch
+#   — so its token stays out of a PR author's reach. Do not reuse this app
+#   anywhere that builds, tests, or checks out a pull request
+# - Merging to `main` deploys to production, so the script refuses by default:
+#   an absent label, a check that has not reported, a missing review verdict and
+#   an unknown mergeability all block. Nothing here has an override
+# - **The `risk:low` label is not trusted.** It only decides which pull requests are
+#   worth looking at; the gate is then re-run here, from this checkout of the
+#   default branch, against the pull request's live file list. The label is
+#   applied by a workflow GitHub runs from the *pull request's* head ref, and
+#   anyone with write access can apply it by hand — neither is a basis for merging
+#   to production. The merge is also pinned to the commit that was judged
+# - Polled rather than event-driven: the merge becomes possible when the last of
+#   several independent workflows finishes, and there is no single event for that.
+#   Fifteen minutes of latency on an unattended merge costs nothing
+# - Runs are serialized repo-wide. Two runs merging into `main` at once would
+#   race each other's mergeability
+# - GitHub computes mergeability lazily, so a pull request can report
+#   `mergeable: null` on first read. That blocks the merge for this run and the
+#   read itself starts the computation, so the next poll has an answer
+
+name: Auto-merge Low Risk PRs
+
+# Schedule only. `workflow_dispatch` would let anyone with write access choose the ref
+# the job runs from, and GitHub takes the workflow definition from that ref — so a branch
+# could rewrite this file to print the app token, which holds the review bypass. There is
+# nothing to gain from it either: the poll comes round every 15 minutes anyway.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+
+concurrency:
+  group: auto-merge-low-risk
+  cancel-in-progress: false
+
+# The app token does the work; GITHUB_TOKEN only needs to read the script.
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    name: Merge eligible pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.OCS_AUTOMERGE_APP_ID }}
+          private-key: ${{ secrets.OCS_AUTOMERGE_PRIVATE_KEY }}
+
+      - name: Check out the merge rules
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/auto_merge_low_risk.py
+            scripts/pr_risk_gate.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Merge what qualifies
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ENABLED: ${{ vars.AUTO_MERGE_LOW_RISK == 'enabled' }}
+        run: |
+          args=()
+          if [[ "$ENABLED" == "true" ]]; then
+            args+=(--execute)
+          fi
+          python3 scripts/auto_merge_low_risk.py "${args[@]}"

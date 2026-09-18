@@ -242,8 +242,8 @@ GROUPS = [
             ModelPermSetDef("human_annotations", "annotationitem", [VIEW, CHANGE]),
             ModelPermSetDef("human_annotations", "annotation", [ADD]),
             ModelPermSetDef("human_annotations", "annotationqueueaggregate", [VIEW]),
-        ]
-        + CHAT_VIEWER_PERMS,
+            *CHAT_VIEWER_PERMS,
+        ],
     ),
 ]
 

@@ -517,6 +517,7 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
     def get_slack_installation(self):
         if team_id := self.initial.get("slack_team_id"):
             return SlackInstallation.objects.filter(slack_team_id=team_id).first()
+        return None
 
 
 class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):

@@ -19,6 +19,27 @@
 #   keep this list intentionally narrow
 # - A new push cancels any in-progress review of the same PR — a review of
 #   stale code is wasted spend
+# - The `review` job stays green whatever it finds; the separate `verdict` job
+#   carries the pass/fail. It fails when the review left any inline comment on
+#   this push, which is the signal `auto_merge_low_risk.yml` gates on. Findings
+#   are counted by diffing the PR's review comments either side of the review
+#   step, so it does not depend on the plugin's internals
+# - `verdict` is skipped exactly when `review` is, so a draft or fork PR has no
+#   verdict check at all. Auto-merge treats a missing verdict as a refusal
+# - The verdict demands a positive signal on both axes: the action's own `conclusion`
+#   output *and* a finding count of zero. Counting alone would read "the review never
+#   got as far as commenting" as "the review found nothing" — which is not
+#   hypothetical: the action declines to run at all when this workflow file differs
+#   from the copy on the default branch, and *exits successfully* when it declines,
+#   leaving a green `review` job and zero findings. It sets no `conclusion` on that
+#   path (`skipped_due_to_workflow_validation_mismatch` instead), so the verdict
+#   catches it. Every PR that edits this file will fail the verdict, by design
+# - Findings are counted as inline review comments because that is the channel the
+#   plugin uses — the action buffers them and posts them in its own
+#   "Post buffered inline comments" step. `claude_args` does also permit `gh pr
+#   comment`, `gh pr review` and `gh api`, so a review that chose to summarise
+#   itself elsewhere would count as zero; the `conclusion` check is what stops that
+#   being a silent pass
 
 name: Claude Code Review
 
@@ -47,6 +68,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    outputs:
+      findings: ${{ steps.findings.outputs.count }}
+      conclusion: ${{ steps.claude.outputs.conclusion }}
+      validation_skip: ${{ steps.claude.outputs.skipped_due_to_workflow_validation_mismatch }}
+
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.
@@ -59,7 +85,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Findings are counted as "review comments this run added", so the comments
+      # already on the PR from earlier pushes have to be recorded first.
+      - name: Snapshot existing review comments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
+            | jq -r 'add // [] | .[].id' | sort > "$RUNNER_TEMP/review-comments-before.txt"
+
       - name: Run Claude Code Review
+        id: claude
         uses: anthropics/claude-code-action@v1.0.206
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -69,3 +108,62 @@ jobs:
           prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment"
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git status:*),Bash(git branch:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr review:*),Bash(gh api:*),Read,Grep,Glob,Task"
+
+      - name: Count findings from this run
+        id: findings
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # Without pipefail a failed `gh api` leaves an empty "after" list, which counts as
+          # zero findings and passes the verdict. The count has to fail instead.
+          set -euo pipefail
+          gh api "repos/$REPO/pulls/$PR/comments?per_page=100" --paginate --slurp \
+            | jq -r 'add // [] | .[].id' | sort > "$RUNNER_TEMP/review-comments-after.txt"
+          count=$(comm -13 "$RUNNER_TEMP/review-comments-before.txt" "$RUNNER_TEMP/review-comments-after.txt" \
+            | wc -l | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "The review added $count inline comment(s) on this push." >> "$GITHUB_STEP_SUMMARY"
+
+  verdict:
+    name: Automated review verdict
+    needs: review
+    # Runs whenever `review` did, including when it failed — a review that did not
+    # finish is not a review that passed.
+    if: always() && needs.review.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Require a review with no findings
+        env:
+          RESULT: ${{ needs.review.result }}
+          FINDINGS: ${{ needs.review.outputs.findings }}
+          CONCLUSION: ${{ needs.review.outputs.conclusion }}
+          VALIDATION_SKIP: ${{ needs.review.outputs.validation_skip }}
+        run: |
+          if [[ "$RESULT" != "success" ]]; then
+            echo "::error::The review job did not complete (result: $RESULT)."
+            exit 1
+          fi
+          if [[ "$VALIDATION_SKIP" == "true" ]]; then
+            echo "::error::No review ran. The action refuses to run when this workflow file" \
+                 "differs from the copy on the default branch, and exits successfully when it" \
+                 "declines. Expected on a pull request that edits this file."
+            exit 1
+          fi
+          # Zero findings has to mean "the review ran and found nothing", not "the review
+          # never got as far as looking". Demand the action's own conclusion as well.
+          if [[ "$CONCLUSION" != "success" ]]; then
+            echo "::error::The review reported conclusion '${CONCLUSION:-<none>}', not success."
+            exit 1
+          fi
+          # An empty count means the counting step never ran. Fail closed.
+          if [[ "$FINDINGS" != "0" ]]; then
+            echo "::error::The review left ${FINDINGS:-an unknown number of} inline comment(s) on this push."
+            exit 1
+          fi
+          echo "The review found nothing on this push."

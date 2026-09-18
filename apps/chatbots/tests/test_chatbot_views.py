@@ -25,10 +25,10 @@ from apps.chatbots.views import (
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
-    _chatbot_chat_ui,
     chatbot_session_pagination_view,
     home,
 )
+from apps.chatbots.views.chatbot_views import _chatbot_chat_ui
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import (
@@ -886,7 +886,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
 @patch("apps.channels.channel_base.ChannelBase.start_new_session")
-@patch("apps.chatbots.views.send_bot_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
 ):

@@ -146,6 +146,7 @@ class CollectionFile(models.Model):
     def chunking_strategy(self) -> ChunkingStrategy | None:
         if self.metadata:
             return self.metadata.chunking_strategy
+        return None
 
     @property
     def status_enum(self):

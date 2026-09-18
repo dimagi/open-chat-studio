@@ -152,6 +152,7 @@ def validate_prompt_variables(context, prompt_key: str, known_vars: set):
     for var in prompt_variables:
         if prompt_text.count(f"{{{var}}}") > 1:
             raise ValidationError({prompt_key: f"Variable {var} is used more than once."})
+    return None
 
 
 def _ensure_tool_variables_are_present(prompt_text, prompt_variables, tools, prompt_key):

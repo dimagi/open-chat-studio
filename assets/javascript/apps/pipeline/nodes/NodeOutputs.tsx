@@ -52,10 +52,11 @@ function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
     return [new Output("Output True"), new Output("Output False")];
   } else if (nodeType === "RouterNode" || nodeType == "StaticRouterNode") {
-    const numberOfOutputs = Math.max(1, params.keywords?.length || 1);
+    const keywords = Array.isArray(params.keywords) ? params.keywords : [];
+    const numberOfOutputs = Math.max(1, keywords.length || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {
-      if (params.keywords?.[i]) {
-        return new Output(params.keywords[i])
+      if (keywords[i]) {
+        return new Output(String(keywords[i]))
       }
       return new Output(`Output ${i + 1}`, true)
     });

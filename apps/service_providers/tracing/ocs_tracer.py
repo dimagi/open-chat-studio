@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import UserActionableError
@@ -21,6 +19,11 @@ from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from langchain_core.outputs import LLMResult
 
 logger = logging.getLogger("ocs.tracing")
 

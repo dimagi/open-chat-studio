@@ -119,7 +119,7 @@ def test_run_bot_generation_with_participant_data_session_state(evaluation_messa
 
     evaluation_message.participant_data = {"test_pd": "demo_pd"}
     evaluation_message.session_state = {"test_ss": "demo_ss"}
-    session_id, result = run_bot_generation(
+    _session_id, result = run_bot_generation(
         team_with_users, evaluation_message, experiment, evaluation_run=generation_run
     )
 

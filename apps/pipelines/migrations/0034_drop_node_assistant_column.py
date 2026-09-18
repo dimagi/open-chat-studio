@@ -5,7 +5,7 @@ class Migration(migrations.Migration):
     """Drop the column 0031 removed from state. Its FK constraint goes with it."""
 
     dependencies = [
-        ("pipelines", "0031_remove_node_assistant_state"),
+        ("pipelines", "0033_node_position_not_null"),
     ]
 
     operations = [

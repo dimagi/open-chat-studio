@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
         ("auth", "0012_alter_user_first_name_max_length"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("custom_actions", "0008_drop_operation_assistant_column"),
-        ("pipelines", "0032_drop_node_assistant_column"),
+        ("pipelines", "0034_drop_node_assistant_column"),
     ]
 
     operations = [

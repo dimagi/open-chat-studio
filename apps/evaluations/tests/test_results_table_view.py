@@ -349,7 +349,7 @@ class TestResultsTableSessionMode:
         return session, run, config
 
     def test_column_set_swaps_message_columns_for_links_and_preview(self, client, team_with_users):
-        session, run, config = self._build_session_mode_run(team_with_users)
+        _session, run, config = self._build_session_mode_run(team_with_users)
         client.force_login(team_with_users.members.first())
 
         url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
@@ -388,7 +388,7 @@ class TestResultsTableSessionMode:
         `_row_hx_get_factory`). Without stopping propagation here, clicking a chip in the
         Links column would bubble up and trigger that too, on top of the chip's own
         navigation."""
-        session, run, config = self._build_session_mode_run(team_with_users)
+        _session, run, config = self._build_session_mode_run(team_with_users)
         client.force_login(team_with_users.members.first())
 
         url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
@@ -398,7 +398,7 @@ class TestResultsTableSessionMode:
         assert 'onclick="event.stopPropagation()"' in content
 
     def test_preview_shows_session_history(self, client, team_with_users):
-        session, run, config = self._build_session_mode_run(team_with_users)
+        _session, run, config = self._build_session_mode_run(team_with_users)
         client.force_login(team_with_users.members.first())
 
         url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])

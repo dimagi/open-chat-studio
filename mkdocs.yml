@@ -142,6 +142,7 @@ nav:
       - 0064 Channels may override the session token lifetime: adr/0064-per-channel-session-token-lifetime-override.md
       - 0065 Participant-actionable errors are answered, not raised: adr/0065-participant-actionable-errors-answered-not-raised.md
       - 0066 Session tokens carry their expiry and are renewed in place: adr/0066-session-tokens-carry-their-expiry-and-renew-in-place.md
+      - 0067 Team-actionable provider errors are configuration errors: adr/0067-team-actionable-provider-errors-are-configuration-errors.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md

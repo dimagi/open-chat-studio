@@ -62,7 +62,7 @@ def test_authenticate_client_credentials_sets_synthetic_identity(rf, client_cred
     request = rf.get("/api/sessions/")
     request.META["HTTP_AUTHORIZATION"] = f"Bearer {client_credentials_token.token}"
 
-    user, token = OAuth2AccessTokenAuthentication().authenticate(request)
+    user, _token = OAuth2AccessTokenAuthentication().authenticate(request)
 
     assert isinstance(user, AnonymousUser)
     assert request.team.id == team.id

@@ -1,3 +1,21 @@
 comment:
     layout: "condensed_header, condensed_files, condensed_footer"
     hide_project_coverage: true
+
+coverage:
+    # Both checks are informational while the team settles on the targets; drop
+    # `informational` to make them block PRs.
+    status:
+        patch:
+            default:
+                # New/changed lines in each PR should be at least 80% covered.
+                # The threshold allows small PRs where one uncovered line would fail an exact target.
+                target: 80%
+                threshold: 5%
+                informational: true
+        project:
+            default:
+                # Don't regress below the current project total.
+                target: auto
+                threshold: 1%
+                informational: true
