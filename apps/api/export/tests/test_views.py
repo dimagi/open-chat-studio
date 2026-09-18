@@ -35,6 +35,18 @@ def _resource_url(resource):
     return reverse(f"api:export:resource-{resource}")
 
 
+def _collect_ids(client, resource, max_pages=50):
+    """Every id the resource serves, in the order served, paged through to exhaustion."""
+    ids, cursor = [], None
+    for _ in range(max_pages):
+        page = client.get(_resource_url(resource), {"cursor": cursor} if cursor else {}).json()
+        ids += [r["id"] for r in page["results"]]
+        cursor = page["cursor"]
+        if not page["has_more"]:
+            return ids
+    raise AssertionError(f"{resource} was still unexhausted after {max_pages} pages")
+
+
 @pytest.fixture()
 def team():
     return TeamWithUsersFactory(is_migrating=True)
@@ -89,11 +101,14 @@ def test_resource_rejects_unlisted_model(team):
 
 
 def test_resource_isolates_other_teams_data(team):
+    """Paged to exhaustion rather than read off the first page: this resource also serves the global
+    team-less rows, which the migrations seed in larger numbers than one page holds, so a single-page
+    read tests nothing about team scoping once the seed list outgrows the page size."""
     other = TeamWithUsersFactory()
     mine = LlmProviderModelFactory(team=team)
     theirs = LlmProviderModelFactory(team=other)
     client = ApiTestClient(_admin(team), team)
-    ids = [r["id"] for r in client.get(_resource_url("llm_provider_models")).json()["results"]]
+    ids = _collect_ids(client, "llm_provider_models")
     assert mine.id in ids
     assert theirs.id not in ids
 
