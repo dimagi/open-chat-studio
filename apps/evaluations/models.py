@@ -20,7 +20,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.const import FINALIZATION_GRACE, PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError
-from apps.evaluations.export import build_evaluation_table_data
+from apps.evaluations.export import annotate_export_fields, build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -769,11 +769,7 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status", "error_message"])
 
     def get_table_data(self, include_ids: bool = False):
-        results_qs = (
-            self.results.select_related("message__session__experiment", "evaluator", "session")
-            .prefetch_related("applied_tags__tag")
-            .order_by("created_at")
-        )
+        results_qs = annotate_export_fields(self.results.all()).order_by("created_at")
         if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
             scoped_ids = self.scoped_messages.values_list("id", flat=True)
             results_qs = results_qs.filter(message_id__in=scoped_ids)

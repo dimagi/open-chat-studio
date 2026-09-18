@@ -1,6 +1,8 @@
 import contextlib
 import csv
+import math
 from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 from io import StringIO
@@ -9,7 +11,7 @@ import taskbadger
 from celery import current_app, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import PROGRESS_STATE, ProgressRecorder
-from django.core.files.base import ContentFile
+from django.core.files import File as DjangoFile
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
@@ -25,7 +27,11 @@ from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.export import build_evaluation_table_data, write_evaluation_csv
+from apps.evaluations.export import (
+    annotate_export_fields,
+    export_evaluation_csv_to_tempfile,
+    iter_evaluation_table_rows,
+)
 from apps.evaluations.models import (
     NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
@@ -1498,52 +1504,87 @@ def create_dataset_from_sessions_task(
         return {"success": False, "error": message}
 
 
-def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
-    """Return the most recent EvaluationResult per (message, evaluator) across all
-    completed FULL/DELTA runs for *config*, pushing deduplication into the DB via
-    DISTINCT ON so only the latest-run row per pair is fetched."""
-    return (
-        EvaluationResult.objects.filter(
-            run__config=config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            team=team,
-        )
-        .select_related("message__session__experiment", "evaluator", "session", "run")
-        .prefetch_related("applied_tags__tag")
-        .order_by("message_id", "evaluator_id", "-run__created_at")
-        .distinct("message_id", "evaluator_id")
+def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[dict]:
+    """Yield *rows*, calling ``report(current, total)`` in steps of roughly one percent.
+
+    Reporting per row would be one backend write per row, which on a large export is more
+    traffic than the export itself.
+    """
+    step = max(1, math.ceil(total / 100))
+    for current, row in enumerate(rows, start=1):
+        if current % step == 0 or current == total:
+            report(current, total)
+        yield row
+
+
+def _bulk_export_results(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
+    """Every result the bulk export draws on. The row count and the exported rows must agree,
+    so both are built from this one filter.
+    """
+    return EvaluationResult.objects.filter(
+        run__config=config,
+        run__status=EvaluationRunStatus.COMPLETED,
+        run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+        team=team,
     )
 
 
-@shared_task(queue=Queues.BACKGROUND)
-def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
-    """
-    Async export of the most recent evaluation result for each dataset item,
-    across all completed evaluation runs for the given config.
+def _count_bulk_export_rows(config: EvaluationConfig, team: Team) -> int:
+    """Number of CSV rows the bulk export will produce, which is one per message."""
+    return _bulk_export_results(config, team).values("message_id").distinct().count()
 
-    Returns {"file_id": <id>} on success.
+
+def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
+    """The latest EvaluationResult per (message, evaluator) across *config*'s completed
+    FULL/DELTA runs, deduplicated in the DB via DISTINCT ON.
+
+    Annotations go on an outer query over the surviving ids: Postgres projects a correlated
+    subquery below the DISTINCT ON, so annotating the inner query would run the applied-tags
+    subquery once per result of every run. Ordering by message id is what lets the export
+    emit a row per message as it reads.
+    """
+    latest_per_message_and_evaluator = (
+        _bulk_export_results(config, team)
+        .order_by("message_id", "evaluator_id", "-run__created_at")
+        .distinct("message_id", "evaluator_id")
+    )
+    surviving = EvaluationResult.objects.filter(id__in=latest_per_message_and_evaluator.values("id"))
+    return annotate_export_fields(surviving).order_by("message_id")
+
+
+@shared_task(bind=True, queue=Queues.BACKGROUND)
+def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id: int) -> dict:
+    """Async export of the most recent evaluation result for each dataset item, across all
+    completed evaluation runs for the given config.
+
+    Peak memory is flat in the number of results. Returns {"file_id": <id>} on success.
     """
     try:
         config = EvaluationConfig.objects.select_related("team").get(id=evaluation_config_id, team_id=team_id)
         team = config.team
 
         with current_team(team):
+            recorder = ProgressRecorder(self)
+            # Counting up front costs a query the streaming read would not otherwise make, but
+            # it is what lets the UI show a percentage rather than an unbounded spinner.
+            total = _count_bulk_export_rows(config, team)
+
+            def report(current: int, row_total: int) -> None:
+                recorder.set_progress(current, row_total, description=f"Processed {current} of {row_total} messages")
+
             results = _get_bulk_results_queryset(config, team)
-            table_data = build_evaluation_table_data(results)
-
-            csv_buffer = StringIO()
-            write_evaluation_csv(csv.writer(csv_buffer), table_data)
-
+            rows = _report_row_progress(iter_evaluation_table_rows(results), total, report)
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-            file_obj = File.objects.create(
-                name=filename,
-                team=team,
-                content_type="text/csv",
-                file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
-                purpose=FilePurpose.DATA_EXPORT,
-                expiry_date=timezone.now() + timedelta(days=7),
-            )
+
+            with export_evaluation_csv_to_tempfile(rows) as csv_file:
+                file_obj = File.objects.create(
+                    name=filename,
+                    team=team,
+                    content_type="text/csv",
+                    file=DjangoFile(csv_file, name=filename),
+                    purpose=FilePurpose.DATA_EXPORT,
+                    expiry_date=timezone.now() + timedelta(days=7),
+                )
 
             return {"file_id": file_obj.id}
 
