@@ -1,4 +1,4 @@
-import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
+import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useRef, useState, useMemo} from "react";
 import Select, {MultiValue, SingleValue} from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
@@ -479,12 +479,18 @@ export function GenerateCodeSection({
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
   const [status, setStatus] = useState<"idle" | "generating" | "checking">("idle")
   const [error, setError] = useState("")
+  // Bumped whenever a request starts, and whenever Accept/Reject/Clear discards the
+  // current proposal, so a response for a request that's no longer current gets ignored
+  // instead of resurrecting a proposal the user already acted on.
+  const requestRevisionRef = useRef(0);
 
   const runGenerate = (query: string, nextStatus: "generating" | "checking") => {
+    const revision = ++requestRevisionRef.current;
     setStatus(nextStatus);
     setError("");
     apiClient.generateCode(query, currentCode).then((generatedResponse) => {
       setStatus("idle");
+      if (revision !== requestRevisionRef.current) return;
       if (generatedResponse.error || !generatedResponse.response?.code) {
         setError(generatedResponse.error || "No code generated. Please provide more information.");
         return;
@@ -492,6 +498,7 @@ export function GenerateCodeSection({
       setGeneratedCode(generatedResponse.response.code);
     }).catch((errorData) => {
       setStatus("idle");
+      if (revision !== requestRevisionRef.current) return;
       setError(errorData?.error || "An error occurred while generating code. Please try again.");
     });
   }
@@ -500,13 +507,18 @@ export function GenerateCodeSection({
   const checkForBugs = () => runGenerate(CHECK_FOR_BUGS_PROMPT, "checking");
 
   const handleAccept = () => {
+    requestRevisionRef.current += 1;
     onAccept(generatedCode as string)
     setGeneratedCode(null)
     setPrompt("")
     setError("")
   }
-  const handleReject = () => setGeneratedCode(null);
+  const handleReject = () => {
+    requestRevisionRef.current += 1;
+    setGeneratedCode(null);
+  };
   const handleClear = () => {
+    requestRevisionRef.current += 1;
     setGeneratedCode(null)
     setPrompt("")
     setError("")

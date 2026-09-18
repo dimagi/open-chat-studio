@@ -230,4 +230,69 @@ describe('GenerateCodeSection', () => {
     expect(diff.getAttribute('data-original')).toBe('original code');
     expect(diff.getAttribute('data-value')).toBe('generated code');
   });
+
+  describe('discards a deferred refine response after the current proposal is discarded', () => {
+    // Two generateCode calls: the first (initial "Generate") resolves immediately with
+    // "code A"; the second (a "Refine" click) stays pending until the test resolves it
+    // itself, simulating a slow response that arrives after the user has already acted
+    // on "code A".
+    const setUpPendingRefine = async () => {
+      let resolveSecond: (value: {response: {code: string}}) => void;
+      vi.spyOn(apiClient, 'generateCode')
+        .mockResolvedValueOnce({response: {code: 'code A'}})
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+
+      const onAccept = vi.fn();
+      const rendered = render(
+        <GenerateCodeSection showGenerate={true} onAccept={onAccept} currentCode="original code" />,
+      );
+      const {getByPlaceholderText, getByText, queryByTestId} = rendered;
+
+      fireEvent.change(getByPlaceholderText(/Describe what you want/), {target: {value: 'first prompt'}});
+      fireEvent.click(getByText('Generate'));
+      await waitFor(() => expect(queryByTestId('code-diff')).toBeInTheDocument());
+
+      fireEvent.click(getByText('Refine')); // second request now pending
+
+      return {...rendered, onAccept, resolveDeferred: () => resolveSecond({response: {code: 'code B'}})};
+    };
+
+    it('Accept: a late response cannot repopulate the panel for a second acceptance', async () => {
+      const {getByText, queryByTestId, onAccept, resolveDeferred} = await setUpPendingRefine();
+
+      fireEvent.click(getByText('Accept')); // accepts the still-current "code A"
+      expect(onAccept).toHaveBeenCalledTimes(1);
+      expect(onAccept).toHaveBeenCalledWith('code A');
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+
+      resolveDeferred();
+      await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+      expect(onAccept).toHaveBeenCalledTimes(1);
+    });
+
+    it('Reject: a late response cannot restore the rejected proposal', async () => {
+      const {getByText, queryByTestId, resolveDeferred} = await setUpPendingRefine();
+
+      fireEvent.click(getByText('Reject'));
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+
+      resolveDeferred();
+      await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+    });
+
+    it('Clear: a late response cannot repopulate the cleared panel', async () => {
+      const {getByText, getByPlaceholderText, queryByTestId, resolveDeferred} = await setUpPendingRefine();
+
+      fireEvent.click(getByText('Clear'));
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+      expect((getByPlaceholderText(/Describe what you want/) as HTMLTextAreaElement).value).toBe('');
+
+      resolveDeferred();
+      await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
+      expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+      expect((getByPlaceholderText(/Describe what you want/) as HTMLTextAreaElement).value).toBe('');
+    });
+  });
 });
