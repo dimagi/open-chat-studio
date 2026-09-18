@@ -8,8 +8,10 @@
     <div class="w-96 px-4 py-4 bg-white dark:bg-neutral-800">
       <h1 class="pg-title">{% translate "Confirm Access" %}</h1>
 
+      {% include "account/snippets/pending_elevation.html" %}
+
       <p>{% blocktranslate %}To safeguard the security of your account, please enter an
-        authenticator code:{% endblocktranslate %}</p>
+        authenticator code or recovery code:{% endblocktranslate %}</p>
 
       <form class="mt-6 space-y-6" method="post" action="{% url 'mfa_reauthenticate' %}">
         {% csrf_token %}

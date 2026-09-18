@@ -2,7 +2,7 @@ from copy import copy
 
 from django.conf import settings
 
-from .elevation import active_elevations
+from .elevation import active_elevations, pending_elevation
 from .meta import absolute_url, get_server_root
 
 
@@ -27,6 +27,7 @@ def project_meta(request):
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "signup_enabled": settings.SIGNUP_ENABLED,
         "elevations": active_elevations(request),
+        "pending_elevation": pending_elevation(request),
         "docs_base_url": settings.DOCUMENTATION_BASE_URL,
         "docs_links": settings.DOCUMENTATION_LINKS,
         "dark_mode": request.COOKIES.get("theme", "") == "dark",

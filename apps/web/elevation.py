@@ -214,6 +214,20 @@ def start_elevation(request, grant: Grant, next_url: str):
     return flows.reauthentication.stash_and_reauthenticate(request, state, REAUTH_CALLBACK)
 
 
+def pending_elevation(request) -> Grant | None:
+    """The grant waiting on an identity proof, so the re-authentication prompt can name it."""
+    if not hasattr(request, "session"):
+        return None
+
+    stash = request.session.get(flows.reauthentication.STATE_SESSION_KEY) or {}
+    if stash.get("callback") != REAUTH_CALLBACK:
+        return None
+    try:
+        return Grant.parse(stash["state"]["grant"])
+    except (InvalidGrant, KeyError, TypeError):
+        return None
+
+
 def complete_elevation(request, state: dict):
     """Grant the stashed elevation now that allauth has proved the user's identity."""
     try:
@@ -229,6 +243,7 @@ def complete_elevation(request, state: dict):
 
     if not grant.may_be_held_by(request.user):
         logger.warning(f"Denied elevation of '{request.user.email}' to '{grant}': insufficient role")
+        messages.error(request, "You are not allowed to hold that elevated access.")
         return HttpResponseRedirect("/")
 
     try:

@@ -1,7 +1,7 @@
 {% load i18n %}
 {% if reauthentication_alternatives %}
   <div class="divider"></div>
-  <h2 class="font-bold">{% translate "Alternative options" %}</h2>
+  <h2 class="pg-subtitle">{% translate "Alternative options" %}</h2>
   <div class="mt-2 flex flex-col gap-2">
     {% for alternative in reauthentication_alternatives %}
       <a class="btn btn-outline btn-primary" href="{{ alternative.url }}">{{ alternative.description }}</a>

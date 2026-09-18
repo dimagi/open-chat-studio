@@ -1,7 +1,7 @@
 import datetime
 
 import pytest
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from pytest_django.asserts import assertRedirects
 from time_machine import travel
 
@@ -9,7 +9,7 @@ from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS, STASH_MAX_AGE, TOO_MANY_ELEVATIONS_MESSAGE
 
-REAUTH_URL = "/accounts/reauthenticate/"
+REAUTH_URL = str(reverse_lazy("account_reauthenticate"))
 
 
 @pytest.fixture()
@@ -66,6 +66,23 @@ def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
     response = authed_client.get(reverse("web:elevate_django_admin"))
     assertRedirects(response, REAUTH_URL)
     assert superuser.email in authed_client.get(REAUTH_URL).content.decode()
+
+
+@pytest.mark.django_db()
+def test_the_prompt_names_the_grant_being_requested(team, superuser, authed_client):
+    """The old confirmation page named the grant; the re-authentication prompt has to as well."""
+    authed_client.get(reverse("web:elevate_team", args=[team.slug]))
+
+    content = authed_client.get(REAUTH_URL).content.decode()
+
+    assert f"Team &quot;{team.slug}&quot;" in content
+
+
+@pytest.mark.django_db()
+def test_the_prompt_names_no_grant_outside_an_elevation(superuser, authed_client):
+    content = authed_client.get(REAUTH_URL).content.decode()
+
+    assert "You are requesting elevated access" not in content
 
 
 @pytest.mark.django_db()
@@ -138,9 +155,9 @@ def test_reauthentication_is_refused_when_the_user_has_no_method(client):
     sso_user.save()
     client.force_login(sso_user)
 
-    client.get(reverse("web:elevate_django_admin"))
+    started = client.get(reverse("web:elevate_django_admin"))
 
-    assert client.get(REAUTH_URL).status_code == 403
+    assertRedirects(started, REAUTH_URL, target_status_code=403)
 
 
 @pytest.mark.django_db()
