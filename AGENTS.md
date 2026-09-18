@@ -88,6 +88,7 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
+* A `DeprecationWarning` reported against `apps.*` fails the test that raises it (`filterwarnings` in `pyproject.toml`). Fix the call site. Add an `ignore` line only when the deprecated thing is inside a dependency and we cannot move off it, scoped to the message so the same library raising something new still surfaces
 
 ## Ask first
 Confirm with a human before these — they are hard to reverse or change a shared contract:
