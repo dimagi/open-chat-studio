@@ -629,6 +629,34 @@ def main(input, **kwargs):
         with pytest.raises(CodeNodeRunError):
             _run_sandbox(code)
 
+    @pytest.mark.parametrize("hook", ["_write_", "_getattr_", "_getitem_", "_print_", "_inplacevar_"])
+    def test_cannot_shadow_guard_hook_via_positional_only_param(self, hook):
+        """A positional-only parameter must not be able to shadow an injected guard hook.
+
+        RestrictedPython's "no leading underscore in variable names" check skipped
+        positional-only parameters before 8.3 (CVE-2026-55830 / GHSA-ffg3-p8fm-mjx2), which
+        let node code rebind ``_write_``/``_getattr_``/... inside a nested function and
+        disable that guard for the whole nested scope.
+        """
+        code = f"def main(input, **kwargs):\n    def inner({hook}, /):\n        return 1\n    return str(inner(None))\n"
+        with pytest.raises(ValidationError, match=f'"{hook}" is an invalid variable name'):
+            _run_sandbox(code)
+
+    def test_shadowed_write_hook_cannot_poison_shared_module(self):
+        """The CVE-2026-55830 reproduction: shadowing ``_write_`` must not re-open Finding 1."""
+        code = """
+def main(input, **kwargs):
+    def inner(_write_, /):
+        json.dumps = 42
+        return 1
+    inner(lambda o: o)
+    return str(json.dumps)
+"""
+        with pytest.raises(ValidationError):
+            _run_sandbox(code)
+
+        assert json.dumps({"safe": 1}) == '{"safe": 1}'
+
     def test_can_write_attributes_on_per_execution_objects(self):
         """Writing an attribute on a per-execution object (e.g. an Attachment) must work.
 
