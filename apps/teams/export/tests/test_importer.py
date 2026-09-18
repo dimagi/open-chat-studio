@@ -24,7 +24,6 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
-from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
@@ -122,8 +121,8 @@ PAST = "2020-01-02T03:04:05+00:00"
 
 
 @pytest.fixture()
-def store(tmp_path):
-    return FKTranslationStore(tmp_path / "team.sqlite")
+def store(make_store, tmp_path):
+    return make_store(tmp_path / "team.sqlite")
 
 
 @pytest.fixture()
@@ -840,7 +839,7 @@ def test_importing_file_backfills_missing_blob_from_the_source(store):
 
     assert fetcher.calls == [501]
     file = File.objects.get(pk=store.get_target("files.file", 501))
-    assert file.file.read() == b"remote-bytes"
+    assert file.read_bytes() == b"remote-bytes"
     _clear_storage("backfilled-501.txt")
 
 
@@ -856,7 +855,7 @@ def test_importing_file_with_present_blob_does_not_fetch(store):
 
     assert fetcher.calls == []
     file = File.objects.get(pk=store.get_target("files.file", 502))
-    assert file.file.read() == b"already-here"
+    assert file.read_bytes() == b"already-here"
     _clear_storage(saved_path)
 
 

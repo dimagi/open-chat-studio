@@ -102,7 +102,7 @@ class TestDocumentSourceManager:
         file = files[0].file
         assert file.name == "test.md"
         assert file.content_type == "text/plain"
-        assert file.file.read() == b"# Test Document"
+        assert file.read_bytes() == b"# Test Document"
         assert "sha" in file.metadata
 
         manager._index_files.assert_called_once()
@@ -130,7 +130,7 @@ class TestDocumentSourceManager:
 
         assert result.files_updated == 1
         file.refresh_from_db()
-        assert file.file.read() == PDF_BYTES
+        assert file.read_bytes() == PDF_BYTES
         assert file.content_type == "application/pdf"
         assert file.content_size == len(PDF_BYTES)
 
@@ -273,7 +273,7 @@ class TestDocumentSourceManager:
         assert len(files) == 1
         assert files[0].status == FileStatus.PENDING
         file = files[0].file
-        assert file.file.read() == b"# Test Document updated"
+        assert file.read_bytes() == b"# Test Document updated"
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_sync_collection_delete_file(self, create_loader, collection, document_source):
@@ -420,7 +420,7 @@ class TestDocumentSourceManager:
 
         file = CollectionFile.objects.get(collection=collection).file
         assert file.name == "My Doc.pdf"
-        assert file.file.read() == b"v2"
+        assert file.read_bytes() == b"v2"
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_update_file_clears_stale_failure_reason(self, create_loader, collection, document_source):
