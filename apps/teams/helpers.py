@@ -3,7 +3,7 @@ from django.utils.translation import gettext as _
 
 from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
-from apps.web.superuser_utils import has_temporary_superuser_access
+from apps.web.elevation import Elevation, Grant
 
 from .backends import make_user_team_owner
 from .models import Membership, Team
@@ -84,7 +84,7 @@ def set_request_attrs(request, **attrs) -> None:
 def get_team_membership_for_request(request: HttpRequest):
     if request.user.is_authenticated and request.team:
         membership = Membership.objects.filter(team=request.team, user=request.user).first()
-        if not membership and request.user.is_superuser and has_temporary_superuser_access(request, request.team.slug):
+        if not membership and request.user.is_superuser and Elevation(request).has(Grant.team(request.team.slug)):
             membership = SuperuserMembership(request.user, request.team)
         return membership
     return None
