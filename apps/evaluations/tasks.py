@@ -1517,19 +1517,21 @@ def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[d
         yield row
 
 
+def _bulk_export_results(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
+    """Every result the bulk export draws on. The row count and the exported rows must agree,
+    so both are built from this one filter.
+    """
+    return EvaluationResult.objects.filter(
+        run__config=config,
+        run__status=EvaluationRunStatus.COMPLETED,
+        run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+        team=team,
+    )
+
+
 def _count_bulk_export_rows(config: EvaluationConfig, team: Team) -> int:
     """Number of CSV rows the bulk export will produce, which is one per message."""
-    return (
-        EvaluationResult.objects.filter(
-            run__config=config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            team=team,
-        )
-        .values("message_id")
-        .distinct()
-        .count()
-    )
+    return _bulk_export_results(config, team).values("message_id").distinct().count()
 
 
 def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
@@ -1542,12 +1544,7 @@ def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet
     emit a row per message as it reads.
     """
     latest_per_message_and_evaluator = (
-        EvaluationResult.objects.filter(
-            run__config=config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            team=team,
-        )
+        _bulk_export_results(config, team)
         .order_by("message_id", "evaluator_id", "-run__created_at")
         .distinct("message_id", "evaluator_id")
     )
