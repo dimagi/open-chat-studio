@@ -1602,6 +1602,11 @@ components:
           type: string
           format: date-time
           readOnly: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
         status:
           $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
@@ -1676,6 +1681,11 @@ components:
           type: string
           format: date-time
           readOnly: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
         status:
           $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
@@ -1696,6 +1706,11 @@ components:
           items:
             type: string
         state: {}
+        participant_data:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
       required:
       - created_at
       - experiment
