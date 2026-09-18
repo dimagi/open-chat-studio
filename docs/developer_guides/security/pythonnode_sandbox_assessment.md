@@ -10,6 +10,12 @@ below were originally confirmed by execution against RestrictedPython 8.1 and re
 case by case on 8.4 (behaviour is unchanged); the runtime wiring was verified by reading
 the production code paths.
 
+> **Scope note.** This is a defensive assessment of our own sandbox. It documents
+> where the isolation boundary holds and where it leaks, with reproductions and
+> remediations. The tractable fixes (findings 1, 4, 5 and the `+=` half of 6) are
+> implemented in the same PR as this document; the remainder are tracked as issues.
+> See the "Remediation status" callout and per-finding "Remediation" sections.
+>
 > **Version floor.** `pyproject.toml` requires `RestrictedPython>=8.4`. RestrictedPython
 > 8.3 fixed [CVE-2026-55830 / GHSA-ffg3-p8fm-mjx2](https://github.com/zopefoundation/RestrictedPython/security/advisories/GHSA-ffg3-p8fm-mjx2):
 > the "no leading underscore in variable names" check skipped **positional-only**
@@ -18,12 +24,6 @@ the production code paths.
 > shadowed, so do not relax that floor. Regression coverage:
 > `TestSandboxHardening::test_cannot_shadow_guard_hook_via_positional_only_param` and
 > `::test_shadowed_write_hook_cannot_poison_shared_module`.
-
-> **Scope note.** This is a defensive assessment of our own sandbox. It documents
-> where the isolation boundary holds and where it leaks, with reproductions and
-> remediations. The tractable fixes (findings 1, 4, 5 and the `+=` half of 6) are
-> implemented in the same PR as this document; the remainder are tracked as issues.
-> See the "Remediation status" callout and per-finding "Remediation" sections.
 
 ---
 
