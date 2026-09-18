@@ -1,6 +1,7 @@
 import copy
 from uuid import uuid4
 
+from apps.pipelines.const import END_NODE_TYPE, START_NODE_TYPE
 from apps.pipelines.flow import FlowNode, FlowNodeData
 from apps.pipelines.node_type import NodeType
 
@@ -71,33 +72,29 @@ def _create_pipeline(team, name, all_flow_nodes, edges):
 
 
 def _get_start_and_end_nodes(start_x=100, end_x=800):
-    from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: nodes.nodes→models→helper→nodes.nodes
-        EndNode,
-        StartNode,
-    )
-
+    start_type, end_type = NodeType(START_NODE_TYPE), NodeType(END_NODE_TYPE)
     start_node_id = str(uuid4())
     end_node_id = str(uuid4())
     start_node = FlowNode(
         id=start_node_id,
-        type="startNode",
+        type=start_type.react_flow_type,
         position={"x": start_x, "y": 200},
         data=FlowNodeData(
             id=start_node_id,
-            type=StartNode.__name__,
+            type=start_type.type,
             label="",
-            params={"name": "start"},
+            params={"name": start_type.reserved_name},
         ),
     )
     end_node = FlowNode(
         id=end_node_id,
-        type="endNode",
+        type=end_type.react_flow_type,
         position={"x": end_x, "y": 200},
         data=FlowNodeData(
             id=end_node_id,
-            type=EndNode.__name__,
+            type=end_type.type,
             label="",
-            params={"name": "end"},
+            params={"name": end_type.reserved_name},
         ),
     )
     return end_node, start_node
