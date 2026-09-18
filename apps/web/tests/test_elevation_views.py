@@ -2,12 +2,14 @@ import datetime
 
 import pytest
 from django.urls import reverse
-from pytest_django.asserts import assertFormError, assertRedirects
+from pytest_django.asserts import assertRedirects
 from time_machine import travel
 
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
-from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS
+from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS, STASH_MAX_AGE, TOO_MANY_ELEVATIONS_MESSAGE
+
+REAUTH_URL = "/accounts/reauthenticate/"
 
 
 @pytest.fixture()
@@ -19,6 +21,14 @@ def superuser():
 def authed_client(client, superuser):
     client.force_login(superuser)
     return client
+
+
+def elevate(client, acquire_url, next_url="/", password="password"):
+    """Walk the acquire → re-authenticate → resume round trip, returning the final response."""
+    started = client.get(acquire_url, {"next": next_url})
+    assert started.status_code == 302, started
+    assert started.url == REAUTH_URL
+    return client.post(REAUTH_URL, {"password": password})
 
 
 @pytest.mark.django_db()
@@ -52,11 +62,10 @@ def test_escalation_does_not_render_when_for_non_superuser(superuser, authed_cli
 
 
 @pytest.mark.django_db()
-def test_acquire_for_django_admin(team, superuser, authed_client):
+def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
     response = authed_client.get(reverse("web:elevate_django_admin"))
-    assert response.status_code == 200
-    assert "Django admin" in response.content.decode()
-    assert superuser.email in response.content.decode()
+    assertRedirects(response, REAUTH_URL)
+    assert superuser.email in authed_client.get(REAUTH_URL).content.decode()
 
 
 @pytest.mark.django_db()
@@ -66,10 +75,23 @@ def test_acquire_for_invalid_team(superuser, authed_client):
 
 
 @pytest.mark.django_db()
-def test_acquire_for_valid_team(team, superuser, authed_client):
-    response = authed_client.get(reverse("web:elevate_team", args=[team.slug]))
-    assert response.status_code == 200
-    assert team.slug in response.content.decode()
+def test_acquire_for_a_team_the_user_belongs_to_skips_the_prompt(team, superuser, authed_client):
+    MembershipFactory.create(team=team, user=superuser)
+    team_home = reverse("web_team:home", args=[team.slug])
+
+    response = authed_client.get(reverse("web:elevate_team", args=[team.slug]), {"next": team_home})
+
+    assertRedirects(response, team_home, target_status_code=302)
+
+
+@pytest.mark.django_db()
+def test_acquire_while_already_elevated_skips_the_prompt(superuser, authed_client):
+    admin_url = reverse("admin:index")
+    elevate(authed_client, reverse("web:elevate_django_admin"), admin_url)
+
+    response = authed_client.get(reverse("web:elevate_django_admin"), {"next": admin_url})
+
+    assertRedirects(response, admin_url)
 
 
 @pytest.mark.django_db()
@@ -79,7 +101,7 @@ def test_acquire_team_elevation_is_superuser_only(team, superuser, authed_client
     superuser.save()
 
     assert authed_client.get(reverse("web:elevate_team", args=[team.slug])).status_code == 404
-    assert authed_client.get(reverse("web:elevate_django_admin")).status_code == 200
+    assertRedirects(authed_client.get(reverse("web:elevate_django_admin")), REAUTH_URL)
 
 
 @pytest.mark.django_db()
@@ -93,23 +115,65 @@ def test_acquire_requires_the_minimum_role(superuser, authed_client):
 
 
 @pytest.mark.django_db()
-def test_acquire_with_valid_password(superuser, authed_client):
+def test_acquire_after_reauthentication(superuser, authed_client):
     admin_url = reverse("admin:index")
-    response = authed_client.post(reverse("web:elevate_django_admin"), {"password": "password", "redirect": admin_url})
+    response = elevate(authed_client, reverse("web:elevate_django_admin"), admin_url)
     assertRedirects(response, admin_url)
 
 
 @pytest.mark.django_db()
-def test_acquire_with_invalid_password(superuser, authed_client):
-    response = authed_client.post(reverse("web:elevate_django_admin"), {"password": "wrongpassword", "redirect": "/"})
+def test_acquire_with_invalid_password_does_not_elevate(superuser, authed_client):
+    admin_url = reverse("admin:index")
+    response = elevate(authed_client, reverse("web:elevate_django_admin"), admin_url, password="wrongpassword")
+
     assert response.status_code == 200
-    assertFormError(response.context["form"], "password", "Invalid password")
+    assert authed_client.get(admin_url).status_code == 302
+
+
+@pytest.mark.django_db()
+def test_reauthentication_is_refused_when_the_user_has_no_method(client):
+    """An SSO-only account has neither a usable password nor MFA, so there is nothing to prove with."""
+    sso_user = UserFactory.create(is_staff=True)
+    sso_user.set_unusable_password()
+    sso_user.save()
+    client.force_login(sso_user)
+
+    client.get(reverse("web:elevate_django_admin"))
+
+    assert client.get(REAUTH_URL).status_code == 403
+
+
+@pytest.mark.django_db()
+def test_a_stale_stash_is_not_completed(superuser, authed_client):
+    """An abandoned elevation must not be granted by an unrelated re-authentication later on."""
+    admin_url = reverse("admin:index")
+    with travel(datetime.datetime.now(), tick=False) as freezer:
+        authed_client.get(reverse("web:elevate_django_admin"), {"next": admin_url})
+
+        freezer.shift(datetime.timedelta(seconds=STASH_MAX_AGE + 1))
+        response = authed_client.post(REAUTH_URL, {"password": "password"})
+
+    assertRedirects(response, "/", target_status_code=302)
+    assert authed_client.get(admin_url).status_code == 302
+
+
+@pytest.mark.django_db()
+def test_elevation_is_refused_when_the_role_is_lost_before_the_proof(superuser, authed_client):
+    authed_client.get(reverse("web:elevate_django_admin"))
+
+    superuser.is_superuser = False
+    superuser.is_staff = False
+    superuser.save()
+
+    response = authed_client.post(REAUTH_URL, {"password": "password"})
+
+    assertRedirects(response, "/", target_status_code=302)
 
 
 @pytest.mark.django_db()
 def test_release_drops_the_grant(superuser, authed_client):
     admin_url = reverse("admin:index")
-    authed_client.post(reverse("web:elevate_django_admin"), {"password": "password", "redirect": admin_url})
+    elevate(authed_client, reverse("web:elevate_django_admin"), admin_url)
     assert authed_client.get(admin_url).status_code == 200
 
     response = authed_client.get(reverse("web:release_elevation", args=["django_admin"]))
@@ -128,9 +192,7 @@ def test_release_of_an_unknown_grant_is_a_404(superuser, authed_client):
 def test_elevation_expires_after_30_minutes(superuser, authed_client):
     with travel(datetime.datetime.now(), tick=False) as freezer:
         admin_url = reverse("admin:index")
-        response = authed_client.post(
-            reverse("web:elevate_django_admin"), {"password": "password", "redirect": admin_url}
-        )
+        response = elevate(authed_client, reverse("web:elevate_django_admin"), admin_url)
         assertRedirects(response, admin_url)
 
         # Advance time by 29 minutes
@@ -147,28 +209,19 @@ def test_elevation_expires_after_30_minutes(superuser, authed_client):
 @pytest.mark.django_db()
 def test_acquire_beyond_the_concurrency_cap_reports_an_error(superuser, authed_client):
     for team in TeamFactory.create_batch(MAX_CONCURRENT_ELEVATIONS):
-        setup = authed_client.post(
-            reverse("web:elevate_team", args=[team.slug]), {"password": "password", "redirect": "/"}
-        )
+        setup = elevate(authed_client, reverse("web:elevate_team", args=[team.slug]))
         assert setup.status_code == 302
 
     extra = TeamFactory.create()
-    response = authed_client.post(
-        reverse("web:elevate_team", args=[extra.slug]), {"password": "password", "redirect": "/"}
-    )
+    response = authed_client.get(reverse("web:elevate_team", args=[extra.slug]), follow=True)
 
-    assert response.status_code == 200
-    assertFormError(
-        response.context["form"],
-        None,
-        ["You already hold the maximum number of elevated privileges. Release one of them and try again."],
-    )
+    assert TOO_MANY_ELEVATIONS_MESSAGE in [str(message) for message in response.context["messages"]]
 
 
 @pytest.mark.django_db()
 def test_banner_shows_the_grant_label_and_a_release_link(team, superuser, authed_client):
     team_home = reverse("web_team:home", args=[team.slug])
-    authed_client.post(reverse("web:elevate_team", args=[team.slug]), {"password": "password", "redirect": "/"})
+    elevate(authed_client, reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(team_home, follow=True).content.decode()
 
@@ -179,7 +232,7 @@ def test_banner_shows_the_grant_label_and_a_release_link(team, superuser, authed
 @pytest.mark.django_db()
 def test_admin_site_shows_a_release_link(superuser, authed_client):
     admin_url = reverse("admin:index")
-    authed_client.post(reverse("web:elevate_django_admin"), {"password": "password", "redirect": admin_url})
+    elevate(authed_client, reverse("web:elevate_django_admin"), admin_url)
 
     content = authed_client.get(admin_url).content.decode()
 
