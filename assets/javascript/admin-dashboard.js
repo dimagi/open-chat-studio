@@ -29,6 +29,8 @@ function getTimeSeriesData (start, end, data) {
 }
 
 export const barChartWithDates = (ctx, start, end, data, label) => {
+  // Chart.js refuses to build a second chart on a canvas that still has a live one.
+  Chart.getChart(ctx)?.destroy()
   const chartData = getTimeSeriesData(start, end, data)
   return new Chart(ctx, {
     type: 'bar',
