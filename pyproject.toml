@@ -119,6 +119,15 @@ filterwarnings = [
     # pytest 10 turns these into hard errors. Fail on them now so they get fixed as they appear,
     # rather than as a wall of breakage at upgrade time.
     "error::pytest.PytestRemovedIn10Warning",
+    # A deprecation raised against our own call site is a bug to fix, not a warning to read past.
+    # The module field matches the dotted __name__ of the frame the warning is reported against
+    # (the caller, via stacklevel) -- not a file path, so `apps/...` would never match. It only
+    # works for warnings.warn(); anything reported by the compiler or the GC, ResourceWarning
+    # above all, carries a file path here instead and is deliberately left as a warning.
+    # These must stay above the ignores below: pytest applies filters in order and the last
+    # matching one wins, so an ignore can still exempt a specific message.
+    "error::DeprecationWarning:apps\\..*",
+    "error::PendingDeprecationWarning:apps\\..*",
     # Deprecations inside dependencies, which we can only clear by upgrading or dropping the
     # dependency. Each is pinned to its message so the same library raising something new is
     # still reported.
