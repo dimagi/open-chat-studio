@@ -298,8 +298,8 @@ def entry(provider, mode="chat", **fields):
     ],
 )
 def test_translate_maps_keys_to_ocs_names(key, tag, expected):
-    _, everything = upstream.translate({key: entry(tag)}, TODAY)
-    assert set(everything) == {expected}
+    _, all_chat = upstream.translate({key: entry(tag)}, TODAY)
+    assert set(all_chat) == {expected}
 
 
 @pytest.mark.parametrize(
@@ -310,8 +310,8 @@ def test_translate_maps_keys_to_ocs_names(key, tag, expected):
     ],
 )
 def test_translate_rejects_keys_ocs_cannot_use(key, tag):
-    _, everything = upstream.translate({key: entry(tag)}, TODAY)
-    assert everything == {}
+    _, all_chat = upstream.translate({key: entry(tag)}, TODAY)
+    assert all_chat == {}
 
 
 @pytest.mark.parametrize(
@@ -328,19 +328,21 @@ def test_translate_rejects_a_name_that_is_not_a_model_id(name):
 
 
 @pytest.mark.parametrize(
-    ("fields", "in_live"),
+    ("fields", "serves_chat"),
     [
         pytest.param({"mode": "chat"}, True, id="chat"),
         pytest.param({"mode": "responses"}, True, id="responses"),
         pytest.param({"mode": "embedding"}, False, id="embedding"),
+        pytest.param({"mode": "audio_transcription"}, False, id="audio-transcription"),
         pytest.param({"mode": "chat", "supported_output_modalities": ["text"]}, True, id="text-modality"),
         pytest.param({"mode": "chat", "supported_output_modalities": ["audio"]}, False, id="audio-only"),
     ],
 )
-def test_translate_live_holds_only_what_ocs_can_run(fields, in_live):
-    live, everything = upstream.translate({"openai/m": {"litellm_provider": "openai", **fields}}, TODAY)
-    assert (("openai", "m") in live) is in_live
-    assert ("openai", "m") in everything
+def test_translate_holds_only_what_ocs_can_run(fields, serves_chat):
+    """A model upstream serves in another mode is in neither catalogue, so it reads as removed."""
+    live, all_chat = upstream.translate({"openai/m": {"litellm_provider": "openai", **fields}}, TODAY)
+    assert (("openai", "m") in live) is serves_chat
+    assert (("openai", "m") in all_chat) is serves_chat
 
 
 @pytest.mark.parametrize(
@@ -354,9 +356,9 @@ def test_translate_live_holds_only_what_ocs_can_run(fields, in_live):
     ],
 )
 def test_translate_applies_deprecation_dates(date, in_live, deprecated):
-    live, everything = upstream.translate({"openai/m": entry("openai", deprecation_date=date)}, TODAY)
+    live, all_chat = upstream.translate({"openai/m": entry("openai", deprecation_date=date)}, TODAY)
     assert (("openai", "m") in live) is in_live
-    assert everything[("openai", "m")].deprecated is deprecated
+    assert all_chat[("openai", "m")].deprecated is deprecated
 
 
 def test_translate_prefers_a_namespaced_key_over_a_bare_one():
@@ -365,8 +367,8 @@ def test_translate_prefers_a_namespaced_key_over_a_bare_one():
         "gpt-4o": entry("openai", input_cost_per_token=0.0000025),
         "openai/gpt-4o": entry("openai", input_cost_per_token=0.000005),
     }
-    _, everything = upstream.translate(data, TODAY)
-    assert everything[("openai", "gpt-4o")].source_key == "openai/gpt-4o"
+    _, all_chat = upstream.translate(data, TODAY)
+    assert all_chat[("openai", "gpt-4o")].source_key == "openai/gpt-4o"
 
 
 def test_translate_prefers_a_plain_key_over_a_regional_variant():
@@ -375,8 +377,8 @@ def test_translate_prefers_a_plain_key_over_a_regional_variant():
         "azure/eu/gpt-4o": entry("azure", input_cost_per_token=0.000009),
         "azure/gpt-4o": entry("azure", input_cost_per_token=0.0000025),
     }
-    _, everything = upstream.translate(data, TODAY)
-    assert everything[("azure", "gpt-4o")].source_key == "azure/gpt-4o"
+    _, all_chat = upstream.translate(data, TODAY)
+    assert all_chat[("azure", "gpt-4o")].source_key == "azure/gpt-4o"
 
 
 @pytest.mark.parametrize(
@@ -389,13 +391,13 @@ def test_translate_prefers_a_plain_key_over_a_regional_variant():
     ],
 )
 def test_translate_converts_per_token_rates_to_per_1k(cost_field, service_kind):
-    _, everything = upstream.translate({"openai/m": entry("openai", **{cost_field: 0.0000025})}, TODAY)
-    assert everything[("openai", "m")].rates == {service_kind: "0.0025"}
+    _, all_chat = upstream.translate({"openai/m": entry("openai", **{cost_field: 0.0000025})}, TODAY)
+    assert all_chat[("openai", "m")].rates == {service_kind: "0.0025"}
 
 
 def test_translate_omits_rates_the_table_does_not_carry():
-    _, everything = upstream.translate({"openai/m": entry("openai")}, TODAY)
-    assert everything[("openai", "m")].rates == {}
+    _, all_chat = upstream.translate({"openai/m": entry("openai")}, TODAY)
+    assert all_chat[("openai", "m")].rates == {}
 
 
 @pytest.mark.parametrize(
@@ -409,8 +411,8 @@ def test_translate_omits_rates_the_table_does_not_carry():
     ],
 )
 def test_translate_reads_the_token_limit(fields, expected):
-    _, everything = upstream.translate({"openai/m": entry("openai", **fields)}, TODAY)
-    assert everything[("openai", "m")].token_limit == expected
+    _, all_chat = upstream.translate({"openai/m": entry("openai", **fields)}, TODAY)
+    assert all_chat[("openai", "m")].token_limit == expected
 
 
 @pytest.mark.parametrize(
@@ -445,8 +447,8 @@ def test_translate_reads_the_token_limit(fields, expected):
 )
 def test_translate_captures_the_flags_that_map_to_a_model_parameter(fields, expected):
     """LiteLLM carries 43 supports_* keys; only those OCS expresses as a parameter are kept."""
-    _, everything = upstream.translate({"openai/m": entry("openai", **fields)}, TODAY)
-    assert everything[("openai", "m")].params == expected
+    _, all_chat = upstream.translate({"openai/m": entry("openai", **fields)}, TODAY)
+    assert all_chat[("openai", "m")].params == expected
 
 
 # Layer 4 - the ledger
@@ -496,7 +498,7 @@ def compare_with(ours_records=(), deleted=frozenset(), live_records=(), all_reco
         ours=catalogue(*ours_records),
         deleted=set(deleted),
         live=live,
-        everything=catalogue(*all_records) if all_records is not None else dict(live),
+        all_chat=catalogue(*all_records) if all_records is not None else dict(live),
         ledger=ledger or {},
     )
 
@@ -543,8 +545,23 @@ def test_removed_is_what_upstream_no_longer_lists_at_all():
     assert [r.name for r in diff.removed] == ["gone"]
 
 
+def test_a_model_upstream_now_serves_only_as_non_chat_is_removed():
+    """``groq/whisper-large-v3-turbo`` is still in the price table, as audio_transcription."""
+    live, all_chat = upstream.translate(
+        {"groq/whisper-large-v3-turbo": entry("groq", mode="audio_transcription")}, TODAY
+    )
+    diff = compare(
+        ours=catalogue(ours("groq", "whisper-large-v3-turbo")),
+        deleted=set(),
+        live=live,
+        all_chat=all_chat,
+        ledger={},
+    )
+    assert [r.name for r in diff.removed] == ["whisper-large-v3-turbo"]
+
+
 def test_an_upstream_deprecated_model_is_not_also_reported_as_removed():
-    """``removed`` compares against the unfiltered map, or every deprecation double-reports."""
+    """``removed`` compares against the deprecation-blind map, or every deprecation double-reports."""
     retired = theirs("openai", "old", deprecated=True, deprecation_date="2026-01-01")
     diff = compare_with(ours_records=[ours("openai", "old")], live_records=[], all_records=[retired])
     assert diff.removed == []

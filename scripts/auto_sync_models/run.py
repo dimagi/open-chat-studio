@@ -14,8 +14,9 @@ Layer 5 yields one list per rule:
 * ``added``       upstream has it, we do not, we never deleted it, and we have
   not rejected it. A model left undecided by an earlier run is still here, so
   nothing is stranded. Drives the catalogue PR.
-* ``removed``     we list it, LiteLLM no longer does at all. Drives the
-  catalogue PR, which retires it.
+* ``removed``     we list it, LiteLLM no longer offers it as a model OCS can
+  run -- dropped from the price table, or still there but served only in some
+  other mode. Drives the catalogue PR, which retires it.
 * ``deprecated``  we still list it as active, its upstream deprecation date has
   passed. Drives the catalogue PR.
 * ``repriced``    a rate we hold has moved upstream. Drives the pricing PR.
@@ -62,10 +63,10 @@ from .records import (
 )
 from .upstream import UpstreamUnavailable, fetch, translate
 
-# The table carried 558 models that mapped to an OCS provider when this floor was
-# set. A structurally valid table translating to far fewer means LiteLLM changed
-# shape -- a renamed ``litellm_provider``, a restructured key -- not that upstream
-# retired its catalogue.
+# The table carried 386 chat-capable models that mapped to an OCS provider when
+# this floor was set. A structurally valid table translating to far fewer means
+# LiteLLM changed shape -- a renamed ``litellm_provider``, a restructured key --
+# not that upstream retired its catalogue.
 MIN_UPSTREAM_MODELS = 300
 
 # Providers retire models a few at a time. A run proposing to drop more than this
@@ -74,11 +75,11 @@ MIN_UPSTREAM_MODELS = 300
 MAX_REMOVED_FRACTION = 0.25
 
 
-def check_upstream_size(everything: Catalogue) -> None:
+def check_upstream_size(all_chat: Catalogue) -> None:
     """Refuse a price table too small to have been read correctly."""
-    if len(everything) < MIN_UPSTREAM_MODELS:
+    if len(all_chat) < MIN_UPSTREAM_MODELS:
         raise UpstreamUnavailable(
-            f"the LiteLLM price table translated to {len(everything)} model(s), under the floor of "
+            f"the LiteLLM price table translated to {len(all_chat)} model(s), under the floor of "
             f"{MIN_UPSTREAM_MODELS}; treating it as unreadable rather than as a mass retirement"
         )
 
@@ -96,37 +97,37 @@ def compare(
     ours: Catalogue,
     deleted: set[Key],
     live: Catalogue,
-    everything: Catalogue,
+    all_chat: Catalogue,
     ledger: dict[Key, LedgerEntry],
 ) -> Diff:
     """The whole reconciliation: six lists off two catalogues and a ledger."""
-    repriced, backfilled, unpriced = _compare_pricing(ours, everything)
+    repriced, backfilled, unpriced = _compare_pricing(ours, all_chat)
     rejected = {key for key, entry in ledger.items() if entry.verdict == REJECTED}
     return Diff(
         added=[live[key] for key in sorted(live.keys() - ours.keys() - deleted - rejected)],
-        removed=[ours[key] for key in sorted(ours.keys() - everything.keys())],
-        deprecated=_newly_deprecated(ours, everything),
+        removed=[ours[key] for key in sorted(ours.keys() - all_chat.keys())],
+        deprecated=_newly_deprecated(ours, all_chat),
         repriced=repriced,
         backfilled=backfilled,
         unpriced=unpriced,
     )
 
 
-def _newly_deprecated(ours: Catalogue, everything: Catalogue) -> list[ModelRecord]:
+def _newly_deprecated(ours: Catalogue, all_chat: Catalogue) -> list[ModelRecord]:
     """Models we still list as active whose upstream deprecation date has passed.
 
     The upstream record is returned, not ours: it carries the date.
     """
     return [
-        everything[key]
+        all_chat[key]
         for key, record in sorted(ours.items())
-        if not record.deprecated and key in everything and everything[key].deprecated
+        if not record.deprecated and key in all_chat and all_chat[key].deprecated
     ]
 
 
 def _compare_pricing(
     ours: Catalogue,
-    everything: Catalogue,
+    all_chat: Catalogue,
 ) -> tuple[list[RateChange], list[RateChange], list[PricingGap]]:
     """Split the rate comparison per service kind, not per model.
 
@@ -138,7 +139,7 @@ def _compare_pricing(
     backfilled: list[RateChange] = []
     gaps: list[PricingGap] = []
     for (provider, model), record in sorted(ours.items()):
-        upstream_rates = everything[(provider, model)].rates if (provider, model) in everything else {}
+        upstream_rates = all_chat[(provider, model)].rates if (provider, model) in all_chat else {}
         for service_kind, new_price in sorted(upstream_rates.items()):
             old_price = record.rates.get(service_kind)
             change = RateChange(provider, model, service_kind, old_price, new_price)
@@ -165,16 +166,16 @@ def run(repo_root: Path, today: datetime.date) -> Reconciliation:
     print(f"  -> {priced} priced; {len(orphan_rows)} seed row(s) with no catalogue entry")
 
     print("  Layer 3: fetching and translating the LiteLLM price table ...")
-    live, everything = translate(fetch(), today)
-    check_upstream_size(everything)
-    print(f"  -> {len(everything)} translated model(s), {len(live)} chat-capable and current")
+    live, all_chat = translate(fetch(), today)
+    check_upstream_size(all_chat)
+    print(f"  -> {len(all_chat)} chat-capable model(s), {len(live)} of them current")
 
     print("  Layer 4: reading the ledger ...")
     ledger = read_ledger(repo_root)
     print(f"  -> {len(ledger)} model(s) offered before")
 
     print("  Layer 5: comparing ...")
-    diff = compare(ours=ours, deleted=deleted, live=live, everything=everything, ledger=ledger)
+    diff = compare(ours=ours, deleted=deleted, live=live, all_chat=all_chat, ledger=ledger)
     check_removal_scale(removed=diff.removed, ours=ours)
     print(
         f"  -> {len(diff.added)} added, {len(diff.removed)} removed, {len(diff.deprecated)} newly deprecated, "

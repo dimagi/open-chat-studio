@@ -28,7 +28,7 @@
           to gain temporary access?
         </p>
         <form class="mt-6 space-y-6" method="post"
-              action="{% url "web:sudo" request.resolver_match.kwargs.team_slug %}">
+              action="{% url "web:elevate_team" request.resolver_match.kwargs.team_slug %}">
           {% csrf_token %}
           <div class="fieldset w-full">
             <label class="label font-bold" for="id_password">Password</label>

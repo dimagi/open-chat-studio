@@ -22,6 +22,11 @@
 # - The action installs the OCR CLI from npm at run time, so pinning the action
 #   alone does not freeze behaviour — ocr_version is pinned to the same release
 # - A new push cancels any in-progress review of the same PR
+# - OCR_NO_UPDATE disables the CLI's detached background self-updater. Without
+#   it, once the registry holds a release newer than the pinned ocr_version,
+#   any `ocr` call can trigger `npm i -g`, which unlinks the global launcher
+#   while it reinstalls; a later step then fails with `ocr: command not found`
+#   (exit 127). Upstream alibaba/open-code-review#703, fix pending in #1204
 
 name: OpenCodeReview PR Review
 
@@ -45,6 +50,8 @@ jobs:
       && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OCR_NO_UPDATE: '1'
 
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
