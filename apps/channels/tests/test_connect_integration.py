@@ -72,7 +72,7 @@ class TestHandleConnectMessageTask:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_multiple_messages_are_sorted_and_concatenated(self, CommCareConnectChannelMock, experiment):
         channel_instance = CommCareConnectChannelMock.return_value
-        commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
+        commcare_connect_channel_id, encryption_key, _experiment_channel, data = _setup_participant(experiment)
         payload = _build_user_message(
             encryption_key, commcare_connect_channel_id, message_spec={2: "I need to ask something", 1: "Hi bot"}
         )
@@ -86,7 +86,7 @@ class TestHandleConnectMessageTask:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_bot_generate_and_sends_message(self, bot_process_input, experiment):
         bot_process_input.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
-        commcare_connect_channel_id, encryption_key, experiment_channel, data = _setup_participant(experiment)
+        commcare_connect_channel_id, encryption_key, _experiment_channel, data = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         # The version will be used when chatting to the bot
         experiment.create_new_version(make_default=True)

@@ -4,7 +4,6 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
@@ -19,6 +18,8 @@ from .base import TraceContext, Tracer
 from .callback import wrap_callback
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from langchain_core.callbacks.base import BaseCallbackHandler
 
     from apps.experiments.models import ExperimentSession

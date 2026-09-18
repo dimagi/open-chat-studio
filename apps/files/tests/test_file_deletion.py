@@ -28,7 +28,7 @@ def code_resource(assistant):
 
 @pytest.mark.django_db()
 def test_deleting_tool_resource_with_files(code_resource):
-    resource, files = code_resource
+    resource, _files = code_resource
 
     resource.delete()
 

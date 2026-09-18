@@ -1,32 +1,65 @@
 # Auto Update LLM Models Workflow
 #
-# Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
-# scripts/reconcile_models.py runs once and produces three signals:
+# Daily reconciliation of the in-repo model catalogue and pricing seed against
+# LiteLLM's model_prices_and_context_window.json, which carries pricing, token
+# limits, provider, model kind and deprecation dates for ~3900 models and needs
+# no credentials.
 #
-#   - new_models      candidates not yet registered in OCS
-#   - price_changes   existing seed entries whose upstream rate has moved
-#   - missing_pricing OCS-managed (default_models) models with no seed entry
+# scripts/auto_sync_models is a six-layer pipeline: our catalogue and the
+# LiteLLM table are read into the same shape, and every signal below falls out
+# of one comparison between them.
 #
-# Job 1 (reconcile) runs the script. The price-change side effects (rewrite
-# seed + emit migration) are deterministic, so the same job opens the
-# "Pricing update" PR and the "missing pricing" issue. Job 2 (new-models-pr)
-# only runs when there are candidates and invokes Claude Code for the
-# judgement calls (which providers, which params class, deprecations) per
-# docs/developer_guides/managing_models.md.
+#   added       upstream has it, we do not, we never deleted it, and we have
+#               not rejected it (so anything still undecided is still here)
+#   deprecated  we still list it as active, its upstream end-of-life has passed
+#   repriced    a rate we hold has moved upstream
+#   backfilled  a rate we lack and upstream has
+#   unpriced    still uncostable after backfill
+#   removed     we list it, LiteLLM no longer does at all
 #
-# Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
+# The division of labour: everything that can be derived from the data happens
+# in a deterministic step, and Claude Code does the rest and checks its work.
+# So the job is three gates and an agent -- skip if a PR is already open, run
+# the script, skip if it found nothing, then invoke Claude. Every step shares
+# one workspace, so what the script writes is simply there when Claude starts.
+#
+# The script rewrites the pricing seed, writes reconciliation.json and advances
+# the ledger. Claude makes the judgements the data cannot make -- whether a
+# provider really serves a new model, which parameters class it wants, whether a
+# model upstream dropped is genuinely retired -- writes the migration per
+# docs/developer_guides/managing_models.md, and opens one PR carrying both
+# halves.
+#
+# The script refuses to act on an upstream table that is implausibly small, or
+# that would retire an implausible share of the catalogue; it exits non-zero,
+# so the agent never runs. Those two checks are the only thing standing between
+# a LiteLLM schema change and a mass-deletion PR.
+#
+# Discovery has one memory: scripts/auto_sync_models/model_ledger.json, keyed
+# "provider/model". It holds the models we have seen upstream and not
+# registered -- each with a first_seen date, a verdict, the parameter-relevant
+# capability flags LiteLLM reports for it, and a reason once rejected.
+#
+# `added` subtracts only the rejected keys, so a model stays on offer until it
+# has a verdict and a failed run strands nothing. Claude closes each one out:
+# rejecting sets the verdict and a reason, registering deletes the entry --
+# default_models.py is then the record that we serve it, and a second copy in
+# the ledger would only drift from it.
 #
 # Triggered on: daily schedule, or manual dispatch
-# Requirements: LLM_STATS_BEARER_TOKEN secret (job 1, reconcile);
-#   ANTHROPIC_API_KEY secret (job 2, new-models-pr)
+# Requirements: ANTHROPIC_API_KEY secret. The upstream file is public and the
+#   script makes exactly one unauthenticated request, so it needs no
+#   credentials of its own.
 #
 # Notes:
-# - The new-model PR (job 2) gets the `claude` and `auto-models` labels.
-# - The missing-pricing issue (job 1) gets the `cost-tracking` and
-#   `auto-models` labels.
-# - Uses a single global concurrency group (not per-issue/PR), so only one
-#   run of the whole workflow — scheduled or manual — executes at a time
-#   across the repository.
+# - The PR gets the `claude` and `auto-models` labels.
+# - The run skips rather than stacks when an `auto-models/*` PR is already open.
+# - reconciliation.json, its rate table and decision_report.md are gitignored:
+#   Claude reads them, and no `git add` can sweep them into the PR.
+# - No dependencies are installed. The script is stdlib-only, and lint_and_test
+#   runs against the PR, so this workflow does not duplicate it.
+# - Uses a single global concurrency group, so only one run of the whole
+#   workflow executes at a time across the repository.
 
 name: Auto Update LLM Models
 
@@ -34,12 +67,6 @@ on:
   schedule:
     - cron: '0 4 * * *'  # Daily at 04:00 UTC
   workflow_dispatch:
-    inputs:
-      days:
-        description: 'Lookback window in days (max 30)'
-        required: false
-        default: '1'
-        type: string
 
 concurrency:
   group: auto-update-models
@@ -49,16 +76,15 @@ permissions:
   contents: read
 
 jobs:
-  reconcile:
+  update-models:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-      issues: write
-    outputs:
-      has_new_models: ${{ steps.reconcile.outputs.has_new_models }}
-      new_model_count: ${{ steps.reconcile.outputs.new_model_count }}
-      new_model_ids: ${{ steps.reconcile.outputs.new_model_ids }}
+      # claude-code-action's OIDC exchange. The App token it mints is what opens
+      # the PR, so the PR carries an identity whose events trigger lint_and_test.
+      id-token: write
+    timeout-minutes: 30
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
       # `allowed-endpoints` list once the recorded traffic looks stable.
@@ -66,6 +92,7 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -77,306 +104,233 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Reconcile upstream model catalogue and pricing seed
-        id: reconcile
-        env:
-          LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
-        run: |
-          # Stdlib-only - no dependency install needed.
-          python3 scripts/reconcile_models.py \
-            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
-            --days "${{ inputs.days || '1' }}" \
-            --output reconciliation.json
-
-      - name: Upload reconciliation payload
-        if: steps.reconcile.outputs.has_new_models == 'true'
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: reconciliation-payload
-          path: |
-            reconciliation.json
-          retention-days: 7
-
-      - name: Configure git author
-        if: steps.reconcile.outputs.has_price_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Commit, push, and open Pricing update PR
-        if: steps.reconcile.outputs.has_price_changes == 'true'
+      - name: Check for an open catalogue PR
+        id: open_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TITLE: ${{ steps.reconcile.outputs.pricing_pr_title }}
-          PR_BODY_PATH: ${{ steps.reconcile.outputs.pricing_pr_body_path }}
         run: |
-          BRANCH="auto-pricing/$(date +%Y%m%d-%H%M%S)"
-          git checkout -b "$BRANCH"
-          git add apps/cost_tracking/seed_data/llm_pricing.json apps/cost_tracking/migrations/
-          git commit -m "$PR_TITLE"
-          git push -u origin "$BRANCH"
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "$PR_TITLE" \
-            --body-file "$PR_BODY_PATH"
-
-      - name: Open or update missing-pricing issue
-        if: steps.reconcile.outputs.has_missing_pricing == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_BODY_PATH: ${{ steps.reconcile.outputs.missing_pricing_issue_body_path }}
-          MISSING_COUNT: ${{ steps.reconcile.outputs.missing_pricing_count }}
-        run: |
-          # One open issue at a time. Edit it if it already exists so the body
-          # reflects the latest gap list; otherwise open a new one. Labelled
-          # `cost-tracking,auto-models` so it filters cleanly. Body is
-          # prefixed with a team @-mention so the platform team is notified.
-          TITLE="Missing pricing for ${MISSING_COUNT} OCS-managed model(s)"
-          {
-            echo "cc @dimagi/open-chat-studio"
-            echo
-            cat "$ISSUE_BODY_PATH"
-          } > issue-body.md
-          EXISTING=$(gh issue list \
-            --state open \
-            --label cost-tracking \
-            --search "Missing pricing for in:title" \
-            --json number --jq '.[0].number // empty')
+          EXISTING=$(gh pr list --state open --search 'head:auto-models/' --limit 100 \
+            --json number,headRefName \
+            --jq '[.[] | select(.headRefName | startswith("auto-models/"))] | .[0].number // empty')
           if [ -n "$EXISTING" ]; then
-            gh issue edit "$EXISTING" --title "$TITLE" --body-file issue-body.md
+            echo "Catalogue PR #${EXISTING} is still open; skipping this run."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
           else
-            gh issue create \
-              --title "$TITLE" \
-              --body-file issue-body.md \
-              --label cost-tracking \
-              --label auto-models
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
           fi
 
-  new-models-pr:
-    needs: reconcile
-    if: needs.reconcile.outputs.has_new_models == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres_password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    env:
-      DJANGO_DATABASE_USER: postgres
-      DJANGO_DATABASE_PASSWORD: postgres_password
-      SECRET_KEY: secret-test-key
-    steps:
-      # Audit only: records egress without blocking. Flip to `block` plus an
-      # `allowed-endpoints` list once the recorded traffic looks stable.
-      - name: Harden the runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download reconciliation payload
-        uses: actions/download-artifact@v8
-        with:
-          name: reconciliation-payload
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Install Python dependencies
+      - name: Reconcile against LiteLLM
+        id: sync
+        if: steps.open_pr.outputs.proceed == 'true'
         run: |
-          uv venv
-          uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-
-      - uses: pnpm/action-setup@v6.0.10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24.x
-          cache: 'pnpm'
-
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Configure git author
-        run: |
+          # Stdlib-only - no dependency install needed. Everything it writes
+          # lands in this workspace, which the Claude step below then reads.
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Create branch
-        id: branch
-        run: |
-          BRANCH_NAME="auto-models/$(date +%Y%m%d-%H%M%S)"
+          BRANCH_NAME="auto-models/$(date -u +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
           echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+          python3 -m scripts.auto_sync_models.run
 
       - name: Run Claude Code
         id: claude
+        if: steps.sync.outputs.has_work == 'true'
         uses: anthropics/claude-code-action@v1.0.206
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            You are adding newly released LLM models to Open Chat Studio.
+            Keep Open Chat Studio's LLM model catalogue and pricing seed in step
+            with what providers actually serve.
 
-            ## Input
-            `scripts/reconcile_models.py` has already fetched candidates from
-            llm-stats.com, removed models already registered in OCS, and resolved
-            per-1K-token pricing. Its output is at `./reconciliation.json`. Do
-            NOT re-fetch, re-dedup, or re-derive pricing - that work is done and
-            unit-tested. You only care about the `new_models[]` section of the
-            payload here; the `price_changes` and `missing_pricing` sections are
-            handled in a separate job and are not your concern.
+            `scripts/auto_sync_models` has already run in this workspace and
+            done every part of this that can be derived from data. You do the
+            parts that need a judgement, and you check its work. Do not re-run
+            it and do not redo what it has done.
 
-            The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
-            - `new_models[]` - candidates to consider. Each has: `id`, `org`,
-              `context_window`, `ocs_providers` (the default OCS provider mapping),
-              `already_registered_providers`, `already_priced_providers`,
-              `source_url`, `sources`, `details_error`, and `pricing`.
-            - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
-              `pricing.source` (`llm_stats` or `litellm`) /
-              `pricing.llm_pricing_entries` - ready-to-paste `llm_pricing.json`
-              entries, one per provider that still needs pricing.
-            - `pricing_entries` - flat list of all generated pricing entries.
-            - `unpriced_models[]` - models the script could not price.
+            It has rewritten `apps/cost_tracking/seed_data/llm_pricing.json` for
+            models we already register, recorded every candidate in
+            `scripts/auto_sync_models/model_ledger.json` as `pending`, and
+            written `./reconciliation.json`, which is gitignored. You are on
+            branch `${{ steps.sync.outputs.branch_name }}`, already checked
+            out, with git identity configured.
 
-            ${{ needs.reconcile.outputs.new_model_count }} new model(s):
-            ${{ needs.reconcile.outputs.new_model_ids }}
+            ## 1. Read
 
-            ## Your task (judgement + applying the generated output)
-            1. Read `reconciliation.json` and
-               `apps/service_providers/llm_service/default_models.py`.
-            2. For each model in `new_models`, decide whether to add it:
-               - Skip models that don't make sense for OCS (embedding-only,
-                 image-only, or preview models already superseded).
-               - Use `ocs_providers` as the default provider mapping. Apply
-                 judgement: for an `openai` model keep `azure` only if it is
-                 generally available on Azure OpenAI - otherwise drop `azure` and
-                 add to `openai` only. Skip any provider already in
-                 `already_registered_providers`.
-            3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using `context_window`
-                 as `token_limit`.
-               - Pick an existing parameters class that matches the model family;
-                 only create a new one if none fits.
-               - Create a new Django migration that calls `llm_model_migration()`.
-               - Strip `llm_model_migration()` (and any `notify_deprecated_models` /
-                 `remove_deprecated_models` data migrations) from earlier migrations
-                 in `apps/service_providers/migrations/` so they only run once.
-            4. Apply pricing: for each model you add, append its
-               `pricing.llm_pricing_entries` to
-               `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
-               providers you actually registered. Trust the unit conversion but
-               sanity-check the magnitudes. Do NOT invent prices - any model in
-               `unpriced_models` (or a provider with no generated entry) goes under
-               `## Needs follow-up` instead. After editing, confirm the file is
-               still valid JSON.
-            5. If `context_window` or other essential info is missing, consult
-               `sources` / `source_url` with WebFetch. If a model has a
-               `details_error`, the detail fetch failed - use the top-level fields
-               and what you know about the family. If you still can't determine
-               `token_limit`, add the model with a conservative placeholder
-               (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
-               it under `## Needs follow-up`.
-            6. Lint and test the changed files:
-               - `uv run ruff check apps/ --fix`
-               - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
-               - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
-               Lint/test any other files your migration touched.
-            7. Commit the changes with a descriptive message.
-            8. Push the branch and open a PR against `main` using the repo's PR
-               template (`.github/pull_request_template.md`).
-               - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
-                 (today's UTC date).
-               - The PR description MUST:
-                 * List each added model with its `source_url`.
-                 * Include the line: `Model metadata sourced from
-                   [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
-                   API.`
-                 * Include a `## Needs follow-up` section for any unpriced models or
-                   missing info.
-                 * Check the "The migrations are backwards compatible" box -
-                   `llm_model_migration()` is additive (only seeds new rows) so
-                   these migrations are inherently backwards-compatible.
-            9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after review there is nothing to add, do NOT open an empty PR -
-                print a short summary to stdout and exit.
-            11. ALWAYS write a decision report to `./decision_report.md` before
-                exiting, regardless of outcome (PR opened, nothing to add, or
-                partial). Use this exact structure:
+            `./reconciliation.json`,
+            `apps/service_providers/llm_service/default_models.py`, the ledger,
+            and `docs/developer_guides/managing_models.md`, which governs steps
+            3 and 4.
 
-                ```markdown
-                # Auto Update Models - Decision Report
+            Each `reconciliation.json` entry is one **(provider, model) pair**
+            carrying that provider's own rates and context window, so a model on
+            openai and azure appears twice and never shares a rate.
 
-                **Run date (UTC):** <YYYY-MM-DD HH:MM>
-                **Candidates considered:** <count>
-                **Outcome:** <PR opened | Nothing to add | Error>
-                **PR:** <PR URL if opened, else "n/a">
+            - `added[]` — candidates: `provider`, `model`, `token_limit` (may be
+              null), `params`, `rates`, `deprecation_date`, `litellm_key`,
+              `pricing_entry` (a ready-to-paste `llm_pricing.json` entry, or
+              null when upstream had no rates).
+            - `deprecated[]` — we list it active, upstream end-of-life passed.
+            - `removed[]` — we list it, upstream dropped it entirely.
+            - `repriced[]` / `backfilled[]` — already applied to the seed.
+            - `unpriced[]` — still uncostable; report only.
 
-                ## Per-model decisions
+            ## 2. Decide each candidate
 
-                ### `<model-id>` (org: `<org>`)
-                - **Verdict:** Added | Skipped | Needs follow-up
-                - **Mapped providers:** <e.g. openai, azure>  (if added)
-                - **Pricing:** <source: llm_stats | litellm | unpriced>
-                - **Reason:** <one-sentence rationale - why added/skipped, or
-                  what info was missing>
-                - **Source:** <source_url>
+            Record every verdict in the ledger: reject with a one-line `reason`,
+            or **delete the entry** when you register the model, since
+            `default_models.py` then carries that fact and a second copy would
+            drift.
 
-                <repeat for every model in new_models>
+            Reject what is not a chatbot model — embedding, image,
+            audio/realtime, guard and safety classifiers, robotics, superseded
+            previews — and dated snapshot aliases where OCS registers the
+            undated name. `provider` is upstream metadata, not proof: confirm
+            the provider really serves it.
 
-                ## Notes
-                <any other context worth surfacing - sources consulted, edge
-                cases, decisions deferred to follow-up, etc.>
-                ```
+            For each model you register:
+            - Use that entry's own `token_limit`, never another provider's.
+            - Choose the parameters class from `params`: `reasoning` gates
+              `effort` entirely; `effort_levels` lists what it takes beyond the
+              unflagged low/medium/high baseline; `adaptive_thinking` maps to
+              the field of that name; `sampling: false` means the class must not
+              declare `temperature`. Reuse a class unless none fits. Empty
+              `params` means upstream said nothing, not that the model supports
+              nothing.
+            - Append its `pricing_entry` to `llm_pricing.json` verbatim. Never
+              invent a price: a null `pricing_entry` goes under
+              `## Needs follow-up`.
+            - Null `token_limit`: use the LiteLLM table (WebFetch) or the model
+              family, else a conservative placeholder (e.g. 128000) with a
+              `# TODO: verify token_limit` comment, flagged under
+              `## Needs follow-up`.
 
-                Every model in `new_models` MUST appear in the "Per-model
-                decisions" section with an explicit verdict and reason. This
-                file is the audit trail for the run.
+            ## 3. Deprecations and removals
 
-            Branch: ${{ steps.branch.outputs.branch_name }} (already created and
-            checked out).
+            `deprecated[]`: set `deprecated=True` where it is not already, plus
+            `replacement=` where the successor is obvious. Report, and leave
+            alone, the ones the file already marks.
+
+            `removed[]`: check the provider's own model list (WebFetch) first.
+            Still served — leave it registered and say why; upstream dropping a
+            key is no reason to break live chatbots. Genuinely retired — drop it
+            from `DEFAULT_LLM_PROVIDER_MODELS`, add it to `DELETED_MODELS` with
+            a third tuple element naming a replacement where one exists so
+            references move rather than clear, and add
+            `RunDataMigration("remove_deprecated_models", command_options={"force": True})`
+            to your migration. That repoints or clears live references and
+            emails the affected teams, so anything doubtful goes under
+            `## Needs follow-up` instead.
+
+            Keep a deleted model's pricing rows so past usage stays costable.
+
+            ## 4. Write the migration
+
+            **Required whenever the seed or the model list changed, including a
+            run that only repriced.** The script rewrote the seed but does not
+            write the migration that loads it; without one, the new prices never
+            reach production.
+
+            Read `docs/developer_guides/managing_models.md` and follow it. It is
+            the authority on what the migration contains and on stripping
+            `llm_model_migration()` from the earlier migrations that still call
+            it. One migration covers the run, whatever mix of registering,
+            deprecating and deleting it did.
+
+            ## 5. Check the script's work
+
+            Read the diff to `llm_pricing.json`. You are the only review this
+            gets before a human sees the PR.
+
+            - A rate that moved by more than about 5x, or crossed an order of
+              magnitude, is suspect. Check it against the provider's own pricing
+              page (WebFetch).
+            - Confirm the file still parses.
+
+            Where you are confident the script is wrong, correct it. Every
+            correction goes in the report and in the PR description, with what
+            you changed and why. Where you are unsure, leave it and flag it
+            under `## Needs follow-up`. Silent edits to billing data are not
+            acceptable.
+
+            ## 6. Commit and open one PR
+
+            Commit `default_models.py`, `llm_pricing.json`, the migration and
+            the ledger. `reconciliation.json`, `reconciliation.pricing-body.md`
+            and `decision_report.md` are gitignored — do not force-add them.
+
+            Write `./decision_report.md` before opening the PR, whatever the
+            outcome, failed and empty runs included, following
+            `scripts/auto_sync_models/decision_report_template.md` exactly.
+            Leave `**PR:**` as `pending`; set it and `**Outcome:**` once the PR
+            is up.
+
+            Open a PR against `main` on `.github/pull_request_template.md`,
+            titled `Auto: update LLM models and pricing (YYYY-MM-DD)` (today,
+            UTC). Its description MUST:
+            - List each registered model with provider and token limit, and each
+              deleted model with the replacement its references moved to, or
+              that they were cleared.
+            - Quote the rate table from `./reconciliation.pricing-body.md`, and
+              name every correction you made under step 5.
+            - Include the line: `Model metadata, pricing and token limits from
+              the
+              [LiteLLM price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).`
+            - Have a `## Needs follow-up` section for anything unpriced, missing
+              a token limit, or that you were unsure about.
+            - Carry the report under `## Decision report`: all of
+              `./decision_report.md` verbatim, minus its `**PR:**` line, or — if
+              that is unwieldy — a link to this run, which publishes the same
+              text:
+              ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Check "The migrations are backwards compatible" only when the PR
+              registers models and changes rates, since `llm_model_migration()`
+              just seeds rows and `load_ai_pricing` supersedes by time. A
+              deletion leaves it unchecked: `remove_deprecated_models` drops the
+              `LlmProviderModel` row while the previous release still serves it.
+              Say which case this is.
+
+            Apply the `claude` and `auto-models` labels if they exist.
+
+            If your decisions leave nothing but ledger verdicts — every
+            candidate rejected, every `removed[]` model still served, no rate
+            moved — do NOT open an empty PR. Push the verdicts as a ledger-only
+            PR: they are that run's whole value, and without them the same
+            candidates return tomorrow.
+
+            You do not run the test suite; no dependencies are installed here.
+            `lint_and_test` runs against the PR.
           claude_args: |
-            --allowedTools "Bash(uv run:*),Bash(uv sync:*),Bash(python manage.py:*),Bash(pnpm run lint:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
+            --allowedTools "Bash(python3:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
 
       - name: Append decision report to step summary
         if: always()
         run: |
           if [ -f decision_report.md ]; then
             cat decision_report.md >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.open_pr.outputs.proceed }}" != "true" ]; then
+            {
+              echo "# Auto Update Models - Decision Report"
+              echo ""
+              echo "**Skipped.** An \`auto-models/*\` PR is already open. The ledger"
+              echo "advances only on merge, so these candidates will be re-offered"
+              echo "on the next run once that PR lands."
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.sync.outcome }}" == "failure" ]; then
+            {
+              echo "# Auto Update Models - Decision Report"
+              echo ""
+              echo "**Upstream rejected.** The LiteLLM price table failed a sanity"
+              echo "check - too few models, or it would retire too much of the"
+              echo "catalogue - so the run stopped before acting. Nothing was"
+              echo "changed. See the reconcile step logs above."
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.sync.outputs.has_work }}" != "true" ]; then
+            {
+              echo "# Auto Update Models - Decision Report"
+              echo ""
+              echo "**Nothing to do.** Upstream matches the catalogue and the pricing"
+              echo "seed, so no agent ran and no PR was opened."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             {
               echo "# Auto Update Models - Decision Report"

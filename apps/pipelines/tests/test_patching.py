@@ -250,8 +250,7 @@ class TestApplyPipelinePatch:
 class TestPatchEndpoint:
     @pytest.fixture()
     def pipeline(self, team_with_users):
-        pipeline = PipelineFactory.create(team=team_with_users)
-        return pipeline
+        return PipelineFactory.create(team=team_with_users)
 
     @pytest.fixture()
     def authed_client(self, team_with_users):

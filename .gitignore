@@ -56,3 +56,8 @@ CODE_REVIEW.md
 site/
 
 .superpowers/
+
+# Model sync run artifacts, written into the checkout by the auto-update-models workflow
+reconciliation.json
+reconciliation.*.md
+decision_report.md

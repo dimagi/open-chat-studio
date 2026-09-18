@@ -274,7 +274,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default"]
+        return [*super().get_fields_to_exclude(), "is_default"]
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -464,7 +464,7 @@ class AgentTools(models.TextChoices):
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return cast(
-            list[Self],
+            "list[Self]",
             [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
         )
 
@@ -838,6 +838,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
+        return None
 
     def get_api_url(self):
         if self.is_working_version:
@@ -963,7 +964,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
+        return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
     def archive(self):
@@ -1740,8 +1741,7 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_metadata = trace_service.get_trace_metadata()
-                return trace_metadata
+                    return trace_service.get_trace_metadata()
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

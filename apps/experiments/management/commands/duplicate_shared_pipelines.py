@@ -85,7 +85,7 @@ class Command(BaseCommand):
 
                 except Exception as e:
                     self.stdout.write(
-                        self.style.ERROR(f"  Error creating pipeline copy for experiment {experiment.name}: {str(e)}")
+                        self.style.ERROR(f"  Error creating pipeline copy for experiment {experiment.name}: {e!s}")
                     )
                     raise
 

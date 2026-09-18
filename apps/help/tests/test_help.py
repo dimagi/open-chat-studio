@@ -34,7 +34,6 @@ class TestExtractFunctionSignature:
     def test_function_with_args(self):
         def func_with_args(a, b, c=10):
             """Function with arguments."""
-            pass
 
         result = extract_function_signature("func_with_args", func_with_args)
         expected = 'def func_with_args(a, b, c=10):\n    """Function with arguments."""\n'
@@ -54,7 +53,6 @@ class TestExtractFunctionSignature:
 
             It has multiple lines.
             And provides detailed information."""
-            pass
 
         result = extract_function_signature("multiline_func", multiline_func)
         expected = '''def multiline_func():

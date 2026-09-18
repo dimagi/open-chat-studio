@@ -18,8 +18,6 @@ class TeamAccessDenied(Http404):
     See 404.html.
     """
 
-    pass
-
 
 # Marker attribute stamped on views wrapped by the team-auth decorators below.
 # The architecture guard test (apps/teams/tests/test_view_auth_guard.py) reads it

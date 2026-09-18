@@ -383,7 +383,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
         """
         message_context = self.client.messages.get(current_chunk_sid)
         message = message_context.fetch()
-        return cast(str, message.status)
+        return cast("str", message.status)
 
     def send_text_message(
         self,
@@ -553,15 +553,13 @@ class TurnIOService(HttpMediaDownloadMixin, MessagingService):
             media_type = "document"
 
         with file.file.open("rb") as file_obj:
-            message_id = self.client.messages.send_media(
+            return self.client.messages.send_media(
                 whatsapp_id=to,
                 file=file_obj,
                 content_type=mime_type,
                 media_type=media_type,
                 caption=None,
             )
-
-        return message_id
 
 
 class SureAdhereService(MessagingService):
@@ -852,6 +850,7 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
             }
             response = httpx.post(url, headers=self._headers, json=data, timeout=self.META_API_TIMEOUT)
             response.raise_for_status()
+        return None
 
     def send_voice_message(
         self,
@@ -1029,6 +1028,7 @@ class SlackService(MessagingService):
         for channel in self.iter_channels():
             if channel["name"] == name:
                 return channel
+        return None
 
     def join_channel(self, channel_id: str):
         from slack_sdk.errors import SlackApiError  # noqa: PLC0415 - lazy: optional provider dep (slack_sdk)

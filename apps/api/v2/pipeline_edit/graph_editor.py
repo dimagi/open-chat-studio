@@ -1,6 +1,6 @@
 """Turning a node request body into the graph edit that carries it out (#4140)."""
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
@@ -10,13 +10,15 @@ from apps.pipelines.const import REACT_FLOW_END_TYPE
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import NodeSchema
 from apps.teams.models import Team
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
 from .node_params import node_params, writable_params
 from .references import check_references
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.base import NodeSchema
 
 #: A node's output handles as ``{handle: branch label}``. The label is ``None`` for the single
 #: standard output, and a router's branch keyword otherwise.
@@ -49,7 +51,7 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     # and `get_node_type_schema` has already refused any other name, so this cannot come back None.
     # The cast drops that `| None` and nothing else.
     resolved = NodeType(node_type)
-    schema = cast(NodeSchema, resolved.schema)
+    schema = cast("NodeSchema", resolved.schema)
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
     node = FlowNode(
@@ -127,7 +129,7 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     for node in flow.nodes:
         if node.id == node_id:
             found = node.model_copy(deep=True)
-            return found, cast(FlowNodeData, found.data)
+            return found, cast("FlowNodeData", found.data)
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
@@ -205,7 +207,7 @@ def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
             continue
         reparked = node.model_copy(deep=True)
         reparked.position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
-        content = cast(FlowNodeData, reparked.data)
+        content = cast("FlowNodeData", reparked.data)
         content.params = stored_params(content)
         moved.append(reparked)
     return moved

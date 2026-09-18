@@ -140,7 +140,7 @@ def test_openapi_tool_oauth_client_credentials_auth(mock_validate, httpx_mock, t
     httpx_mock.add_response(url="https://example.com/test", json={"ok": True})
 
     spec = OpenAPISpec.from_spec_dict(_make_openapi_schema({"parameters": []}))
-    path = list(spec.paths)[0]
+    path = next(iter(spec.paths))
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=provider.get_auth_service(), custom_action=Mock())
     tool.run({}, tool_call_id="123")
@@ -151,7 +151,7 @@ def test_openapi_tool_oauth_client_credentials_auth(mock_validate, httpx_mock, t
 
 def _test_tool_call(spec_dict, call_args: dict, path=None):
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    path = path or list(spec.paths)[0]
+    path = path or next(iter(spec.paths))
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=anonymous_auth_service, custom_action=Mock())
     return tool.run(call_args, tool_call_id="123")
