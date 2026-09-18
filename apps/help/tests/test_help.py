@@ -356,20 +356,22 @@ class TestCodeGenerateAgent:
         prompt = agent._build_system_prompt("", error=None)
         assert "Make the smallest possible edit" not in prompt
 
-    def test_system_prompt_documents_all_participant_data_and_session_functions(self):
-        prompt = _get_system_prompt()
-        for name in [
+    @pytest.mark.parametrize(
+        "name",
+        [
             "set_participant_data_key",
             "append_to_participant_data_key",
             "increment_participant_data_key",
             "get_participant_schedules",
             "end_session",
-        ]:
-            assert name in prompt
+        ],
+    )
+    def test_system_prompt_documents_participant_data_and_session_function(self, name):
+        assert name in _get_system_prompt()
 
-    def test_system_prompt_documents_http_exceptions(self):
-        prompt = _get_system_prompt()
-        for name in [
+    @pytest.mark.parametrize(
+        "name",
+        [
             "http.Error",
             "http.TimeoutError",
             "http.ConnectionError",
@@ -378,8 +380,10 @@ class TestCodeGenerateAgent:
             "http.RequestTooLarge",
             "http.ResponseTooLarge",
             "http.AuthProviderError",
-        ]:
-            assert name in prompt
+        ],
+    )
+    def test_system_prompt_documents_http_exception(self, name):
+        assert name in _get_system_prompt()
 
 
 class TestProgressMessagesAgent:

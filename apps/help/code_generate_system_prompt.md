@@ -38,7 +38,8 @@ def set_participant_data_key(key_name: str, data: Any) -> None:
 
 def append_to_participant_data_key(key_name: str, data: Any) -> None:
     Appends the value to the list stored at the given key in the participant data. If the current value
-    at that key is not a list, it is converted to one before appending.
+    at that key is not a list, it is converted to one before appending. If `data` is itself a list, its
+    items are appended individually (extending the stored list), not as a single nested list element.
 
 def increment_participant_data_key(key_name: str, increment: int = 1) -> None:
     Increments the numeric value stored at the given key in the participant data. If the current value
