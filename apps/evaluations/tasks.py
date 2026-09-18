@@ -1579,7 +1579,6 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
             rows = _report_row_progress(iter_evaluation_table_rows(results), total, report)
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
-            # Two spooled temp files: one holds the rows until the header is known, one the CSV.
             with export_evaluation_csv_to_tempfile(rows) as csv_file:
                 file_obj = File.objects.create(
                     name=filename,
