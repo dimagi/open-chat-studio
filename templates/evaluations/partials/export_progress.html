@@ -1,0 +1,89 @@
+{% load i18n %}
+{% comment %}
+The running half of an async CSV export, swapped into the slot `export_button.html`
+renders. Scoped by task id rather than element ids so several exports can run on one page.
+{% endcomment %}
+<div id="export-progress-{{ task_id }}" class="contents">
+  <div data-export-bar-panel class="w-48">
+    <div class="h-1.5 w-full bg-base-300 rounded-full overflow-hidden">
+      <div data-export-bar class="h-full bg-primary transition-all duration-300 ease-out" style="width: 0%"></div>
+    </div>
+    <div data-export-message class="mt-1 text-xs text-center text-base-content/70">
+      {% translate "Waiting for the export to start..." %}
+    </div>
+  </div>
+
+  <a data-export-link class="btn btn-success" style="display: none;" href="#">
+    <i class="fa-solid fa-download"></i>
+    {% translate "Download CSV" %}
+  </a>
+
+  <span data-export-error class="text-error text-sm items-center gap-1" style="display: none;">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span data-export-error-message></span>
+    <button type="button" class="btn btn-ghost btn-xs" onclick="location.reload()">{% translate "Try again" %}</button>
+  </span>
+
+  <script>
+    (function () {
+      const root = document.getElementById("export-progress-{{ task_id }}");
+      const startButton = root.closest("[data-export]").querySelector("[data-export-start]");
+      const barPanel = root.querySelector("[data-export-bar-panel]");
+      const downloadLink = root.querySelector("[data-export-link]");
+      const errorPanel = root.querySelector("[data-export-error]");
+      const downloadBaseUrl = "{% url 'files:base' request.team.slug 0 %}";
+
+      startButton.disabled = true;
+
+      // Once the task has finished there is nothing left to generate, so every terminal
+      // state clears the start button along with the bar.
+      function finish() {
+        startButton.style.display = "none";
+        barPanel.style.display = "none";
+      }
+
+      function fail(message) {
+        finish();
+        errorPanel.querySelector("[data-export-error-message]").textContent = message;
+        errorPanel.style.display = "flex";
+      }
+
+      CeleryProgressBar.initProgressBar("{% url 'celery_progress:task_status' task_id %}", {
+        pollInterval: 500,
+        progressBarElement: root.querySelector("[data-export-bar]"),
+        progressBarMessageElement: root.querySelector("[data-export-message]"),
+
+        onProgress: function (bar, message, progress) {
+          bar.style.width = (progress.percent || 0) + "%";
+          message.textContent = progress.description || "Starting...";
+        },
+
+        // The task returns its failure rather than raising, so a task that completed
+        // successfully can still carry an error and onTaskError never fires for it.
+        onSuccess: function (_bar, _message, result) {
+          if (result && result.file_id) {
+            finish();
+            downloadLink.href =
+              downloadBaseUrl.replace(/\/0(\/?$)/, "/" + result.file_id + "$1") + "?allow_s3=1";
+            downloadLink.style.display = "";
+          } else {
+            fail((result && result.error) || "Export failed.");
+          }
+        },
+
+        onError: function (_bar, _message, error) {
+          fail((error && error.message) || "Export failed.");
+        },
+        onTaskError: function (_bar, _message, excMessage) {
+          fail(excMessage || "Export failed.");
+        },
+        onNetworkError: function () {
+          fail("Network error — check your connection.");
+        },
+        onHttpError: function () {
+          fail("Server error — please try again.");
+        },
+      });
+    })();
+  </script>
+</div>

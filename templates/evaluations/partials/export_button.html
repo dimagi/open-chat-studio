@@ -1,0 +1,20 @@
+{% load i18n %}
+{% comment %}
+Starts an async CSV export. Posting to `start_url` swaps `export_progress.html` into the
+status slot, which drives a progress bar and finally the download link. `export_id` only
+has to be unique within the page. `label` is omitted for an icon-only button.
+{% endcomment %}
+<div class="flex items-center gap-2" data-export>
+  <button type="button"
+          class="btn {{ button_class|default:'btn-outline' }}"
+          data-export-start
+          title="{% translate 'Download CSV' %}"
+          hx-post="{{ start_url }}"
+          hx-target="#export-status-{{ export_id }}"
+          hx-swap="innerHTML"
+          {% if disabled %}disabled{% endif %}>
+    <i class="fa-solid fa-file-csv"></i>
+    {{ label }}
+  </button>
+  <span id="export-status-{{ export_id }}" class="contents"></span>
+</div>

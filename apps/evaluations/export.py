@@ -1,7 +1,7 @@
 """Shared helpers for building and writing evaluation result export data.
 
-Both the per-run results table/CSV (``EvaluationRun.get_table_data`` /
-``download_evaluation_run_csv``) and the async bulk export
+Both the per-run export (``EvaluationRun.get_table_data`` /
+``export_evaluation_run_results_task``) and the async bulk export
 (``export_evaluation_bulk_results_task``) build the same per-message row shape and
 share the same CSV column ordering, so the logic lives here to avoid two diverging
 code paths.

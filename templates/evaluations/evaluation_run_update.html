@@ -39,10 +39,9 @@
           </div>
 
           <div class="flex gap-2">
-            <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
-               class="btn btn-outline">
-              <i class="fa-solid fa-download"></i> {% translate "Download Template" %}
-            </a>
+            {% url 'evaluations:evaluation_run_download_start' request.team.slug evaluation_run.config_id evaluation_run.id as run_export_url %}
+            {% translate "Download Template" as export_label %}
+            {% include "evaluations/partials/export_button.html" with export_id=evaluation_run.id start_url=run_export_url label=export_label only %}
           </div>
         </form>
       </div>
