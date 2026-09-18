@@ -35,7 +35,7 @@ class DashboardCache(BaseTeamModel):
     def set_cached_data(cls, team, cache_key, data, ttl_minutes=30):
         """Cache data with TTL"""
         expires_at = timezone.now() + timedelta(minutes=ttl_minutes)
-        cache_entry, created = cls.objects.update_or_create(
+        cache_entry, _created = cls.objects.update_or_create(
             team=team,
             cache_key=cache_key,
             defaults={

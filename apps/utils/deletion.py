@@ -212,9 +212,9 @@ def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list
             continue
 
         # get the other side of the relationship (the one that is not the origin)
-        related_field = [
+        related_field = next(
             f for f in through_model._meta.get_fields() if f.is_relation and f.related_model == related_model
-        ][0]
+        )
 
         field = related.field
         qs = collector.related_objects(through_model, [field], objs)
@@ -304,11 +304,10 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = No
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
-    pipelines = Node.objects.filter(
+    return Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}__contains": instance.id})
         | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
     )
-    return pipelines
 
 
 def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):

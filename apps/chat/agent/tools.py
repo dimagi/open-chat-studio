@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, ClassVar, Union
+from typing import Any, ClassVar, Union
 from xml.sax.saxutils import escape
 
 from asgiref.sync import async_to_sync
@@ -35,9 +35,6 @@ from apps.service_providers.llm_service.prompt_context import ParticipantDataPro
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
 from apps.utils.time import pretty_date
-
-if TYPE_CHECKING:
-    from apps.pipelines.models import Node
 
 logger = logging.getLogger("ocs.tools")
 
@@ -851,10 +848,10 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
-        return
+        return None
 
     auth_service = custom_action.get_auth_service()
-    path = list(spec.paths)[0]
+    path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service, custom_action)

@@ -126,7 +126,9 @@ class ModalAction(Action):
         action_id = uuid.uuid4().hex
         modal_id = f"modal_{action_id}"
         ctxt.update(
-            **{"action_id": action_id, "modal_id": modal_id, "modal_template": self.modal_template},
+            action_id=action_id,
+            modal_id=modal_id,
+            modal_template=self.modal_template,
             **(self.modal_context or {}),
         )
         return ctxt

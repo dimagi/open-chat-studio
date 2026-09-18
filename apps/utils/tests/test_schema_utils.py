@@ -1,3 +1,4 @@
+import re
 from typing import Any, Literal
 
 import pytest
@@ -95,7 +96,9 @@ def test_external_reference():
         "pet": {"$ref": "http://example.com/definitions/Pet"},
     }
 
-    with pytest.raises(ValueError, match="External references are not supported: http://example.com/definitions/Pet"):
+    with pytest.raises(
+        ValueError, match=re.escape("External references are not supported: http://example.com/definitions/Pet")
+    ):
         resolve_references(spec)
 
 

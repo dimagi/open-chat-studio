@@ -86,9 +86,7 @@ def create_pipeline_model(
         edges = _make_edges(nodes)  # ty: ignore[invalid-assignment]
     if edges and isinstance(edges[0], str):
         edges = _edges_from_strings(edges, nodes)  # ty: ignore[invalid-assignment]
-    flow_nodes = []
-    for node in nodes:
-        flow_nodes.append({"id": node["id"], "data": node})
+    flow_nodes = [{"id": node["id"], "data": node} for node in nodes]
     layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
     pipeline.data = layout.model_dump()
     pipeline.update_nodes_from_data(node_data)
@@ -222,12 +220,10 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str], n
         {
             "type": nodes.RouterNode.__name__,
             "params": {
-                **{
-                    "prompt": "You are a router",
-                    "keywords": keywords,
-                    "llm_provider_id": provider_id,
-                    "llm_provider_model_id": provider_model_id,
-                },
+                "prompt": "You are a router",
+                "keywords": keywords,
+                "llm_provider_id": provider_id,
+                "llm_provider_model_id": provider_model_id,
                 **kwargs,
             },
         },

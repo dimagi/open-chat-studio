@@ -32,7 +32,7 @@ class Command(IdempotentCommand):
 
         if dry_run:
             self.stdout.write(f"Would write Scores for {eval_qs.count()} eval results, {ann_qs.count()} annotations")
-            return
+            return None
 
         written = 0
         failed = 0

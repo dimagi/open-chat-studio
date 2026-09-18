@@ -10,9 +10,13 @@
 # Notes:
 # - Merging to `main` deploys to production (`deploy.yml`), so `risk:low` is the
 #   gate for unattended auto-merge. The rubric lives in the script's docstring
-# - The gate script is read from the PR's **base** commit, not its head, so a PR
+# - The gate script is read from the default branch, never from the PR, so a PR
 #   cannot relax the rules it is judged by. The checkout is sparse for the same
-#   reason — nothing else from the repo is on disk
+#   reason — nothing else from the repo is on disk. The default branch rather than
+#   the PR's `base.sha`: that snapshot can predate the script, either because
+#   GitHub reports a stale value just after `main` moves or because the PR targets
+#   a feature branch. `auto_merge_low_risk.py` re-runs the gate from the default
+#   branch too, so this is also the ruleset the merge decision uses
 # - Nothing from the PR branch is executed here. The diff is fetched through the
 #   API and only ever parsed as text
 # - Fork PRs get a read-only GITHUB_TOKEN, so the label cannot be applied to
@@ -51,10 +55,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Check out the gate from the base commit
+      - name: Check out the gate from the default branch
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           sparse-checkout: scripts/pr_risk_gate.py
           sparse-checkout-cone-mode: false
@@ -81,7 +85,7 @@ jobs:
           UNTRUSTED: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           if [[ ! -f scripts/pr_risk_gate.py ]]; then
-            echo "::error::scripts/pr_risk_gate.py is missing from the base commit." \
+            echo "::error::scripts/pr_risk_gate.py is missing from the default branch." \
                  "A pull request that adds or renames it cannot be classified by it."
             exit 1
           fi

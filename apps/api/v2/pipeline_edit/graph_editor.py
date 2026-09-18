@@ -49,8 +49,8 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     # and `get_node_type_schema` has already refused any other name, so neither of these can come
     # back None. Both casts drop that `| None` and nothing else.
     resolved = NodeType(node_type)
-    node_class = cast(type[BasePipelineNode], resolved.node_class)
-    schema = cast(NodeSchema, resolved.schema)
+    node_class = cast("type[BasePipelineNode]", resolved.node_class)
+    schema = cast("NodeSchema", resolved.schema)
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
     node = FlowNode(
@@ -128,7 +128,7 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     for node in flow.nodes:
         if node.id == node_id:
             found = node.model_copy(deep=True)
-            return found, cast(FlowNodeData, found.data)
+            return found, cast("FlowNodeData", found.data)
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
@@ -211,7 +211,7 @@ def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
             continue
         reparked = node.model_copy(deep=True)
         reparked.position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
-        content = cast(FlowNodeData, reparked.data)
+        content = cast("FlowNodeData", reparked.data)
         content.params = stored_params(content)
         moved.append(reparked)
     return moved
