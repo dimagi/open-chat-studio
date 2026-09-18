@@ -12,7 +12,6 @@ from openai import NOT_GIVEN, OpenAI
 from pydantic import BaseModel
 
 from apps.documents.rerankers import Reranker, VoyageReranker
-from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
     from openai._base_client import SyncAPIClient
 
+    from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger("ocs.llm_service")
 

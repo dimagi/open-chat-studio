@@ -62,7 +62,7 @@ class TestRerankStage:
         reranker = StubReranker([RerankedDocument(2, 0.9)])
         results = search_with_reranker(collection, "chunk", reranker, top_k=1)
 
-        query, documents, limit = reranker.calls[0]
+        _, documents, limit = reranker.calls[0]
         assert len(documents) == 3
         assert limit == 1
         assert len(results) == 1
@@ -439,7 +439,7 @@ class TestRerankingThroughTheProvider:
         # Dense search puts `first` on top; the provider's ranking overrides it.
         assert [result.id for result in results] == [second.id, first.id]
         assert [result.rerank_score for result in results] == [0.91, 0.12]
-        assert client_cls.call_args.kwargs["api_key"] == "test-voyage-key"
+        assert client_cls.call_args.kwargs["api_key"].get_secret_value() == "test-voyage-key"
         assert client_cls.return_value.rerank.call_args.kwargs["model"] == "rerank-2"
 
 

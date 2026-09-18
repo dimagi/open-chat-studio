@@ -981,7 +981,7 @@ class TestQueryCollectionView:
             return client.get(url, {"query": query, "top_k": 2})
 
     def test_renders_the_reranked_order_and_score(self, collection_with_chunks, client):
-        collection, chunks = collection_with_chunks
+        collection, _ = collection_with_chunks
 
         with mock.patch("voyageai.Client") as client_cls:
             client_cls.return_value.rerank.return_value = mock.Mock(
@@ -1004,7 +1004,7 @@ class TestQueryCollectionView:
     def test_renders_the_distance_when_reranking_is_off(self, collection_with_chunks, client):
         """The regression guarantee at the surface the user sees: flag off and the preview is the
         page it has always been."""
-        collection, chunks = collection_with_chunks
+        collection, _ = collection_with_chunks
 
         with override_flag("flag_hybrid_search", active=False):
             response = self._get(client, collection)
@@ -1017,7 +1017,7 @@ class TestQueryCollectionView:
     def test_a_reranker_failure_still_renders_the_results(self, collection_with_chunks, client):
         """The failure path at the surface: the page renders the un-reranked ranking rather than
         an error."""
-        collection, chunks = collection_with_chunks
+        collection, _ = collection_with_chunks
 
         with mock.patch.object(VoyageReranker, "rerank", side_effect=RerankerError("provider is down")):
             with override_flag("flag_hybrid_search", active=True):
