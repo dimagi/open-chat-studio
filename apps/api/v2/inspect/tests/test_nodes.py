@@ -34,7 +34,9 @@ def test_documented_param_shapes_name_a_real_node_type(node_type):
 @pytest.mark.parametrize("node_type", sorted(NODE_PARAM_SERIALIZERS))
 def test_documented_params_are_params_the_type_declares(node_type):
     """A documented param the type does not declare is a shape the endpoint can never serve."""
-    declared = NodeType(node_type).declared_params | set(InspectNodeSerializer._RENAMED_PARAMS.values())
+    declared = NodeType(node_type).declared_params
+    # A renamed param is only servable by the type that declares the param it renames.
+    declared |= {served for source, served in InspectNodeSerializer._RENAMED_PARAMS.items() if source in declared}
     documented = set(NODE_PARAM_SERIALIZERS[node_type]().get_fields())
     assert documented <= declared, f"not declared by '{node_type}': {sorted(documented - declared)}"
 
