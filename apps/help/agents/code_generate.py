@@ -75,7 +75,12 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
         prompt_context = {"current_code": "", "error": ""}
 
         if current_code:
-            prompt_context["current_code"] = f"The current function definition is:\n\n{current_code}"
+            prompt_context["current_code"] = (
+                f"The current function definition is:\n\n{current_code}\n\n"
+                "IMPORTANT: Make the smallest possible edit to satisfy the request. Preserve "
+                "existing logic, structure, comments, and variable names that are not directly "
+                "relevant to the requested change. Do not rewrite or reformat unrelated code."
+            )
         if error:
             prompt_context["error"] = f"\nThe current function has the following error. Try to resolve it:\n\n{error}"
 

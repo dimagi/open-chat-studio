@@ -30,8 +30,22 @@ def get_participant_data() -> dict:
     Returns the current participant's data as a dictionary.
 
 def set_participant_data(data: dict) -> None:
-    Updates the current participant's data with the provided dictionary. This will overwrite any existing
-    data.
+    Merges the provided dictionary into the current participant's data. Only the keys present in `data`
+    are overwritten; other existing keys are left untouched.
+
+def set_participant_data_key(key_name: str, data: Any) -> None:
+    Overwrites the participant data at the given key with the provided value. Other keys are unaffected.
+
+def append_to_participant_data_key(key_name: str, data: Any) -> None:
+    Appends the value to the list stored at the given key in the participant data. If the current value
+    at that key is not a list, it is converted to one before appending.
+
+def increment_participant_data_key(key_name: str, increment: int = 1) -> None:
+    Increments the numeric value stored at the given key in the participant data. If the current value
+    is not a number, it is treated as 0 before incrementing.
+
+def get_participant_schedules() -> list:
+    Returns all active scheduled messages for the current participant in the current chat session.
 
 def get_temp_state_key(key_name: str) -> str | None:
     Returns the value of the temporary state key with the given name.
@@ -82,6 +96,9 @@ def add_session_tag(tag_name: str):
 def get_node_output(node_name: str) -> Any:
     Returns the output of the specified node if it has been executed.
     If the node has not been executed, it returns `None`.
+
+def end_session() -> None:
+    Ends the current chat session with this response.
 
 def abort_with_message(message, tag_name: str = None) -> None:
     Calling this will terminate the pipeline execution. No further nodes will get executed in
@@ -135,8 +152,26 @@ All methods return a dictionary with the following keys:
 - `is_error`: `True` if the status code is 400 or above.
 
 On success, always check `response["status_code"]` or the `is_success` / `is_error` keys before
-processing the response. The HTTP client may raise exceptions for invalid URLs, connection errors,
-timeouts, request size limits, and auth provider errors. Wrap calls in try/except to handle these.
+processing the response. The `http` object also exposes typed exception classes as attributes, so
+calls can be wrapped in try/except and specific failure modes handled individually:
+- `http.Error`: base class for all of the exceptions below.
+- `http.TimeoutError`: the request timed out.
+- `http.ConnectionError`: a connection could not be established.
+- `http.InvalidURL`: the URL is malformed or blocked (e.g. a private IP or localhost).
+- `http.RequestLimitExceeded`: too many requests were made.
+- `http.RequestTooLarge`: the request body exceeded the size limit.
+- `http.ResponseTooLarge`: the response body exceeded the size limit.
+- `http.AuthProviderError`: the named `auth` provider could not be resolved or used.
+
+Example:
+```
+try:
+    response = http.get("https://api.example.com/data")
+except http.TimeoutError:
+    return "The request timed out."
+except http.Error as e:
+    return f"The request failed: {{e}}"
+```
 
 Authentication credentials can be injected automatically from team Authentication Providers via the
 `auth` parameter. The value must be the name of the authentication provider. Example:

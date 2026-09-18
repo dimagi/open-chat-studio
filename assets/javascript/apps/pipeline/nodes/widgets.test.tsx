@@ -1,10 +1,20 @@
-import {beforeAll, describe, expect, it, vi} from 'vitest';
-import {render, fireEvent} from '@testing-library/react';
-import {getWidget as getWidgetUntyped, InputField} from './widgets';
+import {beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
+import {render, fireEvent, waitFor} from '@testing-library/react';
+import {getWidget as getWidgetUntyped, InputField, GenerateCodeSection, CHECK_FOR_BUGS_PROMPT} from './widgets';
 import type {WidgetParams} from './widgets';
 import type {ComponentType} from 'react';
 import type {PropertySchema} from '../types/nodeParams';
 import usePipelineStore from '../stores/pipelineStore';
+import {apiClient} from '../api/api';
+
+// GenerateCodeSection renders CodeDiffEditor for the AI suggestion, which mounts a real
+// CodeMirror/EditorView -- not reliable in jsdom. Stub it with something that surfaces the
+// props it was given, so tests can assert on wiring (original/value) without a real editor.
+vi.mock('../components/CodeDiffEditor', () => ({
+  CodeDiffEditor: ({original, value}: {original: string; value: string}) => (
+    <div data-testid="code-diff" data-original={original} data-value={value} />
+  ),
+}));
 
 // getWidget's inferred return type is a union across every case in its switch (each widget's
 // own prop type, e.g. ToggleWidget's boolean paramValue), so JSX usages below would otherwise
@@ -154,5 +164,70 @@ describe('InputField warning slot', () => {
     );
     expect(container.textContent).toContain('This field is required.');
     expect(container.textContent).not.toContain('deprecated');
+  });
+});
+
+describe('GenerateCodeSection', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the prompt textarea mounted after a successful generation', async () => {
+    vi.spyOn(apiClient, 'generateCode').mockResolvedValue({response: {code: 'def main(input, **kwargs): return input'}});
+    const {getByPlaceholderText, getByText} = render(
+      <GenerateCodeSection showGenerate={true} onAccept={() => {}} currentCode="def main(input, **kwargs): return input" />,
+    );
+
+    fireEvent.change(getByPlaceholderText(/Describe what you want/), {target: {value: 'add error handling'}});
+    fireEvent.click(getByText('Generate'));
+
+    await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalled());
+    expect(getByPlaceholderText(/Describe what you want/)).toBeInTheDocument();
+  });
+
+  it('Reject clears the diff but keeps the prompt; Clear empties both', async () => {
+    vi.spyOn(apiClient, 'generateCode').mockResolvedValue({response: {code: 'generated code'}});
+    const {getByPlaceholderText, getByText, queryByTestId} = render(
+      <GenerateCodeSection showGenerate={true} onAccept={() => {}} currentCode="original code" />,
+    );
+
+    const textarea = getByPlaceholderText(/Describe what you want/) as HTMLTextAreaElement;
+    fireEvent.change(textarea, {target: {value: 'my prompt'}});
+    fireEvent.click(getByText('Generate'));
+    await waitFor(() => expect(queryByTestId('code-diff')).toBeInTheDocument());
+
+    fireEvent.click(getByText('Reject'));
+    expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+    expect(textarea.value).toBe('my prompt');
+
+    fireEvent.click(getByText('Generate'));
+    await waitFor(() => expect(queryByTestId('code-diff')).toBeInTheDocument());
+    fireEvent.click(getByText('Clear'));
+    expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+    expect(textarea.value).toBe('');
+  });
+
+  it('Check for bugs sends the fixed prompt with the current code, ignoring an empty prompt field', async () => {
+    vi.spyOn(apiClient, 'generateCode').mockResolvedValue({response: {code: 'fixed code'}});
+    const {getByText} = render(
+      <GenerateCodeSection showGenerate={true} onAccept={() => {}} currentCode="original code" />,
+    );
+
+    fireEvent.click(getByText('Check for bugs'));
+    await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledWith(CHECK_FOR_BUGS_PROMPT, 'original code'));
+  });
+
+  it('passes the current code and generated code to CodeDiffEditor', async () => {
+    vi.spyOn(apiClient, 'generateCode').mockResolvedValue({response: {code: 'generated code'}});
+    const {getByPlaceholderText, getByText, findByTestId} = render(
+      <GenerateCodeSection showGenerate={true} onAccept={() => {}} currentCode="original code" />,
+    );
+
+    fireEvent.change(getByPlaceholderText(/Describe what you want/), {target: {value: 'my prompt'}});
+    fireEvent.click(getByText('Generate'));
+
+    const diff = await findByTestId('code-diff');
+    expect(diff.getAttribute('data-original')).toBe('original code');
+    expect(diff.getAttribute('data-value')).toBe('generated code');
   });
 });

@@ -59,3 +59,5 @@
     - type: execute
       input: "hello"
       expected: "HELLO"
+    - type: llm_judge
+      criteria: "The code preserves the original input.upper() logic and only adds the requested empty-input check, rather than restructuring or rewriting the function"
