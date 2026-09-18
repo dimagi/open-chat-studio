@@ -619,8 +619,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if pipeline is not None:
             new_version.pipeline = pipeline
         new_version.save()
-        if self.params.get("custom_actions"):
-            self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
         new_version._sync_resource_fk_fields()
 
         return new_version
