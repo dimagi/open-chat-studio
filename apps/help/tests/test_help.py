@@ -7,7 +7,12 @@ from django.test import RequestFactory
 from pydantic import BaseModel
 
 import apps.experiments.filters  # noqa: F401 — trigger filter registration
-from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
+from apps.help.agents.code_generate import (
+    CodeGenerateAgent,
+    CodeGenerateInput,
+    CodeGenerateOutput,
+    _get_system_prompt,
+)
 from apps.help.agents.filter import FilterOutput
 from apps.help.agents.progress_messages import (
     ProgressMessagesAgent,
@@ -16,56 +21,8 @@ from apps.help.agents.progress_messages import (
 )
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
-from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 from apps.help.views import run_agent
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
-
-
-def test_get_python_node_coder_prompt():
-    current_code = "bla bla bla"
-    error = "alb alb alb"
-    prompt = get_python_node_coder_prompt(current_code, error)
-    assert "get_participant_data" in prompt
-    assert current_code in prompt
-    assert error in prompt
-
-
-class TestExtractFunctionSignature:
-    def test_function_with_args(self):
-        def func_with_args(a, b, c=10):
-            """Function with arguments."""
-
-        result = extract_function_signature("func_with_args", func_with_args)
-        expected = 'def func_with_args(a, b, c=10):\n    """Function with arguments."""\n'
-        assert result == expected
-
-    def test_function_without_docstring(self):
-        def no_docstring_func(x):
-            return x
-
-        result = extract_function_signature("no_docstring_func", no_docstring_func)
-        expected = "def no_docstring_func(x):\n    pass\n"
-        assert result == expected
-
-    def test_function_with_multiline_docstring(self):
-        def multiline_func():
-            """This is a function with a multiline docstring.
-
-            It has multiple lines.
-            And provides detailed information."""
-
-        result = extract_function_signature("multiline_func", multiline_func)
-        expected = '''def multiline_func():
-    """This is a function with a multiline docstring.
-
-    It has multiple lines.
-    And provides detailed information."""
-'''
-        assert result == expected
-
-    def test_non_callable_object_returns_none(self):
-        result = extract_function_signature("not_callable", "string")
-        assert result is None
 
 
 class TestAgentRegistry:
@@ -388,6 +345,45 @@ class TestCodeGenerateAgent:
         tracer.trace.assert_called_once()  # one trace covers both attempts
         for call in mock_agent.invoke.call_args_list:
             assert call.kwargs["config"]["callbacks"] == [callback]
+
+    def test_build_system_prompt_includes_minimal_diff_instruction_when_current_code_present(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+        prompt = agent._build_system_prompt("def main(input: str, **kwargs) -> str:\n    return input", error=None)
+        assert "Make the smallest possible edit" in prompt
+
+    def test_build_system_prompt_omits_minimal_diff_instruction_when_no_current_code(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="write hello world"))
+        prompt = agent._build_system_prompt("", error=None)
+        assert "Make the smallest possible edit" not in prompt
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "set_participant_data_key",
+            "append_to_participant_data_key",
+            "increment_participant_data_key",
+            "get_participant_schedules",
+            "end_session",
+        ],
+    )
+    def test_system_prompt_documents_participant_data_and_session_function(self, name):
+        assert name in _get_system_prompt()
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "http.Error",
+            "http.TimeoutError",
+            "http.ConnectionError",
+            "http.InvalidURL",
+            "http.RequestLimitExceeded",
+            "http.RequestTooLarge",
+            "http.ResponseTooLarge",
+            "http.AuthProviderError",
+        ],
+    )
+    def test_system_prompt_documents_http_exception(self, name):
+        assert name in _get_system_prompt()
 
 
 class TestProgressMessagesAgent:
