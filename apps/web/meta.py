@@ -39,3 +39,18 @@ def absolute_url(relative_url: str, is_secure: bool = settings.USE_HTTPS_IN_ABSO
         return f"{settings.SITE_URL_ROOT}{relative_url}"
 
     return f"{get_server_root(is_secure)}{relative_url}"
+
+
+def ensure_absolute_url(url: str, is_secure: bool = settings.USE_HTTPS_IN_ABSOLUTE_URLS) -> str:
+    """Expand a site-relative path to an absolute url, leaving urls that already name a host alone.
+
+    A url `urlsplit` rejects is passed through rather than raised on: callers map over sets of
+    links, and one bad value should cost that link, not the whole message.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    if parts.scheme or parts.netloc:
+        return url
+    return absolute_url(url, is_secure)
