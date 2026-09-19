@@ -1,0 +1,23 @@
+from django.db import migrations
+
+from apps.data_migrations.utils.migrations import RunDataMigration
+from apps.service_providers.migration_utils import llm_model_migration
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("service_providers", "0082_auto_model_sync_20260917"),
+        ("service_providers", "0082_alter_embeddingprovidermodel_type_and_more"),
+        # remove_deprecated_models queries Team with live models, so all Team
+        # schema changes must be applied first.
+        ("teams", "0013_team_files_export_team_files_export_task_id"),
+        # llm_model_migration() repoints evaluators off any custom model it replaces, so the
+        # Evaluator FK must be in this migration's app state (see _repoint_evaluators).
+        ("evaluations", "0018_evaluator_llm_provider_fks"),
+    ]
+
+    operations = [
+        # Remove o4-mini-high for the `openai` provider
+        llm_model_migration(),
+        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
+    ]
