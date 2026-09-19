@@ -6194,7 +6194,6 @@ components:
       - cursor
       - has_more
       - results
-
     UsageRecordDetail:
       type: object
       properties:
