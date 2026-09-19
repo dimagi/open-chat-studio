@@ -85,7 +85,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
-        Model("o4-mini-high", 200000, deprecated=True),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
@@ -213,6 +212,11 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
+    # o4-mini-high is a ChatGPT effort preset, not an API model: it is absent from OpenAI's
+    # catalogue and from its deprecation table, so requests with it already 404. References move
+    # to gpt-5.6-terra, the successor OpenAI names for o4-mini, rather than to o4-mini itself,
+    # which shuts down on 2026-10-23.
+    ("openai", "o4-mini-high", "gpt-5.6-terra"),
     ("openai", "gpt-5.3", "gpt-5.4"),
     ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
     # Groq
