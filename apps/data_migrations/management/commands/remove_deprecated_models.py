@@ -55,7 +55,7 @@ class Command(IdempotentCommand):
 
         if not models_to_delete:
             self.stdout.write(self.style.SUCCESS("No deleted models found"))
-            return
+            return None
 
         # Build affected resources per model per team
         affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set}}}

@@ -29,10 +29,10 @@
   {% if user.is_anonymous %}
     {% include "admin/color_theme_toggle.html" %}
   {% endif %}
-  {% if temporary_superuser_access and "admin_site" in temporary_superuser_access %}
+  {% if elevations.django_admin %}
     <div>
-      <a href="{% url "web:release_sudo" "admin_site" %}" class="releaselink">Release Admin Access</a>
-      Expires in {{ temporary_superuser_access.admin_site|timeuntil }}
+      <a href="{% url "web:release_elevation" "django_admin" %}" class="releaselink">Release Admin Access</a>
+      Expires in {{ elevations.django_admin.expires_at|timeuntil }}
     </div>
   {% endif %}
 {% endblock branding %}

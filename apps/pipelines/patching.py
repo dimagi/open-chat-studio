@@ -5,16 +5,75 @@ Never touches the database directly — the caller (the PATCH view) is responsib
 for persisting the merged graph and calling update_nodes_from_data().
 """
 
-from apps.pipelines.build_state import output_handle_labels, rewired_edges_for_node
 from apps.pipelines.flow import (
     EdgeDiff,
     Flow,
     FlowNode,
+    FlowEdge,
+    FlowNodeData,
     FlowWithoutNodes,
     NodeDiff,
     PipelineDiffPayload,
     split_flow_data,
 )
+
+#: A node's output handles as ``{handle: branch label}`` -- for matching handles across an edit.
+OutputHandles = dict[str, str | None]
+
+
+def _output_handle_labels(content: FlowNodeData) -> OutputHandles:
+    """``FlowNodeData`` -> ``{handle: label}``, the shape ``_handle_remap`` matches across an edit."""
+    return {
+        handle["handle"]: handle["label"]
+        for handle in content.node_type.output_handles(content.params, content.id)
+    }
+
+
+def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
+    """Where each handle a node used to offer has ended up, keyed by the handle it was.
+
+    A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts
+    as a removal -- inheriting the old branch's target would wire the new one somewhere nobody
+    chose.
+    """
+    if _labels_are_distinct(before) and _labels_are_distinct(after):
+        destinations = {label: handle for handle, label in after.items()}
+        return {handle: destinations[label] for handle, label in before.items() if label in destinations}
+    # Duplicate branch labels: keywords have to be unique, but a router that breaks that is still
+    # writable, and which edge belongs to which of two identical branches is a guess. So handles
+    # are followed by position instead, and only an edge left with no handle at all is dropped.
+    return {handle: handle for handle in before if handle in after}
+
+
+def _labels_are_distinct(handles: OutputHandles) -> bool:
+    """Whether every handle in the map carries a different branch label."""
+    return len(set(handles.values())) == len(handles)
+
+
+def _rewired_edges_for_node(
+    edges: list[FlowEdge], node_id: str, before: OutputHandles, after: OutputHandles
+) -> tuple[list[FlowEdge], list[str]]:
+    """Edges sourced from ``node_id`` after its output handles change from ``before`` to ``after``.
+
+    Returns ``(updated, deleted_ids)``: ``updated`` are copies of the affected edges with
+    ``sourceHandle`` moved to follow the same branch label; ``deleted_ids`` are edges whose branch
+    is gone. An edge not sourced from this node, or already on a handle the node didn't offer
+    before the change, is left out of both -- it is either unaffected, or was already stranded
+    before this edit and is not this edit's problem to clean up.
+    """
+    moved_to = _handle_remap(before, after)
+    updated: list[FlowEdge] = []
+    deleted: list[str] = []
+    for edge in edges:
+        handle = edge.source_handle_name
+        if edge.source != node_id or handle not in before:
+            continue
+        destination = moved_to.get(handle)
+        if destination is None:
+            deleted.append(edge.id)
+        elif destination != handle:
+            updated.append(edge.model_copy(update={"sourceHandle": destination}))
+    return updated, deleted
 
 
 def apply_pipeline_patch(
@@ -98,8 +157,8 @@ def _handle_change_for_update(previous: FlowNode | None, updated: FlowNode) -> H
         return None
     if previous_data.type == updated.data.type and previous_data.params == updated.data.params:
         return None
-    before = output_handle_labels(previous_data)
-    after = output_handle_labels(updated.data)
+    before = _output_handle_labels(previous_data)
+    after = _output_handle_labels(updated.data)
     if before == after:
         return None
     return (updated.id, before, after)
@@ -114,7 +173,7 @@ def _rewire_edges(flow: Flow, handle_changes: list[HandleChange]) -> None:
     cannot resurrect it, because this runs after that update already landed.
     """
     for node_id, before, after in handle_changes:
-        changed, deleted_ids = rewired_edges_for_node(flow.edges, node_id, before, after)
+        changed, deleted_ids = _rewired_edges_for_node(flow.edges, node_id, before, after)
         if not changed and not deleted_ids:
             continue
         changed_by_id = {edge.id: edge for edge in changed}

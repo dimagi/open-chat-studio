@@ -6,22 +6,19 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
-from apps.pipelines.flow import (
-    REACT_FLOW_END_TYPE,
-    Flow,
-    FlowNode,
-    FlowNodeData,
-    NodeDiff,
-    react_flow_node_type,
-)
+from apps.pipelines.const import REACT_FLOW_END_TYPE
+from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
-from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
+from apps.pipelines.node_type import NodeType
+from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 from apps.teams.models import Team
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
 from .node_params import node_params, writable_params
 from .references import check_references
+
+OutputHandles = dict[str, str | None]
 
 #: How far right of the rightmost node a new one is parked, and the row it is parked on. The step is
 #: about a node's width, so a parked node clears the one before it.
@@ -47,19 +44,21 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     the request body, so nothing here has to wait on the graph.
     """
     # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
-    # and
-    # `get_node_type_schema` has already refused any other name, so this cannot come back None.
-    node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
+    # and `get_node_type_schema` has already refused any other name, so neither of these can come
+    # back None. Both casts drop that `| None` and nothing else.
+    resolved = NodeType(node_type)
+    node_class = cast("type[BasePipelineNode]", resolved.node_class)
+    schema = cast("NodeSchema", resolved.schema)
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
     node = FlowNode(
         id=node_id,
-        type=react_flow_node_type(node_type),
+        type=resolved.react_flow_type,
         position=position,
         data=FlowNodeData(
             id=node_id,
             type=node_type,
-            label=label if label is not None else node_schema(node_class).label,
+            label=label if label is not None else schema.label,
             params=initial_params(node_class, node_id, params),
         ),
     )
@@ -108,15 +107,8 @@ def plan_delete(flow: Flow, node_id: str) -> PipelineEdit:
 
 
 def refuse_if_server_managed(node_type: str) -> None:
-    """Refuse to touch a node the server owns — Start and End, the two the API will not create.
-
-    ``can_delete`` is the UI builder's own flag for this and is False for exactly those two, so the
-    API withholds the same nodes rather than keeping a list of its own.
-    """
-    node_class = resolve_node_class(node_type)
-    # A type naming no node class -- removed since, or never one -- has no flag to consult, and is
-    # exactly the sort of node a pipeline has to be able to shed. So it is not withheld.
-    if node_class is not None and not node_schema(node_class).can_delete:
+    """Refuse to touch a node the server owns — Start and End, the two the API will not create."""
+    if NodeType(node_type).is_server_managed:
         raise NodeIsServerManaged(
             f"'{node_type}' is part of the pipeline's structure: it cannot be edited or deleted through the API."
         )
@@ -133,7 +125,7 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     for node in flow.nodes:
         if node.id == node_id:
             found = node.model_copy(deep=True)
-            return found, cast(FlowNodeData, found.data)
+            return found, cast("FlowNodeData", found.data)
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
@@ -144,8 +136,7 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
     shows a ``CodeNode`` carrying ``llm_provider_id`` and others it does not declare. Merging those
     back would write them to the row on any edit, label-only ones included.
     """
-    node_class = resolve_node_class(content.type)
-    declared = set(node_class.model_fields) if node_class is not None else set()
+    declared = content.node_type.declared_params
     mirrored = Node.resource_param_names()
     return {name: value for name, value in content.params.items() if name in declared or name not in mirrored}
 
@@ -194,13 +185,6 @@ def parking_position(flow: Flow) -> dict:
     return {"x": rightmost + PARKING_STEP_X, "y": PARKING_Y}
 
 
-def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
-    """A node class's ``NodeSchema``: its display label, and whether it can be added or deleted."""
-    # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
-    # node class here stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
-    return cast(NodeSchema, node_class.model_config["json_schema_extra"])
-
-
 def _unused_node_id(flow: Flow, node_type: str) -> str:
     """A node id no node in this graph already has.
 
@@ -224,7 +208,7 @@ def _reparked_end_nodes(flow: Flow, new_node_x: float) -> list[FlowNode]:
             continue
         reparked = node.model_copy(deep=True)
         reparked.position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
-        content = cast(FlowNodeData, reparked.data)
+        content = cast("FlowNodeData", reparked.data)
         content.params = stored_params(content)
         moved.append(reparked)
     return moved
@@ -235,3 +219,59 @@ def _is_overtaken_end_node(node: FlowNode, new_node_x: float) -> bool:
     if node.type != REACT_FLOW_END_TYPE:
         return False
     return (node.position.get("x") or 0) <= new_node_x
+
+
+def _output_handles(content: FlowNodeData) -> OutputHandles:
+    """A node's output handles as ``{handle: branch label}``.
+
+    The label is what identifies a router's branch across an edit: the handle is only a position in
+    ``keywords``, and positions move. A node whose type names no node class reports no handles.
+    """
+    return {
+        handle["handle"]: handle["label"] for handle in content.node_type.output_handles(content.params, content.id)
+    }
+
+
+def _rewired_edges(flow: Flow, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:
+    """What an edit that changed a node's output handles does to the edges leaving it.
+
+    Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
+    keywords renumbers the third rather than freeing a slot: going by position alone would hand the
+    third branch's target to the second. Old handles are matched to new ones by branch label instead
+    -- an edge follows its branch wherever it moved, and a branch that is gone takes its edge with
+    it, as the UI builder's ``deleteKeyword`` does. An edge already stranded when the edit arrived
+    stays, and stays reported in ``errors.edge``.
+    """
+    moved_to = _handle_remap(before, after)
+    update: list[FlowEdge] = []
+    delete: list[str] = []
+    for edge in flow.edges:
+        handle = edge.source_handle_name
+        if edge.source != node_id or handle not in before:
+            continue
+        destination = moved_to.get(handle)
+        if destination is None:
+            delete.append(edge.id)
+        elif destination != handle:
+            update.append(edge.model_copy(update={"sourceHandle": destination}))
+    return EdgeDiff(update=update, delete=delete)
+
+
+def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
+    """Where each handle the node used to offer has ended up, keyed by the handle it was.
+
+    A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts as
+    a removal -- inheriting the old branch's target would wire the new one somewhere nobody chose.
+    """
+    if _labels_are_distinct(before) and _labels_are_distinct(after):
+        destinations = {label: handle for handle, label in after.items()}
+        return {handle: destinations[label] for handle, label in before.items() if label in destinations}
+    # Duplicate branch labels: keywords have to be unique, but a router that breaks that is still
+    # writable, and which edge belongs to which of two identical branches is a guess. So handles are
+    # followed by position instead, and only an edge left with no handle at all is dropped.
+    return {handle: handle for handle in before if handle in after}
+
+
+def _labels_are_distinct(handles: OutputHandles) -> bool:
+    """Whether every handle in the map carries a different branch label."""
+    return len(set(handles.values())) == len(handles)

@@ -33,38 +33,38 @@ def get_integration_rows(request, team) -> list[dict]:
     """
     rows = []
     for provider in ServiceProvider:
-        for obj in provider.model.objects.filter(team=team):
-            rows.append(
-                {
-                    "id": f"{provider.slug}-{obj.pk}",
-                    "kind": "service_provider",
-                    "provider_type": provider.slug,
-                    "pk": obj.pk,
-                    "name": obj.name,
-                    "category": provider.category,
-                    "icon_class": _CATEGORY_ICONS[provider.category],
-                    "provider": obj.type_enum.label,
-                    "status": "Connected",
-                    "edit_perm": provider.get_permission("change"),
-                    "delete_perm": provider.get_permission("delete"),
-                }
-            )
+        rows.extend(
+            {
+                "id": f"{provider.slug}-{obj.pk}",
+                "kind": "service_provider",
+                "provider_type": provider.slug,
+                "pk": obj.pk,
+                "name": obj.name,
+                "category": provider.category,
+                "icon_class": _CATEGORY_ICONS[provider.category],
+                "provider": obj.type_enum.label,
+                "status": "Connected",
+                "edit_perm": provider.get_permission("change"),
+                "delete_perm": provider.get_permission("delete"),
+            }
+            for obj in provider.model.objects.filter(team=team)
+        )
     if flag_is_active(request, "flag_mcp"):
-        for obj in McpServer.objects.filter(team=team):
-            rows.append(
-                {
-                    "id": f"mcp-{obj.pk}",
-                    "kind": "mcp",
-                    "pk": obj.pk,
-                    "name": obj.name,
-                    "category": MCP_CATEGORY,
-                    "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
-                    "provider": "MCP Server",
-                    "status": "Connected",
-                    "edit_perm": "mcp_integrations.change_mcpserver",
-                    "delete_perm": "mcp_integrations.delete_mcpserver",
-                }
-            )
+        rows.extend(
+            {
+                "id": f"mcp-{obj.pk}",
+                "kind": "mcp",
+                "pk": obj.pk,
+                "name": obj.name,
+                "category": MCP_CATEGORY,
+                "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
+                "provider": "MCP Server",
+                "status": "Connected",
+                "edit_perm": "mcp_integrations.change_mcpserver",
+                "delete_perm": "mcp_integrations.delete_mcpserver",
+            }
+            for obj in McpServer.objects.filter(team=team)
+        )
     rows.sort(key=lambda row: (row["category"], row["name"]))
     return rows
 
@@ -117,12 +117,12 @@ def build_integration_filter_pills(
     counts = Counter(row["category"] for row in rows)
     categories = [category for category in _CATEGORY_ORDER if category != MCP_CATEGORY or show_mcp]
     pills = [IntegrationFilterPill(label="All", value=None, count=len(rows), active=active_category is None)]
-    for category in categories:
-        pills.append(
-            IntegrationFilterPill(
-                label=category, value=category, count=counts[category], active=active_category == category
-            )
+    pills.extend(
+        IntegrationFilterPill(
+            label=category, value=category, count=counts[category], active=active_category == category
         )
+        for category in categories
+    )
     return pills
 
 

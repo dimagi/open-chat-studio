@@ -172,7 +172,7 @@ class TestNodeUpdateRewiresHandles:
         )
         updated.position = {"x": 100, "y": 200}
         calls = []
-        monkeypatch.setattr(patching_module, "output_handle_labels", lambda data: calls.append(data) or {})
+        monkeypatch.setattr(patching_module, "_output_handle_labels", lambda data: calls.append(data) or {})
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
 
         apply_pipeline_patch(graph, patch)

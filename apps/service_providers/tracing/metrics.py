@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
-from uuid import UUID
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages.utils import count_tokens_approximately
@@ -12,6 +10,10 @@ from langchain_core.messages.utils import count_tokens_approximately
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.cost_tracking.services.estimation import has_usage_metadata, response_text, tiktoken_count
 from apps.cost_tracking.services.recorder import UsageEvent
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from uuid import UUID
 
 # Providers we can tiktoken-estimate (exact, OpenAI-specific encodings) when
 # usage_metadata is missing. Everything else falls back to the chars/4

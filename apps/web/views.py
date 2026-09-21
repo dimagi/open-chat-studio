@@ -5,7 +5,7 @@ from celery.result import GroupResult
 from celery_progress.backend import GroupProgress
 from django import forms
 from django.conf import settings
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -16,10 +16,9 @@ from health_check.views import HealthCheckView
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
-from apps.web.admin import ADMIN_SLUG
+from apps.web.elevation import Elevation, Grant, GrantKind, InvalidGrant, TooManyElevations
 from apps.web.health_checks import CHECK_SUBSETS
 from apps.web.search import get_searchable_models
-from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
 
 UUID_PATTERN = re.compile(r"^[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}$", re.IGNORECASE)
 
@@ -49,52 +48,88 @@ class ConfirmIdentityForm(forms.Form):
     redirect = forms.CharField(widget=forms.HiddenInput, required=False)
 
 
-@user_passes_test(lambda u: u.is_superuser)
+def _safe_redirect(url: str) -> str:
+    """Where to send the user once they are done here, falling back to the site root."""
+    if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
+        return "/"
+    return url
+
+
+def _grant_on_confirmed_identity(request, grant, form):
+    """Elevate to `grant` if the submitted password checks out.
+
+    Returns the redirect to follow, or None having populated the form's errors.
+    """
+    if not request.user.check_password(form.cleaned_data["password"]):
+        form.add_error("password", "Invalid password")
+        return None
+
+    try:
+        Elevation(request).add(grant)
+    except TooManyElevations:
+        form.add_error(
+            None,
+            "You already hold the maximum number of elevated privileges. Release one of them and try again.",
+        )
+        return None
+
+    return HttpResponseRedirect(_safe_redirect(form.cleaned_data["redirect"]))
+
+
+@login_required
 @sensitive_post_parameters()
-def acquire_superuser_powers(request, slug):
-    is_team_request = slug != ADMIN_SLUG
-    if is_team_request and not Team.objects.filter(slug=slug).exists():
+def elevate_django_admin(request):
+    return _acquire_elevation(request, Grant.DJANGO_ADMIN)
+
+
+@login_required
+@sensitive_post_parameters()
+def elevate_ocs_admin(request):
+    return _acquire_elevation(request, Grant.OCS_ADMIN)
+
+
+@login_required
+@sensitive_post_parameters()
+def elevate_team(request, team_slug):
+    if not Team.objects.filter(slug=team_slug).exists():
+        raise Http404
+    return _acquire_elevation(request, Grant.team(team_slug))
+
+
+def _acquire_elevation(request, grant):
+    if not grant.may_be_held_by(request.user):
+        # Don't leak which surfaces exist to someone who could never elevate into them.
         raise Http404
 
     if request.method == "POST":
         form = ConfirmIdentityForm(request.POST)
         if form.is_valid():
-            if not request.user.check_password(form.cleaned_data["password"]):
-                form.add_error("password", "Invalid password")
-            else:
-                apply_temporary_superuser_access(request, slug)
-                redirect_to = form.cleaned_data["redirect"]
-                if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
-                    redirect_to = "/"
-                return HttpResponseRedirect(redirect_to)
+            if response := _grant_on_confirmed_identity(request, grant, form):
+                return response
     else:
-        redirect_to = request.GET.get("next", "")
-        if not redirect_to or not url_has_allowed_host_and_scheme(redirect_to, allowed_hosts=None):
-            redirect_to = "/"
-        if is_team_request and Membership.objects.filter(team__slug=slug, user=request.user).exists():
+        redirect_to = _safe_redirect(request.GET.get("next", ""))
+        if grant.kind is GrantKind.TEAM and _is_team_member(request.user, grant.team_slug):
             return HttpResponseRedirect(redirect_to)
 
         form = ConfirmIdentityForm(initial={"redirect": redirect_to})
 
-    return render(
-        request,
-        "web/temporary_superuser_powers.html",
-        {
-            "form": form,
-            "is_team_request": is_team_request,
-            "team_slug": slug,
-        },
-    )
+    return render(request, "web/temporary_superuser_powers.html", {"form": form, "grant": grant})
 
 
-@user_passes_test(lambda u: u.is_superuser)
-def release_superuser_powers(request, slug):
-    if slug != ADMIN_SLUG and not Team.objects.filter(slug=slug).exists():
-        raise Http404
+def _is_team_member(user, team_slug):
+    return Membership.objects.filter(team__slug=team_slug, user=user).exists()
 
-    remove_temporary_superuser_access(request, slug)
 
-    return HttpResponseRedirect("/")
+@login_required
+def release_elevation(request, grant):
+    try:
+        parsed = Grant.parse(grant)
+    except InvalidGrant:
+        raise Http404 from None
+
+    Elevation(request).drop(parsed)
+
+    return HttpResponseRedirect(_safe_redirect(request.GET.get("next", "")))
 
 
 @login_required

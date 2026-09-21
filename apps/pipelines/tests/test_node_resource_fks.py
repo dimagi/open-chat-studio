@@ -604,6 +604,28 @@ def test_backfill_drops_archived_collection_index():
 
 
 @pytest.mark.django_db()
+class TestRequiresAttachmentTool:
+    def test_reads_the_collection_column_not_the_stale_params_id(self):
+        """Deleting a collection nulls the FK column and leaves the id behind in params.
+
+        The delete guard only queries unarchived nodes, so an archived node can outlive its
+        collection. ``to_flow_node`` already serves the column, and this check has to agree with it.
+        """
+        collection = CollectionFactory.create()
+        collection_id = collection.id
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm", "collection_id": collection_id})
+        node.update_from_params()
+        node.archive()
+
+        collection.delete()
+        node.refresh_from_db()
+
+        assert node.params["collection_id"] == collection_id, "the stale id is the point of the test"
+        assert node.collection_id is None
+        assert node.requires_attachment_tool() is False
+
+
+@pytest.mark.django_db()
 def test_assistant_is_not_a_resource_fk_field():
     """resource_fk_fields drives the mirrored params, so a dropped FK must leave it (#4254)."""
     assert "assistant" not in Node.resource_fk_fields()

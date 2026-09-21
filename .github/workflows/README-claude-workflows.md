@@ -25,6 +25,10 @@ Two independent mechanisms scope what Claude can do in every run: the `permissio
 
 Check the comment block at the top of each file for what it does, when it is skipped and what it needs.
 
+### Non-Claude reviewers
+
+`ocr-review.yml` ([OpenCodeReview](https://github.com/alibaba/open-code-review)) reviews the same pull requests as `claude-code-review.yml` and is not part of this action family — it runs its own CLI, not `claude-code-action`, and is configured entirely through action inputs rather than a prompt. It currently posts every finding into one sticky summary comment rather than inline, so review comments on the diff still come only from Claude. It shares the `ANTHROPIC_API_KEY` secret.
+
 ## Forked PR limitations
 
 `claude-code-review.yml` and `claude-followup.yml` both skip fork-originated PRs and `claude.yml`'s `claude` job fails with "User does not have write access on this repository". See the `Notes:` in each header comment for why.

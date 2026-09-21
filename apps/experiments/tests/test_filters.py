@@ -337,7 +337,7 @@ class TestExperimentSessionFilters:
 
     def test_tag_filters(self, sessions_with_tags):
         """Test tag filtering with ANY_OF and ALL_OF operators"""
-        sessions, tags = sessions_with_tags
+        sessions, _tags = sessions_with_tags
 
         # Test ANY_OF with one tag
         session_queryset = sessions[0].experiment.sessions.all()
@@ -407,7 +407,7 @@ class TestExperimentSessionFilters:
 
     def test_version_filters(self, sessions_with_versions):
         """Test version tag filtering"""
-        sessions, version_tags = sessions_with_versions
+        sessions, _version_tags = sessions_with_versions
 
         # Test ANY_OF with one version
         session_queryset = sessions[0].experiment.sessions.all()
@@ -430,7 +430,7 @@ class TestExperimentSessionFilters:
 
     def test_multiple_filters(self, sessions_with_tags):
         """Test combining multiple filters"""
-        sessions, tags = sessions_with_tags
+        sessions, _tags = sessions_with_tags
         sessions[0].participant.identifier = "user1@example.com"
         sessions[0].participant.save()
         sessions[1].participant.identifier = "user2@example.com"
@@ -471,7 +471,7 @@ class TestExperimentSessionFilters:
 
     def test_messages_tag_filters(self, sessions_with_messages_tags):
         """Test tag filtering with ANY_OF and ALL_OF operators"""
-        sessions, tags = sessions_with_messages_tags
+        sessions, _tags = sessions_with_messages_tags
 
         # Test ANY_OF with one tag
         session_queryset = sessions[0].experiment.sessions.all()

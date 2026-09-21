@@ -129,6 +129,7 @@ class TelegramMessage(BaseMessage):
     def determine_content_type(cls, value):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
+        return None
 
     @staticmethod
     def parse(update_obj, chatbot_id: int) -> "TelegramMessage":
@@ -371,6 +372,7 @@ class FacebookMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio":
             return MESSAGE_TYPES.VOICE
+        return None
 
     @staticmethod
     def parse(message_data: dict) -> "FacebookMessage":

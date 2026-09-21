@@ -120,7 +120,9 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     )
     evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message_1, evaluation_message_2])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    evaluation_config = cast(
+        "EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset)
+    )
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
@@ -210,7 +212,9 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
     )
     evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message_1, evaluation_message_2])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    evaluation_config = cast(
+        "EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset)
+    )
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
@@ -269,7 +273,9 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
     )
     evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    evaluation_config = cast(
+        "EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset)
+    )
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
@@ -398,7 +404,9 @@ def test_evaluator_interpolates_participant_data_and_session_state(get_llm_servi
     )
     evaluator = EvaluatorFactory.create(params=llm_evaluator.model_dump(), type="LlmEvaluator")
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset))
+    evaluation_config = cast(
+        "EvaluationConfig", EvaluationConfigFactory.create(evaluators=[evaluator], dataset=dataset)
+    )
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
     evaluate_message(evaluation_run.id, [evaluator.id], evaluation_message.id)

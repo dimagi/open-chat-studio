@@ -4,10 +4,8 @@ import atexit
 import logging
 import threading
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
-from uuid import UUID
 
 from django.utils import timezone
 from langfuse import propagate_attributes
@@ -17,14 +15,18 @@ from langfuse.langchain import CallbackHandler
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
-from .const import SpanLevel
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from uuid import UUID
+
     from langchain_core.callbacks.base import BaseCallbackHandler
     from langfuse import Langfuse
     from langfuse.api.client import LangfuseAPI
 
     from apps.experiments.models import ExperimentSession
+
+    from .const import SpanLevel
 
 
 logger = logging.getLogger("ocs.tracing.langfuse")
@@ -241,7 +243,7 @@ class LangFuseTracer(Tracer):
             trace_url = None
 
         return cast(
-            dict[str, str],
+            "dict[str, str]",
             {
                 "trace_id": self._langfuse_trace_id,
                 "trace_url": trace_url,

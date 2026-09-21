@@ -3,6 +3,7 @@
 
 {% block page_js %}
   {{ block.super }}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   <script src="{% static 'js/evaluationTrends-bundle.js' %}"></script>
 {% endblock page_js %}
 
