@@ -88,7 +88,7 @@ class EvaluationConfigTable(tables.Table):
                     format_html('<i class="fa {}"></i> ', icon) if icon else "",
                     name,
                     label,
-                    format_html(' <span class="badge badge-ghost badge-sm">Archived</span>') if archived else "",
+                    mark_safe(' <span class="badge badge-ghost badge-sm">Archived</span>') if archived else "",
                 )
                 for icon, name, label, archived in rows
             ),
