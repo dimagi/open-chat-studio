@@ -192,6 +192,7 @@ class EvaluationConfigFactory(DjangoModelFactory):
 class EvaluationRunFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationRun
+        skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
