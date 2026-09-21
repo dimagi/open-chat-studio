@@ -1,4 +1,6 @@
+import inspect
 import json
+import re
 from unittest import mock
 
 import pydantic as pydantic_module
@@ -380,6 +382,33 @@ class TestCodeGenerateAgent:
         prompt = _get_system_prompt()
         missing = sorted(name for name in documented_names if name not in prompt)
         assert not missing, f"Sandbox functions missing from the AI prompt: {missing}"
+
+    def test_documented_signatures_match_real_parameter_names(self):
+        node = CodeNode(name="test", node_id="123", django_node=None, code="")
+        node._repo = InMemoryPipelineRepository()
+        mock_state = PipelineState(outputs={}, experiment_session=None)
+        functions = node._get_custom_functions(
+            state=mock_state, context=NodeContext(mock_state), output_state=mock_state, print_collectors=[]
+        )
+
+        prompt = _get_system_prompt()
+        # A prompt-only doc convention (e.g. "def name(args) -> ReturnType:") -- not real code,
+        # so parsed with a regex rather than actually executed.
+        documented_signatures = dict(re.findall(r"def (\w+)\(([^)]*)\)", prompt))
+
+        def param_names(param_list: str) -> list[str]:
+            return [p.split(":")[0].split("=")[0].strip().lstrip("*") for p in param_list.split(",") if p.strip()]
+
+        mismatches = []
+        for name, obj in functions.items():
+            if name not in documented_signatures or not callable(obj):
+                continue
+            documented_params = param_names(documented_signatures[name])
+            real_params = list(inspect.signature(obj).parameters)
+            if documented_params != real_params:
+                mismatches.append(f"{name}: documented {documented_params}, real {real_params}")
+
+        assert not mismatches, "Documented parameter names don't match the real signature:\n" + "\n".join(mismatches)
 
     @pytest.mark.parametrize(
         "name",

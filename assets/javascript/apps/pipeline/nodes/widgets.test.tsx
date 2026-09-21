@@ -258,12 +258,13 @@ describe('GenerateCodeSection', () => {
     };
 
     it('Accept: a late response cannot repopulate the panel for a second acceptance', async () => {
-      const {getByText, queryByTestId, onAccept, resolveDeferred} = await setUpPendingRefine();
+      const {getByText, queryByTestId, queryByText, onAccept, resolveDeferred} = await setUpPendingRefine();
 
-      fireEvent.click(getByText('Accept')); // accepts the still-current "code A"
+      fireEvent.click(getByText('Accept')); // accepts the still-current "code A" while the refine is still pending
       expect(onAccept).toHaveBeenCalledTimes(1);
       expect(onAccept).toHaveBeenCalledWith('code A');
       expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+      expect(queryByText('Generating...')).not.toBeInTheDocument();
 
       resolveDeferred();
       await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
@@ -272,10 +273,11 @@ describe('GenerateCodeSection', () => {
     });
 
     it('Reject: a late response cannot restore the rejected proposal', async () => {
-      const {getByText, queryByTestId, resolveDeferred} = await setUpPendingRefine();
+      const {getByText, queryByTestId, queryByText, resolveDeferred} = await setUpPendingRefine();
 
       fireEvent.click(getByText('Reject'));
       expect(queryByTestId('code-diff')).not.toBeInTheDocument();
+      expect(queryByText('Generating...')).not.toBeInTheDocument();
 
       resolveDeferred();
       await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
@@ -283,16 +285,39 @@ describe('GenerateCodeSection', () => {
     });
 
     it('Clear: a late response cannot repopulate the cleared panel', async () => {
-      const {getByText, getByPlaceholderText, queryByTestId, resolveDeferred} = await setUpPendingRefine();
+      const {getByText, getByPlaceholderText, queryByTestId, queryByText, resolveDeferred} = await setUpPendingRefine();
 
       fireEvent.click(getByText('Clear'));
       expect(queryByTestId('code-diff')).not.toBeInTheDocument();
       expect((getByPlaceholderText(/Describe what you want/) as HTMLTextAreaElement).value).toBe('');
+      expect(queryByText('Generating...')).not.toBeInTheDocument();
 
       resolveDeferred();
       await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(2));
       expect(queryByTestId('code-diff')).not.toBeInTheDocument();
       expect((getByPlaceholderText(/Describe what you want/) as HTMLTextAreaElement).value).toBe('');
     });
+  });
+
+  it('ignores a second Generate trigger (e.g. Ctrl+Enter) while a request is already in flight', async () => {
+    let resolveFirst: (value: {response: {code: string}}) => void;
+    vi.spyOn(apiClient, 'generateCode').mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFirst = resolve; }),
+    );
+
+    const {getByPlaceholderText} = render(
+      <GenerateCodeSection showGenerate={true} onAccept={() => {}} currentCode="original code" />,
+    );
+    const promptBox = getByPlaceholderText(/Describe what you want/);
+    fireEvent.change(promptBox, {target: {value: 'first prompt'}});
+
+    // Ctrl+Enter isn't gated by the button's disabled attribute, so it's the reachable path
+    // for starting a second request while the first is still pending.
+    fireEvent.keyDown(promptBox, {key: 'Enter', ctrlKey: true});
+    fireEvent.keyDown(promptBox, {key: 'Enter', ctrlKey: true});
+
+    expect(apiClient.generateCode).toHaveBeenCalledTimes(1);
+    resolveFirst!({response: {code: 'code A'}});
+    await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(1));
   });
 });

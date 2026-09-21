@@ -485,20 +485,21 @@ export function GenerateCodeSection({
   const requestRevisionRef = useRef(0);
 
   const runGenerate = (query: string, nextStatus: "generating" | "checking") => {
+    if (status !== "idle") return;
     const revision = ++requestRevisionRef.current;
     setStatus(nextStatus);
     setError("");
     apiClient.generateCode(query, currentCode).then((generatedResponse) => {
-      setStatus("idle");
       if (revision !== requestRevisionRef.current) return;
+      setStatus("idle");
       if (generatedResponse.error || !generatedResponse.response?.code) {
         setError(generatedResponse.error || "No code generated. Please provide more information.");
         return;
       }
       setGeneratedCode(generatedResponse.response.code);
     }).catch((errorData) => {
-      setStatus("idle");
       if (revision !== requestRevisionRef.current) return;
+      setStatus("idle");
       setError(errorData?.error || "An error occurred while generating code. Please try again.");
     });
   }
@@ -508,6 +509,7 @@ export function GenerateCodeSection({
 
   const handleAccept = () => {
     requestRevisionRef.current += 1;
+    setStatus("idle");
     onAccept(generatedCode as string)
     setGeneratedCode(null)
     setPrompt("")
@@ -515,10 +517,12 @@ export function GenerateCodeSection({
   }
   const handleReject = () => {
     requestRevisionRef.current += 1;
+    setStatus("idle");
     setGeneratedCode(null);
   };
   const handleClear = () => {
     requestRevisionRef.current += 1;
+    setStatus("idle");
     setGeneratedCode(null)
     setPrompt("")
     setError("")

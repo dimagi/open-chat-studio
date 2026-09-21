@@ -33,15 +33,15 @@ def set_participant_data(data: dict) -> None:
     Merges the provided dictionary into the current participant's data. Only the keys present in `data`
     are overwritten; other existing keys are left untouched.
 
-def set_participant_data_key(key_name: str, data: Any) -> None:
+def set_participant_data_key(key: str, value: Any) -> None:
     Overwrites the participant data at the given key with the provided value. Other keys are unaffected.
 
-def append_to_participant_data_key(key_name: str, data: Any) -> None:
+def append_to_participant_data_key(key: str, value: Any) -> None:
     Appends the value to the list stored at the given key in the participant data. If the current value
-    at that key is not a list, it is converted to one before appending. If `data` is itself a list, its
+    at that key is not a list, it is converted to one before appending. If `value` is itself a list, its
     items are appended individually (extending the stored list), not as a single nested list element.
 
-def increment_participant_data_key(key_name: str, increment: int = 1) -> None:
+def increment_participant_data_key(key: str, increment: int = 1) -> None:
     Increments the numeric value stored at the given key in the participant data. If the current value
     is not a number, it is treated as 0 before incrementing.
 
@@ -52,7 +52,7 @@ def get_temp_state_key(key_name: str) -> str | None:
     Returns the value of the temporary state key with the given name.
     If the key does not exist, it returns `None`.
 
-def set_temp_state_key(key_name: str, data: Any) -> None:
+def set_temp_state_key(key_name: str, value: Any) -> None:
     Sets the value of the temporary state key with the given name to the provided data.
     This will override any existing data for the key unless the key is read-only, in which case
     an error will be raised. Read-only keys are: `user_input`, `outputs`, `attachments`.
@@ -61,11 +61,11 @@ def get_session_state_key(key_name: str) -> str | None:
     Returns the value of the session state's key with the given name.
     If the key does not exist, it returns `None`.
 
-def set_session_state_key(key_name: str, data: Any) -> None:
+def set_session_state_key(key_name: str, value: Any) -> None:
     Sets the value of the session state's key with the given name to the provided data.
     This will override any existing data.
 
-def get_selected_route(router_node_name: str) -> str | None:
+def get_selected_route(node_name: str) -> str | None:
     Returns the route selected by a specific router node with the given name.
     If the node does not exist or has no route defined, it returns `None`.
 
@@ -88,10 +88,10 @@ def add_file_attachment(filename: str, content: bytes, content_type: str = None)
 
     Raises an error if content is not bytes.
 
-def add_message_tag(tag_name: str):
+def add_message_tag(tag: str):
     Adds a tag to the output message.
 
-def add_session_tag(tag_name: str):
+def add_session_tag(tag: str):
     Adds the tag to the chat session.
 
 def get_node_output(node_name: str) -> Any:
