@@ -252,7 +252,9 @@ def elevation_redirect(request, grant: Grant, superuser_only: bool = False) -> H
     discoverable by probing for a login redirect.
     """
     user = request.user
-    if not grant.may_be_held_by(user) or (superuser_only and not user.is_superuser):
+    if not grant.may_be_held_by(user):
+        raise Http404
+    if superuser_only and not user.is_superuser:
         raise Http404
 
     if Elevation(request).has(grant):
