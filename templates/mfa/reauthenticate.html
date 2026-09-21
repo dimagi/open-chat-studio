@@ -10,10 +10,10 @@
 
       {% include "account/snippets/pending_elevation.html" %}
 
-      <p>{% blocktranslate %}To safeguard the security of your account, please enter your
-        password:{% endblocktranslate %}</p>
+      <p>{% blocktranslate %}To safeguard the security of your account, please enter an
+        authenticator code or recovery code:{% endblocktranslate %}</p>
 
-      <form class="reauthenticate mt-6 space-y-6" method="post" action="{% url 'account_reauthenticate' %}">
+      <form class="mt-6 space-y-6" method="post" action="{% url 'mfa_reauthenticate' %}">
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% render_form_fields form %}
