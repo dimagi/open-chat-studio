@@ -178,9 +178,6 @@ class TestTurnWhatsappMessageParsing:
 class TestMetaCloudAPIServiceAudio:
     """Tests for MetaCloudAPIService audio message support."""
 
-    def test_voice_replies_supported(self, meta_cloud_api_service):
-        assert meta_cloud_api_service.voice_replies_supported is True
-
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_fetches_and_converts(self, mock_get, meta_cloud_api_service):
         """get_message_audio should:

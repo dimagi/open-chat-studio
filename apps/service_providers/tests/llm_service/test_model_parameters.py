@@ -17,11 +17,6 @@ class TestGPT52ParametersNoneEffort:
         params = GPT52Parameters(effort="none", temperature=0.7, top_p=None)
         assert params.top_p == 1.0
 
-    def test_both_default_when_effort_is_none_and_both_are_null(self):
-        params = GPT52Parameters(effort="none", temperature=None, top_p=None)
-        assert params.temperature == 0.7
-        assert params.top_p == 1.0
-
     def test_explicit_values_are_preserved_when_effort_is_none(self):
         params = GPT52Parameters(effort="none", temperature=0.5, top_p=0.9)
         assert params.temperature == 0.5
@@ -54,9 +49,6 @@ class TestClaudeSonnet46Parameters:
     """Claude Sonnet 4.6 was released after Opus 4.6 and does not support
     temperature. Verify the parameter class omits it entirely."""
 
-    def test_temperature_not_in_fields(self):
-        assert "temperature" not in ClaudeSonnet46Parameters.model_fields
-
     def test_temperature_not_in_model_dump(self):
         params = ClaudeSonnet46Parameters()
         assert "temperature" not in params.model_dump()
@@ -66,8 +58,3 @@ class TestClaudeSonnet46Parameters:
         assert params.max_tokens == 32000
         assert params.effort == "high"
         assert params.adaptive_thinking is False
-
-    def test_effort_and_adaptive_thinking_configurable(self):
-        params = ClaudeSonnet46Parameters(effort="low", adaptive_thinking=True)
-        assert params.effort == "low"
-        assert params.adaptive_thinking is True

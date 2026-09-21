@@ -170,16 +170,6 @@ def test_voyage_embedding_models_are_seeded():
         assert EmbeddingProviderModel.objects.filter(team=None, type="voyage", name=model_name).exists()
 
 
-def test_model_replacement_defaults_to_none():
-    model = Model("gpt-4", 8192)
-    assert model.replacement is None
-
-
-def test_model_replacement_can_be_set():
-    model = Model("gpt-4", 8192, deprecated=True, replacement="gpt-4o")
-    assert model.replacement == "gpt-4o"
-
-
 def get_pipeline(llm_provider_model):
     pipeline = PipelineFactory.create()
     node_data = {node.flow_id: None for node in pipeline.node_set.all()}

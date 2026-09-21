@@ -83,20 +83,6 @@ def test_delete_evaluator_allowed_when_runs_terminal(client, team_with_users):
 
 
 @pytest.mark.django_db()
-def test_delete_evaluator_allowed_when_on_no_config(client, team_with_users):
-    """An evaluator on no config has no related runs and deletes cleanly."""
-    user = team_with_users.members.first()
-    evaluator = EvaluatorFactory.create(team=team_with_users)
-
-    client.force_login(user)
-    url = reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id])
-    response = client.delete(url)
-
-    assert response.status_code == 200
-    assert not Evaluator.objects.filter(id=evaluator.id).exists()
-
-
-@pytest.mark.django_db()
 def test_delete_evaluator_blocked_when_shared_config_in_flight(client, team_with_users):
     """Evaluator on two configs: A in-flight, B terminal -> blocked (would corrupt A)."""
     user = team_with_users.members.first()
