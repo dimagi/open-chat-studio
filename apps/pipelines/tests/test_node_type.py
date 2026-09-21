@@ -6,7 +6,12 @@ resource lookup carries a ``django_db`` marker.
 
 import pytest
 
-from apps.pipelines.node_type import NodeType, NoOutputHandles, server_managed_node_types
+from apps.pipelines.node_type import (
+    NodeType,
+    NoOutputHandles,
+    node_types_declaring,
+    server_managed_node_types,
+)
 from apps.pipelines.tests.utils import NON_NODE_ATTRIBUTES
 from apps.pipelines.versioning import ParamVersioning
 
@@ -38,8 +43,15 @@ class TestNullObject:
         assert unresolvable.node_class is None
         assert unresolvable.declared_params == frozenset()
         assert unresolvable.declares("name") is False
+        assert unresolvable.declared_field("name") is None
+        assert unresolvable.default_params() == {}
         assert unresolvable.schema is None
+        assert unresolvable.is_router is False
+        assert unresolvable.label == node_type
+        assert unresolvable.reserved_name is None
+        assert unresolvable.dispatches_own_edges is False
         assert unresolvable.is_server_managed is False
+        assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
         assert unresolvable.output_handles({"name": "odd"}, "odd-1") == []
         assert unresolvable.why_no_output_handles() is NoOutputHandles.UNKNOWN_TYPE
@@ -65,6 +77,68 @@ class TestDeclaredParams:
         declared = NodeType("LLMResponseWithPrompt").declared_params
         assert {"name", "llm_provider_id", "prompt"} <= declared
 
+    @pytest.mark.parametrize(
+        ("param_name", "expected"),
+        [
+            pytest.param("prompt", {"LLMResponseWithPrompt", "RouterNode"}, id="two-types"),
+            pytest.param("custom_actions", {"LLMResponseWithPrompt"}, id="one-type"),
+            pytest.param("no_such_param", set(), id="no-type"),
+        ],
+    )
+    def test_node_types_declaring_is_exactly_the_types_that_declare_it(self, param_name, expected):
+        assert node_types_declaring(param_name) == expected
+
+    def test_node_types_declaring_agrees_with_declares(self):
+        """The set a SQL caller filters on and the per-type answer cannot disagree."""
+        for node_type in node_types_declaring("prompt"):
+            assert NodeType(node_type).declares("prompt") is True
+
+
+class TestIsRouter:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("RouterNode", True, id="llm-router"),
+            pytest.param("StaticRouterNode", True, id="static-router"),
+            pytest.param("BooleanNode", True, id="boolean-router"),
+            pytest.param("LLMResponseWithPrompt", False, id="plain-node"),
+            pytest.param("EndNode", False, id="terminal"),
+            pytest.param("GhostNode", False, id="unknown-type"),
+        ],
+    )
+    def test_only_router_types_branch(self, node_type, expected):
+        assert NodeType(node_type).is_router is expected
+
+
+class TestDeclaredField:
+    def test_a_declared_param_carries_its_field(self):
+        field = NodeType("StaticRouterNode").declared_field("keywords")
+        assert field is not None
+        assert field.annotation is not None
+
+    @pytest.mark.parametrize(
+        ("node_type", "param_name"),
+        [
+            pytest.param("LLMResponseWithPrompt", "route_key", id="not-declared"),
+            pytest.param("GhostNode", "name", id="unknown-type"),
+        ],
+    )
+    def test_anything_else_has_no_field(self, node_type, param_name):
+        assert NodeType(node_type).declared_field(param_name) is None
+
+
+class TestDefaultParams:
+    def test_defaults_cover_the_optional_params_and_leave_out_the_required_ones(self):
+        defaults = NodeType("StaticRouterNode").default_params()
+
+        assert "keywords" in defaults
+        # `route_key` is required, so there is no value to start a new node from.
+        assert "route_key" not in defaults
+
+    def test_every_default_is_a_param_the_type_declares(self):
+        node_type = NodeType("LLMResponseWithPrompt")
+        assert set(node_type.default_params()) <= node_type.declared_params
+
 
 class TestSchema:
     def test_a_node_type_carries_its_ui_schema(self):
@@ -85,6 +159,58 @@ class TestSchema:
 
     def test_server_managed_node_types_is_exactly_the_types_that_report_it(self):
         assert server_managed_node_types() == {"StartNode", "EndNode"}
+
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", True, id="server-managed"),
+            pytest.param("EndNode", True, id="server-managed-too"),
+            pytest.param("Passthrough", True, id="deletable-but-never-offered"),
+            pytest.param("LLMResponseWithPrompt", False, id="on-offer"),
+            pytest.param("BooleanNode", False, id="deprecated-is-on-its-way-out-not-withheld"),
+            pytest.param("AssistantNode", False, id="removed-names-no-class"),
+        ],
+    )
+    def test_is_structural_follows_can_add(self, node_type, expected):
+        assert NodeType(node_type).is_structural is expected
+
+
+class TestLabel:
+    def test_a_resolvable_type_reports_its_schema_label(self):
+        assert NodeType("StartNode").label == "Start"
+        assert NodeType("EndNode").label == "End"
+
+    def test_an_unresolvable_type_names_itself(self):
+        """A caller putting the label in a build error still has to name something."""
+        assert NodeType("GhostNode").label == "GhostNode"
+
+
+class TestReservedName:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("StartNode", "start", id="start"),
+            pytest.param("EndNode", "end", id="end"),
+            pytest.param("LLMResponseWithPrompt", None, id="params-decide"),
+            pytest.param("GhostNode", None, id="unknown-type"),
+        ],
+    )
+    def test_only_the_server_owned_types_fix_their_name(self, node_type, expected):
+        assert NodeType(node_type).reserved_name == expected
+
+
+class TestRoutesItself:
+    @pytest.mark.parametrize(
+        ("node_type", "expected"),
+        [
+            pytest.param("CodeNode", True, id="code"),
+            pytest.param("RouterNode", False, id="router-is-wired-conditionally"),
+            pytest.param("LLMResponseWithPrompt", False, id="plain-node"),
+            pytest.param("GhostNode", False, id="unknown-type"),
+        ],
+    )
+    def test_only_code_dispatches_its_own_edges(self, node_type, expected):
+        assert NodeType(node_type).dispatches_own_edges is expected
 
 
 class TestReactFlowType:

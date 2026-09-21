@@ -1862,15 +1862,8 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            LLMResponseWithPrompt,
-            RouterNode,
-        )
-
         if self.experiment.pipeline:
-            llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
-            router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
-            prompts = llm_prompts + router_prompts
+            prompts = self.experiment.pipeline.get_node_param_values(param_name="prompt")
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
         return False
 

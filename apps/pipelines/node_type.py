@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, cast
 import pydantic
 
 from apps.pipelines.const import (
+    CODE_NODE_TYPE,
     END_NODE_TYPE,
     REACT_FLOW_END_TYPE,
     REACT_FLOW_NODE_TYPE,
@@ -35,6 +36,8 @@ from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 
 if TYPE_CHECKING:
+    from pydantic.fields import FieldInfo
+
     from apps.pipelines.models import Node
     from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 
@@ -82,6 +85,30 @@ class NodeType:
         """Whether this type declares ``param_name`` as a param."""
         return param_name in self.declared_params
 
+    def declared_field(self, param_name: str) -> "FieldInfo | None":
+        """What this type declares *about* ``param_name`` -- its annotation, default and exclusions.
+
+        ``None`` where :meth:`declares` is false, so a caller reading one param's declaration asks
+        here rather than reaching into the node class for its fields.
+        """
+        node_class = self.node_class
+        return node_class.model_fields.get(param_name) if node_class is not None else None
+
+    def default_params(self) -> dict:
+        """The params a new node of this type starts with: every declared param that has a default.
+
+        Required params are left out -- they have no value to start from, and the caller supplies
+        them. An unresolvable type starts with none.
+        """
+        node_class = self.node_class
+        if node_class is None:
+            return {}
+        return {
+            name: field.get_default(call_default_factory=True)
+            for name, field in node_class.model_fields.items()
+            if not field.is_required()
+        }
+
     @property
     def schema(self) -> "NodeSchema | None":
         """This type's ``NodeSchema`` -- its display label, and whether it can be added or deleted."""
@@ -102,6 +129,59 @@ class NodeType:
         """
         schema = self.schema
         return schema is not None and not schema.can_delete
+
+    @property
+    def is_router(self) -> bool:
+        """Whether nodes of this type branch: one output handle per branch rather than one output.
+
+        A type naming no node class reports ``False`` -- its handles are unknowable either way, and
+        :meth:`output_handles` already answers ``[]`` for it.
+        """
+        node_class = self.node_class
+        return node_class is not None and issubclass(node_class, _nodes_base().PipelineRouterNode)
+
+    @property
+    def is_structural(self) -> bool:
+        """Whether this is a live type the builder does not offer in its node picker.
+
+        ``can_add`` is the builder's own flag, read as ``is_server_managed`` reads ``can_delete``.
+        Deprecated types are excluded because ``NodeSchema`` clears ``can_add`` for them too, and a
+        type on its way out is not the same as one that was never on offer. A type naming no node
+        class reports ``False``: it is not withheld, it is simply not a type.
+        """
+        schema = self.schema
+        return schema is not None and not schema.can_add and not schema.deprecated
+
+    @property
+    def label(self) -> str:
+        """This type's display label -- what the editor calls it.
+
+        A type naming no node class has none and answers with the type string: a caller putting a
+        label in a message still has to name something.
+        """
+        schema = self.schema
+        return schema.label if schema is not None else self.type
+
+    @property
+    def reserved_name(self) -> str | None:
+        """The name every node of this type runs under, or ``None`` where the node's params decide.
+
+        Start and End are the two: the server creates them, there is never more than one, and their
+        ``name`` field carries the fixed value as its default. Read off that default so the two
+        cannot drift apart.
+        """
+        node_class = self.node_class
+        if node_class is None:
+            return None
+        field = node_class.model_fields.get("name")
+        if field is None or field.is_required():
+            return None
+        return field.get_default()
+
+    @property
+    def dispatches_own_edges(self) -> bool:
+        """Whether nodes of this type schedule their outgoing edges themselves, so the graph leaves them out."""
+        return self.type == CODE_NODE_TYPE
 
     @property
     def react_flow_type(self) -> str:
@@ -149,7 +229,7 @@ class NodeType:
             # A type naming no node class (removed since, or never one): validation reports it; we can't
             # know its handles.
             return []
-        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+        if self.is_router:
             output_map = _router_output_map(node_class, params, node_id, django_node)
             return [{"handle": handle, "label": label} for handle, label in output_map.items()]
         return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
@@ -165,7 +245,7 @@ class NodeType:
         node_class = self.node_class
         if node_class is None:
             return NoOutputHandles.UNKNOWN_TYPE
-        if issubclass(node_class, _nodes_base().PipelineRouterNode):
+        if self.is_router:
             return NoOutputHandles.NO_BRANCHES
         return NoOutputHandles.UNDETERMINED
 
@@ -181,6 +261,20 @@ def server_managed_node_types() -> frozenset[str]:
     from apps.pipelines.nodes.node_metadata import get_node_schemas  # noqa: PLC0415 - heavy: nodes→langgraph
 
     return frozenset(schema["title"] for schema in get_node_schemas() if not schema.get("ui:can_delete"))
+
+
+@cache
+def node_types_declaring(param_name: str) -> frozenset[str]:
+    """Every type whose :attr:`NodeType.declared_params` includes ``param_name``, for a caller that
+    needs the set in SQL -- ``Node.objects.filter(type__in=...)``.
+
+    Derived from the node classes rather than listed, as :func:`server_managed_node_types` is, so a
+    type that gains or loses the param cannot leave a hand-written list behind. Memoised because the
+    declarations are static per deploy.
+    """
+    from apps.pipelines.nodes.node_metadata import get_node_schemas  # noqa: PLC0415 - heavy: nodes→langgraph
+
+    return frozenset(schema["title"] for schema in get_node_schemas() if NodeType(schema["title"]).declares(param_name))
 
 
 def _nodes_base():

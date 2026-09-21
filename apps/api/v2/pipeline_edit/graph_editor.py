@@ -1,22 +1,24 @@
 """Turning a node request body into the graph edit that carries it out (#4140)."""
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
 
-from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
+from apps.api.v2.discovery.node_types import get_node_type_schema, served_node_type
 from apps.pipelines.const import REACT_FLOW_END_TYPE
 from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
 from apps.pipelines.node_type import NodeType
-from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
 from apps.teams.models import Team
 
 from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
 from .node_params import node_params, writable_params
 from .references import check_references
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.base import NodeSchema
 
 #: A node's output handles as ``{handle: branch label}``. The label is ``None`` for the single
 #: standard output, and a router's branch keyword otherwise.
@@ -46,10 +48,9 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
     the request body, so nothing here has to wait on the graph.
     """
     # The types the `pipeline_node_list` endpoint serves are exactly the resolvable node classes,
-    # and `get_node_type_schema` has already refused any other name, so neither of these can come
-    # back None. Both casts drop that `| None` and nothing else.
+    # and `get_node_type_schema` has already refused any other name, so this cannot come back None.
+    # The cast drops that `| None` and nothing else.
     resolved = NodeType(node_type)
-    node_class = cast("type[BasePipelineNode]", resolved.node_class)
     schema = cast("NodeSchema", resolved.schema)
     node_id = _unused_node_id(flow, node_type)
     position = parking_position(flow)
@@ -61,7 +62,7 @@ def plan_create(flow: Flow, node_type: str, label: str | None, params: dict[str,
             id=node_id,
             type=node_type,
             label=label if label is not None else schema.label,
-            params=initial_params(node_class, node_id, params),
+            params=initial_params(resolved, node_id, params),
         ),
     )
     end_nodes = _reparked_end_nodes(flow, position["x"])
@@ -82,10 +83,10 @@ def plan_update(flow: Flow, team: Team, node_id: str, label: str | None, params:
     if params:
         # 404s a type the API does not publish. Only when there are params to write: renaming a
         # node of such a type is not something the API has to withhold.
-        node_class = get_node_class(content.type)
-        params = writable_params(node_class, params)
-        check_references(team, node_class, params)
-        content.params = node_params(node_class, node_id, {**stored_params(content), **params})
+        node_type = served_node_type(content.type)
+        params = writable_params(node_type, params)
+        check_references(team, node_type, params)
+        content.params = node_params(node_type, node_id, {**stored_params(content), **params})
     else:
         # Drops the resource-id mirror `to_flow_node` merged in; normalising here would write every
         # default to a row nobody asked to change.
@@ -160,7 +161,7 @@ def settable_params(node: Node) -> dict[str, Any]:
     return {name: value for name, value in params.items() if name in node_type_schema["schema"]["properties"]}
 
 
-def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: dict[str, Any]) -> dict[str, Any]:
+def initial_params(node_type: NodeType, node_id: str, supplied: dict[str, Any]) -> dict[str, Any]:
     """The params a new node starts life with: the type's defaults, then what the client sent.
 
     The defaults are written to the row rather than only reported -- ``update_nodes_from_data``
@@ -168,12 +169,7 @@ def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: d
     required and has no default, so the server supplies the node id, as the UI builder does. Run
     through the model on the way out, so a create and a later PATCH of one value store the same thing.
     """
-    defaults = {
-        field_name: field.get_default(call_default_factory=True)
-        for field_name, field in node_class.model_fields.items()
-        if not field.is_required()
-    }
-    return node_params(node_class, node_id, {**defaults, "name": node_id, **supplied})
+    return node_params(node_type, node_id, {**node_type.default_params(), "name": node_id, **supplied})
 
 
 def parking_position(flow: Flow) -> dict:
