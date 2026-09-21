@@ -129,6 +129,15 @@ export function getCanAddNodeSchemas(): JsonSchema[] {
 }
 
 /**
+ * Whether a node of this type renders one output handle per branch (`output_0`, `output_1`, …)
+ * rather than the single unlabeled `output` handle every other type offers. Shared so
+ * `NodeOutputs` and anything rewiring an edge onto a node's first output handle agree.
+ */
+export function nodeHasMultipleOutputs(nodeType: string): boolean {
+  return nodeType === "RouterNode" || nodeType === "BooleanNode" || nodeType === "StaticRouterNode";
+}
+
+/**
  * Coerce a node param to a string. Takes `unknown` because node params are backend-supplied
  * JSON with no compile-time shape -- see `NodeParams`.
  */

@@ -1,6 +1,8 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from "vitest";
 import {Edge, Node} from "reactflow";
 import usePipelineStore, {withTemporalPaused} from "./pipelineStore";
+import useEditorStore from "./editorStore";
+import {NodeData} from "../types/nodeParams";
 
 const nodeA: Node = {id: "a", type: "pipelineNode", position: {x: 0, y: 0}, data: {type: "LLMResponse", params: {}}};
 const nodeB: Node = {id: "b", type: "pipelineNode", position: {x: 100, y: 0}, data: {type: "LLMResponse", params: {}}};
@@ -206,6 +208,120 @@ describe("pipelineStore undo/redo", () => {
     usePipelineStore.setState({readOnly: true});
 
     usePipelineStore.getState().redoLastChange();
+
+    expect(usePipelineStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("pipelineStore changeNodeType", () => {
+  const plainData: NodeData = {type: "StaticRouterNode", label: "Router", params: {name: "b", keywords: ["a"]}};
+  const routerData: NodeData = {type: "StaticRouterNode", label: "Router", params: {name: "a"}};
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    seed();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("replaces the node with a fresh id at the same position, carrying the new data", () => {
+    usePipelineStore.getState().changeNodeType("b", plainData);
+    flushThrottle();
+
+    const remaining = usePipelineStore.getState().nodes.filter((n) => n.id !== "a");
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].id).not.toBe("b");
+    expect(remaining[0].position).toEqual(nodeB.position);
+    expect(remaining[0].data).toEqual(plainData);
+  });
+
+  test("reconnects the incoming edge to the new node", () => {
+    usePipelineStore.getState().changeNodeType("b", plainData);
+    flushThrottle();
+
+    const newId = usePipelineStore.getState().nodes.find((n) => n.id !== "a")!.id;
+    expect(usePipelineStore.getState().edges).toEqual([
+      expect.objectContaining({source: "a", target: newId}),
+    ]);
+  });
+
+  test("reconnects an outgoing edge to the new node's single output handle", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [{...nodeA, data: routerData}, nodeB],
+      edges: [{id: "a-b", source: "a", target: "b", sourceHandle: "output_0"}],
+    });
+
+    usePipelineStore.getState().changeNodeType("a", {type: "LLMResponse", label: "LLM", params: {name: "a"}});
+    flushThrottle();
+
+    const newId = usePipelineStore.getState().nodes.find((n) => n.id !== "b")!.id;
+    expect(usePipelineStore.getState().edges).toEqual([
+      expect.objectContaining({source: newId, target: "b", sourceHandle: "output"}),
+    ]);
+  });
+
+  test("reconnects an outgoing edge to output_0 when the new type has multiple outputs", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [{...nodeA, data: {type: "LLMResponse", label: "LLM", params: {name: "a"}}}, nodeB],
+      edges: [{id: "a-b", source: "a", target: "b", sourceHandle: "output"}],
+    });
+
+    usePipelineStore.getState().changeNodeType("a", routerData);
+    flushThrottle();
+
+    const newId = usePipelineStore.getState().nodes.find((n) => n.id !== "b")!.id;
+    expect(usePipelineStore.getState().edges).toEqual([
+      expect.objectContaining({source: newId, target: "b", sourceHandle: "output_0"}),
+    ]);
+  });
+
+  // #1452: a router with more than one wired branch keeps only its first outgoing connection --
+  // the same as every type change already does today for every branch past the first.
+  test("drops every outgoing edge but the first when the old node had more than one", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [{...nodeA, data: routerData}, nodeB, {id: "c", type: "pipelineNode", position: {x: 200, y: 0}, data: {type: "LLMResponse", params: {}}}],
+      edges: [
+        {id: "a-b", source: "a", target: "b", sourceHandle: "output_0"},
+        {id: "a-c", source: "a", target: "c", sourceHandle: "output_1"},
+      ],
+    });
+
+    usePipelineStore.getState().changeNodeType("a", {type: "LLMResponse", label: "LLM", params: {name: "a"}});
+    flushThrottle();
+
+    const newId = usePipelineStore.getState().nodes.find((n) => n.id !== "b" && n.id !== "c")!.id;
+    expect(usePipelineStore.getState().edges).toEqual([
+      expect.objectContaining({source: newId, target: "b"}),
+    ]);
+  });
+
+  test("closes the editor, same as deleteNode", () => {
+    useEditorStore.getState().openEditorForNode({id: "b", data: nodeB.data} as never);
+
+    usePipelineStore.getState().changeNodeType("b", plainData);
+    flushThrottle();
+
+    expect(useEditorStore.getState().currentNode).toBeNull();
+  });
+
+  test("undo restores the original node and edge in one step", () => {
+    usePipelineStore.getState().changeNodeType("b", plainData);
+    flushThrottle();
+
+    usePipelineStore.temporal.getState().undo();
+
+    expect(usePipelineStore.getState().nodes).toEqual(
+      expect.arrayContaining([expect.objectContaining({id: "b", data: nodeB.data})]),
+    );
+    expect(usePipelineStore.getState().edges).toEqual([edgeAB]);
+  });
+
+  test("does nothing in read-only mode", () => {
+    usePipelineStore.setState({readOnly: true});
+
+    usePipelineStore.getState().changeNodeType("b", plainData);
 
     expect(usePipelineStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
   });

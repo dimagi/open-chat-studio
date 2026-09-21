@@ -1,4 +1,4 @@
-import {Node, NodeProps, NodeToolbar, Position, useUpdateNodeInternals} from "reactflow";
+import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent, MouseEvent, useMemo} from "react";
 import {buildTypeChangeParams, concatenate, formatDocsForSchema, getCachedData, getCanAddNodeSchemas, nodeBorderClass} from "./utils";
 import usePipelineStore from "./stores/pipelineStore";
@@ -29,13 +29,13 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
   const openEditorForNode = useEditorStore((state) => state.openEditorForNode)
   const setNode = usePipelineStore((state) => state.setNode);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
+  const changeNodeTypeAction = usePipelineStore((state) => state.changeNodeType);
   const hasErrors = usePipelineStore((state) => state.nodeHasErrors(id));
   const nodeError = usePipelineStore((state) => state.getNodeFieldError(id, "root"));
   const getNodeFieldError = usePipelineStore((state) => state.getNodeFieldError);
   const deprecatedModel = usePipelineStore((state) => state.getNodeDeprecatedModel(id));
   const readOnly = usePipelineStore((state) => state.readOnly);
   const nodeSchema = getCachedData().nodeSchemas.get(data.type)!;
-  const updateNodeInternals = useUpdateNodeInternals();
 
   const updateParamValue = (
     event: ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>,
@@ -73,13 +73,15 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
     [canBeChangeTypeSource, data.type]
   );
 
+  // Swapping a node's type is a delete-and-recreate under the hood (#1452): a type change can
+  // move or drop the node's handles arbitrarily, and reusing the delete/add machinery every
+  // other edit already goes through is safer than hand-rolling a second way to reconcile edges.
   const changeNodeType = (newSchema: JsonSchema) => {
-    setNode(id, produce((next) => {
-      next.data.type = newSchema.title;
-      next.data.label = newSchema["ui:label"];
-      next.data.params = buildTypeChangeParams(newSchema, next.data.params);
-    }));
-    updateNodeInternals(id);
+    changeNodeTypeAction(id, {
+      type: newSchema.title,
+      label: newSchema["ui:label"],
+      params: buildTypeChangeParams(newSchema, data.params),
+    });
   };
 
   const currentColor = concatenate(data.params["color"]) || NODE_COLORS[0].value;

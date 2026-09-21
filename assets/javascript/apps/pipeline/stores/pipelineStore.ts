@@ -13,7 +13,7 @@ import {shallow} from "zustand/shallow";
 import {temporal} from "zundo";
 import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
-import {getNodeId} from "../utils";
+import {getNodeId, nodeHasMultipleOutputs} from "../utils";
 import cloneDeep from "lodash/cloneDeep";
 import throttle from "lodash/throttle";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
@@ -294,6 +294,38 @@ const createPipelineStore: StateCreator<
       .map((node) => ({...node, selected: false}))
       .concat({...newNode, selected: false});
     get().setNodes(newNodes);
+  },
+  changeNodeType: (nodeId, newData) => {
+    if (get().readOnly) return;
+    const oldNode = get().nodes.find((node) => node.id === nodeId);
+    if (!oldNode) return;
+
+    useEditorStore.getState().closeEditor();
+
+    const connectedEdges = getConnectedEdges([oldNode], get().edges);
+    const incoming = connectedEdges.find((edge) => edge.target === nodeId);
+    // Only the first: a router with more than one wired branch has nowhere defensible to put
+    // the rest once its branches are gone, same as every other type change today (#1452).
+    const outgoing = connectedEdges.find((edge) => edge.source === nodeId);
+
+    const newId = getNodeId(newData.type);
+    const newNode: Node = {...oldNode, id: newId, data: newData};
+
+    const remainingNodes = get().nodes.filter((node) => node.id !== nodeId);
+    const remainingEdges = get().edges.filter((edge) => !connectedEdges.includes(edge));
+    const newEdges: Edge[] = [...remainingEdges];
+    if (incoming) {
+      newEdges.push({...incoming, id: `${incoming.id}-${newId}`, target: newId, targetHandle: undefined});
+    }
+    if (outgoing) {
+      const sourceHandle = nodeHasMultipleOutputs(newData.type) ? "output_0" : "output";
+      newEdges.push({...outgoing, id: `${newId}-${outgoing.id}`, source: newId, sourceHandle});
+    }
+
+    // One set() call, same reasoning as deleteNode: this is one user action, so it must be one
+    // undo step and one autosave, not a broken intermediate state in between.
+    set({nodes: [...remainingNodes, newNode], edges: newEdges});
+    get().autoSaveCurrentPipline();
   },
   resetFlow: ({nodes, edges}) => {
     // Loading or reloading a pipeline is not a user edit — don't let it become an undo step.

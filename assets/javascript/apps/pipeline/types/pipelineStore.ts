@@ -28,6 +28,12 @@ export type PipelineStoreType = {
   setNode: (id: string, update: Node | ((oldState: Node) => Node)) => void;
   getNode: (id: string) => Node | undefined;
   deleteNode: (nodeId: string | Array<string>) => void;
+  /**
+   * Swaps `nodeId` for a fresh node carrying `newData` (#1452): deletes the old node and its
+   * edges, adds a new one at the same position, and reconnects its source/first target -- all
+   * in one store update, so it is one undo step and one autosave, matching `deleteNode`.
+   */
+  changeNodeType: (nodeId: string, newData: NodeData) => void;
   deleteEdge: (edgeId: string | Array<string>) => void;
   onConnect: (connection: Connection) => void;
   addNode: (

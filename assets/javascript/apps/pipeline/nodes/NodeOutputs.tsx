@@ -2,11 +2,12 @@ import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
 import {LabeledHandle} from "./LabeledHandle";
+import {nodeHasMultipleOutputs} from "../utils";
 
 export default function NodeOutputs({data}: {
   data: NodeData,
 }) {
-  const multipleOutputs = data.type === "RouterNode" || data.type === "BooleanNode" || data.type == "StaticRouterNode";
+  const multipleOutputs = nodeHasMultipleOutputs(data.type);
   const outputNames = getOutputNames(data.type, data.params);
   const generateOutputHandle = (outputIndex: number) => {
     return multipleOutputs ? `output_${outputIndex}` : "output";
