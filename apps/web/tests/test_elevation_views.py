@@ -86,6 +86,18 @@ def test_the_prompt_names_no_grant_outside_an_elevation(superuser, authed_client
 
 
 @pytest.mark.django_db()
+def test_the_prompt_names_no_grant_once_the_request_has_gone_stale(team, superuser, authed_client):
+    """`complete_elevation` would refuse it, so the prompt must not offer it."""
+    with travel(datetime.datetime.now(), tick=False) as freezer:
+        authed_client.get(reverse("web:elevate_team", args=[team.slug]))
+
+        freezer.shift(datetime.timedelta(seconds=STASH_MAX_AGE + 1))
+        content = authed_client.get(REAUTH_URL).content.decode()
+
+    assert f"Team &quot;{team.slug}&quot;" not in content
+
+
+@pytest.mark.django_db()
 def test_acquire_for_invalid_team(superuser, authed_client):
     response = authed_client.get(reverse("web:elevate_team", args=["invalid-team"]))
     assert response.status_code == 404

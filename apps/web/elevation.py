@@ -195,6 +195,10 @@ def _now() -> int:
     return int(timezone.now().timestamp())
 
 
+def _is_stale(state: dict) -> bool:
+    return _now() - state.get("at", 0) > STASH_MAX_AGE
+
+
 def safe_redirect_url(url: str) -> str:
     """Where to send the user once they are done here, falling back to the site root."""
     if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
@@ -222,10 +226,14 @@ def pending_elevation(request) -> Grant | None:
     stash = request.session.get(flows.reauthentication.STATE_SESSION_KEY) or {}
     if stash.get("callback") != REAUTH_CALLBACK:
         return None
+    state = stash.get("state") or {}
     try:
-        return Grant.parse(stash["state"]["grant"])
+        grant = Grant.parse(state["grant"])
     except (InvalidGrant, KeyError, TypeError):
         return None
+
+    # Naming a request `complete_elevation` will refuse would promise access the user cannot get.
+    return None if _is_stale(state) else grant
 
 
 def complete_elevation(request, state: dict):
@@ -236,7 +244,7 @@ def complete_elevation(request, state: dict):
         logger.warning(f"Discarding elevation of '{request.user.email}': unknown grant {state.get('grant')!r}")
         return HttpResponseRedirect("/")
 
-    if _now() - state.get("at", 0) > STASH_MAX_AGE:
+    if _is_stale(state):
         logger.warning(f"Discarding stale elevation request of '{request.user.email}' to '{grant}'")
         messages.error(request, "That request for elevated access expired. Please try again.")
         return HttpResponseRedirect("/")
