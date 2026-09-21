@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Remove o4-mini-high for the `openai` provider
+        # Remove openai/o4-mini-high and groq/whisper-large-v3-turbo
         llm_model_migration(),
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
     ]

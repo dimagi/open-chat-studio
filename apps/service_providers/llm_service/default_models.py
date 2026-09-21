@@ -114,7 +114,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
     ],
     "groq": [
-        Model("whisper-large-v3-turbo", k(8)),
         # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
         # siblings use.
         Model("qwen/qwen3.8-27b", 131042),
@@ -221,6 +220,9 @@ DELETED_MODELS = [
     ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
     # Groq
     ("groq", "whisper-large-v3"),
+    # Speech-to-text, billed per audio-hour: it has no token rates and cannot serve a chat
+    # request, so any reference to it is already broken. References move to the Groq default.
+    ("groq", "whisper-large-v3-turbo", "openai/gpt-oss-120b"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
     ("groq", "llama3-groq-8b-8192-tool-use-preview"),
     ("groq", "llama-3.1-70b-versatile"),
