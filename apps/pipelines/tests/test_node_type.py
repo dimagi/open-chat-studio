@@ -167,6 +167,15 @@ class TestOutputHandles:
             {"handle": "output_1", "label": "B"},
         ]
 
+    def test_router_with_none_keywords_reports_no_handles(self):
+        # An older client, a raw import, or any other caller that predates the frontend's own
+        # empty-list default for `keywords` can still send an explicit `None` rather than a
+        # missing key. route_key is also missing here, so full validation fails and falls back
+        # to the unvalidated instance -- which must treat None the same as "no keywords yet",
+        # not enumerate() it directly.
+        params = {"name": "router", "keywords": None}
+        assert NodeType("StaticRouterNode").output_handles(params, "router-1") == []
+
     def test_boolean_node_handles_are_static(self):
         params = {"name": "bool", "input_equals": "hi"}
         assert NodeType("BooleanNode").output_handles(params, "bool-1") == [

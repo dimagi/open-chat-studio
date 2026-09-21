@@ -211,7 +211,9 @@ def _router_output_map(
         instance = node_class.model_validate({**params, "node_id": node_id, "django_node": django_node})
     except (pydantic.ValidationError, PipelineNodeBuildError):
         fallback = dict(params)
-        if isinstance(fallback.get("keywords"), list):
-            fallback["keywords"] = [str(keyword).upper() for keyword in fallback["keywords"]]
+        # A missing key and an explicit `None` both mean "no keywords yet" -- `or []` covers both,
+        # unlike `dict.get(key, default)`, which only covers the missing-key case.
+        keywords = fallback.get("keywords") or []
+        fallback["keywords"] = [str(keyword).upper() for keyword in keywords]
         instance = node_class.model_construct(**fallback)
     return instance.get_output_map()
