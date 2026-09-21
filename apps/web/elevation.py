@@ -23,9 +23,10 @@ MAX_CONCURRENT_ELEVATIONS = 5
 
 REAUTH_CALLBACK = "apps.web.elevation.complete_elevation"
 
-# Marker attribute stamped on views wrapped by `requires_elevation`, so the architecture
-# guard can tell a gated view from an ungated one — `functools.wraps` otherwise hides the
-# decorator identity.
+# Marker attribute stamped on views wrapped by `requires_elevation`. Nothing reads it yet;
+# it is what the architecture guard over the admin surfaces will key off, the way
+# `apps/teams/tests/test_view_auth_guard.py` keys off `ENFORCES_TEAM_AUTH_ATTR`.
+# `functools.wraps` hides the decorator identity, so the attribute is the only signal.
 ENFORCES_ELEVATION_ATTR = "enforces_elevation"
 
 #: How long a stashed elevation request stays valid. allauth keeps the stash in the session
