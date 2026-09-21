@@ -21,6 +21,8 @@ from django.db.models import (
     Case,
     Count,
     F,
+    Max,
+    Min,
     OuterRef,
     Q,
     Subquery,
@@ -46,6 +48,11 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
+from apps.utils.deletion import (
+    get_related_experiment_versions_queryset,
+    get_related_pipeline_nodes_queryset,
+    has_related_pipeline_references,
+)
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.utils.time import seconds_to_human
@@ -85,6 +92,9 @@ class VersionFieldDisplayFormatters:
             if static_trigger.trigger_type == "TimeoutTrigger":
                 seconds = seconds_to_human(static_trigger.delay)
                 string = f"{string} no response for {seconds}"
+            elif static_trigger.trigger_type == "ScheduledTrigger":
+                scheduled = f"{static_trigger.trigger_date} {static_trigger.trigger_time} ({static_trigger.timezone})"
+                string = f"{string} {scheduled}"
             else:
                 string = f"{string} {static_trigger.get_type_display().lower()}"
             trigger_action = static_trigger.action.get_action_type_display().lower()
@@ -185,6 +195,20 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
+    def get_related_nodes_queryset(self) -> models.QuerySet:
+        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+
+    def get_related_experiments_queryset(self) -> models.QuerySet:
+        return get_related_experiment_versions_queryset(self, "source_material_id")
+
+    @transaction.atomic()
+    def archive(self):
+        """Mirrors Collection.archive()'s in-use guard."""
+        if has_related_pipeline_references(self, "source_material_id"):
+            return False
+        super().archive()
+        return True
+
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
@@ -259,7 +283,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default"]
+        return [*super().get_fields_to_exclude(), "is_default"]
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -449,7 +473,7 @@ class AgentTools(models.TextChoices):
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return cast(
-            list[Self],
+            "list[Self]",
             [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
         )
 
@@ -666,7 +690,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @property
     def event_triggers(self):
-        return [*self.timeout_triggers.all(), *self.static_triggers.all()]
+        return [*self.timeout_triggers.all(), *self.static_triggers.all(), *self.scheduled_triggers.all()]
 
     @property
     def version_display(self) -> str:
@@ -823,6 +847,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
+        return None
 
     def get_api_url(self):
         if self.is_working_version:
@@ -948,7 +973,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
+        return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
     def archive(self):
@@ -958,6 +983,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
+        self.scheduled_triggers.update(is_archived=True)
 
         if self.is_working_version:
             self.delete_experiment_channels()
@@ -973,6 +999,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
+        self.scheduled_triggers.get_all().update(is_archived=False)
         # Mirrors archive(), which leaves the working version's pipeline alone.
         if not self.is_working_version and self.pipeline:
             self.pipeline.unarchive()
@@ -1063,6 +1090,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Triggers",
                 name="timeout_triggers",
                 queryset=self.timeout_triggers.all(),
+                to_display=VersionFieldDisplayFormatters.format_trigger,
+            ),
+            VersionField(
+                group_name="Triggers",
+                name="scheduled_triggers",
+                queryset=self.scheduled_triggers.all(),
                 to_display=VersionFieldDisplayFormatters.format_trigger,
             ),
         ]
@@ -1170,6 +1203,11 @@ class Participant(BaseTeamModel):
             .first()
         )
 
+    def is_recently_active(self, days: int = 30) -> bool:
+        """Whether this participant has sent a message within the last `days` days."""
+        last_seen = self.last_seen()
+        return bool(last_seen and last_seen >= timezone.now() - timezone.timedelta(days=days))
+
     def get_absolute_url(self):
         return reverse("participants:single-participant-home", args=[get_slug_for_team(self.team_id), self.id])
 
@@ -1180,28 +1218,39 @@ class Participant(BaseTeamModel):
         )
         return f"{url}#{experiment.id}"
 
-    def get_experiments_for_display(self):
-        """Used by the html templates to display various stats about the participant's participation."""
-        exp_scoped_human_message = ChatMessage.objects.filter(
-            chat__experiment_session__participant=self,
-            message_type="human",
-            chat__experiment_session__experiment__id=OuterRef("id"),
-        )
-        last_message = exp_scoped_human_message.order_by("-created_at")[:1].values("created_at")
-        joined_on = self.experimentsession_set.order_by("created_at")[:1].values("created_at")
-        return (
-            self.get_experiments_queryset(include_archived=True)
-            .annotate(
-                joined_on=Subquery(joined_on),
-                last_message=Subquery(last_message),
+    def get_experiments_for_display(self) -> list[Experiment]:
+        """Used by templates to show participant stats per experiment.
+
+        Adds `joined_on` and `last_message` per `Experiment`, from `ExperimentSession.last_activity_at`
+        (raw field, not the coalesced `last_activity_expression()`, so a session with no message stays
+        `None`). Two grouped queries instead of one query joined across every chatbot session, which
+        fanned a per-row subquery out to every session, not just this participant's.
+        """
+        experiments = list(self.get_experiments_queryset(include_archived=True))
+        if not experiments:
+            return experiments
+
+        experiment_ids = [e.id for e in experiments]
+        session_stats_by_experiment = {
+            experiment_id: (joined_on, last_message)
+            for experiment_id, joined_on, last_message in (
+                self.experimentsession_set.filter(experiment_id__in=experiment_ids)
+                .values("experiment_id")
+                .annotate(joined_on=Min("created_at"), last_message=Max("last_activity_at"))
+                .values_list("experiment_id", "joined_on", "last_message")
             )
-            .distinct()
-        )
+        }
+        for experiment in experiments:
+            experiment.joined_on, experiment.last_message = session_stats_by_experiment.get(experiment.id, (None, None))
+        return experiments
 
     def get_experiments_queryset(self, include_archived=False):
         """Get the experiments that the participant has interacted with"""
+        session_experiment_ids = self.experimentsession_set.values_list("experiment_id", flat=True)
+        data_experiment_ids = self.data_set.values_list("experiment_id", flat=True)
+        experiment_ids = set(session_experiment_ids) | set(data_experiment_ids)
         query = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
-        return query.filter(Q(sessions__participant=self) | Q(id__in=Subquery(self.data_set.values("experiment"))))
+        return query.filter(id__in=experiment_ids)
 
     def get_data_for_experiment(self, experiment_id) -> dict:
         try:
@@ -1209,23 +1258,45 @@ class Participant(BaseTeamModel):
         except ParticipantData.DoesNotExist:
             return {}
 
-    def get_schedules_for_experiment(
-        self, experiment_id, as_dict=False, as_timezone: str | None = None, include_inactive=False
+    def get_schedules_for_experiments(
+        self,
+        experiment_id=None,
+        as_dict=False,
+        as_timezone: str | None = None,
+        include_inactive=False,
+        experiments: list[Experiment] | None = None,
     ):
-        """
-        Returns all scheduled messages for the associated participant for this session's experiment
+        """Scheduled messages for this participant, optionally narrowed to one experiment.
 
         Parameters:
+        experiment_id: Scope to one chatbot. Omit to aggregate across every chatbot this
+            participant has used, in which case each dict also carries `experiment` (the
+            source `Experiment` instance) so callers can render a chatbot column without a
+            second lookup.
         as_dict: If True, the data will be returned as an array of dictionaries, otherwise an an array of strings
         timezone: The timezone to use for the dates. Defaults to the active timezone.
+        experiments: Already-loaded result of `get_experiments_for_display()`, so a caller that
+            called it themselves doesn't pay for that query twice. Ignored when `experiment_id`
+            is set. Falls back to calling it here if not passed.
         """
         from apps.events.models import (  # noqa: PLC0415 - circular: events.models imports experiments.models
             ScheduledMessage,
         )
 
+        if experiment_id is not None:
+            experiment_ids = [experiment_id]
+            experiments_by_id = None
+        else:
+            if experiments is None:
+                experiments = self.get_experiments_for_display()
+            experiments_by_id = {e.id: e for e in experiments}
+            if not experiments_by_id:
+                return []
+            experiment_ids = list(experiments_by_id.keys())
+
         messages = (
             ScheduledMessage.objects.filter(
-                experiment_id=experiment_id,
+                experiment_id__in=experiment_ids,
                 participant=self,
                 team=self.team,
             )
@@ -1238,11 +1309,41 @@ class Participant(BaseTeamModel):
 
         scheduled_messages = []
         for message in messages:
-            if as_dict:
-                scheduled_messages.append(message.as_dict(as_timezone=as_timezone))
-            else:
+            if not as_dict:
                 scheduled_messages.append(message.as_string(as_timezone=as_timezone))
+                continue
+            schedule = message.as_dict(as_timezone=as_timezone)
+            if experiments_by_id is not None:
+                schedule["experiment"] = experiments_by_id[message.experiment_id]
+            scheduled_messages.append(schedule)
         return scheduled_messages
+
+    def get_message_trend(self, days: int = 30) -> list[int]:
+        """Daily trace count for this participant across every chatbot, zero-filled for gaps.
+
+        Mirrors the bucket-and-zero-fill approach in `Experiment.get_bulk_trend_data`, scoped to
+        this participant (`Trace.participant`) instead of an experiment, and bucketed by day over
+        a longer window instead of by hour over 24h.
+        """
+        to_date = timezone.now()
+        from_date = to_date - timezone.timedelta(days=days - 1)
+
+        trace_counts = (
+            Trace.objects.filter(participant=self, timestamp__gte=from_date, timestamp__lte=to_date)
+            .annotate(day_bucket=functions.TruncDate("timestamp"))
+            .values("day_bucket")
+            .annotate(count=Count("id"))
+        )
+        counts_by_day = {row["day_bucket"]: row["count"] for row in trace_counts}
+
+        day_buckets = []
+        current = from_date.date()
+        end = to_date.date()
+        while current <= end:
+            day_buckets.append(current)
+            current += timezone.timedelta(days=1)
+
+        return [counts_by_day.get(day, 0) for day in day_buckets]
 
     @transaction.atomic()
     def update_memory(self, data: dict, experiment: Experiment):
@@ -1398,7 +1499,7 @@ class ExperimentSessionObjectManager(models.Manager):
         if experiment_id:
             queryset = queryset.filter(experiment__id=experiment_id)
 
-        queryset = queryset.select_related("experiment", "participant__user", "chat")
+        queryset = queryset.select_related("experiment", "participant__user", "chat", "experiment_channel")
         # Order by the same expression the "Last activity" column renders, so a session whose
         # `last_activity_at` is null doesn't sort to the bottom while displaying a recent
         # `created_at`. Backed by `expsession_team_lastact_c_idx`.
@@ -1649,8 +1750,7 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_metadata = trace_service.get_trace_metadata()
-                return trace_metadata
+                    return trace_service.get_trace_metadata()
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:

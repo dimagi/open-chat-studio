@@ -16,7 +16,6 @@ from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfi
 from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TelegramMessage
-from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.terminal import DeliveryErrorHandler, MessageDeliveryFailure
 from apps.experiments.models import ParticipantData
@@ -25,6 +24,7 @@ from apps.service_providers.file_limits import can_send_on_telegram
 if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio

@@ -1,10 +1,10 @@
 import React, {ChangeEvent, ChangeEventHandler, ReactNode, useCallback, useId, useState, useMemo} from "react";
-import Select, {SingleValue} from 'react-select';
+import Select, {MultiValue, SingleValue} from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
 import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
-import {JsonSchema, NodeParams, PropertySchema} from "../types/nodeParams";
+import {JsonSchema, NodeParams, PropertySchema, ToolConfigField} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
 import {apiClient} from "../api/api";
@@ -65,7 +65,7 @@ export interface WidgetParams {
   helpText: string;
   paramValue: string | string[];
   inputError: string | undefined;
-  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => void;
   schema: PropertySchema
   nodeParams: NodeParams
   nodeSchema: JsonSchema
@@ -80,8 +80,8 @@ interface ToggleWidgetParams extends Omit<WidgetParams, 'paramValue'> {
 
 interface LLMModelParametersWidgetProps {
   nodeId: string;
-  schema: any;
-  modelParameters: any;
+  schema: JsonSchema;
+  modelParameters: Record<string, unknown>;
   readOnly: boolean;
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
 }
@@ -151,12 +151,9 @@ function FloatWidget(props: WidgetParams) {
 }
 
 function RangeWidget(props: WidgetParams) {
-  const getPropOrOther = (prop: string, other: string) => {
-    const val = props.schema[prop];
-    if (val !== undefined) {
-      return val;
-    }
-    return props.schema[other];
+  const getPropOrOther = (prop: string, other: string): string | number | undefined => {
+    const val = props.schema[prop] !== undefined ? props.schema[prop] : props.schema[other];
+    return typeof val === "number" || typeof val === "string" ? val : undefined;
   }
   return <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
     <input
@@ -300,7 +297,7 @@ function SearchableMultiSelectWidget(props: WidgetParams) {
   const itemType = props.schema.items?.type || 'string';
 
   // Type conversion function based on schema
-  const convertValue = (value: any) => {
+  const convertValue = (value: unknown) => {
     switch (itemType) {
       case 'integer':
       case 'number':
@@ -321,8 +318,8 @@ function SearchableMultiSelectWidget(props: WidgetParams) {
     return selectedValues.includes(option.value) || selectedValues.some(v => v === convertedValue);
   });
 
-  const handleChange = (selectedOptions: any) => {
-    const values = selectedOptions ? selectedOptions.map((option: Option) => convertValue(option.value)) : [];
+  const handleChange = (selectedOptions: MultiValue<Option>) => {
+    const values = selectedOptions ? selectedOptions.map((option) => convertValue(option.value)) : [];
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         next.data.params[props.name] = values;
@@ -635,7 +632,7 @@ export function ExpandableTextWidget(props: WidgetParams) {
   );
 }
 
-function getKeywordsNodeData(old: Node, keywords: any[], newDefaultIndex?: number) {
+function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: number) {
   return produce(old, next => {
     next.data.params["keywords"] = keywords;
     if (newDefaultIndex !== undefined) {
@@ -913,7 +910,7 @@ export function LlmWidget(props: WidgetParams) {
 
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
-  const modelParameters = props.nodeParams.llm_model_parameters || {};
+  const modelParameters = (props.nodeParams.llm_model_parameters ?? {}) as Record<string, unknown>;
   let value = "";
   let error = props.inputError || props.getNodeFieldError(props.nodeId, "llm_provider_model_id");
   if (providerId && providerModelId) {
@@ -921,10 +918,15 @@ export function LlmWidget(props: WidgetParams) {
   } else {
     error = "This field is required."
   }
+  const selectedModel = (parameterValues.llm_provider_model_id as LlmProviderModel[])
+    .find((model) => String(model.value) === String(providerModelId));
+  const warning = selectedModel?.deprecated
+    ? "Deprecated — move to a supported model before it is removed."
+    : undefined;
   const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
   return (
     <>
-      <InputField label={props.label} help_text={props.helpText} inputError={error}>
+      <InputField label={props.label} help_text={props.helpText} inputError={error} inputWarning={warning}>
         <select
           // Add `appearance-none` to work around placement issue: https://github.com/saadeghi/daisyui/discussions/4202
           // Should be resolved in future versions of browsers.
@@ -1099,10 +1101,11 @@ function HelpBubble({ helpText }: { helpText: string }) {
   );
 }
 
-export function InputField({label, help_text, inputError, children}: React.PropsWithChildren<{
+export function InputField({label, help_text, inputError, inputWarning, children}: React.PropsWithChildren<{
   label: string | ReactNode,
   help_text: string,
-  inputError?: string | undefined
+  inputError?: string | undefined,
+  inputWarning?: string | undefined
 }>) {
   return (
     <>
@@ -1115,6 +1118,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
       </div>
       <div>
         <small className="text-red-500">{inputError}</small>
+        {!inputError && inputWarning && <small className="text-warning">{inputWarning}</small>}
       </div>
     </>
   );
@@ -1132,10 +1136,10 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
   if (options.length === 0) return <></>;
 
-  const toolConfigsMap = parameterValues.tool_config as unknown as Record<string, Record<string, PropertySchema[]>>;
+  const toolConfigsMap = parameterValues.tool_config as unknown as Record<string, Record<string, ToolConfigField[]>>;
   const providerToolConfigs = toolConfigsMap[providerKey] || {};
 
-  const toolConfig = props.nodeParams.tool_config || {};
+  const toolConfig = (props.nodeParams.tool_config ?? {}) as Record<string, Record<string, unknown>>;
   // Derived directly from props, like the sibling MultiSelectWidget above, rather than
   // duplicated into local state synced by an effect — it can't go stale if it's never copied.
   const selectedValues = Array.isArray(props.paramValue) ? [...props.paramValue] : [];
@@ -1193,7 +1197,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
             <div className="font-medium mb-1 text-sm text-base-content/70">
               {toolKey} configuration
             </div>
-            {widgets.map((widget: PropertySchema) => {
+            {widgets.map((widget: ToolConfigField) => {
               const value = toolConfig[toolKey]?.[widget.name] ?? [];
               const rawError = props.getNodeFieldError(props.nodeId, "tool_config");
               const error = rawError?.includes(`field '${widget.name}'`) ? rawError : "";
@@ -1202,7 +1206,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
                 name: widget.name,
                 label: widget.label,
                 helpText: widget.helpText ?? "",
-                paramValue: Array.isArray(value) ? value.join("\n") : value,
+                paramValue: Array.isArray(value) ? value.join("\n") : String(value),
                 updateParamValue: (event) => onConfigUpdate(toolKey, event),
                 inputError: error,
               };

@@ -3,21 +3,41 @@ from django.db import models
 from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST
 
+from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.events.forms import (
     ACTION_PARAMS_FORMS,
     EventActionForm,
+    ScheduledTriggerForm,
     StaticTriggerForm,
     TimeoutTriggerForm,
     build_action_params_form,
 )
-from apps.events.models import StaticTrigger, TimeoutTrigger
+from apps.events.models import (
+    ScheduledTrigger,
+    StaticTrigger,
+    TimeoutTrigger,
+)
+from apps.experiments.models import Experiment
+from apps.generics.breadcrumbs import Crumb
 from apps.teams.decorators import login_and_team_required
+
+
+def _assert_team_experiment(request, experiment_id):
+    """Raise 404 if experiment_id does not belong to request.team, treating cross-team ids as not found."""
+    get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
 
 def _get_events_url(team_slug, experiment_id):
     url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
     return f"{url}#events"
+
+
+def _event_breadcrumbs(request, experiment_id, leaf: str) -> list[Crumb]:
+    experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
+    return [*chatbot_crumbs(request.team.slug, experiment), (leaf, None)]
 
 
 @login_and_team_required
@@ -32,7 +52,14 @@ def create_static_event_view(request, team_slug: str, experiment_id: str):
     return _create_event_view(StaticTriggerForm, request, team_slug, experiment_id)
 
 
+@login_and_team_required
+@permission_required("events.add_scheduledtrigger")
+def create_scheduled_event_view(request, team_slug: str, experiment_id: str):
+    return _create_event_view(ScheduledTriggerForm, request, team_slug, experiment_id)
+
+
 def _create_event_view(trigger_form_class, request, team_slug: str, experiment_id: str):
+    _assert_team_experiment(request, experiment_id)
     if request.method == "POST":
         action_type = request.POST.get("action_type") or _default_action_type()
         action_primary_form = EventActionForm(request.POST)
@@ -68,7 +95,14 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
         trigger_form = trigger_form_class()
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+        trigger_form,
+        action_primary_form,
+        action_params_form,
+        action_type,
+        trigger_form_class,
+        experiment_id,
+        request,
+        title=_("New Event"),
     )
     return render(request, "events/manage_event.html", context)
 
@@ -79,10 +113,19 @@ def _default_action_type() -> str:
 
 
 def _event_form_context(
-    trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+    trigger_form,
+    action_primary_form,
+    action_params_form,
+    action_type,
+    trigger_form_class,
+    experiment_id,
+    request,
+    title: str,
 ):
     namespace = request.resolver_match.namespace  # e.g., "chatbots:events"
     return {
+        "title": title,
+        "breadcrumbs": _event_breadcrumbs(request, experiment_id, title),
         "trigger_form": trigger_form,
         "action_primary_form": action_primary_form,
         "action_params_form": action_params_form,
@@ -108,16 +151,24 @@ def edit_timeout_event_view(request, team_slug: str, experiment_id: str, trigger
     return _edit_event_view("timeout", request, team_slug, experiment_id, trigger_id)
 
 
+@login_and_team_required
+@permission_required("events.change_scheduledtrigger")
+def edit_scheduled_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _edit_event_view("scheduled", request, team_slug, experiment_id, trigger_id)
+
+
 def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
     trigger_form_class = {
         "static": StaticTriggerForm,
         "timeout": TimeoutTriggerForm,
+        "scheduled": ScheduledTriggerForm,
     }[trigger_type]
     model_class = {
         "static": StaticTrigger,
         "timeout": TimeoutTrigger,
+        "scheduled": ScheduledTrigger,
     }[trigger_type]
-    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team)
 
     if request.method == "POST":
         action_type = request.POST.get("action_type") or trigger.action.action_type
@@ -154,29 +205,46 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
         trigger_form = trigger_form_class(instance=trigger)
 
     context = _event_form_context(
-        trigger_form, action_primary_form, action_params_form, action_type, trigger_form_class, experiment_id, request
+        trigger_form,
+        action_primary_form,
+        action_params_form,
+        action_type,
+        trigger_form_class,
+        experiment_id,
+        request,
+        title=_("Edit Event"),
     )
     return render(request, "events/manage_event.html", context)
 
 
 @login_and_team_required
 @permission_required("events.delete_statictrigger")
+@require_POST
 def delete_static_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _delete_event_view("static", request, team_slug, experiment_id, trigger_id)
 
 
 @login_and_team_required
 @permission_required("events.delete_timeouttrigger")
+@require_POST
 def delete_timeout_event_view(request, team_slug: str, experiment_id: str, trigger_id):
     return _delete_event_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+@login_and_team_required
+@permission_required("events.delete_scheduledtrigger")
+@require_POST
+def delete_scheduled_event_view(request, team_slug: str, experiment_id: str, trigger_id):
+    return _delete_event_view("scheduled", request, team_slug, experiment_id, trigger_id)
 
 
 def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
     model_class = {
         "static": StaticTrigger,
         "timeout": TimeoutTrigger,
+        "scheduled": ScheduledTrigger,
     }[trigger_type]
-    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id)
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team)
     trigger.archive()
     return HttpResponseRedirect(_get_events_url(team_slug, experiment_id))
 
@@ -184,46 +252,73 @@ def _delete_event_view(trigger_type, request, team_slug: str, experiment_id: str
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def static_logs_view(request, team_slug, experiment_id, trigger_id):
-    trigger = get_object_or_404(StaticTrigger, id=trigger_id, experiment_id=experiment_id)
-    context = _get_event_logs_context(trigger)
+    trigger = get_object_or_404(
+        StaticTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
+    )
+    context = _get_event_logs_context(request, trigger)
     return render(request, "events/view_logs.html", context)
 
 
 @login_and_team_required
 @permission_required("events.view_eventlog")
 def timeout_logs_view(request, team_slug, experiment_id, trigger_id):
-    trigger = get_object_or_404(TimeoutTrigger, id=trigger_id, experiment_id=experiment_id)
-    context = _get_event_logs_context(trigger)
+    trigger = get_object_or_404(
+        TimeoutTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
+    )
+    context = _get_event_logs_context(request, trigger)
     return render(request, "events/view_logs.html", context)
 
 
-def _get_event_logs_context(trigger):
+@login_and_team_required
+@permission_required("events.view_eventlog")
+def scheduled_logs_view(request, team_slug: str, experiment_id: str, trigger_id):
+    trigger = get_object_or_404(
+        ScheduledTrigger, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team
+    )
+    context = _get_event_logs_context(request, trigger)
+    return render(request, "events/view_logs.html", context)
+    return render(request, "events/view_logs.html", context)
+
+
+def _get_event_logs_context(request, trigger):
+    title = _("Event Logs")
     return {
         "event_logs": trigger.event_logs.order_by("-created_at").all(),
-        "title": "Event logs",
+        "title": title,
+        "breadcrumbs": _event_breadcrumbs(request, trigger.experiment_id, title),
         "trigger": trigger,
     }
 
 
 @login_and_team_required
 @permission_required("events.change_statictrigger")
+@require_POST
 def toggle_static_active_status(request, team_slug: str, experiment_id: str, trigger_id):
     return _toggle_event_status_view("static", request, team_slug, experiment_id, trigger_id)
 
 
 @login_and_team_required
 @permission_required("events.change_timeouttrigger")
+@require_POST
 def toggle_timeout_active_status(request, team_slug: str, experiment_id: str, trigger_id):
     return _toggle_event_status_view("timeout", request, team_slug, experiment_id, trigger_id)
+
+
+@login_and_team_required
+@permission_required("events.change_scheduledtrigger")
+@require_POST
+def toggle_scheduled_active_status(request, team_slug: str, experiment_id: str, trigger_id):
+    return _toggle_event_status_view("scheduled", request, team_slug, experiment_id, trigger_id)
 
 
 def _toggle_event_status_view(trigger_type, request, team_slug: str, experiment_id: str, trigger_id):
     model_class = {
         "static": StaticTrigger,
         "timeout": TimeoutTrigger,
+        "scheduled": ScheduledTrigger,
     }[trigger_type]
 
-    trigger = get_object_or_404(model_class, id=trigger_id)
+    trigger = get_object_or_404(model_class, id=trigger_id, experiment_id=experiment_id, experiment__team=request.team)
     working_root = trigger.get_working_version()
     all_versions = model_class.objects.filter(models.Q(id=working_root.id) | models.Q(working_version=working_root))
     new_status = not trigger.is_active

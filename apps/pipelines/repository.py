@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-from io import BytesIO
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from apps.chat.conversation import COMPRESSION_MARKER
@@ -10,17 +9,18 @@ from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
-from apps.service_providers.llm_service import LlmService
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
     from langchain_core.messages import BaseMessage
+
+    from apps.service_providers.llm_service import LlmService
 
 
 class RepositoryLookupError(Exception):
     """Raised when a repository lookup finds no matching record."""
-
-    pass
 
 
 class CollectionFileInfo(NamedTuple):
@@ -228,7 +228,7 @@ class ORMRepository:
 
     def get_participant_schedules(self, **kwargs) -> list:
         """Get scheduled messages for the current participant and experiment."""
-        return self.participant.get_schedules_for_experiment(self.session.experiment_id, **kwargs)
+        return self.participant.get_schedules_for_experiments(self.session.experiment_id, **kwargs)
 
 
 class InMemoryPipelineRepository(ORMRepository):

@@ -1,6 +1,6 @@
 from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
 from apps.ocs_notifications.notifications import AffectedResources, deprecated_model_notification
-from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
+from apps.service_providers.llm_service.default_models import get_deprecated_models
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
 
@@ -11,16 +11,10 @@ class Command(IdempotentCommand):
     disable_audit = True
 
     def perform_migration(self, dry_run=False):
-        # Find all deprecated models (with or without a replacement)
-        deprecated_with_replacement = {}
-        for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
-            for model in provider_models:
-                if model.deprecated:
-                    deprecated_with_replacement[(provider_type, model.name)] = model.replacement or None
-
+        deprecated_with_replacement = get_deprecated_models()
         if not deprecated_with_replacement:
             self.stdout.write(self.style.SUCCESS("No deprecated models found"))
-            return
+            return None
 
         # Find DB records for each deprecated model
         db_models = []  # list of (db_model, model_name, replacement_name)
@@ -34,7 +28,7 @@ class Command(IdempotentCommand):
 
         if not db_models:
             self.stdout.write(self.style.SUCCESS("No deprecated models found in database"))
-            return
+            return None
 
         # For each deprecated model, find affected teams
         # Structure: {db_model_id: (teams_data, model_name, replacement)}
@@ -54,7 +48,7 @@ class Command(IdempotentCommand):
         if self.verbosity > 1:
             all_team_ids = {tid for td, _, _ in affected_by_model.values() for tid in td}
             teams = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
-            for _db_model_id, (teams_data, model_name, replacement) in affected_by_model.items():
+            for teams_data, model_name, replacement in affected_by_model.values():
                 self.stdout.write(f"\n  Model: {model_name} → {replacement}")
                 for team_id, data in teams_data.items():
                     self.stdout.write(f"    Team: {teams[team_id].name}")
@@ -70,7 +64,7 @@ class Command(IdempotentCommand):
         teams_objs = {t.id: t for t in Team.objects.filter(id__in=all_team_ids)}
 
         total_notified = 0
-        for _db_model_id, (teams_data, model_name, replacement) in affected_by_model.items():
+        for teams_data, model_name, replacement in affected_by_model.values():
             for team_id, data in teams_data.items():
                 deprecated_model_notification(
                     team=teams_objs[team_id],

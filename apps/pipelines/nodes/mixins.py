@@ -115,21 +115,14 @@ class LLMResponseMixin(BaseModel):
 
     @model_validator(mode="after")
     def validate_llm_model(self):
-        # Ensure model is not deprecated
         try:
             model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
         except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
                 str(e),
-                {"field": "llm_provider_id"},
+                {"field": "llm_provider_model_id"},
             ) from None
-        if model.deprecated:
-            raise PydanticCustomError(
-                "deprecated_model",
-                f"LLM provider model '{model.name}' is deprecated.",
-                {"field": "llm_provider_id"},
-            )
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
@@ -291,18 +284,18 @@ class HistoryMixin(LLMResponseMixin):
 
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+        return None
 
     def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:
-            return
+            return None
 
         if self.use_session_history:
             # Global History is saved outside of the node
-            return
+            return None
 
         history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
-        message = self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
-        return message
+        return self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
 
 
 class RouterMixin(BaseModel):

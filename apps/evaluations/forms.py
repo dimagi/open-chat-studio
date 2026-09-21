@@ -909,7 +909,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             )
         return validated_pairs
 
-    def _clean_csv(self):
+    def _clean_csv(self):  # noqa: C901 - validator: one branch per CSV column-mapping failure mode
         column_mapping_str = self.data.get("column_mapping", "")
         csv_file_id_str = self.data.get("csv_file_id", "")
         history_column = self.data.get("history_column", "").strip()
@@ -929,7 +929,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             csv_reader = csv.DictReader(StringIO(file_content))
             csv_columns = set(csv_reader.fieldnames or [])
         except Exception as err:
-            raise forms.ValidationError(f"Error reading CSV file: {str(err)}") from err
+            raise forms.ValidationError(f"Error reading CSV file: {err!s}") from err
 
         column_mapping = {}
         if column_mapping_str:

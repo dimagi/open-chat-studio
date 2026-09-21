@@ -208,7 +208,7 @@ def test_prune_thread_starts_automatically(langfuse_mock):
 
         # Assert that Thread was created with correct parameters
         thread_mock.assert_called_once()
-        args, kwargs = thread_mock.call_args
+        _args, kwargs = thread_mock.call_args
         assert kwargs["target"] == client_manager._prune_worker
         assert kwargs["daemon"] is True
 

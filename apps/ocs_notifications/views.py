@@ -6,6 +6,7 @@ from django.http.response import HttpResponse as HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.generic import TemplateView, View
 from django_tables2 import SingleTableView
 
@@ -47,11 +48,10 @@ def get_notification_toggle_context(request) -> dict:
     # response (for the out-of-band button refresh), and the pushed URL must always be the
     # notifications page, not wherever the request that built it happened to land.
     context = {"notifications_home_url": reverse("ocs_notifications:notifications_home")}
-    level_filter = SeverityLevelFilter().model_copy(deep=True)
+    level_filter = SeverityLevelFilter()
     context["level_toggle_options"] = build_toggle_options(level_filter, request)
 
-    team_filter = TeamFilter().model_copy(deep=True)
-    team_filter.prepare(request.team, user=request.user)
+    team_filter = TeamFilter().prepare(request.team, user=request.user)
     if len(team_filter.options) < TEAM_TOGGLE_BUTTON_THRESHOLD:
         context["team_toggle_options"] = build_toggle_options(team_filter, request)
 
@@ -297,7 +297,7 @@ class MarkAllNotificationsReadView(LoginRequiredMixin, View):
 
 
 class NotificationEventHome(LoginRequiredMixin, TemplateView):
-    template_name = "ocs_notifications/notification_event_home.html"
+    template_name = "generic/object_home.html"
 
     @cached_property
     def event_type(self) -> EventType:
@@ -320,18 +320,20 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
         table_url = reverse("ocs_notifications:notification_event_table", args=[self.event_type.id])
 
         title = self.event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
-        context = {
+        return {
             "active_tab": "notifications",
             "title": "Notifications",
             "subtitle": title or "",
             "table_url": table_url,
             "enable_search": False,
-            # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
-            # request.team), so the breadcrumb needs its own team indicator.
-            "team": self.event_type.team,
+            "breadcrumbs": [
+                (_("Notifications"), reverse("ocs_notifications:notifications_home")),
+                # Notifications are cross-team (unlike most detail pages, this one isn't scoped to
+                # request.team), so the trail needs its own team indicator.
+                (self.event_type.team.name, None),
+                *([(title, None)] if title else []),
+            ],
         }
-
-        return context
 
 
 class NotificationEventTableView(LoginRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]

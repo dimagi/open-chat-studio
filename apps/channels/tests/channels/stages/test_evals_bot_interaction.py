@@ -15,7 +15,7 @@ class TestEvalsBotInteractionStage:
     @patch("apps.channels.stages.core.EvalsBot")
     def test_constructs_evals_bot_with_participant_data(self, mock_evals_bot_cls):
         mock_bot = MagicMock()
-        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
+        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=list)
         mock_evals_bot_cls.return_value = mock_bot
 
         participant_data = {"userid": "1234"}

@@ -124,7 +124,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
 
         llm_with_retry = llm.with_retry(
             stop_after_attempt=3,
-            retry_if_exception_type=(ValueError,) + RATE_LIMIT_EXCEPTIONS,
+            retry_if_exception_type=(ValueError, *RATE_LIMIT_EXCEPTIONS),
         )
 
         try:

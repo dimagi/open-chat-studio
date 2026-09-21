@@ -54,12 +54,6 @@ class Attachment(BaseModel):
     send_to_llm: bool = True
     """Setting this to False will prevent the attachment from being sent to the LLM node."""
 
-    upload_to_assistant: bool = False
-    """Inert. The Assistant node that consumed this is gone (#4254), but ``Attachment`` instances
-    are handed to user code in Python nodes, so the field is kept until phase 2 drops the rest of
-    the assistants data: a stored node doing ``att.upload_to_assistant = True`` would otherwise
-    raise and fail the run. Deliberately undocumented in ``PYTHON_NODE_HELP_PROMPT``."""
-
     @classmethod
     def from_file(cls, file, type: AttachmentType, session_id: int):
         return cls(
@@ -135,6 +129,7 @@ class TelegramMessage(BaseMessage):
     def determine_content_type(cls, value):
         if MESSAGE_TYPES.is_member(value):
             return MESSAGE_TYPES(value)
+        return None
 
     @staticmethod
     def parse(update_obj, chatbot_id: int) -> "TelegramMessage":
@@ -334,10 +329,12 @@ class WhatsAppMessage(BaseMessage):
         elif message_type in ("image", "document"):
             body = message.get(message_type, {}).get("caption", "")
 
-        media_payload = message.get(message_type, {})
+        _media_types = ("image", "document", "audio", "voice", "video", "sticker")
+        media_payload = message.get(message_type, {}) if message_type in _media_types else {}
         # For documents the provider gives us a real MIME type; for images we keep the
         # literal "image" marker (Twilio still uses image/* — the hydration stage handles both).
-        attachment_mime_type: str | None = message_type
+        # Non-media message types (contacts, location, etc.) have no attachment.
+        attachment_mime_type: str | None = message_type if message_type in _media_types else None
         if message_type == "document":
             attachment_mime_type = media_payload.get("mime_type") or "application/octet-stream"
 
@@ -375,6 +372,7 @@ class FacebookMessage(BaseMessage):
             return MESSAGE_TYPES.TEXT
         if value and value == "audio":
             return MESSAGE_TYPES.VOICE
+        return None
 
     @staticmethod
     def parse(message_data: dict) -> "FacebookMessage":

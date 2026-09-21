@@ -14,7 +14,6 @@ from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -359,14 +358,14 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     # Check nodes have remapped params and FK mirror (both must point at the target team)
     for node in Node.objects.filter(pipeline=target_pipeline):
         params = node.params
-        if "llm_provider_id" in params and params["llm_provider_id"]:
+        if params.get("llm_provider_id"):
             # Should reference target team's provider, not source
             assert params["llm_provider_id"] == target_llm_provider.id
             assert params["llm_provider_id"] != source_llm_provider.id
             # FK mirror must be remapped too, not left pointing at the source team
             assert node.llm_provider_id == target_llm_provider.id
 
-        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
+        if params.get("llm_provider_model_id"):
             # Should reference target team's model, not source
             assert params["llm_provider_model_id"] == target_llm_model.id
             assert params["llm_provider_model_id"] != source_llm_model.id
@@ -398,29 +397,27 @@ def test_clone_team_copies_feature_flags(source_team):
 
 
 @pytest.mark.django_db()
-def test_clone_team_drops_assistant_reference_from_node_params():
-    """A cloned `AssistantNode` must not keep pointing at the source team's assistant.
+def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
+    """`changed` gates the write, and writing a node the clone had no reason to touch is lossy.
 
-    `AssistantNode` lost its class (#4254), so a stored one is inert and cloning no longer
-    refuses it -- but `Node._sync_resource_fk_fields` resolves ids without scoping them to a
-    team, so the id has to be dropped from params rather than carried across.
+    `set_params` re-derives the FK columns from params, so saving a node whose params never
+    carried a resource id nulls whatever column the params do not mirror.
     """
     source, target = TeamFactory.create(), TeamFactory.create()
-    assistant = OpenAiAssistantFactory.create(team=source)
+    provider = LlmProviderFactory.create(team=target)
     pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
     node = Node.objects.create(
         pipeline=pipeline,
-        type="AssistantNode",
-        flow_id="assist",
-        label="Assistant",
-        params={"assistant_id": assistant.id, "citations_enabled": True},
+        type="RouterNode",
+        flow_id="router",
+        label="Router",
+        params={"keywords": ["yes", "no"]},
     )
-    node.update_from_params()
-    assert node.assistant_id == assistant.id, "precondition: the FK mirror resolves the source id"
+    Node.objects.filter(pk=node.pk).update(llm_provider_id=provider.id)
+    node = Node.objects.get(pk=node.pk)
 
     Command()._remap_node_params(CloneContext(source_team=source, target_team=target), node)
 
     node.refresh_from_db()
-    assert "assistant_id" not in node.params
-    assert node.assistant_id is None
-    assert node.params["citations_enabled"] is True
+    assert node.llm_provider_id == provider.id
+    assert node.params == {"keywords": ["yes", "no"]}

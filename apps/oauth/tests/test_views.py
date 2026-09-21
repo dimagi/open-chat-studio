@@ -546,6 +546,25 @@ class TestGlobalApplicationViews:
 
         assert response.status_code == 200
 
+    def test_register_form_breadcrumbs_lead_back_to_the_global_list(self, client, superuser):
+        client.force_login(superuser)
+        response = client.get(reverse("oauth2_provider:global_application_new"))
+
+        assert response.context["breadcrumbs"] == [
+            ("Global OAuth Applications", reverse("oauth2_provider:global_application_home")),
+            ("Register", None),
+        ]
+
+    def test_edit_form_breadcrumbs_end_on_the_application_name(self, client, superuser):
+        application = _create_application(team=None, name="Global App")
+        client.force_login(superuser)
+        response = client.get(reverse("oauth2_provider:global_application_edit", args=[application.pk]))
+
+        assert response.context["breadcrumbs"] == [
+            ("Global OAuth Applications", reverse("oauth2_provider:global_application_home")),
+            ("Global App", None),
+        ]
+
     def test_table_lists_only_global_applications(self, client, superuser):
         global_app = _create_application(team=None, name="Global App")
         team_app = _create_application(team=TeamWithUsersFactory.create(), name="Team App")

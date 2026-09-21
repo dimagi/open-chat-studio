@@ -2,6 +2,7 @@
 {% load chat_tags form_tags %}
 {% block body %}
   <div class="app-card max-w-5xl mx-auto">
+    {% block breadcrumbs %}{{ block.super }}{% endblock %}
     <h1 class="pg-title">{{ experiment_name }}</h1>
     <div class="mt-2 mb-4 prose">{{ experiment_description|render_markdown }}</div>
     <div class="prose max-w-none!">

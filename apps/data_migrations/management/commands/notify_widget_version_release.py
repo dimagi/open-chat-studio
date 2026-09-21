@@ -29,7 +29,7 @@ class Command(IdempotentCommand):
         affected_by_team = self._collect_affected_teams()
         if not affected_by_team:
             self.stdout.write(self.style.SUCCESS("No teams use the embedded chat widget"))
-            return
+            return None
 
         self.stdout.write(f"Found {len(affected_by_team)} team(s) using the embedded widget")
         if self.verbosity > 1:
@@ -37,7 +37,7 @@ class Command(IdempotentCommand):
 
         if dry_run:
             self.stdout.write(f"Would notify {len(affected_by_team)} team(s) about widget {self.widget_version}")
-            return
+            return None
 
         for data in affected_by_team.values():
             widget_version_release_notification(

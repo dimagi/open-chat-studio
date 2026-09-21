@@ -14,6 +14,7 @@ from apps.channels.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     DuplicateDeliveryStage,
+    ErrorGuardStage,
     MessageTypeValidationStage,
     ParticipantIdentifierStage,
     ParticipantResolverStage,
@@ -108,7 +109,7 @@ class ChannelBase(ABC):
                 return response
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
-        ctx = MessageProcessingContext(
+        return MessageProcessingContext(
             message=message,
             experiment=self.experiment,
             experiment_channel=self.experiment_channel,
@@ -118,7 +119,6 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
             trace_service=self.trace_service,
         )
-        return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
         """Build the default processing pipeline. Subclasses can override entirely.
@@ -142,6 +142,10 @@ class ChannelBase(ABC):
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                # After the turn is recorded, so a voice note nothing could be read out
+                # of still appears in the history and on the trace. Every pipeline with a
+                # QueryExtractionStage needs this stage, in this position.
+                ErrorGuardStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),

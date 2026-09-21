@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.translation import gettext as _
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -19,6 +20,7 @@ from apps.documents.models import CollectionFile
 from apps.files.forms import FileForm, MultipleFileFieldForm
 from apps.files.models import File
 from apps.files.tables import FilesTable
+from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -232,8 +234,12 @@ class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[i
         return queryset
 
 
+def _files_crumb(team_slug: str) -> Crumb:
+    return _("Files"), reverse("files:file_home", args=[team_slug])
+
+
 # This view is not currently being used
-class CreateFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+class CreateFile(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -245,6 +251,9 @@ class CreateFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView)
         "form_attrs": {"enctype": "multipart/form-data"},
     }
 
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [_files_crumb(self.request.team.slug), (_("Upload"), None)]
+
     def get_success_url(self):
         return reverse("files:file_home", args=[self.request.team.slug])
 
@@ -255,7 +264,7 @@ class CreateFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView)
         return response
 
 
-class EditFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+class EditFile(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     template_name = "documents/file_form.html"
     model = File
     form_class = FileForm
@@ -266,6 +275,9 @@ class EditFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
         "active_tab": "files",
         "form_attrs": {"enctype": "multipart/form-data"},
     }
+
+    def get_breadcrumbs(self) -> list[Crumb]:
+        return [_files_crumb(self.request.team.slug), (self.object.name, None)]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

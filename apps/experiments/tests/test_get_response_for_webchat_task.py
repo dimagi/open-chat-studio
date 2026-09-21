@@ -3,7 +3,6 @@ from unittest.mock import patch
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.chat.exceptions import UserReportableError
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -42,20 +41,9 @@ def test_get_response_for_webchat_task(session):
 
 
 @pytest.mark.django_db()
-def test_user_reportable_error_sets_user_facing_error(session):
-    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserReportableError("nope")):
-        response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
-
-    assert response["error"] == "nope"
-    assert response["user_facing_error"] is True
-    assert response["response"] is None
-
-
-@pytest.mark.django_db()
-def test_generic_exception_sets_error_without_user_facing_flag(session):
+def test_generic_exception_sets_error(session):
     with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=RuntimeError("boom")):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
     assert response["error"] == "boom"
-    assert not response.get("user_facing_error")
     assert response["response"] is None

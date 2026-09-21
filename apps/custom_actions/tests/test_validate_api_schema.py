@@ -7,14 +7,14 @@ from apps.custom_actions.forms import validate_api_schema, validate_api_schema_f
 
 class TestValidateApiSchema:
     def test_invalid_schema(self):
-        with pytest.raises(ValidationError, match="Invalid OpenAPI schema."):
+        with pytest.raises(ValidationError, match=r"Invalid OpenAPI schema\."):
             validate_api_schema({"paths": {}})
 
     def test_valid_schema(self):
         validate_api_schema(_make_openapi_schema({"/test": {"get": {}}}))
 
     def test_missing_paths(self):
-        with pytest.raises(ValidationError, match="No paths found in the schema."):
+        with pytest.raises(ValidationError, match=r"No paths found in the schema\."):
             validate_api_schema(_make_openapi_schema({}))
 
     def test_invalid_path_format(self):

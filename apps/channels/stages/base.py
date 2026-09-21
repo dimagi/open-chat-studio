@@ -8,15 +8,22 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.db.models import Model
 
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
+from apps.chat.exceptions import UserActionableError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 
 if TYPE_CHECKING:
     from apps.channels.pipeline import MessageProcessingContext
 
 # Control-flow signals are not failures: they steer the pipeline (early exit,
-# silent abort, generation cancellation) rather than indicate something broke.
-# They must not mark a stage's span as errored.
-_CONTROL_FLOW_SIGNALS = (EarlyExitResponse, EarlyAbort, GenerationCancelled)
+# silent abort, generation cancellation, an error the participant can act on)
+# rather than indicate something broke. They must not mark a stage's span as
+# errored, which would also count them on the operator error-rate charts.
+_CONTROL_FLOW_SIGNALS = (
+    EarlyExitResponse,
+    EarlyAbort,
+    GenerationCancelled,
+    UserActionableError,
+)
 
 # Bounds for span-value serialization -- keep trace payloads small and cheap.
 _SPAN_LIST_LIMIT = 20
@@ -67,7 +74,7 @@ class ProcessingStage(ABC):
     def get_span_notification_config(self):
         """Override to attach a SpanNotificationConfig to this stage's trace span.
         Default: None (no notification)."""
-        return None
+        return
 
     def get_span_inputs(self, ctx: MessageProcessingContext) -> dict[str, Any]:
         """Context recorded on this stage's span, from ``span_input_fields``.

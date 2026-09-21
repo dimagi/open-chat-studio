@@ -25,7 +25,7 @@ from apps.web.dynamic_filters.column_filters import (
 
 def get_trace_filter_context_data(team):
     table_url = reverse("trace:table", args=[team.slug])
-    context = get_filter_context_data(
+    return get_filter_context_data(
         team,
         columns=TraceFilter.columns(team),
         filter_class=TraceFilter,
@@ -33,7 +33,6 @@ def get_trace_filter_context_data(team):
         table_container_id="data-table",
         table_type=FilterSet.TableType.TRACES,
     )
-    return context
 
 
 class MessageTagsFilter(ChoiceColumnFilter):
@@ -41,10 +40,11 @@ class MessageTagsFilter(ChoiceColumnFilter):
     label: str = "Message Tags"
     type: str = TYPE_CHOICE
 
-    def prepare(self, team, **_):
-        self.options = list(
+    def prepare(self, team, **_) -> "MessageTagsFilter":
+        options = list(
             team.tag_set.filter(is_system_tag=False).values_list("name", flat=True).order_by("name").distinct()
         )
+        return self.model_copy(update={"options": options})
 
     def _input_or_output_message_tag_exists(self, tag_names: list[str]):
         """Build a Q matching traces whose input or output message carries one of ``tag_names``."""
@@ -84,8 +84,8 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
         # versions are returned as strings like "v1", "v2", so we need to strip the "v" and convert to int
         return [int(v[1:]) for v in values if "v" in v]
 
-    def prepare(self, team, **kwargs):
-        self.options = Experiment.objects.get_version_names(team)  # ty: ignore[invalid-assignment]
+    def prepare(self, team, **kwargs) -> "ExperimentVersionsFilter":
+        return self.model_copy(update={"options": Experiment.objects.get_version_names(team)})
 
 
 class TraceStatusFilter(ChoiceColumnFilter):

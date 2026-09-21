@@ -27,7 +27,7 @@ class TestFormatReferenceSection:
     def test_converts_footnote_citations_to_regular_citations(self):
         """Test that [^1] style citations are converted to [1]"""
         text = "Here's a fact [^1] and another [^2]."
-        formatted_text, uncited_files = self._format(text, files=[])
+        formatted_text, _uncited_files = self._format(text, files=[])
 
         assert "[^1]" not in formatted_text
         assert "[^2]" not in formatted_text
@@ -89,7 +89,7 @@ class TestFormatReferenceSection:
 
 [^1]: [cited.pdf](http://example.com/cited.pdf)"""
 
-        formatted_text, uncited_files = self._format(text, files=[file1, file2])
+        _formatted_text, uncited_files = self._format(text, files=[file1, file2])
 
         assert len(uncited_files) == 1
         assert file2 in uncited_files

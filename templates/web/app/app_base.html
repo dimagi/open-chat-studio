@@ -13,7 +13,7 @@
   {% block notifications %}
   {% endblock notifications %}
   <section class="m-2 lg:m-4">
-    <div class="xl:container flex flex-row">
+    <div class="px-8 flex flex-row">
       {% if request.user.is_authenticated %}
         <div class="w-64 hidden lg:flex">
           {% block sidebar-nav %}
@@ -33,6 +33,9 @@
           {% include "teams/migration_lock_banner.html" %}
         {% endif %}
         {% block breadcrumbs %}
+          {% if breadcrumbs and request.user.is_authenticated %}
+            {% include "generic/breadcrumbs.html" %}
+          {% endif %}
         {% endblock breadcrumbs %}
         {% block app %}
         {% endblock app %}

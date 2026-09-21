@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -5,7 +6,6 @@ from django.core.management import call_command
 
 from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
 from apps.ocs_notifications.utils import toggle_notification_read
-from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
 from apps.teams.backends import get_team_owner_groups
@@ -14,6 +14,9 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import MembershipFactory
+
+if TYPE_CHECKING:
+    from apps.pipelines.models import Pipeline
 
 FAKE_DEPRECATED_MODELS = {
     "openai": [
@@ -36,7 +39,7 @@ class TestNotifyDeprecatedModelsCommand:
         """If no models are deprecated, nothing happens."""
         no_deprecated = {"openai": [Model("gpt-4o", 128000, is_default=True)]}
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             no_deprecated,
         ):
             call_command("notify_deprecated_models", force=True)
@@ -53,7 +56,7 @@ class TestNotifyDeprecatedModelsCommand:
         experiment = ExperimentFactory(pipeline=pipeline)
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_MODELS,
         ):
             call_command("notify_deprecated_models", force=True)
@@ -75,7 +78,7 @@ class TestNotifyDeprecatedModelsCommand:
         experiment = ExperimentFactory(pipeline=pipeline)
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_NO_REPLACEMENT,
         ):
             call_command("notify_deprecated_models", force=True)
@@ -96,7 +99,7 @@ class TestNotifyDeprecatedModelsCommand:
         evaluator = EvaluatorFactory.create(llm_provider_model=deprecated_model)
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_MODELS,
         ):
             call_command("notify_deprecated_models", force=True)
@@ -116,7 +119,7 @@ class TestNotifyDeprecatedModelsCommand:
         _make_pipeline_referencing(deprecated_model)
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_MODELS,
         ):
             call_command("notify_deprecated_models", dry_run=True)
@@ -136,7 +139,7 @@ class TestNotifyDeprecatedModelsCommand:
         user = MembershipFactory(team=experiment.team, groups=get_team_owner_groups).user
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_MODELS,
         ):
             call_command("notify_deprecated_models", force=True)
@@ -157,7 +160,7 @@ class TestNotifyDeprecatedModelsCommand:
         LlmProviderModelFactory(team=None, type="openai", name="test-deprecated-model", deprecated=True)
 
         with patch(
-            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            "apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS",
             FAKE_DEPRECATED_MODELS,
         ):
             call_command("notify_deprecated_models", force=True)

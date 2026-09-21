@@ -1,16 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n static %}
 
-{% block breadcrumbs %}
-  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
-    <ul>
-      <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
-      <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.pk %}">{{ dataset.name }}</a></li>
-      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Add Sessions" %}</li>
-    </ul>
-  </div>
-{% endblock breadcrumbs %}
-
 {% block app %}
 <div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
      x-init="init()"
@@ -135,6 +125,7 @@
 
     <!-- Sessions table (HTMX lazy-loaded). Dimmed when not in 'selected' mode. -->
     <div id="sessions-table"
+         class="overflow-x-auto"
          :class="{ 'opacity-60': mode !== 'selected' }"
          data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
       {% include "table/table_placeholder.html" %}

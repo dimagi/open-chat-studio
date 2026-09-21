@@ -8,9 +8,9 @@ from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
-from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import (
     ChatMessageCreationStage,
+    ErrorGuardStage,
     EvalsBotInteractionStage,
     MessageTypeValidationStage,
     QueryExtractionStage,
@@ -23,6 +23,7 @@ from apps.service_providers.tracing import TracingService
 if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.channels.sender import ChannelSender
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.service_providers.tracing.base import Tracer
 
@@ -84,6 +85,7 @@ class EvaluationChannel(ChannelBase):
                 MessageTypeValidationStage(),
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
+                ErrorGuardStage(),
                 EvalsBotInteractionStage(),
                 ResponseFormattingStage(),
             ],

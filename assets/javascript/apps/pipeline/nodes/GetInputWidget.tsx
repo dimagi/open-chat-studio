@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from "react";
-import {JsonSchema, NodeParams, VisibleWhenCondition} from "../types/nodeParams";
+import {JsonSchema, NodeData, NodeParams, VisibleWhenCondition} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
-import {getWidget} from "./widgets";
+import {getWidget, WidgetParams} from "./widgets";
 import {getCachedData} from "../utils";
 import {produce} from "immer";
 
@@ -47,7 +47,7 @@ type VisibleWhenWrapperProps = {
   nodeParams: NodeParams;
   fieldName: string;
   nodeId: string;
-  schemaDefault: any;
+  schemaDefault: unknown;
   onHide?: () => void;
   onShow?: () => void;
   children: React.ReactNode;
@@ -123,14 +123,14 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
 type GetWidgetsParams = {
   schema: JsonSchema;
   nodeId: string;
-  nodeData: any;
-  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  nodeData: NodeData;
+  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => void;
 }
 
 type GetWidgetParamsGeneric = GetWidgetsParams & {
   widgetGenerator: (
     params: InputWidgetParams
-  ) => React.ReactElement<any>;
+  ) => React.ReactElement;
 }
 
 
@@ -139,7 +139,7 @@ export type InputWidgetParams = {
   name: string;
   schema: JsonSchema;
   params: NodeParams;
-  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => any;
+  updateParamValue: (event: React.ChangeEvent<HTMLTextAreaElement | HTMLSelectElement | HTMLInputElement>) => void;
   nodeType: string;
   required: boolean;
 }
@@ -290,7 +290,10 @@ export const getInputWidget = (
     return <></>;
   }
 
-  const Widget = getWidget(widgetOrType, widgetSchema)
+  // getWidget returns a union across every case of its switch, and those cases disagree on
+  // paramValue (ToggleWidget takes a boolean, the rest a string), so the union has no prop type
+  // a caller can satisfy. Widgets narrow the value themselves; dispatch through the base shape.
+  const Widget = getWidget(widgetOrType, widgetSchema) as React.ComponentType<WidgetParams>
   let fieldError = getNodeFieldError(params.id, params.name);
   let paramValue = params.params[params.name];
 
@@ -302,6 +305,9 @@ export const getInputWidget = (
   if (params.required && (paramValue === null || paramValue === undefined)) {
     fieldError = "This field is required";
   }
+  // Node params are backend JSON (see NodeParams), so the value arrives untyped; the widget
+  // selected above is the thing that knows what shape its own param holds.
+  const widgetValue = (paramValue ?? "") as string | string[];
   return (
     <VisibleWhenWrapper
       visibleWhen={widgetSchema["ui:visibleWhen"]}
@@ -317,7 +323,7 @@ export const getInputWidget = (
         name={params.name}
         label={widgetSchema.title || params.name.replace(/_/g, " ")}
         helpText={widgetSchema.description || ""}
-        paramValue={paramValue ?? ""}
+        paramValue={widgetValue}
         inputError={fieldError}
         updateParamValue={params.updateParamValue}
         schema={widgetSchema}

@@ -212,9 +212,9 @@ def get_related_m2m_objects(objs, exclude: list | None = None) -> dict[Any, list
             continue
 
         # get the other side of the relationship (the one that is not the origin)
-        related_field = [
+        related_field = next(
             f for f in through_model._meta.get_fields() if f.is_relation and f.related_model == related_model
-        ][0]
+        )
 
         field = related.field
         qs = collector.related_objects(through_model, [field], objs)
@@ -304,11 +304,10 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = No
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
-    pipelines = Node.objects.filter(
+    return Node.objects.filter(
         Q(**{f"params__{pipeline_param_key}__contains": instance.id})
         | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
     )
-    return pipelines
 
 
 def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
@@ -338,6 +337,35 @@ def _get_related_pipeline_experiments_queryset(
         )
         .distinct()
     )
+
+
+def get_related_pipeline_nodes_queryset(instance, param_key: str, list_param_key: str | None = None) -> models.QuerySet:
+    """Live pipeline nodes referencing ``instance``, with no pipeline/experiment-status filtering."""
+    queryset = get_related_pipelines_queryset(instance, param_key)
+    if list_param_key:
+        queryset = queryset | get_related_pipelines_queryset_for_list_param(instance, list_param_key)
+    return queryset.distinct()
+
+
+def get_related_experiment_versions_queryset(
+    instance, param_key: str, list_param_key: str | None = None
+) -> models.QuerySet:
+    """Live default-published-or-working experiments referencing ``instance`` or any of its versions."""
+    ids = [*instance.versions.values_list("id", flat=True), instance.id]
+
+    queryset = get_related_pipeline_experiments_queryset(ids, param_key)
+    if list_param_key:
+        queryset = queryset | get_related_pipeline_experiments_queryset_list_param(ids, list_param_key)
+    return queryset.filter(Q(is_default_version=True) | Q(working_version__id__isnull=True))
+
+
+def has_related_pipeline_references(instance, param_key: str, list_param_key: str | None = None) -> bool:
+    """True if ``instance`` is still referenced and can't be safely archived."""
+    if get_related_pipeline_nodes_queryset(instance, param_key, list_param_key).exists():
+        return True
+    if instance.is_working_version:
+        return get_related_experiment_versions_queryset(instance, param_key, list_param_key).exists()
+    return False
 
 
 def get_admin_emails_with_delete_permission(team):

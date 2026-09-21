@@ -2,6 +2,7 @@ import copy
 from uuid import uuid4
 
 from apps.pipelines.flow import FlowNode, FlowNodeData
+from apps.pipelines.node_type import NodeType
 
 
 def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
@@ -22,7 +23,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
     new_data.pop("nodes", None)
     old_to_new_node_ids = {}
     for old_id, node_type in node_types.items():
-        if node_type in ("StartNode", "EndNode"):
+        if NodeType(node_type).is_server_managed:
             new_id = str(uuid4())
         else:
             new_id = f"{node_type}-{uuid4().hex[:5]}"
