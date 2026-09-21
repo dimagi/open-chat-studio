@@ -403,7 +403,7 @@ class TestDisabledChannelRefusesSessionStarts:
         experiment = session.experiment
         client.force_login(self._console_user(experiment, "change_experimentsession"))
 
-        with patch("apps.chatbots.views.get_channel_class_for_platform") as get_channel_class:
+        with patch("apps.chatbots.views.chatbot_views.get_channel_class_for_platform") as get_channel_class:
             get_channel_class.return_value.start_new_session.side_effect = ChannelDisabledException(
                 session.experiment_channel
             )
@@ -429,7 +429,7 @@ class TestDisabledChannelRefusesSessionStarts:
         session.experiment_channel.save()
         client.force_login(self._console_user(experiment, "change_experimentsession"))
 
-        with patch("apps.chatbots.views.send_bot_message") as send_bot_message:
+        with patch("apps.chatbots.views.chatbot_views.send_bot_message") as send_bot_message:
             response = client.post(
                 reverse(
                     "chatbots:chatbot_new_session",
@@ -470,7 +470,7 @@ class TestDisabledChannelRefusesSessionStarts:
         channel.save()
         client.force_login(self._console_user(experiment, "invite_participants", "view_experiment"))
 
-        with patch("apps.chatbots.views.send_experiment_invitation") as send_invitation:
+        with patch("apps.chatbots.views.chatbot_views.send_experiment_invitation") as send_invitation:
             response = client.post(
                 reverse("chatbots:chatbots_invitations", args=[experiment.team.slug, experiment.id]),
                 data={"experiment_id": experiment.id, "email": "someone@example.com", "invite_now": "on"},

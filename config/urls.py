@@ -25,7 +25,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
-from apps.chatbots.public_link import public_link_page
+from apps.chatbots.views import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
@@ -122,7 +122,8 @@ urlpatterns = [
     path("tz_detect/", include("tz_detect.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
     path("silk/", include("silk.urls", namespace="silk")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+]
 
 if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls

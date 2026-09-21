@@ -10,6 +10,7 @@ from apps.channels.pipeline import (
 from apps.chat.exceptions import (
     AudioTranscriptionException,
     ChatException,
+    ProviderConfigurationError,
     UserActionableError,
 )
 from apps.pipelines.exceptions import (
@@ -201,6 +202,10 @@ class TestUserCausedErrors:
             pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
             pytest.param(CodeNodeRunError("name 'foo' is not defined"), id="code-node-run-error"),
             pytest.param(NodeUserConfigRunError('UndefinedError in field "subject"'), id="node-user-config-run-error"),
+            pytest.param(
+                ProviderConfigurationError("The LLM provider account has no credit or quota remaining."),
+                id="provider-configuration-error",
+            ),
         ],
     )
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")

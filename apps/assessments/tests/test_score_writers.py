@@ -279,7 +279,7 @@ def test_write_scores_from_evaluation_result_is_idempotent(eval_result_on_sessio
 
 @pytest.mark.django_db()
 def test_write_scores_from_evaluation_result_error_payload_writes_no_scores(eval_result_on_session):
-    team, session, result = eval_result_on_session
+    _team, _session, result = eval_result_on_session
     result.output = {"error": "boom"}
     result.save()
 
@@ -312,7 +312,7 @@ def annotation_on_session(db):
 
 @pytest.mark.django_db()
 def test_write_scores_from_annotation_decomposes_data_dict(annotation_on_session):
-    team, session, annotation, reviewer = annotation_on_session
+    _team, session, annotation, reviewer = annotation_on_session
     # Annotation.save already triggers the writer; assert what's on the table.
     scores = {s.name: s for s in Score.objects.filter(review=annotation)}
 
@@ -367,7 +367,7 @@ def test_write_scores_from_annotation_draft_annotation_writes_no_scores(annotati
 
 @pytest.mark.django_db()
 def test_write_scores_from_annotation_direct_call_is_idempotent(annotation_on_session):
-    team, session, annotation, _ = annotation_on_session
+    _team, _session, annotation, _ = annotation_on_session
     first_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
     write_scores_from_annotation(annotation)
     second_ids = set(Score.objects.filter(review=annotation).values_list("id", flat=True))
@@ -409,7 +409,7 @@ def test_annotation_save_survives_score_writer_failure(annotation_on_session, ca
     failure is logged. Mirrors the recompute_queue_aggregates resilience pattern."""
     caplog.set_level(logging.ERROR, logger="ocs.human_annotations")
 
-    team, session, _existing_annotation, reviewer = annotation_on_session
+    team, _session, _existing_annotation, reviewer = annotation_on_session
     # Build a fresh item in a new queue + new session to sidestep both the
     # unique(item, reviewer) constraint and the unique_session_per_queue constraint.
     queue = AnnotationQueueFactory.create(

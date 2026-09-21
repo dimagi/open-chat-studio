@@ -43,7 +43,7 @@ def test_group_evaluation_with_multiple_evaluators():
 
     dataset = EvaluationDatasetFactory.create(messages=[evaluation_message])
     evaluation_config = cast(
-        EvaluationConfig,
+        "EvaluationConfig",
         EvaluationConfigFactory.create(evaluators=[evaluator1, evaluator2, evaluator3], dataset=dataset),
     )
 
@@ -61,7 +61,7 @@ def test_group_evaluation_with_multiple_evaluators():
 @pytest.mark.django_db()
 def test_empty_evaluation_config():
     """A config with no evaluators cannot start a run, so no run row is created."""
-    evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[]))
+    evaluation_config = cast("EvaluationConfig", EvaluationConfigFactory.create(evaluators=[]))
 
     with pytest.raises(NoActiveEvaluatorsError):
         evaluation_config.run()

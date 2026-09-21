@@ -4,12 +4,12 @@
 import hashlib
 import json
 from functools import cache
-from typing import cast
 
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.nodes.base import BasePipelineNode, OptionsSource, PipelineRouterNode, resolve_node_class
+from apps.pipelines.node_type import NodeType
+from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
@@ -48,13 +48,14 @@ def get_node_type_schema(node_type: str) -> dict:
     raise unknown_node_type(node_type)
 
 
-def get_node_class(node_type: str) -> type[BasePipelineNode]:
-    """The node class behind a type this API publishes, or :func:`get_node_type_schema`'s 404.
+def served_node_type(node_type: str) -> NodeType:
+    """The named type this API publishes, or :func:`get_node_type_schema`'s 404.
 
-    The served types are exactly the resolvable node classes, so past the lookup this cannot be None.
+    The lookup is the point: it refuses a name the API does not serve before the caller asks the
+    type anything.
     """
     get_node_type_schema(node_type)
-    return cast(type[BasePipelineNode], resolve_node_class(node_type))
+    return NodeType(node_type)
 
 
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
@@ -78,7 +79,7 @@ def served_option_keys() -> frozenset[str]:
 
 def unknown_node_type(requested_type: str) -> NotFound:
     """A 404 carrying why the name failed and what the client could have asked for instead."""
-    if requested_type in _structural_types():
+    if NodeType(requested_type).is_structural:
         detail = (
             f"Node type '{requested_type}' is managed by the server and cannot be created or "
             f"configured. It may appear as a node's `type` in /inspect/ responses."
@@ -102,10 +103,7 @@ def _available_schemas() -> list[dict]:
 def _output_topology(schema: dict) -> dict:
     """How edges leave this node type. ``EndNode`` is the only terminating type and it is unlisted,
     so there is no zero-output case."""
-    node_class = resolve_node_class(schema["title"])
-    if node_class is not None and issubclass(node_class, PipelineRouterNode):
-        return PER_KEYWORD_OUTPUT
-    return SINGLE_OUTPUT
+    return PER_KEYWORD_OUTPUT if NodeType(schema["title"]).is_router else SINGLE_OUTPUT
 
 
 def _schema(node_schema: dict) -> dict:
@@ -181,17 +179,6 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type
-
-
-@cache
-def _structural_types() -> frozenset[str]:
-    """Types the server creates and manages. Unlisted, but ``/inspect/`` still reports them as the
-    ``type`` of real nodes."""
-    return frozenset(
-        schema["title"]
-        for schema in get_node_schemas()
-        if not schema.get("ui:can_add") and not schema.get("ui:deprecated")
-    )
 
 
 def _valid_type_names() -> list[str]:

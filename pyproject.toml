@@ -119,6 +119,30 @@ filterwarnings = [
     # pytest 10 turns these into hard errors. Fail on them now so they get fixed as they appear,
     # rather than as a wall of breakage at upgrade time.
     "error::pytest.PytestRemovedIn10Warning",
+    # A deprecation raised against our own call site is a bug to fix, not a warning to read past.
+    # The module field matches the dotted __name__ of the frame the warning is reported against
+    # (the caller, via stacklevel) -- not a file path, so `apps/...` would never match. It only
+    # works for warnings.warn(); anything reported by the compiler or the GC, ResourceWarning
+    # above all, carries a file path here instead and is deliberately left as a warning.
+    # These must stay above the ignores below: pytest applies filters in order and the last
+    # matching one wins, so an ignore can still exempt a specific message.
+    "error::DeprecationWarning:apps\\..*",
+    "error::PendingDeprecationWarning:apps\\..*",
+    # Deprecations inside dependencies, which we can only clear by upgrading or dropping the
+    # dependency. Each is pinned to its message so the same library raising something new is
+    # still reported.
+    "ignore:invalid escape sequence:SyntaxWarning",  # pydub; ruff's W605 covers our own code
+    "ignore:Couldn't find ffmpeg or avconv:RuntimeWarning",  # pydub, no ffmpeg on the CI runner
+    "ignore::SyntaxWarning:RestrictedPython.compile",  # code nodes whose restricted source prints
+    "ignore:CheckConstraint.check is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
+    "ignore:`langchain-community` is being sunset:DeprecationWarning",
+    "ignore:The `parse_obj` method is deprecated:pydantic.PydanticDeprecatedSince20",
+    "ignore:`FieldValidationInfo` is deprecated:DeprecationWarning",
+    "ignore:'count' is passed as positional argument:DeprecationWarning",  # mailparser-reply
+    "ignore:datetime.datetime.utcnow:DeprecationWarning",  # botocore
+    "ignore:datetime.datetime.utcfromtimestamp:DeprecationWarning",  # dateutil
+    # Our own, but it has to stay until the Django 6 upgrade makes https the default scheme.
+    "ignore:The FORMS_URLFIELD_ASSUME_HTTPS transitional setting is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
 ]
 
 [tool.ruff]
@@ -135,8 +159,33 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "PLC0415", "TID253"]
-ignore = ["PT019", "SIM102", "SIM108", "SIM117"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "C90", "PLC0415", "TID253"]
+ignore = [
+    "PT019",
+    "SIM102",
+    "SIM108",
+    "SIM117",
+    # An explicit `else`/`elif` after a `return` is the clearer shape where the branches are
+    # parallel in meaning (dispatch on request method, on node type, on provider). 63 hits, all
+    # of them de-indenting a block for no behaviour change. RET501-RET504 stay on.
+    "RET505",
+    "RET506",
+    "RET507",
+    "RET508",
+    # Unicode-confusable checks: the flagged characters are intentional in human-facing
+    # strings, docstrings and comments (en dashes, ×, curly quotes).
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Django/DRF declarative class config (`Meta.fields`, `widgets`, `list_display`,
+    # serializer `Meta` lists) is class-level by design; annotating each as ClassVar is noise.
+    "RUF012",
+    # `# noqa: PLC0415 - <reason>` is a justification marker read by
+    # scripts/check_inline_imports.py. TID253's banned-module-level-imports already exempts
+    # those imports from PLC0415, so RUF100 sees the directives as unused and strips the
+    # reason the checker needs. Its fix also mangles comments that merely mention `# noqa`.
+    "RUF100",
+]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
@@ -150,6 +199,15 @@ line-ending = "auto"
 [tool.ruff.lint.extend-per-file-ignores]
 "settings_production.py" = ["F405"]
 "docs/plans/*.py" = ["PLC0415"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resolves annotations at runtime, so an import only a pydantic model references
+# must stay at module level. Covers the pydantic-derived hierarchies in apps/pipelines/nodes
+# and apps/channels/datamodels.
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 
 [tool.ruff.lint.flake8-pytest-style]
 mark-parentheses = true

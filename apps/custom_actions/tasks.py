@@ -58,7 +58,7 @@ def check_single_custom_action_health(action_id: int):
     except httpx.RequestError as e:
         new_status = HealthCheckStatus.DOWN
         failure_reason = str(e)
-        logger.warning(f"Health check error for {action.name}: {str(e)}")
+        logger.warning(f"Health check error for {action.name}: {e!s}")
 
     # Notify team members if status changed to DOWN from a non-DOWN state
     should_notify = new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN

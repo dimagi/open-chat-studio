@@ -114,7 +114,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
             fired_at=timezone.now()
         )
         if not claimed:
-            return None
+            return
 
         sessions = list(self._resolve_sessions())
         if not sessions:
@@ -123,7 +123,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
                 status=EventLogStatusChoices.FAILURE,
                 log="No active session was found to run this trigger.",
             )
-            return None
+            return
 
         handler_cls = ACTION_HANDLERS.get(self.action.action_type)
         if not handler_cls:
@@ -132,7 +132,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
                 status=EventLogStatusChoices.FAILURE,
                 log=f"Action with type '{self.action.action_type}' not found.",
             )
-            return None
+            return
 
         for session in sessions:
             try:
@@ -142,7 +142,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
                 logger.exception(e)
                 working_version.event_logs.create(session=session, status=EventLogStatusChoices.FAILURE, log=str(e))
 
-        return None
+        return
 
     def _resolve_sessions(self):
         """Return a queryset of active sessions for this trigger's experiment.
@@ -174,7 +174,7 @@ class ScheduledTrigger(BaseModel, VersionsMixin):
         return new_instance
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs", "fired_at"]
+        return [*super().get_fields_to_exclude(), "action", "experiment", "event_logs", "fired_at"]
 
     def _get_version_details(self):
         event_action_type = EventActionType(self.action.action_type).label

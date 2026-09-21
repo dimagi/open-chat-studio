@@ -8,8 +8,6 @@ from functools import cached_property
 from io import StringIO
 from typing import Any
 
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -940,6 +938,7 @@ def load_experiment_versions(request, team_slug: str):
 
 @login_and_team_required
 @permission_required("evaluations.change_evaluationrun")
+@require_http_methods(["GET", "POST"])
 def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Upload CSV to update evaluation run results"""
     evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
@@ -955,7 +954,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
             ],
         }
         return render(request, "evaluations/evaluation_run_update.html", context)
-    elif request.method == "POST":
+    else:
         try:
             payload = json.loads(request.body)
             csv_data = payload.get("csv_data", [])
@@ -966,7 +965,7 @@ def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, e
             )
             return JsonResponse({"success": True, "task_id": task.id})
         except Exception as e:
-            logger.error(f"Error starting CSV upload for evaluation run {evaluation_run.id}: {str(e)}")
+            logger.error(f"Error starting CSV upload for evaluation run {evaluation_run.id}: {e!s}")
             return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 
@@ -1039,29 +1038,4 @@ def start_bulk_download(request, team_slug: str, evaluation_pk: int):
         request,
         "evaluations/partials/bulk_download.html",
         {"config": config, "task_id": task.id},
-    )
-
-
-@login_and_team_required
-@permission_required("evaluations.view_evaluationrun")
-def get_bulk_download_link(request, team_slug: str, evaluation_pk: int, task_id: str):
-    """Poll the bulk export task and return a download link when ready."""
-    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
-    info = Progress(AsyncResult(task_id)).get_info()
-    context: dict = {"config": config}
-    if info["complete"] and info["success"]:
-        file_id = info["result"].get("file_id")
-        if file_id:
-            download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
-            context["export_download_url"] = download_url
-        else:
-            context["export_error"] = info["result"].get("error", "Export failed.")
-    elif info["complete"]:
-        context["export_error"] = "Export failed."
-    else:
-        context["task_id"] = task_id
-    return TemplateResponse(
-        request,
-        "evaluations/partials/bulk_download.html",
-        context,
     )

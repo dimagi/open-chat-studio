@@ -35,7 +35,7 @@ def teams_list(flag):
     """Return set of teams, for display in admin list. If there are more than
     MAX_TEAMS_DISPLAY, show that many followed by ellipsis."""
     if flag.teams.count() > MAX_TEAMS_DISPLAY:
-        return list([team.name for team in flag.teams.all()][:MAX_TEAMS_DISPLAY] + ["..."])
+        return [*[team.name for team in flag.teams.all()][:MAX_TEAMS_DISPLAY], "..."]
     return [team.name for team in flag.teams.all()]
 
 

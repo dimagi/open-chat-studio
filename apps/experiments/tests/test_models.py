@@ -217,10 +217,10 @@ class TestExperimentSession:
         experiment_b = ExperimentFactory.create(team=participant.team)
         ExperimentSessionFactory.create(participant=participant, experiment=experiment_b, team=participant.team)
 
-        event_action_a, params_a = self._construct_event_action(
+        event_action_a, _params_a = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=experiment_a.id
         )
-        event_action_b, params_b = self._construct_event_action(
+        event_action_b, _params_b = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=experiment_b.id
         )
         ScheduledMessageFactory.create(
@@ -380,7 +380,7 @@ class TestExperimentSession:
         if custom_experiment:
             event_action_kwargs["experiment_id"] = custom_experiment.id
 
-        event_action, params = self._construct_event_action(**event_action_kwargs)
+        event_action, _params = self._construct_event_action(**event_action_kwargs)
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 

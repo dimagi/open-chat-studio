@@ -119,7 +119,7 @@ class TestResultsTableAtScale:
         assert table.paginator.count == _LARGE_ROW_COUNT // 2
 
     def test_detail_panel_prev_next_over_a_1200_row_run_has_bounded_queries(self, client, team_with_users):
-        small_evaluator, small_config, small_run, small_messages = _make_run(team_with_users, row_count=3)
+        _small_evaluator, small_config, small_run, small_messages = _make_run(team_with_users, row_count=3)
         _, large_config, large_run, large_messages = _make_run(team_with_users, row_count=_LARGE_ROW_COUNT)
         client.force_login(team_with_users.members.first())
 

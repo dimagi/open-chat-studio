@@ -128,7 +128,7 @@ def parse_history_text(history_text: str) -> list:
 
     # Validate that history text starts with user: or assistant:
     first_line = history_text.strip().lower()
-    if not (first_line.startswith("user:") or first_line.startswith("assistant:")):
+    if not first_line.startswith(("user:", "assistant:")):
         raise HistoryParseException
 
     current_message = None
@@ -152,7 +152,7 @@ def parse_history_text(history_text: str) -> list:
             }
         elif current_message:
             # Continuation of current message content
-            current_message["content"] = cast(str, current_message["content"]) + "\n" + line_stripped
+            current_message["content"] = cast("str", current_message["content"]) + "\n" + line_stripped
 
     if current_message:
         history.append(current_message)
@@ -482,8 +482,7 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
 def normalize_json_quotes(text):
     """Normalize fancy quotes to regular quotes for JSON parsing."""
     text = text.replace("“", '"').replace("”", '"')
-    text = text.replace("‘", "'").replace("’", "'")
-    return text
+    return text.replace("‘", "'").replace("’", "'")
 
 
 def parse_csv_value_as_json(value):

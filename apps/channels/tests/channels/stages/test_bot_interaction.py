@@ -15,7 +15,7 @@ class TestBotInteractionStage:
     @patch("apps.channels.stages.core.get_bot")
     def test_calls_submit_input_callback(self, mock_get_bot):
         mock_bot = MagicMock()
-        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
+        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=list)
         mock_get_bot.return_value = mock_bot
         callbacks = StubCallbacks()
         ctx = make_context(user_query="Hello", callbacks=callbacks)
@@ -27,7 +27,7 @@ class TestBotInteractionStage:
     @patch("apps.channels.stages.core.get_bot")
     def test_creates_bot_lazily(self, mock_get_bot):
         mock_bot = MagicMock()
-        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
+        mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=list)
         mock_get_bot.return_value = mock_bot
         ctx = make_context(user_query="Hello", bot=None)
 
@@ -39,7 +39,7 @@ class TestBotInteractionStage:
     @patch("apps.channels.stages.core.get_bot")
     def test_reuses_existing_bot(self, mock_get_bot):
         existing_bot = MagicMock()
-        existing_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
+        existing_bot.process_input.return_value = MagicMock(content="response", get_attached_files=list)
         ctx = make_context(user_query="Hello", bot=existing_bot)
 
         self.stage(ctx)

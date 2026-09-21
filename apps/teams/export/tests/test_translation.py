@@ -5,27 +5,26 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.teams.export.translation import (
-    FKTranslationStore,
     derive_pk_cursor,
     derive_updated_at_cursor,
 )
 
 
-def test_record_and_get_target_round_trip(tmp_path):
-    store = FKTranslationStore(tmp_path / "team.sqlite")
+def test_record_and_get_target_round_trip(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
     store.record("teams.team", 5, 99)
     assert store.get_target("teams.team", 5) == 99
     assert store.get_target("teams.team", 6) is None
 
 
-def test_index_persists_across_reopen(tmp_path):
+def test_index_persists_across_reopen(make_store, tmp_path):
     path = tmp_path / "team.sqlite"
-    FKTranslationStore(path).record("teams.team", 5, 99)
-    assert FKTranslationStore(path).get_target("teams.team", 5) == 99
+    make_store(path).record("teams.team", 5, 99)
+    assert make_store(path).get_target("teams.team", 5) == 99
 
 
-def test_null_target_is_a_checkpoint_until_filled(tmp_path):
-    store = FKTranslationStore(tmp_path / "team.sqlite")
+def test_null_target_is_a_checkpoint_until_filled(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
     store.record("chat.chat", 7)  # created marker, target not written yet
     assert store.has_target("chat.chat", 7) is False
     store.record("chat.chat", 7, 42)
@@ -33,24 +32,24 @@ def test_null_target_is_a_checkpoint_until_filled(tmp_path):
     assert store.get_target("chat.chat", 7) == 42
 
 
-def test_max_source_key_ignores_uncommitted_rows(tmp_path):
-    store = FKTranslationStore(tmp_path / "team.sqlite")
+def test_max_source_key_ignores_uncommitted_rows(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
     store.record("chat.chat", 1, 10)
     store.record("chat.chat", 3, 30)
     store.record("chat.chat", 9)  # uncommitted: must not advance the cursor
     assert store.max_source_key("chat.chat") == 3
 
 
-def test_has_unfilled_targets(tmp_path):
-    store = FKTranslationStore(tmp_path / "team.sqlite")
+def test_has_unfilled_targets(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
     store.record("chat.chat", 1, 10)
     assert store.has_unfilled_targets() is False
     store.record("chat.chat", 2)
     assert store.has_unfilled_targets() is True
 
 
-def test_committed_targets_excludes_uncommitted(tmp_path):
-    store = FKTranslationStore(tmp_path / "team.sqlite")
+def test_committed_targets_excludes_uncommitted(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
     store.record("chat.chat", 1, 10)
     store.record("chat.chat", 2)  # uncommitted
     assert store.committed_targets("chat.chat") == {1: 10}

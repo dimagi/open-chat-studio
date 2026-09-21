@@ -125,7 +125,7 @@ def _save_checkpoint(filepath: str, migrated_ids: set, resume_from_timestamp: st
     os.replace(tmp_path, filepath)
 
 
-def _transform_trace_to_ingestion_batch(source_trace):
+def _transform_trace_to_ingestion_batch(source_trace):  # noqa: C901 - translator: a branch per observation type
     """Transform a fetched TraceWithFullDetails into ingestion events for the batch endpoint."""
 
     ingestion_events = []
@@ -519,7 +519,7 @@ class Command(BaseCommand):
                     self.stdout.write("    Transient error, retrying...")
         return on_exhausted
 
-    def _migrate_traces(
+    def _migrate_traces(  # noqa: C901 - paging loop with resume, retry and per-trace failure accounting
         self,
         source_config: dict,
         dest_config: dict,
@@ -645,7 +645,7 @@ class Command(BaseCommand):
                     executor.submit(_process_single_trace, trace_info): trace_info for trace_info in trace_list.data
                 }
                 for future in as_completed(futures):
-                    status, trace_id = future.result()
+                    status, _trace_id = future.result()
                     if status == "migrated":
                         total_migrated += 1
                     elif status == "failed_fetch":

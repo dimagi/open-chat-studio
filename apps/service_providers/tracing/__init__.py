@@ -1,4 +1,4 @@
-__all__ = ["Tracer", "LangFuseTracer", "TracingService", "OCS_TRACE_PROVIDER", "TraceInfo"]
+__all__ = ["OCS_TRACE_PROVIDER", "LangFuseTracer", "TraceInfo", "Tracer", "TracingService"]
 
 from .base import TraceInfo, Tracer
 from .const import OCS_TRACE_PROVIDER
