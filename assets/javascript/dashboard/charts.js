@@ -76,8 +76,6 @@ class ChartManager {
         const ctx = document.getElementById('activeParticipantsChart');
         if (!ctx) return;
 
-        this.destroyChart('activeParticipants');
-
         const chartData = {
             labels: data.map(item => this.formatDateLabel(item.date)),
             datasets: [{
@@ -112,7 +110,7 @@ class ChartManager {
             }
         };
 
-        this.charts.activeParticipants = new Chart(ctx, {
+        this.createChart('activeParticipants', ctx, {
             type: 'line',
             data: chartData,
             options: options
@@ -122,8 +120,6 @@ class ChartManager {
     renderSessionAnalyticsChart(data) {
         const ctx = document.getElementById('sessionAnalyticsChart');
         if (!ctx) return;
-
-        this.destroyChart('sessionAnalytics');
 
         const chartData = {
             labels: data.map(item => this.formatDateLabel(item.date)),
@@ -159,7 +155,7 @@ class ChartManager {
             }
         };
 
-        this.charts.sessionAnalytics = new Chart(ctx, {
+        this.createChart('sessionAnalytics', ctx, {
             type: 'line',
             data: chartData,
             options: options
@@ -169,8 +165,6 @@ class ChartManager {
     renderMessageVolumeChart(data) {
         const ctx = document.getElementById('messageVolumeChart');
         if (!ctx) return;
-
-        this.destroyChart('messageVolume');
 
         const labels = data.totals?.map(item => this.formatDateLabel(item.date)) || [];
 
@@ -216,7 +210,7 @@ class ChartManager {
             }
         };
 
-        this.charts.messageVolume = new Chart(ctx, {
+        this.createChart('messageVolume', ctx, {
             type: 'line',
             data: chartData,
             options: options
@@ -226,8 +220,6 @@ class ChartManager {
     renderAverageResponseTimeChart(data) {
         const ctx = document.getElementById('averageResponseTimeChart');
         if (!ctx) return;
-
-        this.destroyChart('averageResponseTime');
 
         const labels = data?.map(item => this.formatDateLabel(item.date)) || [];
 
@@ -275,7 +267,7 @@ class ChartManager {
             }
         };
 
-        this.charts.averageResponseTime = new Chart(ctx, {
+        this.createChart('averageResponseTime', ctx, {
             type: 'line',
             data: chartData,
             options: options
@@ -285,8 +277,6 @@ class ChartManager {
     renderChannelBreakdownChart(data) {
         const ctx = document.getElementById('channelBreakdownChart');
         if (!ctx) return;
-
-        this.destroyChart('channelBreakdown');
 
         const channels = data.platforms || [];
         const totalSessions = data.totals?.sessions || 1;
@@ -349,7 +339,7 @@ class ChartManager {
             }
         };
 
-        this.charts.channelBreakdown = new Chart(ctx, {
+        this.createChart('channelBreakdown', ctx, {
             type: 'doughnut',
             data: chartData,
             options: options
@@ -359,8 +349,6 @@ class ChartManager {
     renderSessionLengthChart(distributionData) {
         const ctx = document.getElementById('sessionLengthChart');
         if (!ctx) return;
-
-        this.destroyChart('sessionLength');
 
         const chartData = {
             labels: distributionData.map(bin => bin.label),
@@ -400,7 +388,7 @@ class ChartManager {
             }
         };
 
-        this.charts.sessionLength = new Chart(ctx, {
+        this.createChart('sessionLength', ctx, {
             type: 'bar',
             data: chartData,
             options: options
@@ -410,8 +398,6 @@ class ChartManager {
     renderCostTimeseriesChart(data) {
         const ctx = document.getElementById('costTimeseriesChart');
         if (!ctx) return;
-
-        this.destroyChart('costTimeseries');
 
         const points = data || [];
         // One stacked series per UsageRecord.source the backend reported. A read filtered to
@@ -470,7 +456,7 @@ class ChartManager {
             }
         };
 
-        this.charts.costTimeseries = new Chart(ctx, {
+        this.createChart('costTimeseries', ctx, {
             type: 'bar',
             data: chartData,
             options: options
@@ -510,13 +496,11 @@ class ChartManager {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
 
-        this.destroyChart(chartKey);
-
         const options = this.costBarOptions();
         if (tooltipTitle) {
             options.plugins.tooltip.callbacks.title = tooltipTitle;
         }
-        this.charts[chartKey] = new Chart(ctx, {
+        this.createChart(chartKey, ctx, {
             type: 'bar',
             data: {
                 labels: rows.map(getLabel),
@@ -559,8 +543,6 @@ class ChartManager {
         const ctx = document.getElementById('costServiceKindChart');
         if (!ctx) return;
 
-        this.destroyChart('costServiceKind');
-
         const series = serviceKindSeries(byServiceKind, mode);
         const formatValue = mode === 'tokens'
             ? (value) => `${(value || 0).toLocaleString()} tokens`
@@ -572,7 +554,7 @@ class ChartManager {
             this.colorPalette.secondary
         ];
 
-        this.charts.costServiceKind = new Chart(ctx, {
+        this.createChart('costServiceKind', ctx, {
             type: 'doughnut',
             data: {
                 labels: series.labels,
@@ -603,8 +585,6 @@ class ChartManager {
         const ctx = document.getElementById('costP95Chart');
         if (!ctx) return;
 
-        this.destroyChart('costP95');
-
         const {labels, datasets} = p95ChartSeries(series);
         const colors = [
             this.colorPalette.primary,
@@ -615,7 +595,7 @@ class ChartManager {
             this.colorPalette.info
         ];
 
-        this.charts.costP95 = new Chart(ctx, {
+        this.createChart('costP95', ctx, {
             type: 'line',
             data: {
                 labels: labels.map(date => this.formatDateLabel(date)),
@@ -651,17 +631,13 @@ class ChartManager {
         });
     }
 
-    destroyChart(chartKey) {
-        if (this.charts[chartKey]) {
-            this.charts[chartKey].destroy();
-            delete this.charts[chartKey];
-        }
-    }
-
-    destroyAllCharts() {
-        Object.keys(this.charts).forEach(key => {
-            this.destroyChart(key);
-        });
+    createChart(chartKey, canvas, config) {
+        // Two ways a stale chart survives: the cost panel swaps its HTML, leaving the old
+        // chart on a detached canvas only the registry can still reach; and a re-executed
+        // script loses the registry, leaving a live chart only the canvas can reach.
+        this.charts[chartKey]?.destroy();
+        Chart.getChart(canvas)?.destroy();
+        this.charts[chartKey] = new Chart(canvas, config);
     }
 
     formatDateLabel(dateString) {

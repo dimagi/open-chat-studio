@@ -1,1 +1,1635 @@
-{}
+{
+  "anthropic/claude-haiku-4-5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Alias of claude-haiku-4-5-20251001, the pinned ID Anthropic documents and OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "anthropic/claude-mythos-5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Project Glasswing cybersecurity model; Anthropic does not plan to make it generally available.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "anthropic/claude-mythos-5-1": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Project Glasswing cybersecurity model; Anthropic does not plan to make it generally available.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "anthropic/claude-mythos-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Deprecated Project Glasswing preview, gated to approved defensive-security organisations.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "anthropic/claude-opus-4-5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Alias of claude-opus-4-5-20251101, the pinned ID Anthropic documents and OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "anthropic/claude-opus-4-6-20260205": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated form of claude-opus-4-6; from the 4.6 generation on the dateless ID is the pinned snapshot OCS registers.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "legacy_thinking": true,
+      "effort_levels": [
+        "max"
+      ]
+    }
+  },
+  "anthropic/claude-opus-4-7-20260416": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated form of claude-opus-4-7; from the 4.6 generation on the dateless ID is the pinned snapshot OCS registers.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "anthropic/claude-sonnet-4-5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Alias of claude-sonnet-4-5-20250929, the pinned ID Anthropic documents and OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/chat-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/codex-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/command-r-plus": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Served through Microsoft Foundry's third-party catalogue, not the Azure OpenAI endpoint OCS calls."
+  },
+  "azure/computer-use-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Computer-use tool model, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/container": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Container tool billing line, not a model."
+  },
+  "azure/gpt-3.5-turbo": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-35-turbo-16k-0613": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-0125-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-0613": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-1106-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-32k-0613": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-turbo": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-turbo-2024-04-09": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4-turbo-vision-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired GPT-3.5/GPT-4-era deployment; the equivalents are already in DELETED_MODELS."
+  },
+  "azure/gpt-4.1-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4.1-mini-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4.1-nano-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4.5-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired preview, superseded by the GPT-4.1 and GPT-5 lines."
+  },
+  "azure/gpt-4o-2024-05-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4o-2024-08-06": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4o-2024-11-20": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4o-audio-preview-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-4o-mini-2024-07-18": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "azure/gpt-4o-mini-audio-preview-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "GPT-5 line is already deprecated in OCS in favour of the gpt-5.4 family.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "GPT-5 line is already deprecated in OCS in favour of the gpt-5.4 family.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-codex": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "GPT-5 line is already deprecated in OCS in favour of the gpt-5.4 family.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-mini-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-nano": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "GPT-5 line is already deprecated in OCS in favour of the gpt-5.4 family.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-nano-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "GPT-5 line is already deprecated in OCS in favour of the gpt-5.4 family.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.1-2025-11-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "minimal"
+      ]
+    }
+  },
+  "azure/gpt-5.1-codex": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.1-codex-2025-11-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.1-codex-max": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.1-codex-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.1-codex-mini-2025-11-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.2-2025-12-11": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.2-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Azure retired gpt-5.2-chat on 2026-06-29; the LiteLLM key is an EU regional price row."
+  },
+  "azure/gpt-5.2-codex": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.2-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in Microsoft's Azure OpenAI model list; no 5.2 pro-tier deployment is offered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.2-pro-2025-12-11": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in Microsoft's Azure OpenAI model list; no 5.2 pro-tier deployment is offered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.3-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Azure retired gpt-5.3-chat on 2026-06-29; the LiteLLM key is an EU regional price row."
+  },
+  "azure/gpt-5.3-codex": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.4-2026-03-05": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "minimal",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.4-mini-2026-03-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.4-nano-2026-03-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.4-pro-2026-03-05": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.5-2026-04-23": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.5-2026-04-24": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.5-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in Microsoft's Azure OpenAI model list; no 5.5 pro-tier deployment is offered.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.5-pro-2026-04-23": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in Microsoft's Azure OpenAI model list; no 5.5 pro-tier deployment is offered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/gpt-5.6": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Documented alias of gpt-5.6-sol, which this run registers.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.6-luna-2026-07-09": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.6-sol-2026-07-09": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-5.6-terra-2026-07-09": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-6-astra-2026-09-03": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-audio-1.5-2026-02-23": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-audio-2025-08-28": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-audio-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-audio-mini-2025-10-06": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-chat-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/mistral-large-2402": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Served through Microsoft Foundry's third-party catalogue, not the Azure OpenAI endpoint OCS calls."
+  },
+  "azure/mistral-large-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Served through Microsoft Foundry's third-party catalogue, not the Azure OpenAI endpoint OCS calls."
+  },
+  "azure/o1": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o1-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o1-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o1-mini-2024-09-12": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o1-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o1-preview-2024-09-12": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o3-2025-04-16": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o3-deep-research": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Deep-research agent model, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o3-mini-2025-01-31": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o3-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded by the gpt-5 pro tier; OCS registers no o3-pro on either provider.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o3-pro-2025-06-10": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded by the gpt-5 pro tier; OCS registers no o3-pro on either provider.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "azure/o4-mini-2025-04-16": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "deepseek/deepseek-coder": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Code-completion model, retired into deepseek-chat."
+  },
+  "deepseek/deepseek-r1": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Previous generation; api.deepseek.com serves it through the deepseek-reasoner alias OCS already lists.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "deepseek/deepseek-v3": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Previous generation; api.deepseek.com serves it through the deepseek-chat alias OCS already lists."
+  },
+  "deepseek/deepseek-v3.2": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Previous generation; api.deepseek.com serves it through the deepseek-chat/deepseek-reasoner aliases OCS already lists.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-2.5-computer-use-preview-10-2025": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Computer-use tool model, not a chat model."
+  },
+  "google/gemini-2.5-flash-lite": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Previous generation, and OCS is already retiring the 2.5 line on Vertex; 3.1/3.5 flash-lite replace it.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-3-flash-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded preview; the 3.5-3.8 flash models are registered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-3.1-pro-preview-customtools": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Tool-configuration variant of gemini-3.1-pro-preview, not a separate model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-exp-1114": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired experimental build."
+  },
+  "google/gemini-exp-1206": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired experimental build."
+  },
+  "google/gemini-flash-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-flash-lite-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-gemma-2-27b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired open-weights Gemma 2 build."
+  },
+  "google/gemini-gemma-2-9b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired open-weights Gemma 2 build."
+  },
+  "google/gemini-omni-1.1-flash": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Omni realtime audio model, not a text chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-omni-flash-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Omni realtime audio model, not a text chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-pro-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-robotics-er-2-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning model, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemini-robotics-er-2-streaming-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning model, not a chat model."
+  },
+  "google/gemma-3-27b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights Gemma line; OCS offers the Gemini chat catalogue only."
+  },
+  "google/gemma-4-26b-a4b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights Gemma line; OCS offers the Gemini chat catalogue only.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/gemma-4-31b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights Gemma line; OCS offers the Gemini chat catalogue only.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google/learnlm-1.5-pro-experimental": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired experimental LearnLM build."
+  },
+  "google_vertex_ai/gemini-2.5-computer-use-preview-10-2025": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Computer-use tool model, not a chat model."
+  },
+  "google_vertex_ai/gemini-2.5-flash-lite-preview-09-2025": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated preview of a model OCS registers and has already deprecated.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-2.5-flash-preview-09-2025": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated preview of a model OCS registers and has already deprecated.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-3-flash-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded preview; the 3.5-3.8 flash models are registered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-3.1-flash-lite-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Preview of gemini-3.1-flash-lite, which OCS already registers on Vertex.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-3.1-pro-preview-customtools": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Tool-configuration variant of gemini-3.1-pro-preview, not a separate model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-omni-1.1-flash": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Omni realtime audio model, not a text chat model."
+  },
+  "google_vertex_ai/gemini-omni-flash-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Omni realtime audio model, not a text chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-robotics-er-1.5-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning model, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-robotics-er-2": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning model, not a chat model."
+  },
+  "google_vertex_ai/gemma-4-26b-a4b-it": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights Gemma line; OCS offers the Gemini chat catalogue only."
+  },
+  "google_vertex_ai/medlm-large": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "MedLM domain model with no published rates."
+  },
+  "google_vertex_ai/medlm-medium": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "MedLM domain model with no published rates."
+  },
+  "groq/meta-llama/llama-prompt-guard-2-22m": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Prompt-injection guard classifier, not a chat model."
+  },
+  "groq/meta-llama/llama-prompt-guard-2-86m": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Prompt-injection guard classifier, not a chat model."
+  },
+  "groq/openai/gpt-oss-safeguard-20b": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Safety classifier, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "groq/qwen/qwen3.6-27b": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in Groq's served model list; qwen3.8-27b replaces it.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "minimax/MiniMax-M2.1": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded by MiniMax-M2.5, which carries the same rates and context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "minimax/MiniMax-M2.1-lightning": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "MiniMax serves -highspeed variants, not -lightning; no such model ID is offered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "minimax/MiniMax-M2.5-lightning": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "MiniMax serves -highspeed variants, not -lightning; no such model ID is offered.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/chat-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Rolling alias whose target changes without notice; OCS pins model names for cost tracking.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/computer-use-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Computer-use tool model, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/container": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Container tool billing line, not a model."
+  },
+  "openai/daybreak-blue-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Unannounced codenamed preview alias, absent from OpenAI's model catalogue.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/daybreak-red-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Unannounced codenamed preview alias, absent from OpenAI's model catalogue.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/ft:gpt-3.5-turbo": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-3.5-turbo-0125": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-3.5-turbo-0613": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-3.5-turbo-1106": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4-0613": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4.1-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4.1-mini-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4.1-nano-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4o-2024-08-06": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4o-2024-11-20": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:gpt-4o-mini-2024-07-18": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model."
+  },
+  "openai/ft:o4-mini-2025-04-16": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Fine-tune price row, not a selectable model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-3.5-turbo-0125": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of gpt-3.5-turbo, which OCS already carries as deprecated."
+  },
+  "openai/gpt-3.5-turbo-16k": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired 16k variant of gpt-3.5-turbo, which OCS already carries as deprecated."
+  },
+  "openai/gpt-4-turbo-2024-04-09": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of gpt-4-turbo, which is already in DELETED_MODELS."
+  },
+  "openai/gpt-4.1-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4.1-mini-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4.1-nano-2025-04-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4o-2024-05-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4o-2024-08-06": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4o-2024-11-20": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4o-audio-preview-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model."
+  },
+  "openai/gpt-4o-audio-preview-2025-06-03": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model."
+  },
+  "openai/gpt-4o-mini-2024-07-18": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name."
+  },
+  "openai/gpt-4o-mini-audio-preview-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model."
+  },
+  "openai/gpt-4o-mini-search-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Search-tool API model, not a general chat model."
+  },
+  "openai/gpt-4o-search-preview": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Search-tool API model, not a general chat model."
+  },
+  "openai/gpt-5-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Non-reasoning gpt-5 chat variant; the GPT-5 line is already deprecated in OCS.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-mini-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-nano-2025-08-07": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-pro-2025-10-06": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a GPT-5 model already deprecated in OCS.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-search-api": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Search-tool API model, not a general chat model.",
+    "params": {
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5-search-api-2025-10-14": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Search-tool API model, not a general chat model.",
+    "params": {
+      "effort_levels": []
+    }
+  },
+  "openai/gpt-5.1-2025-11-13": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none"
+      ]
+    }
+  },
+  "openai/gpt-5.2-2025-12-11": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.2-pro-2025-12-11": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.3-codex": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Codex coding-agent model, not a conversational chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "minimal"
+      ]
+    }
+  },
+  "openai/gpt-5.4-2026-03-05": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.4-mini-2026-03-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.4-nano-2026-03-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.4-pro-2026-03-05": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.5-2026-04-23": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.5-cyber": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity specialist release, not a general chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-5.5-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in OpenAI's model catalogue; no 5.5 pro tier is offered.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.5-pro-2026-04-23": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Not in OpenAI's model catalogue; no 5.5 pro tier is offered.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.6": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Documented alias of gpt-5.6-sol, which OCS already registers.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-5.6-cyber": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity specialist release, not a general chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-audio": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "openai/gpt-audio-1.5": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "openai/gpt-audio-2025-08-28": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "openai/gpt-audio-mini": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "openai/gpt-audio-mini-2025-12-15": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "openai/gpt-daybreak-blue-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Unannounced codenamed preview alias, absent from OpenAI's model catalogue.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-daybreak-red-latest": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Unannounced codenamed preview alias, absent from OpenAI's model catalogue.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-rosalind-research": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Research preview with no published context window."
+  },
+  "openai/o1": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o1-2024-12-17": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o1-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o1-pro-2025-03-19": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired o1 generation; superseded by o3/o4-mini, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o3-2025-04-16": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o3-mini-2025-01-31": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o3-pro": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded by the gpt-5 pro tier, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o3-pro-2025-06-10": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Superseded by the gpt-5 pro tier, which OCS registers.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/o4-mini-2025-04-16": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/codellama-34b-instruct": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/codellama-70b-instruct": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/deepseek-v4-flash-0731": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/glm-5.2": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/glm-5.3": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window."
+  },
+  "perplexity/glm-5.3-flash": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window."
+  },
+  "perplexity/kimi-k2.7-code": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "perplexity/kimi-k3": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/llama-2-70b-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/mistral-7b-instruct": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/mixtral-8x7b-instruct": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/nemotron-3-ultra-550b-a55b": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/nemotron-3.5-lightning-30b-a3b": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "perplexity/pplx-70b-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/pplx-70b-online": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/pplx-7b-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/pplx-7b-online": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/sonar-medium-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/sonar-medium-online": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/sonar-small-chat": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  },
+  "perplexity/sonar-small-online": {
+    "first_seen": "2026-09-17",
+    "verdict": "rejected",
+    "reason": "Retired; Perplexity's API now offers only the four sonar models."
+  }
+}

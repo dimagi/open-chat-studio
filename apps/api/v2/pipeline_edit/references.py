@@ -17,7 +17,7 @@ from typing import Any
 from rest_framework.exceptions import ValidationError
 
 from apps.api.v2.discovery.node_types import parameter_option_mapping
-from apps.pipelines.nodes.base import BasePipelineNode
+from apps.pipelines.node_type import NodeType
 from apps.teams.models import Team
 
 from .node_params import is_list_param
@@ -27,7 +27,7 @@ from .node_params import is_list_param
 UNSET = (None, [], "")
 
 
-def check_references(team: Team, node_class: type[BasePipelineNode], params: dict[str, Any]) -> None:
+def check_references(team: Team, node_type: NodeType, params: dict[str, Any]) -> None:
     """Refuse ``params`` naming a resource the team cannot reach.
 
     Only the params actually sent are checked, so a PATCH never fails on a stale value it is not
@@ -35,17 +35,16 @@ def check_references(team: Team, node_class: type[BasePipelineNode], params: dic
     would report whether an id exists in some other team.
     """
 
-    if errors := _reference_errors(team, node_class, params):
+    if errors := _reference_errors(team, node_type, params):
         raise ValidationError({"params": errors})
 
 
-def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, str]:
+def _reference_errors(team: Team, node_type: NodeType, params: dict[str, Any]) -> dict[str, str]:
     """The params naming a resource the team cannot reach, keyed by param name, each with a message
     naming the option list to choose from instead. Only references carrying a value are looked at --
     ``None``, ``""`` and ``[]`` unset one, so there is nothing to check.
     """
-    node_type = node_class.__name__
-    param_option_map = parameter_option_mapping(node_type)
+    param_option_map = parameter_option_mapping(node_type.type)
     errors: dict[str, str] = {}
     for param, value in params.items():
         if param not in param_option_map or value in UNSET:
@@ -53,7 +52,7 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
         # `is_list_param` reads the declaration, `isinstance` the value: `params` is untyped here,
         # so a bare `5` arrives where `[5]` belongs and iterating it would be a 500, not a 400.
         requested_values = (
-            value if is_list_param(node_class, param) and isinstance(value, list | tuple | set) else [value]
+            value if is_list_param(node_type, param) and isinstance(value, list | tuple | set) else [value]
         )
         # Via the source, not the param: the source is what says which records are on offer.
         # `test_every_checked_param_has_a_resolver` says every one reached here has a resolver.
@@ -62,7 +61,7 @@ def _reference_errors(team: Team, node_class: type[BasePipelineNode], params: di
             errors[param] = (
                 f"Not available to this team: {', '.join(repr(item) for item in unknown)}. "
                 f"Choose from the '{param_option_map[param]}' list the `pipeline_node_options` endpoint "
-                f"serves for '{node_type}'."
+                f"serves for '{node_type.type}'."
             )
     return errors
 

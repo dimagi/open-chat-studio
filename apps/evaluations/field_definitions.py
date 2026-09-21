@@ -68,6 +68,14 @@ class ChoiceFieldDefinition(BaseFieldDefinition):
     choices: list[str]
 
     @property
+    def pydantic_fields(self) -> dict:
+        fields = super().pydantic_fields
+        # `choices` duplicates the enum the Literal already produces, but it has always been part of
+        # the schema the LLM is given, so it stays -- routed through the field that accepts extras.
+        fields["json_schema_extra"] = {"choices": fields.pop("choices")}
+        return fields
+
+    @property
     def python_type(self) -> type:
         """Return Literal type with allowed choice values."""
         if not self.choices:

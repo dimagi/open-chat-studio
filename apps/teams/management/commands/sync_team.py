@@ -329,28 +329,27 @@ class Command(BaseCommand):
         if options["force_delete"]:
             self._run_force_delete(options)
 
-        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
+        with FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite") as store:
+            check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
-        check_sync_preconditions(client, private_key, enforce_schema, store=store)
+            importer = run_sync(
+                client,
+                store,
+                private_key,
+                write=self.stdout.write,
+                page_limit=options["limit"],
+                enforce_schema=enforce_schema,
+                style=self.style,
+            )
 
-        importer = run_sync(
-            client,
-            store,
-            private_key,
-            write=self.stdout.write,
-            page_limit=options["limit"],
-            enforce_schema=enforce_schema,
-            style=self.style,
-        )
-
-        duration = timedelta(seconds=round(time.monotonic() - start_time))
-        self._report(
-            sync_complete=not store.has_unfilled_targets(),
-            team_slug=options["team_slug"],
-            duration=duration,
-            missing_files=importer.missing_files,
-            notification_failures=importer.notification_failures,
-        )
+            duration = timedelta(seconds=round(time.monotonic() - start_time))
+            self._report(
+                sync_complete=not store.has_unfilled_targets(),
+                team_slug=options["team_slug"],
+                duration=duration,
+                missing_files=importer.missing_files,
+                notification_failures=importer.notification_failures,
+            )
 
     def _run_force_delete(self, options):
         """Confirm and delete the local team plus its sync state."""

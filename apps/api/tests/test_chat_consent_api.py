@@ -335,7 +335,8 @@ def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, c
     _consent(api_client, session, session.experiment.consent_form_id, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
 
     if call is _send:
-        with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+        with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
+            task.delay.return_value = mock.Mock(task_id="consent-task")
             response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
     else:
         response = call(api_client, session, HTTP_X_OCS_WIDGET_VERSION="0.13.0")
@@ -355,7 +356,8 @@ def test_release_b_widget_passes_once_consent_is_recorded(api_client, session, c
 def test_older_widgets_and_api_callers_are_not_gated(api_client, session, widget_version):
     extra = {"HTTP_X_OCS_WIDGET_VERSION": widget_version} if widget_version else {}
 
-    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+    with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
+        task.delay.return_value = mock.Mock(task_id="consent-task")
         response = _send(api_client, session, **extra)
 
     assert response.status_code == 202
@@ -384,7 +386,8 @@ def test_a_preview_send_is_gated_on_the_session_version_form(team_member_client,
     accepted = _consent(team_member_client, preview_session, published.consent_form_id)
     assert accepted.status_code == 204
 
-    with mock.patch("apps.api.views.chat.get_response_for_webchat_task"):
+    with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
+        task.delay.return_value = mock.Mock(task_id="consent-task")
         response = _send(
             team_member_client,
             preview_session,

@@ -279,7 +279,7 @@ def delete_collection_task(self, collection_id: int):
         return
 
     tb_task = TaskbadgerTaskWrapper(self)
-    paginator = Paginator(collection.collectionfile_set.all(), per_page=100, orphans=25)
+    paginator = Paginator(collection.collectionfile_set.order_by("id"), per_page=100, orphans=25)
     for page in paginator:
         with transaction.atomic():
             bulk_delete_collection_files(collection, page.object_list, is_index_deletion=True)

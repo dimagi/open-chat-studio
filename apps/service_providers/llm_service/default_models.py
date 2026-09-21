@@ -6,10 +6,8 @@ from django.db import connection, transaction
 from pydantic import BaseModel
 
 from apps.service_providers.llm_service.model_parameters import (
-    AnthropicNonReasoningParameters,
     AnthropicReasoningParameters,
     BasicParameters,
-    ClaudeHaikuLatestParameters,
     ClaudeOpus4_20250514Parameters,
     ClaudeOpus46Parameters,
     ClaudeOpus47Parameters,
@@ -46,6 +44,18 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
         Model("o3", 200000, parameters=OpenAIReasoningParameters),
         Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
+        # Token limits are the total context window Microsoft publishes for the deployment, not the
+        # separate input-only figure it also lists.
+        Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
+        Model("gpt-5.6-terra", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.5", 1050000, parameters=GPT55Parameters),
+        Model("gpt-5.4", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.4-pro", 1050000, parameters=GPT5ProParameters),
+        Model("gpt-5.4-mini", 400000, parameters=GPT52Parameters),
+        Model("gpt-5.4-nano", 400000, parameters=GPT52Parameters),
+        Model("gpt-5.2", 400000, parameters=GPT52Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
@@ -72,12 +82,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
             replacement="claude-opus-4-7",
             parameters=ClaudeOpus4_20250514Parameters,
         ),
-        Model("claude-3-7-sonnet-20250219", k(200), deprecated=True, parameters=AnthropicNonReasoningParameters),
-        Model("claude-3-5-haiku-latest", k(200), deprecated=True, parameters=ClaudeHaikuLatestParameters),
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
-        Model("o4-mini-high", 200000, deprecated=True),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
@@ -93,24 +100,23 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5.2", k(400), parameters=GPT52Parameters),
         Model("gpt-5.2-pro", k(400), parameters=GPT52Parameters),
-        Model("gpt-5.3", k(400), parameters=GPT51Parameters),
-        Model("gpt-5.3-instant", k(400), parameters=GPT51Parameters),
         Model("gpt-5.4", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.4-pro", 1050000, parameters=GPT5ProParameters),
         Model("gpt-5.4-mini", 400000, parameters=GPT52Parameters),
         Model("gpt-5.4-nano", 400000, parameters=GPT52Parameters),
         Model("gpt-5.5", 1050000, parameters=GPT55Parameters),
-        Model("gpt-5.6-terra", 1100000, parameters=GPT52Parameters),
-        Model("gpt-5.6-sol", 1100000, parameters=GPT52Parameters),
-        Model("gpt-5.6-luna", 1100000, parameters=GPT52Parameters),
+        Model("gpt-5.6-terra", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
+        Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.4-mini", parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), deprecated=True, replacement="gpt-5.4-nano", parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
     ],
     "groq": [
-        Model("whisper-large-v3-turbo", k(8)),
-        Model("gemma2-9b-it", k(8), deprecated=True, replacement="openai/gpt-oss-20b"),
+        # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
+        # siblings use.
+        Model("qwen/qwen3.8-27b", 131042),
         Model("gemma-7b-it", k(8), deprecated=True),
         Model("llama-3.3-70b-versatile", k(128), deprecated=True, replacement="openai/gpt-oss-120b"),
         Model("llama-3.1-8b-instant", k(128), deprecated=True, replacement="openai/gpt-oss-20b"),
@@ -122,11 +128,14 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("sonar-pro", 200000),
         Model("sonar-reasoning-pro", 128000, is_translation_default=True),
         Model("sonar-deep-research", 128000),
-        Model("llama-3.1-sonar-small-128k-chat", 127072),
-        Model("llama-3.1-sonar-large-128k-chat", 127072),
         Model("llama-3.1-8b-instruct", 131072),
         Model("llama-3.1-70b-instruct", 131072),
     ],
+    # OpenRouter supports thousands of models; we intentionally ship no defaults.
+    # Users can add models manually, and a dedicated discovery flow using the OpenRouter
+    # model API (search, autocomplete, pricing) is tracked in issue #4258. Like
+    # ``voyage`` (embeddings only), providers without shipped chat models are omitted
+    # from this dict entirely rather than listed with an empty list.
     "deepseek": [
         # DeepSeek-V4.1-Flash (llm-stats id `deepseek-v4.1-flash`). api.deepseek.com serves it as
         # `deepseek-flash`; the two dated names below are still accepted but now route here.
@@ -143,7 +152,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "minimax": [
         Model("MiniMax-M3", k(1000), is_default=True),
-        Model("MiniMax-M2.7", 200000),
+        Model("MiniMax-M2.7", 204800),
+        Model("MiniMax-M2.5", 204800),
         Model("MiniMax-M2", 200000),
     ],
     "google": [
@@ -152,6 +162,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-3.6-flash", 1048576),
         Model("gemini-3.5-flash", 1048576),
         Model("gemini-3.5-flash-lite", 1048576),
+        Model("gemini-3.1-pro-preview", 1048576),
+        Model("gemini-3.1-flash-lite", 1048576),
         Model("gemini-2.5-flash", 1048576, is_default=True),
         Model("gemini-2.5-pro", 1048576, is_translation_default=True),
         Model("gemini-2.0-flash", 1048576, deprecated=True),
@@ -189,6 +201,8 @@ DELETED_MODELS = [
     ("anthropic", "claude-2.1"),
     ("anthropic", "claude-instant-1.2"),
     ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
+    ("anthropic", "claude-3-5-haiku-latest", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-3-7-sonnet-20250219", "claude-sonnet-4-6"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
@@ -197,8 +211,18 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
+    # o4-mini-high is a ChatGPT effort preset, not an API model: it is absent from OpenAI's
+    # catalogue and from its deprecation table, so requests with it already 404. References move
+    # to gpt-5.6-terra, the successor OpenAI names for o4-mini, rather than to o4-mini itself,
+    # which shuts down on 2026-10-23.
+    ("openai", "o4-mini-high", "gpt-5.6-terra"),
+    ("openai", "gpt-5.3", "gpt-5.4"),
+    ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
     # Groq
     ("groq", "whisper-large-v3"),
+    # Speech-to-text, billed per audio-hour: it has no token rates and cannot serve a chat
+    # request, so any reference to it is already broken. References move to the Groq default.
+    ("groq", "whisper-large-v3-turbo", "openai/gpt-oss-120b"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
     ("groq", "llama3-groq-8b-8192-tool-use-preview"),
     ("groq", "llama-3.1-70b-versatile"),
@@ -210,11 +234,14 @@ DELETED_MODELS = [
     ("groq", "llama3-70b-8192"),
     ("groq", "llama3-8b-8192"),
     ("groq", "mixtral-8x7b-32768"),
+    ("groq", "gemma2-9b-it", "openai/gpt-oss-20b"),
     # Perplexity
     ("perplexity", "sonar-reasoning"),
     ("perplexity", "llama-3.1-sonar-small-128k-online"),
     ("perplexity", "llama-3.1-sonar-large-128k-online"),
     ("perplexity", "llama-3.1-sonar-huge-128k-online"),
+    ("perplexity", "llama-3.1-sonar-small-128k-chat", "sonar"),
+    ("perplexity", "llama-3.1-sonar-large-128k-chat", "sonar-pro"),
     # Google
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),

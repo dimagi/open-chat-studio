@@ -6,6 +6,10 @@ STANDARD_INPUT_NAME: str = "input"
 START_NODE_TYPE: str = "StartNode"
 END_NODE_TYPE: str = "EndNode"
 
+#: The one node type that dispatches its own outgoing edges, returning a langgraph ``Command``
+#: naming where the turn goes next instead of following a wired edge.
+CODE_NODE_TYPE: str = "CodeNode"
+
 #: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
 #: these for the editor; the reserved start/end classes get their own types.
 REACT_FLOW_START_TYPE = "startNode"
