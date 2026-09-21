@@ -219,6 +219,10 @@ def test_an_archive_racing_another_reports_nothing_rather_than_a_stale_count():
         try:
             response = client.delete(_url(chatbot))
             answer["status_code"] = response.status_code
+        except Exception as exc:  # noqa: BLE001
+            # A thread that dies keeps its traceback to itself, and the assertions below would then
+            # fail on a missing key rather than on what actually went wrong.
+            answer["error"] = exc
         finally:
             # The thread's own connection, which the test's transaction machinery does not reach.
             connections.close_all()
@@ -238,5 +242,6 @@ def test_an_archive_racing_another_reports_nothing_rather_than_a_stale_count():
 
     racer.join(timeout=10)
     assert not racer.is_alive()
+    assert "error" not in answer, answer["error"]
     assert answer["status_code"] == 404
     assert ScheduledMessage.objects.filter(experiment=chatbot).count() == 0
