@@ -1,10 +1,13 @@
 """GET /api/v2/chatbots/{id}/versions/status/ -- where the version history stands (#4142)."""
 
+from unittest.mock import patch
+
 import pytest
 from django.test import override_settings
 from django.urls import reverse
 
 from apps.experiments.models import Experiment
+from apps.experiments.tasks import async_create_experiment_version
 from apps.utils.factories.experiment import ChatbotFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -19,6 +22,20 @@ def publish(client, chatbot, **body) -> None:
 
 def poll(client, chatbot):
     return client.get(status_url(chatbot))
+
+
+def run_the_worker_and_let_it_raise(chatbot) -> None:
+    """Run the version task against a snapshot that fails, so its own `finally` frees the lock.
+
+    Driven through the task rather than by calling `release_version_operation_lock` here: what the
+    status endpoint is being asked to report is the state the task leaves behind, so a task that
+    stopped freeing the lock has to fail these tests.
+    """
+    with (
+        patch.object(Experiment, "create_new_version", side_effect=RuntimeError("the snapshot failed")),
+        pytest.raises(RuntimeError),
+    ):
+        async_create_experiment_version(experiment_id=chatbot.id)
 
 
 @pytest.mark.django_db()
@@ -85,7 +102,7 @@ class TestNothingToReport:
         """The worker raised before creating anything and its `finally` freed the lock. With no
         version to name and no task to account for, the honest answer is that there is nothing."""
         publish(client, chatbot, make_default=True)
-        Experiment.release_version_operation_lock(chatbot.id)
+        run_the_worker_and_let_it_raise(chatbot)
 
         assert poll(client, chatbot).status_code == 404
 
@@ -96,10 +113,11 @@ class TestNothingToReport:
         expected instead of reading `completed` as proof its own snapshot landed."""
         publish(client, chatbot, make_default=True)
         chatbot.refresh_from_db()
-        # A second publish that the worker raises on: the lock is taken and freed, and no snapshot
-        # is made -- exactly the state the task's `finally` leaves behind.
-        chatbot.acquire_version_operation_lock("publish-that-will-raise")
-        Experiment.release_version_operation_lock(chatbot.id)
+        # A second publish the worker raises on. The lock is taken here because the request that
+        # would have taken it is refused -- the chatbot is unchanged since v1, so there is nothing
+        # to publish -- but freeing it is left to the task, which is the behaviour under test.
+        assert chatbot.acquire_version_operation_lock("publish-that-will-raise")
+        run_the_worker_and_let_it_raise(chatbot)
 
         assert poll(client, chatbot).json() == {"status": "completed", "version_number": 1}
 
