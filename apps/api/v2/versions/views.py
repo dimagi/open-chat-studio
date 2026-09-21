@@ -232,9 +232,6 @@ class ChatbotVersionDeletePermission(RequiresTeamPermission):
 class ChatbotVersionView(APIView):
     """The two writes that address one published version: promote it, or archive it."""
 
-    # Set per verb by `get_permissions`; declared so a misconfiguration is a refusal, not an
-    # open door, if that override is ever removed.
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotVersionDeletePermission, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
 
     def get_permissions(self):
