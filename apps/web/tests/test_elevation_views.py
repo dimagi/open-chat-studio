@@ -70,7 +70,7 @@ def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
 
 @pytest.mark.django_db()
 def test_the_prompt_names_the_grant_being_requested(team, superuser, authed_client):
-    """The old confirmation page named the grant; the re-authentication prompt has to as well."""
+    """The prompt has to name the grant, so the user can see what they are confirming."""
     authed_client.get(reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(REAUTH_URL).content.decode()
