@@ -43,8 +43,7 @@ def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
 def fire_static_trigger(trigger_id, session_id):
     trigger = StaticTrigger.objects.get(id=trigger_id)
     session = ExperimentSession.objects.get(id=session_id)
-    triggered = trigger.fire(session)
-    return triggered
+    return trigger.fire(session)
 
 
 @shared_task(ignore_result=True, queue=Queues.CHAT)
@@ -71,8 +70,7 @@ def enqueue_timed_out_events():
 def fire_trigger(trigger_id, session_id):
     trigger = TimeoutTrigger.objects.get(id=trigger_id)
     session = ExperimentSession.objects.get(id=session_id)
-    triggered = trigger.fire(session)
-    return triggered
+    return trigger.fire(session)
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)

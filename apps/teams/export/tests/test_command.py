@@ -13,7 +13,6 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
-from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -150,41 +149,41 @@ def test_load_private_key_returns_none_when_unset(monkeypatch):
     assert _load_private_key(None) is None
 
 
-def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
+def test_schema_checksum_mismatch_aborts(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     with pytest.raises(CommandError, match="schema"):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
 
 
-def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
+def test_skip_schema_check_bypasses_mismatch(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     run_sync(FakeClient(manifest, rows), store, keypair[1], enforce_schema=False)
 
     assert Team.objects.filter(slug="imported-team-z").exists()
 
 
-def test_aborts_when_secrets_present_but_no_private_key(tmp_path, keypair):
+def test_aborts_when_secrets_present_but_no_private_key(make_store, tmp_path, keypair):
     """Without the private key the sealed secret fields would be imported as unreadable tokens, so
     the sync must refuse up front rather than silently corrupt provider configs / participant data."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     with pytest.raises(CommandError, match="private key"):
         run_sync(FakeClient(manifest, rows), store, None)
 
     assert not Team.objects.filter(slug="imported-team-z").exists()  # aborted before importing anything
 
 
-def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monkeypatch):
+def test_files_confirmation_is_asked_once_and_remembered(make_store, tmp_path, keypair, monkeypatch):
     """Declining the files prompt aborts without persisting anything; confirming is recorded in the
     state DB so a rerun (a fresh store over the same file) doesn't ask again."""
     manifest, rows = _scenario(keypair[0])
     client = FakeClient(manifest, rows)
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
     with pytest.raises(CommandError, match="files"):
@@ -193,16 +192,16 @@ def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monk
     monkeypatch.setattr("builtins.input", lambda *a, **k: " Yes ")  # affirmative in any case/spacing
     check_sync_preconditions(client, keypair[1], store=store)
 
-    reopened = FKTranslationStore(tmp_path / "t.sqlite")
+    reopened = make_store(tmp_path / "t.sqlite")
     monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted again after confirmation"))
     check_sync_preconditions(client, keypair[1], store=reopened)
 
 
-def test_files_confirmation_is_not_remembered_when_preconditions_fail(tmp_path, keypair, monkeypatch):
+def test_files_confirmation_is_not_remembered_when_preconditions_fail(make_store, tmp_path, keypair, monkeypatch):
     """A "yes" is only recorded once every other check passes, so an aborted run asks again."""
     manifest, rows = _scenario(keypair[0])
     manifest["schema_checksum"] += "-mismatch"
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
 
     with pytest.raises(CommandError, match="schema"):
@@ -211,14 +210,14 @@ def test_files_confirmation_is_not_remembered_when_preconditions_fail(tmp_path, 
     assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
 
 
-def test_files_confirmation_fails_cleanly_without_a_terminal(tmp_path, keypair, monkeypatch):
+def test_files_confirmation_fails_cleanly_without_a_terminal(make_store, tmp_path, keypair, monkeypatch):
     """EOF on stdin (cron, CI, piped input) must abort with a CommandError, not a raw EOFError."""
 
     def eof(*args, **kwargs):
         raise EOFError
 
     monkeypatch.setattr("builtins.input", eof)
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     with pytest.raises(CommandError, match="interactively"):
         check_sync_preconditions(FakeClient(*_scenario(keypair[0])), keypair[1], store=store)
@@ -260,9 +259,9 @@ def _new_user_scenario():
     return entries, rows
 
 
-def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
+def test_new_users_receive_a_password_reset_email(make_store, tmp_path, keypair):
     entries, rows = _new_user_scenario()
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     mail.outbox.clear()
 
     run_sync(FakeClient(_manifest(entries), rows), store, keypair[1])
@@ -293,9 +292,9 @@ def test_a_rejected_password_reset_email_is_reported_instead_of_aborting_the_syn
     assert "Email address is not verified" in report.getvalue()
 
 
-def test_run_sync_builds_team_and_resolves_secret_provider(tmp_path, keypair):
+def test_run_sync_builds_team_and_resolves_secret_provider(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     run_sync(FakeClient(manifest, rows), store, keypair[1])
 
@@ -306,9 +305,9 @@ def test_run_sync_builds_team_and_resolves_secret_provider(tmp_path, keypair):
     assert store.has_unfilled_targets() is False
 
 
-def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
+def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
     run_sync(first, store, keypair[1])
     # once for the readiness precondition, once to fetch and import the team
@@ -325,11 +324,11 @@ def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
 
-def test_rerun_reanchors_scoped_rows_to_the_existing_team(tmp_path, keypair):
+def test_rerun_reanchors_scoped_rows_to_the_existing_team(make_store, tmp_path, keypair):
     """On rerun the team is loaded from the target DB (not re-fetched), and it still anchors the
     team-scoped rows -- the provider stays attached to the same imported team."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     run_sync(FakeClient(manifest, rows), store, keypair[1])
     team = Team.objects.get(pk=store.get_target("teams.team", 9001))
 
@@ -340,12 +339,12 @@ def test_rerun_reanchors_scoped_rows_to_the_existing_team(tmp_path, keypair):
     assert provider.team_id == team.id
 
 
-def test_untracked_existing_team_aborts_and_suggests_force_delete(tmp_path, keypair):
+def test_untracked_existing_team_aborts_and_suggests_force_delete(make_store, tmp_path, keypair):
     """A team already present locally but absent from the sync store must not be imported over: the
     sync aborts and points the operator at --force-delete, leaving the team and store untouched."""
     manifest, rows = _scenario(keypair[0])
     existing = Team.objects.create(name="Old name", slug="imported-team-z")
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     with pytest.raises(CommandError, match="--force-delete"):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
@@ -357,11 +356,11 @@ def test_untracked_existing_team_aborts_and_suggests_force_delete(tmp_path, keyp
     assert not LlmProvider.objects.filter(team=existing).exists()  # no scoped rows imported
 
 
-def test_stale_sync_state_pointing_at_deleted_team_suggests_force_delete(tmp_path, keypair):
+def test_stale_sync_state_pointing_at_deleted_team_suggests_force_delete(make_store, tmp_path, keypair):
     """If the synced team was deleted locally but the sync state still references it, a rerun must
     abort with a CommandError pointing at --force-delete, not a raw Team.DoesNotExist traceback."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     run_sync(FakeClient(manifest, rows), store, keypair[1])
     Team.objects.get(slug="imported-team-z").delete()
 
@@ -369,33 +368,33 @@ def test_stale_sync_state_pointing_at_deleted_team_suggests_force_delete(tmp_pat
         run_sync(FakeClient(manifest, rows), store, keypair[1])
 
 
-def test_first_time_import_creates_team(tmp_path, keypair):
+def test_first_time_import_creates_team(make_store, tmp_path, keypair):
     """A brand-new import (no local team with that slug) creates the team from the source."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     run_sync(FakeClient(manifest, rows), store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").exists()
 
 
-def test_first_time_import_enables_migration_mode_on_target(tmp_path, keypair):
+def test_first_time_import_enables_migration_mode_on_target(make_store, tmp_path, keypair):
     """The target team is frozen (migration mode on) the moment it's created, so this server doesn't
     start firing the team's events and scheduled messages while the still-live source is migrating.
     Migration mode isn't exported, so the sync sets it explicitly."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     run_sync(FakeClient(manifest, rows), store, keypair[1])
 
     assert Team.objects.get(slug="imported-team-z").is_migrating is True
 
 
-def test_rerun_does_not_re_enable_migration_mode(tmp_path, keypair):
+def test_rerun_does_not_re_enable_migration_mode(make_store, tmp_path, keypair):
     """Migration mode is set only when the team is first created. If an operator turns it off (e.g. at
     cutover), a later rerun of the sync must not silently turn it back on."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     run_sync(FakeClient(manifest, rows), store, keypair[1])
 
     team = Team.objects.get(slug="imported-team-z")
@@ -449,12 +448,12 @@ class _RaisingClient(FakeClient):
         pytest.param(False, False, "Migration mode.*no public key", id="neither"),
     ],
 )
-def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrating, has_public_key, match):
+def test_sync_blocks_when_source_team_is_not_ready(make_store, tmp_path, keypair, is_migrating, has_public_key, match):
     """Migration mode and a registered public key must both be set on the source team; the sync blocks
     up front (before any import) and names whatever is missing."""
     manifest, rows = _scenario(keypair[0])
     rows["teams"][0].update(is_migrating=is_migrating, has_public_key=has_public_key)
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
 
     with pytest.raises(CommandError, match=match):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
@@ -462,10 +461,10 @@ def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrati
     assert not Team.objects.filter(slug="imported-team-z").exists()  # blocked before importing anything
 
 
-def test_unrelated_403_surfaces_as_http_error(tmp_path, keypair):
+def test_unrelated_403_surfaces_as_http_error(make_store, tmp_path, keypair):
     """A 403 from the source (e.g. a revoked API key) must surface as-is rather than be swallowed."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     error = _http_error(403, "You do not have permission to perform this action.")
     client = _RaisingClient(manifest, rows, error, raise_on="get_team")
 
@@ -473,11 +472,11 @@ def test_unrelated_403_surfaces_as_http_error(tmp_path, keypair):
         run_sync(client, store, keypair[1])
 
 
-def test_missing_public_key_400_raises_friendly_error(tmp_path, keypair):
+def test_missing_public_key_400_raises_friendly_error(make_store, tmp_path, keypair):
     """The source returns a 400 when a secret resource is requested but its team has no public key to
     seal against; surface a friendly message instead of a raw HTTP traceback."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, seal_mod.MISSING_PUBLIC_KEY_DETAIL)
     client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
 
@@ -485,11 +484,11 @@ def test_missing_public_key_400_raises_friendly_error(tmp_path, keypair):
         run_sync(client, store, keypair[1])
 
 
-def test_unrelated_400_is_not_mistaken_for_missing_public_key(tmp_path, keypair):
+def test_unrelated_400_is_not_mistaken_for_missing_public_key(make_store, tmp_path, keypair):
     """A 400 for some other reason must surface as-is, not be reworded into a misleading
     'set the public key' message."""
     manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, "Invalid cursor.")
     client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
 
@@ -497,10 +496,10 @@ def test_unrelated_400_is_not_mistaken_for_missing_public_key(tmp_path, keypair)
         run_sync(client, store, keypair[1])
 
 
-def test_force_delete_team_removes_team_and_resets_state(tmp_path):
+def test_force_delete_team_removes_team_and_resets_state(make_store, tmp_path):
     team = Team.objects.create(name="Old", slug="imported-team-z")
     state_db = tmp_path / "imported-team-z.sqlite"
-    FKTranslationStore(state_db).record("teams.team", 9001, team.id)
+    make_store(state_db).record("teams.team", 9001, team.id)
     assert state_db.exists()
     mail.outbox.clear()
 
@@ -548,13 +547,13 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     assert Team.objects.filter(slug="imported-team-z").exists()  # declined -> nothing deleted
 
 
-def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
+def test_serialized_row_round_trips_through_importer(make_store, tmp_path, keypair):
     """The serializer's output is exactly what the importer consumes."""
     public_key, private_key = keypair
     provider = LlmProviderFactory(config={"api_key": "sk-live"})
     row = build_resource_serializer(LlmProvider)(provider, context={"public_key": public_key}).data
 
-    store = FKTranslationStore(tmp_path / "t.sqlite")
+    store = make_store(tmp_path / "t.sqlite")
     target_team = Team.objects.create(name="Target", slug="target-z")
 
     importer = Importer(store, private_key=private_key)

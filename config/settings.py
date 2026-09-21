@@ -166,7 +166,9 @@ MIDDLEWARE = list(
         [
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
-            "whitenoise.middleware.WhiteNoiseMiddleware",
+            # Tests never run collectstatic, so whitenoise would warn about the missing STATIC_ROOT
+            # on every test client it is loaded into, and scan the directory when there is one.
+            "whitenoise.middleware.WhiteNoiseMiddleware" if not IS_TESTING else None,
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
             "allauth.account.middleware.AccountMiddleware",

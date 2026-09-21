@@ -2,9 +2,13 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from apps.api.v2.inspect.nodes import graph_digest, nodes_in_render_order
+from apps.api.v2.inspect.param_serializers import NODE_PARAM_SERIALIZERS
 from apps.api.v2.inspect.serializers import InspectNodeSerializer
 from apps.pipelines.models import Node
+from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes import nodes as pipeline_nodes
 
 
@@ -18,6 +22,23 @@ def test_resource_param_fields_are_real_node_fields():
             declared_anywhere |= set(model_fields)
     missing = InspectNodeSerializer._RESOURCE_PARAM_KEYS - declared_anywhere
     assert not missing, f"resource param keys not declared on any node type: {sorted(missing)}"
+
+
+@pytest.mark.parametrize("node_type", sorted(NODE_PARAM_SERIALIZERS))
+def test_documented_param_shapes_name_a_real_node_type(node_type):
+    """The registry's keys are never read — only its values are — so nothing else would notice a
+    type renamed or removed out from under one."""
+    assert NodeType(node_type).exists, f"'{node_type}' names no node type"
+
+
+@pytest.mark.parametrize("node_type", sorted(NODE_PARAM_SERIALIZERS))
+def test_documented_params_are_params_the_type_declares(node_type):
+    """A documented param the type does not declare is a shape the endpoint can never serve."""
+    declared = NodeType(node_type).declared_params
+    # A renamed param is only servable by the type that declares the param it renames.
+    declared |= {served for source, served in InspectNodeSerializer._RENAMED_PARAMS.items() if source in declared}
+    documented = set(NODE_PARAM_SERIALIZERS[node_type]().get_fields())
+    assert documented <= declared, f"not declared by '{node_type}': {sorted(documented - declared)}"
 
 
 def test_nodes_in_render_order_is_stable_whatever_order_the_db_returns():

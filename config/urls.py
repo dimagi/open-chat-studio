@@ -122,7 +122,8 @@ urlpatterns = [
     path("tz_detect/", include("tz_detect.urls")),
     path("__reload__/", include("django_browser_reload.urls")),
     path("silk/", include("silk.urls", namespace="silk")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+]
 
 if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls

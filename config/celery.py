@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 from celery import Celery, signals
 from celery.app import trace
@@ -7,6 +8,13 @@ from apps.utils.logging import CeleryContextFilter
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+#: Touched once the worker is consuming its queues and removed when it shuts down, so a container
+#: orchestrator can gate a rolling deploy on readiness rather than on process start. Celery offers
+#: no cheap readiness probe -- `celery inspect ping` costs a second full app import, which a worker
+#: sized for its own workload cannot absorb -- so the worker reports readiness itself. Unset
+#: outside ECS, where nothing reads it.
+READY_FILE = os.environ.get("CELERY_READY_FILE")
 
 app = Celery("open_chat_studio")
 
@@ -41,3 +49,15 @@ def on_task_postrun(sender, **_):
 
     CeleryContextFilter.clear_task_context()
     unset_current_team()
+
+
+@signals.worker_ready.connect
+def on_worker_ready(**_):
+    if READY_FILE:
+        pathlib.Path(READY_FILE).touch()
+
+
+@signals.worker_shutdown.connect
+def on_worker_shutdown(**_):
+    if READY_FILE:
+        pathlib.Path(READY_FILE).unlink(missing_ok=True)

@@ -70,6 +70,15 @@ class FKTranslationStore:
         """True if any recorded row still lacks a target -- i.e. a prior run was interrupted."""
         return any(tgt is None for rows in self._index.values() for tgt in rows.values())
 
+    def close(self) -> None:
+        self._conn.close()
+
+    def __enter__(self) -> "FKTranslationStore":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
 
 def derive_pk_cursor(source_keys) -> str | None:
     return str(max(source_keys)) if source_keys else None

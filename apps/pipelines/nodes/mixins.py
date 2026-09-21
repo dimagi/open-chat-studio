@@ -42,6 +42,7 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
+from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
 from apps.utils.json import dict_to_json_schema
 
 if TYPE_CHECKING:
@@ -284,18 +285,18 @@ class HistoryMixin(LLMResponseMixin):
 
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+        return None
 
     def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:
-            return
+            return None
 
         if self.use_session_history:
             # Global History is saved outside of the node
-            return
+            return None
 
         history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
-        message = self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
-        return message
+        return self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
 
 
 class RouterMixin(BaseModel):
@@ -375,7 +376,7 @@ class ExtractStructuredDataNodeMixin:
         )
 
     def extraction_chain(self, tool_class, reference_data):
-        structured_output = super().get_chat_model().with_structured_output(tool_class)
+        structured_output = structured_output_runnable(super().get_chat_model(), tool_class)
         return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
@@ -385,10 +386,17 @@ class ExtractStructuredDataNodeMixin:
         message_chunks = self.chunk_messages(context.input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
+        extracted = False
         for message_chunk in message_chunks:
             chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
-            output = chain.invoke(message_chunk, config=self._config)
-            output = output.model_dump()
+            try:
+                output = chain.invoke(message_chunk, config=self._config).model_dump()
+            except NoStructuredOutputError as e:
+                logger.warning(
+                    "Node %s extracted nothing from a chunk (stop reason: %s)", self.name, e.reason or "none"
+                )
+                continue
+            extracted = True
             # TOOO: tracing
             # self.logger.info(
             #     f"Chunk {idx}",
@@ -397,9 +405,14 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
+        if not extracted:
+            return self.get_unextracted_output(context)
         return self.get_node_output(context, new_reference_data)
 
     def get_node_output(self, context: "NodeContext", output_data) -> PipelineState:
+        raise NotImplementedError()
+
+    def get_unextracted_output(self, context: "NodeContext") -> PipelineState:
         raise NotImplementedError()
 
     def get_reference_data(self, context: "NodeContext"):

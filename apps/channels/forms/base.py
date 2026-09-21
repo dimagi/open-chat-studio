@@ -170,7 +170,6 @@ class ExtraFormBase(forms.Form):
 
     def post_save(self, channel: ExperimentChannel):
         """Override this method to perform any additional actions after the channel has been saved"""
-        pass
 
     def configure_webhook(self, channel: ExperimentChannel):
         """Point the channel's inbound webhook at us, via its WebhookManager.

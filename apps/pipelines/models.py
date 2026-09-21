@@ -32,7 +32,7 @@ from apps.pipelines.flow import (
     node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.node_type import NodeType, server_managed_node_types
+from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -58,10 +58,7 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
-    def llm_response_with_prompt_nodes(self):
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
+    pass
 
 
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
@@ -110,14 +107,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         node = None
         if llm_provider_id and llm_provider_model:
-            llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
+            llm_node_type = NodeType("LLMResponseWithPrompt")
+            llm_id = f"{llm_node_type.type}-{uuid4().hex[:5]}"
             node = FlowNode(
                 id=llm_id,
-                type="pipelineNode",
+                type=llm_node_type.react_flow_type,
                 position={"x": 300, "y": 0},
                 data=FlowNodeData(
                     id=llm_id,
-                    type="LLMResponseWithPrompt",
+                    type=llm_node_type.type,
                     label="LLM",
                     params={
                         "name": llm_id,
@@ -231,7 +229,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in nodes:
             name_to_flow_id[node.name].append(node.flow_id)
 
-        for _name, flow_ids in name_to_flow_id.items():
+        for flow_ids in name_to_flow_id.values():
             if len(flow_ids) > 1:
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})
@@ -418,8 +416,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in self.node_set.get_all().filter(is_archived=True):
             node.unarchive()
 
-    def get_node_param_values(self, node_cls, param_name: str) -> list:
-        return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
+    def get_node_param_values(self, param_name: str) -> list:
+        """Every value stored for ``param_name``, across the nodes whose type declares it.
+
+        The types come from :func:`~apps.pipelines.node_type.node_types_declaring` rather than from
+        the caller, so a caller asking for a param needs neither the node classes nor a list of which
+        types carry it.
+        """
+        return list(
+            self.node_set.filter(type__in=node_types_declaring(param_name)).values_list(
+                f"params__{param_name}", flat=True
+            )
+        )
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         return self.experiment_set.filter(is_archived=False)
@@ -460,9 +468,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
     # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
-    # Null until the row is saved, or until migration 0030 backfills it from the old blob.
-    position_x = models.FloatField(null=True, blank=True)
-    position_y = models.FloatField(null=True, blank=True)
+    # A row saved without one sits at the origin, which is what reads have always served.
+    position_x = models.FloatField(default=0)
+    position_y = models.FloatField(default=0)
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -549,10 +557,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return NodeType(self.type)
 
     @property
-    def position(self) -> dict | None:
-        """The react-flow position, or None when the row has not been backfilled yet."""
-        if self.position_x is None or self.position_y is None:
-            return None
+    def position(self) -> dict:
+        """The react-flow position."""
         return {"x": self.position_x, "y": self.position_y}
 
     def to_flow_node(self) -> FlowNode:
@@ -566,7 +572,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         params.update(self.resource_params())
         return FlowNode(
             id=self.flow_id,
-            position=self.position or {"x": 0, "y": 0},
+            position=self.position,
             type=self.node_type.react_flow_type,
             data=FlowNodeData(
                 id=self.flow_id,
@@ -611,7 +617,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if pipeline is not None:
             new_version.pipeline = pipeline
         new_version.save()
-        if self.params.get("custom_actions"):
+        if self.node_type.declares("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
         new_version._sync_resource_fk_fields()
 
@@ -633,11 +639,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         self._sync_resource_fk_fields()
 
-        if self.type == LLMResponseWithPrompt.__name__:
+        if self.node_type.declares("custom_actions"):
             custom_action_infos = []
             for custom_action_operation in self.params.get("custom_actions") or []:
                 custom_action_id, operation_id = custom_action_operation.split(":")
@@ -737,8 +741,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
         node_name = self.display_name
 
         specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
@@ -763,7 +765,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.type == LLMResponseWithPrompt.__name__ and self.params.get("custom_actions"):
+        if self.node_type.declares("custom_actions") and self.params.get("custom_actions"):
             param_versions.append(
                 VersionField(
                     group_name=node_name,

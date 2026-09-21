@@ -7,9 +7,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
-from apps.web.superuser_utils import has_temporary_superuser_access
-
-ADMIN_SLUG = "admin_site"
+from apps.web.elevation import Elevation, Grant
 
 
 class OcsAdminSite(admin.AdminSite):
@@ -36,8 +34,8 @@ class OcsAdminSite(admin.AdminSite):
                 )
 
             # this is the custom functionality to check for temporary superuser access
-            if request.user.is_superuser and not has_temporary_superuser_access(request, ADMIN_SLUG):
-                url = reverse("web:sudo", args=[ADMIN_SLUG])
+            if request.user.is_superuser and not Elevation(request).has(Grant.DJANGO_ADMIN):
+                url = reverse("web:elevate_django_admin")
                 next_url = request.get_full_path()
                 if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
                     next_url = reverse("admin:index", current_app=self.name)

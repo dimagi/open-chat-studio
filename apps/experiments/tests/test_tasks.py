@@ -44,7 +44,7 @@ def test_async_export_chat_applies_query_string_filters(mock_recorder_cls):
     query_string = "f_participant=alice&op_participant=equals&f_participant=bob&op_participant=does+not+contain"
     result = async_export_chat.run(experiment.id, query_string, "UTC")
 
-    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).file.read()).decode()
+    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).read_bytes()).decode()
     assert "message from alice" in csv_content
     assert "message from bob" not in csv_content
 
@@ -97,7 +97,7 @@ def test_async_export_chat_streams_temp_file_to_storage(mock_recorder_cls):
     assert all(size > 0 for size in reads), f"export was read unbounded into memory: read sizes {reads}"
 
     file = File.objects.get(id=result["file_id"])
-    csv_content = gzip.decompress(file.file.read()).decode()
+    csv_content = gzip.decompress(file.read_bytes()).decode()
     assert "m49" in csv_content
     assert file.content_size == file.file.size
 

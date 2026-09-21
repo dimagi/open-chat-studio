@@ -602,6 +602,11 @@ paths:
         schema:
           type: string
         description: Filter by platform (e.g. api, telegram, whatsapp)
+      - in: query
+        name: remote_id
+        schema:
+          type: string
+        description: Filter by participant remote ID
       tags:
       - Participants
       security:
