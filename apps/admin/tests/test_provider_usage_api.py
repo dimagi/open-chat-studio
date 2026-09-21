@@ -25,7 +25,7 @@ def _usage(team, **kwargs):
 def test_non_superuser_blocked(client):
     client.force_login(CustomUser.objects.create(username="staff@acme.com", is_staff=True))
     response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
-    assert response.status_code == 302
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db()
@@ -39,9 +39,9 @@ def test_invalid_range_returns_400(superuser_client):
     ("configured_token", "auth_header", "expected_status"),
     [
         pytest.param("s3cret-token", "Bearer s3cret-token", 200, id="valid-token-grants-access"),
-        pytest.param("s3cret-token", "Bearer wrong", 302, id="invalid-token-falls-back-to-session"),
-        pytest.param(None, "Bearer anything", 302, id="token-ignored-when-unset"),
-        pytest.param("s3cret-token", "Bearer nön-ascii", 302, id="non-ascii-header-rejected"),
+        pytest.param("s3cret-token", "Bearer wrong", 404, id="invalid-token-falls-back-to-session"),
+        pytest.param(None, "Bearer anything", 404, id="token-ignored-when-unset"),
+        pytest.param("s3cret-token", "Bearer nön-ascii", 404, id="non-ascii-header-rejected"),
     ],
 )
 def test_reporting_token_auth(client, settings, configured_token, auth_header, expected_status):

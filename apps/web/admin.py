@@ -3,11 +3,10 @@ from functools import update_wrapper
 from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
-from apps.web.elevation import Elevation, Grant
+from apps.web.elevation import Grant, elevation_redirect
 
 
 class OcsAdminSite(admin.AdminSite):
@@ -33,13 +32,9 @@ class OcsAdminSite(admin.AdminSite):
                     reverse("admin:login", current_app=self.name),
                 )
 
-            # this is the custom functionality to check for temporary superuser access
-            if request.user.is_superuser and not Elevation(request).has(Grant.DJANGO_ADMIN):
-                url = reverse("web:elevate_django_admin")
-                next_url = request.get_full_path()
-                if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
-                    next_url = reverse("admin:index", current_app=self.name)
-                return HttpResponseRedirect(f"{url}?next={next_url}")
+            # `has_permission` is `is_active and is_staff`, so the elevation check covers staff too.
+            if redirect := elevation_redirect(request, Grant.DJANGO_ADMIN):
+                return redirect
 
             return view(request, *args, **kwargs)
 

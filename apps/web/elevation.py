@@ -2,11 +2,14 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from functools import wraps
 from typing import ClassVar
+from urllib.parse import urlencode
 
 from allauth.account.internal import flows
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -19,6 +22,11 @@ EXPIRY = 60 * 30  # 30 minutes
 MAX_CONCURRENT_ELEVATIONS = 5
 
 REAUTH_CALLBACK = "apps.web.elevation.complete_elevation"
+
+# Marker attribute stamped on views wrapped by `requires_elevation`, so the architecture
+# guard can tell a gated view from an ungated one — `functools.wraps` otherwise hides the
+# decorator identity.
+ENFORCES_ELEVATION_ATTR = "enforces_elevation"
 
 #: How long a stashed elevation request stays valid. allauth keeps the stash in the session
 #: until *some* re-authentication consumes it, so without this an abandoned elevation could be
@@ -99,6 +107,11 @@ class Grant:
             return user.is_superuser
         return user.is_staff
 
+    def acquire_url(self) -> str:
+        if self.kind is GrantKind.TEAM:
+            return reverse("web:elevate_team", args=[self.team_slug])
+        return reverse(_ACQUIRE_URL_NAMES[self.kind])
+
 
 Grant.DJANGO_ADMIN = Grant(GrantKind.DJANGO_ADMIN)
 Grant.OCS_ADMIN = Grant(GrantKind.OCS_ADMIN)
@@ -106,6 +119,11 @@ Grant.OCS_ADMIN = Grant(GrantKind.OCS_ADMIN)
 _LABELS = {
     GrantKind.DJANGO_ADMIN: "Django admin",
     GrantKind.OCS_ADMIN: "OCS admin",
+}
+
+_ACQUIRE_URL_NAMES = {
+    GrantKind.DJANGO_ADMIN: "web:elevate_django_admin",
+    GrantKind.OCS_ADMIN: "web:elevate_ocs_admin",
 }
 
 
@@ -204,6 +222,44 @@ def safe_redirect_url(url: str) -> str:
     if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
         return "/"
     return url
+
+
+def requires_elevation(grant, superuser_only: bool = False):
+    """Gate a view on holding `grant`, sending anyone who does not hold it off to acquire it.
+
+    `grant` is a `Grant`, or a callable taking the view's own arguments and returning one for
+    grants that depend on the URL. `superuser_only` raises the bar above the grant's minimum
+    role, for admin views that were superuser-only before elevation covered them.
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def _inner(request, *args, **kwargs):
+            resolved = grant(request, *args, **kwargs) if callable(grant) else grant
+            redirect = elevation_redirect(request, resolved, superuser_only=superuser_only)
+            return redirect or view_func(request, *args, **kwargs)
+
+        setattr(_inner, ENFORCES_ELEVATION_ATTR, True)
+        return _inner
+
+    return decorator
+
+
+def elevation_redirect(request, grant: Grant, superuser_only: bool = False) -> HttpResponseRedirect | None:
+    """Where to send a request that does not hold `grant`, or None when it does.
+
+    Everyone lacking the role gets the same `Http404`, so the elevated surfaces are not
+    discoverable by probing for a login redirect.
+    """
+    user = request.user
+    if not grant.may_be_held_by(user) or (superuser_only and not user.is_superuser):
+        raise Http404
+
+    if Elevation(request).has(grant):
+        return None
+
+    next_url = safe_redirect_url(request.get_full_path())
+    return HttpResponseRedirect(f"{grant.acquire_url()}?{urlencode({'next': next_url})}")
 
 
 def start_elevation(request, grant: Grant, next_url: str):
