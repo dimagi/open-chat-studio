@@ -446,6 +446,36 @@ def test_queue_items_table(client, team_with_users, queue):
 
 
 @pytest.mark.django_db()
+def test_summary_column_follows_field_order(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        created_by=user,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won.
+    assert content.index("score: 5") < content.index("notes: good")
+
+
+@pytest.mark.django_db()
 def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     pending_item = AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
     completed_item = AnnotationItemFactory.create(
@@ -2042,6 +2072,36 @@ def test_remove_session_get_shows_confirmation(client, team_with_users, queue, u
     content = response.content.decode()
     assert "Remove Session from Queue" in content
     assert "quality_score" in content
+
+
+@pytest.mark.django_db()
+def test_remove_session_confirm_follows_field_order(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        created_by=user,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won.
+    assert content.index("score: 5") < content.index("notes: good")
 
 
 @pytest.mark.django_db()
