@@ -8,8 +8,8 @@ for persisting the merged graph and calling update_nodes_from_data().
 from apps.pipelines.flow import (
     EdgeDiff,
     Flow,
-    FlowNode,
     FlowEdge,
+    FlowNode,
     FlowNodeData,
     FlowWithoutNodes,
     NodeDiff,
@@ -24,8 +24,7 @@ OutputHandles = dict[str, str | None]
 def _output_handle_labels(content: FlowNodeData) -> OutputHandles:
     """``FlowNodeData`` -> ``{handle: label}``, the shape ``_handle_remap`` matches across an edit."""
     return {
-        handle["handle"]: handle["label"]
-        for handle in content.node_type.output_handles(content.params, content.id)
+        handle["handle"]: handle["label"] for handle in content.node_type.output_handles(content.params, content.id)
     }
 
 
