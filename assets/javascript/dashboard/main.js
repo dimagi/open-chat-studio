@@ -926,5 +926,5 @@ function dashboard() {
 }
 
 document.addEventListener('alpine:init', () => {
-    Alpine.data('dashboard', dashboard);
+    window.Alpine.data('dashboard', dashboard);
 });
