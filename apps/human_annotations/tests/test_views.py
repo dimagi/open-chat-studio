@@ -2267,6 +2267,7 @@ def test_prior_reviews_panel_follows_field_order(team_with_users):
         data={"score": 5, "notes": "good"},
         status=AnnotationStatus.SUBMITTED,
     )
+    queue.refresh_from_db()
 
     context = _build_annotations_context(item, user, queue)
 
