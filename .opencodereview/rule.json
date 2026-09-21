@@ -1,4 +1,7 @@
 {
+  "include": [
+    "**/test_*.py"
+  ],
   "exclude": [
     "api-schemas/*.yml"
   ],
