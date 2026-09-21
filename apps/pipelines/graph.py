@@ -7,12 +7,11 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic_core import ValidationError
 
-from apps.pipelines.const import STANDARD_OUTPUT_NAME
+from apps.pipelines.const import END_NODE_TYPE, STANDARD_OUTPUT_NAME, START_NODE_TYPE
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
-from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 from apps.service_providers.llm_service.retry import get_retry_policy
 
 
@@ -24,10 +23,15 @@ class Node(pydantic.BaseModel):
     django_node: Any = None
 
     @property
+    def node_type(self) -> NodeType:
+        """What this node's type decides, as opposed to what the node itself holds."""
+        return NodeType(self.type)
+
+    @property
     def pipeline_node_class(self):
         """This node's class. Raises for a type that names no node class, which is what a removed
         type has always done — so a caller guarding against one guards against both."""
-        node_class = NodeType(self.type).node_class
+        node_class = self.node_type.node_class
         if node_class is None:
             raise AttributeError(f"Unknown pipeline node type: {self.type}")
         return node_class
@@ -38,11 +42,7 @@ class Node(pydantic.BaseModel):
 
     @property
     def name(self):
-        if self.type == StartNode.__name__:
-            return "start"
-        if self.type == EndNode.__name__:
-            return "end"
-        return self.params.get("name") or self.id
+        return self.node_type.reserved_name or self.params.get("name") or self.id
 
 
 class Edge(pydantic.BaseModel):
@@ -91,12 +91,12 @@ class PipelineGraph(pydantic.BaseModel):
 
     @cached_property
     def start_node(self) -> Node:
-        start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]
+        start_nodes = [node for node in self.nodes if node.type == START_NODE_TYPE]
         return start_nodes[0]
 
     @cached_property
     def end_node(self) -> Node:
-        end_nodes = [node for node in self.nodes if node.type == EndNode.__name__]
+        end_nodes = [node for node in self.nodes if node.type == END_NODE_TYPE]
         return end_nodes[0]
 
     @cached_property
@@ -130,7 +130,7 @@ class PipelineGraph(pydantic.BaseModel):
         """
         if node_id not in self._output_maps:
             node = self.nodes_by_id[node_id]
-            if not NodeType(node.type).exists:
+            if not node.node_type.exists:
                 self._output_maps[node_id] = None  # unknown node type; the node stage names it
                 return self._output_maps[node_id]
             try:
@@ -229,8 +229,8 @@ class PipelineGraph(pydantic.BaseModel):
         if self.end_node not in self.reachable_nodes:
             errors.append(
                 PipelineBuildError(
-                    f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
-                    f"from {StartNode.model_config['json_schema_extra'].label} node",
+                    f"{NodeType(END_NODE_TYPE).label} node is not reachable "
+                    f"from {NodeType(START_NODE_TYPE).label} node",
                     node_id=self.end_node.id,
                 )
             )
@@ -320,8 +320,7 @@ class PipelineGraph(pydantic.BaseModel):
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         for node in reachable_nodes:
-            if node.type == CodeNode.__name__:
-                # CodeNode manages its own routing similar to conditional nodes
+            if node.node_type.dispatches_own_edges:
                 continue
             for edge in self.edges_by_source[node.id]:
                 if not edge.is_conditional():
@@ -331,11 +330,10 @@ class PipelineGraph(pydantic.BaseModel):
     def _start_end_node_errors(self) -> list[PipelineBuildError]:
         """Both counts, reported together — one missing terminal shouldn't hide the other."""
         errors = []
-        for node_class in (StartNode, EndNode):
-            matching = [node for node in self.nodes if node.type == node_class.__name__]
+        for node_type in (NodeType(START_NODE_TYPE), NodeType(END_NODE_TYPE)):
+            matching = [node for node in self.nodes if node.type == node_type.type]
             if len(matching) != 1:
-                label = node_class.model_config["json_schema_extra"].label
-                errors.append(PipelineBuildError(f"There should be exactly 1 {label} node"))
+                errors.append(PipelineBuildError(f"There should be exactly 1 {node_type.label} node"))
         return errors
 
     def _dangling_edge_endpoint_errors(self) -> list[PipelineBuildError]:

@@ -72,6 +72,29 @@ def prune_unused_tags(result, **kwargs):
     return result
 
 
+def unrequire_readonly_nullable_fields(result, **kwargs):
+    """Drop read-only, nullable properties from a schema's ``required`` list.
+
+    drf-spectacular marks read-only fields as required by default, but OpenAPI 3.0 forbids a
+    property being both nullable and required (required means the value must be present and
+    non-null). The session API's ``participant_data`` returns ``{}`` — a valid, non-null value —
+    when no data is recorded, so it must stay nullable but cannot also be required.
+    """
+    for schema in result.get("components", {}).get("schemas", {}).values():
+        properties = schema.get("properties", {})
+        if not properties or "participant_data" not in properties:
+            continue
+        prop = properties["participant_data"]
+        if not (prop.get("readOnly") and prop.get("nullable")):
+            continue
+        required = schema.get("required")
+        if required and "participant_data" in required:
+            required.remove("participant_data")
+        if not required:
+            del schema["required"]
+    return result
+
+
 def _closed_serializers(base: type) -> Iterator[type]:
     """``base``'s subclasses, however deeply nested."""
     for cls in base.__subclasses__():

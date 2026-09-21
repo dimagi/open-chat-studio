@@ -56,6 +56,7 @@ from apps.evaluations.utils import (
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues
@@ -155,6 +156,15 @@ def _run_evaluator_on_message(
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
         output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
+    except NoStructuredOutputError as e:
+        logger.warning(
+            "Evaluator %s returned no structured output for message %s (stop reason: %s)",
+            evaluator.id,
+            message.id,
+            e.reason or "none",
+        )
+        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        return
     except Exception as e:
         logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
         _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
@@ -799,7 +809,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         csv_file = File.objects.get(id=file_id, team_id=team_id)
 
         try:
-            csv_content = csv_file.file.read().decode("utf-8")
+            csv_content = csv_file.read_bytes().decode("utf-8")
             with current_team(team):
                 rows, columns = _parse_csv_content(csv_content, progress_recorder)
                 if not rows:
@@ -865,7 +875,7 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
 
     try:
         try:
-            csv_content = csv_file.file.read().decode("utf-8")
+            csv_content = csv_file.read_bytes().decode("utf-8")
             csv_reader = csv.DictReader(StringIO(csv_content))
         except UnicodeDecodeError as e:
             logger.error(f"Failed to decode CSV file {file_id}: {e}")

@@ -67,6 +67,12 @@ class ParticipantView(APIView):
                 type=str,
             ),
             OpenApiParameter(
+                name="remote_id",
+                description="Filter by participant remote ID",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
                 name="platform",
                 description="Filter by platform (e.g. api, telegram, whatsapp)",
                 required=False,
@@ -108,6 +114,8 @@ class ParticipantView(APIView):
         qs = Participant.objects.filter(team=request.team)
         if identifier := request.query_params.get("identifier"):
             qs = qs.filter(identifier=identifier)
+        if remote_id := request.query_params.get("remote_id"):
+            qs = qs.filter(remote_id=remote_id)
         if platform := request.query_params.get("platform"):
             qs = qs.filter(platform=platform)
         # "chatbot" is the documented (OpenApiParameter) name; "experiment" is kept as a

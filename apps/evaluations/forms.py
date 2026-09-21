@@ -925,7 +925,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             raise forms.ValidationError("Invalid or missing CSV file.") from err
 
         try:
-            file_content = csv_file.file.read().decode("utf-8")
+            file_content = csv_file.read_bytes().decode("utf-8")
             csv_reader = csv.DictReader(StringIO(file_content))
             csv_columns = set(csv_reader.fieldnames or [])
         except Exception as err:

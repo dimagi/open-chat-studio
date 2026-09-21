@@ -166,7 +166,9 @@ MIDDLEWARE = list(
         [
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
-            "whitenoise.middleware.WhiteNoiseMiddleware",
+            # Tests never run collectstatic, so whitenoise would warn about the missing STATIC_ROOT
+            # on every test client it is loaded into, and scan the directory when there is one.
+            "whitenoise.middleware.WhiteNoiseMiddleware" if not IS_TESTING else None,
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
             "allauth.account.middleware.AccountMiddleware",
@@ -490,6 +492,7 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
         "apps.api.schema.mirror_unknown_key_rejection",
+        "apps.api.schema.unrequire_readonly_nullable_fields",
         "apps.api.schema.set_export_description",
         "apps.api.schema.set_example_urls",
     ],
@@ -505,6 +508,7 @@ SPECTACULAR_SETTINGS = {
         "EvaluationModeEnum": "apps.evaluations.models.EvaluationMode",
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
+        "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,

@@ -505,6 +505,8 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     }
     _RESOURCE_PARAM_KEYS = frozenset(param for params in _CONDITIONAL_KEY_PARAMS.values() for param in params)
     _HIDDEN_PARAM_KEYS = _RESOURCE_PARAM_KEYS
+    # Params served under a clearer name than the node type declares them with.
+    _RENAMED_PARAMS = {"max_results": "max_indexed_collection_search_results"}
 
     node_id = serializers.CharField(source="flow_id")
     type = serializers.CharField()
@@ -553,8 +555,9 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         # node label, exposed separately).
         params = {k: v for k, v in (node.params or {}).items() if k not in self._HIDDEN_PARAM_KEYS and k != "name"}
         # ``max_results`` only bounds index search, so surface it under a clearer name.
-        if "max_results" in params:
-            params["max_indexed_collection_search_results"] = params.pop("max_results")
+        for declared, served in self._RENAMED_PARAMS.items():
+            if declared in params:
+                params[served] = params.pop(declared)
         return params
 
     @extend_schema_field(OutputHandleSerializer(many=True))

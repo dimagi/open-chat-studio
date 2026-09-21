@@ -85,7 +85,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
-        Model("o4-mini-high", 200000, deprecated=True),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
         Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
@@ -115,7 +114,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
     ],
     "groq": [
-        Model("whisper-large-v3-turbo", k(8)),
         # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
         # siblings use.
         Model("qwen/qwen3.8-27b", 131042),
@@ -133,6 +131,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-8b-instruct", 131072),
         Model("llama-3.1-70b-instruct", 131072),
     ],
+    # OpenRouter supports thousands of models; we intentionally ship no defaults.
+    # Users can add models manually, and a dedicated discovery flow using the OpenRouter
+    # model API (search, autocomplete, pricing) is tracked in issue #4258. Like
+    # ``voyage`` (embeddings only), providers without shipped chat models are omitted
+    # from this dict entirely rather than listed with an empty list.
     "deepseek": [
         # DeepSeek-V4.1-Flash (llm-stats id `deepseek-v4.1-flash`). api.deepseek.com serves it as
         # `deepseek-flash`; the two dated names below are still accepted but now route here.
@@ -208,10 +211,18 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
+    # o4-mini-high is a ChatGPT effort preset, not an API model: it is absent from OpenAI's
+    # catalogue and from its deprecation table, so requests with it already 404. References move
+    # to gpt-5.6-terra, the successor OpenAI names for o4-mini, rather than to o4-mini itself,
+    # which shuts down on 2026-10-23.
+    ("openai", "o4-mini-high", "gpt-5.6-terra"),
     ("openai", "gpt-5.3", "gpt-5.4"),
     ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
     # Groq
     ("groq", "whisper-large-v3"),
+    # Speech-to-text, billed per audio-hour: it has no token rates and cannot serve a chat
+    # request, so any reference to it is already broken. References move to the Groq default.
+    ("groq", "whisper-large-v3-turbo", "openai/gpt-oss-120b"),
     ("groq", "llama3-groq-70b-8192-tool-use-preview"),
     ("groq", "llama3-groq-8b-8192-tool-use-preview"),
     ("groq", "llama-3.1-70b-versatile"),

@@ -33,7 +33,7 @@ from apps.pipelines.flow import (
     node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.node_type import NodeType, server_managed_node_types
+from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -59,10 +59,7 @@ class PipelineManager(VersionsObjectManagerMixin, models.Manager):
 
 
 class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
-    def llm_response_with_prompt_nodes(self):
-        from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        return self.get_queryset().filter(type=LLMResponseWithPrompt.__name__)
+    pass
 
 
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
@@ -111,14 +108,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         node = None
         if llm_provider_id and llm_provider_model:
-            llm_id = f"LLMResponseWithPrompt-{uuid4().hex[:5]}"
+            llm_node_type = NodeType("LLMResponseWithPrompt")
+            llm_id = f"{llm_node_type.type}-{uuid4().hex[:5]}"
             node = FlowNode(
                 id=llm_id,
-                type="pipelineNode",
+                type=llm_node_type.react_flow_type,
                 position={"x": 300, "y": 0},
                 data=FlowNodeData(
                     id=llm_id,
-                    type="LLMResponseWithPrompt",
+                    type=llm_node_type.type,
                     label="LLM",
                     params={
                         "name": llm_id,
@@ -338,6 +336,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def node_ids(self):
         return self.node_set.order_by("created_at").values_list("flow_id", flat=True).all()
 
+    @property
+    def wiring(self) -> set[tuple[str, str, str, str]]:
+        """This graph's wiring as ``(source, source handle, target, target handle)`` tuples.
+
+        Read through ``FlowEdge`` so a null handle and the standard name it stands for compare as
+        one wire -- a seeded or imported graph would otherwise read as different from an equivalent
+        one the builder made. Edge ids stay out: they are client-generated, so deleting a wire and
+        drawing the same one again would otherwise look like a change.
+        """
+        return {edge.wiring for edge in FlowWithoutNodes(**(self.data or {"edges": []})).edges}
+
     @transaction.atomic()
     def create_new_version(self, is_copy: bool = False):  # ty: ignore[invalid-method-override]
         version_number = 1 if is_copy else self.version_number
@@ -425,8 +434,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for node in self.node_set.get_all().filter(is_archived=True):
             node.unarchive()
 
-    def get_node_param_values(self, node_cls, param_name: str) -> list:
-        return list(self.node_set.filter(type=node_cls.__name__).values_list(f"params__{param_name}", flat=True))
+    def get_node_param_values(self, param_name: str) -> list:
+        """Every value stored for ``param_name``, across the nodes whose type declares it.
+
+        The types come from :func:`~apps.pipelines.node_type.node_types_declaring` rather than from
+        the caller, so a caller asking for a param needs neither the node classes nor a list of which
+        types carry it.
+        """
+        return list(
+            self.node_set.filter(type__in=node_types_declaring(param_name)).values_list(
+                f"params__{param_name}", flat=True
+            )
+        )
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         return self.experiment_set.filter(is_archived=False)
@@ -456,6 +475,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     name="nodes",
                     queryset=self.node_set.exclude(type__in=server_managed_node_types()),
                     to_display=lambda node: node.display_name,
+                ),
+                # Edges live in ``data`` rather than in a row of their own (ADR-0049), so without
+                # this a version that only rewires the graph reports no changes.
+                VersionField(
+                    name="edges",
+                    raw_value=self.wiring,
+                    to_display=VersionFieldDisplayFormatters.format_wiring,
                 ),
             ],
         )
@@ -616,7 +642,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if pipeline is not None:
             new_version.pipeline = pipeline
         new_version.save()
-        if self.params.get("custom_actions"):
+        if self.node_type.declares("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
         new_version._sync_resource_fk_fields()
 

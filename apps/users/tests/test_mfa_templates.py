@@ -83,3 +83,14 @@ def test_index_does_not_offer_recovery_codes_before_mfa_is_enabled(logged_in_cli
 
     assert not Authenticator.objects.exists()
     assert reverse("mfa_generate_recovery_codes") not in response.content.decode()
+
+
+def test_reauthentication_renders_the_code_field_and_the_password_alternative(logged_in_client, user):
+    """`reauthentication_alternatives` is how a user switches method; the override has to render it."""
+    totp_auth.TOTP.activate(user, totp_auth.generate_totp_secret())
+
+    response = logged_in_client.get(reverse("mfa_reauthenticate"))
+
+    content = response.content.decode()
+    assert 'name="code"' in content
+    assert reverse("account_reauthenticate") in content
