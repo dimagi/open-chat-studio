@@ -1,5 +1,21 @@
 {
+  "exclude": [
+    "api-schemas/*.yml"
+  ],
   "rules": [
+    {
+      "path": "**/migrations/*.py",
+      "rule": ".opencodereview/rules/django_migrations.md"
+    },
+    {
+      "path": "apps/**/models.py",
+      "rule": ".opencodereview/rules/django_models.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "templates/**/*.html",
+      "rule": ".opencodereview/rules/django_templates.md"
+    },
     {
       "path": "**/pyproject.toml",
       "rule": ".opencodereview/rules/pyproject_toml.md"
