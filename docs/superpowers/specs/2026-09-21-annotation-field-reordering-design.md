@@ -170,9 +170,6 @@ Two notes:
 - `annotations_summary.html` reaches the queue through `record.queue`. The items
   table needs `select_related("queue")`, or the ordered names passed in as table
   context, or it is an N+1 per row. See `docs/agents/django_performance.md`.
-- `remove_session_confirm.html` wants the same `(name, value)` pair shape that
-  `_build_annotations_context` already builds at `annotate_views.py:90`. Extract
-  that rather than writing it twice.
 
 `aggregation.py:45` also iterates `ann.data`, but only to accumulate into a
 name-keyed dict. It is order-independent and needs no change.

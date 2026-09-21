@@ -54,6 +54,21 @@ def test_build_annotation_form_optional_fields(team):
 
 
 @pytest.mark.django_db()
+def test_build_annotation_form_field_order(team):
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    queue.refresh_from_db()
+
+    assert list(build_annotation_form(queue).base_fields) == ["score", "notes"]
+
+
+@pytest.mark.django_db()
 def test_optional_fields_accept_empty_submission(team):
     queue = AnnotationQueue.objects.create(
         team=team,

@@ -119,7 +119,7 @@ class AnnotationQueue(BaseTeamModel):
         return reverse("human_annotations:queue_detail", args=[get_slug_for_team(self.team_id), self.id])
 
     def ordered_field_names(self) -> list[str]:
-        """Field names in display order, reconciled against the current schema."""
+        """Field names in display order, de-duplicated and reconciled against the current schema."""
         known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
         return known + [name for name in self.schema if name not in known]  # ty: ignore[invalid-return-type]
 
