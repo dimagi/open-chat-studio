@@ -472,3 +472,48 @@ def test_resync_swallows_aggregate_recompute_failure(team):
 
     item.refresh_from_db()
     assert item.status == AnnotationItemStatus.IN_PROGRESS  # status recompute committed despite the failure
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("field_order", "expected"),
+    [
+        pytest.param(["b", "a", "c"], ["b", "a", "c"], id="explicit-order-is-honoured"),
+        pytest.param([], ["a", "b", "c"], id="empty-falls-back-to-schema-order"),
+        pytest.param(None, ["a", "b", "c"], id="null-falls-back-to-schema-order"),
+        pytest.param(["c", "removed"], ["c", "a", "b"], id="names-not-in-schema-are-dropped"),
+        pytest.param(["c"], ["c", "a", "b"], id="schema-keys-missing-from-order-are-appended"),
+    ],
+)
+def test_ordered_field_names(team, field_order, expected):
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Ordered",
+        schema={
+            "a": {"type": "string", "description": "A"},
+            "b": {"type": "string", "description": "B"},
+            "c": {"type": "string", "description": "C"},
+        },
+        field_order=field_order,
+        created_by=team.members.first(),
+    )
+    queue.refresh_from_db()
+
+    assert queue.ordered_field_names() == expected
+
+
+@pytest.mark.django_db()
+def test_get_field_definitions_follows_field_order(team):
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Ordered defs",
+        schema={
+            "a": {"type": "string", "description": "A"},
+            "b": {"type": "int", "description": "B"},
+        },
+        field_order=["b", "a"],
+        created_by=team.members.first(),
+    )
+    queue.refresh_from_db()
+
+    assert list(queue.get_field_definitions()) == ["b", "a"]
