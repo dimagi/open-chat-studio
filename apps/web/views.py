@@ -73,7 +73,11 @@ def _acquire_elevation(request, grant):
 
     next_url = safe_redirect_url(request.GET.get("next", ""))
     elevation = Elevation(request)
-    if elevation.has(grant) or (grant.kind is GrantKind.TEAM and _is_team_member(request.user, grant.team_slug)):
+    if elevation.has(grant):
+        return HttpResponseRedirect(next_url)
+
+    if grant.kind is GrantKind.TEAM and _is_team_member(request.user, grant.team_slug):
+        # A member of the team has no need to stand in for one.
         return HttpResponseRedirect(next_url)
 
     if elevation.is_full():
