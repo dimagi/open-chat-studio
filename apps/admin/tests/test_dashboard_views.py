@@ -20,6 +20,8 @@ SECTION_NAMES = [
     "section_whatsapp",
 ]
 
+SUPERUSER_ONLY_VIEWS = ["configuration", "flags_home", "find_provider_by_key"]
+
 DATE_RANGE = {"range_type": "d30", "start": "2026-05-01", "end": "2026-05-31"}
 INVALID_RANGE = {"range_type": "custom", "start": "not-a-date", "end": "2026-05-31"}
 
@@ -50,15 +52,14 @@ class TestDashboardSkeleton:
         staff_view = staff_client.get(reverse("ocs_admin:home")).content.decode()
         superuser_view = superuser_client.get(reverse("ocs_admin:home")).content.decode()
 
-        for url_name in ["configuration", "flags_home", "find_provider_by_key"]:
+        for url_name in SUPERUSER_ONLY_VIEWS:
             assert reverse(f"ocs_admin:{url_name}") not in staff_view
             assert reverse(f"ocs_admin:{url_name}") in superuser_view
         assert reverse("ocs_admin:team_metadata") in staff_view
 
-    def test_staff_elevation_does_not_reach_the_superuser_views(self, staff_client):
-        assert staff_client.get(reverse("ocs_admin:flags_home")).status_code == 404
-        assert staff_client.get(reverse("ocs_admin:configuration")).status_code == 404
-        assert staff_client.get(reverse("ocs_admin:find_provider_by_key")).status_code == 404
+    @pytest.mark.parametrize("view_name", SUPERUSER_ONLY_VIEWS)
+    def test_staff_elevation_does_not_reach_the_superuser_views(self, staff_client, view_name):
+        assert staff_client.get(reverse(f"ocs_admin:{view_name}")).status_code == 404
 
     def test_elevating_into_another_grant_does_not_unlock_the_admin(self, client):
         """The grants are namespaced, so a team elevation is not an admin elevation."""
