@@ -8,10 +8,9 @@ nothing -- so it is never refused for having no changes to publish.
 import pytest
 from django.urls import reverse
 
-from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.utils import set_current_team, unset_current_team
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.experiment import ChatbotFactory
-from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -166,19 +165,6 @@ class TestAuth:
         )
 
         assert promote(client, published, 2).status_code == (200 if listed else 403)
-
-
-@pytest.fixture()
-def team_with_roles(db):
-    """`create_default_groups()` is explicit so the DB-backed groups match backends.py even
-    though pytest runs with --reuse-db."""
-    create_default_groups()
-    team = TeamFactory.create()
-    token = set_current_team(team)
-    try:
-        yield team
-    finally:
-        unset_current_team(token)
 
 
 @pytest.mark.django_db()
