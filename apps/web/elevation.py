@@ -232,7 +232,6 @@ def pending_elevation(request) -> Grant | None:
     except (InvalidGrant, KeyError, TypeError):
         return None
 
-    # Naming a request `complete_elevation` will refuse would promise access the user cannot get.
     return None if _is_stale(state) else grant
 
 
