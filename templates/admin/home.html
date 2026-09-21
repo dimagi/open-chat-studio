@@ -9,19 +9,19 @@
               title="{% translate "Release this deployment was built from" %}">{{ ocs_version }}</span>
       </h1>
       <div class="flex flex-wrap gap-2">
-        <a href="{% url 'ocs_admin:configuration' %}" class="btn btn-sm btn-primary">
-          {% translate "Configuration" %}
-        </a>
-        <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-sm btn-primary">
-          {% translate "Feature Flags" %}
-        </a>
-        <a href="{% url 'ocs_admin:find_provider_by_key' %}" class="btn btn-sm btn-primary">
-          {% translate "Provider by key" %}
-        </a>
         <a href="{% url 'ocs_admin:team_metadata' %}" class="btn btn-sm btn-primary">
           {% translate "Team Metadata" %}
         </a>
         {% if request.user.is_superuser %}
+          <a href="{% url 'ocs_admin:configuration' %}" class="btn btn-sm btn-primary">
+            {% translate "Configuration" %}
+          </a>
+          <a href="{% url 'ocs_admin:flags_home' %}" class="btn btn-sm btn-primary">
+            {% translate "Feature Flags" %}
+          </a>
+          <a href="{% url 'ocs_admin:find_provider_by_key' %}" class="btn btn-sm btn-primary">
+            {% translate "Provider by key" %}
+          </a>
           <a href="{% url 'oauth2_provider:global_application_home' %}" class="btn btn-sm btn-primary">
             {% translate "OAuth Apps" %}
           </a>

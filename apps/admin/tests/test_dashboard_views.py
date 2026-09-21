@@ -1,6 +1,7 @@
 from urllib.parse import quote
 
 import pytest
+from django.test import Client
 from django.urls import reverse
 
 from apps.users.models import CustomUser
@@ -38,6 +39,21 @@ class TestDashboardSkeleton:
 
         assert response.status_code == 302
         assert response.url == f"{reverse('web:elevate_ocs_admin')}?next={quote(url, safe='')}"
+
+    def test_the_home_page_offers_staff_only_what_they_can_reach(self, staff_client):
+        """A staff member should not be shown buttons that 404 on them."""
+        superuser = CustomUser.objects.create(username="super@acme.com", is_staff=True, is_superuser=True)
+        superuser_client = Client()
+        superuser_client.force_login(superuser)
+        elevate_session(superuser_client, Grant.OCS_ADMIN)
+
+        staff_view = staff_client.get(reverse("ocs_admin:home")).content.decode()
+        superuser_view = superuser_client.get(reverse("ocs_admin:home")).content.decode()
+
+        for url_name in ["configuration", "flags_home", "find_provider_by_key"]:
+            assert reverse(f"ocs_admin:{url_name}") not in staff_view
+            assert reverse(f"ocs_admin:{url_name}") in superuser_view
+        assert reverse("ocs_admin:team_metadata") in staff_view
 
     def test_staff_elevation_does_not_reach_the_superuser_views(self, staff_client):
         assert staff_client.get(reverse("ocs_admin:flags_home")).status_code == 404
