@@ -88,7 +88,7 @@ class Attachment(BaseModel):
     def read_bytes(self):
         if not self._file:
             return b""
-        return self._file.file.read()
+        return self._file.read_bytes()
 
     def read_text(self):
         return self.document.get_contents_as_string()
