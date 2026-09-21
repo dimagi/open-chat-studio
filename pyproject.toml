@@ -136,6 +136,10 @@ filterwarnings = [
     "ignore::SyntaxWarning:RestrictedPython.compile",  # code nodes whose restricted source prints
     "ignore:CheckConstraint.check is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
     "ignore:`langchain-community` is being sunset:DeprecationWarning",
+    # ChatVertexAI is deprecated in favour of langchain-google-genai's ChatGoogleGenerativeAI, which
+    # only grew a Vertex backend in 4.x. Both warnings below come from the same class. See #4580.
+    'ignore:Use \[`ChatGoogleGenerativeAI`\]:DeprecationWarning',
+    'ignore:The class `ChatVertexAI` was deprecated:DeprecationWarning',
     "ignore:The `parse_obj` method is deprecated:pydantic.PydanticDeprecatedSince20",
     "ignore:`FieldValidationInfo` is deprecated:DeprecationWarning",
     "ignore:'count' is passed as positional argument:DeprecationWarning",  # mailparser-reply
