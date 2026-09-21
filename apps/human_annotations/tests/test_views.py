@@ -364,6 +364,79 @@ def test_edit_locked_queue_rejects_adding_field(client, team_with_users, user):
 
 
 @pytest.mark.django_db()
+def test_edit_queue_existing_schema_context_follows_field_order(client, team_with_users, user):
+    """The edit view's existing_schema must reflect field_order, not raw jsonb key order."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Reorder check",
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+        created_by=user,
+    )
+    queue.refresh_from_db()
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won over jsonb order.
+    assert list(response.context["existing_schema"]) == ["score", "notes"]
+
+
+@pytest.mark.django_db()
+def test_edit_queue_unlocked_renders_reorder_controls(client, team_with_users, queue):
+    """The schema builder shows the drag grip and both move buttons on an unlocked queue."""
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "fa-grip-vertical" in html
+    assert "fa-arrow-up" in html
+    assert "fa-arrow-down" in html
+    assert 'name="field_order"' in html
+
+
+@pytest.mark.django_db()
+def test_edit_queue_locked_still_renders_reorder_controls(client, team_with_users, user):
+    """Re-order controls stay usable and promoted on a locked queue; delete stays hidden."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Locked Queue",
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        created_by=user,
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context["schema_locked"] is True
+    html = response.content.decode()
+    assert "fa-grip-vertical" in html
+    assert "fa-arrow-up" in html
+    assert "fa-arrow-down" in html
+    assert 'x-show="!locked"' in html
+    assert "border-primary/30" in html
+    assert "re-order" in html.lower()
+
+
+@pytest.mark.django_db()
 def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(

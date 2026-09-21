@@ -123,7 +123,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         annotations_started = self.object.items.filter(review_count__gt=0).exists()
-        context["existing_schema"] = self.object.schema
+        context["existing_schema"] = {name: self.object.schema[name] for name in self.object.ordered_field_names()}
         context["schema_locked"] = annotations_started
         context["annotations_started"] = annotations_started
         context["breadcrumbs"] = [*queues_crumbs(self.request.team.slug, self.object), (_("Edit"), None)]
