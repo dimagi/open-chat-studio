@@ -149,16 +149,23 @@ class TestAuth:
 
         assert promote(client, published, 2).status_code == 403
 
-    def test_a_machine_token_is_held_to_its_applications_chatbot_allowlist(self, published):
+    @pytest.mark.parametrize(
+        "listed",
+        [
+            pytest.param(True, id="a-listed-chatbot-may-be-promoted"),
+            pytest.param(False, id="an-unlisted-one-may-not"),
+        ],
+    )
+    def test_a_machine_token_is_held_to_its_applications_chatbot_allowlist(self, published, listed):
         client = ApiTestClient(
             published.team.members.first(),
             published.team,
             auth_method="oauth_client_credentials",
             scopes=["chatbots:write"],
-            allowed_chatbots=[],
+            allowed_chatbots=[published] if listed else [],
         )
 
-        assert promote(client, published, 2).status_code == 403
+        assert promote(client, published, 2).status_code == (200 if listed else 403)
 
 
 @pytest.fixture()
