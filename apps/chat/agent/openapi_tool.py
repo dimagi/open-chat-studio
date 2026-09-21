@@ -15,7 +15,7 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, model_serializer
 
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
@@ -94,7 +94,7 @@ class OpenAPIOperationExecutor:
         if "body_data" in kwargs:
             kwargs["json"] = kwargs.pop("body_data")
 
-        kwargs = {k: _dump_with_original_names(v) if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
+        kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
         url = self._get_url(path_params)
         with self.auth_service.get_http_client() as client:
@@ -173,7 +173,7 @@ class OpenAPIOperationExecutor:
     def _get_url(self, path_params):
         url = self.function_def.url
         if path_params:
-            url = _format_url(url, _dump_with_original_names(path_params))
+            url = _format_url(url, path_params.model_dump())
 
         try:
             validate_user_input_url(url, strict=not settings.DEBUG)
@@ -365,12 +365,27 @@ def _get_basic_type(data_type: DataType) -> type:
         raise ValueError(f"Unsupported type: {data_type}")
 
 
+class _OriginalNameSerializerMixin(BaseModel):
+    """Base for models built by `_create_model`: renames each field back to its original
+    (pre-sanitization) OpenAPI parameter name whenever the model is serialized. This makes the
+    rename transparent to every caller of `model_dump()` (directly, or via anything built on top
+    of it, e.g. a nested model's own dump) rather than requiring everyone to remember to call a
+    special dump function instead of the normal one.
+    """
+
+    @model_serializer(mode="wrap")
+    def _serialize_with_original_names(self, handler) -> dict:
+        dumped = handler(self)
+        mapping = getattr(type(self), "__ocs_param_name_mapping__", {})
+        return {mapping.get(key, key): value for key, value in dumped.items()}
+
+
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
     """Builds a Pydantic model from OpenAPI-derived `properties`, sanitizing each key so the
     resulting JSON schema is valid for every provider (notably Anthropic's
     `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original mapping is stashed on the model as
-    `__param_name_mapping__` so `_dump_with_original_names` can undo it before an actual API call,
-    which must use the real parameter names the OpenAPI spec defines.
+    `__ocs_param_name_mapping__` and applied by `_OriginalNameSerializerMixin` so a plain
+    `model_dump()` already reflects the real parameter names the OpenAPI spec defines.
     """
     sanitized_properties = {}
     param_name_mapping: dict[str, str] = {}
@@ -382,25 +397,11 @@ def _create_model(name, properties, **kwargs) -> type[BaseModel]:
         param_name_mapping[sanitized_name] = prop_name
         sanitized_properties[sanitized_name] = prop_value
 
-    model = create_model(_make_model_name(name), **sanitized_properties, **kwargs)
-    model.__param_name_mapping__ = param_name_mapping
+    model = create_model(
+        _make_model_name(name), __base__=_OriginalNameSerializerMixin, **sanitized_properties, **kwargs
+    )
+    model.__ocs_param_name_mapping__ = param_name_mapping
     return model
-
-
-def _dump_with_original_names(value: Any) -> Any:
-    """Like `value.model_dump()`, but restores each field's original (pre-sanitization) name so
-    the real API call uses the parameter names the OpenAPI spec actually defines."""
-    if isinstance(value, BaseModel):
-        mapping = getattr(type(value), "__param_name_mapping__", {})
-        return {
-            mapping.get(field_name, field_name): _dump_with_original_names(getattr(value, field_name))
-            for field_name in type(value).model_fields
-        }
-    if isinstance(value, list):
-        return [_dump_with_original_names(item) for item in value]
-    if isinstance(value, enum.Enum):
-        return value.value
-    return value
 
 
 def _make_model_name(name, suffix="Model"):
