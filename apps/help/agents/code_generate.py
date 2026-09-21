@@ -86,7 +86,9 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
 
         system_prompt = system_prompt.format(**prompt_context).strip()
         system_prompt += (
-            "\n\nIMPORTANT: Start your response with exactly"
-            " `def main(input: str, **kwargs) -> str:` and nothing else before it."
+            "\n\nIMPORTANT: Respond with only Python code — no markdown code fences and no prose"
+            " before or after the code. Comment lines (starting with `#`) above the function, such as"
+            " documentation comments, are allowed and should be preserved if already present in the"
+            " current code. The code must define `def main(input: str, **kwargs) -> str:`."
         )
         return system_prompt

@@ -22,6 +22,10 @@ from apps.help.agents.progress_messages import (
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
 from apps.help.views import run_agent
+from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import NodeContext
+from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.repository import InMemoryPipelineRepository
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
@@ -356,18 +360,26 @@ class TestCodeGenerateAgent:
         prompt = agent._build_system_prompt("", error=None)
         assert "Make the smallest possible edit" not in prompt
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "set_participant_data_key",
-            "append_to_participant_data_key",
-            "increment_participant_data_key",
-            "get_participant_schedules",
-            "end_session",
-        ],
-    )
-    def test_system_prompt_documents_participant_data_and_session_function(self, name):
-        assert name in _get_system_prompt()
+    def test_build_system_prompt_allows_leading_comments(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+        prompt = agent._build_system_prompt("", error=None)
+        assert "Comment lines" in prompt
+        assert "nothing else before it" not in prompt
+
+    def test_system_prompt_documents_every_sandbox_function(self):
+        node = CodeNode(name="test", node_id="123", django_node=None, code="")
+        node._repo = InMemoryPipelineRepository()
+        mock_state = PipelineState(outputs={}, experiment_session=None)
+        functions = node._get_custom_functions(
+            state=mock_state, context=NodeContext(mock_state), output_state=mock_state, print_collectors=[]
+        )
+        # "_print_" is a RestrictedPython internal hook, not part of the documented API.
+        # "http" is documented via its methods (http.get, http.post, ...), not the bare name.
+        documented_names = {name for name in functions if not name.startswith("_") and name != "http"}
+
+        prompt = _get_system_prompt()
+        missing = sorted(name for name in documented_names if name not in prompt)
+        assert not missing, f"Sandbox functions missing from the AI prompt: {missing}"
 
     @pytest.mark.parametrize(
         "name",
