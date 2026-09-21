@@ -174,10 +174,12 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
 
         aggregate = getattr(queue, "aggregate", None)
         schema = queue.schema or {}
-        context["aggregates"] = {
-            name: merge_binary_labels(stats, schema.get(name) or {})
-            for name, stats in (aggregate.aggregates if aggregate else {}).items()
-        }
+        stored = aggregate.aggregates if aggregate else {}
+        context["aggregates"] = [
+            (name, merge_binary_labels(stored[name], schema.get(name) or {}))
+            for name in queue.ordered_field_names()
+            if name in stored
+        ]
 
         filter_context = get_filter_context_data(
             self.request.team,

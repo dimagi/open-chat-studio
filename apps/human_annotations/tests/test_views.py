@@ -27,6 +27,7 @@ from apps.utils.factories.evaluations import EvaluationDatasetFactory, Evaluatio
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
+    AnnotationQueueAggregateFactory,
     AnnotationQueueFactory,
 )
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
@@ -405,6 +406,35 @@ def test_queue_detail_shows_a_count_for_each_binary_label(client, team_with_user
     assert "3/4" in content
     assert "Incorrect:" in content
     assert "1/4" in content
+
+
+@pytest.mark.django_db()
+def test_aggregates_panel_follows_field_order(client, team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "rating": {"type": "int", "description": "Rating"},
+        },
+        field_order=["rating", "score"],
+    )
+    AnnotationQueueAggregateFactory.create(
+        team=team_with_users,
+        queue=queue,
+        aggregates={
+            "rating": {"type": "numeric", "count": 1, "mean": 2},
+            "score": {"type": "numeric", "count": 1, "mean": 5},
+        },
+    )
+    client.force_login(team_with_users.members.first())
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    # jsonb sorts by length first, so schema order is ("score", "rating"); asserting the
+    # reverse is what proves field_order won.
+    assert [name for name, _ in response.context["aggregates"]] == ["rating", "score"]
 
 
 @pytest.mark.django_db()
