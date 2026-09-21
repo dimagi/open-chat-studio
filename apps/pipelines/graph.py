@@ -320,7 +320,7 @@ class PipelineGraph(pydantic.BaseModel):
 
     def _add_edges_to_graph(self, state_graph: StateGraph, reachable_nodes: list[Node]):
         for node in reachable_nodes:
-            if node.node_type.routes_itself:
+            if node.node_type.dispatches_own_edges:
                 continue
             for edge in self.edges_by_source[node.id]:
                 if not edge.is_conditional():

@@ -179,12 +179,8 @@ class NodeType:
         return field.get_default()
 
     @property
-    def routes_itself(self) -> bool:
-        """Whether nodes of this type dispatch their own outgoing edges.
-
-        A self-routing node returns a langgraph ``Command`` naming where the turn goes next, so
-        wiring its static edges into the graph as well would run both paths.
-        """
+    def dispatches_own_edges(self) -> bool:
+        """Whether nodes of this type schedule their outgoing edges themselves, so the graph leaves them out."""
         return self.type == CODE_NODE_TYPE
 
     @property

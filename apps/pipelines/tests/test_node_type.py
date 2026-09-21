@@ -49,7 +49,7 @@ class TestNullObject:
         assert unresolvable.is_router is False
         assert unresolvable.label == node_type
         assert unresolvable.reserved_name is None
-        assert unresolvable.routes_itself is False
+        assert unresolvable.dispatches_own_edges is False
         assert unresolvable.is_server_managed is False
         assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
@@ -210,7 +210,7 @@ class TestRoutesItself:
         ],
     )
     def test_only_code_dispatches_its_own_edges(self, node_type, expected):
-        assert NodeType(node_type).routes_itself is expected
+        assert NodeType(node_type).dispatches_own_edges is expected
 
 
 class TestReactFlowType:
