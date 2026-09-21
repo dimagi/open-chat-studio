@@ -21,10 +21,15 @@ def output_handle_labels(content: FlowNodeData) -> OutputHandles:
 def handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
     """Where each handle a node used to offer has ended up, keyed by the handle it was.
 
-    A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts
-    as a removal -- inheriting the old branch's target would wire the new one somewhere nobody
-    chose.
+    A handle whose branch the edit removed is absent: its edge has nowhere to go.
+
+    Renaming one branch is not a removal: if the edit kept the same handles and only one of them
+    changed label, that handle was edited in place and nothing moved. A reorder can never produce
+    that shape -- moving one branch's slot always displaces at least one other -- so matching that
+    one handle to itself is never a guess, unlike inheriting a moved branch's old target would be.
     """
+    if before.keys() == after.keys() and sum(before[handle] != after[handle] for handle in before) <= 1:
+        return {handle: handle for handle in before}
     if _labels_are_distinct(before) and _labels_are_distinct(after):
         destinations = {label: handle for handle, label in after.items()}
         return {handle: destinations[label] for handle, label in before.items() if label in destinations}

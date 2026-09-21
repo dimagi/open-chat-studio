@@ -221,21 +221,24 @@ class TestEdgesAnEditCanStrand:
             second: ("output_0", rescheduled),
         }
 
-    def test_renaming_a_keyword_deletes_its_edge_rather_than_handing_it_over(self, client, chatbot, llm, router):
-        """A rename reads as one branch gone and another new, since nothing in the body says otherwise:
-        the old branch's edge goes with it and the new branch comes back unwired, rather than quietly
-        inheriting a target nobody chose for it."""
+    def test_renaming_a_keyword_keeps_its_edge(self, client, chatbot, llm, router):
+        """A rename that leaves every other branch untouched can only be an edit of that one
+        branch -- a reorder always displaces at least one other branch too -- so the edge stays
+        on it rather than being treated as though the branch were removed and a new one added."""
         scheduled, rescheduled = (add_llm_node(client, chatbot, llm) for _ in range(2))
         kept = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
-        add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
+        renamed = add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
 
         response = client.patch(
             node_url(chatbot, router), {"params": {"keywords": ["schedule", "cancel"]}}, format="json"
         )
 
         assert response.status_code == 200, response.content
-        assert outgoing_handles(chatbot.pipeline, router) == {kept: ("output_0", scheduled)}
-        assert {"handle": "output_1", "label": "CANCEL"} in response.json()["unwired_handles"][router]
+        assert outgoing_handles(chatbot.pipeline, router) == {
+            kept: ("output_0", scheduled),
+            renamed: ("output_1", rescheduled),
+        }
+        assert response.json()["pipeline_errors"]["edge"] == []
 
     def test_an_edge_already_stranded_before_the_edit_is_left_alone(self, client, chatbot, llm, router, start_node):
         """Only the handles this edit removed are followed. An edge on a handle the node never offered is

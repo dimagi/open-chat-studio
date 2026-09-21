@@ -78,6 +78,31 @@ class TestNodeUpdateRewiresHandles:
         by_id = {edge.id: edge.sourceHandle for edge in edge_data.edges}
         assert by_id == {"e0": "output_1", "e1": "output_0"}
 
+    def test_renaming_one_keyword_keeps_its_edge(self):
+        """A rename changes exactly one branch's label with the rest of the list untouched --
+        structurally that can only be an edit of that one branch, never a reorder (moving one
+        branch's slot always displaces another), so the edge stays on it rather than being
+        treated as removed."""
+        graph = self._graph(
+            StaticRouterNode.__name__,
+            {"name": "router", "route_key": "k", "keywords": ["support", "sales"]},
+            edges=[
+                make_flow_edge("e0", "src", "t0", source_handle="output_0"),
+                make_flow_edge("e1", "src", "t1", source_handle="output_1"),
+            ],
+        )
+        updated = make_flow_node(
+            "src",
+            StaticRouterNode.__name__,
+            params={"name": "router", "route_key": "k", "keywords": ["support2", "sales"]},
+        )
+        patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
+
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+
+        by_id = {edge.id: edge.sourceHandle for edge in edge_data.edges}
+        assert by_id == {"e0": "output_0", "e1": "output_1"}
+
     def test_changing_type_from_router_to_plain_drops_edges_on_removed_handles(self):
         """A type change is just another update as far as the patch engine is concerned -- it
         should lose its old branches' edges exactly like a keyword edit does."""

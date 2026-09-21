@@ -7,7 +7,7 @@ from rest_framework.exceptions import APIException, NotFound
 
 from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
 from apps.pipelines.const import REACT_FLOW_END_TYPE
-from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNode, FlowNodeData, NodeDiff
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, NodeDiff
 from apps.pipelines.models import Node
 from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
@@ -17,8 +17,6 @@ from .facade import PipelineEdit, graph_diff
 from .ids import with_free_suffix
 from .node_params import node_params, writable_params
 from .references import check_references
-
-OutputHandles = dict[str, str | None]
 
 #: How far right of the rightmost node a new one is parked, and the row it is parked on. The step is
 #: about a node's width, so a parked node clears the one before it.
@@ -219,59 +217,3 @@ def _is_overtaken_end_node(node: FlowNode, new_node_x: float) -> bool:
     if node.type != REACT_FLOW_END_TYPE:
         return False
     return (node.position.get("x") or 0) <= new_node_x
-
-
-def _output_handles(content: FlowNodeData) -> OutputHandles:
-    """A node's output handles as ``{handle: branch label}``.
-
-    The label is what identifies a router's branch across an edit: the handle is only a position in
-    ``keywords``, and positions move. A node whose type names no node class reports no handles.
-    """
-    return {
-        handle["handle"]: handle["label"] for handle in content.node_type.output_handles(content.params, content.id)
-    }
-
-
-def _rewired_edges(flow: Flow, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:
-    """What an edit that changed a node's output handles does to the edges leaving it.
-
-    Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
-    keywords renumbers the third rather than freeing a slot: going by position alone would hand the
-    third branch's target to the second. Old handles are matched to new ones by branch label instead
-    -- an edge follows its branch wherever it moved, and a branch that is gone takes its edge with
-    it, as the UI builder's ``deleteKeyword`` does. An edge already stranded when the edit arrived
-    stays, and stays reported in ``errors.edge``.
-    """
-    moved_to = _handle_remap(before, after)
-    update: list[FlowEdge] = []
-    delete: list[str] = []
-    for edge in flow.edges:
-        handle = edge.source_handle_name
-        if edge.source != node_id or handle not in before:
-            continue
-        destination = moved_to.get(handle)
-        if destination is None:
-            delete.append(edge.id)
-        elif destination != handle:
-            update.append(edge.model_copy(update={"sourceHandle": destination}))
-    return EdgeDiff(update=update, delete=delete)
-
-
-def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
-    """Where each handle the node used to offer has ended up, keyed by the handle it was.
-
-    A handle whose branch the edit removed is absent: its edge has nowhere to go. A rename counts as
-    a removal -- inheriting the old branch's target would wire the new one somewhere nobody chose.
-    """
-    if _labels_are_distinct(before) and _labels_are_distinct(after):
-        destinations = {label: handle for handle, label in after.items()}
-        return {handle: destinations[label] for handle, label in before.items() if label in destinations}
-    # Duplicate branch labels: keywords have to be unique, but a router that breaks that is still
-    # writable, and which edge belongs to which of two identical branches is a guess. So handles are
-    # followed by position instead, and only an edge left with no handle at all is dropped.
-    return {handle: handle for handle in before if handle in after}
-
-
-def _labels_are_distinct(handles: OutputHandles) -> bool:
-    """Whether every handle in the map carries a different branch label."""
-    return len(set(handles.values())) == len(handles)
