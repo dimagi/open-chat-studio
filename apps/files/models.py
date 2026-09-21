@@ -185,9 +185,11 @@ class File(BaseTeamModel, VersionsMixin):
                 # Sniffing the type seeks the FieldFile, which opens it against storage when the
                 # blob is already stored. Leave it as we found it rather than holding the handle.
                 was_closed = self.file.closed
-                self.content_type = File.get_content_type(self.file)
-                if was_closed:
-                    self.file.close()
+                try:
+                    self.content_type = File.get_content_type(self.file)
+                finally:
+                    if was_closed:
+                        self.file.close()
         super().save(*args, **kwargs)
 
     def duplicate(self):
