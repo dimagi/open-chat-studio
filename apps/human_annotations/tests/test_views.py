@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -431,9 +432,26 @@ def test_edit_queue_locked_still_renders_reorder_controls(client, team_with_user
     assert "fa-grip-vertical" in html
     assert "fa-arrow-up" in html
     assert "fa-arrow-down" in html
-    assert 'x-show="!locked"' in html
-    assert "border-primary/30" in html
-    assert "re-order" in html.lower()
+
+    # "border-primary/30" also appears on the pre-existing Required-checkbox :class binding
+    # further down the card, so scope the check to the re-order row's own binding by
+    # slicing between two anchors unique to that row.
+    reorder_row_start = html.index("flex gap-2 items-center mb-1")
+    reorder_row_end = html.index('x-model="field.name"')
+    reorder_row_html = html[reorder_row_start:reorder_row_end]
+    assert "border-primary/30" in reorder_row_html
+
+    # x-show="!locked" also appears on unrelated controls (the choice/binary delete buttons,
+    # the "Add Field" button, the Field Name label toggle), so anchor on the delete button's
+    # own @click handler, which is unique, to prove *its* binding is still present.
+    delete_button_pattern = re.compile(
+        r'@click="removeField\(index\)"\s*x-show="!locked"\s*class="btn btn-outline btn-xs btn-error"'
+    )
+    assert delete_button_pattern.search(html)
+
+    # "re-order" alone also matches the grip's "Drag to re-order" tooltip; assert the
+    # locked notice's own wording distinctly from that tooltip.
+    assert "You can still re-order fields" in html
 
 
 @pytest.mark.django_db()
