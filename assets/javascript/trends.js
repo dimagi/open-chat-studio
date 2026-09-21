@@ -35,6 +35,8 @@ const CHART_OPTIONS = {
  *   colors for callers whose series isn't a success/error split (e.g. a plain count).
  */
 export const renderChart = (ctx, data, colors = {}) => {
+    // Destroy any existing chart on this canvas before creating a new one.
+    Chart.getChart(ctx)?.destroy()
     const datasets = [
         {
             label: "Success",

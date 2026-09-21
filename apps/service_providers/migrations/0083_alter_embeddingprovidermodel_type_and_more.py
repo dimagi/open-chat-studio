@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0081_add_deepseek_flash'),
+        ('service_providers', '0082_auto_model_sync_20260917'),
     ]
 
     operations = [
