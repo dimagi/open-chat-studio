@@ -1107,7 +1107,7 @@ paths:
         - With `granularity` finer than `total`, `results` is one row per time bucket.
         - With `group_by` set, `results` is cursor-paginated breakdown rows — one per group, or one per (group, bucket) when combined with a finer granularity.
 
-        Optionally narrowed by `participant`, `chatbot`, or `platform`.
+        Optionally narrowed by `participant`, `participant_identifier`, `participant_remote_id`, `chatbot`, or `platform`.
 
         > **Tip:** The **Response samples** panel has worked examples for the common cases — pick one from the **Example** dropdown (single participant, cost + tokens, grouped breakdowns, and daily timeseries).
       summary: Usage
@@ -1191,6 +1191,13 @@ paths:
           maxLength: 320
           minLength: 1
         description: Restrict to a single participant by their raw identifier (email/phone).
+      - in: query
+        name: participant_remote_id
+        schema:
+          type: string
+          maxLength: 255
+          minLength: 1
+        description: Restrict to participants by their external-system remote ID.
       - in: query
         name: period
         schema:
