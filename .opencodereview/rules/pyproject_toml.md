@@ -20,8 +20,7 @@
 - An entry added to `runtime-evaluated-base-classes` or `banned-module-level-imports` is fine, but should say what it is for when the reason is not obvious from the name
 
 #### Test Configuration
-- An `ignore` line added to `[tool.pytest.ini_options] filterwarnings` that is not scoped to a specific message, or that suppresses a warning raised by this project's own code rather than by a dependency. The `error::DeprecationWarning:apps\..*` entries exist so that a deprecation against our own call site fails the test; an unscoped ignore placed below them can exempt it again
-- A `filterwarnings` entry inserted above the `error::` lines. pytest applies filters in order and the last match wins, so ordering is load-bearing
+- An `ignore` line added to `[tool.pytest.ini_options] filterwarnings` that is not scoped to a specific message, or that suppresses a warning raised by this project's own code rather than by a dependency. The `error::DeprecationWarning:apps\..*` entries exist so that a deprecation against our own call site fails the test. pytest applies filters in order and the last match wins, so an ignore placed below those lines, and broad enough to match the same warning, silently exempts our own code again
 - A change to `addopts` that widens what runs by default, in particular dropping `-m "not integration and not eval"`, which would make CI run tests that need API keys
 - A new marker used in tests but not registered under `markers`; `--strict-markers` turns that into a hard error
 
