@@ -483,6 +483,7 @@ def test_resync_swallows_aggregate_recompute_failure(team):
         pytest.param(None, ["a", "b", "c"], id="null-falls-back-to-schema-order"),
         pytest.param(["c", "removed"], ["c", "a", "b"], id="names-not-in-schema-are-dropped"),
         pytest.param(["c"], ["c", "a", "b"], id="schema-keys-missing-from-order-are-appended"),
+        pytest.param(["c", "a", "c"], ["c", "a", "b"], id="duplicate-names-are-collapsed"),
     ],
 )
 def test_ordered_field_names(team, field_order, expected):

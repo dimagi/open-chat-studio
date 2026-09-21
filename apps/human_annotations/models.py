@@ -120,7 +120,7 @@ class AnnotationQueue(BaseTeamModel):
 
     def ordered_field_names(self) -> list[str]:
         """Field names in display order, reconciled against the current schema."""
-        known = [name for name in (self.field_order or []) if name in self.schema]
+        known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
         return known + [name for name in self.schema if name not in known]  # ty: ignore[invalid-return-type]
 
     def get_field_definitions(self) -> dict[str, FieldDefinition]:
