@@ -142,7 +142,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
-        schema_fields = list(queue.schema.keys())
+        schema_fields = queue.ordered_field_names()
         fieldnames, rows = self._pivot_annotations(annotations, flagged_items, schema_fields)
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)
@@ -153,7 +153,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         return response
 
     def _export_jsonl(self, queue, annotations, flagged_items):
-        schema_fields = list(queue.schema.keys())
+        schema_fields = queue.ordered_field_names()
         flagged_items = list(flagged_items)
         flagged_item_ids = {item.pk for item in flagged_items}
         by_item = self._group_annotations_by_item(annotations)

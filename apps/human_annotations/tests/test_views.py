@@ -20,6 +20,7 @@ from apps.human_annotations.models import (
     AnnotationStatus,
 )
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
+from apps.human_annotations.views.annotate_views import _build_annotations_context
 from apps.human_annotations.views.export_views import ExportAnnotations
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
@@ -2216,3 +2217,57 @@ def test_export_jsonl_includes_authoritative_annotator(client, team_with_users, 
     record = json.loads(lines[0])
     assert record["authoritative_annotator"] == user.email
     assert "is_authoritative" not in record
+
+
+@pytest.mark.django_db()
+def test_export_csv_columns_follow_field_order(client, team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    user = team_with_users.members.first()
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    client.force_login(user)
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(response.content.decode().splitlines()))
+    assert [row["field"] for row in rows] == ["score", "notes"]
+
+
+@pytest.mark.django_db()
+def test_prior_reviews_panel_follows_field_order(team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    user = team_with_users.members.first()
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    context = _build_annotations_context(item, user, queue)
+
+    assert [name for name, _ in context[0]["fields"]] == ["score", "notes"]
