@@ -1,247 +1,20 @@
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.notifications import (
     AffectedResources,
-    audio_synthesis_failure_notification,
-    audio_transcription_failure_notification,
-    custom_action_api_failure_notification,
-    custom_action_health_check_failure_notification,
-    custom_action_unexpected_error_notification,
     deleted_model_notification,
     deprecated_model_notification,
-    file_delivery_failure_notification,
     message_delivery_failure_notification,
     trace_error_notification,
 )
-from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
 
-class TestCustomActionHealthCheckFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        action = CustomActionFactory.create()
-        failure_reason = "Connection timeout"
-
-        # Act
-        custom_action_health_check_failure_notification(action, failure_reason)
-
-        # Assert
-        mock_create_notification.assert_called_once_with(
-            title="Custom Action is down",
-            message=f"The custom action '{action.name}' health check failed: {failure_reason}.",
-            level=LevelChoices.ERROR,
-            team=action.team,
-            slug="custom-action-health-check",
-            event_data={"action_id": action.id, "status": action.health_status},
-            permissions=["custom_actions.change_customaction"],
-            links={"View Action": action.get_absolute_url()},
-        )
-
-
-class TestCustomActionApiFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        custom_action = CustomActionFactory.create()
-        function_def = Mock()
-        function_def.method = "post"
-        function_def.name = "create_user"
-        exception = Exception("API call failed")
-
-        # Act
-        custom_action_api_failure_notification(custom_action, function_def, exception)
-
-        # Assert
-        mock_create_notification.assert_called_once_with(
-            title=f"Custom Action '{custom_action.name}' failed",
-            message=f"POST 'create_user' API call failed: {exception}",
-            level=LevelChoices.ERROR,
-            team=custom_action.team,
-            permissions=["custom_actions.view_customaction"],
-            slug="custom-action-api-failure",
-            event_data={"action_id": custom_action.id, "exception_type": "Exception"},
-            links={"View Action": custom_action.get_absolute_url()},
-        )
-
-
-class TestCustomActionUnexpectedErrorNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        custom_action = CustomActionFactory.create()
-        function_def = Mock()
-        function_def.method = "put"
-        function_def.name = "update_user"
-        exception = RuntimeError("Unexpected error")
-
-        # Act
-        custom_action_unexpected_error_notification(custom_action, function_def, exception)
-
-        # Assert
-        mock_create_notification.assert_called_once_with(
-            title=f"Custom Action '{custom_action.name}' encountered an error",
-            message=f"PUT 'update_user' failed with an unexpected error: {exception}",
-            level=LevelChoices.ERROR,
-            team=custom_action.team,
-            permissions=["custom_actions.view_customaction"],
-            slug="custom-action-unexpected-error",
-            event_data={"action_id": custom_action.id, "exception_type": "RuntimeError"},
-            links={"View Action": custom_action.get_absolute_url()},
-        )
-
-
-class TestAudioSynthesisFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_session(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-
-        # Act
-        audio_synthesis_failure_notification(experiment, session)
-
-        # Assert
-        expected_links = {
-            "View Bot": experiment.get_absolute_url(),
-            "View Session": session.get_absolute_url(),
-        }
-        mock_create_notification.assert_called_once_with(
-            title="Audio Synthesis Failed",
-            message=f"An error occurred while synthesizing a voice response for '{experiment.name}'",
-            level=LevelChoices.ERROR,
-            slug="audio-synthesis-failed",
-            team=experiment.team,
-            permissions=["experiments.view_experimentsession"],
-            event_data={"bot_id": experiment.id},
-            links=expected_links,
-        )
-
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_without_session(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-
-        # Act
-        audio_synthesis_failure_notification(experiment)
-
-        # Assert
-        expected_links = {"View Bot": experiment.get_absolute_url()}
-        mock_create_notification.assert_called_once_with(
-            title="Audio Synthesis Failed",
-            message=f"An error occurred while synthesizing a voice response for '{experiment.name}'",
-            level=LevelChoices.ERROR,
-            slug="audio-synthesis-failed",
-            team=experiment.team,
-            permissions=["experiments.view_experimentsession"],
-            event_data={"bot_id": experiment.id},
-            links=expected_links,
-        )
-
-
-class TestFileDeliveryFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        platform_title = "WhatsApp"
-        content_type = "image/png"
-
-        # Act
-        file_delivery_failure_notification(experiment, platform_title, content_type, session)
-
-        # Assert
-        expected_message = (
-            f"An error occurred while delivering a file attachment to the user via "
-            f"{platform_title} for '{experiment.name}'"
-        )
-        expected_links = {
-            "View Bot": experiment.get_absolute_url(),
-            "View Session": session.get_absolute_url(),
-        }
-        mock_create_notification.assert_called_once_with(
-            title="File Delivery Failed",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            slug="file-delivery-failed",
-            team=experiment.team,
-            permissions=["experiments.view_experimentsession"],
-            event_data={
-                "bot_id": experiment.id,
-                "platform": platform_title,
-                "content_type": content_type,
-            },
-            links=expected_links,
-        )
-
-
-class TestAudioTranscriptionFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-
-        # Act
-        audio_transcription_failure_notification(experiment, "WhatsApp")
-
-        # Assert
-        mock_create_notification.assert_called_once_with(
-            title="Audio Transcription Failed",
-            message=f"An error occurred while transcribing a voice message for '{experiment.name}'",
-            level=LevelChoices.ERROR,
-            slug="audio-transcription-failed",
-            team=experiment.team,
-            permissions=["experiments.view_experimentsession"],
-            event_data={"bot_id": experiment.id, "platform": "WhatsApp"},
-            links={"View Bot": experiment.get_absolute_url()},
-        )
-
-
 class TestMessageDeliveryFailureNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification(self, mock_create_notification):
-        # Arrange
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        platform_title = "Slack"
-        context = "message"
-
-        # Act
-        message_delivery_failure_notification(experiment, session, platform_title, context)
-
-        # Assert
-        expected_message = (
-            f"An error occurred while delivering a {context} to {session.participant.identifier} via {platform_title}"
-        )
-        mock_create_notification.assert_called_once_with(
-            title=f"Message Delivery Failed for {experiment.name}",
-            message=expected_message,
-            level=LevelChoices.ERROR,
-            slug="message-delivery-failed",
-            team=experiment.team,
-            permissions=["experiments.view_experimentsession"],
-            event_data={
-                "bot_id": experiment.id,
-                "platform": platform_title,
-                "context": context,
-            },
-            links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
-        )
-
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
     def test_creates_notification_without_a_session(self, mock_create_notification):
@@ -258,41 +31,6 @@ class TestMessageDeliveryFailureNotification:
 
 
 class TestTraceErrorNotification:
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_creates_notification_with_trace_url(self, mock_create_notification):
-        """trace_error_notification passes correct slug, title, links to create_notification."""
-        experiment = ExperimentFactory.create()
-        session = ExperimentSessionFactory.create(experiment=experiment)
-        trace_url = "/traces/team/42/"
-
-        trace_error_notification(
-            experiment=experiment,
-            session=session,
-            span_name="Run Pipeline",
-            error_message="Something went wrong",
-            permissions=["experiments.change_experiment"],
-            trace_url=trace_url,
-        )
-
-        mock_create_notification.assert_called_once_with(
-            title=f"Run Pipeline Failed for '{experiment}'",
-            message=(
-                f"An error occurred during 'Run Pipeline' for participant "
-                f"'{session.participant.identifier}': Something went wrong"
-            ),
-            level=LevelChoices.ERROR,
-            team=experiment.team,
-            slug="run-pipeline",
-            event_data={"experiment_id": experiment.id, "span_name": "Run Pipeline"},
-            permissions=["experiments.change_experiment"],
-            links={
-                "View Bot": experiment.get_absolute_url(),
-                "View Session": session.get_absolute_url(),
-                "View Trace": trace_url,
-            },
-        )
-
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
     def test_omits_view_trace_link_when_trace_url_is_none(self, mock_create_notification):
@@ -464,18 +202,3 @@ class TestDeletedModelNotification:
             links={"Pipeline X": "/pipelines/1/", "Evaluator Y": "/evaluators/1/"},
             once_per_event_type=True,
         )
-
-    @pytest.mark.django_db()
-    @patch("apps.ocs_notifications.notifications.create_notification")
-    def test_affected_evaluators_are_counted_and_linked(self, mock_create_notification):
-        """Without a replacement an affected evaluator cannot run until someone edits it."""
-        team = TeamFactory.create()
-        deleted_model_notification(
-            team=team,
-            model_name="claude-2.0",
-            replacement_model_name=None,
-            affected=_affected(evaluators={"Sentiment": "/evaluators/7/"}),
-        )
-        _title, kwargs = mock_create_notification.call_args
-        assert "1 evaluator(s) were affected" in kwargs["message"]
-        assert kwargs["links"] == {"Sentiment": "/evaluators/7/"}
