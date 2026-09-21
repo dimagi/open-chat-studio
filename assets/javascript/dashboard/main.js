@@ -925,5 +925,6 @@ function dashboard() {
     };
 }
 
-// Make dashboard function globally available
-window.dashboard = dashboard;
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dashboard', dashboard);
+});
