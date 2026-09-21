@@ -87,6 +87,7 @@ class SearchIndexSchema(BaseModel):
         "Be specific and use keywords related to the information you're looking for. "
         "The query will be used for semantic similarity matching against the file contents."
     )
+    graph_state: Annotated[dict, InjectedState]
 
 
 class MultiSearchIndexSchema(BaseModel):
@@ -99,6 +100,7 @@ class MultiSearchIndexSchema(BaseModel):
         "Be specific and use keywords related to the information you're looking for. "
         "The query will be used for semantic similarity matching against the file contents."
     )
+    graph_state: Annotated[dict, InjectedState]
 
 
 class SetSessionStateSchema(BaseModel):
