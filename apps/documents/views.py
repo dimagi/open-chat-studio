@@ -986,12 +986,13 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             collection_id=collection_id,
         )
 
-        chunking_strategy = collection_file.metadata.chunking_strategy
+        chunking_strategy = collection_file.chunking_strategy
 
         context.update(
             {
-                "chunk_size": chunking_strategy.chunk_size,
-                "chunk_overlap": chunking_strategy.chunk_overlap,
+                "chunk_size": chunking_strategy.chunk_size if chunking_strategy else None,
+                "chunk_overlap": chunking_strategy.chunk_overlap if chunking_strategy else None,
+                "is_row_import": collection_file.row_import is not None,
                 "collection": collection_file.collection,
                 "file": collection_file.file,
                 "breadcrumbs": [

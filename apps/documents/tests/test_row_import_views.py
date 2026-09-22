@@ -1,12 +1,14 @@
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from apps.documents.models import CollectionFile, FileStatus
-from apps.files.models import File, FilePurpose
+from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 FAQ_CSV = b"question,answer,language\nWhen is the clinic open?,08:00 to 16:00,en\n"
@@ -134,3 +136,35 @@ class TestRowImportModalOnCollectionPage:
         url = reverse("documents:single_collection_home", args=[team.slug, remote.id])
 
         assert "importRowsModal" not in logged_in_client.get(url).content.decode()
+
+
+@pytest.mark.django_db()
+class TestFileChunksPageForRowImport:
+    def test_shows_row_number_and_metadata_without_a_chunking_strategy(self, logged_in_client, team, local_collection):
+        file = FileFactory.create(team=team, name="faq.csv")
+        CollectionFile.objects.create(
+            collection=local_collection,
+            file=file,
+            status=FileStatus.COMPLETED,
+            metadata={"row_import": {"metadata_columns": ["language"]}},
+        )
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=local_collection,
+            chunk_number=4,
+            page_number=4,
+            text="faq.csv\nquestion: q\nlanguage: en",
+            embedding=[0.0] * settings.EMBEDDING_VECTOR_SIZE,
+            metadata={"language": "en"},
+        )
+
+        url = reverse("documents:file_chunks", args=[team.slug, local_collection.id, file.id])
+        response = logged_in_client.get(url)
+
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert "Row 4" in body
+        assert "language" in body
+        assert ">en<" in body
+        assert "Chunk Size" not in body
