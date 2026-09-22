@@ -22,6 +22,12 @@ def _sentence(index: int) -> str:
     return f"{words[0].capitalize()} {' '.join(words[1:])}."
 
 
+def words(count: int, index: int = 0) -> str:
+    """`count` lorem words, the same every time for a given index."""
+    rng = random.Random(index)
+    return " ".join(rng.choice(_LOREM_WORDS) for _ in range(count))
+
+
 def build_response_text(length: str, index: int = 0) -> str:
     """Lorem ipsum of the requested size. `index` rotates the wording between calls."""
     total = SENTENCE_COUNTS[length]

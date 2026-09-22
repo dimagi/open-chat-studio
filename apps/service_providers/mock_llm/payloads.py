@@ -10,6 +10,14 @@ from .directives import ErrorDirective
 
 MODEL_NAME = "stub"
 
+# Real OpenAI reports these as the error `type`; the rest fall back to the status family.
+CODE_TYPES = {
+    "insufficient_quota": "insufficient_quota",
+    "credit_balance_exhausted": "insufficient_quota",
+    "rate_limit_exceeded": "rate_limit_error",
+    "invalid_api_key": "authentication_error",
+}
+
 
 def error_body(error: ErrorDirective) -> dict:
     """An OpenAI-shaped error body.
@@ -21,7 +29,7 @@ def error_body(error: ErrorDirective) -> dict:
     return {
         "error": {
             "message": f"Mock LLM provider returned {error.status} ({error.code}) for an 'error' directive.",
-            "type": family,
+            "type": CODE_TYPES.get(error.code, family),
             "code": error.code,
         }
     }
@@ -66,11 +74,10 @@ def _stream_pieces(text: str) -> list[str]:
     return re.findall(r"\s+|\S+", text)
 
 
-def response_envelope(*, model: str, text: str, input_tokens: int, output_tokens: int) -> dict:
+def response_envelope(*, model: str, output: list[dict], input_tokens: int, output_tokens: int) -> dict:
     """A completed Responses API `response` object.
 
-    Every key here is one the OpenAI SDK's `Response` model requires, so dropping any of
-    them makes the client raise before OCS ever sees the text.
+    These are the fields `openai.types.responses.Response` marks required.
     """
     return {
         "id": f"resp_{uuid.uuid4().hex}",
@@ -78,15 +85,7 @@ def response_envelope(*, model: str, text: str, input_tokens: int, output_tokens
         "created_at": int(time.time()),
         "model": model,
         "status": "completed",
-        "output": [
-            {
-                "id": f"msg_{uuid.uuid4().hex}",
-                "type": "message",
-                "role": "assistant",
-                "status": "completed",
-                "content": [{"type": "output_text", "text": text, "annotations": []}],
-            }
-        ],
+        "output": output,
         "parallel_tool_calls": False,
         "tool_choice": "auto",
         "tools": [],
@@ -100,30 +99,87 @@ def response_envelope(*, model: str, text: str, input_tokens: int, output_tokens
     }
 
 
-def chat_completion_envelope(*, model: str, text: str, usage: dict) -> dict:
+def message_output(text: str) -> dict:
+    """A Responses API assistant message carrying `text`."""
+    return {
+        "id": f"msg_{uuid.uuid4().hex}",
+        "type": "message",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": text, "annotations": []}],
+    }
+
+
+def function_call_output(*, name: str, arguments: str) -> dict:
+    """A Responses API function call item."""
+    identifier = uuid.uuid4().hex
+    return {
+        "id": f"fc_{identifier}",
+        "call_id": f"call_{identifier}",
+        "type": "function_call",
+        "name": name,
+        "arguments": arguments,
+        "status": "completed",
+    }
+
+
+def chat_completion_envelope(*, model: str, usage: dict, text: str | None = None, tool_calls: list[dict] | None = None):
+    """A chat completion, answering with either text or tool calls."""
+    message: dict = {"role": "assistant", "content": text}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+        message["content"] = None
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "created": int(time.time()),
         "model": model,
         "object": "chat.completion",
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+        "choices": [
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+            }
+        ],
         "usage": usage,
+    }
+
+
+def chat_tool_call(*, name: str, arguments: str) -> dict:
+    return {
+        "id": f"call_{uuid.uuid4().hex}",
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
     }
 
 
 def chat_completion_stream(*, envelope: dict, usage: dict, include_usage: bool):
     """SSE chunks for a streamed chat completion, built from the non-streamed envelope."""
     header = {key: envelope[key] for key in ("id", "created", "model")}
-    text = envelope["choices"][0]["message"]["content"]
+    choice = envelope["choices"][0]
+    message = choice["message"]
 
     def chunk(choices, extra=None):
         body = {**header, "object": "chat.completion.chunk", "choices": choices, **(extra or {})}
         return f"data: {json.dumps(body)}\n\n"
 
     yield chunk([{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}])
-    for piece in _stream_pieces(text):
-        yield chunk([{"index": 0, "delta": {"content": piece}, "finish_reason": None}])
-    yield chunk([{"index": 0, "delta": {}, "finish_reason": "stop"}])
+    if tool_calls := message.get("tool_calls"):
+        for position, call in enumerate(tool_calls):
+            opening = {
+                "index": position,
+                "id": call["id"],
+                "type": "function",
+                "function": {"name": call["function"]["name"], "arguments": ""},
+            }
+            yield chunk([{"index": 0, "delta": {"tool_calls": [opening]}, "finish_reason": None}])
+            for piece in _stream_pieces(call["function"]["arguments"]):
+                argument_delta = {"index": position, "function": {"arguments": piece}}
+                yield chunk([{"index": 0, "delta": {"tool_calls": [argument_delta]}, "finish_reason": None}])
+    else:
+        for piece in _stream_pieces(message["content"]):
+            yield chunk([{"index": 0, "delta": {"content": piece}, "finish_reason": None}])
+    yield chunk([{"index": 0, "delta": {}, "finish_reason": choice["finish_reason"]}])
     if include_usage:
         yield chunk([], {"usage": usage})
     yield "data: [DONE]\n\n"
@@ -132,23 +188,41 @@ def chat_completion_stream(*, envelope: dict, usage: dict, include_usage: bool):
 def responses_stream(envelope: dict):
     """SSE events for a streamed Responses API call.
 
-    Only the events langchain_openai reads: `response.created` for the id, the text
-    deltas, and `response.completed`, which carries the whole envelope and so is where
-    the final text and the usage numbers come from. Unlike chat completions there is no
-    `[DONE]` sentinel; the stream ends when the connection closes.
+    Only the events langchain_openai reads: `response.created` for the id, the deltas for
+    whichever output items the answer carries, and `response.completed`, which carries the
+    whole envelope and so is where the final text and the usage numbers come from. Unlike
+    chat completions there is no `[DONE]` sentinel; the stream ends when the connection
+    closes.
     """
-    message = envelope["output"][0]
-    text = message["content"][0]["text"]
     sequence = itertools.count()
 
     def event(body: dict) -> str:
         body = {**body, "sequence_number": next(sequence)}
         return f"event: {body['type']}\ndata: {json.dumps(body)}\n\n"
 
-    position = {"item_id": message["id"], "output_index": 0, "content_index": 0, "logprobs": []}
     in_progress = {**envelope, "status": "in_progress", "output": [], "usage": None}
     yield event({"type": "response.created", "response": in_progress})
-    for piece in _stream_pieces(text):
-        yield event({"type": "response.output_text.delta", "delta": piece, **position})
-    yield event({"type": "response.output_text.done", "text": text, **position})
+
+    for output_index, item in enumerate(envelope["output"]):
+        yield event({"type": "response.output_item.added", "output_index": output_index, "item": item})
+        if item["type"] == "function_call":
+            position = {"item_id": item["id"], "output_index": output_index}
+            for piece in _stream_pieces(item["arguments"]):
+                yield event({"type": "response.function_call_arguments.delta", "delta": piece, **position})
+            yield event(
+                {
+                    "type": "response.function_call_arguments.done",
+                    "arguments": item["arguments"],
+                    "name": item["name"],
+                    **position,
+                }
+            )
+        else:
+            text = item["content"][0]["text"]
+            position = {"item_id": item["id"], "output_index": output_index, "content_index": 0, "logprobs": []}
+            for piece in _stream_pieces(text):
+                yield event({"type": "response.output_text.delta", "delta": piece, **position})
+            yield event({"type": "response.output_text.done", "text": text, **position})
+        yield event({"type": "response.output_item.done", "output_index": output_index, "item": item})
+
     yield event({"type": "response.completed", "response": envelope})
