@@ -14,6 +14,15 @@ from apps.documents.exceptions import FileUploadError
 from apps.documents.models import Collection, CollectionFile, FileStatus, format_failure_reason
 from apps.documents.readers import FileReadException
 from apps.documents.retrieval import search_collection
+from apps.documents.row_import import (
+    RowFailure,
+    RowImportError,
+    content_hash,
+    format_row_failures,
+    parse_sheet,
+    render_row,
+    row_metadata,
+)
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException, provider_error_message
 from apps.service_providers.llm_service.openai_files import create_files_remote
@@ -25,6 +34,7 @@ Vector = list[float]
 EmbeddingInputType = Literal["document", "query"]
 
 NO_EXTRACTABLE_TEXT = "No text could be extracted from this file"
+ROW_EMBED_BATCH_SIZE = 100
 
 
 def _reads_as_empty(file: File) -> bool:
@@ -315,16 +325,24 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     ):
         """Chunk and embed each file, marking its CollectionFile COMPLETED or FAILED.
 
-        Files are independent: one failing does not stop the rest. A file that fails leaves
-        no embeddings behind, since a partial index is not a usable representation of it.
+        Files are independent: one failing does not stop the rest. A text file that fails leaves
+        no embeddings behind, since a partial index is not a usable representation of it. A row
+        import keeps the rows that embedded and lists the ones that did not in `failure_reason`;
+        it fails only when no row embedded at all.
         """
         for collection_file in collection_files:
             embeddings = []
             try:
-                embeddings = self._embed_file(collection_file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                if collection_file.row_import:
+                    embeddings, row_failures = self._embed_rows(collection_file)
+                    collection_file.failure_reason = format_row_failures(
+                        row_failures, total_rows=len(embeddings) + len(row_failures)
+                    )
+                else:
+                    embeddings = self._embed_file(collection_file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                    # An earlier attempt may have left a reason behind; this attempt supersedes it.
+                    collection_file.failure_reason = ""
                 collection_file.status = FileStatus.COMPLETED
-                # An earlier attempt may have left a reason behind; this attempt supersedes it.
-                collection_file.failure_reason = ""
             except FileReadException as e:
                 logger.warning(
                     "Could not extract text from file", extra={"file_id": collection_file.file_id, "error": str(e)}
@@ -446,6 +464,64 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
             raise
+
+    def _embed_rows(self, collection_file: CollectionFile) -> tuple[list[FileChunkEmbedding], list[RowFailure]]:
+        """Store one embedding per sheet row, returning what was written and which rows failed.
+
+        Rows go to the provider in batches. A batch that fails is retried one row at a time so a
+        single bad row costs only itself. Deletes anything already written if nothing indexed or
+        a database write fails, for the same reason as `_embed_file`.
+        """
+        file = collection_file.file
+        try:
+            sheet = parse_sheet(file.read_bytes(), filename=file.name)
+        except RowImportError as exc:
+            raise FileReadException(str(exc)) from exc
+
+        metadata_columns = collection_file.row_import.metadata_columns
+        embeddings: list[FileChunkEmbedding] = []
+        failures: list[RowFailure] = []
+        try:
+            for batch in chunk_list(sheet.rows, ROW_EMBED_BATCH_SIZE):
+                texts = [render_row(file.name, sheet.headers, row) for row in batch]
+                for row, text, vector in self._embed_batch(batch, texts, failures):
+                    metadata = row_metadata(row, metadata_columns)
+                    embeddings.append(
+                        FileChunkEmbedding.objects.create(
+                            team_id=file.team_id,
+                            file=file,
+                            collection_id=collection_file.collection_id,
+                            chunk_number=row.row_number,
+                            page_number=row.row_number,
+                            text=text,
+                            context="",
+                            embedding=vector,
+                            metadata=metadata,
+                            content_hash=content_hash(text, metadata),
+                        )
+                    )
+            if not embeddings:
+                raise FileReadException(format_row_failures(failures, total_rows=len(failures)))
+            self._try_build_search_vectors(embeddings, collection_file.collection)
+            return embeddings, failures
+        except Exception:
+            FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+            raise
+
+    def _embed_batch(self, rows, texts: list[str], failures: list[RowFailure]):
+        try:
+            vectors = self.get_embedding_vectors(texts)
+        except Exception as exc:
+            logger.warning("Batch embedding failed, retrying rows one at a time", extra={"error": str(exc)})
+            vectors = None
+        if vectors is not None:
+            yield from zip(rows, texts, vectors, strict=True)
+            return
+        for row, text in zip(rows, texts, strict=True):
+            try:
+                yield row, text, self.get_embedding_vector(text, input_type="document")
+            except Exception as exc:
+                failures.append(RowFailure(row_number=row.row_number, reason=format_failure_reason(exc)))
 
     def chunk_file(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
