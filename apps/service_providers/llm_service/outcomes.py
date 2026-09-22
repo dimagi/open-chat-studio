@@ -13,6 +13,9 @@ from typing import Literal
 
 from langchain_core.messages import AIMessage
 
+from apps.chat.exceptions import EmptyModelResponseError, ModelRefusedTurnError, ProviderConfigurationError
+from apps.service_providers.llm_service.error_classification import TOKEN_LIMIT_MESSAGE
+
 OutcomeKind = Literal["answered", "refusal", "content_filter", "length", "empty"]
 
 GOOGLE_FILTER_REASONS = frozenset({"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY"})
@@ -102,3 +105,15 @@ def _detail(metadata: dict) -> dict:
     if stop_details := metadata.get("stop_details"):
         detail["stop_details"] = stop_details
     return detail
+
+
+def raise_for_outcome(outcome: TurnOutcome, node_name: str) -> None:
+    """Raise the tier-appropriate exception for anything but an answered turn."""
+    if outcome.kind in ("refusal", "content_filter"):
+        raise ModelRefusedTurnError(outcome.kind, outcome.provider_reason, outcome.detail)
+    if outcome.kind == "length":
+        raise ProviderConfigurationError(
+            f"{TOKEN_LIMIT_MESSAGE} Node: {node_name}. Stop reason: {outcome.provider_reason}."
+        )
+    if outcome.kind == "empty":
+        raise EmptyModelResponseError(outcome.provider_reason)

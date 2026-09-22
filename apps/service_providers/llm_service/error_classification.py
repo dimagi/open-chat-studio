@@ -59,6 +59,10 @@ BILLING_MESSAGE = "The LLM provider account has no credit or quota remaining:"
 AUTHENTICATION_MESSAGE = "The LLM provider rejected the credentials configured for this chatbot:"
 NOT_FOUND_MESSAGE = "The LLM provider could not find the model this chatbot is configured to use:"
 CONTEXT_OVERFLOW_MESSAGE = "The conversation exceeds the model's context window:"
+TOKEN_LIMIT_MESSAGE = (
+    "The model ran out of output tokens before it produced a reply. Shorten the prompt or history, "
+    "choose a different model, or raise the Max Output Tokens setting where the model has one."
+)
 
 
 def translate_provider_error(error: BaseException) -> ProviderConfigurationError | None:

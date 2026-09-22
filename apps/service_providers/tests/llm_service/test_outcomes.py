@@ -1,7 +1,14 @@
 import pytest
 from langchain_core.messages import AIMessage
 
-from apps.service_providers.llm_service.outcomes import TurnOutcome, classify_turn, provider_reason, refusal_text
+from apps.chat.exceptions import EmptyModelResponseError, ModelRefusedTurnError, ProviderConfigurationError
+from apps.service_providers.llm_service.outcomes import (
+    TurnOutcome,
+    classify_turn,
+    provider_reason,
+    raise_for_outcome,
+    refusal_text,
+)
 
 
 def _tool_call_message():
@@ -219,3 +226,33 @@ def test_provider_reason_for_responses_api_incomplete():
     )
 
     assert provider_reason(message) == "content_filter"
+
+
+class TestRaiseForOutcome:
+    def test_answered_returns(self):
+        assert raise_for_outcome(TurnOutcome("answered"), node_name="LLM") is None
+
+    @pytest.mark.parametrize("kind", ["refusal", "content_filter"])
+    def test_refused_and_filtered_are_participant_actionable(self, kind):
+        with pytest.raises(ModelRefusedTurnError) as exc_info:
+            raise_for_outcome(TurnOutcome(kind, "SAFETY", {"safety_ratings": []}), node_name="LLM")
+
+        assert exc_info.value.kind == kind
+        assert exc_info.value.provider_reason == "SAFETY"
+        assert exc_info.value.detail == {"safety_ratings": []}
+
+    def test_length_is_team_actionable_and_names_the_node(self):
+        with pytest.raises(ProviderConfigurationError) as exc_info:
+            raise_for_outcome(TurnOutcome("length", "max_tokens"), node_name="Answer node")
+
+        text = str(exc_info.value)
+        assert "ran out of output tokens" in text
+        assert "Node: Answer node." in text
+        assert "Stop reason: max_tokens." in text
+
+    def test_empty_is_a_plain_fault(self):
+        with pytest.raises(EmptyModelResponseError) as exc_info:
+            raise_for_outcome(TurnOutcome("empty", "OTHER"), node_name="LLM")
+
+        assert not isinstance(exc_info.value, ProviderConfigurationError)
+        assert exc_info.value.provider_reason == "OTHER"
