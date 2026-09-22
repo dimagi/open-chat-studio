@@ -8,7 +8,7 @@ from google.api_core import exceptions as google_exceptions
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.runnables import RunnableLambda
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.service_providers.llm_service.error_classification import (
     translate_provider_error,
     translate_provider_errors,
@@ -266,3 +266,83 @@ def test_translation_wrapper_preserves_bound_kwargs():
 
     assert wrapped.invoke("hi") == "ok"
     assert seen == {"stop": ["x"]}
+
+
+AZURE_FILTER_BODY = {
+    "code": "content_filter",
+    "message": "The response was filtered",
+    "param": "prompt",
+    "type": None,
+    "status": 400,
+    "innererror": {
+        "code": "ResponsibleAIPolicyViolation",
+        "content_filter_result": {"hate": {"filtered": True, "severity": "high"}},
+    },
+}
+
+
+def _content_filter_error(body):
+    request = httpx.Request("POST", "https://example.openai.azure.com/openai/deployments/x/chat/completions")
+    return openai.BadRequestError(
+        "Error code: 400 - content filter", response=httpx.Response(400, request=request), body=body
+    )
+
+
+class TestContentFilter400:
+    def test_is_translated_to_a_participant_actionable_error(self):
+        translated = translate_provider_error(_content_filter_error(AZURE_FILTER_BODY))
+
+        assert isinstance(translated, ModelRefusedTurnError)
+        assert translated.kind == "content_filter"
+        assert translated.provider_reason == "content_filter"
+        assert translated.detail == {"hate": {"filtered": True, "severity": "high"}}
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param({"code": "content_filter"}, id="no_innererror"),
+            pytest.param({"code": "content_filter", "innererror": None}, id="innererror_none"),
+            pytest.param("The response was filtered", id="body_is_text"),
+            pytest.param(None, id="body_is_none"),
+        ],
+    )
+    def test_detail_tolerates_missing_or_non_dict_bodies(self, body):
+        error = _content_filter_error(body)
+        if not isinstance(body, dict):
+            # The SDK only reads ``code`` from a dict body; set it the way a real error carries it.
+            error.code = "content_filter"
+
+        translated = translate_provider_error(error)
+
+        assert isinstance(translated, ModelRefusedTurnError)
+        assert translated.detail == {}
+
+    def test_is_not_retried(self):
+        assert should_retry_exception(_content_filter_error(AZURE_FILTER_BODY)) is False
+
+    def test_an_already_translated_refusal_is_left_alone(self):
+        translated = translate_provider_error(_content_filter_error(AZURE_FILTER_BODY))
+
+        assert translate_provider_error(translated) is None
+
+    def test_context_manager_translates_and_chains(self):
+        error = _content_filter_error(AZURE_FILTER_BODY)
+
+        with pytest.raises(ModelRefusedTurnError) as exc_info:  # noqa: SIM117
+            with translate_provider_errors():
+                raise error
+
+        assert exc_info.value.__cause__ is error
+
+    def test_with_llm_retry_translates_without_retrying(self, no_retry_backoff):
+        error = _content_filter_error(AZURE_FILTER_BODY)
+        calls = []
+
+        def raising(_input):
+            calls.append(1)
+            raise error
+
+        with pytest.raises(ModelRefusedTurnError):
+            with_llm_retry(RunnableLambda(raising)).invoke("x")
+
+        assert len(calls) == 1

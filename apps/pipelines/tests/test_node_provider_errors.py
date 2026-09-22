@@ -3,7 +3,7 @@ import openai
 import pytest
 from pydantic import ConfigDict
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.pipelines.nodes.base import NodeSchema, PipelineNode, PipelineRouterNode, PipelineState
 
 
@@ -65,4 +65,23 @@ def test_router_nodes_translate_too():
     router = node.build_router_function(edge_map={"output_0": "node-3"}, incoming_edges=[])
 
     with pytest.raises(ProviderConfigurationError, match="no credit or quota remaining"):
+        router(_state(), {})
+
+
+def test_content_filter_400_is_participant_actionable_at_the_node_boundary():
+    error = _openai_error(openai.BadRequestError, 400, "The response was filtered", "content_filter")
+
+    with pytest.raises(ModelRefusedTurnError) as exc_info:
+        _node(error).process([], [], _state(), {})
+
+    assert exc_info.value.kind == "content_filter"
+
+
+def test_content_filter_400_in_a_router_ends_the_turn_with_the_participant_message():
+    error = _openai_error(openai.BadRequestError, 400, "The response was filtered", "content_filter")
+    node = RaisingRouterNode.model_construct(name="router", node_id="node-2")
+    node._error = error
+    router = node.build_router_function(edge_map={"output_0": "node-3"}, incoming_edges=[])
+
+    with pytest.raises(ModelRefusedTurnError):
         router(_state(), {})

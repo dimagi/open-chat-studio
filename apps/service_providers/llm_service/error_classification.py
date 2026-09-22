@@ -6,6 +6,9 @@ genuine rate limits, Anthropic as a 400 alongside malformed requests. Status alo
 therefore cannot tell "wait and retry" apart from "nothing will work until someone
 adds credit", which is why the checks below reach into provider-specific error codes
 and, where Anthropic offers nothing else, the message text. See ADR-0067.
+A filtered prompt is the one case here the participant, not the team, can act on; it is
+translated to a participant-actionable error so the node boundary handles it alongside
+the rest.
 """
 
 import contextlib
@@ -16,7 +19,7 @@ import openai
 from google.api_core import exceptions as google_exceptions
 from langchain_core.exceptions import ContextOverflowError
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 
 # OpenAI reports an exhausted balance as a 429, the same status as a genuine rate limit,
 # distinguished only by these codes.
@@ -65,8 +68,8 @@ TOKEN_LIMIT_MESSAGE = (
 )
 
 
-def translate_provider_error(error: BaseException) -> ProviderConfigurationError | None:
-    """Return the team-actionable error this provider exception represents, or None.
+def translate_provider_error(error: BaseException) -> ProviderConfigurationError | ModelRefusedTurnError | None:
+    """Return the actionable error this provider exception represents, or None.
 
     None covers both "transient, so leave the native type alone for the retry policy"
     and "not a provider error at all".
@@ -76,9 +79,11 @@ def translate_provider_error(error: BaseException) -> ProviderConfigurationError
     turns every ``InvalidArgument``, a bad API key among them, into a
     ``ChatGoogleGenerativeAIError`` -- and the outer type says nothing useful.
     """
-    if isinstance(error, ProviderConfigurationError):
+    if isinstance(error, ProviderConfigurationError | ModelRefusedTurnError):
         return None
     for cause in _causes(error):
+        if filtered := _content_filter(cause):
+            return filtered
         for classify in (_billing, _authentication, _not_found, _context_overflow):
             if message := classify(cause):
                 return ProviderConfigurationError(f"{message} {_detail(cause)}".strip())
@@ -144,6 +149,21 @@ def _context_overflow(error: BaseException) -> str | None:
     if isinstance(error, openai.BadRequestError) and "context_length_exceeded" in _openai_codes(error):
         return CONTEXT_OVERFLOW_MESSAGE
     return None
+
+
+def _content_filter(error: BaseException) -> ModelRefusedTurnError | None:
+    # Azure reports a filtered prompt as a 400 whose ``code`` is content_filter and whose ``type`` is null.
+    if isinstance(error, openai.BadRequestError) and "content_filter" in _openai_codes(error):
+        return ModelRefusedTurnError("content_filter", "content_filter", detail=_content_filter_detail(error))
+    return None
+
+
+def _content_filter_detail(error: openai.BadRequestError) -> dict:
+    # The SDK strips the outer ``error`` envelope, so ``innererror`` sits at the top of ``body``;
+    # ``body`` is a string for a non-JSON response and None when the response was closed unread.
+    body = error.body if isinstance(error.body, dict) else {}
+    inner = body.get("innererror") or {}
+    return inner.get("content_filter_result") or {}
 
 
 def _openai_codes(error: BaseException) -> set[str]:
