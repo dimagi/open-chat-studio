@@ -347,8 +347,10 @@ jobs:
           PYTHONWARNINGS: default
         run: uv run pytest -n auto --cov --cov-report=xml ${{ steps.test_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
 
+      # No `if:`, so this runs only when the tests passed. A failed run still writes a
+      # coverage report, and uploading that partial report would become the baseline every
+      # later PR compares against.
       - name: Upload results to Codecov
-        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
