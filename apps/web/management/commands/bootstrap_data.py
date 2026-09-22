@@ -13,7 +13,6 @@ Usage:
 from datetime import timedelta
 from decimal import Decimal
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -86,18 +85,15 @@ _STUB_LLM_PROVIDER_NAME = "Stub LLM"
 _STUB_LLM_MODEL_NAME = "stub"
 # Where apps/service_providers/mock_llm is mounted by config.urls under DEBUG.
 _STUB_LLM_PATH = "/mock-llm/v1"
-_STUB_LLM_DEFAULT_ROOT = "http://localhost:8000"
+# The mock is served by this same process, so its address is always the local one.
+_STUB_LLM_ROOT = "http://localhost:8000"
 # High enough that history compression never kicks in while developing.
 _STUB_LLM_TOKEN_LIMIT = 128000
 
 
 def _stub_llm_base_url() -> str:
-    """The dev server's own address, which is where the mock provider answers.
-
-    SITE_URL_ROOT is set by `inv runserver --public`, so under an ngrok tunnel the call
-    goes out and back rather than failing against a port nothing is listening on.
-    """
-    return f"{settings.SITE_URL_ROOT or _STUB_LLM_DEFAULT_ROOT}{_STUB_LLM_PATH}"
+    """The dev server's own address, which is where the mock provider answers."""
+    return f"{_STUB_LLM_ROOT}{_STUB_LLM_PATH}"
 
 
 class Command(BaseCommand):
@@ -268,27 +264,32 @@ class Command(BaseCommand):
                 config=config,
             )
         elif provider.config != config:
-            # Re-running after the dev server moved should repoint the provider, not leave
-            # it aimed at an address nothing answers on.
+            # Repoint an existing provider at the current address.
             provider.config = config
             provider.save(update_fields=["config"])
         self._log_created("LLM provider", f"{_STUB_LLM_PROVIDER_NAME} ({base_url})", created)
 
         # The mock only answers to a model called "stub", which is not one of the globally
         # registered OpenAI models, so a pipeline node would have nothing to select.
-        model, created = LlmProviderModel.objects.get_or_create_for_team(
+        model, created = LlmProviderModel.objects.get_or_create(
             team=team,
             name=_STUB_LLM_MODEL_NAME,
             type=str(LlmProviderTypes.openai),
-            max_token_limit=_STUB_LLM_TOKEN_LIMIT,
+            defaults={"max_token_limit": _STUB_LLM_TOKEN_LIMIT},
         )
+        if not created and model.max_token_limit != _STUB_LLM_TOKEN_LIMIT:
+            model.max_token_limit = _STUB_LLM_TOKEN_LIMIT
+            model.save(update_fields=["max_token_limit"])
         self._log_created("LLM provider model", model.name, created)
         return provider, model
 
     def _get_or_create_llm_provider(self, team, creds: ProviderCredentials) -> LlmProvider:
         # LlmProvider has no unique constraint on (team, type), so a manually-created
         # provider of the same type would make get_or_create raise MultipleObjectsReturned.
-        provider = LlmProvider.objects.filter(team=team, type=str(creds.type)).first()
+        # The stub is an "openai" provider too, and must never stand in for a real key.
+        provider = (
+            LlmProvider.objects.filter(team=team, type=str(creds.type)).exclude(name=_STUB_LLM_PROVIDER_NAME).first()
+        )
         if provider is None:
             provider = LlmProvider.objects.create(team=team, type=str(creds.type), name=creds.name, config=creds.config)
             self._log_created("LLM provider", f"{provider.name} ({creds.type})", True)
