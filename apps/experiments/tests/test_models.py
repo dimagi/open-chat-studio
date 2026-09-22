@@ -767,8 +767,7 @@ class TestSourceMaterialArchiving:
 
         # Publishing doesn't rewrite the original working node's params; clear it so only the
         # published version's node still references source_material.
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         assert source_material.archive() is False
         source_material.refresh_from_db()
@@ -785,8 +784,7 @@ class TestSourceMaterialArchiving:
         experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         published = experiment.create_new_version()
 
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         # Archiving the working experiment wouldn't touch the pipeline; archive the published one.
         published.archive()
