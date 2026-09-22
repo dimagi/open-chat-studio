@@ -1,17 +1,89 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.notifications import (
     AffectedResources,
+    audio_synthesis_failure_notification,
+    audio_transcription_failure_notification,
+    custom_action_api_failure_notification,
+    custom_action_health_check_failure_notification,
+    custom_action_unexpected_error_notification,
     deleted_model_notification,
     deprecated_model_notification,
+    file_delivery_failure_notification,
     message_delivery_failure_notification,
     trace_error_notification,
 )
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
+
+
+def _function_def():
+    function_def = Mock()
+    function_def.method = "post"
+    function_def.name = "create_user"
+    return function_def
+
+
+def _session():
+    experiment = ExperimentFactory.create()
+    return experiment, ExperimentSessionFactory.create(experiment=experiment)
+
+
+def _pair_for_file_delivery():
+    experiment, session = _session()
+    return experiment, "WhatsApp", "image/png", session
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "build",
+    [
+        pytest.param(
+            lambda: custom_action_health_check_failure_notification(CustomActionFactory.create(), "timed out"),
+            id="custom-action-health-check",
+        ),
+        pytest.param(
+            lambda: custom_action_api_failure_notification(
+                CustomActionFactory.create(), _function_def(), Exception("boom")
+            ),
+            id="custom-action-api-failure",
+        ),
+        pytest.param(
+            lambda: custom_action_unexpected_error_notification(
+                CustomActionFactory.create(), _function_def(), RuntimeError("boom")
+            ),
+            id="custom-action-unexpected-error",
+        ),
+        pytest.param(
+            lambda: audio_synthesis_failure_notification(ExperimentFactory.create()),
+            id="audio-synthesis-no-session",
+        ),
+        pytest.param(
+            lambda: audio_synthesis_failure_notification(*_session()),
+            id="audio-synthesis-with-session",
+        ),
+        pytest.param(
+            lambda: audio_transcription_failure_notification(ExperimentFactory.create(), "WhatsApp"),
+            id="audio-transcription",
+        ),
+        pytest.param(
+            lambda: file_delivery_failure_notification(*_pair_for_file_delivery()),
+            id="file-delivery",
+        ),
+    ],
+)
+def test_builder_reaches_create_notification(build):
+    """@silence_exceptions swallows everything these builders raise, so a renamed attribute or a
+    broken get_absolute_url() would stop the notification silently. Asserting the builder gets as
+    far as create_notification is what catches that; the kwargs it passes are not asserted here."""
+    with patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
+        build()
+
+    mock_create_notification.assert_called_once()
 
 
 class TestMessageDeliveryFailureNotification:
