@@ -2,9 +2,10 @@ from typing import Any
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel
+
+from apps.service_providers.llm_service.outcomes import provider_reason, refusal_text
 
 
 class NoStructuredOutputError(Exception):
@@ -36,24 +37,7 @@ def unwrap_structured_output(result: dict) -> BaseModel:
     if result["parsed"] is not None:
         return result["parsed"]
     raw = result["raw"]
-    refusal = _refusal_text(raw)
+    refusal = refusal_text(raw)
     if result["parsing_error"] is not None and not refusal:
         raise result["parsing_error"]
-    raise NoStructuredOutputError(model_text=refusal or raw.text, reason=stop_reason(raw))
-
-
-def _refusal_text(message: AIMessage) -> str:
-    if refusal := message.additional_kwargs.get("refusal"):
-        return refusal
-    for block in message.content_blocks:
-        if isinstance(block, dict):
-            # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
-            value = block.get("value") if block.get("type") == "non_standard" else block
-            if isinstance(value, dict) and value.get("type") == "refusal":
-                return value.get("refusal", "")
-    return ""
-
-
-def stop_reason(message: AIMessage) -> str:
-    metadata = message.response_metadata or {}
-    return metadata.get("stop_reason") or metadata.get("finish_reason") or ""
+    raise NoStructuredOutputError(model_text=refusal or raw.text, reason=provider_reason(raw))
