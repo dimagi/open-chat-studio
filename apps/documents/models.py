@@ -13,7 +13,7 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
+from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig, RowImportSettings
 from apps.documents.exceptions import IndexConfigurationException
 from apps.documents.rerankers import Reranker
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
@@ -147,6 +147,12 @@ class CollectionFile(models.Model):
     def chunking_strategy(self) -> ChunkingStrategy | None:
         if self.metadata:
             return self.metadata.chunking_strategy
+        return None
+
+    @property
+    def row_import(self) -> RowImportSettings | None:
+        if self.metadata:
+            return self.metadata.row_import
         return None
 
     @property

@@ -12,8 +12,21 @@ class ChunkingStrategy(pydantic.BaseModel):
     chunk_overlap: int = pydantic.Field(description="Number of overlapping tokens between chunks")
 
 
+class RowImportSettings(pydantic.BaseModel):
+    metadata_columns: list[str] = pydantic.Field(
+        default_factory=list,
+        max_length=16,
+        description="Columns stored as metadata on each row's chunk",
+    )
+
+
 class CollectionFileMetadata(pydantic.BaseModel):
-    chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
+    chunking_strategy: ChunkingStrategy | None = pydantic.Field(
+        default=None, description="Chunking strategy used for the file"
+    )
+    row_import: RowImportSettings | None = pydantic.Field(
+        default=None, description="Present when each row of the file is indexed as its own chunk"
+    )
 
 
 class GitHubSourceConfig(pydantic.BaseModel):
