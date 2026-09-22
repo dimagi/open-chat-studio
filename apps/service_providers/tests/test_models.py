@@ -17,7 +17,6 @@ from apps.service_providers.models import (
     LlmProviderModel,
     LlmProviderTypes,
 )
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -64,11 +63,6 @@ def llm_provider_model():
 
 
 @pytest.fixture()
-def assistant():
-    return OpenAiAssistantFactory.create()
-
-
-@pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory.create()
     node_data = {node.flow_id: None for node in pipeline.node_set.all()}
@@ -105,13 +99,6 @@ class TestServiceProviderModel:
         assert len(global_models) > 1
         assert len(global_models) == len(team_models) - 1
         assert all(not m.is_custom() for m in global_models)
-
-    @pytest.mark.django_db()
-    def test_cannot_delete_provider_models_with_associated_models(self, assistant):
-        # llm provider models that are associated with another model cannot be deleted
-        provider_model = assistant.llm_provider_model
-        with pytest.raises(ValidationError):
-            provider_model.delete()
 
     @pytest.mark.django_db()
     def test_cannot_delete_provider_models_with_associated_pipeline(self, pipeline):

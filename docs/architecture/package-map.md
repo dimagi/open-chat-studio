@@ -23,7 +23,7 @@ foundation. The foundation depends on nothing above it.
 ```mermaid
 flowchart TD
     EP["Entry points<br/>api · web · admin · dashboard · prelogin · users · oauth · sso"]
-    DOM["Domain & runtime<br/>experiments · chatbots · pipelines · assistants · custom_actions · service_providers<br/>chat · channels · participants · slack · documents · files"]
+    DOM["Domain & runtime<br/>experiments · chatbots · pipelines · custom_actions · service_providers<br/>chat · channels · participants · slack · documents · files"]
     FEAT["Evaluation, analytics & support<br/>evaluations · human_annotations · annotations · assessments<br/>trace · events · cost_tracking · usage_metrics · analysis · ocs_notifications · banners · help · filters · mcp_integrations"]
     FND["Foundation<br/>teams · utils · generics · web · audit · data_migrations"]
 
@@ -59,7 +59,7 @@ The chatbot model and the machinery that runs conversations.
 | `experiments` | The `Experiment` (a.k.a. Chatbot) model, versioning, sessions. Imported by 27 apps. |
 | `chatbots` | Chatbot-facing UI layer over `experiments`. |
 | `pipelines` | DAG workflow definition and runtime (LLM/router/custom-action nodes). |
-| `assistants` | Retired OpenAI Assistants integration (#4254). Migrations only — no admin, views, URLs or runtime, and the models leave Django state here; the tables are dropped in the following release. |
+| `assistants` | Retired OpenAI Assistants integration (#4254). Historical migrations only — no models, admin, views, URLs or runtime. Kept installed so Django owns the migration graph. |
 | `custom_actions` | HTTP API wrappers (OpenAPI schema) callable from pipelines. |
 | `service_providers` | Credentials + `LlmService`/`MessagingService` abstractions for LLM, messaging, voice, tracing. |
 | `chat` | `Chat`/message models and history. |
