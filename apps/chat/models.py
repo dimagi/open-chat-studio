@@ -63,7 +63,9 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             self.save()
 
     def get_langchain_messages(self) -> list[BaseMessage]:
-        return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
+        return messages_from_dict(
+            [m.to_langchain_dict() for m in self.messages.all() if not m.is_excluded_from_history]
+        )
 
     def get_langchain_messages_until_marker(self, marker: str, exclude_message_id=None) -> list[BaseMessage]:
         """Fetch messages from the database until a marker is found. The marker must be one of the

@@ -104,6 +104,7 @@ class TestEmptyHumanMessageReplay:
 
 def test_model_turn_outcome_is_an_internal_metadata_key():
     assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in ChatMessageMetadataKeys.internal_keys()
+    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME not in ChatMessageMetadataKeys.attachment_keys()
 
 
 @pytest.mark.django_db()
@@ -153,4 +154,14 @@ class TestHistoryExcludesFilteredHumanMessages:
 
         assert reply.is_excluded_from_history is False
 
-    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME not in ChatMessageMetadataKeys.attachment_keys()
+    def test_marked_human_message_is_skipped_in_full_history(self):
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="ok")
+        filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="reply")
+
+        messages = session.chat.get_langchain_messages()
+
+        assert [m.content for m in messages] == ["fine", "ok", "reply"]
