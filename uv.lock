@@ -3151,7 +3151,7 @@ requires-dist = [
     { name = "pytelegrambotapi", specifier = "==4.12.0" },
     { name = "python-json-logger", specifier = ">=3.2.1" },
     { name = "python-magic" },
-    { name = "restrictedpython" },
+    { name = "restrictedpython", specifier = ">=8.4" },
     { name = "sentry-sdk" },
     { name = "slack-bolt" },
     { name = "taskbadger", specifier = ">=2.5.2" },
