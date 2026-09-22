@@ -62,6 +62,22 @@ def test_list_participants_filter_by_identifier():
 
 
 @pytest.mark.django_db()
+def test_list_participants_filter_by_remote_id():
+    team = TeamWithUsersFactory.create()
+    ParticipantFactory.create(team=team, identifier="alice", remote_id="ext-123", platform="api")
+    ParticipantFactory.create(team=team, identifier="bob", remote_id="ext-456", platform="api")
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    response = client.get(reverse("api:participant-data"), {"remote_id": "ext-123"})
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 1
+    assert results[0]["identifier"] == "alice"
+
+
+@pytest.mark.django_db()
 def test_list_participants_filter_by_platform():
     team = TeamWithUsersFactory.create()
 

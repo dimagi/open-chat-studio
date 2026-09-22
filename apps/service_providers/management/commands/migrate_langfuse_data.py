@@ -125,7 +125,7 @@ def _save_checkpoint(filepath: str, migrated_ids: set, resume_from_timestamp: st
     os.replace(tmp_path, filepath)
 
 
-def _transform_trace_to_ingestion_batch(source_trace):
+def _transform_trace_to_ingestion_batch(source_trace):  # noqa: C901 - translator: a branch per observation type
     """Transform a fetched TraceWithFullDetails into ingestion events for the batch endpoint."""
 
     ingestion_events = []
@@ -194,15 +194,9 @@ def _transform_trace_to_ingestion_batch(source_trace):
                 event_body = CreateEventBody(**common_body_args)
                 ingestion_event_type = IngestionEvent_EventCreate
             elif source_obs.type == "GENERATION":
-                usage_to_pass = None
-                if isinstance(source_obs.usage, Usage):
-                    usage_data = {
-                        k: getattr(source_obs.usage, k, None)
-                        for k in ["input", "output", "total", "unit", "input_cost", "output_cost", "total_cost"]
-                    }
-                    filtered = {k: v for k, v in usage_data.items() if v is not None}
-                    if filtered:
-                        usage_to_pass = Usage(**filtered)
+                # `Usage` requires input/output/total, so a fetched one can be forwarded as-is
+                # but must not be rebuilt from a subset of its fields.
+                usage_to_pass = source_obs.usage if isinstance(source_obs.usage, Usage) else None
                 event_body = CreateGenerationBody(
                     **common_body_args,
                     end_time=source_obs.end_time,
@@ -519,7 +513,7 @@ class Command(BaseCommand):
                     self.stdout.write("    Transient error, retrying...")
         return on_exhausted
 
-    def _migrate_traces(
+    def _migrate_traces(  # noqa: C901 - paging loop with resume, retry and per-trace failure accounting
         self,
         source_config: dict,
         dest_config: dict,
@@ -645,7 +639,7 @@ class Command(BaseCommand):
                     executor.submit(_process_single_trace, trace_info): trace_info for trace_info in trace_list.data
                 }
                 for future in as_completed(futures):
-                    status, trace_id = future.result()
+                    status, _trace_id = future.result()
                     if status == "migrated":
                         total_migrated += 1
                     elif status == "failed_fetch":

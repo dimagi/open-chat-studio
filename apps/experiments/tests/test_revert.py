@@ -38,7 +38,7 @@ def _build_experiment_with_pipeline():
 @pytest.mark.django_db()
 def test_revert_round_trip_shows_no_changes():
     """Publish v1 → modify → revert to v1 → comparing the working version against v1 shows no changes."""
-    experiment, nodes, source_material = _build_experiment_with_pipeline()
+    experiment, nodes, _source_material = _build_experiment_with_pipeline()
     _, llm, _ = nodes
 
     version = experiment.create_new_version(make_default=True)
@@ -84,7 +84,7 @@ def test_revert_restores_fields_and_remaps_pipeline_to_working_records():
 @pytest.mark.django_db()
 def test_revert_is_non_destructive():
     """Version history and the default version must be untouched by a revert."""
-    experiment, nodes, _ = _build_experiment_with_pipeline()
+    experiment, _nodes, _ = _build_experiment_with_pipeline()
     version = experiment.create_new_version(make_default=True)
 
     version_pipeline_id = version.pipeline_id

@@ -87,7 +87,8 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "field",
             "authoritative_annotator",
             "annotated_at",
-        ] + annotator_emails
+            *annotator_emails,
+        ]
 
         rows = []
         for item_annotations in by_item.values():

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-
-from langchain_core.language_models.chat_models import BaseChatModel
+from typing import TYPE_CHECKING
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+
+if TYPE_CHECKING:
+    from langchain_core.language_models.chat_models import BaseChatModel
+
+    from apps.experiments.models import Experiment, ExperimentSession
 
 
 class BaseHistoryManager(metaclass=ABCMeta):

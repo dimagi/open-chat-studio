@@ -31,7 +31,7 @@ class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
         pipelines = set(node.pipeline for node in nodes)
         pipeline_urls = [
-            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{str(pipeline)}</a>"
+            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{pipeline!s}</a>"
             for pipeline in pipelines
         ]
         return format_html("<br>".join(pipeline_urls))

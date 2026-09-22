@@ -95,7 +95,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
             query_file.seek(0)
 
         except Exception as e:
-            raise forms.ValidationError(f"Error reading CSV file: {str(e)}") from e
+            raise forms.ValidationError(f"Error reading CSV file: {e!s}") from e
 
         return query_file
 

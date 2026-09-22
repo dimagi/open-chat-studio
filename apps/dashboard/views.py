@@ -398,7 +398,7 @@ class SaveFilterView(LoginAndTeamRequiredMixin, TemplateView):
                 )
 
             # Save filter
-            filter_obj, created = DashboardFilter.objects.update_or_create(
+            filter_obj, _created = DashboardFilter.objects.update_or_create(
                 team=request.team,
                 user=request.user,
                 filter_name=form.cleaned_data["name"],

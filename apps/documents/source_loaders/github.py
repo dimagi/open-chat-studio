@@ -64,7 +64,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
                         yield document
 
         except Exception as e:
-            logger.error(f"Error loading documents from GitHub: {str(e)}")
+            logger.error(f"Error loading documents from GitHub: {e!s}")
             raise
 
     @property

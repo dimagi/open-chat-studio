@@ -356,13 +356,15 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             return None
         if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
             return rating
+        return None
 
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
         if self.message_type != ChatMessageType.AI:
-            return
+            return None
         if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
             return tag.name
+        return None
 
     def get_absolute_url(self):
         if not self.chat_id or not self.chat.team_id:

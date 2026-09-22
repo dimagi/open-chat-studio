@@ -30,13 +30,11 @@ def docker(c: Context, command):
 @task(pre=[call(docker, command="up")])
 def up(c: Context):
     """Start PostgreSQL and Redis services using Docker."""
-    pass
 
 
 @task(pre=[call(docker, command="down")])
 def down(c: Context):
     """Stop PostgreSQL and Redis services."""
-    pass
 
 
 @task(
@@ -141,6 +139,7 @@ def _run_with_confirm(c: Context, message, command, step=False):
     if not step or _confirm("\tOK?", _exit=False):
         c.run(command, echo=True, pty=True)
         return True
+    return None
 
 
 def _check_node_version(c: Context):

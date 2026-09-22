@@ -6,14 +6,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, ClassVar, Union
+from typing import Any, ClassVar, Union
 from xml.sax.saxutils import escape
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
 
@@ -35,9 +35,6 @@ from apps.service_providers.llm_service.prompt_context import ParticipantDataPro
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
 from apps.utils.time import pretty_date
-
-if TYPE_CHECKING:
-    from apps.pipelines.models import Node
 
 logger = logging.getLogger("ocs.tools")
 
@@ -148,8 +145,33 @@ def _get_search_tool_footer(with_citations: bool):
     return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
+# How many recent turns to hand the reranker as conversation context. Six is three exchanges:
+# enough to carry the referent of a follow-up question ("how much does it cost?"), short enough
+# that the reranker's query stays dominated by the query the LLM actually asked.
+RERANK_CONTEXT_MESSAGE_COUNT = 6
+
+
+def _recent_conversation_context(collection, graph_state: dict) -> str | None:
+    """Return recent human and AI turns already loaded into the graph state."""
+    if not collection.reranking_enabled:
+        return None
+
+    turns = []
+    for message in graph_state.get("messages", []):
+        if isinstance(message, HumanMessage | AIMessage) and (content := message.text.strip()):
+            role = "user" if isinstance(message, HumanMessage) else "assistant"
+            turns.append(f"{role}: {content}")
+    turns = turns[-RERANK_CONTEXT_MESSAGE_COUNT:]
+    return "\n".join(turns) or None
+
+
 def _perform_collection_search(
-    collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
+    collection,
+    query: str,
+    max_results: int = 5,
+    generate_citations: bool = True,
+    include_collection_info: bool = False,
+    graph_state: dict | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -160,11 +182,17 @@ def _perform_collection_search(
         max_results: Maximum number of results to return
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
+        graph_state: The LangGraph state containing the conversation already loaded for the LLM.
 
     Returns:
         Formatted search results string
     """
-    embeddings = search_collection(collection=collection, query=query, top_k=max_results)
+    embeddings = search_collection(
+        collection=collection,
+        query=query,
+        top_k=max_results,
+        context=_recent_conversation_context(collection, graph_state or {}),
+    )
 
     if not embeddings:
         if include_collection_info:
@@ -519,7 +547,7 @@ class SearchIndexTool(CustomBaseTool):
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
 
-    def action(self, query: str) -> str:
+    def action(self, query: str, graph_state: dict | None = None) -> str:
         """
         Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
         rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
@@ -531,6 +559,7 @@ class SearchIndexTool(CustomBaseTool):
             max_results=self.search_config.max_results,
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
+            graph_state=graph_state,
         )
 
 
@@ -548,7 +577,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     generate_citations: bool = True
     allowed_collection_ids: list[int]
 
-    def action(self, collection_index_id: int, query: str) -> str:
+    def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
@@ -568,6 +597,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             max_results=self.max_results,
             generate_citations=self.generate_citations,
             include_collection_info=True,
+            graph_state=graph_state,
         )
 
 
@@ -767,7 +797,7 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.params.get("tools") or []
+    tool_names = node.tool_names
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
@@ -779,7 +809,7 @@ def get_node_tools(
 def get_mcp_tool_instances(node: Node, team: Team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
 
-    mcp_tools = node.params.get("mcp_tools", [])
+    mcp_tools = node.mcp_tool_refs
     if not mcp_tools:
         return []
 
@@ -818,10 +848,10 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
-        return
+        return None
 
     auth_service = custom_action.get_auth_service()
-    path = list(spec.paths)[0]
+    path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
     return function_def.build_tool(auth_service, custom_action)

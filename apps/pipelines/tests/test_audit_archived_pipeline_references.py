@@ -4,7 +4,6 @@ import pytest
 from django.core.management import call_command
 
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
@@ -31,9 +30,13 @@ class TestAuditArchivedPipelineReferences:
         assert "source_material" in output
 
     def test_reports_nothing_when_no_live_node_references_an_archived_resource(self):
-        assistant = OpenAiAssistantFactory.create()
+        source_material = SourceMaterialFactory.create()
         pipeline = PipelineFactory.create()
-        node = NodeFactory.create(type="AssistantNode", pipeline=pipeline, params={"assistant_id": str(assistant.id)})
+        node = NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"source_material_id": str(source_material.id)},
+        )
         node.update_from_params()
 
         out = StringIO()

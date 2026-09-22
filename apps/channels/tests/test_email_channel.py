@@ -1337,7 +1337,7 @@ class TestPersistInboundAttachments:
         png_bytes = b"\x89PNG\r\n\x1a\n" + (b"\x00" * 32)
         raw = [self._raw("image.png", "image/png", png_bytes)]
 
-        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+        accepted, _skipped = _persist_inbound_attachments(raw, team_id=team.id)
 
         assert len(accepted) == 1
         f = File.objects.get(id=accepted[0])

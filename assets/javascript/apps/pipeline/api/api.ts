@@ -128,7 +128,7 @@ class ApiClient {
   private async makeRequest<T>(
     method: "get" | "post",
     url: string,
-    data?: any,
+    data?: unknown,
   ): Promise<T> {
     const client = this.createClient();
     let response;
