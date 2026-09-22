@@ -9,6 +9,7 @@ declare global {
   const alertify: {
     error: (message: string) => void;
     success: (message: string) => void;
+    warning: (message: string) => void;
   };
 }
 

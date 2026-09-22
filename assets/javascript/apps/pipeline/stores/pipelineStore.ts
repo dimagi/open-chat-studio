@@ -13,7 +13,7 @@ import {shallow} from "zustand/shallow";
 import {temporal} from "zundo";
 import {PipelineStoreType} from "../types/pipelineStore";
 import useEditorStore from "./editorStore";
-import {getNodeId} from "../utils";
+import {getCachedData, getEdgeId, getNodeId, nodeDataFromSchema, outputHandle} from "../utils";
 import cloneDeep from "lodash/cloneDeep";
 import throttle from "lodash/throttle";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
@@ -196,6 +196,81 @@ const createPipelineStore: StateCreator<
     // calls would make it take two undos to fully restore, landing on a broken intermediate
     // state (edges gone, node still present) in between.
     set({edges: remainingEdges, nodes: remainingNodes});
+    get().autoSaveCurrentPipline();
+  },
+  changeNodeType: (nodeId: string, newNodeType: string) => {
+    if (get().readOnly) return;
+    const oldNode = get().nodes.find((node) => node.id === nodeId);
+    if (!oldNode || oldNode.data?.type === newNodeType) return;
+    const schema = getCachedData().nodeSchemas.get(newNodeType);
+    if (!schema) return;
+
+    const newId = getNodeId(newNodeType);
+    const data = nodeDataFromSchema(schema);
+    const color = oldNode.data?.params?.color;
+    const newNode: Node = {
+      id: newId,
+      type: schema["ui:flow_node_type"],
+      position: oldNode.position,
+      selected: true,
+      data: {
+        ...data,
+        id: newId,
+        // The name is how other nodes reach this one's result, through
+        // `temp_state.outputs.<name>`, and that result was the old type's, so the new node takes
+        // a new name. Colour is the user's marking on this spot in the graph, so it carries over
+        // - but only when it is set. A `color: undefined` key would leave the client's params one
+        // key longer than the saved ones, which `computePipelineDiff` reads as a change forever.
+        params: {...data.params, name: newId, ...(color !== undefined && {color})},
+      },
+    };
+
+    // A self-loop cannot be rewired without dangling, so it goes with the old node.
+    const incoming = get().edges.filter((edge) => edge.target === nodeId && edge.source !== nodeId);
+    const outgoing = get().edges.filter((edge) => edge.source === nodeId && edge.target !== nodeId);
+    const untouched = get().edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
+
+    const rewired = incoming.map((edge) => ({
+      ...edge,
+      id: getEdgeId(edge.source, edge.sourceHandle, newId, edge.targetHandle),
+      target: newId,
+    }));
+    // With more than one outgoing edge there is no single answer for which of the new node's
+    // outputs each one belongs on, so they are dropped for the user to rewire.
+    if (outgoing.length === 1) {
+      const edge = outgoing[0];
+      const sourceHandle = outputHandle(newNodeType, 0);
+      const rewiredOutgoing: Edge = {
+        ...edge,
+        id: getEdgeId(newId, sourceHandle, edge.target, edge.targetHandle),
+        source: newId,
+        sourceHandle,
+      };
+      // `label` and `type` annotate the path a test run took through the old node's outputs,
+      // so they mean nothing on a handle that no longer exists.
+      delete rewiredOutgoing.label;
+      delete rewiredOutgoing.type;
+      rewired.push(rewiredOutgoing);
+    }
+
+    const dropped = get().edges.length - untouched.length - rewired.length;
+    if (dropped) {
+      alertify.warning(`Removed ${dropped} connection${dropped === 1 ? "" : "s"} that the new node type cannot take.`);
+    }
+
+    if (useEditorStore.getState().currentNode?.id === nodeId) {
+      useEditorStore.getState().closeEditor();
+    }
+
+    // One set() call, as in deleteNode above: undo history is recorded per set(), and swapping
+    // a node's type is a single user action.
+    const remainingNodes = get()
+      .nodes.filter((node) => node.id !== nodeId)
+      .map((node) => ({...node, selected: false}));
+    set({
+      nodes: [...remainingNodes, newNode],
+      edges: [...untouched, ...rewired],
+    });
     get().autoSaveCurrentPipline();
   },
   deleteEdge: (edgeId) => {

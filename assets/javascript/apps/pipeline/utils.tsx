@@ -1,4 +1,5 @@
 import React from "react"
+import {addEdge, Connection} from "reactflow";
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues, Option} from "./types/nodeParameterValues";
 import {JsonSchema, NodeData, NodeParams, PropertySchema} from "./types/nodeParams";
@@ -166,4 +167,24 @@ export function hasMultipleOutputs(nodeType: string): boolean {
 /** The handle id of a node type's nth output. */
 export function outputHandle(nodeType: string, index: number): string {
   return hasMultipleOutputs(nodeType) ? `output_${index}` : "output";
+}
+
+/**
+ * The edge id React Flow itself would draw for these ends, so edges the editor builds are
+ * indistinguishable from ones the user drew by hand. React Flow does not export the format,
+ * so `addEdge` is asked to draw one instead of restating it here.
+ */
+export function getEdgeId(
+  source: string,
+  sourceHandle: string | null | undefined,
+  target: string,
+  targetHandle: string | null | undefined,
+): string {
+  const connection: Connection = {
+    source,
+    sourceHandle: sourceHandle ?? null,
+    target,
+    targetHandle: targetHandle ?? null,
+  };
+  return addEdge(connection, [])[0].id;
 }
