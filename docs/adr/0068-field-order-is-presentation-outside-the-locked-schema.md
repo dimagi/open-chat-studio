@@ -1,4 +1,4 @@
-# ADR-0067: Field order is presentation, stored outside the locked schema
+# ADR-0068: Field order is presentation, stored outside the locked schema
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
