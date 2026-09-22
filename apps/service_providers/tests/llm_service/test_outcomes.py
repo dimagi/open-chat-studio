@@ -172,6 +172,12 @@ CASES = [
         "is_blocked",
         id="vertex_is_blocked_with_no_other_signal",
     ),
+    pytest.param(
+        AIMessage(content=[], response_metadata={"status": "incomplete", "incomplete_details": {}}),
+        "empty",
+        "",
+        id="openai_responses_incomplete_with_no_reason",
+    ),
 ]
 
 

@@ -20,6 +20,7 @@ OutcomeKind = Literal["answered", "refusal", "content_filter", "length", "empty"
 
 GOOGLE_FILTER_REASONS = frozenset({"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY"})
 LENGTH_REASONS = frozenset({"length", "MAX_TOKENS", "max_tokens", "model_context_window_exceeded", "max_output_tokens"})
+FILTER_REASONS = frozenset({"content_filter", *GOOGLE_FILTER_REASONS})
 
 
 @dataclass(frozen=True)
@@ -34,14 +35,21 @@ class TurnOutcome:
 def classify_turn(message: AIMessage) -> TurnOutcome:
     """Classify a model turn's outcome kind and stop signal from its content and metadata."""
     metadata = message.response_metadata or {}
-    reason = provider_reason(message)
     detail = _detail(metadata)
     if refusal_text(message):
         return TurnOutcome("refusal", "refusal", detail)
+    reason = provider_reason(message)
     kind = _outcome_kind(message, metadata, reason)
-    if kind == "content_filter" and not reason:
-        reason = "is_blocked"
-    return TurnOutcome(kind, reason, detail)
+    return TurnOutcome(kind, _reason_for_kind(kind, reason), detail)
+
+
+def _reason_for_kind(kind: OutcomeKind, reason: str) -> str:
+    """Fall back to the Vertex-only is_blocked signal when a content filter carries no other reason."""
+    if kind != "content_filter":
+        return reason
+    if reason:
+        return reason
+    return "is_blocked"
 
 
 def _outcome_kind(message: AIMessage, metadata: dict, reason: str) -> OutcomeKind:
@@ -61,7 +69,9 @@ def _outcome_kind(message: AIMessage, metadata: dict, reason: str) -> OutcomeKin
 
 def _is_content_filtered(metadata: dict, reason: str) -> bool:
     """True when the provider's stop signal indicates a content filter block."""
-    if reason == "content_filter" or reason in GOOGLE_FILTER_REASONS or _prompt_block_reason(metadata):
+    if reason in FILTER_REASONS:
+        return True
+    if _prompt_block_reason(metadata):
         return True
     return metadata.get("is_blocked") is True
 
@@ -69,13 +79,43 @@ def _is_content_filtered(metadata: dict, reason: str) -> bool:
 def provider_reason(message: AIMessage) -> str:
     """The raw stop signal string the adapter exposed, or an empty string."""
     metadata = message.response_metadata or {}
-    if reason := metadata.get("stop_reason") or metadata.get("finish_reason"):
-        return str(reason)
+    return (
+        _stop_signal(metadata)
+        or _incomplete_reason(metadata)
+        or _block_reason_signal(metadata)
+        or _refusal_signal(message)
+    )
+
+
+def _stop_signal(metadata: dict) -> str:
+    """Return the adapter's stop_reason or finish_reason, or an empty string."""
+    reason = metadata.get("stop_reason") or metadata.get("finish_reason")
+    if not reason:
+        return ""
+    return str(reason)
+
+
+def _incomplete_reason(metadata: dict) -> str:
+    """Return the Responses API incomplete reason, or an empty string when the turn is not incomplete."""
+    if metadata.get("status") != "incomplete":
+        return ""
     incomplete = metadata.get("incomplete_details") or {}
-    if metadata.get("status") == "incomplete" and incomplete.get("reason"):
-        return str(incomplete["reason"])
-    if block_reason := _prompt_block_reason(metadata):
-        return str(block_reason)
+    reason = incomplete.get("reason")
+    if not reason:
+        return ""
+    return str(reason)
+
+
+def _block_reason_signal(metadata: dict) -> str:
+    """Return Gemini's prompt block reason as a string, or an empty string when the prompt was not blocked."""
+    block_reason = _prompt_block_reason(metadata)
+    if not block_reason:
+        return ""
+    return str(block_reason)
+
+
+def _refusal_signal(message: AIMessage) -> str:
+    """Return "refusal" when the message carries refusal text, or an empty string."""
     if refusal_text(message):
         return "refusal"
     return ""
@@ -86,10 +126,17 @@ def refusal_text(message: AIMessage) -> str:
     if refusal := message.additional_kwargs.get("refusal"):
         return refusal
     for block in message.content_blocks:
-        # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
-        value = block.get("value") if block.get("type") == "non_standard" else block
-        if isinstance(value, dict) and value.get("type") == "refusal":
-            return value.get("refusal", "")
+        if refusal := _refusal_block(block):
+            return refusal
+    return ""
+
+
+def _refusal_block(block: dict) -> str:
+    """Return the refusal text in a content block, or an empty string when the block carries none."""
+    # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
+    value = block.get("value") if block.get("type") == "non_standard" else block
+    if isinstance(value, dict) and value.get("type") == "refusal":
+        return value.get("refusal", "")
     return ""
 
 
