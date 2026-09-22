@@ -403,6 +403,8 @@ class EventBot:
     def get_conversation_history(self):
         messages = []
         for message in self.session.chat.message_iterator(with_summaries=False):
+            if message.is_excluded_from_history:
+                continue
             messages.append(f"{message.role}: {message.content}")
             if len(messages) > 10:
                 break

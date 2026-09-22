@@ -76,7 +76,8 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
         for message in self.message_iterator(include_summaries, exclude_message_id=exclude_message_id):
-            messages.append(message.to_langchain_dict())
+            if not message.is_excluded_from_history:
+                messages.append(message.to_langchain_dict())
             if message.compression_marker and (not marker or marker == message.compression_marker):
                 break
 
@@ -246,6 +247,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def is_human_message(self):
         return self.message_type == ChatMessageType.HUMAN
+
+    @property
+    def is_excluded_from_history(self) -> bool:
+        """A human message that led to a refused or filtered turn is not replayed, or the next turn fails
+        the same way."""
+        return self.is_human_message and ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in self.metadata
 
     @property
     def is_summary(self):
