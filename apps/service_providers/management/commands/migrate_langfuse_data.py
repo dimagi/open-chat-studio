@@ -194,15 +194,9 @@ def _transform_trace_to_ingestion_batch(source_trace):  # noqa: C901 - translato
                 event_body = CreateEventBody(**common_body_args)
                 ingestion_event_type = IngestionEvent_EventCreate
             elif source_obs.type == "GENERATION":
-                usage_to_pass = None
-                if isinstance(source_obs.usage, Usage):
-                    usage_data = {
-                        k: getattr(source_obs.usage, k, None)
-                        for k in ["input", "output", "total", "unit", "input_cost", "output_cost", "total_cost"]
-                    }
-                    filtered = {k: v for k, v in usage_data.items() if v is not None}
-                    if filtered:
-                        usage_to_pass = Usage(**filtered)
+                # `Usage` requires input/output/total, so a fetched one can be forwarded as-is
+                # but must not be rebuilt from a subset of its fields.
+                usage_to_pass = source_obs.usage if isinstance(source_obs.usage, Usage) else None
                 event_body = CreateGenerationBody(
                     **common_body_args,
                     end_time=source_obs.end_time,
