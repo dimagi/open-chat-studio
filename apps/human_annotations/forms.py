@@ -140,7 +140,9 @@ class AnnotationQueueForm(forms.ModelForm):
         field_order = cleaned.get("field_order")
         # An absent field_order is valid: the resolver falls back to schema order. Only a
         # non-empty one is held to matching the schema exactly.
-        if schema and field_order and set(field_order) != set(schema):
+        if not schema or not field_order:
+            return cleaned
+        if set(field_order) != set(schema):
             raise ValidationError("Field order must list exactly the schema's fields.")
         return cleaned
 

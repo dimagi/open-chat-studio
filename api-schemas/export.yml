@@ -2150,7 +2150,6 @@ components:
           type: array
           items:
             type: string
-            maxLength: 255
           nullable: true
           description: Field names in display order; names not listed fall back to
             schema order

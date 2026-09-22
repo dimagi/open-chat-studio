@@ -1,6 +1,9 @@
+---
+status: extracted
+---
+
 # Re-ordering annotation queue fields — design
 
-**Status:** approved (brainstorm)
 **Date:** 2026-09-21
 **Tracking issue:** [#4276](https://github.com/dimagi/open-chat-studio/issues/4276)
 **Extends:** [ADR-0015](../../adr/0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md)
@@ -91,7 +94,7 @@ A single model method becomes the only way anything reads field order:
 
 ```python
 def ordered_field_names(self) -> list[str]:
-    known = [n for n in (self.field_order or []) if n in self.schema]
+    known = list(dict.fromkeys(n for n in (self.field_order or []) if n in self.schema))
     return known + [n for n in self.schema if n not in known]
 ```
 

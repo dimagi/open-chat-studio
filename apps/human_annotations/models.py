@@ -81,7 +81,7 @@ class AnnotationQueue(BaseTeamModel):
         help_text="Dict of field_name -> FieldDefinition JSON (same format as evaluator output_schema)",
     )
     field_order = ArrayField(
-        models.CharField(max_length=255),
+        models.TextField(),
         default=list,
         blank=True,
         null=True,

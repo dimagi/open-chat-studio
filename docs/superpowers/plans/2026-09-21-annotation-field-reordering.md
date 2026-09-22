@@ -35,8 +35,8 @@
 | `templates/human_annotations/columns/annotations_summary.html` | Render first three fields in author order | 4 |
 | `templates/human_annotations/remove_session_confirm.html` | Render annotation values in author order | 4 |
 | `templates/human_annotations/queue_form.html` | Grip + ▲▼ controls, `moveField`, drag handlers, `fieldOrderJson`, locked promotion | 5 |
-| `docs/adr/0067-field-order-is-presentation-outside-the-locked-schema.md` | Record the decision | 6 |
-| `docs/adr/index.md` | Index row for ADR-0067 | 6 |
+| `docs/adr/0068-field-order-is-presentation-outside-the-locked-schema.md` | Record the decision | 6 |
+| `docs/adr/index.md` | Index row for ADR-0068 | 6 |
 
 Tests live in the existing `apps/human_annotations/tests/` files (`test_models.py`, `test_forms.py`, `test_views.py`) — this app keeps tests per layer, not per feature. Follow that.
 
@@ -143,7 +143,7 @@ Replace the existing `get_field_definitions` method (currently at `models.py:113
 ```python
     def ordered_field_names(self) -> list[str]:
         """Field names in display order, reconciled against the current schema."""
-        known = [name for name in (self.field_order or []) if name in self.schema]
+        known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
         return known + [name for name in self.schema if name not in known]
 
     def get_field_definitions(self) -> dict[str, FieldDefinition]:
@@ -945,17 +945,17 @@ EOF
 ADR-0015 says only `required` stays mutable once a queue locks. That is now untrue, and the reasoning for the exemption belongs somewhere citable.
 
 **Files:**
-- Create: `docs/adr/0067-field-order-is-presentation-outside-the-locked-schema.md`
+- Create: `docs/adr/0068-field-order-is-presentation-outside-the-locked-schema.md`
 - Modify: `docs/adr/index.md`
 
 **Interfaces:** none.
 
 - [ ] **Step 1: Write the ADR**
 
-Create `docs/adr/0067-field-order-is-presentation-outside-the-locked-schema.md`. Follow ADR-0055's structure exactly — it is the existing example of an ADR that extends ADR-0015 rather than editing it:
+Create `docs/adr/0068-field-order-is-presentation-outside-the-locked-schema.md`. Follow ADR-0055's structure exactly — it is the existing example of an ADR that extends ADR-0015 rather than editing it:
 
 ```markdown
-# ADR-0067: Field order is presentation, stored outside the locked schema
+# ADR-0068: Field order is presentation, stored outside the locked schema
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -1022,22 +1022,22 @@ the exemption needs no carve-out.
 Append to the table at the end of `docs/adr/index.md`, matching the existing row format exactly:
 
 ```markdown
-| [0067](0067-field-order-is-presentation-outside-the-locked-schema.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Field order is presentation, stored outside the locked schema |
+| [0068](0068-field-order-is-presentation-outside-the-locked-schema.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Field order is presentation, stored outside the locked schema |
 ```
 
 - [ ] **Step 3: Verify the links resolve**
 
 ```bash
-ls docs/adr/0067-field-order-is-presentation-outside-the-locked-schema.md
-grep -c "0067" docs/adr/index.md
+ls docs/adr/0068-field-order-is-presentation-outside-the-locked-schema.md
+grep -c "0068" docs/adr/index.md
 ```
 
-Expected: the file exists and the index has exactly one `0067` row.
+Expected: the file exists and the index has exactly one `0068` row.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/adr/0067-field-order-is-presentation-outside-the-locked-schema.md docs/adr/index.md
+git add docs/adr/0068-field-order-is-presentation-outside-the-locked-schema.md docs/adr/index.md
 git commit -m "$(cat <<'EOF'
 Add ADR-0067: field order is presentation, outside the locked schema
 

@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
             model_name="annotationqueue",
             name="field_order",
             field=django.contrib.postgres.fields.ArrayField(
-                base_field=models.CharField(max_length=255),
+                base_field=models.TextField(),
                 blank=True,
                 default=list,
                 help_text="Field names in display order; names not listed fall back to schema order",
