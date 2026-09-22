@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html_join
+from django.utils.safestring import SafeString
 
 from apps.pipelines.models import Node
 from apps.utils.admin import ReadonlyAdminMixin
@@ -29,12 +30,12 @@ class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
 
     def related_nodes(self, obj):
         nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
-        pipelines = set(node.pipeline for node in nodes)
-        pipeline_urls = [
-            f"<a href={reverse('admin:pipelines_pipeline_change', args=[pipeline.id])} >{pipeline!s}</a>"
-            for pipeline in pipelines
-        ]
-        return format_html("<br>".join(pipeline_urls))
+        pipelines = {node.pipeline for node in nodes}
+        return format_html_join(
+            SafeString("<br>"),
+            '<a href="{}">{}</a>',
+            ((reverse("admin:pipelines_pipeline_change", args=[p.id]), str(p)) for p in pipelines),
+        )
 
     related_nodes.short_description = "Pipeline Usage"
 
