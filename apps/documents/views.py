@@ -514,10 +514,11 @@ def add_collection_files(request, team_slug: str, pk: int):
 ROW_IMPORT_PREVIEW_ROWS = 5
 
 
-def _row_import_collection(request, pk: int) -> Collection:
+def _row_import_collection(request, pk: int) -> Collection | None:
+    """Return the collection when row import applies to it, or None when it is not a local index."""
     collection = get_object_or_404(Collection, id=pk, team=request.team)
     if not collection.is_index or collection.is_remote_index:
-        raise Http404("Row import is available for local indexes only")
+        return None
     return collection
 
 
@@ -536,9 +537,7 @@ def _parse_uploaded_sheet(uploaded_file):
 @login_and_team_required
 @permission_required("documents.change_collection")
 def row_import_preview(request, team_slug: str, pk: int):
-    try:
-        _row_import_collection(request, pk)
-    except Http404:
+    if _row_import_collection(request, pk) is None:
         return HttpResponseBadRequest("Row import is available for local indexes only")
     uploaded_file = request.FILES.get("file")
     context = {"error": None, "headers": [], "sample_rows": [], "row_count": 0, "oversized_rows": []}
@@ -570,9 +569,8 @@ def row_import_preview(request, team_slug: str, pk: int):
 @login_and_team_required
 @permission_required("documents.change_collection")
 def row_import(request, team_slug: str, pk: int):
-    try:
-        collection = _row_import_collection(request, pk)
-    except Http404:
+    collection = _row_import_collection(request, pk)
+    if collection is None:
         return HttpResponseBadRequest("Row import is available for local indexes only")
     uploaded_file = request.FILES.get("file")
     if uploaded_file is None:

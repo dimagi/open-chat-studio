@@ -67,6 +67,13 @@ class TestRowImportPreview:
 
         assert response.status_code == 400
 
+    def test_another_teams_collection_is_not_found(self, logged_in_client, team):
+        other = CollectionFactory.create(team=TeamWithUsersFactory.create(), is_index=True, is_remote_index=False)
+        url = reverse("documents:row_import_preview", args=[team.slug, other.id])
+        response = logged_in_client.post(url, {"file": upload()})
+
+        assert response.status_code == 404
+
 
 @pytest.mark.django_db()
 class TestRowImport:
