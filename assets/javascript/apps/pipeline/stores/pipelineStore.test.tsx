@@ -15,10 +15,14 @@ function flushThrottle() {
   vi.advanceTimersByTime(500);
 }
 
+// The store is a singleton that nothing resets between tests, so every test that sets one of
+// these leaks it into whatever runs next.
+function resetStore() {
+  usePipelineStore.setState({readOnly: false, currentPipeline: undefined, dirty: false});
+}
+
 function seed() {
-  // readOnly is reset explicitly: nothing else in this file resets it after a test sets it,
-  // so without this a read-only test leaks readOnly: true into whatever runs next.
-  usePipelineStore.setState({readOnly: false});
+  resetStore();
   usePipelineStore.getState().resetFlow({nodes: [nodeA, nodeB], edges: [edgeAB]});
   usePipelineStore.temporal.getState().clear();
 }
@@ -40,15 +44,22 @@ function seedCurrentPipeline() {
   });
 }
 
-describe("pipelineStore undo/redo", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    seed();
-  });
+beforeEach(() => {
+  vi.useFakeTimers();
+});
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+afterEach(() => {
+  // Drain the throttled history handler before handing the clock back. The throttle is one
+  // instance shared for the life of the store, so a pending trailing call would be counted
+  // against the next test's history. Clearing the timers then drops the autosave a mutation
+  // leaves behind, which would otherwise fire on a later test's clock and reach the network.
+  flushThrottle();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
+describe("pipelineStore undo/redo", () => {
+  beforeEach(seed);
 
   test("undo restores a deleted node and its connected edge", () => {
     usePipelineStore.getState().deleteNode("b");
