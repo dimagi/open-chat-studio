@@ -1,7 +1,7 @@
 import React from "react"
 import ShortUniqueId from "short-unique-id";
 import {NodeParameterValues, Option} from "./types/nodeParameterValues";
-import {JsonSchema, PropertySchema} from "./types/nodeParams";
+import {JsonSchema, NodeData, NodeParams, PropertySchema} from "./types/nodeParams";
 
 declare global {
   interface Window {
@@ -113,4 +113,57 @@ export function getSelectOptions(schema: PropertySchema): Option[] {
     const label = enumLabels ? enumLabels[index] : value;
     return {value: value, label: label};
   });
+}
+
+/**
+ * Build the default params for a node of this type: the schema's own default for each
+ * property, falling back to the site-wide default for a property of that name.
+ */
+export function getDefaultParamValues(schema: JsonSchema): NodeParams {
+  const {defaultValues} = getCachedData();
+  const defaults: NodeParams = {name: ""};
+  for (const name in schema.properties) {
+    const property = schema.properties[name];
+    defaults[name] = [property.default, defaultValues[name]].find(
+      (value) => value !== undefined && value !== null
+    ) ?? null;
+  }
+  return defaults;
+}
+
+/** A fresh node of this type, before it is given an id and a place on the canvas. */
+export function nodeDataFromSchema(schema: JsonSchema): NodeData {
+  return {
+    type: schema.title,
+    label: schema["ui:label"],
+    params: getDefaultParamValues(schema),
+  };
+}
+
+/** The node types a user can add to a pipeline, in the order they are offered. */
+export function addableNodeSchemas(): JsonSchema[] {
+  return Array.from(getCachedData().nodeSchemas.values())
+    .filter((schema) => schema["ui:can_add"])
+    .sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
+}
+
+// Routers whose outputs come from a user-supplied keyword list. The backend does not publish
+// this in the node schema, so the editor has to name the types.
+const KEYWORD_ROUTER_NODE_TYPES = ["RouterNode", "StaticRouterNode"];
+
+// The node types that fan out to several outputs: the keyword routers, plus BooleanNode, whose
+// two outputs are fixed.
+const MULTI_OUTPUT_NODE_TYPES = ["BooleanNode", ...KEYWORD_ROUTER_NODE_TYPES];
+
+export function isKeywordRouter(nodeType: string): boolean {
+  return KEYWORD_ROUTER_NODE_TYPES.includes(nodeType);
+}
+
+export function hasMultipleOutputs(nodeType: string): boolean {
+  return MULTI_OUTPUT_NODE_TYPES.includes(nodeType);
+}
+
+/** The handle id of a node type's nth output. */
+export function outputHandle(nodeType: string, index: number): string {
+  return hasMultipleOutputs(nodeType) ? `output_${index}` : "output";
 }
