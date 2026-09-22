@@ -476,6 +476,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    allowed_collection_ids: list[int]
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -483,6 +484,24 @@ class AttachMediaTool(CustomBaseTool):
             chat=self.experiment_session.chat, tool_type="ocs_attachments"
         )
         return chat_attachment
+
+    def _get_attachable_file(self, file_id: int) -> File | None:
+        """Resolve one of the files this node is configured to share, or None.
+
+        `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
+        to look up. The scoping belongs here: attaching is what makes
+        `ChatMessage.get_attached_files()` return the file, so that read's `chatattachment__chat`
+        filter confirms the association rather than checking it.
+        """
+        return (
+            File.objects.filter(
+                id=file_id,
+                team_id=self.experiment_session.team_id,
+                collections__id__in=self.allowed_collection_ids,
+            )
+            .distinct()
+            .first()
+        )
 
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
@@ -497,12 +516,15 @@ class AttachMediaTool(CustomBaseTool):
         # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
         for file_id in file_ids:
+            file = self._get_attachable_file(file_id)
+            if file is None:
+                response.append(f"* {file_id}: File not found.")
+                continue
             try:
                 # One transaction per file, so a failed attachment rolls back on its own and the
                 # loop can keep going. Catching a DB error without leaving the block would abort
                 # the transaction and break every remaining iteration.
                 with transaction.atomic():
-                    file = File.objects.get(id=file_id)
                     chat_attachment.files.add(file_id)
                     self.tool_callbacks.attach_file(file_id)
                     file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
@@ -524,8 +546,6 @@ class AttachMediaTool(CustomBaseTool):
                             )
                         file_response = f"{file_response} {link_text}"
                     response.append(file_response)
-            except File.DoesNotExist:
-                response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
                 response.append(f"* {file_id}: Error fetching file.")
 
@@ -797,10 +817,15 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.tool_names
+    # attach-media is not user-selectable (see AgentTools.user_tool_choices); it is added here so
+    # that it can be given the node's collections. Drop any copy carried in the node's own tool
+    # list so it cannot be built unscoped.
+    tool_names = [name for name in node.tool_names if name != AgentTools.ATTACH_MEDIA]
+    tool_kwargs = {}
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
-    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"allowed_collection_ids": node.attachable_collection_ids()}
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks, tool_kwargs)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
@@ -828,14 +853,22 @@ def get_mcp_tool_instances(node: Node, team: Team):
 
 
 def get_tool_instances(
-    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+    tools_list,
+    experiment_session: ExperimentSession | None = None,
+    tool_callbacks=None,
+    tool_kwargs: dict[str, dict] | None = None,
 ) -> list[BaseTool]:
+    tool_kwargs = tool_kwargs or {}
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         if tool_cls.requires_callbacks and not tool_callbacks:
             raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
-        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
+        tools.append(
+            tool_cls(
+                experiment_session=experiment_session, tool_callbacks=tool_callbacks, **tool_kwargs.get(tool_name, {})
+            )
+        )
     return tools
 
 

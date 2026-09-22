@@ -802,6 +802,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """True when a collection is linked, read off the FK column rather than the id in params."""
         return self.collection_id is not None
 
+    def attachable_collection_ids(self) -> list[int]:
+        """The collections whose files the attach-media tool is allowed to share.
+
+        The media collection plus the searchable indexes. That is the whole set of file ids this
+        node ever puts in front of the model -- media summaries in the prompt, and file ids in
+        search results -- so anything outside it is an id the model made up or guessed.
+        """
+        ids = list(self.collection_indexes.values_list("id", flat=True))
+        if self.collection_id is not None:
+            ids.append(self.collection_id)
+        return ids
+
     def _archive_related_params(self):
         """
         Archive related params that were also versioned along with this node
