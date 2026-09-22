@@ -13,6 +13,7 @@ class Migration(migrations.Migration):
         # llm_model_migration() repoints evaluators off any custom model it replaces, so the
         # Evaluator FK must be in this migration's app state (see _repoint_evaluators).
         ("evaluations", "0018_evaluator_llm_provider_fks"),
+        ("pipelines", "0027_backfill_node_fks"),
     ]
 
     operations = [

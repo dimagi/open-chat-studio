@@ -129,6 +129,31 @@ def test_converts_custom_models_to_global_models_from_a_migration(requires_migra
 
 
 @pytest.mark.django_db()
+def test_converts_custom_models_to_global_models_pipelines_from_a_migration(requires_migrations):
+    """Node params must be rewritten even when the custom model is a historical one.
+
+    ``get_related_objects`` reports historical ``Node`` rows as themselves rather than as their
+    pipelines, so the generic repointing pass writes their FK column. The nodes still have to be
+    found and their params rewritten, or the deleted model's id survives in params and the next
+    ``create_new_version`` re-derives the column from it and nulls it.
+    """
+    custom_model = LlmProviderModelFactory.create()
+    pipeline = get_pipeline(custom_model)
+
+    historical_state = MigrationExecutor(connection).loader.project_state()
+    HistoricalLlmProviderModel = historical_state.apps.get_model("service_providers", "LlmProviderModel")
+
+    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
+    with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
+        _update_llm_provider_models(HistoricalLlmProviderModel)
+
+    global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
+    node = pipeline.node_set.get(type="LLMResponseWithPrompt")
+    assert node.params["llm_provider_model_id"] == global_model.id
+    assert node.llm_provider_model_id == global_model.id
+
+
+@pytest.mark.django_db()
 def test_repointing_raises_when_the_evaluator_relation_is_missing_but_its_fk_is_live():
     """Fail loudly when the evaluators exist in the database but not in the app state.
 
