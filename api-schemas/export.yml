@@ -3668,6 +3668,8 @@ components:
           type: string
           maxLength: 128
         params: {}
+        is_archived:
+          type: boolean
         evaluation_mode:
           allOf:
           - $ref: '#/components/schemas/EvaluationModeEnum'
