@@ -512,7 +512,7 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
 
     Field names are sanitized so the model's JSON schema keys are valid tool/property names for
     every provider (notably Anthropic's `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original
-    mapping is stashed on the returned model as `__field_name_mapping__` so callers can restore
+    mapping is stashed on the returned model as `__ocs_field_name_mapping__` so callers can restore
     the original names once the LLM result comes back.
 
     Args:
@@ -537,7 +537,7 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
         )
 
     model = create_model(model_name, **pydantic_fields)
-    model.__field_name_mapping__ = field_name_mapping
+    model.__ocs_field_name_mapping__ = field_name_mapping
     return model
 
 
