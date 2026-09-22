@@ -58,6 +58,18 @@ def test_admin_site_steps_up_staff_as_well_as_superusers(client):
 
 
 @pytest.mark.django_db()
+def test_signing_out_of_the_admin_needs_no_elevation(client):
+    """`admin_view` wraps the logout view, so the elevation check has to let it through."""
+    staff = UserFactory.create(is_staff=True)
+    client.force_login(staff)
+
+    response = client.post(reverse("admin:logout"))
+
+    assert response.status_code == 200
+    assert "_auth_user_id" not in client.session
+
+
+@pytest.mark.django_db()
 def test_ocs_admin_is_reached_through_its_own_elevation(superuser, authed_client):
     """The Django admin grant is a different grant, so it does not open /admin/."""
     ocs_admin_url = reverse("ocs_admin:home")
