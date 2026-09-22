@@ -309,7 +309,8 @@ class TestContentFilter400:
     def test_detail_tolerates_missing_or_non_dict_bodies(self, body):
         error = _content_filter_error(body)
         if not isinstance(body, dict):
-            # The SDK only reads ``code`` from a dict body; set it the way a real error carries it.
+            # The SDK derives ``code`` only from a dict body, so a string or None body leaves it
+            # unset; set it directly to reach the body-type guard in ``_content_filter_detail``.
             error.code = "content_filter"
 
         translated = translate_provider_error(error)
@@ -321,8 +322,15 @@ class TestContentFilter400:
         assert should_retry_exception(_content_filter_error(AZURE_FILTER_BODY)) is False
 
     def test_an_already_translated_refusal_is_left_alone(self):
-        translated = translate_provider_error(_content_filter_error(AZURE_FILTER_BODY))
+        """Otherwise a second boundary would rebuild it from its own cause, which is still a 400."""
+        error = _content_filter_error(AZURE_FILTER_BODY)
 
+        with pytest.raises(ModelRefusedTurnError) as exc_info:  # noqa: SIM117
+            with translate_provider_errors():
+                raise error
+
+        translated = exc_info.value
+        assert translated.__cause__ is error
         assert translate_provider_error(translated) is None
 
     def test_context_manager_translates_and_chains(self):
