@@ -13,6 +13,7 @@ Usage:
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -83,10 +84,20 @@ _USAGE_DAYS = 14
 
 _STUB_LLM_PROVIDER_NAME = "Stub LLM"
 _STUB_LLM_MODEL_NAME = "stub"
-# Port matches DEFAULT_PORT in scripts/mock_llm_server.py, which serves this endpoint.
-_STUB_LLM_BASE_URL = "http://localhost:9100/v1"
+# Where apps/service_providers/mock_llm is mounted by config.urls under DEBUG.
+_STUB_LLM_PATH = "/mock-llm/v1"
+_STUB_LLM_DEFAULT_ROOT = "http://localhost:8000"
 # High enough that history compression never kicks in while developing.
 _STUB_LLM_TOKEN_LIMIT = 128000
+
+
+def _stub_llm_base_url() -> str:
+    """The dev server's own address, which is where the mock provider answers.
+
+    SITE_URL_ROOT is set by `inv runserver --public`, so under an ngrok tunnel the call
+    goes out and back rather than failing against a port nothing is listening on.
+    """
+    return f"{settings.SITE_URL_ROOT or _STUB_LLM_DEFAULT_ROOT}{_STUB_LLM_PATH}"
 
 
 class Command(BaseCommand):
@@ -227,9 +238,9 @@ class Command(BaseCommand):
         if not provider_credentials:
             self.stdout.write(
                 self.style.WARNING(
-                    "  No provider env vars set; the sample chatbots will use the stub provider."
-                    " Run `uv run scripts/mock_llm_server.py` to answer their calls, or set"
-                    " OPENAI_API_KEY (or another supported key — see .env.example) for real LLM calls."
+                    "  No provider env vars set; the sample chatbots will use the stub provider,"
+                    " which the dev server answers itself. Set OPENAI_API_KEY (or another supported"
+                    " key — see .env.example) for real LLM calls."
                 )
             )
             return stub_provider, stub_model
@@ -239,12 +250,14 @@ class Command(BaseCommand):
         return llm_provider, get_first_llm_provider_model(llm_provider, team.id)
 
     def _get_or_create_stub_llm_provider(self, team) -> tuple[LlmProvider, LlmProviderModel]:
-        """A provider pointing at scripts/mock_llm_server.py, so dev chatbots work without an API key.
+        """A provider pointing at the dev server's own mock endpoints, so dev chatbots need no API key.
 
         Seeded as an OpenAI provider so dev traffic takes the same path as a real OpenAI key:
         that type talks the Responses API rather than chat completions, and the mock serves
         both. Its config form has the optional base URL this needs.
         """
+        base_url = _stub_llm_base_url()
+        config = {"openai_api_key": "stub", "openai_api_base": base_url}
         provider = LlmProvider.objects.filter(team=team, name=_STUB_LLM_PROVIDER_NAME).first()
         created = provider is None
         if created:
@@ -252,9 +265,14 @@ class Command(BaseCommand):
                 team=team,
                 type=str(LlmProviderTypes.openai),
                 name=_STUB_LLM_PROVIDER_NAME,
-                config={"openai_api_key": "stub", "openai_api_base": _STUB_LLM_BASE_URL},
+                config=config,
             )
-        self._log_created("LLM provider", f"{_STUB_LLM_PROVIDER_NAME} ({_STUB_LLM_BASE_URL})", created)
+        elif provider.config != config:
+            # Re-running after the dev server moved should repoint the provider, not leave
+            # it aimed at an address nothing answers on.
+            provider.config = config
+            provider.save(update_fields=["config"])
+        self._log_created("LLM provider", f"{_STUB_LLM_PROVIDER_NAME} ({base_url})", created)
 
         # The mock only answers to a model called "stub", which is not one of the globally
         # registered OpenAI models, so a pipeline node would have nothing to select.

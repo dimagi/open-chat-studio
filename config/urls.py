@@ -125,6 +125,11 @@ urlpatterns = [
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
 ]
 
+if settings.DEBUG:
+    # Mounted at the root rather than under ``service_providers/`` because the OpenAI SDK
+    # sends only a bearer token, and that include sits behind the team-scoped login.
+    urlpatterns.append(path("mock-llm/", include("apps.service_providers.mock_llm.urls")))
+
 if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls
 
