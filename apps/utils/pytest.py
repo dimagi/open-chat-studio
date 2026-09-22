@@ -1,4 +1,7 @@
 import pytest
+from django.core.management import call_command
+from django.db import transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 
 
 def django_db_with_data():
@@ -26,3 +29,24 @@ def django_db_transactional():
     with a live server). For most tests, use @pytest.mark.django_db() instead.
     """
     return django_db_with_data()
+
+
+def restore_serialized_database(connection: BaseDatabaseWrapper, serialized_contents: str) -> None:
+    """Put a reused test database back to the state it was serialized in.
+
+    A `django_db(transaction=True)` test flushes the database and lets `post_migrate` re-create
+    the content type and permission rows, which come back with new primary keys. Replaying the
+    snapshot on top of that would insert the old primary key for a natural key that already
+    exists, so the database is emptied first. Emptying it and refilling it share a transaction:
+    a restore that fails halfway would otherwise leave the reused database with nothing in it.
+    """
+    with transaction.atomic(using=connection.alias):
+        call_command(
+            "flush",
+            verbosity=0,
+            interactive=False,
+            database=connection.alias,
+            reset_sequences=False,
+            inhibit_post_migrate=True,
+        )
+        connection.creation.deserialize_db_from_string(serialized_contents)
