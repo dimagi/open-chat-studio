@@ -88,7 +88,11 @@ class TestParseSheet:
 
     def test_skips_fully_blank_lines(self):
         sheet = parse_sheet(b"a,b\n1,2\n\n3,4\n", filename="faq.csv")
-        assert [row.row_number for row in sheet.rows] == [1, 2]
+        assert [row.row_number for row in sheet.rows] == [1, 3]
+
+    def test_skips_a_row_of_only_delimiters_and_keeps_its_row_number_for_the_next_row(self):
+        sheet = parse_sheet(b"a,b\n1,2\n,\n3,4\n", filename="faq.csv")
+        assert [row.row_number for row in sheet.rows] == [1, 3]
 
     def test_empty_cell_is_stored_as_empty_string(self):
         sheet = parse_sheet(b"a,b\n1,\n", filename="faq.csv")
@@ -116,6 +120,11 @@ class TestParseSheet:
     def test_rejects_unsupported_extension(self):
         with pytest.raises(RowImportError, match="csv or tsv"):
             parse_sheet(FAQ, filename="faq.xlsx")
+
+    def test_wraps_a_csv_field_size_error(self):
+        data = b"a,b\n" + b"x" * 200_000 + b",2\n"
+        with pytest.raises(RowImportError, match="Could not parse"):
+            parse_sheet(data, filename="faq.csv")
 
 
 class TestRenderRow:

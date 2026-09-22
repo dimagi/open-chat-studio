@@ -48,17 +48,21 @@ def parse_sheet(data: bytes, *, filename: str, max_rows: int | None = None) -> P
         delimiter = _sniff_delimiter(text)
 
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
-    headers = _read_headers(reader)
-    rows: list[ParsedRow] = []
-    for values in reader:
-        if not any(value.strip() for value in values):
-            continue
-        row_number = len(rows) + 1
-        if len(values) != len(headers):
-            raise RowImportError(f"Row {row_number} has {len(values)} values but the header has {len(headers)}")
-        if row_number > max_rows:
-            raise RowImportError(f"The file has more than {max_rows} rows")
-        rows.append(ParsedRow(row_number=row_number, values=dict(zip(headers, values, strict=True))))
+    try:
+        headers = _read_headers(reader)
+        rows: list[ParsedRow] = []
+        kept_rows = 0
+        for row_number, values in enumerate(reader, start=1):
+            if not any(value.strip() for value in values):
+                continue
+            if len(values) != len(headers):
+                raise RowImportError(f"Row {row_number} has {len(values)} values but the header has {len(headers)}")
+            kept_rows += 1
+            if kept_rows > max_rows:
+                raise RowImportError(f"The file has more than {max_rows} rows")
+            rows.append(ParsedRow(row_number=row_number, values=dict(zip(headers, values, strict=True))))
+    except csv.Error as exc:
+        raise RowImportError(f"Could not parse the file: {exc}") from None
     if not rows:
         raise RowImportError("The file has no data rows")
     return ParsedSheet(headers=headers, rows=rows)
