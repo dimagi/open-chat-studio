@@ -1,4 +1,4 @@
-# Feature Flags
+# Feature Flags Admin Guide
 
 Feature flags let you turn features on or off without deploying code. For implementation details, see the [developer guide](../developer_guides/code_systems/feature_flags.md).
 
