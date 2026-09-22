@@ -10,9 +10,11 @@ from apps.channels.pipeline import (
 from apps.chat.exceptions import (
     AudioTranscriptionException,
     ChatException,
+    ModelRefusedTurnError,
     ProviderConfigurationError,
     UserActionableError,
 )
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -390,6 +392,104 @@ class TestErrorMessageGeneration:
         pipeline = _pipeline()
 
         result = pipeline._generate_error_message(ctx, RuntimeError("original"))
+
+        assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+
+
+class TestModelRefusedTurn:
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_records_the_outcome_on_the_reply_and_the_human_message(self, mock_gen):
+        mock_gen.return_value = "I can't answer that one."
+        human = MagicMock()
+        human.metadata = {}
+        error = ModelRefusedTurnError("content_filter", "SAFETY", {"safety_ratings": []})
+        ctx = make_context(human_message=human)
+
+        _pipeline(core=[_make_stage(side_effect=error)], terminal=[_make_stage()]).process(ctx)
+
+        expected = {"kind": "content_filter", "provider_reason": "SAFETY"}
+        assert ctx.early_exit_metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
+        assert human.metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
+        human.save.assert_called_once_with(update_fields=["metadata"])
+        assert ctx.processing_errors == []
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_marks_the_human_message_before_the_reply_is_generated(self, mock_gen):
+        """EventBot reads the chat history, so the mark has to be on the record first."""
+        human = MagicMock()
+        human.metadata = {}
+        seen = []
+        mock_gen.side_effect = lambda ctx, e: seen.append(dict(human.metadata)) or "reply"
+        ctx = make_context(human_message=human)
+
+        _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
+
+        assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in seen[0]
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_tolerates_a_missing_human_message(self, mock_gen):
+        mock_gen.return_value = "reply"
+        ctx = make_context(human_message=None)
+
+        _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
+
+        assert ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]["kind"] == "refusal"
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_a_plain_user_actionable_error_sets_no_metadata(self, mock_gen):
+        mock_gen.return_value = "reply"
+        ctx = make_context()
+
+        _pipeline(core=[_make_stage(side_effect=UserActionableError("x"))], terminal=[]).process(ctx)
+
+        assert ctx.early_exit_metadata == {}
+
+
+class TestErrorSpanAndFallback:
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_error_span_carries_the_outcome(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.return_value = "reply"
+        error = ModelRefusedTurnError("content_filter", "SAFETY", {"safety_ratings": [{"blocked": True}]})
+
+        _pipeline()._generate_error_message(make_context(), error)
+
+        metadata = mock_trace_info.call_args.kwargs["metadata"]
+        assert metadata["error"] == str(error)
+        assert metadata["model_turn_outcome"] == "content_filter"
+        assert metadata["provider_reason"] == "SAFETY"
+        assert metadata["detail"] == {"safety_ratings": [{"blocked": True}]}
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_failure_on_a_user_actionable_error_replies_with_its_text(
+        self, mock_trace_info, mock_event_bot_cls, caplog
+    ):
+        mock_event_bot_cls.return_value.get_user_message.side_effect = RuntimeError("filtered too")
+        error = ModelRefusedTurnError("refusal")
+
+        with caplog.at_level("INFO", logger="ocs.channels"):
+            result = _pipeline()._generate_error_message(make_context(), error)
+
+        assert result == str(error)
+        assert not [r for r in caplog.records if r.levelname == "ERROR"]
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_empty_reply_on_a_user_actionable_error_replies_with_its_text(
+        self, mock_trace_info, mock_event_bot_cls
+    ):
+        mock_event_bot_cls.return_value.get_user_message.return_value = ""
+        error = UserActionableError("`x.bmp` is not a supported image type")
+
+        assert _pipeline()._generate_error_message(make_context(), error) == str(error)
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_empty_reply_on_another_error_uses_the_default_text(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.return_value = ""
+
+        result = _pipeline()._generate_error_message(make_context(), RuntimeError("boom"))
 
         assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
 

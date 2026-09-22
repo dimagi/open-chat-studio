@@ -142,11 +142,13 @@ class ChatMessageMetadataKeys(StrEnum):
     TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
     # History / compression
     COMPRESSION_MARKER = "compression_marker"
+    # Model turn outcome (refused or filtered), on the reply and the human message that led to it
+    MODEL_TURN_OUTCOME = "model_turn_outcome"
 
     @classmethod
     def internal_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
         """Metadata keys that should be excluded from the API response."""
-        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT})
+        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT, cls.MODEL_TURN_OUTCOME})
 
     @classmethod
     def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:

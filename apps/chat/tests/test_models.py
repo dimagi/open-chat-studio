@@ -1,7 +1,7 @@
 import pytest
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.pipelines.models import PipelineChatHistoryModes
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -100,3 +100,8 @@ class TestEmptyHumanMessageReplay:
         messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
 
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
+
+
+def test_model_turn_outcome_is_an_internal_metadata_key():
+    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in ChatMessageMetadataKeys.internal_keys()
+    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME not in ChatMessageMetadataKeys.attachment_keys()
