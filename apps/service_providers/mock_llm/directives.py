@@ -8,6 +8,8 @@ from .lorem import SENTENCE_COUNTS
 DEFAULT_SLOW_SECONDS = 5.0
 DEFAULT_ERROR_STATUS = 500
 DEFAULT_LENGTH = "medium"
+# A delay holds a request thread, so a typo like "slow 100000" must not strand one for a day.
+MAX_SLOW_SECONDS = 120.0
 
 # Error codes whose HTTP status is implied, so "error insufficient_quota" is enough.
 CODE_STATUSES = {
@@ -30,7 +32,10 @@ STATUS_CODES = {
 
 _LENGTH_RE = re.compile(rf"\b({'|'.join(SENTENCE_COUNTS)})\b", re.IGNORECASE)
 _SLOW_RE = re.compile(r"\bslow\b(?:\s+(\d+(?:\.\d+)?))?", re.IGNORECASE)
-_ERROR_RE = re.compile(rf"\berror\b(?:\s+(\d{{3}}|{'|'.join(CODE_STATUSES)}))?", re.IGNORECASE)
+# Only a 4xx or 5xx counts as a status, so "error 200" and "error 999" fall back to the
+# default rather than reaching Django with a status it refuses to serve. The trailing
+# boundary keeps "error 4291" from silently meaning "error 429".
+_ERROR_RE = re.compile(rf"\berror\b(?:\s+([45]\d{{2}}\b|{'|'.join(CODE_STATUSES)}))?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -49,13 +54,20 @@ class Directives:
 def parse_directives(text: str) -> Directives:
     """Read the response-shaping keywords out of a user message."""
     lengths = _LENGTH_RE.findall(text)
-    slow = _SLOW_RE.search(text)
     return Directives(
         # Last one wins, so "short, no wait, make it long" does what it says.
         length=lengths[-1].lower() if lengths else DEFAULT_LENGTH,
-        delay_seconds=float(slow.group(1)) if slow and slow.group(1) else (DEFAULT_SLOW_SECONDS if slow else 0.0),
+        delay_seconds=_parse_delay(text),
         error=_parse_error(text),
     )
+
+
+def _parse_delay(text: str) -> float:
+    match = _SLOW_RE.search(text)
+    if not match:
+        return 0.0
+    seconds = float(match.group(1)) if match.group(1) else DEFAULT_SLOW_SECONDS
+    return min(seconds, MAX_SLOW_SECONDS)
 
 
 def _parse_error(text: str) -> ErrorDirective | None:
