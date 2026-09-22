@@ -3,11 +3,11 @@
 import re
 from dataclasses import dataclass
 
+from .lorem import SENTENCE_COUNTS
+
 DEFAULT_SLOW_SECONDS = 5.0
 DEFAULT_ERROR_STATUS = 500
 DEFAULT_LENGTH = "medium"
-
-SENTENCE_COUNTS = {"short": 1, "medium": 10, "long": 30}
 
 # Error codes whose HTTP status is implied, so "error insufficient_quota" is enough.
 CODE_STATUSES = {

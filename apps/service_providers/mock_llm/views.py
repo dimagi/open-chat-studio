@@ -10,11 +10,21 @@ from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import payloads
+from . import lorem, payloads
 from .directives import ErrorDirective, parse_directives
 
 # Rotates the wording so consecutive replies in one conversation aren't identical.
-responses_served = itertools.count()
+_responses_served = itertools.count()
+
+
+def next_response_index() -> int:
+    return next(_responses_served)
+
+
+def reset_response_index() -> None:
+    """Restart the rotation. For tests, which need to know the index a reply was built from."""
+    global _responses_served
+    _responses_served = itertools.count()
 
 
 def debug_only(view):
@@ -61,9 +71,9 @@ def chat_completions(request):
     if failure := _apply(directives):
         return failure
 
-    text = payloads.build_response_text(directives.length, index=next(responses_served))
-    prompt_tokens = payloads.count_tokens(payloads.prompt_text(messages))
-    completion_tokens = payloads.count_tokens(text)
+    text = lorem.build_response_text(directives.length, index=next_response_index())
+    prompt_tokens = lorem.count_tokens(payloads.prompt_text(messages))
+    completion_tokens = lorem.count_tokens(text)
     usage = {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
@@ -96,12 +106,12 @@ def responses(request):
     if failure := _apply(directives):
         return failure
 
-    text = payloads.build_response_text(directives.length, index=next(responses_served))
+    text = lorem.build_response_text(directives.length, index=next_response_index())
     envelope = payloads.response_envelope(
         model=payload.get("model") or payloads.MODEL_NAME,
         text=text,
-        input_tokens=payloads.count_tokens(payloads.prompt_text(items)),
-        output_tokens=payloads.count_tokens(text),
+        input_tokens=lorem.count_tokens(payloads.prompt_text(items)),
+        output_tokens=lorem.count_tokens(text),
     )
 
     if payload.get("stream"):

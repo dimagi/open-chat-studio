@@ -1,4 +1,3 @@
-import itertools
 import json
 
 import pytest
@@ -12,10 +11,12 @@ from apps.service_providers.mock_llm.directives import (
     ErrorDirective,
     parse_directives,
 )
-from apps.service_providers.mock_llm.payloads import (
-    MODEL_NAME,
+from apps.service_providers.mock_llm.lorem import (
     SENTENCES_PER_PARAGRAPH,
     build_response_text,
+)
+from apps.service_providers.mock_llm.payloads import (
+    MODEL_NAME,
     error_body,
     last_user_message,
 )
@@ -29,7 +30,7 @@ def _debug_on(settings):
 @pytest.fixture(autouse=True)
 def _reset_rotation():
     """Restart the wording rotation, so each test knows which `index` its reply was built from."""
-    views.responses_served = itertools.count()
+    views.reset_response_index()
 
 
 @pytest.mark.parametrize(
