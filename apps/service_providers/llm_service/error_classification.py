@@ -68,11 +68,13 @@ TOKEN_LIMIT_MESSAGE = (
 )
 
 
-def translate_provider_error(error: BaseException) -> ProviderConfigurationError | ModelRefusedTurnError | None:
+def translate_provider_error(
+    error: BaseException | None,
+) -> ProviderConfigurationError | ModelRefusedTurnError | None:
     """Return the actionable error this provider exception represents, or None.
 
-    None covers both "transient, so leave the native type alone for the retry policy"
-    and "not a provider error at all".
+    None covers "transient, so leave the native type alone for the retry policy", "not a
+    provider error at all", and no error at all.
 
     The whole ``__cause__`` chain is examined because LangChain's provider adapters
     re-raise the SDK exception wrapped in one of their own -- langchain-google-genai

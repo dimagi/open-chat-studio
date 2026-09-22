@@ -344,8 +344,10 @@ class MessageProcessingPipeline:
         return message or self._fallback_reply(exception)
 
     def _fallback_reply(self, exception: Exception) -> str:
-        # A participant-actionable message is already written for the participant; anything else
-        # gets the canned text. An empty reply would otherwise be sent as nothing at all.
+        """Return the exception's own message for a participant-actionable error, the canned text otherwise.
+
+        An empty reply would otherwise be sent as nothing at all.
+        """
         if isinstance(exception, UserActionableError):
             return str(exception)
         return self.DEFAULT_ERROR_RESPONSE_TEXT

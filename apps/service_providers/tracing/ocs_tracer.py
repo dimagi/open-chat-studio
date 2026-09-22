@@ -375,6 +375,7 @@ def _error_arg(args, kwargs) -> BaseException | None:
 
 
 def _is_participant_actionable(error: BaseException | None) -> bool:
+    """Return whether the error, or what it translates to, is one the participant can act on."""
     # LangChain reports a provider exception before the node boundary translates it, so the
     # translation has to be consulted here as well as the type.
     return isinstance(error, UserActionableError) or isinstance(translate_provider_error(error), UserActionableError)

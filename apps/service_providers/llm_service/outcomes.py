@@ -94,11 +94,13 @@ def refusal_text(message: AIMessage) -> str:
 
 
 def _prompt_block_reason(metadata: dict) -> int | str | None:
+    """Return Gemini's prompt block reason from the metadata, or None if the prompt was not blocked."""
     feedback = metadata.get("prompt_feedback") or {}
     return feedback.get("block_reason") or None
 
 
 def _detail(metadata: dict) -> dict:
+    """Return the safety ratings and stop details found in the metadata, keyed by name and present only when set."""
     detail = {}
     if ratings := metadata.get("safety_ratings"):
         detail["safety_ratings"] = ratings

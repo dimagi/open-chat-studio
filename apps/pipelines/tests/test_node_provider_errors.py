@@ -83,5 +83,8 @@ def test_content_filter_400_in_a_router_ends_the_turn_with_the_participant_messa
     node._error = error
     router = node.build_router_function(edge_map={"output_0": "node-3"}, incoming_edges=[])
 
-    with pytest.raises(ModelRefusedTurnError):
+    with pytest.raises(ModelRefusedTurnError) as exc_info:
         router(_state(), {})
+
+    assert exc_info.value.kind == "content_filter"
+    assert str(exc_info.value) == "The last message was blocked by the provider's content filter."

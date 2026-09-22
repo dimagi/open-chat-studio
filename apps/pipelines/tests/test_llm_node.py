@@ -242,13 +242,14 @@ class TestExecuteSubAgentOutcomes:
             run()
 
     def test_logs_the_kind_and_stop_reason_only(self, monkeypatch, caplog):
-        message = AIMessage(content="secret text", response_metadata={"stop_reason": "refusal"})
+        message = AIMessage(content="secret text", response_metadata={"finish_reason": "SAFETY"})
         _, run = self._run(monkeypatch, [message])
 
         with caplog.at_level(logging.INFO, logger="ocs.pipelines.nodes"), pytest.raises(ModelRefusedTurnError):
             run()
 
-        assert "refusal" in caplog.text
+        assert "content_filter" in caplog.text
+        assert "SAFETY" in caplog.text
         assert "secret text" not in caplog.text
 
     def test_truncated_answer_is_delivered_and_logged(self, monkeypatch, caplog):

@@ -25,7 +25,11 @@ CASES = [
     ),
     pytest.param(_tool_call_message(), "answered", "", id="tool_call_turn"),
     pytest.param(
-        AIMessage(content="", additional_kwargs={"refusal": "I cannot help with that."}),
+        AIMessage(
+            content="",
+            additional_kwargs={"refusal": "I cannot help with that."},
+            response_metadata={"finish_reason": "stop"},
+        ),
         "refusal",
         "refusal",
         id="openai_chat_completions_refusal",
