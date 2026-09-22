@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage
 from apps.chat.exceptions import EmptyModelResponseError, ModelRefusedTurnError, ProviderConfigurationError
 from apps.service_providers.llm_service.outcomes import (
     TurnOutcome,
+    _refusal_block,
     classify_turn,
     provider_reason,
     raise_for_outcome,
@@ -228,6 +229,10 @@ def test_refusal_text_skips_a_leading_non_refusal_block():
     message = AIMessage(content=[{"type": "text", "text": "partial"}, {"type": "refusal", "refusal": "no"}])
 
     assert refusal_text(message) == "no"
+
+
+def test_refusal_block_skips_a_non_dict_block():
+    assert _refusal_block("text") == ""
 
 
 def test_provider_reason_for_responses_api_incomplete():

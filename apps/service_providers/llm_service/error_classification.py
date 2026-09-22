@@ -164,8 +164,10 @@ def _content_filter_detail(error: openai.BadRequestError) -> dict:
     # The SDK strips the outer ``error`` envelope, so ``innererror`` sits at the top of ``body``;
     # ``body`` is a string for a non-JSON response and None when the response was closed unread.
     body = error.body if isinstance(error.body, dict) else {}
-    inner = body.get("innererror") or {}
-    return inner.get("content_filter_result") or {}
+    inner = body.get("innererror")
+    inner = inner if isinstance(inner, dict) else {}
+    result = inner.get("content_filter_result")
+    return result if isinstance(result, dict) else {}
 
 
 def _openai_codes(error: BaseException) -> set[str]:

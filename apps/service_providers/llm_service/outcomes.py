@@ -131,12 +131,15 @@ def refusal_text(message: AIMessage) -> str:
     return ""
 
 
-def _refusal_block(block: dict) -> str:
+def _refusal_block(block: object) -> str:
     """Return the refusal text in a content block, or an empty string when the block carries none."""
+    if not isinstance(block, dict):
+        return ""
     # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
     value = block.get("value") if block.get("type") == "non_standard" else block
     if isinstance(value, dict) and value.get("type") == "refusal":
-        return value.get("refusal", "")
+        refusal = value.get("refusal", "")
+        return refusal if isinstance(refusal, str) else ""
     return ""
 
 

@@ -302,6 +302,10 @@ class TestContentFilter400:
         [
             pytest.param({"code": "content_filter"}, id="no_innererror"),
             pytest.param({"code": "content_filter", "innererror": None}, id="innererror_none"),
+            pytest.param(
+                {"code": "content_filter", "innererror": "ResponsibleAIPolicyViolation"},
+                id="innererror_is_text",
+            ),
             pytest.param("The response was filtered", id="body_is_text"),
             pytest.param(None, id="body_is_none"),
         ],

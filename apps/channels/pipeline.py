@@ -294,9 +294,9 @@ class MessageProcessingPipeline:
         outcome = getattr(error, "message_metadata", None)
         if not outcome:
             return
-        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: outcome}
+        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: dict(outcome)}
         if ctx.human_message is not None:
-            ctx.human_message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = outcome
+            ctx.human_message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = dict(outcome)
             ctx.human_message.save(update_fields=["metadata"])
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:

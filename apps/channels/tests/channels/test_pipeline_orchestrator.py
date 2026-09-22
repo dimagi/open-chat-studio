@@ -410,6 +410,10 @@ class TestModelRefusedTurn:
         expected = {"kind": "content_filter", "provider_reason": "SAFETY"}
         assert ctx.early_exit_metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
         assert human.metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
+        assert (
+            ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]
+            is not human.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]
+        )
         human.save.assert_called_once_with(update_fields=["metadata"])
         assert ctx.processing_errors == []
 
