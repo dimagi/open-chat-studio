@@ -25,6 +25,7 @@ from apps.chat.agent.tools import (
     SearchToolConfig,
     _convert_to_sync_tool,
     _format_metadata_block,
+    _format_row_block,
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
@@ -562,6 +563,32 @@ class TestSearchIndexTool:
         assert "source_type" not in result
         assert "citation_url" not in result
 
+    def test_action_includes_row_metadata_in_its_own_block(self, team, local_index_manager_mock):
+        collection = CollectionFactory.create(team=team)
+        file = FileFactory.create(team=team, name="faq.csv", metadata={"source": "feed"})
+        vector_data = self.load_vector_data()
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=12,
+            page_number=12,
+            text="Apples are great",
+            embedding=vector_data["Apples are great"],
+            metadata={"language": "en", "source": "sheet column", "district": ""},
+        )
+
+        local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
+        search_config = SearchToolConfig(index_id=collection.id, max_results=1, generate_citations=False)
+        result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
+
+        assert "<row>" in result
+        assert "<row_number>12</row_number>" in result
+        assert "<language>en</language>" in result
+        # A sheet column named like a blocklisted file key is still shown: the blocklist covers file metadata only.
+        assert "<source>sheet column</source>" in result
+        assert "<district>" not in result
+
 
 class TestFormatMetadataBlock:
     def test_empty_metadata_returns_empty_string(self):
@@ -595,6 +622,16 @@ class TestFormatMetadataBlock:
         block = _format_metadata_block({"title": "Q&A <draft>", "authors": ["A & B"]})
         assert "<title>Q&amp;A &lt;draft&gt;</title>" in block
         assert "<authors>A &amp; B</authors>" in block
+
+
+class TestFormatRowBlock:
+    def test_text_chunk_has_no_row_block(self):
+        chunk = FileChunkEmbedding(metadata=None, page_number=0)
+        assert _format_row_block(chunk) == ""
+
+    def test_row_chunk_with_no_metadata_columns_still_names_the_row(self):
+        chunk = FileChunkEmbedding(metadata={}, page_number=3)
+        assert _format_row_block(chunk) == "\n  <row>\n    <row_number>3</row_number>\n  </row>"
 
 
 def test_tools_present():

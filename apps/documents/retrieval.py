@@ -38,7 +38,7 @@ logger = logging.getLogger("ocs.retrieval")
 # field set does not silently differ between call sites and trigger per-row queries later.
 # `context` is here for `contextualized_text`, which is what the rerank stage scores: leaving it
 # deferred would turn one query into one per candidate the moment reranking was switched on.
-_RESULT_ONLY_FIELDS = ("text", "context", "file__name", "file__metadata")
+_RESULT_ONLY_FIELDS = ("text", "context", "page_number", "metadata", "file__name", "file__metadata")
 
 # Upper bound on the conversation context prepended to the reranker's query. Voyage clips the
 # query-document pair to the model's context window, so an unbounded context would eat the room
