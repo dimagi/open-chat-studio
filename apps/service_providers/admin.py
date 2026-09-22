@@ -3,7 +3,6 @@ from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.safestring import SafeString
 
-from apps.pipelines.models import Node
 from apps.utils.admin import ReadonlyAdminMixin
 
 from .models import (
@@ -29,8 +28,7 @@ class LlmProviderModelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     readonly_fields = ["related_nodes"]
 
     def related_nodes(self, obj):
-        nodes = Node.objects.filter(params__llm_provider_model_id=str(obj.id))
-        pipelines = {node.pipeline for node in nodes}
+        pipelines = {node.pipeline for node in obj.nodes.select_related("pipeline")}
         return format_html_join(
             SafeString("<br>"),
             '<a href="{}">{}</a>',
