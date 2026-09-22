@@ -79,9 +79,7 @@ nobody has asked for it.
 
 ```python
 # AnnotationQueue
-field_order = ArrayField(
-    models.CharField(max_length=255), default=list, blank=True, null=True
-)
+field_order = ArrayField(models.CharField(max_length=255), default=list, blank=True, null=True)
 ```
 
 `ArrayField(CharField(...), default=list, blank=True)` is the established idiom

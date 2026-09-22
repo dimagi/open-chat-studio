@@ -141,15 +141,16 @@ Then add the field to `AnnotationQueue`, directly after the existing `schema` de
 Replace the existing `get_field_definitions` method (currently at `models.py:113`) with these two methods:
 
 ```python
-    def ordered_field_names(self) -> list[str]:
-        """Field names in display order, reconciled against the current schema."""
-        known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
-        return known + [name for name in self.schema if name not in known]
+def ordered_field_names(self) -> list[str]:
+    """Field names in display order, reconciled against the current schema."""
+    known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
+    return known + [name for name in self.schema if name not in known]
 
-    def get_field_definitions(self) -> dict[str, FieldDefinition]:
-        """Parse the raw JSON schema into typed FieldDefinition objects, in display order."""
-        adapter = TypeAdapter(FieldDefinition)
-        return {name: adapter.validate_python(self.schema[name]) for name in self.ordered_field_names()}
+
+def get_field_definitions(self) -> dict[str, FieldDefinition]:
+    """Parse the raw JSON schema into typed FieldDefinition objects, in display order."""
+    adapter = TypeAdapter(FieldDefinition)
+    return {name: adapter.validate_python(self.schema[name]) for name in self.ordered_field_names()}
 ```
 
 - [ ] **Step 5: Create the migration**
@@ -367,33 +368,34 @@ And add it to `Meta.fields`:
 Add these two methods to `AnnotationQueueForm`, after `clean_schema` / `_validate_locked_schema_change`:
 
 ```python
-    def clean_field_order(self):
-        raw = self.cleaned_data.get("field_order")
-        if not raw:
-            return []
+def clean_field_order(self):
+    raw = self.cleaned_data.get("field_order")
+    if not raw:
+        return []
 
-        if isinstance(raw, list):
-            data = raw
-        else:
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError as e:
-                raise ValidationError(f"Invalid JSON: {e}") from e
+    if isinstance(raw, list):
+        data = raw
+    else:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ValidationError(f"Invalid JSON: {e}") from e
 
-        if not isinstance(data, list) or not all(isinstance(name, str) for name in data):
-            raise ValidationError("Field order must be a list of field names")
+    if not isinstance(data, list) or not all(isinstance(name, str) for name in data):
+        raise ValidationError("Field order must be a list of field names")
 
-        return data
+    return data
 
-    def clean(self):
-        cleaned = super().clean()
-        schema = cleaned.get("schema")
-        field_order = cleaned.get("field_order")
-        # An absent field_order is valid: the resolver falls back to schema order. Only a
-        # non-empty one is held to matching the schema exactly.
-        if schema and field_order and set(field_order) != set(schema):
-            raise ValidationError("Field order must list exactly the schema's fields.")
-        return cleaned
+
+def clean(self):
+    cleaned = super().clean()
+    schema = cleaned.get("schema")
+    field_order = cleaned.get("field_order")
+    # An absent field_order is valid: the resolver falls back to schema order. Only a
+    # non-empty one is held to matching the schema exactly.
+    if schema and field_order and set(field_order) != set(schema):
+        raise ValidationError("Field order must list exactly the schema's fields.")
+    return cleaned
 ```
 
 Do **not** touch `_validate_locked_schema_change`. It compares `schema` only, so a re-order passes it untouched — that is the design, and the locked-queue test proves it.
