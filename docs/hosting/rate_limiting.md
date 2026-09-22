@@ -5,7 +5,7 @@ ships counting only. A new deployment records what it would have blocked without
 away, and enforcement is switched on separately once you have numbers to set it from.
 
 This page covers the switch-on. The variables themselves are listed in the
-[Configuration Reference](configuration.md), and the reasoning behind an in-house limiter rather
+[Configuration Reference](configuration.md#rate-limiting), and the reasoning behind an in-house limiter rather
 than a library is in
 [ADR-0052](https://github.com/dimagi/open-chat-studio/blob/main/docs/adr/0052-app-layer-rate-limiting-mechanism.md).
 
