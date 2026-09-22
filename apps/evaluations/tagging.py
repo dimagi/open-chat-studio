@@ -14,7 +14,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
-from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType
+from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType, Evaluator
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         EvaluationMessage,
         EvaluationResult,
         EvaluationRun,
-        Evaluator,
         EvaluatorTagRule,
     )
 
@@ -192,7 +191,7 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     if run.type == EvaluationRunType.PREVIEW:
         return
 
-    evaluators = list(run.config.evaluators.prefetch_related("tag_rules").all())
+    evaluators = list(Evaluator.objects.filter(id__in=run.evaluator_ids).prefetch_related("tag_rules"))
     possible_tags = _get_possible_tags(evaluators)
     if not possible_tags:
         return

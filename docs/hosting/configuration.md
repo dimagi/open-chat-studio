@@ -1,5 +1,9 @@
 # Configuration Reference
 
+This page lists the environment variables used by self-hosted deployments. Start with the
+[Self-Hosting overview](./index.md) to choose a deployment method and understand the required
+services.
+
 All configuration is via environment variables. In production, set `DJANGO_SETTINGS_MODULE=config.settings_production`.
 
 ## Required
@@ -56,10 +60,12 @@ These apply whether the connection comes from `DATABASE_URL` or the variables ab
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS` | `36000` | Lifetime of OAuth2 access tokens issued at `/o/token/`. |
 | `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS` | `60` | Lifetime of a client-credentials access token requested with the `chat:start` scope alone. Such a token is meant to be handed to the chat widget in a browser, so it is kept short. Authorization-code tokens, and tokens that carry other scopes, get `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS`. |
-| `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
+| `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. See [Health Check](./index.md#health-check) |
 | `DATA_UPLOAD_MAX_MEMORY_SIZE` | `10485760` (10 MB) | Largest request body Django will buffer in memory, bounding the JSON API, web-UI form posts and channel webhooks alike. See the [Django docs](https://docs.djangoproject.com/en/stable/ref/settings/#data-upload-max-memory-size). |
 
 ## Rate Limiting
+
+For rollout guidance and enforcement behavior, see the [Rate Limiting guide](./rate_limiting.md).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -213,7 +219,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 
 ## Zero Trust Access (optional)
 
-Required only when using [Cloudflare Tunnel](./cloudflare_tunnel.md) as the Zero Trust access layer. Not needed for standard reverse-proxy deployments.
+Required only when using [Cloudflare Tunnel](./cloudflare_tunnel.md) as the [Zero Trust access](./zero_trust_access.md) layer. Not needed for standard reverse-proxy deployments.
 
 | Variable | Description |
 |----------|-------------|

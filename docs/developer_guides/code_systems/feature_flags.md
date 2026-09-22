@@ -5,6 +5,7 @@ Open Chat Studio uses [Django Waffle](https://waffle.readthedocs.io/) for featur
 ## Overview
 
 Feature flags in Open Chat Studio are:
+
 - **Team-scoped**: Flags can be enabled/disabled per team
 - **Database-driven**: Stored in the database and configurable via a [custom admin page](../../admin_guides/feature_flags.md)
 - **Cached**: Uses Redis for performance
