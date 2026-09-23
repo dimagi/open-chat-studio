@@ -992,7 +992,6 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             {
                 "chunk_size": chunking_strategy.chunk_size if chunking_strategy else None,
                 "chunk_overlap": chunking_strategy.chunk_overlap if chunking_strategy else None,
-                "is_row_import": collection_file.row_import is not None,
                 "collection": collection_file.collection,
                 "file": collection_file.file,
                 "breadcrumbs": [
