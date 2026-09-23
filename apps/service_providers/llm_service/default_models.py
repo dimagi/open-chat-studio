@@ -14,10 +14,10 @@ from apps.service_providers.llm_service.model_parameters import (
     GPT5Parameters,
     GPT5ProParameters,
     GPT6Parameters,
+    GPT6SolParameters,
     GPT51Parameters,
     GPT52Parameters,
     GPT55Parameters,
-    GPT6SolParameters,
     OpenAIReasoningParameters,
 )
 from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
