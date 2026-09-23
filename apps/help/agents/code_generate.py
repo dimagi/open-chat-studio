@@ -75,13 +75,20 @@ class CodeGenerateAgent(BaseHelpAgent[CodeGenerateInput, CodeGenerateOutput]):
         prompt_context = {"current_code": "", "error": ""}
 
         if current_code:
-            prompt_context["current_code"] = f"The current function definition is:\n\n{current_code}"
+            prompt_context["current_code"] = (
+                f"The current function definition is:\n\n{current_code}\n\n"
+                "IMPORTANT: Make the smallest possible edit to satisfy the request. Preserve "
+                "existing logic, structure, comments, and variable names that are not directly "
+                "relevant to the requested change. Do not rewrite or reformat unrelated code."
+            )
         if error:
             prompt_context["error"] = f"\nThe current function has the following error. Try to resolve it:\n\n{error}"
 
         system_prompt = system_prompt.format(**prompt_context).strip()
         system_prompt += (
-            "\n\nIMPORTANT: Start your response with exactly"
-            " `def main(input: str, **kwargs) -> str:` and nothing else before it."
+            "\n\nIMPORTANT: Respond with only Python code — no markdown code fences and no prose"
+            " before or after the code. Comment lines (starting with `#`) above the function, such as"
+            " documentation comments, are allowed and should be preserved if already present in the"
+            " current code. The code must define `def main(input: str, **kwargs) -> str:`."
         )
         return system_prompt

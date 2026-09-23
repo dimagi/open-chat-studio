@@ -1,6 +1,8 @@
-import {afterEach, beforeEach, describe, expect, test, vi} from "vitest";
-import {Edge, Node} from "reactflow";
+import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi} from "vitest";
+import {Edge, Node, NodeProps} from "reactflow";
 import usePipelineStore, {withTemporalPaused} from "./pipelineStore";
+import useEditorStore from "./editorStore";
+import {NodeData} from "../types/nodeParams";
 
 const nodeA: Node = {id: "a", type: "pipelineNode", position: {x: 0, y: 0}, data: {type: "LLMResponse", params: {}}};
 const nodeB: Node = {id: "b", type: "pipelineNode", position: {x: 100, y: 0}, data: {type: "LLMResponse", params: {}}};
@@ -15,10 +17,14 @@ function flushThrottle() {
   vi.advanceTimersByTime(500);
 }
 
+// The store is a singleton that nothing resets between tests, so every test that sets one of
+// these leaks it into whatever runs next.
+function resetStore() {
+  usePipelineStore.setState({readOnly: false, currentPipeline: undefined, dirty: false});
+}
+
 function seed() {
-  // readOnly is reset explicitly: nothing else in this file resets it after a test sets it,
-  // so without this a read-only test leaks readOnly: true into whatever runs next.
-  usePipelineStore.setState({readOnly: false});
+  resetStore();
   usePipelineStore.getState().resetFlow({nodes: [nodeA, nodeB], edges: [edgeAB]});
   usePipelineStore.temporal.getState().clear();
 }
@@ -40,15 +46,77 @@ function seedCurrentPipeline() {
   });
 }
 
-describe("pipelineStore undo/redo", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    seed();
-  });
+// changeNodeType reads the node schemas through getCachedData(), which pulls them out of these
+// script tags once and caches the result for the lifetime of the module.
+const SCHEMA_SCRIPTS: Record<string, unknown> = {
+  "parameter-values": {},
+  "default-values": {},
+  "node-schemas": [
+    {
+      title: "LLMResponse",
+      "ui:label": "LLM",
+      "ui:flow_node_type": "pipelineNode",
+      "ui:can_add": true,
+      properties: {prompt: {type: "string", default: "Say hi"}},
+    },
+    {
+      title: "AssistantNode",
+      "ui:label": "Assistant",
+      "ui:flow_node_type": "pipelineNode",
+      "ui:can_add": true,
+      properties: {},
+    },
+    {
+      title: "RouterNode",
+      "ui:label": "Router",
+      "ui:flow_node_type": "pipelineNode",
+      "ui:can_add": true,
+      properties: {keywords: {type: "array"}},
+    },
+  ],
+  "flags-enabled": [],
+  "llm-model-params": {},
+  "llm-model-parameter-schemas": {},
+};
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+// `alertify` is a global the Django templates load, so the store reaches for it without an
+// import and it is simply absent here.
+const alertifyWarning = vi.fn();
+
+beforeAll(() => {
+  vi.stubGlobal("alertify", {error: vi.fn(), success: vi.fn(), warning: alertifyWarning});
+  for (const [id, data] of Object.entries(SCHEMA_SCRIPTS)) {
+    const el = document.createElement("script");
+    el.type = "application/json";
+    el.id = id;
+    el.textContent = JSON.stringify(data);
+    document.body.appendChild(el);
+  }
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+  for (const id of Object.keys(SCHEMA_SCRIPTS)) {
+    document.getElementById(id)?.remove();
+  }
+});
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  // Drain the throttled history handler before handing the clock back. The throttle is one
+  // instance shared for the life of the store, so a pending trailing call would be counted
+  // against the next test's history. Clearing the timers then drops the autosave a mutation
+  // leaves behind, which would otherwise fire on a later test's clock and reach the network.
+  flushThrottle();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
+describe("pipelineStore undo/redo", () => {
+  beforeEach(seed);
 
   test("undo restores a deleted node and its connected edge", () => {
     usePipelineStore.getState().deleteNode("b");
@@ -208,5 +276,275 @@ describe("pipelineStore undo/redo", () => {
     usePipelineStore.getState().redoLastChange();
 
     expect(usePipelineStore.getState().nodes.map((n) => n.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+
+describe("pipelineStore changeNodeType", () => {
+  const nodeC: Node = {id: "c", type: "pipelineNode", position: {x: 200, y: 0}, data: {type: "LLMResponse", params: {}}};
+  const nodeD: Node = {id: "d", type: "pipelineNode", position: {x: 200, y: 100}, data: {type: "LLMResponse", params: {}}};
+  const chainAB: Edge = {id: "a-b", source: "a", sourceHandle: "output", target: "b", targetHandle: "input"};
+  const chainBC: Edge = {id: "b-c", source: "b", sourceHandle: "output", target: "c", targetHandle: "input"};
+
+  // a -> b -> c, so b has exactly one edge on each side.
+  function seedChain(middle: Node = nodeB, outgoingHandle = "output") {
+    resetStore();
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, middle, nodeC],
+      edges: [chainAB, {...chainBC, sourceHandle: outgoingHandle}],
+    });
+    usePipelineStore.temporal.getState().clear();
+  }
+
+  function replacementNode() {
+    return usePipelineStore.getState().nodes.find((node) => !["a", "b", "c", "d"].includes(node.id));
+  }
+
+  // The editor store is a singleton too, so an open editor leaks into the next test.
+  function openEditorOn(node: Node) {
+    useEditorStore.getState().openEditorForNode({id: node.id, data: node.data} as NodeProps<NodeData>);
+  }
+
+  beforeEach(() => {
+    seedChain();
+    alertifyWarning.mockClear();
+    useEditorStore.getState().closeEditor();
+  });
+
+  test("swaps the node for one of the chosen type, in the same place and with that type's defaults", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const nodes = usePipelineStore.getState().nodes;
+    expect(nodes.map((node) => node.id)).not.toContain("b");
+    const replacement = replacementNode()!;
+    expect(replacement.data.type).toBe("AssistantNode");
+    expect(replacement.data.label).toBe("Assistant");
+    expect(replacement.position).toEqual(nodeB.position);
+  });
+
+  test("the replacement keeps the old node's name, so references to its output still resolve", () => {
+    seedChain({...nodeB, data: {type: "LLMResponse", params: {name: "Triage"}}});
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(replacementNode()!.data.params.name).toBe("Triage");
+  });
+
+  test("a node with no name of its own takes the replacement's id, as a freshly dropped node does", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const replacement = replacementNode()!;
+    expect(replacement.data.params.name).toBe(replacement.id);
+  });
+
+  test("the replacement starts from the new type's default params", () => {
+    seedChain({...nodeB, data: {type: "AssistantNode", params: {}}});
+
+    usePipelineStore.getState().changeNodeType("b", "LLMResponse");
+
+    expect(replacementNode()!.data.params.prompt).toBe("Say hi");
+  });
+
+  test("the replacement keeps the old node's colour", () => {
+    seedChain({...nodeB, data: {type: "LLMResponse", params: {color: "bg-red-100 dark:bg-red-950"}}});
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(replacementNode()!.data.params.color).toBe("bg-red-100 dark:bg-red-950");
+  });
+
+  test("rewires the incoming edge and the single outgoing edge onto the replacement", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const newId = replacementNode()!.id;
+    const edges = usePipelineStore.getState().edges;
+    expect(edges).toHaveLength(2);
+    const incoming = edges.find((edge) => edge.source === "a")!;
+    expect(incoming.target).toBe(newId);
+    expect(incoming.targetHandle).toBe("input");
+    expect(edges.find((edge) => edge.target === "c")!.source).toBe(newId);
+  });
+
+  // A router's handles are output_0, output_1, ...; it has no plain "output" to inherit.
+  test.each([
+    {from: "LLMResponse", on: "output", to: "AssistantNode", lands: "output"},
+    {from: "LLMResponse", on: "output", to: "RouterNode", lands: "output_0"},
+    {from: "RouterNode", on: "output_2", to: "AssistantNode", lands: "output"},
+  ])("the single outgoing edge off a $from's $on lands on a $to's $lands", ({from, on, to, lands}) => {
+    seedChain({...nodeB, data: {type: from, params: {}}}, on);
+
+    usePipelineStore.getState().changeNodeType("b", to);
+
+    const outgoing = usePipelineStore.getState().edges.find((edge) => edge.target === "c")!;
+    expect(outgoing.source).toBe(replacementNode()!.id);
+    expect(outgoing.sourceHandle).toBe(lands);
+  });
+
+  test("drops every outgoing edge when the old node had more than one", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, {...nodeB, data: {type: "RouterNode", params: {}}}, nodeC, nodeD],
+      edges: [
+        chainAB,
+        {...chainBC, sourceHandle: "output_0"},
+        {id: "b-d", source: "b", sourceHandle: "output_1", target: "d", targetHandle: "input"},
+      ],
+    });
+
+    usePipelineStore.getState().changeNodeType("b", "LLMResponse");
+
+    const edges = usePipelineStore.getState().edges;
+    expect(edges).toHaveLength(1);
+    expect(edges[0].target).toBe(replacementNode()!.id);
+  });
+
+  test("keeps edges that never touched the node", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, nodeB, nodeC, nodeD],
+      edges: [chainAB, chainBC, {id: "c-d", source: "c", sourceHandle: "output", target: "d", targetHandle: "input"}],
+    });
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(usePipelineStore.getState().edges.find((edge) => edge.id === "c-d")).toEqual({
+      id: "c-d", source: "c", sourceHandle: "output", target: "d", targetHandle: "input",
+    });
+  });
+
+  test("the whole swap is a single undo step", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+    flushThrottle();
+
+    expect(usePipelineStore.temporal.getState().pastStates).toHaveLength(1);
+
+    usePipelineStore.temporal.getState().undo();
+
+    expect(usePipelineStore.getState().nodes.map((node) => node.id).sort()).toEqual(["a", "b", "c"]);
+    expect(usePipelineStore.getState().edges).toEqual([chainAB, chainBC]);
+  });
+
+  test("redo re-applies an undone swap", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+    flushThrottle();
+    const newId = replacementNode()!.id;
+    usePipelineStore.temporal.getState().undo();
+
+    usePipelineStore.temporal.getState().redo();
+
+    expect(usePipelineStore.getState().nodes.map((node) => node.id).sort()).toEqual(["a", "c", newId].sort());
+  });
+
+  test("triggers an autosave", () => {
+    seedCurrentPipeline();
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(usePipelineStore.getState().dirty).toBe(true);
+  });
+
+  test("rewires every incoming edge, giving each a distinct id", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, nodeB, nodeC, nodeD],
+      edges: [
+        chainAB,
+        {id: "d-b", source: "d", sourceHandle: "output", target: "b", targetHandle: "input"},
+      ],
+    });
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const newId = replacementNode()!.id;
+    const edges = usePipelineStore.getState().edges;
+    expect(edges).toHaveLength(2);
+    expect(edges.map((edge) => edge.target)).toEqual([newId, newId]);
+    expect(edges.map((edge) => edge.source).sort()).toEqual(["a", "d"]);
+    expect(new Set(edges.map((edge) => edge.id)).size).toBe(2);
+  });
+
+  // Both ends move to the new node, so the loop would have to be rewired onto a handle chosen
+  // for it rather than one the user picked.
+  test("drops a self-loop rather than rewiring it", () => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, nodeB],
+      edges: [chainAB, {id: "b-b", source: "b", sourceHandle: "output", target: "b", targetHandle: "input"}],
+    });
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const edges = usePipelineStore.getState().edges;
+    expect(edges).toHaveLength(1);
+    expect(edges[0].source).toBe("a");
+  });
+
+  // setNode's function form asserts the node is still there, so an editor left open on the
+  // removed node would throw on the next keystroke.
+  test("closes the editor when it is open on the node being replaced", () => {
+    openEditorOn(nodeB);
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(useEditorStore.getState().currentNode).toBeNull();
+  });
+
+  test("leaves the editor alone when it is open on a different node", () => {
+    openEditorOn(nodeA);
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(useEditorStore.getState().currentNode?.id).toBe("a");
+  });
+
+  test("selects the replacement so the toolbar stays on screen", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(replacementNode()!.selected).toBe(true);
+    expect(usePipelineStore.getState().nodes.filter((node) => node.selected)).toHaveLength(1);
+  });
+
+  test("leaves no color key on the replacement when the old node had no colour", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(replacementNode()!.data.params).not.toHaveProperty("color");
+  });
+
+  test.each([
+    {what: "a self-loop", edges: [{id: "b-b", source: "b", sourceHandle: "output", target: "b", targetHandle: "input"}], dropped: 1},
+    {
+      what: "two outgoing edges",
+      edges: [
+        {id: "b-c", source: "b", sourceHandle: "output_0", target: "c", targetHandle: "input"},
+        {id: "b-d", source: "b", sourceHandle: "output_1", target: "d", targetHandle: "input"},
+      ],
+      dropped: 2,
+    },
+  ])("warns the user when the swap drops $what", ({edges, dropped}) => {
+    usePipelineStore.getState().resetFlow({
+      nodes: [nodeA, {...nodeB, data: {type: "RouterNode", params: {}}}, nodeC, nodeD],
+      edges: [chainAB, ...edges],
+    });
+
+    usePipelineStore.getState().changeNodeType("b", "LLMResponse");
+
+    expect(alertifyWarning).toHaveBeenCalledOnce();
+    expect(alertifyWarning.mock.calls[0][0]).toContain(`${dropped} connection`);
+  });
+
+  test("does not warn when every edge survives the swap", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(alertifyWarning).not.toHaveBeenCalled();
+  });
+
+  // A pipeline can hold a node whose type the server no longer serves a schema for, so an
+  // unknown target has to be a no-op rather than a throw.
+  test.each([
+    {guard: "read-only mode", arrange: () => usePipelineStore.setState({readOnly: true}), type: "AssistantNode"},
+    {guard: "a target type with no schema", arrange: () => {}, type: "NoSuchNode"},
+    {guard: "a node that is already that type", arrange: () => {}, type: "LLMResponse"},
+  ])("does nothing for $guard", ({arrange, type}) => {
+    arrange();
+
+    usePipelineStore.getState().changeNodeType("b", type);
+
+    expect(usePipelineStore.getState().nodes.map((node) => node.id)).toEqual(["a", "b", "c"]);
   });
 });

@@ -8,6 +8,7 @@ from django.db.models import F
 from django.http import QueryDict
 from django.utils import timezone
 
+from apps.evaluations.exceptions import NoActiveEvaluatorsError
 from apps.evaluations.models import (
     AutoPopulationRunStatus,
     DatasetAutoPopulationRule,
@@ -29,7 +30,10 @@ def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended_ids: li
     """Enqueue a DELTA evaluation run for each opted-in config on this dataset."""
     configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
     for config in configs:
-        config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=appended_ids)
+        try:
+            config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=appended_ids)
+        except NoActiveEvaluatorsError:
+            logger.warning("Skipping auto-run for config %s: no active evaluators", config.id)
 
 
 def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) -> None:

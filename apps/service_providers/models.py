@@ -428,10 +428,10 @@ class LlmProviderModel(BaseTeamModel):
         return self.team is not None
 
     def has_related_objects(self):
-        return has_related_objects(self, "llm_provider_model_id")
+        return has_related_objects(self)
 
     def delete(self, *args, **kwargs):
-        related_objects = get_related_objects(self, "llm_provider_model_id")
+        related_objects = get_related_objects(self)
 
         if related_objects:
             related_object_strings = [

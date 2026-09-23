@@ -12,6 +12,13 @@
 #   severity, into the sticky summary comment instead of onto the diff, so this
 #   does not add a second set of inline comments while its output is being
 #   assessed against the Claude review. Drop that input to go inline
+# - Repo-local review rules live in `.opencodereview/rule.json`, which OCR reads
+#   from the checkout. It overrides the built-in rules for the paths it names.
+#   `ocr rules check <path>` shows which rule wins
+# - That file's `include` exists to undo one of OCR's defaults: since 1.12.7 the
+#   built-in exclude list drops `test_*.py`, which is every test file in this
+#   repo. An include is matched before the default excludes, so the entry keeps
+#   them in review; drop it to take upstream's default
 # - Fork PRs are skipped. Upstream's own example uses pull_request_target to
 #   reach secrets from forks; this uses pull_request instead, matching the fork
 #   posture of the other review workflows in this repo
@@ -62,9 +69,9 @@ jobs:
           egress-policy: audit
 
       - name: Run OpenCodeReview
-        uses: alibaba/open-code-review@f1101fd7f51304c82e4a4f292bbee88aea0823cf # v1.12.4
+        uses: alibaba/open-code-review@5c7b38381d1fdd36de6cf622a2a1f768243c4704 # v1.12.8
         with:
-          ocr_version: '1.12.4'
+          ocr_version: '1.12.8'
           llm_url: https://api.anthropic.com
           llm_auth_token: ${{ secrets.ANTHROPIC_API_KEY }}
           llm_model: claude-sonnet-5

@@ -148,7 +148,7 @@ nav:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
       - User Docs:
-        - Overview: developer_guides/user_docs/index.md
+        - User Docs: developer_guides/user_docs/index.md
         - Changelog Automation: developer_guides/user_docs/changelog_automation.md
         - Weekly Release Notes: developer_guides/user_docs/release_notes.md
       - API Documentation: developer_guides/api_documentation.md
@@ -182,14 +182,15 @@ nav:
     - Releases and Upgrades: hosting/releases.md
     - Configuration: hosting/configuration.md
     - Rate Limiting: hosting/rate_limiting.md
-    - Docker Compose: hosting/docker.md
-    - Heroku: hosting/heroku.md
-    - AWS Fargate: hosting/aws.md
-    - Kamal: hosting/kamal.md
-    - Zero Trust Access:
-      - Overview: hosting/zero_trust_access.md
-      - Cloudflare Tunnel: hosting/cloudflare_tunnel.md
-      - Cloudflare Admin: hosting/cloudflare_admin.md
+    - Deployment Options:
+      - Docker Compose: hosting/docker.md
+      - Heroku: hosting/heroku.md
+      - AWS Fargate: hosting/aws.md
+      - Kamal: hosting/kamal.md
+      - Zero Trust Access:
+        - Overview: hosting/zero_trust_access.md
+        - Cloudflare Tunnel: hosting/cloudflare_tunnel.md
+        - Cloudflare Admin: hosting/cloudflare_admin.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md

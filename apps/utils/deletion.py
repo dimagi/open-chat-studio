@@ -2,7 +2,7 @@ from collections import Counter
 from collections.abc import Generator
 from functools import reduce
 from operator import or_
-from typing import Any, Literal
+from typing import Any
 
 from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
@@ -239,7 +239,7 @@ def _get_m2m_related_models(model):
     return m2m_models
 
 
-def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
+def get_related_objects(instance) -> list:
     from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
         Node,
         Pipeline,
@@ -247,7 +247,7 @@ def get_related_objects(instance, pipeline_param_key: str | None = None) -> list
 
     related_objects = []
 
-    for queryset in _get_related_objects_querysets(instance, pipeline_param_key):
+    for queryset in _get_related_objects_querysets(instance):
         if queryset.model == Node:
             # Report the owning pipelines rather than the nodes themselves. Resolving them
             # through a subquery on the node ids keeps this to a single query (walking
@@ -276,95 +276,57 @@ def _with_working_version(queryset):
     return queryset
 
 
-def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool:
-    return any(queryset.exists() for queryset in _get_related_objects_querysets(instance, pipeline_param_key))
+def has_related_objects(instance) -> bool:
+    return any(queryset.exists() for queryset in _get_related_objects_querysets(instance))
 
 
-def _get_related_objects_querysets(instance, pipeline_param_key: str | None = None) -> Generator[Any | None, Any]:
+def _get_related_objects_querysets(instance) -> Generator[Any | None, Any]:
+    """Every reverse relation that would be touched by deleting ``instance``.
+
+    ``get_candidate_relations_to_delete`` covers the SET_NULL reverse FKs too, so a
+    ``Node`` referencing ``instance`` through one of its resource columns arrives here
+    without any help from the caller.
+    """
     for related in get_candidate_relations_to_delete(instance._meta):
         related_objects = getattr(instance, related.get_accessor_name(), None)
         if related_objects is not None:
             yield related_objects
 
-    if pipeline_param_key:
-        yield get_related_pipelines_queryset(instance, pipeline_param_key)
 
-
-def _params_key_filter(params_key: str, instance) -> Q:
-    """Match ``params[params_key]`` against ``instance.id`` stored as either int or str."""
-    return Q(**{f"params__{params_key}": instance.id}) | Q(**{f"params__{params_key}": str(instance.id)})
-
-
-def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = None):
+def get_related_pipeline_nodes_queryset(instance, fk_field: str, m2m_field: str | None = None) -> models.QuerySet:
+    """Live pipeline nodes referencing ``instance``, with no pipeline/experiment-status filtering."""
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
-    return Node.objects.filter(_params_key_filter(pipeline_param_key, instance))
+    return Node.objects.filter(_node_reference_filter(instance, fk_field, m2m_field)).distinct()
 
 
-def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
-    from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
-
-    return Node.objects.filter(
-        Q(**{f"params__{pipeline_param_key}__contains": instance.id})
-        | Q(**{f"params__{pipeline_param_key}__contains": str(instance.id)})
-    )
-
-
-def get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key: str):
-    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
-    parameter"""
-    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__in")
-
-
-def get_related_pipeline_experiments_queryset_list_param(instance_ids, pipeline_param_key: str):
-    """Get all experiments that reference any id in `instance_ids`, located at the `pipeline_param_key`
-    parameter where the param value is a list."""
-    return _get_related_pipeline_experiments_queryset(instance_ids, pipeline_param_key, "__contains")
-
-
-def _get_related_pipeline_experiments_queryset(
-    instance_ids, pipeline_param_key: str, operator: Literal["__in", "__contains"]
-):
+def get_related_experiment_versions_queryset(instance, fk_field: str, m2m_field: str | None = None) -> models.QuerySet:
+    """Live default-published-or-working experiments referencing ``instance`` or any of its versions."""
     from apps.experiments.models import Experiment  # noqa: PLC0415 - circular: experiments.models→deletion
 
-    instance_ids_str = [str(instance_id) for instance_id in instance_ids]
-    instance_ids_int = [int(instance_id) for instance_id in instance_ids]
+    ids = [*instance.versions.values_list("id", flat=True), instance.id]
     return (
         Experiment.objects.exclude(pipeline=None)
-        .filter(
-            Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_int})
-            | Q(**{f"pipeline__node__params__{pipeline_param_key}{operator}": instance_ids_str})
-        )
+        .filter(_node_reference_filter(ids, fk_field, m2m_field, prefix="pipeline__node__", lookup="__in"))
+        .filter(Q(is_default_version=True) | Q(working_version__id__isnull=True))
         .distinct()
     )
 
 
-def get_related_pipeline_nodes_queryset(instance, param_key: str, list_param_key: str | None = None) -> models.QuerySet:
-    """Live pipeline nodes referencing ``instance``, with no pipeline/experiment-status filtering."""
-    queryset = get_related_pipelines_queryset(instance, param_key)
-    if list_param_key:
-        queryset = queryset | get_related_pipelines_queryset_for_list_param(instance, list_param_key)
-    return queryset.distinct()
+def _node_reference_filter(value, fk_field: str, m2m_field: str | None, prefix: str = "", lookup: str = "") -> Q:
+    """Match nodes pointing at ``value`` through ``fk_field``, or through ``m2m_field`` when given."""
+    query = Q(**{f"{prefix}{fk_field}{lookup}": value})
+    if m2m_field:
+        query |= Q(**{f"{prefix}{m2m_field}{lookup}": value})
+    return query
 
 
-def get_related_experiment_versions_queryset(
-    instance, param_key: str, list_param_key: str | None = None
-) -> models.QuerySet:
-    """Live default-published-or-working experiments referencing ``instance`` or any of its versions."""
-    ids = [*instance.versions.values_list("id", flat=True), instance.id]
-
-    queryset = get_related_pipeline_experiments_queryset(ids, param_key)
-    if list_param_key:
-        queryset = queryset | get_related_pipeline_experiments_queryset_list_param(ids, list_param_key)
-    return queryset.filter(Q(is_default_version=True) | Q(working_version__id__isnull=True))
-
-
-def has_related_pipeline_references(instance, param_key: str, list_param_key: str | None = None) -> bool:
+def has_related_pipeline_references(instance, fk_field: str, m2m_field: str | None = None) -> bool:
     """True if ``instance`` is still referenced and can't be safely archived."""
-    if get_related_pipeline_nodes_queryset(instance, param_key, list_param_key).exists():
+    if get_related_pipeline_nodes_queryset(instance, fk_field, m2m_field).exists():
         return True
     if instance.is_working_version:
-        return get_related_experiment_versions_queryset(instance, param_key, list_param_key).exists()
+        return get_related_experiment_versions_queryset(instance, fk_field, m2m_field).exists()
     return False
 
 
