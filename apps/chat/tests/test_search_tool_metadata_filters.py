@@ -59,6 +59,20 @@ class TestSearchToolsApplyMetadataFilters:
         assert "clinic in Khayelitsha" in result
         assert "Mitchells Plain" not in result
 
+    def test_multi_index_no_results_message_names_the_collection_and_the_filter(self):
+        collection, file = make_indexed_collection(name="Clinics")
+        _clinic_rows(collection, file)
+        tool = SearchCollectionByIdTool(
+            allowed_collection_ids=[collection.id], metadata_filters={"district": "Gugulethu"}
+        )
+
+        result = tool.action(collection_index_id=collection.id, query="clinic")
+
+        assert result == (
+            f"\nThe semantic search did not return any results from collection 'Clinics' (ID: {collection.id})"
+            " among rows matching district = Gugulethu."
+        )
+
     def test_no_results_message_says_a_filter_was_applied(self):
         collection, file = make_indexed_collection()
         _clinic_rows(collection, file)
