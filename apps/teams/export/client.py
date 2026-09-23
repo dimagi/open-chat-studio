@@ -50,13 +50,15 @@ class ResourceFetcher:
             params["cursor"] = cursor
         return self._get(f"/api/export/{resource}/", params)
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100):
+        """Yield each page's rows as its own list. The sync writes its resume cursor once a page's
+        rows are committed, so it has to see the page boundaries."""
         cursor = start_cursor
         while True:
             page = self.get_page(resource, cursor, limit)
-            yield from page["results"]
+            yield page["results"]
             if not page.get("has_more"):
-                break
+                return
             cursor = page["cursor"]
 
     def get_file_content(self, file_id: int) -> bytes:

@@ -2,12 +2,18 @@
 target_key starts null and is filled once the row exists on the target. It is both the FK-remap map
 and the checkpoint (a null target_key means "not created yet"), so a run can resume on rerun.
 
-It lives in SQLite (a persistent, mounted path) while the synced rows live in the target's Postgres,
-so per-slug cursors aren't stored separately -- they're derived from the rows already synced."""
+It lives in SQLite (a persistent, mounted path) while the synced rows live in the target's Postgres.
+The same file holds each model's pagination cursor, namespaced by the chatbot selection the source
+served it under."""
 
 import base64
 import json
 import sqlite3
+
+from django.utils.dateparse import parse_datetime
+
+# The cursor namespace used when the source exports the whole team.
+ALL_CHATBOTS_KEY = "all"
 
 
 class FKTranslationStore:
@@ -26,6 +32,11 @@ class FKTranslationStore:
             "PRIMARY KEY (content_type, source_key))"
         )
         self._conn.execute("CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)")
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS cursors ("
+            "selection_key TEXT NOT NULL, model_label TEXT NOT NULL, cursor TEXT, "
+            "PRIMARY KEY (selection_key, model_label))"
+        )
         self._add_missing_columns()
         self._conn.commit()
         self._index: dict[str, dict[int, int | None]] = {}
@@ -96,6 +107,32 @@ class FKTranslationStore:
         self._conn.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
         self._conn.commit()
 
+    def get_cursor(self, selection_key: str, model_label: str) -> str | None:
+        """Where to resume this model's pull. Cursors are namespaced by selection: the source serves
+        a different row set per chatbot selection, so a cursor from one selection would skip rows
+        that a wider one puts below it."""
+        row = self._conn.execute(
+            "SELECT cursor FROM cursors WHERE selection_key = ? AND model_label = ?",
+            (selection_key, model_label),
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_cursor(self, selection_key: str, model_label: str, cursor: str | None) -> None:
+        self._conn.execute(
+            "INSERT INTO cursors (selection_key, model_label, cursor) VALUES (?, ?, ?) "
+            "ON CONFLICT (selection_key, model_label) DO UPDATE SET cursor = excluded.cursor",
+            (selection_key, model_label, cursor),
+        )
+        self._conn.commit()
+
+    def cursors_for(self, selection_key: str) -> dict[str, str | None]:
+        return {
+            model_label: cursor
+            for model_label, cursor in self._conn.execute(
+                "SELECT model_label, cursor FROM cursors WHERE selection_key = ?", (selection_key,)
+            )
+        }
+
     def has_unfilled_targets(self) -> bool:
         """True if any recorded row still lacks a target -- i.e. a prior run was interrupted."""
         return any(tgt is None for rows in self._index.values() for tgt in rows.values())
@@ -122,3 +159,13 @@ def derive_updated_at_cursor(rows) -> str | None:
     updated_at, source_id = max(rows, key=lambda r: (r[0], r[1]))
     keyset = {"updated_at": updated_at.isoformat(), "id": source_id}
     return base64.b64encode(json.dumps(keyset).encode()).decode()
+
+
+def page_cursor(cursor_type: str, rows: list[dict]) -> str | None:
+    """The resume cursor for the page just imported, derived from its own rows. The endpoint only
+    returns a cursor while more rows remain, so the last page of a run carries none."""
+    if not rows:
+        return None
+    if cursor_type == "pk":
+        return derive_pk_cursor([row["id"] for row in rows])
+    return derive_updated_at_cursor((parse_datetime(row["updated_at"]), row["id"]) for row in rows)
