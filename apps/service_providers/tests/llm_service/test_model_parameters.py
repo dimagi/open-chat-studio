@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.service_providers.llm_service.model_parameters import ClaudeSonnet46Parameters, GPT52Parameters, get_schema
+from apps.service_providers.llm_service.model_parameters import (
+    ClaudeSonnet46Parameters,
+    GPT6SolParameters,
+    GPT52Parameters,
+    get_schema,
+)
 
 
 class TestGPT52ParametersNoneEffort:
@@ -58,3 +63,18 @@ class TestClaudeSonnet46Parameters:
         assert params.max_tokens == 32000
         assert params.effort == "high"
         assert params.adaptive_thinking is False
+
+
+class TestGPT6SolParameters:
+    """gpt-6-sol and gpt-6-luna expose the six-level effort range and no sampling
+    parameters, including at 'none' effort."""
+
+    def test_no_sampling_fields(self):
+        assert "temperature" not in GPT6SolParameters.model_fields
+        assert "top_p" not in GPT6SolParameters.model_fields
+
+    @pytest.mark.parametrize("effort", ["none", "max"])
+    def test_sampling_overrides_are_dropped(self, effort):
+        """An override carried over from a GPT-5.x model must not reach the API."""
+        filtered = GPT6SolParameters.filter_overrides({"effort": effort, "temperature": 0.7, "top_p": 0.9})
+        assert filtered == {"effort": effort}

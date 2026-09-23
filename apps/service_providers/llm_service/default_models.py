@@ -9,13 +9,14 @@ from apps.pipelines.models import Node
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicReasoningParameters,
     BasicParameters,
-    ClaudeOpus4_20250514Parameters,
     ClaudeOpus46Parameters,
     ClaudeOpus47Parameters,
+    ClaudeOpus55Parameters,
     ClaudeSonnet46Parameters,
     GPT5Parameters,
     GPT5ProParameters,
     GPT6Parameters,
+    GPT6SolParameters,
     GPT51Parameters,
     GPT52Parameters,
     GPT55Parameters,
@@ -65,6 +66,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
+        Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
@@ -76,13 +78,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-sonnet-4-5-20250929", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
-        Model(
-            "claude-opus-4-20250514",
-            k(200),
-            deprecated=True,
-            replacement="claude-opus-4-7",
-            parameters=ClaudeOpus4_20250514Parameters,
-        ),
     ],
     "openai": [
         Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
@@ -93,7 +88,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
-        Model("chatgpt-4o-latest", 128000, deprecated=True),
         Model("gpt-4", k(8)),
         Model("gpt-3.5-turbo", k(16), deprecated=True, replacement="gpt-4.1-mini"),
         Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
@@ -110,6 +104,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
+        Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
+        Model("gpt-6-luna", 1050000, parameters=GPT6SolParameters),
         Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.4-mini", parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), deprecated=True, replacement="gpt-5.4-nano", parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
@@ -118,7 +114,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
         # siblings use.
         Model("qwen/qwen3.8-27b", 131042),
-        Model("gemma-7b-it", k(8), deprecated=True),
         Model("llama-3.3-70b-versatile", k(128), deprecated=True, replacement="openai/gpt-oss-120b"),
         Model("llama-3.1-8b-instant", k(128), deprecated=True, replacement="openai/gpt-oss-20b"),
         Model("openai/gpt-oss-120b", 131072, is_default=True, is_translation_default=True),
@@ -167,7 +162,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-3.1-flash-lite", 1048576),
         Model("gemini-2.5-flash", 1048576, deprecated=True, replacement="gemini-3.5-flash"),
         Model("gemini-2.5-pro", 1048576, deprecated=True, replacement="gemini-3.6-flash"),
-        Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
         Model("gemini-3.8-flash", 1048576),
@@ -204,6 +198,7 @@ DELETED_MODELS = [
     ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
     ("anthropic", "claude-3-5-haiku-latest", "claude-haiku-4-5-20251001"),
     ("anthropic", "claude-3-7-sonnet-20250219", "claude-sonnet-4-6"),
+    ("anthropic", "claude-opus-4-20250514", "claude-opus-4-8"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
@@ -219,6 +214,9 @@ DELETED_MODELS = [
     ("openai", "o4-mini-high", "gpt-5.6-terra"),
     ("openai", "gpt-5.3", "gpt-5.4"),
     ("openai", "gpt-5.3-instant", "gpt-5.4-mini"),
+    # OpenAI names gpt-5.1-chat-latest as the successor, but that is a rolling alias; references
+    # move to gpt-5.1, the pinned model behind it that OCS registers.
+    ("openai", "chatgpt-4o-latest", "gpt-5.1"),
     # Groq
     ("groq", "whisper-large-v3"),
     # Speech-to-text, billed per audio-hour: it has no token rates and cannot serve a chat
@@ -236,6 +234,9 @@ DELETED_MODELS = [
     ("groq", "llama3-8b-8192"),
     ("groq", "mixtral-8x7b-32768"),
     ("groq", "gemma2-9b-it", "openai/gpt-oss-20b"),
+    # Groq retired gemma-7b-it in favour of gemma2-9b-it, itself already deleted, so references
+    # follow that chain to the Groq small-model default.
+    ("groq", "gemma-7b-it", "openai/gpt-oss-20b"),
     # Perplexity
     ("perplexity", "sonar-reasoning"),
     ("perplexity", "llama-3.1-sonar-small-128k-online"),
@@ -247,6 +248,7 @@ DELETED_MODELS = [
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),
     ("google", "gemini-1.5-pro"),
+    ("google", "gemini-2.0-flash", "gemini-3.5-flash"),
     # Google Vertex AI
     ("google_vertex_ai", "gemini-3-pro-preview", "gemini-3.1-pro-preview"),
 ]
