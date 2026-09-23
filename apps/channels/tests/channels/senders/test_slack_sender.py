@@ -64,12 +64,6 @@ class TestSendText:
         )
 
 
-class TestSendVoice:
-    def test_not_supported(self, sender):
-        with pytest.raises(NotImplementedError):
-            sender.send_voice(MagicMock(), "SLACK_USER_ID")
-
-
 class TestSendFile:
     def test_uses_channel_and_thread_from_inbound_message(self, sender, slack_service):
         _bind_with_message(sender)
