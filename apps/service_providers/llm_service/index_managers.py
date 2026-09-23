@@ -285,6 +285,29 @@ class OpenAIRemoteIndexManager(RemoteIndexManager):
         File.objects.bulk_update(files, fields=["external_id"])
 
 
+def _chunk_ids(embeddings: list[FileChunkEmbedding]) -> list[int]:
+    return [embedding.id for embedding in embeddings]
+
+
+def _row_chunk(
+    collection_file: CollectionFile, row: ParsedRow, text: str, vector: Vector, metadata_columns: list[str]
+) -> FileChunkEmbedding:
+    """Build the unsaved chunk for one sheet row; `chunk_number` and `page_number` both hold the row's position."""
+    metadata = row_metadata(row, metadata_columns)
+    return FileChunkEmbedding(
+        team_id=collection_file.file.team_id,
+        file=collection_file.file,
+        collection_id=collection_file.collection_id,
+        chunk_number=row.row_number,
+        page_number=row.row_number,
+        text=text,
+        context="",
+        embedding=vector,
+        metadata=metadata,
+        content_hash=content_hash(text, metadata),
+    )
+
+
 class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     """
     Abstract base class for managing local embedding operations.
@@ -341,7 +364,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                     )
                 else:
                     embeddings = self._embed_file(collection_file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                    embedding_ids = [embedding.id for embedding in embeddings]
+                    embedding_ids = _chunk_ids(embeddings)
                     # An earlier attempt may have left a reason behind; this attempt supersedes it.
                     collection_file.failure_reason = ""
                 collection_file.status = FileStatus.COMPLETED
@@ -461,7 +484,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 # Content that is entirely NUL bytes clears the check above but sanitizes away
                 # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)
-            self._try_build_search_vectors([embedding.id for embedding in embeddings], collection_file.collection)
+            self._try_build_search_vectors(_chunk_ids(embeddings), collection_file.collection)
             return embeddings
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
@@ -486,26 +509,12 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         try:
             for batch in chunk_list(sheet.rows, ROW_EMBED_BATCH_SIZE):
                 texts = [render_row(file.name, sheet.headers, row) for row in batch]
-                embeddings = []
-                for row, text, vector in self._embed_batch(file, batch, texts, failures):
-                    metadata = row_metadata(row, metadata_columns)
-                    embeddings.append(
-                        FileChunkEmbedding(
-                            team_id=file.team_id,
-                            file=file,
-                            collection_id=collection_file.collection_id,
-                            chunk_number=row.row_number,
-                            page_number=row.row_number,
-                            text=text,
-                            context="",
-                            embedding=vector,
-                            metadata=metadata,
-                            content_hash=content_hash(text, metadata),
-                        )
-                    )
+                embeddings = [
+                    _row_chunk(collection_file, row, text, vector, metadata_columns)
+                    for row, text, vector in self._embed_batch(file, batch, texts, failures)
+                ]
                 if embeddings:
-                    created = FileChunkEmbedding.objects.bulk_create(embeddings)
-                    chunk_ids.extend(embedding.id for embedding in created)
+                    chunk_ids.extend(_chunk_ids(FileChunkEmbedding.objects.bulk_create(embeddings)))
             if not chunk_ids:
                 raise FileReadException(format_row_failures(failures, total_rows=len(failures)))
             self._try_build_search_vectors(chunk_ids, collection_file.collection)

@@ -51,22 +51,26 @@ def parse_sheet(data: bytes, *, filename: str, max_rows: int | None = None) -> P
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
     try:
         headers = _read_headers(reader)
-        rows: list[ParsedRow] = []
-        kept_rows = 0
-        for row_number, values in enumerate(reader, start=1):
-            if not any(value.strip() for value in values):
-                continue
-            if len(values) != len(headers):
-                raise RowImportError(f"Row {row_number} has {len(values)} values but the header has {len(headers)}")
-            kept_rows += 1
-            if kept_rows > max_rows:
-                raise RowImportError(f"The file has more than {max_rows} rows")
-            rows.append(ParsedRow(row_number=row_number, values=dict(zip(headers, values, strict=True))))
+        rows = _read_rows(reader, headers, max_rows)
     except csv.Error as exc:
         raise RowImportError(f"Could not parse the file: {exc}") from None
     if not rows:
         raise RowImportError("The file has no data rows")
     return ParsedSheet(headers=headers, rows=rows)
+
+
+def _read_rows(reader, headers: list[str], max_rows: int) -> list[ParsedRow]:
+    """Read the data rows, numbering by position after the header and skipping rows with no content."""
+    rows: list[ParsedRow] = []
+    for row_number, values in enumerate(reader, start=1):
+        if not any(value.strip() for value in values):
+            continue
+        if len(values) != len(headers):
+            raise RowImportError(f"Row {row_number} has {len(values)} values but the header has {len(headers)}")
+        if len(rows) == max_rows:
+            raise RowImportError(f"The file has more than {max_rows} rows")
+        rows.append(ParsedRow(row_number=row_number, values=dict(zip(headers, values, strict=True))))
+    return rows
 
 
 def _delimiter_for(filename: str) -> str | None:
@@ -98,6 +102,11 @@ def _read_headers(reader) -> list[str]:
     if not headers or not any(header.strip() for header in headers):
         raise RowImportError("The file has no header row")
     headers = [sanitize_control_chars(header).strip() for header in headers]
+    _check_headers(headers)
+    return headers
+
+
+def _check_headers(headers: list[str]) -> None:
     seen: set[str] = set()
     for position, header in enumerate(headers, start=1):
         if not header:
@@ -105,7 +114,6 @@ def _read_headers(reader) -> list[str]:
         if header in seen:
             raise RowImportError(f"Duplicate column name: {header}")
         seen.add(header)
-    return headers
 
 
 def render_row(filename: str, headers: list[str], row: ParsedRow) -> str:
