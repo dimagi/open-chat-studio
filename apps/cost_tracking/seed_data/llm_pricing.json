@@ -1940,5 +1940,71 @@
         "unit_price": "0.000375"
       }
     ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-opus-5-5",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.004"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.02"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0002"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.005"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-6-sol",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.002"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0002"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.0025"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-6-luna",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0005"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00001"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.000125"
+      }
+    ]
   }
 ]

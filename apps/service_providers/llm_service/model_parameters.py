@@ -42,6 +42,15 @@ class GPT6ReasoningEffortParameter(TextChoices):
     MAX = "max", "Max"
 
 
+class GPT6SolReasoningEffortParameter(TextChoices):
+    NONE = "none", "None"
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    XHIGH = "xhigh", "XHigh"
+    MAX = "max", "Max"
+
+
 class Claude46EffortParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -195,6 +204,17 @@ class GPT6Parameters(LLMModelParamBase):
         title="Reasoning Effort",
         default=GPT6ReasoningEffortParameter.MEDIUM,
         json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT6ReasoningEffortParameter.labels),
+    )
+
+
+class GPT6SolParameters(LLMModelParamBase):
+    # gpt-6-sol and gpt-6-luna take the same effort range as gpt-6-astra plus `none`, so
+    # GPT6Parameters does not fit. Temperature and top_p stay unexposed as for the rest of the
+    # family, including at `none` effort, where GPT-5.2 would have re-enabled them.
+    effort: GPT6SolReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT6SolReasoningEffortParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT6SolReasoningEffortParameter.labels),
     )
 
 
