@@ -14,6 +14,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_de
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.events.versioning import get_event_action_param_specs
 from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
@@ -119,6 +120,19 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
     return result
 
 
+def remap_event_action_params(params: dict, action_type: str, store: FKTranslationStore) -> dict:
+    """Rewrite the resource ids an event action holds in its params. Which params carry an id is
+    declared in ``apps.events.versioning``; references the sync doesn't copy have no translation and
+    are left as-is, matching ``remap_node_params``."""
+    result = dict(params)
+    for spec in get_event_action_param_specs(action_type):
+        value = result.get(spec.param_name)
+        if value in (None, "", 0):
+            continue
+        result[spec.param_name] = store.get_target(spec.model_label.lower(), as_int(value)) or value
+    return result
+
+
 def unseal_secrets(row: dict, secret_fields: list[str], private_key) -> dict:
     result = dict(row)
     for field in secret_fields:
@@ -211,6 +225,8 @@ class Importer:
         # The single team every resource is imported into. Captured from the team row (first in the
         # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
         self.target_team = None
+        # Rows a rerun read again but didn't have to touch (source updated_at unchanged).
+        self.skipped_rows = 0
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -219,11 +235,26 @@ class Importer:
         secret_fields = SECRET_REGISTRY.get(model_label, [])
         count = 0
         for row in rows:
+            if self._is_unchanged(model_label, row):
+                self.skipped_rows += 1
+                continue
             if self.private_key and secret_fields:
                 row = unseal_secrets(row, secret_fields, self.private_key)
             self._import_row(model_label, model, row)
             count += 1
         return count
+
+    def _is_unchanged(self, model_label: str, row: dict) -> bool:
+        """Whether the row is already on the target at this exact source revision, so a re-read costs
+        a dict lookup instead of a re-import. An m2m membership change doesn't move ``updated_at``, so
+        a row whose only change is an m2m is not re-applied."""
+        source_updated_at = row.get("updated_at")
+        if source_updated_at is None:
+            return False
+        source_pk = row["id"]
+        if not self.store.has_target(model_label, source_pk):
+            return False
+        return self.store.get_source_updated_at(model_label, source_pk) == source_updated_at
 
     def _import_row(self, model_label: str, model: type[models.Model], row: dict) -> None:
         """Import a single row. A global row is matched to its shared target and only its id
@@ -238,7 +269,7 @@ class Importer:
             match = self._match_global(model, global_spec, row)
             if match is None:
                 raise MissingGlobalRow(model_label, global_spec, row)
-            self.store.record(model_label, source_pk, match.pk)
+            self.store.record(model_label, source_pk, match.pk, source_updated_at=row.get("updated_at"))
             return
 
         # Team-owned row. The create, its m2m/named links, the timestamp restore, and the checkpoint
@@ -280,7 +311,7 @@ class Importer:
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
     ) -> tuple[models.Model, bool]:
         with transaction.atomic():
-            field_values, m2m_values, timestamps = self._build_values(model_label, model, row)
+            field_values, m2m_values, timestamps, nulled_fk = self._build_values(model_label, model, row)
             instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
 
             for name, target_pks in m2m_values.items():
@@ -291,7 +322,10 @@ class Importer:
             if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
                 _bypass_auto_now_update(model, instance.pk, timestamps)
 
-            self.store.record(model_label, source_pk, instance.pk)
+            # A row whose FK was nulled for a target not synced yet is recorded without its timestamp, so
+            # a later re-read re-applies it instead of skipping it as unchanged.
+            source_updated_at = None if nulled_fk else row.get("updated_at")
+            self.store.record(model_label, source_pk, instance.pk, source_updated_at=source_updated_at)
         return instance, created
 
     def _create_or_update(
@@ -363,10 +397,11 @@ class Importer:
         instance.save()
         return instance, True
 
-    def _build_values(self, model_label: str, model: type[models.Model], row: dict) -> tuple[dict, dict, dict]:
+    def _build_values(self, model_label: str, model: type[models.Model], row: dict) -> tuple[dict, dict, dict, bool]:
         """Split a serialized row into (concrete field values, translated m2m pk lists, source
-        timestamps). FKs are remapped to target ids, pipeline/node resource ids are rewritten, and
-        named-link fields are left out for ``_apply_named_links`` to handle."""
+        timestamps, whether an FK to a synced model was nulled for lack of a translation). FKs are
+        remapped to target ids, pipeline/node resource ids are rewritten, and named-link fields are
+        left out for ``_apply_named_links`` to handle."""
         named = set(_NAMED_LINK_FIELDS.get(model_label, []))
         # Excluded fields aren't exported, but a source on older code may still send them (e.g. a
         # tag's slug, which must be regenerated on the target) -- drop them here too.
@@ -378,15 +413,16 @@ class Importer:
         gfk_pairs = generic_fk_fields(model)
         gfk_columns = {name for pair in gfk_pairs for name in pair}
         field_values, timestamps = {}, {}
+        nulled_fk = False
         for field in model._meta.concrete_fields:
             if field.name in gfk_columns:
                 continue
-            self._collect_concrete_field(field, row, named, field_values, timestamps)
+            nulled_fk |= self._collect_concrete_field(field, row, named, field_values, timestamps)
         self._resolve_generic_fks(gfk_pairs, row, field_values)
         self._remap_embedded_resource_ids(model_label, field_values)
         self._assign_team(model_label, model, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
-        return field_values, m2m_values, timestamps
+        return field_values, m2m_values, timestamps, nulled_fk
 
     def _resolve_generic_fks(self, gfk_pairs: list[tuple[str, str]], row: dict, field_values: dict) -> None:
         """Fill each generic FK's content-type and object-id columns. The content type is matched by
@@ -414,25 +450,35 @@ class Importer:
             raise UnresolvedForeignKey(f"{model_label}.team: the team row must be imported before its data.")
         field_values["team_id"] = self.target_team.pk
 
-    def _collect_concrete_field(self, field, row: dict, named: set, field_values: dict, timestamps: dict) -> None:
+    def _collect_concrete_field(self, field, row: dict, named: set, field_values: dict, timestamps: dict) -> bool:
         """Route one concrete field into ``field_values`` or ``timestamps`` (or skip it). Source
         timestamps are held aside so ``auto_now`` doesn't clobber them; FKs are translated to target
-        ids; named-link fields are left for ``_apply_named_links``."""
+        ids; named-link fields are left for ``_apply_named_links``. Returns whether it nulled an FK to
+        a synced model that has no translation yet."""
         if field.primary_key:
-            return
+            return False
         if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
             if field.name in row and row[field.name] is not None:
                 timestamps[field.name] = parse_datetime(row[field.name])
         elif isinstance(field, models.ForeignKey):
-            field_values[field.attname] = resolve_fk(field, row.get(field.name), self.store)
+            source_pk = row.get(field.name)
+            target_pk = resolve_fk(field, source_pk, self.store)
+            field_values[field.attname] = target_pk
+            synced_target = field.related_model._meta.label_lower in MANIFEST_LABELS
+            return source_pk is not None and target_pk is None and synced_target
         elif field.name in row and field.name not in named:
             field_values[field.name] = row[field.name]
+        return False
 
     def _remap_embedded_resource_ids(self, model_label: str, field_values: dict) -> None:
-        """Rewrite the source resource ids buried in a node's params in place. Pipeline data is
+        """Rewrite the source resource ids buried in a row's params in place. Pipeline data is
         layout-only (ADR-0046) and carries no resource ids, so it imports as-is."""
         if model_label == "pipelines.node" and "params" in field_values:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
+        elif model_label == "events.eventaction" and "params" in field_values:
+            field_values["params"] = remap_event_action_params(
+                field_values["params"], field_values.get("action_type", ""), self.store
+            )
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
         """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member

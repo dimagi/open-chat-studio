@@ -9,6 +9,7 @@ from apps.pipelines.models import Node
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import (
     UnresolvedForeignKey,
+    remap_event_action_params,
     remap_node_params,
     resolve_fk,
     unseal_secrets,
@@ -82,3 +83,22 @@ def test_unseal_secrets_restores_plaintext():
     out = unseal_secrets(row, ["config"], private)
     assert out["config"] == {"k": "v"}
     assert out["name"] == "p"
+
+
+def test_remap_event_action_params_translates_the_pipeline_id():
+    store = FakeStore({"pipelines.pipeline": {11: 99}})
+
+    result = remap_event_action_params({"pipeline_id": 11, "input_type": "last_message"}, "pipeline_start", store)
+
+    assert result == {"pipeline_id": 99, "input_type": "last_message"}
+
+
+def test_remap_event_action_params_leaves_other_action_types_alone():
+    store = FakeStore({"pipelines.pipeline": {11: 99}})
+
+    assert remap_event_action_params({"pipeline_id": 11}, "log", store) == {"pipeline_id": 11}
+
+
+def test_remap_event_action_params_keeps_an_untranslated_id():
+    """A pipeline the sync never saw has no translation; the id is kept verbatim, as remap_node_params does."""
+    assert remap_event_action_params({"pipeline_id": 11}, "pipeline_start", FakeStore({})) == {"pipeline_id": 11}
