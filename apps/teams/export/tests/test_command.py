@@ -856,3 +856,10 @@ def test_the_force_delete_refusal_does_not_suggest_deleting_chatbots_by_hand(key
 
     assert "by hand" not in str(excinfo.value)
     assert "rerun without --force-delete" in str(excinfo.value)
+
+
+def test_report_warns_that_turning_off_migration_mode_resumes_every_synced_chatbot(capsys):
+    """Migration mode on the target is team-wide, so switching it off to cut one chatbot over also
+    starts the others, which may still be live on the source."""
+    Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
+    assert "Turning off migration mode on this server" in capsys.readouterr().out
