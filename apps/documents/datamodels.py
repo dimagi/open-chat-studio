@@ -1,6 +1,7 @@
 from typing import Any, Literal
 
 import pydantic
+from django.conf import settings
 from pydantic import HttpUrl, field_validator
 
 # Audio/video types markitdown cannot extract useful text from.
@@ -15,7 +16,7 @@ class ChunkingStrategy(pydantic.BaseModel):
 class RowImportSettings(pydantic.BaseModel):
     metadata_columns: list[str] = pydantic.Field(
         default_factory=list,
-        max_length=16,
+        max_length=settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS,
         description="Columns stored as metadata on each row's chunk",
     )
 

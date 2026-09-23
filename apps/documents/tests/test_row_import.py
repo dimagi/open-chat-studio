@@ -1,5 +1,6 @@
 import pydantic
 import pytest
+from django.conf import settings
 
 from apps.documents.datamodels import CollectionFileMetadata, RowImportSettings
 from apps.documents.models import FAILURE_REASON_MAX_LENGTH
@@ -26,10 +27,11 @@ FAQ = (
 
 
 class TestRowImportSettings:
-    def test_metadata_columns_are_capped_at_sixteen(self):
-        RowImportSettings(metadata_columns=[f"c{i}" for i in range(16)])
+    def test_metadata_columns_are_capped_at_the_setting(self):
+        cap = settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS
+        RowImportSettings(metadata_columns=[f"c{i}" for i in range(cap)])
         with pytest.raises(pydantic.ValidationError):
-            RowImportSettings(metadata_columns=[f"c{i}" for i in range(17)])
+            RowImportSettings(metadata_columns=[f"c{i}" for i in range(cap + 1)])
 
     def test_collection_file_metadata_without_a_chunking_strategy(self):
         metadata = CollectionFileMetadata(row_import=RowImportSettings(metadata_columns=["language"]))
