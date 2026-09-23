@@ -633,6 +633,20 @@ class TestFormatRowBlock:
         chunk = FileChunkEmbedding(metadata={}, page_number=3)
         assert _format_row_block(chunk) == "\n  <row>\n    <row_number>3</row_number>\n  </row>"
 
+    def test_columns_sit_under_their_own_element_so_a_row_number_column_cannot_collide(self):
+        chunk = FileChunkEmbedding(metadata={"row_number": "x", "language": "en"}, page_number=3)
+        assert _format_row_block(chunk) == (
+            "\n  <row>\n    <row_number>3</row_number>\n    <columns>\n"
+            "      <row_number>x</row_number>\n      <language>en</language>\n"
+            "    </columns>\n  </row>"
+        )
+
+    def test_a_second_column_with_the_same_sanitized_tag_is_skipped(self):
+        chunk = FileChunkEmbedding(metadata={"a b": "1", "a_b": "2"}, page_number=1)
+        block = _format_row_block(chunk)
+        assert block.count("<a_b>") == 1
+        assert "<a_b>1</a_b>" in block
+
 
 def test_tools_present():
     for tool in AgentTools.values:

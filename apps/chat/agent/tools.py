@@ -114,11 +114,18 @@ def _format_row_block(embedding: FileChunkEmbedding) -> str:
     if embedding.metadata is None:
         return ""
     lines = [f"    <row_number>{embedding.page_number}</row_number>"]
+    used_tags: set[str] = set()
+    columns = []
     for key, value in embedding.metadata.items():
         if value in (None, ""):
             continue
         tag = _sanitize_tag(key)
-        lines.append(f"    <{tag}>{_format_metadata_value(value)}</{tag}>")
+        if tag in used_tags:
+            continue
+        used_tags.add(tag)
+        columns.append(f"      <{tag}>{_format_metadata_value(value)}</{tag}>")
+    if columns:
+        lines.append("    <columns>\n" + "\n".join(columns) + "\n    </columns>")
     inner = "\n".join(lines)
     return f"\n  <row>\n{inner}\n  </row>"
 
