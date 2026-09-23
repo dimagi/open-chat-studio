@@ -320,6 +320,20 @@ describe("pipelineStore changeNodeType", () => {
     expect(replacement.data.type).toBe("AssistantNode");
     expect(replacement.data.label).toBe("Assistant");
     expect(replacement.position).toEqual(nodeB.position);
+  });
+
+  test("the replacement keeps the old node's name, so references to its output still resolve", () => {
+    seedChain({...nodeB, data: {type: "LLMResponse", params: {name: "Triage"}}});
+
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    expect(replacementNode()!.data.params.name).toBe("Triage");
+  });
+
+  test("a node with no name of its own takes the replacement's id, as a freshly dropped node does", () => {
+    usePipelineStore.getState().changeNodeType("b", "AssistantNode");
+
+    const replacement = replacementNode()!;
     expect(replacement.data.params.name).toBe(replacement.id);
   });
 
