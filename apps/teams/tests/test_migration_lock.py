@@ -74,3 +74,28 @@ def test_admin_can_clear_migration_lock(client):
 
     team.refresh_from_db()
     assert team.is_migrating is False
+
+
+@pytest.mark.django_db()
+def test_banner_names_the_number_of_migrating_chatbots(client):
+    team, admin = _team_with_admin()
+    team.is_migrating = True
+    team.save()
+    team.exportable_experiments.add(ExperimentFactory(team=team), ExperimentFactory(team=team, is_archived=True))
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert "2 chatbots in this team are being migrated" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_banner_stays_team_wide_without_a_selection(client):
+    team, admin = _team_with_admin()
+    team.is_migrating = True
+    team.save()
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert "This team is undergoing a migration" in response.content.decode()
