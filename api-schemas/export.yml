@@ -4234,6 +4234,19 @@ components:
       - cursor
       - has_more
       - results
+    ExportableChatbot:
+      type: object
+      description: |-
+        One entry of a team's export allowlist, identified by ``public_id`` because row ids differ
+        between servers.
+      properties:
+        public_id:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      - public_id
     FileChunkEmbeddingDetail:
       type: object
       properties:
@@ -4595,10 +4608,16 @@ components:
         secret:
           type: boolean
           description: Whether rows carry fields sealed under the team public key.
+        scope:
+          type: string
+          description: 'How a chatbot-scoped export filters this model: owned | referenced
+            | excluded. `excluded` resources are served empty while the team has a
+            chatbot selection.'
       required:
       - cursor
       - model
       - resource
+      - scope
       - secret
     MessageTypeEnum:
       enum:
@@ -5851,6 +5870,13 @@ components:
           readOnly: true
           description: Whether the team has a public key registered. The key itself
             is never exported.
+        exportable_chatbots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportableChatbot'
+          readOnly: true
+          description: Chatbots this team may export. Empty means the whole team is
+            exportable.
         created_at:
           type: string
           format: date-time
@@ -5892,6 +5918,7 @@ components:
       required:
       - created_at
       - created_by
+      - exportable_chatbots
       - feature_flags
       - has_public_key
       - id

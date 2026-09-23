@@ -22,6 +22,7 @@ from apps.teams.export.manifest import (
     model_has_team_field,
 )
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, seal
+from apps.teams.export.selection import selected_chatbots
 from apps.teams.models import Flag
 
 
@@ -141,6 +142,10 @@ class ManifestEntrySerializer(serializers.Serializer):
     resource = serializers.CharField(help_text="URL-facing resource name the endpoint is mounted at.")
     cursor = serializers.CharField(help_text="Pagination cursor type: pk | updated_at_id.")
     secret = serializers.BooleanField(help_text="Whether rows carry fields sealed under the team public key.")
+    scope = serializers.CharField(
+        help_text="How a chatbot-scoped export filters this model: owned | referenced | excluded. "
+        "`excluded` resources are served empty while the team has a chatbot selection."
+    )
 
 
 class ManifestSerializer(serializers.Serializer):
@@ -206,26 +211,48 @@ def build_resource_serializer(model):
     return type(f"{component_name(model)}DetailSerializer", (_SecretMixin, serializers.ModelSerializer), attrs)
 
 
+class ExportableChatbotSerializer(serializers.Serializer):
+    """One entry of a team's export allowlist, identified by ``public_id`` because row ids differ
+    between servers."""
+
+    public_id = serializers.CharField()
+    name = serializers.CharField()
+
+
 @cache
 def build_team_serializer():
     """Serializer for the single-team endpoint (``GET /api/export/team/``). The team anchors the export
     surface and is served as one object rather than a page. It extends the importable team-row dump with
-    the two operational status fields the sync client preflights on: ``is_migrating`` (kept out of the
-    importable row, so migration mode isn't replicated to the target) and ``has_public_key`` -- a method
-    field collapsing the key to a boolean, whether one is registered, never the key material itself. The
-    raw ``public_key`` field is excluded alongside ``members`` so neither ever goes out."""
+    the operational status the sync client preflights on: ``is_migrating`` (kept out of the importable
+    row, so migration mode isn't replicated to the target), ``has_public_key`` -- a method field
+    collapsing the key to a boolean, whether one is registered, never the key material itself -- and
+    ``exportable_chatbots``, which says how much of the team this server will serve. The raw
+    ``public_key`` and ``exportable_experiments`` fields are excluded alongside ``members``: the
+    allowlist holds source pks the target cannot translate, and ``load_team`` imports the team row
+    before any experiment exists."""
     base = build_resource_serializer(entry_model(TEAM_MODEL))
 
     class TeamExportSerializer(base):
         has_public_key = serializers.SerializerMethodField(
             help_text="Whether the team has a public key registered. The key itself is never exported."
         )
+        exportable_chatbots = serializers.SerializerMethodField(
+            help_text="Chatbots this team may export. Empty means the whole team is exportable."
+        )
 
         class Meta(base.Meta):
-            exclude = ["members", "public_key"]
+            # Replaces the base's exclude list rather than extending it.
+            exclude = ["members", "public_key", "exportable_experiments"]
 
         def get_has_public_key(self, team) -> bool:
             return bool(team.public_key)
+
+        @extend_schema_field(ExportableChatbotSerializer(many=True))
+        def get_exportable_chatbots(self, team) -> list[dict]:
+            # Sorted by public_id so the client's selection key is stable across requests. Postgres
+            # orders a uuid bytewise, which matches the order of its lowercase hex string.
+            rows = selected_chatbots(team).order_by("public_id").values_list("public_id", "name")
+            return [{"public_id": str(public_id), "name": name} for public_id, name in rows]
 
     return TeamExportSerializer
 
