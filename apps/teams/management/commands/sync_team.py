@@ -5,6 +5,9 @@
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 
+The source decides how much of the team moves: a team admin there can limit the export to selected
+chatbots. The command has no chatbot flag; it syncs whatever the source allows and reports it.
+
 Every user the sync creates is sent a password-reset email, since passwords are hashed and never
 migrated. A failed send doesn't stop the sync; the addresses are listed in the sync report instead,
 to be followed up by hand.
@@ -53,6 +56,11 @@ SELECTION_CHANGED_MESSAGE = (
     "The source team's chatbot selection changed during the sync, so the run stopped before importing "
     "rows from two selections. Rerun to sync the new selection."
 )
+FORCE_DELETE_WITH_SELECTION = (
+    "The source is exporting only part of the team, so --force-delete would also destroy chatbots "
+    "synced under an earlier selection. Delete the chatbots you want re-imported by hand on this "
+    "server, then rerun without --force-delete."
+)
 
 # Known source-server refusals, matched by status code and detail marker, with the friendly
 # message to show the operator instead of a raw HTTP traceback.
@@ -99,11 +107,13 @@ def _load_private_key(private_key_path: str | None):
     return None
 
 
-def check_source_team_ready(client) -> None:
+def check_source_team_ready(client, write=lambda _m: None) -> None:
     """Block the sync unless the source team is in migration mode and has a public key registered --
     both must be set. The export API no longer enforces migration mode server-side, so the client
     checks it here from the team endpoint's ``is_migrating`` / ``has_public_key`` status (the latter is a
-    boolean saying whether a key is registered). Raises CommandError listing whatever is missing."""
+    boolean saying whether a key is registered). Also prints what the source says it will export, so
+    the operator sees the server's answer rather than assuming. Raises CommandError listing whatever
+    is missing."""
     team = client.get_team()
     problems = []
     if not team.get("is_migrating"):
@@ -112,6 +122,20 @@ def check_source_team_ready(client) -> None:
         problems.append(MISSING_PUBLIC_KEY_MESSAGE)
     if problems:
         raise CommandError(" ".join(problems))
+
+    chatbots = team.get("exportable_chatbots") or []
+    if chatbots:
+        write(f"The source will export {len(chatbots)} of this team's chatbots:")
+        for chatbot in chatbots:
+            write(f"  - {chatbot['name']}")
+    else:
+        write("The source will export the whole team.")
+
+
+def check_force_delete_allowed(client) -> None:
+    """Refuse a whole-team delete while the source is exporting a selection."""
+    if client.get_team().get("exportable_chatbots"):
+        raise CommandError(FORCE_DELETE_WITH_SELECTION)
 
 
 def _prompt(message: str) -> str:
@@ -122,7 +146,7 @@ def _prompt(message: str) -> str:
         raise CommandError("This command must be run interactively; stdin is closed.") from None
 
 
-def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
+def check_sync_preconditions(client, private_key, enforce_schema=True, store=None, write=lambda _m: None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
     its export schema matches ours, we hold a key for any sealed secrets, and the source team is
     ready to export (migration mode on, public key set). When a ``store`` is given, also ask the
@@ -145,7 +169,7 @@ def check_sync_preconditions(client, private_key, enforce_schema=True, store=Non
             "would be imported as unreadable tokens. Pass --private-key-path with the team's key."
         )
 
-    check_source_team_ready(client)
+    check_source_team_ready(client, write)
 
     files_confirmation_needed = store is not None and not store.has_flag(FILES_CONFIRMED_FLAG)
     if files_confirmation_needed:
@@ -369,10 +393,12 @@ class Command(BaseCommand):
         enforce_schema = not options["skip_schema_check"]
 
         if options["force_delete"]:
-            self._run_force_delete(options)
+            self._run_force_delete(options, client)
 
         with FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite") as store:
-            check_sync_preconditions(client, private_key, enforce_schema, store=store)
+            check_sync_preconditions(
+                client, private_key, enforce_schema=enforce_schema, store=store, write=self.stdout.write
+            )
 
             importer = run_sync(
                 client,
@@ -391,10 +417,13 @@ class Command(BaseCommand):
                 duration=duration,
                 missing_files=importer.missing_files,
                 notification_failures=importer.notification_failures,
+                chatbots=client.get_team().get("exportable_chatbots") or [],
+                skipped_rows=importer.skipped_rows,
             )
 
-    def _run_force_delete(self, options):
+    def _run_force_delete(self, options, client):
         """Confirm and delete the local team plus its sync state."""
+        check_force_delete_allowed(client)
         if not self._confirm_force_delete(options["team_slug"]):
             raise CommandError("Aborted: --force-delete not confirmed.")
         force_delete_team(
@@ -411,18 +440,37 @@ class Command(BaseCommand):
         duration: timedelta | None = None,
         missing_files: Sequence[str] = (),
         notification_failures: Sequence[tuple[str, str]] = (),
+        chatbots: Sequence[dict] = (),
+        skipped_rows: int = 0,
     ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
-        which resources need manual setup, which files the source had no content for, whether the sync
-        finished or must be rerun, how long the run took, and the follow-up step for channel webhooks
-        (a separate command -- see ``reregister_webhooks``). Sections are headed and blank-line
-        separated so the report stands apart from the row-by-row progress log above it."""
+        which chatbots moved, which resources need manual setup, which files the source had no content
+        for, whether the sync finished or must be rerun, how long the run took, and the follow-up step
+        for channel webhooks (a separate command -- see ``reregister_webhooks``). Sections are headed
+        and blank-line separated so the report stands apart from the row-by-row progress log above it."""
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
         self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
 
         if duration is not None:
             self.stdout.write(f"Duration: {duration}")
+        if skipped_rows:
+            self.stdout.write(f"Rows already up to date and left untouched: {skipped_rows}")
+
+        if chatbots:
+            self.stdout.write("")
+            self.stdout.write(self.style.MIGRATE_HEADING("Chatbots synced"))
+            for chatbot in chatbots:
+                self.stdout.write(f"  - {chatbot['name']}")
+            self.stdout.write("")
+            self.stdout.write(
+                self.style.WARNING(
+                    "Only these chatbots were migrated. Evaluations, human annotations and transcript "
+                    "analyses were not migrated for them, and neither was anything belonging to this "
+                    "team's other chatbots. Team members, tags, pricing rules and notifications were "
+                    "migrated for the whole team, and notifications can mention the other chatbots."
+                )
+            )
 
         if missing_files:
             self.stdout.write("")

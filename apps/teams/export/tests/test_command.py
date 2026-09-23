@@ -545,6 +545,7 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     Team.objects.create(name="Keep", slug="imported-team-z")
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
+    monkeypatch.setattr(sync_team, "check_force_delete_allowed", lambda _client: None)
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
 
@@ -726,3 +727,77 @@ def test_a_selection_change_during_the_run_stops_it_cleanly(make_store, tmp_path
 
     with pytest.raises(CommandError, match="selection changed"):
         run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+
+def test_report_names_the_synced_chatbots(capsys):
+    command = Command()
+    command._report(
+        sync_complete=True,
+        team_slug="acme",
+        chatbots=[{"public_id": "abc", "name": "Support bot"}],
+    )
+    out = capsys.readouterr().out
+    assert "Support bot" in out
+    assert "evaluations" in out.lower()
+    assert "human annotations" in out.lower()
+    assert "transcript analyses" in out.lower()
+
+
+def test_report_omits_the_chatbot_section_for_a_whole_team_sync(capsys):
+    command = Command()
+    command._report(sync_complete=True, team_slug="acme", chatbots=[])
+    out = capsys.readouterr().out
+    assert "Chatbots synced" not in out
+
+
+def test_report_counts_rows_left_untouched(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", skipped_rows=7)
+    assert "left untouched: 7" in capsys.readouterr().out
+
+
+def test_force_delete_is_refused_while_the_source_has_a_selection(keypair):
+    """--force-delete drops the whole local team, which would destroy chatbots synced under an
+    earlier selection."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+
+    with pytest.raises(CommandError, match="only part of the team"):
+        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
+
+
+def test_force_delete_is_allowed_for_a_whole_team_sync(keypair):
+    manifest, rows = _scenario(keypair[0])
+    sync_team.check_force_delete_allowed(FakeClient(manifest, rows))  # does not raise
+
+
+def test_preflight_prints_what_the_source_will_export(keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export 1 of this team's chatbots:" in lines
+    assert "  - Support bot" in lines
+
+
+def test_preflight_says_when_the_whole_team_is_exported(keypair):
+    manifest, rows = _scenario(keypair[0])
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export the whole team." in lines
+
+
+def test_force_delete_is_refused_before_the_prompt(tmp_path, monkeypatch, keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    Team.objects.create(name="Keep", slug="imported-team-z")
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
+    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite the refusal"))
+
+    with pytest.raises(CommandError, match="only part of the team"):
+        Command().handle(**_force_delete_options(tmp_path))
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
