@@ -12,6 +12,7 @@ class Migration(migrations.Migration):
         # remove_deprecated_models repoints evaluators off each model it deletes, so the
         # Evaluator FK must be in this migration's app state.
         ("evaluations", "0018_evaluator_llm_provider_fks"),
+        ("pipelines", "0027_backfill_node_fks"),
     ]
 
     operations = [

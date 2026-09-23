@@ -195,15 +195,15 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+        return get_related_pipeline_nodes_queryset(self, "source_material")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
-        return get_related_experiment_versions_queryset(self, "source_material_id")
+        return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
     def archive(self):
         """Mirrors Collection.archive()'s in-use guard."""
-        if has_related_pipeline_references(self, "source_material_id"):
+        if has_related_pipeline_references(self, "source_material"):
             return False
         super().archive()
         return True
