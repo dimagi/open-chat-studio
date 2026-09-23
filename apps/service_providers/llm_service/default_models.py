@@ -10,6 +10,7 @@ from apps.service_providers.llm_service.model_parameters import (
     BasicParameters,
     ClaudeOpus46Parameters,
     ClaudeOpus47Parameters,
+    ClaudeOpus55Parameters,
     ClaudeSonnet46Parameters,
     GPT5Parameters,
     GPT5ProParameters,
@@ -64,7 +65,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
-        Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus47Parameters),
+        Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
