@@ -247,3 +247,16 @@ def test_every_scope_rule_builds_a_runnable_queryset():
 
     for entry in manifest.MANIFEST_ENTRIES:
         list(manifest.scoped_queryset(entry, team, scope)[:1])
+
+
+def test_a_malformed_pipeline_id_in_an_event_action_is_ignored():
+    """One bad legacy value must not break the scope every resource request builds."""
+    team = TeamFactory()
+    chatbot = ExperimentFactory(team=team)
+    team.exportable_experiments.add(chatbot)
+    trigger = StaticTriggerFactory(experiment=chatbot)
+    trigger.action.action_type = "pipeline_start"
+    trigger.action.params = {"pipeline_id": "not-a-number"}
+    trigger.action.save()
+
+    assert build_scope(team).pipeline_ids == [chatbot.pipeline_id]
