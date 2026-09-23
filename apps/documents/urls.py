@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.documents import views
+from apps.documents import row_import_views, views
 from apps.generics.urls import make_crud_urls
 
 app_name = "documents"
@@ -10,8 +10,8 @@ urlpatterns = [
     path("collections/<int:pk>/query_view", views.QueryView.as_view(), name="query_collection_view"),
     path("collections/<int:pk>/query", views.query_collection, name="collection_query"),
     path("collections/<int:pk>/add_files", views.add_collection_files, name="add_collection_files"),
-    path("collections/<int:pk>/import_rows/preview", views.row_import_preview, name="row_import_preview"),
-    path("collections/<int:pk>/import_rows", views.row_import, name="row_import"),
+    path("collections/<int:pk>/import_rows/preview", row_import_views.row_import_preview, name="row_import_preview"),
+    path("collections/<int:pk>/import_rows", row_import_views.row_import, name="row_import"),
     path("collections/<int:pk>/download", views.download_collection_files, name="download_collection_files"),
     path(
         "collections/<int:pk>/files/<int:file_id>/delete",
