@@ -188,7 +188,7 @@ def test_import_carries_provider_verification_state(store, keypair):
     importer = Importer(store, private_key=private_key)
     importer.import_rows("teams.team", [_team_row()])
 
-    def provider_row(api_key, extra_data):
+    def provider_row(api_key, extra_data, updated_at):
         return {
             "id": 5,
             "name": "OpenAI",
@@ -196,15 +196,17 @@ def test_import_carries_provider_verification_state(store, keypair):
             "config": seal_mod.seal({"api_key": api_key}, public_key),
             "extra_data": extra_data,
             "created_at": PAST,
-            "updated_at": PAST,
+            "updated_at": updated_at,
         }
 
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-first", {"verified_credentials": True})])
+    first = provider_row("sk-first", {"verified_credentials": True}, PAST)
+    importer.import_rows("service_providers.llmprovider", [first])
     provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
     assert provider.credentials_verified
 
     rejected = {"verified_credentials": False, "verification_error": "AuthenticationError: bad key"}
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-second", rejected)])
+    second = provider_row("sk-second", rejected, "2021-01-02T03:04:05+00:00")
+    importer.import_rows("service_providers.llmprovider", [second])
     provider.refresh_from_db()
     assert provider.config == {"api_key": "sk-second"}
     assert not provider.credentials_verified  # not left over from the row this one replaced
@@ -644,10 +646,10 @@ def _fail_when_filling_checkpoint(store):
     after the row is inserted but before its checkpoint is filled."""
     real_record = store.record
 
-    def record(content_type, source_key, target_key=None):
+    def record(content_type, source_key, target_key=None, **kwargs):
         if target_key is not None:
             raise RuntimeError("interrupted before checkpoint was filled")
-        return real_record(content_type, source_key, target_key)
+        return real_record(content_type, source_key, target_key, **kwargs)
 
     return record
 
@@ -1135,3 +1137,41 @@ def test_a_failing_on_user_created_hook_is_announced_as_it_happens(store, capsys
     output = capsys.readouterr().out
     assert "one@example.com" in output
     assert "Email address is not verified" in output
+
+
+def test_unchanged_row_is_skipped_on_reimport(store, django_assert_num_queries):
+    """A second pass over a row whose source updated_at hasn't moved must not touch the database."""
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    importer.import_rows("service_providers.llmprovider", [row])
+    target_pk = store.get_target("service_providers.llmprovider", 5)
+
+    with django_assert_num_queries(0):
+        assert importer.import_rows("service_providers.llmprovider", [row]) == 0
+    assert importer.skipped_rows == 1
+    assert store.get_target("service_providers.llmprovider", 5) == target_pk
+
+
+def test_changed_row_is_reimported(store):
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    importer.import_rows("service_providers.llmprovider", [row])
+
+    changed = {**row, "name": "OpenAI (renamed)", "updated_at": "2026-02-02T03:04:05+00:00"}
+    assert importer.import_rows("service_providers.llmprovider", [changed]) == 1
+    assert LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5)).name == "OpenAI (renamed)"
+
+
+def test_row_without_a_target_is_imported_even_when_the_timestamp_matches(store):
+    """An interrupted run leaves a checkpoint with a null target. The row does not exist on the
+    target yet, so a matching timestamp must not skip it."""
+    store.record("service_providers.llmprovider", 5, None, source_updated_at=PAST)
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    assert importer.import_rows("service_providers.llmprovider", [row]) == 1
