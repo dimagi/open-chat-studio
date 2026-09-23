@@ -1,5 +1,6 @@
 import base64
 import json
+import sqlite3
 from datetime import UTC, datetime
 
 import pytest
@@ -78,3 +79,46 @@ def test_derive_updated_at_cursor_picks_highest_keyset():
 
 def test_derive_updated_at_cursor_empty_is_none():
     assert derive_updated_at_cursor([]) is None
+
+
+def test_record_round_trips_the_source_timestamp(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    store.record("chat.chatmessage", 5, 99, source_updated_at="2026-01-02T03:04:05+00:00")
+    assert store.get_source_updated_at("chat.chatmessage", 5) == "2026-01-02T03:04:05+00:00"
+
+
+def test_source_timestamp_persists_across_reopen(make_store, tmp_path):
+    path = tmp_path / "team.sqlite"
+    make_store(path).record("chat.chatmessage", 5, 99, source_updated_at="2026-01-02T03:04:05+00:00")
+    assert make_store(path).get_source_updated_at("chat.chatmessage", 5) == "2026-01-02T03:04:05+00:00"
+
+
+def test_source_timestamp_is_absent_for_an_unrecorded_row(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    store.record("chat.chatmessage", 5, 99)
+    assert store.get_source_updated_at("chat.chatmessage", 5) is None
+    assert store.get_source_updated_at("chat.chatmessage", 6) is None
+
+
+def test_store_opens_a_database_written_before_the_timestamp_column(make_store, tmp_path):
+    """State DBs created by an earlier release have no source_updated_at column; opening one must
+    add it rather than fail, and the rows already in it read back as unknown."""
+    path = tmp_path / "legacy.sqlite"
+    connection = sqlite3.connect(str(path))
+    connection.execute(
+        "CREATE TABLE fk_translation (content_type TEXT NOT NULL, source_key INTEGER NOT NULL, "
+        "target_key INTEGER, PRIMARY KEY (content_type, source_key))"
+    )
+    connection.execute("INSERT INTO fk_translation VALUES ('teams.team', 1, 7)")
+    connection.commit()
+    connection.close()
+
+    store = make_store(path)
+    assert store.get_target("teams.team", 1) == 7
+    assert store.get_source_updated_at("teams.team", 1) is None
+
+
+def test_store_uses_wal_journaling(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    mode = store._conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode == "wal"
