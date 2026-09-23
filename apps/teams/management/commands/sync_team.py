@@ -247,7 +247,8 @@ def run_sync(
                 if chatbots and entry.get("scope") == ScopeClass.EXCLUDED:
                     write(_style_synced_line(f"skipped {entry['resource']} (not migrated)", 0, style))
                     continue
-                count = _sync_resource(importer, client, store, entry, page_limit, cursor_key)
+                reread = bool(chatbots) and _can_gain_older_rows(entry)
+                count = _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=reread)
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
@@ -279,12 +280,20 @@ def resolve_selection(client, store) -> tuple[str, list[dict]]:
     return key, chatbots
 
 
-def _sync_resource(importer, client, store, entry, page_limit, cursor_key) -> int:
+def _can_gain_older_rows(entry) -> bool:
+    """Whether a selection's row set for this resource can gain a row below its cursor. Referenced
+    resources are defined by what the selected chatbots use now, so an existing provider, file or
+    collection joins the set when a chatbot starts using it, keeping its old pk and timestamp."""
+    return entry.get("scope") == ScopeClass.REFERENCED
+
+
+def _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=False) -> int:
     """Import one resource page by page, recording the resume cursor once each page's rows are
     committed. The cursor is stored rather than derived from the synced rows, because the row set the
-    source serves changes with the chatbot selection."""
+    source serves changes with the chatbot selection. ``reread`` starts from the beginning regardless;
+    rows already imported at the same source revision are skipped by the importer."""
     model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
-    cursor = store.get_cursor(cursor_key, model_label)
+    cursor = None if reread else store.get_cursor(cursor_key, model_label)
     count = 0
     for rows in client.iter_pages(resource, start_cursor=cursor, limit=page_limit):
         count += importer.import_rows(model_label, rows)

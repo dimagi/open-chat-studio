@@ -13,7 +13,7 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
-from apps.teams.export.translation import ALL_CHATBOTS_KEY
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -633,7 +633,7 @@ def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
     """The source then serves a subset of what it served, so every cursor is still valid."""
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
-    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"][0]["scope"] = "owned"
     store = make_store(tmp_path / "team.sqlite")
 
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
@@ -650,7 +650,7 @@ def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_pa
     """A full-team sync served a superset of any selection, so its cursors stay valid."""
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
-    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"][0]["scope"] = "owned"
     store = make_store(tmp_path / "team.sqlite")
     store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
 
@@ -676,3 +676,31 @@ def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, key
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", None) in client.iter_calls
+
+
+def test_referenced_resources_are_reread_from_the_start_under_a_selection(make_store, tmp_path, keypair):
+    """A shared row the chatbot starts using later can have a lower pk than the stored cursor, so a
+    referenced resource is re-read in full while a selection is active."""
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "referenced"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls
+
+
+def test_owned_resources_resume_from_their_cursor_under_a_selection(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "owned"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
