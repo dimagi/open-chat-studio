@@ -10,6 +10,7 @@ from apps.teams.export import manifest
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
+from apps.utils.factories.events import ScheduledTriggerFactory, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ChatFactory, ExperimentFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
@@ -293,3 +294,20 @@ def test_m2m_resources_are_prefetched():
         data = serializer(list(queryset), many=True, context={"team": team, "public_key": None}).data
     assert len(data) == 4
     assert len(captured) <= 2, [q["sql"] for q in captured]
+
+
+@pytest.mark.django_db()
+def test_event_actions_of_every_trigger_type_are_exported():
+    """Each trigger type holds a non-null OneToOne to its EventAction, so an action left out of the
+    export makes its trigger unimportable (resolve_fk raises on a non-null FK with no translation)."""
+    team = TeamFactory()
+    experiment = ExperimentFactory(team=team)
+    triggers = [
+        StaticTriggerFactory(experiment=experiment),
+        TimeoutTriggerFactory(experiment=experiment),
+        ScheduledTriggerFactory(experiment=experiment),
+    ]
+
+    entry = manifest.get_manifest_entry("event_actions")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert {trigger.action_id for trigger in triggers} <= pks
