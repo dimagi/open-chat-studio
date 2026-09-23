@@ -5,7 +5,8 @@
     class="flex justify-between p-3 border-b border-base-300"
     hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}"
     hx-target="#messages-container"
-    hx-trigger="change, submit">
+    hx-trigger="change, submit"
+    hx-sync="this:replace">
     <!-- Hidden inputs to maintain search state -->
     <input type="hidden" name="search" value="{{ request.GET.search|default:'' }}">
 
@@ -78,6 +79,7 @@
                           type="button"
                           data-action="translate-remaining-messages"
                           class="btn btn-primary"
+                          hx-disinherit="hx-sync"
                           hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                           hx-vals='{"language": "{{ language }}"}'
                           hx-include="#control-panel, #translation-provider-remaining, #translation-provider-model-remaining"
