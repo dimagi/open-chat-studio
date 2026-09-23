@@ -15,6 +15,7 @@ from apps.documents.models import Collection, CollectionFile, FileStatus, format
 from apps.documents.readers import FileReadException
 from apps.documents.retrieval import search_collection
 from apps.documents.row_import import (
+    ParsedRow,
     RowFailure,
     RowImportError,
     content_hash,
@@ -331,15 +332,16 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         it fails only when no row embedded at all.
         """
         for collection_file in collection_files:
-            embeddings = []
+            embedding_ids: list[int] = []
             try:
                 if collection_file.row_import:
-                    embeddings, row_failures = self._embed_rows(collection_file)
+                    embedding_ids, row_failures = self._embed_rows(collection_file)
                     collection_file.failure_reason = format_row_failures(
-                        row_failures, total_rows=len(embeddings) + len(row_failures)
+                        row_failures, total_rows=len(embedding_ids) + len(row_failures)
                     )
                 else:
                     embeddings = self._embed_file(collection_file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                    embedding_ids = [embedding.id for embedding in embeddings]
                     # An earlier attempt may have left a reason behind; this attempt supersedes it.
                     collection_file.failure_reason = ""
                 collection_file.status = FileStatus.COMPLETED
@@ -360,14 +362,14 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 collection_file = CollectionFile.objects.filter(id=collection_file_id).first()
                 if not collection_file:
                     # collection file deleted - remove all the embeddings
-                    FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+                    FileChunkEmbedding.objects.filter(id__in=embedding_ids).delete()
                 else:
                     logger.exception(
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
     @classmethod
-    def _try_build_search_vectors(cls, embeddings: list[FileChunkEmbedding], collection: Collection):
+    def _try_build_search_vectors(cls, chunk_ids: list[int], collection: Collection):
         """Build the lexical vectors, treating a failure here as non-fatal for the file.
 
         The embeddings are already written and each one cost a provider call. Losing the lexical
@@ -380,16 +382,16 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         """
         try:
             with transaction.atomic():
-                cls._build_search_vectors(embeddings, collection)
+                cls._build_search_vectors(chunk_ids, collection)
         except Exception:
             logger.exception(
                 "Failed to build lexical search vectors; the file is indexed but will not be "
                 "found by keyword search until it is re-indexed",
-                extra={"collection_id": collection.id, "chunk_count": len(embeddings)},
+                extra={"collection_id": collection.id, "chunk_count": len(chunk_ids)},
             )
 
     @staticmethod
-    def _build_search_vectors(embeddings: list[FileChunkEmbedding], collection: Collection):
+    def _build_search_vectors(chunk_ids: list[int], collection: Collection):
         """Populate the lexical `search_vector` for chunks just written.
 
         Done in one statement so Postgres builds the tsvectors itself rather than round-tripping
@@ -398,7 +400,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         and queried as `english` matches nothing, which is indistinguishable from having no
         lexical hits at all.
         """
-        FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).update(
+        FileChunkEmbedding.objects.filter(id__in=chunk_ids).update(
             search_vector=SearchVector("context", "text", config=collection.search_language)
         )
 
@@ -459,18 +461,18 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 # Content that is entirely NUL bytes clears the check above but sanitizes away
                 # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)
-            self._try_build_search_vectors(embeddings, collection_file.collection)
+            self._try_build_search_vectors([embedding.id for embedding in embeddings], collection_file.collection)
             return embeddings
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
             raise
 
-    def _embed_rows(self, collection_file: CollectionFile) -> tuple[list[FileChunkEmbedding], list[RowFailure]]:
-        """Store one embedding per sheet row, returning what was written and which rows failed.
+    def _embed_rows(self, collection_file: CollectionFile) -> tuple[list[int], list[RowFailure]]:
+        """Store one embedding per sheet row, returning the chunk ids written and which rows failed.
 
         Rows go to the provider in batches. A batch that fails is retried one row at a time so a
-        single bad row costs only itself. Deletes anything already written if nothing indexed or
-        a database write fails, for the same reason as `_embed_file`.
+        single bad row does not fail the rest of the batch. Deletes anything already written if
+        nothing indexed or a database write fails, for the same reason as `_embed_file`.
         """
         file = collection_file.file
         try:
@@ -479,15 +481,16 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             raise FileReadException(str(exc)) from exc
 
         metadata_columns = collection_file.row_import.metadata_columns
-        embeddings: list[FileChunkEmbedding] = []
+        chunk_ids: list[int] = []
         failures: list[RowFailure] = []
         try:
             for batch in chunk_list(sheet.rows, ROW_EMBED_BATCH_SIZE):
                 texts = [render_row(file.name, sheet.headers, row) for row in batch]
-                for row, text, vector in self._embed_batch(batch, texts, failures):
+                embeddings = []
+                for row, text, vector in self._embed_batch(file, batch, texts, failures):
                     metadata = row_metadata(row, metadata_columns)
                     embeddings.append(
-                        FileChunkEmbedding.objects.create(
+                        FileChunkEmbedding(
                             team_id=file.team_id,
                             file=file,
                             collection_id=collection_file.collection_id,
@@ -500,19 +503,27 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                             content_hash=content_hash(text, metadata),
                         )
                     )
-            if not embeddings:
+                if embeddings:
+                    created = FileChunkEmbedding.objects.bulk_create(embeddings)
+                    chunk_ids.extend(embedding.id for embedding in created)
+            if not chunk_ids:
                 raise FileReadException(format_row_failures(failures, total_rows=len(failures)))
-            self._try_build_search_vectors(embeddings, collection_file.collection)
-            return embeddings, failures
+            self._try_build_search_vectors(chunk_ids, collection_file.collection)
+            return chunk_ids, failures
         except Exception:
-            FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+            FileChunkEmbedding.objects.filter(id__in=chunk_ids).delete()
             raise
 
-    def _embed_batch(self, rows, texts: list[str], failures: list[RowFailure]):
+    def _embed_batch(
+        self, file: File, rows: list[ParsedRow], texts: list[str], failures: list[RowFailure]
+    ) -> Iterator[tuple[ParsedRow, str, Vector]]:
         try:
             vectors = self.get_embedding_vectors(texts)
         except Exception as exc:
-            logger.warning("Batch embedding failed, retrying rows one at a time", extra={"error": str(exc)})
+            logger.warning(
+                "Batch embedding failed, retrying rows one at a time",
+                extra={"file_id": file.id, "error": str(exc)},
+            )
             vectors = None
         if vectors is not None:
             yield from zip(rows, texts, vectors, strict=True)
@@ -683,13 +694,6 @@ class VoyageAILocalIndexManager(LocalIndexManager):
         The langchain wrapper maps `embed_documents` and `embed_query` to
         Voyage's `input_type=document` and `input_type=query` API params
         respectively, which return different vectors for documents vs queries.
-
-        Contextual models are rejected: they route through Voyage's
-        `contextualized_embed` API with auto-chunking, which can return several
-        embeddings for a single input. This method returns one vector per chunk we
-        send, so the extra embeddings would be dropped and the tail of the chunk
-        silently lost from the index. Detection matches langchain-voyageai's own
-        `_is_context_model`, which is a substring check on the model name.
         """
         if not content:
             raise ValueError("Cannot embed empty string")
@@ -700,6 +704,15 @@ class VoyageAILocalIndexManager(LocalIndexManager):
         raise ValueError(f"Unknown input_type: {input_type!r}")
 
     def _embeddings_client(self):
+        """Build the Voyage embeddings client, rejecting contextual models.
+
+        Contextual models route through Voyage's `contextualized_embed` API with
+        auto-chunking, which can return several embeddings for a single input. The
+        callers here return one vector per chunk sent, so the extra embeddings would
+        be dropped and the tail of the chunk silently lost from the index. Detection
+        matches langchain-voyageai's own `_is_context_model`, which is a substring
+        check on the model name.
+        """
         if "context" in self.embedding_model_name:
             raise ValueError(f"Contextual Voyage models are not supported: {self.embedding_model_name}")
 

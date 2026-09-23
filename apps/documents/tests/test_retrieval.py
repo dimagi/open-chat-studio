@@ -396,7 +396,7 @@ class TestLexicalSearchLanguage:
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == []
 
         # Re-indexing the chunk under the new language brings it back.
-        LocalIndexManager._build_search_vectors([chunk], collection)
+        LocalIndexManager._build_search_vectors([chunk.id], collection)
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == [chunk.id]
 
     def test_stopword_only_query_falls_back_to_dense(self):

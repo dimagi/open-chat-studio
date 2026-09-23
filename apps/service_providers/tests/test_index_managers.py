@@ -405,6 +405,54 @@ class TestLocalIndexManagerRowImport:
         assert collection_file.status == FileStatus.FAILED
         assert collection_file.failure_reason == "FileReadException: Row 1 has 3 values but the header has 2"
 
+    @pytest.fixture()
+    def large_collection_file(self, local_index_instance):
+        data = b"a,b\n" + b"".join(f"v{i},w{i}\n".encode() for i in range(150))
+        file = FileFactory.create(team=local_index_instance.team, name="large.csv", file__data=data)
+        return CollectionFile.objects.create(
+            collection=local_index_instance,
+            file=file,
+            status=FileStatus.PENDING,
+            metadata={"row_import": {"metadata_columns": []}},
+        )
+
+    def test_rows_beyond_the_batch_size_are_sent_in_further_batches(self, large_collection_file, index_manager):
+        with mock.patch.object(
+            index_manager, "get_embedding_vectors", wraps=index_manager.get_embedding_vectors
+        ) as spy:
+            index_manager.add_files(CollectionFile.objects.filter(id=large_collection_file.id).iterator(1))
+
+        large_collection_file.refresh_from_db()
+        assert large_collection_file.status == FileStatus.COMPLETED
+        assert FileChunkEmbedding.objects.filter(file=large_collection_file.file).count() == 150
+        assert [len(call.args[0]) for call in spy.call_args_list] == [100, 50]
+
+    def test_a_failing_batch_falls_back_row_by_row_and_the_next_batch_is_unaffected(
+        self, large_collection_file, index_manager
+    ):
+        vector = [0.1] * settings.EMBEDDING_VECTOR_SIZE
+        batch_calls = []
+
+        def embed_documents(contents):
+            batch_calls.append(len(contents))
+            if len(batch_calls) == 1:
+                raise RuntimeError("batch failed")
+            return [vector] * len(contents)
+
+        with (
+            mock.patch.object(index_manager, "get_embedding_vectors", side_effect=embed_documents),
+            mock.patch.object(
+                index_manager, "get_embedding_vector", wraps=index_manager.get_embedding_vector
+            ) as row_spy,
+        ):
+            index_manager.add_files(CollectionFile.objects.filter(id=large_collection_file.id).iterator(1))
+
+        large_collection_file.refresh_from_db()
+        assert large_collection_file.status == FileStatus.COMPLETED
+        assert large_collection_file.failure_reason == ""
+        assert FileChunkEmbedding.objects.filter(file=large_collection_file.file).count() == 150
+        assert row_spy.call_count == 100
+
     def test_text_files_still_take_the_chunking_path(self, local_index_instance, index_manager):
         file = FileFactory.create(team=local_index_instance.team, file__data=b"test content")
         local_index_instance.files.add(file)
