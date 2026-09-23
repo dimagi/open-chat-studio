@@ -123,7 +123,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         annotations_started = self.object.items.filter(review_count__gt=0).exists()
-        context["existing_schema"] = self.object.schema
+        context["existing_schema"] = {name: self.object.schema[name] for name in self.object.ordered_field_names()}
         context["schema_locked"] = annotations_started
         context["annotations_started"] = annotations_started
         context["breadcrumbs"] = [*queues_crumbs(self.request.team.slug, self.object), (_("Edit"), None)]
@@ -174,10 +174,12 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
 
         aggregate = getattr(queue, "aggregate", None)
         schema = queue.schema or {}
-        context["aggregates"] = {
-            name: merge_binary_labels(stats, schema.get(name) or {})
-            for name, stats in (aggregate.aggregates if aggregate else {}).items()
-        }
+        stored = aggregate.aggregates if aggregate else {}
+        context["aggregates"] = [
+            (name, merge_binary_labels(stored[name], schema.get(name) or {}))
+            for name in queue.ordered_field_names()
+            if name in stored
+        ]
 
         filter_context = get_filter_context_data(
             self.request.team,

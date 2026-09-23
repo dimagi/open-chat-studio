@@ -67,7 +67,7 @@
     <div class="card-body">
       <h3 class="card-title text-sm">Aggregate Scores</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
-        {% for field_name, stats in aggregates.items %}
+        {% for field_name, stats in aggregates %}
           <div class="border border-base-300 rounded-lg p-3">
             <div class="flex justify-between items-center mb-2">
               <span class="font-medium">{{ field_name }}</span>

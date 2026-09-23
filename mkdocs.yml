@@ -143,6 +143,7 @@ nav:
       - 0065 Participant-actionable errors are answered, not raised: adr/0065-participant-actionable-errors-answered-not-raised.md
       - 0066 Session tokens carry their expiry and are renewed in place: adr/0066-session-tokens-carry-their-expiry-and-renew-in-place.md
       - 0067 Team-actionable provider errors are configuration errors: adr/0067-team-actionable-provider-errors-are-configuration-errors.md
+      - 0068 Field order is presentation, stored outside the locked schema: adr/0068-field-order-is-presentation-outside-the-locked-schema.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md

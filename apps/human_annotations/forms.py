@@ -38,10 +38,14 @@ class AnnotationQueueForm(forms.ModelForm):
         widget=forms.HiddenInput(),
         required=False,
     )
+    field_order = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
 
     class Meta:
         model = AnnotationQueue
-        fields = ["name", "description", "schema", "num_reviews_required"]
+        fields = ["name", "description", "schema", "field_order", "num_reviews_required"]
         widgets = {
             "description": forms.TextInput(attrs={"placeholder": "Optional description"}),
             "num_reviews_required": forms.NumberInput(attrs={"min": 1, "max": 10}),
@@ -111,6 +115,36 @@ class AnnotationQueueForm(forms.ModelForm):
             old_def = {k: v for k, v in existing[name].items() if k != "required"}
             if new_def != old_def:
                 raise ValidationError(f"Cannot change field '{name}' structure after annotations have started.")
+
+    def clean_field_order(self):
+        raw = self.cleaned_data.get("field_order")
+        if not raw:
+            return []
+
+        if isinstance(raw, list):
+            data = raw
+        else:
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ValidationError(f"Invalid JSON: {e}") from e
+
+        if not isinstance(data, list) or not all(isinstance(name, str) for name in data):
+            raise ValidationError("Field order must be a list of field names")
+
+        return data
+
+    def clean(self):
+        cleaned = super().clean()
+        schema = cleaned.get("schema")
+        field_order = cleaned.get("field_order")
+        # An absent field_order is valid: the resolver falls back to schema order. Only a
+        # non-empty one is held to matching the schema exactly.
+        if not schema or not field_order:
+            return cleaned
+        if set(field_order) != set(schema):
+            raise ValidationError("Field order must list exactly the schema's fields.")
+        return cleaned
 
     def clean_num_reviews_required(self):
         value = self.cleaned_data["num_reviews_required"]

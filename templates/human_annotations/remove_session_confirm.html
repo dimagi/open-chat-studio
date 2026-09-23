@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load default_tags i18n %}
 
 <div class="p-4">
   <h3 class="font-bold text-lg mb-2">{% translate "Remove Session from Queue" %}</h3>
@@ -26,8 +26,8 @@
           <span class="text-xs text-gray-400">{{ ann.created_at|date:"M d, Y H:i" }}</span>
         </div>
         <div class="flex flex-wrap gap-2">
-          {% for key, value in ann.data.items %}
-            <span class="badge badge-sm badge-outline">{{ key }}: {{ value }}</span>
+          {% for key in queue.ordered_field_names %}
+            <span class="badge badge-sm badge-outline">{{ key }}: {{ ann.data|get_item:key|default_if_none:"" }}</span>
           {% endfor %}
         </div>
       </div>

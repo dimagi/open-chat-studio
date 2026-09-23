@@ -89,3 +89,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0065](0065-participant-actionable-errors-answered-not-raised.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Participant-actionable errors are answered, not raised |
 | [0066](0066-session-tokens-carry-their-expiry-and-renew-in-place.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Session tokens carry their expiry and are renewed in place |
 | [0067](0067-team-actionable-provider-errors-are-configuration-errors.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Team-actionable provider errors are configuration errors |
+| [0068](0068-field-order-is-presentation-outside-the-locked-schema.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Field order is presentation, stored outside the locked schema |

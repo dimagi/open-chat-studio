@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -20,12 +21,14 @@ from apps.human_annotations.models import (
     AnnotationStatus,
 )
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
+from apps.human_annotations.views.annotate_views import _build_annotations_context
 from apps.human_annotations.views.export_views import ExportAnnotations
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import (
     AnnotationItemFactory,
+    AnnotationQueueAggregateFactory,
     AnnotationQueueFactory,
 )
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
@@ -362,6 +365,96 @@ def test_edit_locked_queue_rejects_adding_field(client, team_with_users, user):
 
 
 @pytest.mark.django_db()
+def test_edit_queue_existing_schema_context_follows_field_order(client, team_with_users, user):
+    """The edit view's existing_schema must reflect field_order, not raw jsonb key order."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Reorder check",
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+        created_by=user,
+    )
+    queue.refresh_from_db()
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won over jsonb order.
+    assert list(response.context["existing_schema"]) == ["score", "notes"]
+
+
+@pytest.mark.django_db()
+def test_edit_queue_unlocked_renders_reorder_controls(client, team_with_users, queue):
+    """The schema builder shows the drag grip and both move buttons on an unlocked queue."""
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "fa-grip-vertical" in html
+    assert "fa-arrow-up" in html
+    assert "fa-arrow-down" in html
+    assert 'name="field_order"' in html
+
+
+@pytest.mark.django_db()
+def test_edit_queue_locked_still_renders_reorder_controls(client, team_with_users, user):
+    """Re-order controls stay usable and promoted on a locked queue; delete stays hidden."""
+    queue = AnnotationQueue.objects.create(
+        team=team_with_users,
+        name="Locked Queue",
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        created_by=user,
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 4, "notes": "OK"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context["schema_locked"] is True
+    html = response.content.decode()
+    assert "fa-grip-vertical" in html
+    assert "fa-arrow-up" in html
+    assert "fa-arrow-down" in html
+
+    # "border-primary/30" also appears on the pre-existing Required-checkbox :class binding
+    # further down the card, so scope the check to the re-order row's own binding by
+    # slicing between two anchors unique to that row.
+    reorder_row_start = html.index("flex gap-2 items-center mb-1")
+    reorder_row_end = html.index('x-model="field.name"')
+    reorder_row_html = html[reorder_row_start:reorder_row_end]
+    assert "border-primary/30" in reorder_row_html
+
+    # x-show="!locked" also appears on unrelated controls (the choice/binary delete buttons,
+    # the "Add Field" button, the Field Name label toggle), so anchor on the delete button's
+    # own @click handler, which is unique, to prove *its* binding is still present.
+    delete_button_pattern = re.compile(
+        r'@click="removeField\(index\)"\s*x-show="!locked"\s*class="btn btn-outline btn-xs btn-error"'
+    )
+    assert delete_button_pattern.search(html)
+
+    # "re-order" alone also matches the grip's "Drag to re-order" tooltip; assert the
+    # locked notice's own wording distinctly from that tooltip.
+    assert "You can still re-order fields" in html
+
+
+@pytest.mark.django_db()
 def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(
@@ -404,6 +497,65 @@ def test_queue_detail_shows_a_count_for_each_binary_label(client, team_with_user
     assert "3/4" in content
     assert "Incorrect:" in content
     assert "1/4" in content
+
+
+@pytest.mark.django_db()
+def test_aggregates_panel_follows_field_order(client, team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "rating": {"type": "int", "description": "Rating"},
+        },
+        field_order=["rating", "score"],
+    )
+    AnnotationQueueAggregateFactory.create(
+        team=team_with_users,
+        queue=queue,
+        aggregates={
+            "rating": {"type": "numeric", "count": 1, "mean": 2},
+            "score": {"type": "numeric", "count": 1, "mean": 5},
+        },
+    )
+    client.force_login(team_with_users.members.first())
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    # jsonb sorts by length first, so schema order is ("score", "rating"); asserting the
+    # reverse is what proves field_order won.
+    assert [name for name, _ in response.context["aggregates"]] == ["rating", "score"]
+
+
+@pytest.mark.django_db()
+def test_summary_column_follows_field_order(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        created_by=user,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won.
+    assert content.index("score: 5") < content.index("notes: good")
 
 
 @pytest.mark.django_db()
@@ -1958,6 +2110,36 @@ def test_remove_session_get_shows_confirmation(client, team_with_users, queue, u
 
 
 @pytest.mark.django_db()
+def test_remove_session_confirm_follows_field_order(client, team_with_users, user):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        created_by=user,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_remove_item", args=[team_with_users.slug, queue.pk, item.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    # "score" and "notes" are both 5 chars, so jsonb sorts them bytewise as ("notes", "score");
+    # asserting score-before-notes is what proves field_order won.
+    assert content.index("score: 5") < content.index("notes: good")
+
+
+@pytest.mark.django_db()
 def test_remove_session_get_no_annotations(client, team_with_users, queue):
     """GET for an item with no annotations shows the empty state."""
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
@@ -2160,3 +2342,58 @@ def test_export_jsonl_includes_authoritative_annotator(client, team_with_users, 
     record = json.loads(lines[0])
     assert record["authoritative_annotator"] == user.email
     assert "is_authoritative" not in record
+
+
+@pytest.mark.django_db()
+def test_export_csv_columns_follow_field_order(client, team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    user = team_with_users.members.first()
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    client.force_login(user)
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(response.content.decode().splitlines()))
+    assert [row["field"] for row in rows] == ["score", "notes"]
+
+
+@pytest.mark.django_db()
+def test_prior_reviews_panel_follows_field_order(team_with_users):
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    user = team_with_users.members.first()
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"score": 5, "notes": "good"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    queue.refresh_from_db()
+
+    context = _build_annotations_context(item, user, queue)
+
+    assert [name for name, _ in context[0]["fields"]] == ["score", "notes"]
