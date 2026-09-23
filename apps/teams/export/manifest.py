@@ -14,6 +14,7 @@ from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 from drf_spectacular.generators import SchemaGenerator
 
 from apps.files.models import FilePurpose
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope
 
 
 @dataclass(frozen=True)
@@ -285,6 +286,19 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
 
     prefetch_factory = PREFETCH_REGISTRY.get(entry.model)
     return queryset.prefetch_related(*prefetch_factory(team)) if prefetch_factory else queryset
+
+
+def scoped_queryset(entry: ManifestEntry, team, scope: ChatbotScope | None = None) -> QuerySet:
+    """The rows this request may serve: the team's, narrowed to the chatbot scope when one is active.
+    An excluded resource returns nothing rather than the team's rows, since importing one would
+    reference an experiment that was never synced."""
+    queryset = team_scoped_queryset(entry, team)
+    if scope is None:
+        return queryset
+    rule = CHATBOT_SCOPE_REGISTRY[entry.model]
+    if rule.build_q is None:
+        return queryset.none()
+    return queryset.filter(rule.build_q(scope))
 
 
 @cache
