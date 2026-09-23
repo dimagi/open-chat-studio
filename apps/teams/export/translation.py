@@ -15,29 +15,59 @@ class FKTranslationStore:
         """Open (creating if needed) the SQLite store at ``path`` and load its table into an
         in-memory index for fast lookups."""
         self._conn = sqlite3.connect(str(path))
+        # A sync commits per row; WAL with synchronous=NORMAL avoids an fsync per commit. A crash can
+        # lose the last few commits, which a rerun re-fetches.
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS fk_translation ("
             "content_type TEXT NOT NULL, source_key INTEGER NOT NULL, target_key INTEGER, "
+            "source_updated_at TEXT, "
             "PRIMARY KEY (content_type, source_key))"
         )
         self._conn.execute("CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)")
+        self._add_missing_columns()
         self._conn.commit()
         self._index: dict[str, dict[int, int | None]] = {}
-        for content_type, source_key, target_key in self._conn.execute(
-            "SELECT content_type, source_key, target_key FROM fk_translation"
+        self._source_timestamps: dict[str, dict[int, str | None]] = {}
+        for content_type, source_key, target_key, source_updated_at in self._conn.execute(
+            "SELECT content_type, source_key, target_key, source_updated_at FROM fk_translation"
         ):
             self._index.setdefault(content_type, {})[source_key] = target_key
+            self._source_timestamps.setdefault(content_type, {})[source_key] = source_updated_at
 
-    def record(self, content_type: str, source_key: int, target_key: int | None = None) -> None:
+    def _add_missing_columns(self) -> None:
+        """Bring a store created by an earlier release up to the current schema. CREATE TABLE IF NOT
+        EXISTS leaves an existing table alone, so a column added later has to be added by hand."""
+        existing = {row[1] for row in self._conn.execute("PRAGMA table_info(fk_translation)")}
+        if "source_updated_at" not in existing:
+            self._conn.execute("ALTER TABLE fk_translation ADD COLUMN source_updated_at TEXT")
+
+    def record(
+        self,
+        content_type: str,
+        source_key: int,
+        target_key: int | None = None,
+        source_updated_at: str | None = None,
+    ) -> None:
         """Upsert a source->target mapping. A null ``target_key`` is the checkpoint marker meaning
-        "synced but not yet created on the target"; it's filled in once the row exists."""
+        "synced but not yet created on the target"; it's filled in once the row exists.
+        ``source_updated_at`` is the source row's timestamp verbatim, used to skip a re-read of a row
+        that hasn't changed."""
         self._conn.execute(
-            "INSERT INTO fk_translation (content_type, source_key, target_key) VALUES (?, ?, ?) "
-            "ON CONFLICT (content_type, source_key) DO UPDATE SET target_key = excluded.target_key",
-            (content_type, source_key, target_key),
+            "INSERT INTO fk_translation (content_type, source_key, target_key, source_updated_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (content_type, source_key) DO UPDATE SET "
+            "target_key = excluded.target_key, source_updated_at = excluded.source_updated_at",
+            (content_type, source_key, target_key, source_updated_at),
         )
         self._conn.commit()
         self._index.setdefault(content_type, {})[source_key] = target_key
+        self._source_timestamps.setdefault(content_type, {})[source_key] = source_updated_at
+
+    def get_source_updated_at(self, content_type: str, source_key: int) -> str | None:
+        """The source ``updated_at`` recorded with the row, or None when it's unknown."""
+        return self._source_timestamps.get(content_type, {}).get(source_key)
 
     def get_target(self, content_type: str, source_key: int) -> int | None:
         """The target pk for a source row, or None if it's unrecorded or not yet created."""
