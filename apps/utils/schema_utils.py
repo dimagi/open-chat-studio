@@ -17,12 +17,17 @@ _MAX_PROPERTY_NAME_LENGTH = 64
 
 
 def sanitize_property_name(name: str, taken: set[str] | None = None) -> str:
-    """Rewrites `name` so it matches `VALID_PROPERTY_NAME_PATTERN`."""
-    if VALID_PROPERTY_NAME_PATTERN.match(name):
+    """Rewrites `name` so it matches `VALID_PROPERTY_NAME_PATTERN` *and* is safe to use as a
+    `pydantic.create_model` field name -- which additionally rejects a name that starts with `_`
+    (`pydantic._internal._fields.is_valid_field_name`), even one that's otherwise a legal property
+    name. A leading invalid character (`"$filter"`, `"(score)"`, `" score"`) would substitute to a
+    leading underscore, so that's stripped along with any leading underscores already in `name`.
+    """
+    if VALID_PROPERTY_NAME_PATTERN.match(name) and not name.startswith("_"):
         sanitized = name
     else:
         sanitized = _REPEATED_UNDERSCORES.sub("_", _INVALID_PROPERTY_CHARS.sub("_", name))
-        sanitized = sanitized[:_MAX_PROPERTY_NAME_LENGTH] or "field"
+        sanitized = sanitized.lstrip("_")[:_MAX_PROPERTY_NAME_LENGTH] or "field"
 
     if taken is None or sanitized not in taken:
         return sanitized
