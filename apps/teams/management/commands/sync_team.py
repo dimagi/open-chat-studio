@@ -58,8 +58,8 @@ SELECTION_CHANGED_MESSAGE = (
 )
 FORCE_DELETE_WITH_SELECTION = (
     "The source is exporting only part of the team, so --force-delete would also destroy chatbots "
-    "synced under an earlier selection. Delete the chatbots you want re-imported by hand on this "
-    "server, then rerun without --force-delete."
+    "synced under an earlier selection. Re-importing a single chatbot from scratch is not supported; "
+    "rerun without --force-delete to bring the synced chatbots up to date."
 )
 
 # Known source-server refusals, matched by status code and detail marker, with the friendly

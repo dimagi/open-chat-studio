@@ -843,3 +843,16 @@ def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_
 def test_report_limits_the_webhook_command_to_the_synced_chatbots(capsys):
     Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
     assert "reregister_webhooks --team-slug=acme --chatbot=abc" in capsys.readouterr().out
+
+
+def test_the_force_delete_refusal_does_not_suggest_deleting_chatbots_by_hand(keypair):
+    """Rows deleted on the target sit below the stored cursors and keep their translations, so a rerun
+    would never restore them."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+
+    with pytest.raises(CommandError) as excinfo:
+        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
+
+    assert "by hand" not in str(excinfo.value)
+    assert "rerun without --force-delete" in str(excinfo.value)
