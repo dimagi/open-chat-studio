@@ -13,6 +13,8 @@ from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
 from apps.experiments.models import Participant
 from apps.pipelines.models import Pipeline
 from apps.teams.export import seal as seal_mod
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ParticipantFactory
@@ -352,3 +354,32 @@ def test_an_excluded_resource_is_empty_while_a_selection_is_active(team):
 
     assert body["results"] == []
     assert body["has_more"] is False
+
+
+def test_a_resource_request_under_the_current_selection_is_served(team):
+    chatbot = ExperimentFactory(team=team)
+    team.exportable_experiments.add(chatbot)
+
+    client = ApiTestClient(_admin(team), team)
+    response = client.get(_resource_url("chatbots"), {"selection": selection_key([str(chatbot.public_id)])})
+
+    assert response.status_code == 200
+
+
+def test_a_resource_request_under_a_stale_selection_is_refused(team):
+    """An allowlist changed mid-run would serve rows the client's earlier pages never referenced."""
+    first = ExperimentFactory(team=team)
+    team.exportable_experiments.add(first)
+    stale_key = selection_key([str(first.public_id)])
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+
+    client = ApiTestClient(_admin(team), team)
+    response = client.get(_resource_url("chatbots"), {"selection": stale_key})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == SELECTION_CHANGED_DETAIL
+
+
+def test_the_whole_team_selection_key_matches_an_empty_allowlist(team):
+    client = ApiTestClient(_admin(team), team)
+    assert client.get(_resource_url("chatbots"), {"selection": ALL_CHATBOTS_KEY}).status_code == 200

@@ -13,6 +13,7 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
 from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
@@ -47,6 +48,7 @@ class FakeClient:
         self.manifest = manifest
         self.rows_by_resource = rows_by_resource
         self.iter_calls = []
+        self.selections = []
         self.get_team_calls = 0
 
     def get_manifest(self):
@@ -57,8 +59,10 @@ class FakeClient:
         self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
-    def iter_pages(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         self.iter_calls.append((resource, start_cursor))
+        if selection not in self.selections:
+            self.selections.append(selection)
         rows = list(self.rows_by_resource.get(resource, []))
         return iter([rows]) if rows else iter([])
 
@@ -437,10 +441,10 @@ class _RaisingClient(FakeClient):
             raise self._error
         return super().get_team()
 
-    def iter_pages(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         if self._raise_on == "iter_pages":
             raise self._error
-        return super().iter_pages(resource, start_cursor, limit)
+        return super().iter_pages(resource, start_cursor, limit, selection)
 
 
 @pytest.mark.parametrize(
@@ -704,3 +708,21 @@ def test_owned_resources_resume_from_their_cursor_under_a_selection(make_store, 
     run_sync(client, store, keypair[1], on_user_created=None)
 
     assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_run_sync_pages_under_its_selection_key(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+
+    run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+    assert client.selections == [selection_key(["a"])]
+
+
+def test_a_selection_change_during_the_run_stops_it_cleanly(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    client = _RaisingClient(manifest, rows, _http_error(409, SELECTION_CHANGED_DETAIL), raise_on="iter_pages")
+
+    with pytest.raises(CommandError, match="selection changed"):
+        run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
