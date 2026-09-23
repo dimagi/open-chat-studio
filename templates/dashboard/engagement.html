@@ -3,15 +3,75 @@
 
 {% block title %}{% translate "Engagement Dashboard" %} - {{ block.super }}{% endblock %}
 
+{% block page_head %}
+  {{ block.super }}
+  {% comment %}
+    Viz palette. Every value is validated by the dataviz skill's checker against this
+    app's real surfaces -- light #ffffff and DaisyUI dark base-100 #1d232a -- not against
+    the reference surfaces. Re-run the validator before changing any of these.
+      week buckets: ordinal ramp (1 < 2 < 3 < 4+ weeks), one hue, light->dark
+      new/returning: blue + purple. The purple shifts from violet (light) to a
+        pink-leaning magenta (dark) because on a dark surface violet collapses
+        against blue -- every true violet tested fails CVD separation there.
+  {% endcomment %}
+  <style>
+    .viz-root {
+      --viz-surface: #ffffff;
+      --viz-ordinal-1: #86b6ef;
+      --viz-ordinal-2: #5598e7;
+      --viz-ordinal-3: #2a78d6;
+      --viz-ordinal-4: #184f95;
+      --viz-series-new: #2a78d6;
+      --viz-series-returning: #4a3aa7;
+      --viz-rank-1: #2a78d6;
+      --viz-rank-2: #eb6834;
+      --viz-rank-3: #1baf7a;
+      --viz-rank-rest: #898781;
+      --viz-ink-muted: #898781;
+      --viz-grid: #e1e0d9;
+      --viz-axis: #c3c2b7;
+      --viz-spark: #c3c2b7;
+      --viz-spark-accent: #2a78d6;
+      --viz-up: #006300;
+      --viz-down: #d03b3b;
+    }
+    :root[data-theme="dark"] .viz-root {
+      --viz-surface: #1d232a;
+      --viz-ordinal-1: #b7d3f6;
+      --viz-ordinal-2: #6da7ec;
+      --viz-ordinal-3: #2a78d6;
+      --viz-ordinal-4: #1c5cab;
+      --viz-series-new: #3987e5;
+      --viz-series-returning: #d55181;
+      --viz-rank-1: #3987e5;
+      --viz-rank-2: #d95926;
+      --viz-rank-3: #199e70;
+      --viz-rank-rest: #898781;
+      --viz-ink-muted: #898781;
+      --viz-grid: #2c2c2a;
+      --viz-axis: #383835;
+      --viz-spark: #52514e;
+      --viz-spark-accent: #3987e5;
+      --viz-up: #0ca30c;
+      --viz-down: #e66767;
+    }
+    .stat-delta { font-variant-numeric: tabular-nums; }
+  </style>
+{% endblock page_head %}
+
 {% block app %}
-  <div class="container mx-auto px-4 py-6" x-data="engagementDashboard()">
+  <div class="viz-root container mx-auto px-4 py-6" x-data="engagementDashboard()">
     {# Page is one path segment deeper than its API endpoints, so pass {% url %}-resolved URLs instead of relying on relative fetches. #}
     <div id="engagementDashboardConfig"
          hidden
          data-summary-url="{% url 'dashboard:api_engagement_summary' request.team.slug %}"
          data-frequency-url="{% url 'dashboard:api_engagement_frequency' request.team.slug %}"
          data-new-vs-returning-url="{% url 'dashboard:api_new_vs_returning' request.team.slug %}"
-         data-session-duration-url="{% url 'dashboard:api_average_session_duration' request.team.slug %}"></div>
+         data-session-duration-url="{% url 'dashboard:api_average_session_duration' request.team.slug %}"
+         data-breakdown-chatbot-url="{% url 'dashboard:api_engagement_breakdown_chatbot' request.team.slug %}"
+         data-breakdown-channel-url="{% url 'dashboard:api_engagement_breakdown_channel' request.team.slug %}"
+         data-chatbots-url="{% url 'chatbots:chatbots_home' request.team.slug %}"
+         data-sessions-url="{% url 'chatbots:all_sessions_home' request.team.slug %}"></div>
 
     <div>
       <h1 data-cy="title" class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% translate "Engagement Dashboard" %}</h1>
@@ -67,25 +127,150 @@
     <div id="engagementStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <template x-for="stat in summaryStats" :key="stat.label">
         <div class="stat-card fade-in">
-          <div class="flex items-center justify-between">
-            <div>
-              <span class="stat-value" x-text="stat.value"></span>
-              <span x-show="stat.inProgress" class="badge badge-sm badge-outline ml-2">{% translate "In progress" %}</span>
-              <div class="stat-label" x-text="stat.label"></div>
+          {% comment %}
+            Label first, then the value, then one line of context. The sparkline sits beside
+            the value rather than above it so nothing competes with the metric name.
+          {% endcomment %}
+          <div class="flex items-center gap-1">
+            <div class="stat-label truncate" x-text="stat.label"></div>
+            {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
+            <template x-if="stat.tooltip">
+              <div class="dropdown dropdown-bottom dropdown-hover shrink-0">
+                <button
+                  type="button"
+                  class="btn btn-circle btn-ghost btn-xs text-info"
+                  aria-label="{% translate 'More information' %}">
+                  <i class="text-xs fa-regular fa-circle-question" aria-hidden="true"></i>
+                </button>
+                <div
+                  tabindex="0"
+                  class="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
+                  <div tabindex="0" class="card-body font-medium text-wrap">
+                    <p x-text="stat.tooltip"></p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="mt-2 flex items-end justify-between gap-3">
+            <div class="min-w-0">
+              <div class="stat-value" x-text="stat.value"></div>
+              <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                <template x-if="stat.inProgress">
+                  <span :title="stat.partialRangeTitle" x-text="stat.partialRangeCaption"></span>
+                </template>
+                <template x-if="!stat.inProgress && stat.delta">
+                  <span class="stat-delta font-medium"
+                        :style="`color: ${stat.delta.up ? 'var(--viz-up)' : 'var(--viz-down)'}`">
+                    <span aria-hidden="true" x-text="stat.delta.up ? '\u25B2' : '\u25BC'"></span>
+                    <span x-text="stat.delta.label"></span>
+                  </span>
+                </template>
+              </div>
             </div>
+
+            <div class="shrink-0" x-html="stat.sparkline" role="img" :aria-label="stat.sparklineLabel" :title="stat.sparklineLabel"></div>
           </div>
         </div>
       </template>
     </div>
 
+
+    {% comment %}
+      Ranked breakdowns. The aggregate tiles say how much; these say which chatbots and
+      channels produced it -- the part a reader can act on. Ranked table rather than a
+      chart: dense, exact, and it doubles as the accessible table view for the page.
+    {% endcomment %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      <template x-for="panel in breakdownPanels" :key="panel.key">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <div class="card-title flex items-center gap-1 justify-between">
+              <div class="flex items-center gap-1">
+                <span x-text="panel.title"></span>
+              </div>
+              <div class="loading loading-spinner loading-sm" x-show="loadingStates[panel.key]"></div>
+            </div>
+
+            <template x-if="!panel.rows.length">
+              <p class="py-8 text-center text-sm text-gray-400">{% translate "No activity this month" %}</p>
+            </template>
+
+            <table class="w-full text-sm" x-show="panel.rows.length">
+              <thead>
+                <tr class="text-xs uppercase text-gray-500 dark:text-gray-400">
+                  <th class="text-left font-medium py-2 pr-3" x-text="panel.dimensionLabel"></th>
+                  <th class="text-right font-medium py-2 px-3 whitespace-nowrap">{% translate "Participants" %}</th>
+                  <th class="text-right font-medium py-2 px-3">{% translate "Share" %}</th>
+                  <th class="text-right font-medium py-2 pl-3 whitespace-nowrap">{% translate "vs last month" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in panel.rows" :key="row.label">
+                  <tr class="border-t border-base-200">
+                    <td class="py-2 pr-3">
+                      <div class="truncate max-w-[14rem]" x-text="row.label"></div>
+                      {# Inline bar: one series, so a single hue -- length repeats the share for scanning. #}
+                      {% comment %}
+                        Only the top three carry a hue: in a table every row is visible at once,
+                        and the validator clears just three colours for all-pairs separation on
+                        this surface. The fourth would be indistinguishable from the second.
+                      {% endcomment %}
+                      <div class="mt-1 h-1 rounded-full"
+                           :style="`width: ${Math.max(row.share, 2)}%; background: var(${row.rankColor})`"></div>
+                    </td>
+                    <td class="py-2 px-3 text-right tabular-nums" x-text="row.participants"></td>
+                    <td class="py-2 px-3 text-right tabular-nums text-gray-500 dark:text-gray-400" x-text="`${row.share.toFixed(0)}%`"></td>
+                    <td class="py-2 pl-3 text-right tabular-nums whitespace-nowrap">
+                      {% comment %}
+                        x-if, not x-show: a :style binding on the same element rewrites the
+                        style attribute and clobbers the display:none that x-show relies on.
+                      {% endcomment %}
+                      <template x-if="!row.delta">
+                        <span class="text-gray-400">&mdash;</span>
+                      </template>
+                      <template x-if="row.delta">
+                        <span :style="`color: ${row.delta.up ? 'var(--viz-up)' : 'var(--viz-down)'}`">
+                          <span aria-hidden="true" x-text="row.delta.up ? '\u25B2' : '\u25BC'"></span>
+                          <span x-text="row.delta.short"></span>
+                        </span>
+                      </template>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+
+            <div class="mt-3 text-right">
+              <a class="link link-primary text-sm" :href="panel.drilldown">
+                <span x-text="panel.drilldownLabel"></span> <span aria-hidden="true">&rarr;</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center gap-1 justify-between">
-            <span>{% translate "Engagement Frequency" %}</span>
+            <div class="flex items-center gap-1">
+              <span>{% translate "Weekly Active Users Trend" %}</span>
+
+              {% blocktranslate asvar frequency_info %}
+                Active participants each month, broken down by how many separate weeks they were active.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=frequency_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.frequency"></div>
           </div>
-          <div class="h-80">
+          <div class="h-80 flex items-center justify-center" x-show="!hasFrequencyData" x-cloak>
+            <p class="text-sm text-gray-400">{% translate "No activity in this period" %}</p>
+          </div>
+          <div class="h-80" x-show="hasFrequencyData">
             <canvas id="engagementFrequencyChart"></canvas>
           </div>
         </div>
@@ -94,10 +279,22 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <div class="card-title flex items-center gap-1 justify-between">
-            <span>{% translate "New vs. Returning Users" %}</span>
+            <div class="flex items-center gap-1">
+              <span>{% translate "New vs. Returning Users" %}</span>
+
+              {% blocktranslate asvar new_vs_returning_info %}
+                Each week's participants, split by whether that week was their first.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=new_vs_returning_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.newVsReturning"></div>
           </div>
-          <div class="h-80">
+          <div class="h-80 flex items-center justify-center" x-show="!hasNewVsReturningData" x-cloak>
+            <p class="text-sm text-gray-400">{% translate "No activity in this period" %}</p>
+          </div>
+          <div class="h-80" x-show="hasNewVsReturningData">
             <canvas id="newVsReturningChart"></canvas>
           </div>
         </div>

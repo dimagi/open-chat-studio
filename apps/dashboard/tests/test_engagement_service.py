@@ -203,6 +203,25 @@ class TestGetNewVsReturningData:
         assert matching_week["returning"] == 1
         assert sum(row["new"] + row["returning"] for row in data) == 2
 
+    def test_returns_every_week_in_window_zero_filled(self, team, experiment):
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        message_time = timezone.datetime(2026, 3, 3, 9, 0, tzinfo=ZoneInfo("UTC"))
+
+        participant = Participant.objects.create(team=team, platform="web", identifier="solo@example.com")
+        Participant.objects.filter(id=participant.id).update(created_at=message_time)
+        _create_message(_create_session(experiment, participant, team), message_time)
+
+        data = EngagementDashboardService(team).get_new_vs_returning_data(now=now)
+
+        weeks = [row["week"] for row in data]
+        assert weeks == sorted(weeks)
+        assert len(weeks) == len(set(weeks))
+        assert len(weeks) > 25
+        active_week = (message_time.date() - timedelta(days=message_time.weekday())).isoformat()
+        assert active_week in weeks
+        assert sum(row["new"] + row["returning"] for row in data) == 1
+        assert all(row["new"] == 0 and row["returning"] == 0 for row in data if row["week"] != active_week)
+
     def test_result_is_cached(self, team):
         service = EngagementDashboardService(team)
         first = service.get_new_vs_returning_data()
@@ -235,14 +254,70 @@ class TestGetAverageSessionDuration:
         )
         _create_message(unfinished_session, now)
 
-        minutes = EngagementDashboardService(team).get_average_session_duration(now=now)
+        data = EngagementDashboardService(team).get_average_session_duration(now=now)
 
-        assert minutes == pytest.approx(40.0)
+        assert len(data) == TRAILING_MONTHS + 1
+        assert data[-1]["minutes"] == pytest.approx(40.0)
+        assert data[-1]["in_progress"] is True
+
+    def test_months_without_completed_sessions_report_zero(self, team):
+        data = EngagementDashboardService(team).get_average_session_duration(now=timezone.now())
+
+        assert [row["minutes"] for row in data] == [0.0] * (TRAILING_MONTHS + 1)
 
     def test_result_is_cached(self, team):
         service = EngagementDashboardService(team)
         first = service.get_average_session_duration()
 
-        cached = DashboardCache.get_cached_data(team, f"engagement_avg_session_duration_{_cache_key({})}")
+        cached = DashboardCache.get_cached_data(team, f"engagement_avg_session_duration_v2_{_cache_key({})}")
 
         assert cached == first
+
+
+@pytest.mark.django_db()
+class TestGetEngagementBreakdown:
+    def test_ranks_chatbots_by_active_participants_with_share(self, team, experiment, participant, user):
+        other_experiment = Experiment.objects.create(name="Other bot", description="Other", team=team, owner=user)
+        other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        earlier = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+
+        _create_message(_create_session(experiment, participant, team), earlier)
+        _create_message(_create_session(experiment, other_participant, team), earlier)
+        _create_message(_create_session(other_experiment, participant, team), earlier)
+
+        data = EngagementDashboardService(team).get_engagement_breakdown("chatbot", now=now)
+
+        assert [row["label"] for row in data] == [experiment.name, "Other bot"]
+        assert data[0]["participants"] == 2
+        assert data[0]["share"] == pytest.approx(66.67, abs=0.01)
+
+    def test_counts_each_participant_once_per_chatbot(self, team, experiment, participant):
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        earlier = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        session = _create_session(experiment, participant, team)
+        _create_message(session, earlier)
+        _create_message(session, earlier)
+
+        data = EngagementDashboardService(team).get_engagement_breakdown("chatbot", now=now)
+
+        assert data[0]["participants"] == 1
+
+    def test_carries_previous_month_for_comparison(self, team, experiment, participant):
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        this_month = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        last_month = timezone.datetime(2026, 2, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        _create_message(_create_session(experiment, participant, team), this_month)
+        _create_message(_create_session(experiment, participant, team), last_month)
+
+        data = EngagementDashboardService(team).get_engagement_breakdown("chatbot", now=now)
+
+        assert data[0]["previous"] == 1
+
+    def test_result_is_cached_per_dimension(self, team):
+        service = EngagementDashboardService(team)
+        chatbot = service.get_engagement_breakdown("chatbot", now=timezone.now())
+
+        cached = DashboardCache.get_cached_data(team, f"engagement_breakdown_chatbot_{_cache_key({})}")
+
+        assert cached == chatbot

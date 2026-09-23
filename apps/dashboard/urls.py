@@ -20,6 +20,16 @@ urlpatterns = [
         name="api_new_vs_returning",
     ),
     path(
+        "api/engagement/breakdown/chatbot/",
+        engagement_views.ChatbotBreakdownApiView.as_view(),
+        name="api_engagement_breakdown_chatbot",
+    ),
+    path(
+        "api/engagement/breakdown/channel/",
+        engagement_views.ChannelBreakdownApiView.as_view(),
+        name="api_engagement_breakdown_channel",
+    ),
+    path(
         "api/engagement/session-duration/",
         engagement_views.AverageSessionDurationApiView.as_view(),
         name="api_average_session_duration",

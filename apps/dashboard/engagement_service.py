@@ -5,8 +5,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Avg, DurationField, ExpressionWrapper, F, QuerySet
-from django.db.models.functions import TruncWeek
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, QuerySet
+from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone as django_timezone
 
 from apps.experiments.models import Participant
@@ -21,6 +21,12 @@ TZ = ZoneInfo("UTC")
 TRAILING_MONTHS = 6
 
 WEEK_BUCKET_KEYS = {1: "1_week", 2: "2_weeks", 3: "3_weeks"}
+
+BREAKDOWN_DIMENSIONS = {
+    "chatbot": "chat__experiment_session__experiment__name",
+    "channel": "chat__experiment_session__experiment_channel__platform",
+}
+BREAKDOWN_LIMIT = 8
 
 
 def _add_months(d: date, delta: int) -> date:
@@ -145,9 +151,16 @@ class EngagementDashboardService:
         )
 
         weekly_participants: dict[date, set[int]] = {}
+        week = _week_start(start)
+        last_week = _week_start(end)
+        while week <= last_week:
+            weekly_participants[week] = set()
+            week += timedelta(days=7)
+
         for row in rows:
             week_start = bucket_date(row["week"], TZ)
-            weekly_participants.setdefault(week_start, set()).add(row["chat__experiment_session__participant_id"])
+            if week_start in weekly_participants:
+                weekly_participants[week_start].add(row["chat__experiment_session__participant_id"])
 
         participant_ids = {pid for ids in weekly_participants.values() for pid in ids}
         created_week = {
@@ -164,18 +177,79 @@ class EngagementDashboardService:
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
 
-    def get_average_session_duration(self, now: datetime | None = None, **filters) -> float:
-        cache_key = f"engagement_avg_session_duration_{_cache_key(filters)}"
+    def get_engagement_breakdown(self, dimension: str, now: datetime | None = None, **filters) -> list[dict[str, Any]]:
+        """Active participants this month by chatbot or channel, ranked, with last month for comparison.
+
+        Answers "which of these is driving the headline number", which the aggregate tiles cannot.
+        """
+        field = BREAKDOWN_DIMENSIONS[dimension]
+        cache_key = f"engagement_breakdown_{dimension}_{_cache_key(filters)}"
         cached = DashboardCache.get_cached_data(self.team, cache_key)
         if cached is not None:
             return cached
 
-        start, end, _months = trailing_window(now)
-        sessions = filtered_querysets(self.team, start_date=start, end_date=end, **filters)["sessions"]
-        avg_duration = sessions.filter(ended_at__isnull=False).aggregate(
-            avg=Avg(ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField()))
-        )["avg"]
-        minutes = (avg_duration or timedelta()).total_seconds() / 60
+        start, end, months = trailing_window(now)
+        current_month, previous_month = months[-1], months[-2]
+        messages = _human_messages(self.team, start=start, end=end, filters=filters)
 
-        DashboardCache.set_cached_data(self.team, cache_key, minutes)
-        return minutes
+        rows = (
+            messages.annotate(month=TruncMonth("created_at", tzinfo=TZ))
+            .values("month", field)
+            .annotate(participants=Count("chat__experiment_session__participant_id", distinct=True))
+        )
+
+        current: dict[str, int] = {}
+        previous: dict[str, int] = {}
+        for row in rows:
+            month = bucket_date(row["month"], TZ)
+            bucket = current if month == current_month else previous if month == previous_month else None
+            if bucket is None:
+                continue
+            label = row[field] or "Unknown"
+            bucket[label] = bucket.get(label, 0) + row["participants"]
+
+        total = sum(current.values())
+        data = [
+            {
+                "label": label,
+                "participants": participants,
+                "share": (participants / total * 100) if total else 0,
+                "previous": previous.get(label, 0),
+            }
+            for label, participants in sorted(current.items(), key=lambda item: (-item[1], item[0]))
+        ][:BREAKDOWN_LIMIT]
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data
+
+    def get_average_session_duration(self, now: datetime | None = None, **filters) -> list[dict[str, Any]]:
+        """Mean completed-session length per month, so the stat tile can show a trend and a delta."""
+        # v2: payload changed from a single float to a monthly series -- a new key so warm
+        # caches from the previous shape are never served to a client expecting the list.
+        cache_key = f"engagement_avg_session_duration_v2_{_cache_key(filters)}"
+        cached = DashboardCache.get_cached_data(self.team, cache_key)
+        if cached is not None:
+            return cached
+
+        start, end, months = trailing_window(now)
+        sessions = filtered_querysets(self.team, start_date=start, end_date=end, **filters)["sessions"]
+        rows = (
+            sessions.filter(ended_at__isnull=False)
+            .annotate(month=TruncMonth("created_at", tzinfo=TZ))
+            .values("month")
+            .annotate(avg=Avg(ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField())))
+        )
+        by_month = {bucket_date(row["month"], TZ): row["avg"] for row in rows}
+
+        current_month = months[-1]
+        data = [
+            {
+                "month": month.isoformat(),
+                "minutes": (by_month.get(month) or timedelta()).total_seconds() / 60,
+                "in_progress": month == current_month,
+            }
+            for month in months
+        ]
+
+        DashboardCache.set_cached_data(self.team, cache_key, data)
+        return data

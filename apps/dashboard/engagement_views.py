@@ -59,6 +59,22 @@ class NewVsReturningApiView(EngagementApiView):
         return self.json_response(data)
 
 
+class EngagementBreakdownApiView(EngagementApiView):
+    dimension: str
+
+    def get(self, request, *args, **kwargs):
+        data = self.get_service().get_engagement_breakdown(self.dimension, **self.get_filter_params())
+        return self.json_response(data)
+
+
+class ChatbotBreakdownApiView(EngagementBreakdownApiView):
+    dimension = "chatbot"
+
+
+class ChannelBreakdownApiView(EngagementBreakdownApiView):
+    dimension = "channel"
+
+
 class AverageSessionDurationApiView(EngagementApiView):
     def get(self, request, *args, **kwargs):
         data = self.get_service().get_average_session_duration(**self.get_filter_params())

@@ -58,7 +58,9 @@ class TestEngagementApiViews:
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
-        assert isinstance(response.json(), float)
+        payload = response.json()
+        assert isinstance(payload, list)
+        assert {"month", "minutes", "in_progress"} <= payload[0].keys()
 
     def test_apis_respect_chatbot_filter(self, authenticated_client, team, experiment, participant, chat, user):
         # An invalid experiment PK would fail form validation and silently skip filtering entirely.
