@@ -38,7 +38,7 @@ from apps.service_providers.llm_service.credentials import (
     ProviderCredentials,
     get_provider_credentials_from_env,
 )
-from apps.service_providers.models import LlmProvider, LlmProviderTypes
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
 from apps.teams.models import Membership, Team
@@ -80,6 +80,20 @@ _EVALUATION_DATASET_MESSAGES = [
 _UNPRICED_MODEL = "experimental-model-x"
 _UNKNOWN_MODEL = "legacy-model-y"
 _USAGE_DAYS = 14
+
+_STUB_LLM_PROVIDER_NAME = "Stub LLM"
+_STUB_LLM_MODEL_NAME = "stub"
+# Where apps/service_providers/mock_llm is mounted by config.urls under DEBUG.
+_STUB_LLM_PATH = "/mock-llm/v1"
+# The mock is served by this same process, so its address is always the local one.
+_STUB_LLM_ROOT = "http://localhost:8000"
+# High enough that history compression never kicks in while developing.
+_STUB_LLM_TOKEN_LIMIT = 128000
+
+
+def _stub_llm_base_url() -> str:
+    """The dev server's own address, which is where the mock provider answers."""
+    return f"{_STUB_LLM_ROOT}{_STUB_LLM_PATH}"
 
 
 class Command(BaseCommand):
@@ -214,30 +228,68 @@ class Command(BaseCommand):
     def _seed_llm_providers(self, team):
         self.stdout.write("")
         self.stdout.write("--- Creating LLM Providers ---")
+        stub_provider, stub_model = self._get_or_create_stub_llm_provider(team)
+
         provider_credentials = get_provider_credentials_from_env()
         if not provider_credentials:
             self.stdout.write(
                 self.style.WARNING(
-                    "  No provider env vars set; creating a placeholder OpenAI provider with a dummy key."
-                    " Set OPENAI_API_KEY (or another supported key — see .env.example) to enable real LLM calls."
+                    "  No provider env vars set; the sample chatbots will use the stub provider,"
+                    " which the dev server answers itself. Set OPENAI_API_KEY (or another supported"
+                    " key — see .env.example) for real LLM calls."
                 )
             )
-            provider_credentials = [
-                ProviderCredentials(
-                    type=LlmProviderTypes.openai,
-                    name="OpenAI",
-                    config={"openai_api_key": "test-key"},
-                )
-            ]
+            return stub_provider, stub_model
 
         llm_providers = [self._get_or_create_llm_provider(team, creds) for creds in provider_credentials]
         llm_provider = llm_providers[0]
         return llm_provider, get_first_llm_provider_model(llm_provider, team.id)
 
+    def _get_or_create_stub_llm_provider(self, team) -> tuple[LlmProvider, LlmProviderModel]:
+        """A provider pointing at the dev server's own mock endpoints, so dev chatbots need no API key.
+
+        Seeded as an OpenAI provider so dev traffic takes the same path as a real OpenAI key:
+        that type talks the Responses API rather than chat completions, and the mock serves
+        both. Its config form has the optional base URL this needs.
+        """
+        base_url = _stub_llm_base_url()
+        config = {"openai_api_key": "stub", "openai_api_base": base_url}
+        provider = LlmProvider.objects.filter(team=team, name=_STUB_LLM_PROVIDER_NAME).first()
+        created = provider is None
+        if created:
+            provider = LlmProvider.objects.create(
+                team=team,
+                type=str(LlmProviderTypes.openai),
+                name=_STUB_LLM_PROVIDER_NAME,
+                config=config,
+            )
+        elif provider.config != config:
+            # Repoint an existing provider at the current address.
+            provider.config = config
+            provider.save(update_fields=["config"])
+        self._log_created("LLM provider", f"{_STUB_LLM_PROVIDER_NAME} ({base_url})", created)
+
+        # The mock only answers to a model called "stub", which is not one of the globally
+        # registered OpenAI models, so a pipeline node would have nothing to select.
+        model, created = LlmProviderModel.objects.get_or_create(
+            team=team,
+            name=_STUB_LLM_MODEL_NAME,
+            type=str(LlmProviderTypes.openai),
+            defaults={"max_token_limit": _STUB_LLM_TOKEN_LIMIT},
+        )
+        if not created and model.max_token_limit != _STUB_LLM_TOKEN_LIMIT:
+            model.max_token_limit = _STUB_LLM_TOKEN_LIMIT
+            model.save(update_fields=["max_token_limit"])
+        self._log_created("LLM provider model", model.name, created)
+        return provider, model
+
     def _get_or_create_llm_provider(self, team, creds: ProviderCredentials) -> LlmProvider:
         # LlmProvider has no unique constraint on (team, type), so a manually-created
         # provider of the same type would make get_or_create raise MultipleObjectsReturned.
-        provider = LlmProvider.objects.filter(team=team, type=str(creds.type)).first()
+        # The stub is an "openai" provider too, and must never stand in for a real key.
+        provider = (
+            LlmProvider.objects.filter(team=team, type=str(creds.type)).exclude(name=_STUB_LLM_PROVIDER_NAME).first()
+        )
         if provider is None:
             provider = LlmProvider.objects.create(team=team, type=str(creds.type), name=creds.name, config=creds.config)
             self._log_created("LLM provider", f"{provider.name} ({creds.type})", True)
