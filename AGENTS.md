@@ -41,28 +41,17 @@ Facts that reviewers and agents repeatedly get wrong:
 
 ## Key Paths
 
-* Django settings: `config/settings.py`
-* Frontend build: `webpack.config.js`
-* Package management: `pyproject.toml`, `package.json`
-* Environment template: `.env.example`
 * Django app root: `apps/` (see `docs/architecture/package-map.md` for what each app does and how dependencies flow)
-* Django template root: `templates/`
 * Shared FactoryBoy factories for test data generation: `apps/utils/factories/`
 * Shared pytest fixtures: `apps/conftest.py`
-* Javascript, Typescript and CSS files root: `assets/`
 * Chat Widget component: `components/chat_widget` (standalone StencilJS component used by the Django app)
 
 ## Useful commands
 
-* Run python tests: `uv run pytest path/to/test.py -v` (all tests in a file)
 * Lint & format python: `uv run inv ruff --paths path/to/file.py` (runs `ruff check --fix` then `ruff format`)
 * Type check: `uv run inv typecheck` (runs both `ty` and `tsc`; `--paths` scopes the Python check, `--python`/`--js` limit it to one)
-* Build JS & CSS: `pnpm run dev`
-* Lint JS: `pnpm run lint path/to/file.js`
 * Run Django dev server: `uv run inv runserver` (uses `portless` if available, otherwise falls back to `uv run python manage.py runserver`)
 * Run Django, Celery and the asset watcher together: `uv run inv dev`
-* Django migrations: `uv run python manage.py migrate`
-* Create migration: `uv run python manage.py makemigrations <app_name>`
 
 ## Verifying changes
 
@@ -84,7 +73,7 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
-* Always use @.github/pull_request_template.md as the template for pull request descriptions
+* Always use `.github/pull_request_template.md` as the template for pull request descriptions
 * Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
