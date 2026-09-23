@@ -82,6 +82,8 @@ class Score(BaseTeamModel):
         indexes = [
             models.Index(fields=["target_content_type", "target_object_id", "name", "source"]),
             models.Index(fields=["created_at"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="score_updated_at_id_idx"),
         ]
 
     def __str__(self) -> str:
