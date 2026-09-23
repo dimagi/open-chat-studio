@@ -382,6 +382,16 @@ class TestMetadataFilteredSearch:
 
         assert [chunk.id for chunk in results] == [strong.id, weak.id]
 
+    def test_a_question_matches_rows_sharing_any_of_its_words_under_simple(self):
+        collection, file = make_indexed_collection(search_language=SearchLanguage.SIMPLE)
+        khayelitsha = {"district": "Khayelitsha"}
+        measles = add_chunk(collection, file, "measles vaccine at six months", unit_vector(0), metadata=khayelitsha)
+        clinic = add_chunk(collection, file, "the clinic opens at eight", unit_vector(1), metadata=khayelitsha)
+
+        results = _filtered_search(collection, "when should my child get the measles vaccine", khayelitsha)
+
+        assert [chunk.id for chunk in results] == [measles.id, clinic.id]
+
     def test_a_query_that_matches_no_row_text_finds_nothing(self):
         collection, file = make_indexed_collection()
         add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})

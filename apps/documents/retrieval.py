@@ -130,6 +130,10 @@ def _filtered_candidates(
     The dense ranking is left out: an HNSW scan returns a fixed number of nearest rows and the
     filter is applied after it, so a selective filter can leave few or none of them.
 
+    A row matches if it holds any word of the query, under every search language. `simple` search
+    elsewhere requires all of them, which a question phrased in the user's words rarely meets, and
+    the filter has already cut the rows down to the ones that are relevant.
+
     A query with no searchable terms returns the first matching rows in index order, which is how
     a filter alone looks a record up.
     """
@@ -139,7 +143,7 @@ def _filtered_candidates(
         .filter(metadata__contains=metadata_filters)
     )
     if _has_search_terms(query, collection.search_language):
-        search_query = _lexical_search_query(query, collection.search_language)
+        search_query = _any_term_query(query, collection.search_language)
         matching = (
             matching.filter(search_vector=search_query)
             .annotate(rank=SearchRank(F("search_vector"), search_query, cover_density=True))
@@ -337,6 +341,11 @@ def _lexical_search_query(query: str, config: str) -> SearchQuery | None:
         # `websearch_to_tsquery` also accepts quoted phrases and `-exclusions` from the user.
         return SearchQuery(query, config=config, search_type="websearch")
 
+    return _any_term_query(query, config)
+
+
+def _any_term_query(query: str, config: str) -> SearchQuery | None:
+    """A tsquery matching text that holds any one of `query`'s words."""
     terms = [SearchQuery(term, config=config, search_type="plain") for term in query.split()]
     if not terms:
         return None
