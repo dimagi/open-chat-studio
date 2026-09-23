@@ -123,6 +123,18 @@ class TestParseSheet:
         with pytest.raises(RowImportError, match="csv or tsv"):
             parse_sheet(FAQ, filename="faq.xlsx")
 
+    @pytest.mark.parametrize(
+        ("data", "headers"),
+        [
+            pytest.param(b"a\x00b,c\n1,2\n", ["ab", "c"], id="nul-in-header"),
+            pytest.param(b"a\x01b,c\n1,2\n", ["ab", "c"], id="control-char-in-header"),
+        ],
+    )
+    def test_strips_control_characters_from_headers(self, data, headers):
+        sheet = parse_sheet(data, filename="faq.csv")
+        assert sheet.headers == headers
+        assert sheet.rows[0].values == {"ab": "1", "c": "2"}
+
     def test_wraps_a_csv_field_size_error(self):
         data = b"a,b\n" + b"x" * 200_000 + b",2\n"
         with pytest.raises(RowImportError, match="Could not parse"):

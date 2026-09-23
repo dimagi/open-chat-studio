@@ -11,6 +11,7 @@ from bs4 import UnicodeDammit
 from django.conf import settings
 
 from apps.documents.models import FAILURE_REASON_MAX_LENGTH
+from apps.utils.fields import sanitize_control_chars
 
 ROW_IMPORT_EXTENSIONS: dict[str, str | None] = {".csv": None, ".tsv": "\t"}
 SNIFF_SAMPLE_CHARS = 4096
@@ -96,7 +97,7 @@ def _read_headers(reader) -> list[str]:
     headers = next(reader, None)
     if not headers or not any(header.strip() for header in headers):
         raise RowImportError("The file has no header row")
-    headers = [header.strip() for header in headers]
+    headers = [sanitize_control_chars(header).strip() for header in headers]
     seen: set[str] = set()
     for position, header in enumerate(headers, start=1):
         if not header:
