@@ -225,6 +225,8 @@ class Importer:
         # The single team every resource is imported into. Captured from the team row (first in the
         # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
         self.target_team = None
+        # Rows a rerun read again but didn't have to touch (source updated_at unchanged).
+        self.skipped_rows = 0
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -233,11 +235,26 @@ class Importer:
         secret_fields = SECRET_REGISTRY.get(model_label, [])
         count = 0
         for row in rows:
+            if self._is_unchanged(model_label, row):
+                self.skipped_rows += 1
+                continue
             if self.private_key and secret_fields:
                 row = unseal_secrets(row, secret_fields, self.private_key)
             self._import_row(model_label, model, row)
             count += 1
         return count
+
+    def _is_unchanged(self, model_label: str, row: dict) -> bool:
+        """Whether the row is already on the target at this exact source revision, so a re-read costs
+        a dict lookup instead of a re-import. An m2m membership change doesn't move ``updated_at``, so
+        a row whose only change is an m2m is not re-applied."""
+        source_updated_at = row.get("updated_at")
+        if source_updated_at is None:
+            return False
+        source_pk = row["id"]
+        if not self.store.has_target(model_label, source_pk):
+            return False
+        return self.store.get_source_updated_at(model_label, source_pk) == source_updated_at
 
     def _import_row(self, model_label: str, model: type[models.Model], row: dict) -> None:
         """Import a single row. A global row is matched to its shared target and only its id
@@ -252,7 +269,7 @@ class Importer:
             match = self._match_global(model, global_spec, row)
             if match is None:
                 raise MissingGlobalRow(model_label, global_spec, row)
-            self.store.record(model_label, source_pk, match.pk)
+            self.store.record(model_label, source_pk, match.pk, source_updated_at=row.get("updated_at"))
             return
 
         # Team-owned row. The create, its m2m/named links, the timestamp restore, and the checkpoint
@@ -305,7 +322,7 @@ class Importer:
             if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
                 _bypass_auto_now_update(model, instance.pk, timestamps)
 
-            self.store.record(model_label, source_pk, instance.pk)
+            self.store.record(model_label, source_pk, instance.pk, source_updated_at=row.get("updated_at"))
         return instance, created
 
     def _create_or_update(
