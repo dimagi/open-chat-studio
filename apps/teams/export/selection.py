@@ -32,6 +32,11 @@ def selected_chatbots(team: Team) -> QuerySet[Experiment]:
     return Experiment._base_manager.filter(pk__in=_allowlist(team).values("experiment_id"))
 
 
+def selected_experiment_count(team: Team) -> int:
+    """How many chatbots the allowlist holds, archived ones included."""
+    return _allowlist(team).count()
+
+
 def family_q(experiment_ids: Sequence[int] | QuerySet) -> Q:
     """Matches the given chatbots and every version of each one."""
     return Q(pk__in=experiment_ids) | Q(working_version_id__in=experiment_ids)
