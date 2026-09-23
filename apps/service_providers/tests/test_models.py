@@ -121,6 +121,9 @@ def test_test_connection_invokes_chat_model_with_the_configured_model():
     provider = LlmProviderFactory()
     LlmProviderModel.objects.filter(type=provider.type).delete()
     provider_model = LlmProviderModelFactory(team=provider.team, type=provider.type, name="gpt-4o-mini")
+    assert provider_model.name != get_default_model(provider.type).name, (
+        "this only covers the fallback while the configured model is not the registered default"
+    )
 
     mock_chat_model = mock.Mock()
     mock_service = mock.Mock()
