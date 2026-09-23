@@ -156,3 +156,95 @@ describe('InputField warning slot', () => {
     expect(container.textContent).not.toContain('deprecated');
   });
 });
+
+describe('KeyValuePairsWidget', () => {
+  const seedNode = (pairs: unknown) =>
+    usePipelineStore.setState({
+      nodes: [{
+        id: 'node-1', type: 'test', position: {x: 0, y: 0},
+        data: {type: 'test', label: '', params: {name: 'x', metadata_filters: pairs}},
+      }] as never,
+    });
+
+  const storedPairs = () => usePipelineStore.getState().nodes[0].data.params.metadata_filters;
+
+  // Re-reads the node from the store on every change, as the node editor does, so each test
+  // exercises the real write-then-render round trip.
+  function Harness({readOnly = false, inputError}: {readOnly?: boolean; inputError?: string}) {
+    const params = usePipelineStore((state) => state.nodes[0].data.params);
+    const Widget = getWidget('key_value_pairs', {type: 'array'} as PropertySchema);
+    return (
+      <Widget
+        {...baseProps}
+        name="metadata_filters"
+        label="Metadata Filters"
+        schema={{type: 'array'} as PropertySchema}
+        nodeParams={params}
+        paramValue={[]}
+        readOnly={readOnly}
+        inputError={inputError}
+      />
+    );
+  }
+
+  it('shows each pair as a key input and a value input', () => {
+    seedNode([{key: 'district', value: 'Khayelitsha'}]);
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Key 1')).toHaveValue('district');
+    expect(getByLabelText('Value 1')).toHaveValue('Khayelitsha');
+  });
+
+  it('adds an empty pair after the existing ones', () => {
+    seedNode([{key: 'district', value: 'Khayelitsha'}]);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Add filter'}));
+
+    expect(storedPairs()).toEqual([{key: 'district', value: 'Khayelitsha'}, {key: '', value: ''}]);
+  });
+
+  it('adds the first pair when the field holds no value yet', () => {
+    seedNode(null);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Add filter'}));
+
+    expect(storedPairs()).toEqual([{key: '', value: ''}]);
+  });
+
+  it('writes an edited key and value back to the node', () => {
+    seedNode([{key: '', value: ''}]);
+    const {getByLabelText} = render(<Harness />);
+
+    fireEvent.change(getByLabelText('Key 1'), {target: {value: 'language'}});
+    fireEvent.change(getByLabelText('Value 1'), {target: {value: 'en'}});
+
+    expect(storedPairs()).toEqual([{key: 'language', value: 'en'}]);
+  });
+
+  it('removes the chosen pair and keeps the rest in order', () => {
+    seedNode([{key: 'a', value: '1'}, {key: 'b', value: '2'}, {key: 'c', value: '3'}]);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Remove filter 2'}));
+
+    expect(storedPairs()).toEqual([{key: 'a', value: '1'}, {key: 'c', value: '3'}]);
+  });
+
+  it('offers no add or remove and blocks typing when read-only', () => {
+    seedNode([{key: 'district', value: 'Khayelitsha'}]);
+    const {getByLabelText, queryByRole} = render(<Harness readOnly />);
+
+    expect(queryByRole('button', {name: 'Add filter'})).not.toBeInTheDocument();
+    expect(queryByRole('button', {name: 'Remove filter 1'})).not.toBeInTheDocument();
+    expect(getByLabelText('Key 1')).toHaveAttribute('readonly');
+  });
+
+  it('shows the validation error for the field', () => {
+    seedNode([{key: 'district', value: 'A'}, {key: 'district', value: 'B'}]);
+    const {getByText} = render(<Harness inputError="Duplicate metadata filter key: district" />);
+
+    expect(getByText('Duplicate metadata filter key: district')).toBeInTheDocument();
+  });
+});
