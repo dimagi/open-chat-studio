@@ -838,3 +838,8 @@ def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_
         check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
 
     assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
+
+
+def test_report_limits_the_webhook_command_to_the_synced_chatbots(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
+    assert "reregister_webhooks --team-slug=acme --chatbot=abc" in capsys.readouterr().out

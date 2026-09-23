@@ -1,6 +1,7 @@
 import io
 
 import pytest
+from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.channels.models import ChannelPlatform
@@ -12,7 +13,9 @@ from apps.teams.management.commands.reregister_webhooks import (
     reregister_webhooks,
 )
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -213,3 +216,67 @@ def test_noinput_skips_confirmation(monkeypatch):
     Command().handle(team_slug=channel.team.slug, interactive=False)
 
     assert registered == [channel.webhook_url]
+
+
+def _registered_labels(report):
+    return [label for label, *_ in report.manual] + report.updated
+
+
+@pytest.fixture()
+def _no_provider_calls(monkeypatch):
+    monkeypatch.setattr(
+        "apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook", lambda self, extra_data, url: None
+    )
+
+
+@pytest.mark.usefixtures("_no_provider_calls")
+def test_only_the_named_chatbots_channels_are_touched():
+    """After a partial sync the other chatbots are still live on the source; repointing their
+    webhooks would cut them over without anyone asking."""
+    team = TeamFactory()
+    moved = ExperimentFactory(team=team, name="Moved bot")
+    stayed = ExperimentFactory(team=team, name="Stayed bot")
+    ExperimentChannelFactory(team=team, experiment=moved, platform=ChannelPlatform.TELEGRAM)
+    ExperimentChannelFactory(team=team, experiment=stayed, platform=ChannelPlatform.TELEGRAM)
+
+    labels = _registered_labels(reregister_webhooks(team, [str(moved.public_id)]))
+
+    assert any("Moved bot" in label for label in labels)
+    assert not any("Stayed bot" in label for label in labels)
+
+
+@pytest.mark.usefixtures("_no_provider_calls")
+def test_a_named_chatbots_published_versions_are_touched():
+    team = TeamFactory()
+    working = ExperimentFactory(team=team, name="Working bot")
+    published = ExperimentFactory(team=team, name="Published bot", working_version=working)
+    ExperimentChannelFactory(team=team, experiment=published, platform=ChannelPlatform.TELEGRAM)
+
+    labels = _registered_labels(reregister_webhooks(team, [str(working.public_id)]))
+
+    assert any("Published bot" in label for label in labels)
+
+
+@pytest.mark.usefixtures("_no_provider_calls")
+def test_every_channel_is_touched_without_the_flag():
+    team = TeamFactory()
+    one = ExperimentFactory(team=team, name="Bot one")
+    two = ExperimentFactory(team=team, name="Bot two")
+    ExperimentChannelFactory(team=team, experiment=one, platform=ChannelPlatform.TELEGRAM)
+    ExperimentChannelFactory(team=team, experiment=two, platform=ChannelPlatform.TELEGRAM)
+
+    labels = _registered_labels(reregister_webhooks(team))
+
+    assert any("Bot one" in label for label in labels)
+    assert any("Bot two" in label for label in labels)
+
+
+def test_an_unknown_chatbot_id_is_an_error():
+    team = TeamFactory()
+    with pytest.raises(CommandError, match="not found"):
+        call_command(
+            "reregister_webhooks",
+            f"--team-slug={team.slug}",
+            "--chatbot=00000000-0000-0000-0000-000000000000",
+            "--noinput",
+        )

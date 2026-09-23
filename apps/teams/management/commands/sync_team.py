@@ -501,10 +501,18 @@ class Command(BaseCommand):
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
-        self.stdout.write(
-            f"  Run `manage.py reregister_webhooks --team-slug={team_slug}` to point this team's "
-            "channel webhooks at this server."
-        )
+        if chatbots:
+            flags = " ".join(f"--chatbot={chatbot['public_id']}" for chatbot in chatbots)
+            self.stdout.write(
+                f"  Run `manage.py reregister_webhooks --team-slug={team_slug} {flags}` to point the "
+                "synced chatbots' channel webhooks at this server. The other chatbots are still live "
+                "on the source, so leave theirs alone."
+            )
+        else:
+            self.stdout.write(
+                f"  Run `manage.py reregister_webhooks --team-slug={team_slug}` to point this team's "
+                "channel webhooks at this server."
+            )
 
         self.stdout.write("")
         self.stdout.write(
