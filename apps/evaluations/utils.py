@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import dictdiffer
 from django.db.models import F
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
@@ -17,6 +17,7 @@ from apps.evaluations.field_definitions import FieldDefinition
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
+from apps.utils.schema_utils import create_model_with_sanitized_names
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -508,6 +509,12 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
             "field_name": FieldDefinition(...)
         }
 
+    Field names are sanitized (see `create_model_with_sanitized_names`) so the model's JSON schema
+    keys are valid tool/property names for every provider (notably Anthropic's
+    `^[a-zA-Z0-9_.-]{1,64}$`). A plain `model_dump()` on an instance of the returned model already
+    comes back keyed by the original field names, so callers don't need to translate an LLM result
+    back themselves.
+
     Args:
         schema: Dictionary mapping field names to FieldDefinition objects
         model_name: Name for the generated Pydantic model
@@ -515,16 +522,11 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
     Returns:
         Dynamically created Pydantic BaseModel class
     """
-
-    pydantic_fields = {}
-
-    for field_name, field_def in schema.items():
-        pydantic_fields[field_name] = (
-            field_def.python_type,
-            Field(**field_def.pydantic_fields),
-        )
-
-    return create_model(model_name, **pydantic_fields)
+    fields = {
+        field_name: (field_def.python_type, Field(**field_def.pydantic_fields))
+        for field_name, field_def in schema.items()
+    }
+    return create_model_with_sanitized_names(model_name, fields)
 
 
 def get_use_in_aggregations(field_def: dict) -> bool:

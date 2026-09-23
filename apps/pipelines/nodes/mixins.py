@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -10,7 +9,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
@@ -44,6 +43,7 @@ from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
 from apps.utils.json import dict_to_json_schema
+from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
@@ -338,9 +338,8 @@ class RouterMixin(BaseModel):
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
-        return create_model(
-            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
-        )
+        route_field = (Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
+        return create_model_with_sanitized_names("RouterOutput", {"route": route_field})
 
     def get_output_map(self):
         """Returns a mapping of the form:
@@ -466,16 +465,11 @@ class ExtractStructuredDataNodeMixin:
         return dict_to_json_schema(data)
 
 
-# Anthropic requires tool property keys to match this pattern. Mirror it here so we can surface a friendly
-# validation error instead of a 500 from a rejected API call.
-_SCHEMA_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
-
-
 def _collect_invalid_schema_keys(schema: dict) -> list[str]:
     """Recursively collect property keys that violate Anthropic's naming rules, mirroring ``dict_to_json_schema``."""
     invalid = []
     for key, val in schema.items():
-        if not _SCHEMA_KEY_PATTERN.match(key):
+        if not VALID_PROPERTY_NAME_PATTERN.match(key):
             invalid.append(key)
         if isinstance(val, list) and val and isinstance(val[0], dict):
             invalid.extend(_collect_invalid_schema_keys(val[0]))
