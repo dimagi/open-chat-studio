@@ -1,18 +1,22 @@
 """Repoint a team's channel webhooks at this server.
 
-    manage.py reregister_webhooks --team-slug=<slug>
+    manage.py reregister_webhooks --team-slug=<slug> [--chatbot=<public_id> ...]
 
 Runs as an independent step (typically after `sync_team`) so an operator can confirm this server's
 domain is right before any provider webhook is touched, and rerun it on its own without re-syncing.
 """
 
 import logging
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.experiments.models import Experiment
+from apps.teams.export.selection import expand_to_family
 from apps.teams.models import Team
 from apps.web.meta import absolute_url
 
@@ -52,13 +56,22 @@ def _channel_label(channel: ExperimentChannel) -> str:
     return f"{name} / {channel.platform_enum.label}"
 
 
-def reregister_webhooks(team) -> WebhookReregistrationReport:
-    """Repoint all of the team's channel webhooks at this server (re-registering a correct one is
-    harmless). Channels that can't be updated automatically -- unsupported provider, undeterminable
-    webhook URL, or a failed provider call -- are collected for manual setup rather than raising, so
-    one bad channel can't fail the whole run."""
+def reregister_webhooks(team, chatbot_public_ids: Sequence[str] = ()) -> WebhookReregistrationReport:
+    """Repoint the team's channel webhooks at this server (re-registering a correct one is harmless).
+
+    ``chatbot_public_ids`` narrows the run to those chatbots and their versions, for a migration that
+    moved only part of the team: repointing a chatbot that is still live on the source would cut it
+    over. Empty means every channel the team has.
+
+    Channels that can't be updated automatically -- unsupported provider, undeterminable webhook URL,
+    or a failed provider call -- are collected for manual setup rather than raising, so one bad
+    channel can't fail the whole run.
+    """
     report = WebhookReregistrationReport(updated=[], manual=[])
     channels = ExperimentChannel.objects.filter(team=team).select_related("experiment", "messaging_provider")
+    if chatbot_public_ids:
+        selected = Experiment._base_manager.filter(team=team, public_id__in=chatbot_public_ids)
+        channels = channels.filter(experiment__in=expand_to_family(selected.values("id")))
     for channel in channels:
         if channel.platform_enum not in WEBHOOK_PLATFORMS:
             continue
@@ -84,11 +97,36 @@ def reregister_webhooks(team) -> WebhookReregistrationReport:
     return report
 
 
+def _unknown_chatbots(team, public_ids: Sequence[str]) -> list[str]:
+    """The requested ids that name no chatbot in the team, malformed ones included."""
+    parsed = {}
+    for value in public_ids:
+        try:
+            parsed[value] = uuid.UUID(value)
+        except ValueError:
+            continue
+    found = set(
+        Experiment._base_manager.filter(team=team, public_id__in=parsed.values()).values_list("public_id", flat=True)
+    )
+    return [value for value in public_ids if parsed.get(value) not in found]
+
+
 class Command(BaseCommand):
     help = "Repoint a team's channel webhooks at this server."
 
     def add_arguments(self, parser):
         parser.add_argument("--team-slug", required=True, help="Slug of the local team to update.")
+        parser.add_argument(
+            "--chatbot",
+            action="append",
+            default=[],
+            dest="chatbot_public_ids",
+            metavar="PUBLIC_ID",
+            help=(
+                "Public id of a chatbot to update, repeatable. Use it after a sync that moved only "
+                "some of the team's chatbots; without it every channel the team has is repointed."
+            ),
+        )
         parser.add_argument(
             "--noinput",
             "--no-input",
@@ -102,13 +140,18 @@ class Command(BaseCommand):
         if team is None:
             raise CommandError(f"No local team '{options['team_slug']}' found.")
 
+        requested = options.get("chatbot_public_ids") or []
+        missing = _unknown_chatbots(team, requested)
+        if missing:
+            raise CommandError(f"Chatbot(s) not found in team '{team.slug}': {', '.join(missing)}")
+
         if options.get("interactive", True) and not self._confirm_site_url():
             raise CommandError(
                 "Aborted: fix this server's domain, then re-run. Update the Site record in the Django "
                 "admin (Sites), or set SITE_URL_ROOT in the environment when running with DEBUG on."
             )
 
-        report = reregister_webhooks(team)
+        report = reregister_webhooks(team, requested)
         self._report(report)
 
     def _confirm_site_url(self) -> bool:
