@@ -749,35 +749,36 @@ In `apps/teams/export/importer.py`, add the counter to `Importer.__init__`:
 and rewrite `import_rows` plus the recording call:
 
 ```python
-    def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
-        """Import every row for one model, unsealing its secret fields first when we hold the key.
-        Returns the number of rows imported this pass (for the sync's progress report)."""
-        model = entry_model(model_label)
-        secret_fields = SECRET_REGISTRY.get(model_label, [])
-        count = 0
-        for row in rows:
-            if self._is_unchanged(model_label, row):
-                self.skipped_rows += 1
-                continue
-            if self.private_key and secret_fields:
-                row = unseal_secrets(row, secret_fields, self.private_key)
-            self._import_row(model_label, model, row)
-            count += 1
-        return count
+def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
+    """Import every row for one model, unsealing its secret fields first when we hold the key.
+    Returns the number of rows imported this pass (for the sync's progress report)."""
+    model = entry_model(model_label)
+    secret_fields = SECRET_REGISTRY.get(model_label, [])
+    count = 0
+    for row in rows:
+        if self._is_unchanged(model_label, row):
+            self.skipped_rows += 1
+            continue
+        if self.private_key and secret_fields:
+            row = unseal_secrets(row, secret_fields, self.private_key)
+        self._import_row(model_label, model, row)
+        count += 1
+    return count
 
-    def _is_unchanged(self, model_label: str, row: dict) -> bool:
-        """Whether the row is already on the target at this exact source revision. Pagination can
-        re-serve a row (a cursor reset, or an ``updated_at`` page overlapping), and re-importing one
-        costs four statements and an fsync; comparing the stored source timestamp makes that a dict
-        lookup. An m2m membership change doesn't move ``updated_at``, so a row whose only change is an
-        m2m is not re-read."""
-        source_updated_at = row.get("updated_at")
-        if source_updated_at is None:
-            return False
-        source_pk = row["id"]
-        if not self.store.has_target(model_label, source_pk):
-            return False
-        return self.store.get_source_updated_at(model_label, source_pk) == source_updated_at
+
+def _is_unchanged(self, model_label: str, row: dict) -> bool:
+    """Whether the row is already on the target at this exact source revision. Pagination can
+    re-serve a row (a cursor reset, or an ``updated_at`` page overlapping), and re-importing one
+    costs four statements and an fsync; comparing the stored source timestamp makes that a dict
+    lookup. An m2m membership change doesn't move ``updated_at``, so a row whose only change is an
+    m2m is not re-read."""
+    source_updated_at = row.get("updated_at")
+    if source_updated_at is None:
+        return False
+    source_pk = row["id"]
+    if not self.store.has_target(model_label, source_pk):
+        return False
+    return self.store.get_source_updated_at(model_label, source_pk) == source_updated_at
 ```
 
 In `_import_team_owned_row`, pass the timestamp through:
@@ -909,31 +910,33 @@ ALL_CHATBOTS_KEY = "all"
 and the accessors (cursors are read a few dozen times per run, so they go straight to SQLite rather than into an in-memory index):
 
 ```python
-    def get_cursor(self, selection_key: str, model_label: str) -> str | None:
-        """Where to resume this model's pull. Cursors are namespaced by selection: the source serves
-        a different row set per chatbot selection, so a cursor from one selection would skip rows
-        that a wider one puts below it."""
-        row = self._conn.execute(
-            "SELECT cursor FROM cursors WHERE selection_key = ? AND model_label = ?",
-            (selection_key, model_label),
-        ).fetchone()
-        return row[0] if row else None
+def get_cursor(self, selection_key: str, model_label: str) -> str | None:
+    """Where to resume this model's pull. Cursors are namespaced by selection: the source serves
+    a different row set per chatbot selection, so a cursor from one selection would skip rows
+    that a wider one puts below it."""
+    row = self._conn.execute(
+        "SELECT cursor FROM cursors WHERE selection_key = ? AND model_label = ?",
+        (selection_key, model_label),
+    ).fetchone()
+    return row[0] if row else None
 
-    def set_cursor(self, selection_key: str, model_label: str, cursor: str | None) -> None:
-        self._conn.execute(
-            "INSERT INTO cursors (selection_key, model_label, cursor) VALUES (?, ?, ?) "
-            "ON CONFLICT (selection_key, model_label) DO UPDATE SET cursor = excluded.cursor",
-            (selection_key, model_label, cursor),
+
+def set_cursor(self, selection_key: str, model_label: str, cursor: str | None) -> None:
+    self._conn.execute(
+        "INSERT INTO cursors (selection_key, model_label, cursor) VALUES (?, ?, ?) "
+        "ON CONFLICT (selection_key, model_label) DO UPDATE SET cursor = excluded.cursor",
+        (selection_key, model_label, cursor),
+    )
+    self._conn.commit()
+
+
+def cursors_for(self, selection_key: str) -> dict[str, str | None]:
+    return {
+        model_label: cursor
+        for model_label, cursor in self._conn.execute(
+            "SELECT model_label, cursor FROM cursors WHERE selection_key = ?", (selection_key,)
         )
-        self._conn.commit()
-
-    def cursors_for(self, selection_key: str) -> dict[str, str | None]:
-        return {
-            model_label: cursor
-            for model_label, cursor in self._conn.execute(
-                "SELECT model_label, cursor FROM cursors WHERE selection_key = ?", (selection_key,)
-            )
-        }
+    }
 ```
 
 At the bottom of the module, next to the existing derive helpers:
@@ -989,20 +992,21 @@ Expected: FAIL with `AttributeError: 'ResourceFetcher' object has no attribute '
 In `apps/teams/export/client.py`:
 
 ```python
-    def iter_pages(self, resource, start_cursor=None, limit=100):
-        """Yield each page's rows as its own list. The sync writes its resume cursor once a page's
-        rows are committed, so it has to see the page boundaries."""
-        cursor = start_cursor
-        while True:
-            page = self.get_page(resource, cursor, limit)
-            yield page["results"]
-            if not page.get("has_more"):
-                return
-            cursor = page["cursor"]
+def iter_pages(self, resource, start_cursor=None, limit=100):
+    """Yield each page's rows as its own list. The sync writes its resume cursor once a page's
+    rows are committed, so it has to see the page boundaries."""
+    cursor = start_cursor
+    while True:
+        page = self.get_page(resource, cursor, limit)
+        yield page["results"]
+        if not page.get("has_more"):
+            return
+        cursor = page["cursor"]
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
-        for rows in self.iter_pages(resource, start_cursor=start_cursor, limit=limit):
-            yield from rows
+
+def iter_rows(self, resource, start_cursor=None, limit=100):
+    for rows in self.iter_pages(resource, start_cursor=start_cursor, limit=limit):
+        yield from rows
 ```
 
 - [ ] **Step 8: Run the client tests**
@@ -2274,9 +2278,7 @@ class ChatbotScope:
             "documents.collection",
             Q(pk__in=_ids_from("pipelines.node", Q(pk__in=self.node_ids), "collection_id"))
             | Q(
-                pk__in=node.collection_indexes.through.objects.filter(node_id__in=self.node_ids).values(
-                    "collection_id"
-                )
+                pk__in=node.collection_indexes.through.objects.filter(node_id__in=self.node_ids).values("collection_id")
             ),
         )
 
@@ -2298,7 +2300,11 @@ class ChatbotScope:
     def custom_action_ids(self) -> list[int]:
         return _resolve(
             "custom_actions.customaction",
-            Q(pk__in=_ids_from("custom_actions.customactionoperation", Q(node_id__in=self.node_ids), "custom_action_id")),
+            Q(
+                pk__in=_ids_from(
+                    "custom_actions.customactionoperation", Q(node_id__in=self.node_ids), "custom_action_id"
+                )
+            ),
             versioned=False,
         )
 
@@ -2343,11 +2349,7 @@ class ChatbotScope:
         return _resolve(
             "service_providers.llmprovidermodel",
             Q(pk__in=_ids_from("pipelines.node", Q(pk__in=self.node_ids), "llm_provider_model_id"))
-            | Q(
-                pk__in=_ids_from(
-                    "documents.collection", Q(pk__in=self.collection_ids), "contextualizer_llm_model_id"
-                )
-            ),
+            | Q(pk__in=_ids_from("documents.collection", Q(pk__in=self.collection_ids), "contextualizer_llm_model_id")),
             versioned=False,
         )
 
@@ -2355,11 +2357,7 @@ class ChatbotScope:
     def embedding_provider_model_ids(self) -> list[int]:
         return _resolve(
             "service_providers.embeddingprovidermodel",
-            Q(
-                pk__in=_ids_from(
-                    "documents.collection", Q(pk__in=self.collection_ids), "embedding_provider_model_id"
-                )
-            ),
+            Q(pk__in=_ids_from("documents.collection", Q(pk__in=self.collection_ids), "embedding_provider_model_id")),
             versioned=False,
         )
 
@@ -2369,9 +2367,7 @@ class ChatbotScope:
             "service_providers.voiceprovider",
             Q(pk__in=_ids_from("experiments.experiment", Q(pk__in=self.experiment_ids), "voice_provider_id"))
             | Q(
-                pk__in=_ids_from(
-                    "experiments.syntheticvoice", Q(pk__in=self.synthetic_voice_ids), "voice_provider_id"
-                )
+                pk__in=_ids_from("experiments.syntheticvoice", Q(pk__in=self.synthetic_voice_ids), "voice_provider_id")
             ),
             versioned=False,
         )
@@ -2380,11 +2376,7 @@ class ChatbotScope:
     def messaging_provider_ids(self) -> list[int]:
         return _resolve(
             "service_providers.messagingprovider",
-            Q(
-                pk__in=_ids_from(
-                    "bot_channels.experimentchannel", Q(pk__in=self.channel_ids), "messaging_provider_id"
-                )
-            ),
+            Q(pk__in=_ids_from("bot_channels.experimentchannel", Q(pk__in=self.channel_ids), "messaging_provider_id")),
             versioned=False,
         )
 
@@ -2392,11 +2384,7 @@ class ChatbotScope:
     def auth_provider_ids(self) -> list[int]:
         return _resolve(
             "service_providers.authprovider",
-            Q(
-                pk__in=_ids_from(
-                    "custom_actions.customaction", Q(pk__in=self.custom_action_ids), "auth_provider_id"
-                )
-            )
+            Q(pk__in=_ids_from("custom_actions.customaction", Q(pk__in=self.custom_action_ids), "auth_provider_id"))
             | Q(
                 pk__in=_ids_from(
                     "documents.documentsource", Q(collection_id__in=self.collection_ids), "auth_provider_id"
@@ -2635,9 +2623,11 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     # Each trigger type holds a OneToOne to its action, so these are single-valued joins: no
     # duplicates and no DISTINCT. A ScheduledMessage's action is its scheduled trigger's.
     "events.eventaction": _owned(
-        lambda s: Q(static_trigger__experiment_id__in=s.experiment_ids)
-        | Q(timeout_trigger__experiment_id__in=s.experiment_ids)
-        | Q(scheduled_trigger__experiment_id__in=s.experiment_ids)
+        lambda s: (
+            Q(static_trigger__experiment_id__in=s.experiment_ids)
+            | Q(timeout_trigger__experiment_id__in=s.experiment_ids)
+            | Q(scheduled_trigger__experiment_id__in=s.experiment_ids)
+        )
     ),
     "events.scheduledmessage": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
     "experiments.experimentsession": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
@@ -2657,8 +2647,10 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     # Session scores only. A score hanging off an evaluation result or a human annotation belongs to
     # an excluded model; its FK is nullable, so keeping the row would silently drop its provenance.
     "assessments.score": _owned(
-        lambda s: _generic_target_q(s, "target_content_type", "target_object_id")
-        & Q(automated_result__isnull=True, review__isnull=True)
+        lambda s: (
+            _generic_target_q(s, "target_content_type", "target_object_id")
+            & Q(automated_result__isnull=True, review__isnull=True)
+        )
     ),
     # --- (b) reached by what the chatbot uses ----------------------------------------------------
     "pipelines.pipeline": _referenced(lambda s: Q(pk__in=s.pipeline_ids)),
@@ -3115,9 +3107,7 @@ Expected: FAIL with `ImportError: cannot import name 'selection_key'`.
 In `apps/teams/export/translation.py`, add `import hashlib` and, in `__init__`:
 
 ```python
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS selections (selection_key TEXT PRIMARY KEY, public_ids TEXT NOT NULL)"
-        )
+self._conn.execute("CREATE TABLE IF NOT EXISTS selections (selection_key TEXT PRIMARY KEY, public_ids TEXT NOT NULL)")
 ```
 
 and:
@@ -3133,28 +3123,30 @@ def selection_key(public_ids: Sequence[str]) -> str:
 ```
 
 ```python
-    def record_selection(self, selection_key: str, public_ids: Sequence[str]) -> None:
-        """Remember which chatbots a key stands for, so a later run can tell a narrower selection
-        from a wider one."""
-        self._conn.execute(
-            "INSERT INTO selections (selection_key, public_ids) VALUES (?, ?) "
-            "ON CONFLICT (selection_key) DO UPDATE SET public_ids = excluded.public_ids",
-            (selection_key, json.dumps(sorted(public_ids))),
-        )
-        self._conn.commit()
+def record_selection(self, selection_key: str, public_ids: Sequence[str]) -> None:
+    """Remember which chatbots a key stands for, so a later run can tell a narrower selection
+    from a wider one."""
+    self._conn.execute(
+        "INSERT INTO selections (selection_key, public_ids) VALUES (?, ?) "
+        "ON CONFLICT (selection_key) DO UPDATE SET public_ids = excluded.public_ids",
+        (selection_key, json.dumps(sorted(public_ids))),
+    )
+    self._conn.commit()
 
-    def selections(self) -> dict[str, list[str]]:
-        return {key: json.loads(ids) for key, ids in self._conn.execute("SELECT selection_key, public_ids FROM selections")}
 
-    def seed_cursors_from(self, source_key: str, target_key: str) -> None:
-        """Copy one selection's cursors to another, leaving any the target already has alone."""
-        self._conn.execute(
-            "INSERT INTO cursors (selection_key, model_label, cursor) "
-            "SELECT ?, model_label, cursor FROM cursors WHERE selection_key = ? "
-            "ON CONFLICT (selection_key, model_label) DO NOTHING",
-            (target_key, source_key),
-        )
-        self._conn.commit()
+def selections(self) -> dict[str, list[str]]:
+    return {key: json.loads(ids) for key, ids in self._conn.execute("SELECT selection_key, public_ids FROM selections")}
+
+
+def seed_cursors_from(self, source_key: str, target_key: str) -> None:
+    """Copy one selection's cursors to another, leaving any the target already has alone."""
+    self._conn.execute(
+        "INSERT INTO cursors (selection_key, model_label, cursor) "
+        "SELECT ?, model_label, cursor FROM cursors WHERE selection_key = ? "
+        "ON CONFLICT (selection_key, model_label) DO NOTHING",
+        (target_key, source_key),
+    )
+    self._conn.commit()
 ```
 
 with `from collections.abc import Sequence` added to the module imports.
@@ -3173,8 +3165,13 @@ def test_excluded_resources_are_not_requested_under_a_selection(make_store, tmp_
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
     manifest["entries"].append(
-        {"model": "evaluations.evaluator", "resource": "evaluators", "cursor": "pk", "secret": False,
-         "scope": "excluded"}
+        {
+            "model": "evaluations.evaluator",
+            "resource": "evaluators",
+            "cursor": "pk",
+            "secret": False,
+            "scope": "excluded",
+        }
     )
     manifest["entries"][0]["scope"] = "referenced"
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
@@ -3190,8 +3187,13 @@ def test_excluded_resources_are_requested_without_a_selection(make_store, tmp_pa
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
     manifest["entries"].append(
-        {"model": "evaluations.evaluator", "resource": "evaluators", "cursor": "pk", "secret": False,
-         "scope": "excluded"}
+        {
+            "model": "evaluations.evaluator",
+            "resource": "evaluators",
+            "cursor": "pk",
+            "secret": False,
+            "scope": "excluded",
+        }
     )
     manifest["entries"][0]["scope"] = "referenced"
     store = make_store(tmp_path / "team.sqlite")
@@ -3484,9 +3486,7 @@ def frozen_experiment_q(path: str = "experiment") -> Q:
     """
     allowlist = Team.exportable_experiments.through.objects.filter(team__is_migrating=True)
     selected_ids = allowlist.values("experiment_id")
-    team_wide_ids = (
-        Team.objects.filter(is_migrating=True).exclude(id__in=allowlist.values("team_id")).values("id")
-    )
+    team_wide_ids = Team.objects.filter(is_migrating=True).exclude(id__in=allowlist.values("team_id")).values("id")
     family_ids = Experiment._base_manager.filter(
         Q(pk__in=selected_ids) | Q(working_version_id__in=selected_ids)
     ).values("id")
@@ -3925,7 +3925,12 @@ def test_every_channel_is_touched_without_the_flag():
 def test_an_unknown_chatbot_id_is_an_error():
     team = TeamFactory()
     with pytest.raises(CommandError, match="not found"):
-        call_command("reregister_webhooks", f"--team-slug={team.slug}", "--chatbot=00000000-0000-0000-0000-000000000000", "--noinput")
+        call_command(
+            "reregister_webhooks",
+            f"--team-slug={team.slug}",
+            "--chatbot=00000000-0000-0000-0000-000000000000",
+            "--noinput",
+        )
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -3963,51 +3968,50 @@ with `from collections.abc import Sequence`, `from apps.experiments.models impor
 Then the flag and its validation:
 
 ```python
-    def add_arguments(self, parser):
-        parser.add_argument("--team-slug", required=True, help="Slug of the local team to update.")
-        parser.add_argument(
-            "--chatbot",
-            action="append",
-            default=[],
-            dest="chatbot_public_ids",
-            metavar="PUBLIC_ID",
-            help=(
-                "Public id of a chatbot to update, repeatable. Use it after a sync that moved only "
-                "some of the team's chatbots; without it every channel the team has is repointed."
-            ),
+def add_arguments(self, parser):
+    parser.add_argument("--team-slug", required=True, help="Slug of the local team to update.")
+    parser.add_argument(
+        "--chatbot",
+        action="append",
+        default=[],
+        dest="chatbot_public_ids",
+        metavar="PUBLIC_ID",
+        help=(
+            "Public id of a chatbot to update, repeatable. Use it after a sync that moved only "
+            "some of the team's chatbots; without it every channel the team has is repointed."
+        ),
+    )
+    parser.add_argument(
+        "--noinput",
+        "--no-input",
+        action="store_false",
+        dest="interactive",
+        help="Skip the domain confirmation prompt (for non-interactive runs).",
+    )
+
+
+def handle(self, *args, **options):
+    team = Team.objects.filter(slug=options["team_slug"]).first()
+    if team is None:
+        raise CommandError(f"No local team '{options['team_slug']}' found.")
+
+    requested = options["chatbot_public_ids"]
+    if requested:
+        found = set(
+            Experiment._base_manager.filter(team=team, public_id__in=requested).values_list("public_id", flat=True)
         )
-        parser.add_argument(
-            "--noinput",
-            "--no-input",
-            action="store_false",
-            dest="interactive",
-            help="Skip the domain confirmation prompt (for non-interactive runs).",
+        missing = [value for value in requested if value not in {str(pk) for pk in found}]
+        if missing:
+            raise CommandError(f"Chatbot(s) not found in team '{team.slug}': {', '.join(missing)}")
+
+    if options.get("interactive", True) and not self._confirm_site_url():
+        raise CommandError(
+            "Aborted: fix this server's domain, then re-run. Update the Site record in the Django "
+            "admin (Sites), or set SITE_URL_ROOT in the environment when running with DEBUG on."
         )
 
-    def handle(self, *args, **options):
-        team = Team.objects.filter(slug=options["team_slug"]).first()
-        if team is None:
-            raise CommandError(f"No local team '{options['team_slug']}' found.")
-
-        requested = options["chatbot_public_ids"]
-        if requested:
-            found = set(
-                Experiment._base_manager.filter(team=team, public_id__in=requested).values_list(
-                    "public_id", flat=True
-                )
-            )
-            missing = [value for value in requested if value not in {str(pk) for pk in found}]
-            if missing:
-                raise CommandError(f"Chatbot(s) not found in team '{team.slug}': {', '.join(missing)}")
-
-        if options.get("interactive", True) and not self._confirm_site_url():
-            raise CommandError(
-                "Aborted: fix this server's domain, then re-run. Update the Site record in the Django "
-                "admin (Sites), or set SITE_URL_ROOT in the environment when running with DEBUG on."
-            )
-
-        report = reregister_webhooks(team, requested)
-        self._report(report)
+    report = reregister_webhooks(team, requested)
+    self._report(report)
 ```
 
 - [ ] **Step 4: Point the sync report at the new flag**
