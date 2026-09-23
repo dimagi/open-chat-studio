@@ -147,3 +147,11 @@ def test_iter_pages_yields_each_page_separately():
 
     assert list(_client(session).iter_pages("chats")) == [[{"id": 1}, {"id": 2}], [{"id": 3}]]
     assert session.calls[1]["params"] == {"limit": 100, "cursor": "c1"}
+
+
+def test_iter_pages_sends_the_selection_key():
+    session = FakeSession([FakeResponse(json_data={"results": [], "cursor": None, "has_more": False})])
+
+    list(_client(session).iter_pages("chats", selection="abc"))
+
+    assert session.calls[0]["params"] == {"limit": 100, "selection": "abc"}

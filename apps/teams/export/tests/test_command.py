@@ -13,7 +13,8 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
-from apps.teams.export.translation import ALL_CHATBOTS_KEY
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -47,6 +48,7 @@ class FakeClient:
         self.manifest = manifest
         self.rows_by_resource = rows_by_resource
         self.iter_calls = []
+        self.selections = []
         self.get_team_calls = 0
 
     def get_manifest(self):
@@ -57,8 +59,10 @@ class FakeClient:
         self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
-    def iter_pages(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         self.iter_calls.append((resource, start_cursor))
+        if selection not in self.selections:
+            self.selections.append(selection)
         rows = list(self.rows_by_resource.get(resource, []))
         return iter([rows]) if rows else iter([])
 
@@ -312,16 +316,17 @@ def test_rerun_is_a_no_op_and_resumes_from_stored_cursor(make_store, tmp_path, k
     store = make_store(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
     run_sync(first, store, keypair[1])
-    # once for the readiness precondition, once to fetch and import the team
-    assert first.get_team_calls == 2
+    # once for the readiness precondition, once for the chatbot selection, once to fetch and import
+    # the team (ResourceFetcher caches the response, so this is one request per run)
+    assert first.get_team_calls == 3
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
-    # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
-    # not to re-import the team (that's loaded from the target DB)
-    assert second.get_team_calls == 1
+    # the team is already synced, so the rerun reads the team only for the readiness precondition and
+    # the selection, not to re-import it (that's loaded from the target DB)
+    assert second.get_team_calls == 2
     # the second run resumes each pk resource from the cursor the first run stored
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
@@ -436,10 +441,10 @@ class _RaisingClient(FakeClient):
             raise self._error
         return super().get_team()
 
-    def iter_pages(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         if self._raise_on == "iter_pages":
             raise self._error
-        return super().iter_pages(resource, start_cursor, limit)
+        return super().iter_pages(resource, start_cursor, limit, selection)
 
 
 @pytest.mark.parametrize(
@@ -587,3 +592,137 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
 
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
+
+
+def _with_excluded_evaluators(manifest):
+    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"].append(
+        {
+            "model": "evaluations.evaluator",
+            "resource": "evaluators",
+            "cursor": "pk",
+            "secret": False,
+            "scope": "excluded",
+        }
+    )
+    return manifest
+
+
+def test_excluded_resources_are_not_requested_under_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" not in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_excluded_resources_are_requested_without_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
+    """The source then serves a subset of what it served, so every cursor is still valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "owned"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_path, keypair):
+    """A full-team sync served a superset of any selection, so its cursors stay valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "owned"
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, keypair):
+    """Adding a chatbot puts rows below the cursor that were never synced, so resuming would skip them."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "referenced"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls
+
+
+def test_referenced_resources_are_reread_from_the_start_under_a_selection(make_store, tmp_path, keypair):
+    """A shared row the chatbot starts using later can have a lower pk than the stored cursor, so a
+    referenced resource is re-read in full while a selection is active."""
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "referenced"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls
+
+
+def test_owned_resources_resume_from_their_cursor_under_a_selection(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "owned"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_run_sync_pages_under_its_selection_key(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+
+    run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+    assert client.selections == [selection_key(["a"])]
+
+
+def test_a_selection_change_during_the_run_stops_it_cleanly(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    client = _RaisingClient(manifest, rows, _http_error(409, SELECTION_CHANGED_DETAIL), raise_on="iter_pages")
+
+    with pytest.raises(CommandError, match="selection changed"):
+        run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)

@@ -7,8 +7,10 @@ The same file holds each model's pagination cursor, namespaced by the chatbot se
 served it under."""
 
 import base64
+import hashlib
 import json
 import sqlite3
+from collections.abc import Sequence
 
 from django.utils.dateparse import parse_datetime
 
@@ -36,6 +38,9 @@ class FKTranslationStore:
             "CREATE TABLE IF NOT EXISTS cursors ("
             "selection_key TEXT NOT NULL, model_label TEXT NOT NULL, cursor TEXT, "
             "PRIMARY KEY (selection_key, model_label))"
+        )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS selections (selection_key TEXT PRIMARY KEY, public_ids TEXT NOT NULL)"
         )
         self._add_missing_columns()
         self._conn.commit()
@@ -133,6 +138,30 @@ class FKTranslationStore:
             )
         }
 
+    def record_selection(self, selection_key: str, public_ids: Sequence[str]) -> None:
+        """Remember which chatbots a key stands for, so a later run can tell a narrower selection
+        from a wider one."""
+        self._conn.execute(
+            "INSERT INTO selections (selection_key, public_ids) VALUES (?, ?) "
+            "ON CONFLICT (selection_key) DO UPDATE SET public_ids = excluded.public_ids",
+            (selection_key, json.dumps(sorted(public_ids))),
+        )
+        self._conn.commit()
+
+    def selections(self) -> dict[str, list[str]]:
+        rows = self._conn.execute("SELECT selection_key, public_ids FROM selections")
+        return {key: json.loads(ids) for key, ids in rows}
+
+    def seed_cursors_from(self, source_key: str, target_key: str) -> None:
+        """Copy one selection's cursors to another, leaving any the target already has alone."""
+        self._conn.execute(
+            "INSERT INTO cursors (selection_key, model_label, cursor) "
+            "SELECT ?, model_label, cursor FROM cursors WHERE selection_key = ? "
+            "ON CONFLICT (selection_key, model_label) DO NOTHING",
+            (target_key, source_key),
+        )
+        self._conn.commit()
+
     def has_unfilled_targets(self) -> bool:
         """True if any recorded row still lacks a target -- i.e. a prior run was interrupted."""
         return any(tgt is None for rows in self._index.values() for tgt in rows.values())
@@ -159,6 +188,14 @@ def derive_updated_at_cursor(rows) -> str | None:
     updated_at, source_id = max(rows, key=lambda r: (r[0], r[1]))
     keyset = {"updated_at": updated_at.isoformat(), "id": source_id}
     return base64.b64encode(json.dumps(keyset).encode()).decode()
+
+
+def selection_key(public_ids: Sequence[str]) -> str:
+    """The cursor namespace for one chatbot selection. Order-independent, so the key only moves when
+    the set itself does."""
+    if not public_ids:
+        return ALL_CHATBOTS_KEY
+    return hashlib.sha256("\n".join(sorted(public_ids)).encode()).hexdigest()[:32]
 
 
 def page_cursor(cursor_type: str, rows: list[dict]) -> str | None:
