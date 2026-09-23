@@ -9,7 +9,10 @@ from collections.abc import Sequence
 from django.db.models import Q, QuerySet
 
 from apps.experiments.models import Experiment
+from apps.teams.export.translation import selection_key
 from apps.teams.models import Team
+
+SELECTION_CHANGED_DETAIL = "The team's chatbot selection changed during the sync."
 
 
 def _allowlist(team: Team) -> QuerySet:
@@ -52,3 +55,8 @@ def selectable_chatbots(team: Team) -> QuerySet[Experiment]:
     return Experiment._base_manager.filter(team=team, working_version__isnull=True).filter(
         Q(is_archived=False) | Q(pk__in=_allowlist(team).values("experiment_id"))
     )
+
+
+def current_selection_key(team: Team) -> str:
+    """The key a sync client derives from this team's allowlist, to check it syncs the same selection."""
+    return selection_key([str(public_id) for public_id in selected_chatbots(team).values_list("public_id", flat=True)])

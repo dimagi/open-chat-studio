@@ -22,6 +22,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -53,6 +60,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -84,6 +98,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -115,6 +136,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -146,6 +174,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -174,6 +209,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -202,6 +244,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -236,6 +285,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -267,6 +323,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -295,6 +358,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -329,6 +399,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -360,6 +437,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -388,6 +472,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -416,6 +507,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -444,6 +542,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -472,6 +577,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -500,6 +612,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -528,6 +647,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -559,6 +685,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -587,6 +720,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -621,6 +761,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -652,6 +799,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -683,6 +837,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -714,6 +875,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -742,6 +910,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -773,6 +948,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -804,6 +986,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -835,6 +1024,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -866,6 +1062,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -894,6 +1097,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -925,6 +1135,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -953,6 +1170,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -981,6 +1205,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1009,6 +1240,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1037,6 +1275,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1088,6 +1333,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1122,6 +1374,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1150,6 +1409,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1181,6 +1447,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1218,6 +1491,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1249,6 +1529,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1277,6 +1564,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1305,6 +1599,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1333,6 +1634,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1361,6 +1669,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1392,6 +1707,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1420,6 +1742,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1451,6 +1780,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1482,6 +1818,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1510,6 +1853,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1538,6 +1888,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1566,6 +1923,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1594,6 +1958,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1639,6 +2010,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1667,6 +2045,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1701,6 +2086,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1732,6 +2124,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1760,6 +2159,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1791,6 +2197,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1819,6 +2232,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1847,6 +2267,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
@@ -1875,6 +2302,13 @@ paths:
         schema:
           type: integer
         description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
       tags:
       - Team
       security:
