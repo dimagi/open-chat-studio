@@ -7,9 +7,11 @@ from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.api.export.serializers import build_resource_serializer
 from apps.files.models import FilePurpose
 from apps.teams.export import manifest
+from apps.teams.export.chatbot_scope import build_scope
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.events import ScheduledTriggerFactory, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ChatFactory, ExperimentFactory
 from apps.utils.factories.files import FileFactory
@@ -317,3 +319,53 @@ def test_the_allowlist_is_not_exported():
     """The allowlist is per-server operational state, and load_team imports the team before any
     experiment exists, so the importer could not translate its FKs."""
     assert "exportable_experiments" in manifest.EXCLUDE_REGISTRY["teams.team"]
+
+
+@pytest.mark.django_db()
+def test_scoped_queryset_without_a_scope_matches_the_team_queryset():
+    team = TeamFactory()
+    ExperimentFactory(team=team)
+    entry = manifest.get_manifest_entry("chatbots")
+    assert set(manifest.scoped_queryset(entry, team).values_list("pk", flat=True)) == set(
+        manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True)
+    )
+
+
+@pytest.mark.django_db()
+def test_scoped_queryset_keeps_only_the_selected_family():
+    team = TeamFactory()
+    mine = ExperimentFactory(team=team)
+    theirs = ExperimentFactory(team=team)
+    team.exportable_experiments.add(mine)
+
+    entry = manifest.get_manifest_entry("chatbots")
+    pks = set(manifest.scoped_queryset(entry, team, build_scope(team)).values_list("pk", flat=True))
+
+    assert pks == {mine.id}
+    assert theirs.id not in pks
+
+
+@pytest.mark.django_db()
+def test_scoped_queryset_serves_an_excluded_resource_empty():
+    """An evaluation row referencing an experiment that was never synced makes resolve_fk raise
+    mid-import, so these resources have to come back empty rather than team-wide."""
+    team = TeamFactory()
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    EvaluatorFactory(team=team)
+
+    entry = manifest.get_manifest_entry("evaluators")
+    assert not manifest.scoped_queryset(entry, team, build_scope(team)).exists()
+
+
+@pytest.mark.django_db()
+def test_scoped_queryset_narrows_the_global_rows_it_serves():
+    """Globals are matched by natural key on the target and never created, so serving one the target
+    lacks aborts the import with MissingGlobalRow. Under a scope only referenced globals go out."""
+    team = TeamFactory()
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    unreferenced_global = LlmProviderModelFactory(team=None)
+
+    entry = manifest.get_manifest_entry("llm_provider_models")
+    pks = set(manifest.scoped_queryset(entry, team, build_scope(team)).values_list("pk", flat=True))
+
+    assert unreferenced_global.pk not in pks

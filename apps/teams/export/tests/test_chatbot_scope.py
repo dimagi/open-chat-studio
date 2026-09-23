@@ -4,7 +4,8 @@ other one's rows stay out."""
 import pytest
 
 from apps.chat.models import Chat
-from apps.teams.export.chatbot_scope import build_scope
+from apps.teams.export import manifest
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ScopeClass, build_scope
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
 from apps.utils.factories.events import StaticTriggerFactory
@@ -206,3 +207,43 @@ def test_scope_sets_are_computed_once(django_assert_num_queries):
     first = scope.experiment_ids
     with django_assert_num_queries(0):
         assert scope.experiment_ids == first == [chatbot.id]
+
+
+def test_every_manifest_model_has_a_scope_rule():
+    """A model added to the manifest must be classified, or a chatbot-scoped sync silently serves it
+    team-wide and drags in another chatbot's rows."""
+    unclassified = {e.model for e in manifest.MANIFEST_ENTRIES} - set(CHATBOT_SCOPE_REGISTRY)
+    assert not unclassified, "Add these to CHATBOT_SCOPE_REGISTRY: " + ", ".join(sorted(unclassified))
+
+
+def test_scope_registry_has_no_entries_for_unsynced_models():
+    assert set(CHATBOT_SCOPE_REGISTRY) <= {e.model for e in manifest.MANIFEST_ENTRIES}
+
+
+def test_excluded_rules_carry_no_query_and_the_others_do():
+    for label, rule in CHATBOT_SCOPE_REGISTRY.items():
+        if rule.scope_class is ScopeClass.EXCLUDED:
+            assert rule.build_q is None, label
+        else:
+            assert rule.build_q is not None, label
+
+
+def test_the_excluded_classes_are_exactly_the_brief():
+    excluded = {label for label, rule in CHATBOT_SCOPE_REGISTRY.items() if rule.scope_class is ScopeClass.EXCLUDED}
+    assert {label.split(".")[0] for label in excluded} == {"evaluations", "human_annotations", "analysis"}
+
+
+def test_participants_are_referenced_so_a_selection_rereads_them():
+    """A participant who first talked to another chatbot joins the scope without their row changing."""
+    assert CHATBOT_SCOPE_REGISTRY["experiments.participant"].scope_class is ScopeClass.REFERENCED
+
+
+def test_every_scope_rule_builds_a_runnable_queryset():
+    """A misspelt lookup path raises FieldError only when the queryset runs. Running each rule once
+    against an empty database is enough to catch that."""
+    team = TeamFactory()
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    scope = build_scope(team)
+
+    for entry in manifest.MANIFEST_ENTRIES:
+        list(manifest.scoped_queryset(entry, team, scope)[:1])

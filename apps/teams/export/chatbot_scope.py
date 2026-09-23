@@ -6,7 +6,9 @@ well; the session-, chat-, message- and file-sized sets stay querysets, because 
 materialised list does not scale for a busy chatbot.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from enum import StrEnum
 from functools import cached_property
 
 from django.apps import apps
@@ -279,3 +281,145 @@ def build_scope(team) -> ChatbotScope | None:
     """
     selected = selected_experiment_ids(team)
     return ChatbotScope(selected) if selected else None
+
+
+class ScopeClass(StrEnum):
+    """How a model is filtered when a chatbot selection is active."""
+
+    OWNED = "owned"
+    """Belongs to a chatbot: filtered by a path to the experiment family."""
+
+    REFERENCED = "referenced"
+    """Shared across the team: kept when the selected chatbots reach it."""
+
+    EXCLUDED = "excluded"
+    """Served empty. The client skips these resources entirely."""
+
+
+@dataclass(frozen=True)
+class ScopeRule:
+    scope_class: ScopeClass
+    build_q: Callable[[ChatbotScope], Q] | None = None
+
+
+def _owned(build_q: Callable[[ChatbotScope], Q]) -> ScopeRule:
+    return ScopeRule(ScopeClass.OWNED, build_q)
+
+
+def _referenced(build_q: Callable[[ChatbotScope], Q]) -> ScopeRule:
+    return ScopeRule(ScopeClass.REFERENCED, build_q)
+
+
+def _excluded() -> ScopeRule:
+    return ScopeRule(ScopeClass.EXCLUDED)
+
+
+def _team_wide() -> ScopeRule:
+    """Kept whole. Used where narrowing buys nothing and only adds a way for a row's FK to fail."""
+    return ScopeRule(ScopeClass.REFERENCED, lambda _scope: Q())
+
+
+def _generic_target_q(scope: ChatbotScope, ct_field: str, id_field: str) -> Q:
+    """A generic-FK row's scope, built from the very querysets that scope chats, messages and
+    sessions. ``_resolve_generic_fks`` raises rather than nulling, so a filter even slightly wider
+    than what was synced aborts the import mid-run; deriving both from one place makes that drift
+    impossible by construction."""
+    content_type = apps.get_model("contenttypes", "ContentType").objects
+    pairs = (
+        (content_type.get_by_natural_key("chat", "chat"), scope.chats),
+        (content_type.get_by_natural_key("chat", "chatmessage"), scope.chat_messages),
+        (content_type.get_by_natural_key("experiments", "experimentsession"), scope.sessions),
+    )
+    query = Q(pk__in=[])
+    for ct, targets in pairs:
+        query |= Q(**{ct_field: ct, f"{id_field}__in": targets})
+    return query
+
+
+# One rule per manifest model. Hand-written: the shortest path is not always the right one, and
+# several cross nullable FKs where "no path" and "path to null" mean different things.
+CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
+    # --- (a) owned by the chatbot ---------------------------------------------------------------
+    "experiments.experiment": _owned(lambda s: Q(pk__in=s.experiment_ids)),
+    "bot_channels.experimentchannel": _owned(lambda s: Q(pk__in=s.channel_ids)),
+    "events.statictrigger": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "events.timeouttrigger": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "events.scheduledtrigger": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "events.eventaction": _owned(lambda s: s.event_actions_q),
+    "events.scheduledmessage": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "experiments.experimentsession": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "experiments.participantdata": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "chat.chat": _owned(lambda s: Q(pk__in=s.chats)),
+    "chat.chatmessage": _owned(lambda s: Q(chat_id__in=s.chats)),
+    "chat.chatattachment": _owned(lambda s: Q(chat_id__in=s.chats)),
+    "trace.trace": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "pipelines.pipelinechathistory": _owned(lambda s: Q(session_id__in=s.sessions)),
+    "pipelines.pipelinechatmessages": _owned(lambda s: Q(chat_history__session_id__in=s.sessions)),
+    "cost_tracking.usagerecord": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "annotations.customtaggeditem": _owned(lambda s: _generic_target_q(s, "content_type", "object_id")),
+    "annotations.usercomment": _owned(lambda s: _generic_target_q(s, "content_type", "object_id")),
+    # Session scores only. A score hanging off an evaluation result or a human annotation belongs to
+    # an excluded model; its FK is nullable, so keeping the row would silently drop its provenance.
+    "assessments.score": _owned(
+        lambda s: (
+            _generic_target_q(s, "target_content_type", "target_object_id")
+            & Q(automated_result__isnull=True, review__isnull=True)
+        )
+    ),
+    # --- (b) reached by what the chatbot uses ----------------------------------------------------
+    # Shared between chatbots: a participant synced for one is reused by the next, and one who first
+    # talked to another chatbot joins the scope without their row changing. That is what makes a
+    # single FK translation store per team necessary.
+    "experiments.participant": _referenced(lambda s: Q(pk__in=s.participants)),
+    "pipelines.pipeline": _referenced(lambda s: Q(pk__in=s.pipeline_ids)),
+    "pipelines.node": _referenced(lambda s: Q(pipeline_id__in=s.pipeline_ids)),
+    "documents.collection": _referenced(lambda s: Q(pk__in=s.collection_ids)),
+    "documents.collectionfile": _referenced(lambda s: Q(collection_id__in=s.collection_ids)),
+    "documents.documentsource": _referenced(lambda s: Q(collection_id__in=s.collection_ids)),
+    "files.filechunkembedding": _referenced(lambda s: Q(collection_id__in=s.collection_ids)),
+    "files.file": _referenced(lambda s: Q(pk__in=s.files)),
+    "custom_actions.customaction": _referenced(lambda s: Q(pk__in=s.custom_action_ids)),
+    "custom_actions.customactionoperation": _referenced(lambda s: Q(node_id__in=s.node_ids)),
+    "experiments.sourcematerial": _referenced(lambda s: Q(pk__in=s.source_material_ids)),
+    "experiments.consentform": _referenced(lambda s: Q(pk__in=s.consent_form_ids)),
+    "experiments.syntheticvoice": _referenced(lambda s: Q(pk__in=s.synthetic_voice_ids)),
+    "service_providers.llmprovider": _referenced(lambda s: Q(pk__in=s.llm_provider_ids)),
+    "service_providers.llmprovidermodel": _referenced(lambda s: Q(pk__in=s.llm_provider_model_ids)),
+    "service_providers.embeddingprovidermodel": _referenced(lambda s: Q(pk__in=s.embedding_provider_model_ids)),
+    "service_providers.voiceprovider": _referenced(lambda s: Q(pk__in=s.voice_provider_ids)),
+    "service_providers.messagingprovider": _referenced(lambda s: Q(pk__in=s.messaging_provider_ids)),
+    "service_providers.authprovider": _referenced(lambda s: Q(pk__in=s.auth_provider_ids)),
+    "service_providers.traceprovider": _referenced(lambda s: Q(pk__in=s.trace_provider_ids)),
+    # Team-wide and small. Narrowing tags would only add a way for a tagged item's non-null tag FK
+    # to fail; several FKs to a user are non-null and the row is cheap.
+    "annotations.tag": _team_wide(),
+    "users.customuser": _team_wide(),
+    "cost_tracking.pricingrule": _team_wide(),
+    # Notification text and links can name chatbots outside the selection. The settings form and
+    # the sync report say so.
+    "ocs_notifications.eventtype": _team_wide(),
+    "ocs_notifications.usernotificationpreferences": _team_wide(),
+    "ocs_notifications.notificationevent": _team_wide(),
+    "ocs_notifications.eventuser": _team_wide(),
+    # --- (c) excluded ----------------------------------------------------------------------------
+    "evaluations.evaluator": _excluded(),
+    "evaluations.evaluationmessage": _excluded(),
+    "evaluations.evaluationdataset": _excluded(),
+    "evaluations.datasetautopopulationrule": _excluded(),
+    "evaluations.evaluationconfig": _excluded(),
+    "evaluations.evaluatortagrule": _excluded(),
+    "evaluations.evaluationrun": _excluded(),
+    "evaluations.evaluationresult": _excluded(),
+    "evaluations.evaluationrunaggregate": _excluded(),
+    "evaluations.appliedtag": _excluded(),
+    "human_annotations.annotationqueue": _excluded(),
+    "human_annotations.annotationitem": _excluded(),
+    "human_annotations.annotation": _excluded(),
+    "human_annotations.annotationqueueaggregate": _excluded(),
+    "analysis.transcriptanalysis": _excluded(),
+    "analysis.analysisquery": _excluded(),
+}
+
+
+def scope_class_for(model_label: str) -> ScopeClass:
+    return CHATBOT_SCOPE_REGISTRY[model_label].scope_class
