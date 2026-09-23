@@ -7,6 +7,8 @@ from django.urls import reverse
 from apps.admin.imports import import_team_metadata_from_csv
 from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamFactory
+from apps.utils.tests.elevation import elevate_session
+from apps.web.elevation import Grant
 
 METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
 TIER_FIELDS = [{"key": "tier", "label": "Tier", "type": "select", "options": ["Free", "Paid"]}]
@@ -122,13 +124,14 @@ class TestImportTeamMetadataView:
         user = CustomUser.objects.create(username="member@acme.com")
         client.force_login(user)
         response = client.get(self._url())
-        assert response.status_code == 302  # user_passes_test redirects to login_url
+        assert response.status_code == 404
 
     def test_staff_can_import(self, client, settings):
         settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
         staff = CustomUser.objects.create(username="staff@acme.com", is_staff=True)
         team = TeamFactory.create(slug="team-a", metadata={})
         client.force_login(staff)
+        elevate_session(client, Grant.OCS_ADMIN)
 
         upload = SimpleUploadedFile("metadata.csv", b"Slug,Team Owner\nteam-a,Jane Doe\n", content_type="text/csv")
         response = client.post(self._url(), {"file": upload})
