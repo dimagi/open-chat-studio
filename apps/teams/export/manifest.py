@@ -189,9 +189,18 @@ def _customuser_prefetch(team) -> list:
     return [Prefetch("membership_set", queryset=membership.objects.filter(team=team).prefetch_related("groups"))]
 
 
+def _prefetch(*names: str) -> Callable[[object], list]:
+    """A prefetch factory for fields that need no team scoping."""
+    return lambda _team: list(names)
+
+
 # Per-model prefetches, built per request because some are scoped to the team being synced.
+# An m2m field serialized by ``fields = "__all__"`` queries once per row without one.
 PREFETCH_REGISTRY: dict[str, Callable[[object], list]] = {
     "users.customuser": _customuser_prefetch,
+    "chat.chatattachment": _prefetch("files"),
+    "pipelines.node": _prefetch("collection_indexes"),
+    "human_annotations.annotationqueue": _prefetch("assignees"),
 }
 
 
