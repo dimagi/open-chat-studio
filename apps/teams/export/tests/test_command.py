@@ -13,6 +13,8 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -46,6 +48,7 @@ class FakeClient:
         self.manifest = manifest
         self.rows_by_resource = rows_by_resource
         self.iter_calls = []
+        self.selections = []
         self.get_team_calls = 0
 
     def get_manifest(self):
@@ -56,9 +59,12 @@ class FakeClient:
         self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         self.iter_calls.append((resource, start_cursor))
-        return list(self.rows_by_resource.get(resource, []))
+        if selection not in self.selections:
+            self.selections.append(selection)
+        rows = list(self.rows_by_resource.get(resource, []))
+        return iter([rows]) if rows else iter([])
 
     def get_file_content(self, file_id):
         return b""
@@ -305,22 +311,23 @@ def test_run_sync_builds_team_and_resolves_secret_provider(make_store, tmp_path,
     assert store.has_unfilled_targets() is False
 
 
-def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(make_store, tmp_path, keypair):
+def test_rerun_is_a_no_op_and_resumes_from_stored_cursor(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
     run_sync(first, store, keypair[1])
-    # once for the readiness precondition, once to fetch and import the team
-    assert first.get_team_calls == 2
+    # once for the readiness precondition, once for the chatbot selection, once to fetch and import
+    # the team (ResourceFetcher caches the response, so this is one request per run)
+    assert first.get_team_calls == 3
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
-    # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
-    # not to re-import the team (that's loaded from the target DB)
-    assert second.get_team_calls == 1
-    # the second run resumes each pk resource from its highest synced source key
+    # the team is already synced, so the rerun reads the team only for the readiness precondition and
+    # the selection, not to re-import it (that's loaded from the target DB)
+    assert second.get_team_calls == 2
+    # the second run resumes each pk resource from the cursor the first run stored
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
 
@@ -421,7 +428,7 @@ def _http_error(status_code, detail):
 
 
 class _RaisingClient(FakeClient):
-    """A FakeClient whose ``get_team`` or ``iter_rows`` raises instead of returning data, to simulate
+    """A FakeClient whose ``get_team`` or ``iter_pages`` raises instead of returning data, to simulate
     an HTTP error surfacing from the source server mid-sync."""
 
     def __init__(self, manifest, rows, error, raise_on):
@@ -434,10 +441,10 @@ class _RaisingClient(FakeClient):
             raise self._error
         return super().get_team()
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
-        if self._raise_on == "iter_rows":
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
+        if self._raise_on == "iter_pages":
             raise self._error
-        return super().iter_rows(resource, start_cursor, limit)
+        return super().iter_pages(resource, start_cursor, limit, selection)
 
 
 @pytest.mark.parametrize(
@@ -478,7 +485,7 @@ def test_missing_public_key_400_raises_friendly_error(make_store, tmp_path, keyp
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, seal_mod.MISSING_PUBLIC_KEY_DETAIL)
-    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_pages")
 
     with pytest.raises(CommandError, match="no public key"):
         run_sync(client, store, keypair[1])
@@ -490,7 +497,7 @@ def test_unrelated_400_is_not_mistaken_for_missing_public_key(make_store, tmp_pa
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, "Invalid cursor.")
-    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_pages")
 
     with pytest.raises(requests.HTTPError):
         run_sync(client, store, keypair[1])
@@ -538,6 +545,7 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     Team.objects.create(name="Keep", slug="imported-team-z")
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
+    monkeypatch.setattr(sync_team, "check_force_delete_allowed", lambda _client: None)
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
 
@@ -563,3 +571,295 @@ def test_serialized_row_round_trips_through_importer(make_store, tmp_path, keypa
     imported = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", provider.id))
     assert imported.team_id == target_team.id  # assigned from the synced team, not carried in the row
     assert imported.config == {"api_key": "sk-live"}
+
+
+def test_run_sync_resumes_from_the_stored_cursor(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "42")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "42") in client.iter_calls
+
+
+def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    store = make_store(tmp_path / "team.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
+
+
+def _with_excluded_evaluators(manifest):
+    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"].append(
+        {
+            "model": "evaluations.evaluator",
+            "resource": "evaluators",
+            "cursor": "pk",
+            "secret": False,
+            "scope": "excluded",
+        }
+    )
+    return manifest
+
+
+def test_excluded_resources_are_not_requested_under_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" not in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_excluded_resources_are_requested_without_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
+    """The source then serves a subset of what it served, so every cursor is still valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "owned"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_path, keypair):
+    """A full-team sync served a superset of any selection, so its cursors stay valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "owned"
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, keypair):
+    """Adding a chatbot puts rows below the cursor that were never synced, so resuming would skip them."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "referenced"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls
+
+
+def test_report_names_the_synced_chatbots(capsys):
+    command = Command()
+    command._report(
+        sync_complete=True,
+        team_slug="acme",
+        chatbots=[{"public_id": "abc", "name": "Support bot"}],
+    )
+    out = capsys.readouterr().out
+    assert "Support bot" in out
+    assert "evaluations" in out.lower()
+    assert "human annotations" in out.lower()
+    assert "transcript analyses" in out.lower()
+
+
+def test_report_omits_the_chatbot_section_for_a_whole_team_sync(capsys):
+    command = Command()
+    command._report(sync_complete=True, team_slug="acme", chatbots=[])
+    out = capsys.readouterr().out
+    assert "Chatbots synced" not in out
+
+
+def test_report_counts_rows_left_untouched(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", skipped_rows=7)
+    assert "left untouched: 7" in capsys.readouterr().out
+
+
+def test_force_delete_is_refused_while_the_source_has_a_selection(keypair):
+    """--force-delete drops the whole local team, which would destroy chatbots synced under an
+    earlier selection."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+
+    with pytest.raises(CommandError, match="only part of the team"):
+        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
+
+
+def test_force_delete_is_allowed_for_a_whole_team_sync(keypair):
+    manifest, rows = _scenario(keypair[0])
+    sync_team.check_force_delete_allowed(FakeClient(manifest, rows))  # does not raise
+
+
+def test_preflight_prints_what_the_source_will_export(keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export 1 of this team's chatbots:" in lines
+    assert "  - Support bot" in lines
+
+
+def test_preflight_says_when_the_whole_team_is_exported(keypair):
+    manifest, rows = _scenario(keypair[0])
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export the whole team." in lines
+
+
+def test_force_delete_is_refused_before_the_prompt(tmp_path, monkeypatch, keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    Team.objects.create(name="Keep", slug="imported-team-z")
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
+    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite the refusal"))
+
+    with pytest.raises(CommandError, match="only part of the team"):
+        Command().handle(**_force_delete_options(tmp_path))
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
+
+
+def test_a_partial_sync_does_not_ask_about_the_files_bundle(make_store, tmp_path, keypair, monkeypatch):
+    """create_team_files_zip_task only zips whole teams, so there is no bundle for the operator to
+    have moved. The importer backfills each missing blob from the source instead."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    store = make_store(tmp_path / "team.sqlite")
+    monkeypatch.setattr(sync_team, "_prompt", lambda _message: pytest.fail("prompted for the files bundle"))
+
+    lines = []
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store, write=lines.append)
+
+    assert any("backfilled from the source" in line for line in lines)
+
+
+def test_a_whole_team_sync_still_asks_about_the_files_bundle(make_store, tmp_path, keypair, monkeypatch):
+    manifest, rows = _scenario(keypair[0])
+    store = make_store(tmp_path / "team.sqlite")
+    asked = []
+    monkeypatch.setattr(sync_team, "_prompt", lambda message: asked.append(message) or "yes")
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
+
+    assert asked
+    assert store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
+
+
+def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_path, keypair, monkeypatch):
+    manifest, rows = _scenario(keypair[0])
+    store = make_store(tmp_path / "team.sqlite")
+    monkeypatch.setattr(sync_team, "_prompt", lambda _message: "no")
+
+    with pytest.raises(CommandError, match="storage backend"):
+        check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
+
+    assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
+
+
+def test_report_limits_the_webhook_command_to_the_synced_chatbots(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
+    assert "reregister_webhooks --team-slug=acme --chatbot=abc" in capsys.readouterr().out
+
+
+def test_referenced_resources_are_reread_from_the_start_under_a_selection(make_store, tmp_path, keypair):
+    """A shared row the chatbot starts using later can have a lower pk than the stored cursor, so a
+    referenced resource is re-read in full while a selection is active."""
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "referenced"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls
+
+
+def test_owned_resources_resume_from_their_cursor_under_a_selection(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["entries"][0]["scope"] = "owned"
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    store = make_store(tmp_path / "team.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, keypair[1], on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_run_sync_pages_under_its_selection_key(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+
+    run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+    assert client.selections == [selection_key(["a"])]
+
+
+def test_a_selection_change_during_the_run_stops_it_cleanly(make_store, tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    client = _RaisingClient(manifest, rows, _http_error(409, SELECTION_CHANGED_DETAIL), raise_on="iter_pages")
+
+    with pytest.raises(CommandError, match="selection changed"):
+        run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+
+def test_the_force_delete_refusal_does_not_suggest_deleting_chatbots_by_hand(keypair):
+    """Rows deleted on the target sit below the stored cursors and keep their translations, so a rerun
+    would never restore them."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+
+    with pytest.raises(CommandError) as excinfo:
+        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
+
+    assert "by hand" not in str(excinfo.value)
+    assert "rerun without --force-delete" in str(excinfo.value)
+
+
+def test_report_warns_that_turning_off_migration_mode_resumes_every_synced_chatbot(capsys):
+    """Migration mode on the target is team-wide, so switching it off to cut one chatbot over also
+    starts the others, which may still be live on the source."""
+    Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
+    assert "Turning off migration mode on this server" in capsys.readouterr().out

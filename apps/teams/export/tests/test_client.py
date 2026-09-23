@@ -73,15 +73,15 @@ def test_get_page_passes_cursor_and_limit():
     assert call["params"] == {"cursor": "4", "limit": 50}
 
 
-def test_iter_rows_follows_has_more():
+def test_iter_pages_follows_has_more():
     session = FakeSession(
         [
             FakeResponse(json_data={"results": [{"id": 1}], "has_more": True, "cursor": "1"}),
             FakeResponse(json_data={"results": [{"id": 2}], "has_more": False, "cursor": "2"}),
         ]
     )
-    rows = list(_client(session).iter_rows("chatbots"))
-    assert [r["id"] for r in rows] == [1, 2]
+    pages = list(_client(session).iter_pages("chatbots"))
+    assert pages == [[{"id": 1}], [{"id": 2}]]
     assert session.calls[1]["params"]["cursor"] == "1"
 
 
@@ -134,3 +134,24 @@ def test_get_file_content_other_client_error_still_raises_http_error():
     session = FakeSession([FakeResponse(403)])
     with pytest.raises(requests.HTTPError):
         _client(session).get_file_content(99)
+
+
+def test_iter_pages_yields_each_page_separately():
+    """The sync records its cursor after each page commits, so it needs the pages, not a flat row stream."""
+    session = FakeSession(
+        [
+            FakeResponse(json_data={"results": [{"id": 1}, {"id": 2}], "cursor": "c1", "has_more": True}),
+            FakeResponse(json_data={"results": [{"id": 3}], "cursor": None, "has_more": False}),
+        ]
+    )
+
+    assert list(_client(session).iter_pages("chats")) == [[{"id": 1}, {"id": 2}], [{"id": 3}]]
+    assert session.calls[1]["params"] == {"limit": 100, "cursor": "c1"}
+
+
+def test_iter_pages_sends_the_selection_key():
+    session = FakeSession([FakeResponse(json_data={"results": [], "cursor": None, "has_more": False})])
+
+    list(_client(session).iter_pages("chats", selection="abc"))
+
+    assert session.calls[0]["params"] == {"limit": 100, "selection": "abc"}

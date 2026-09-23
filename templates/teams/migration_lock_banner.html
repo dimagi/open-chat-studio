@@ -1,4 +1,10 @@
-{% load i18n %}
+{% load i18n team_tags %}
 <div class="alert alert-warning rounded-none justify-center text-center">
-  {% translate "This team is undergoing a migration. Do not create or edit chatbots until the migration is complete." %}
+  {% exportable_chatbot_count request.team as count %}
+  {% if count %}
+    {% blocktranslate count counter=count %}{{ counter }} chatbot in this team is being migrated. Do not edit it until the migration is complete.{% plural %}{{ counter }} chatbots in this team are being migrated. Do not edit them until the migration is complete.{% endblocktranslate %}
+    <a class="link ml-1" href="{% url 'single_team:manage_team' request.team.slug %}#data">{% translate "Details" %}</a>
+  {% else %}
+    {% translate "This team is undergoing a migration. Do not create or edit chatbots until the migration is complete." %}
+  {% endif %}
 </div>

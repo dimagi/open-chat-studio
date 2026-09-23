@@ -19,14 +19,16 @@ from rest_framework.views import APIView
 from apps.api.export.permissions import IsTeamAdmin
 from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
+from apps.teams.export.chatbot_scope import build_scope
 from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
     entry_model,
     get_manifest_entry,
-    team_scoped_queryset,
+    scoped_queryset,
 )
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_public_key
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL, current_selection_key
 
 from .serializers import (
     ManifestSerializer,
@@ -111,7 +113,15 @@ class ResourceView(_ExportAPIView):
             context["public_key"] = load_public_key(request.team.public_key)
 
         limit = _parse_limit(request.query_params.get("limit", DEFAULT_LIMIT))
-        queryset = team_scoped_queryset(entry, request.team)
+        # A client pages each resource under the selection it read at the start of its run; rows served
+        # under a different allowlist could reference rows its earlier pages never included.
+        selection = request.query_params.get("selection")
+        if selection is not None and selection != current_selection_key(request.team):
+            return Response({"detail": SELECTION_CHANGED_DETAIL}, status=status.HTTP_409_CONFLICT)
+
+        # The chatbot scope is the team's own allowlist, never a client preference: an API key alone
+        # must not widen what may leave this server.
+        queryset = scoped_queryset(entry, request.team, build_scope(request.team))
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
         serializer = build_resource_serializer(entry_model(entry.model))(rows, many=True, context=context)
@@ -201,6 +211,14 @@ _QUERY_PARAMETERS: list[OpenApiParameter] = [
         location=OpenApiParameter.QUERY,
         required=False,
         description=f"Maximum rows per page (default {DEFAULT_LIMIT}, capped at {MAX_LIMIT}).",
+    ),
+    OpenApiParameter(
+        name="selection",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        required=False,
+        description="The chatbot selection the client is syncing. When it no longer matches the team's "
+        "export allowlist the request is refused with 409, so a sync cannot mix two selections.",
     ),
 ]
 
