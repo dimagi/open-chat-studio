@@ -265,34 +265,107 @@
                 </div>
               </div>
 
-              <div class="app-card">
+              <div class="app-card"
+                   x-data="{
+                     scope: '{{ public_key_form.export_scope.value|default:'all'|escapejs }}',
+                     initialSelection: {{ saved_allowlist_ids|default:'[]' }},
+                     selection: [],
+                     get changedMidMigration() {
+                       return {{ team.is_migrating|yesno:'true,false' }}
+                         && JSON.stringify([...this.selection].sort()) !== JSON.stringify([...this.initialSelection].sort());
+                     }
+                   }"
+                   x-init="
+                     const picker = new window.TomSelect($refs.allowlist, {
+                       plugins: ['remove_button'],
+                       maxItems: null,
+                       searchField: ['text'],
+                       hideSelected: true,
+                       closeAfterSelect: true,
+                       onChange: (values) => { selection = (values || []).map(Number); }
+                     });
+                     selection = picker.getValue().map(Number);
+                     $watch('scope', (value) => value === 'all' ? picker.disable() : picker.enable());
+                     if (scope === 'all') { picker.disable(); }
+                     $refs.selectAll.addEventListener('click', () => picker.setValue(Object.keys(picker.options)));
+                     $refs.clearAll.addEventListener('click', () => picker.clear());
+                   ">
                 <div class="flex justify-between items-start">
                   <div>
-                    <h3 class="pg-subtitle font-bold text-sm">{% translate "Migration public key" %}</h3>
-                    <span class="text-neutral-500 section-subtitle">{% translate "Seals secret data exported from this team during a migration." %}</span>
+                    <h3 class="pg-subtitle font-bold text-sm">{% translate "Migration" %}</h3>
+                    <span class="text-neutral-500 section-subtitle">{% translate "Seals secret data exported from this team, and controls what may leave this server." %}</span>
                   </div>
-                  {% if team.public_key %}
-                    <span class="badge badge-success">{% translate "Set" %}</span>
-                  {% else %}
-                    <span class="badge badge-warning">{% translate "Not set" %}</span>
-                  {% endif %}
+                  <div class="flex gap-2">
+                    {% if team.public_key %}
+                      <span class="badge badge-success">{% translate "Key set" %}</span>
+                    {% else %}
+                      <span class="badge badge-warning">{% translate "Key not set" %}</span>
+                    {% endif %}
+                    {% if team.is_migrating %}
+                      <span class="badge badge-info">{% translate "Migration mode on" %}</span>
+                    {% endif %}
+                  </div>
                 </div>
+
                 <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}" class="mt-2">
                   {% csrf_token %}
                   {{ public_key_form.non_field_errors }}
                   {% render_form_fields public_key_form "public_key" %}
-                  <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+
+                  <fieldset class="mt-4">
+                    <legend class="section-subtitle font-bold">{{ public_key_form.export_scope.label }}</legend>
+                    {% for radio in public_key_form.export_scope %}
+                      <label class="label cursor-pointer justify-start gap-2">
+                        <input type="radio" name="export_scope" class="radio radio-sm"
+                               value="{{ radio.data.value }}" x-model="scope">
+                        <span class="section-subtitle">{{ radio.choice_label }}</span>
+                      </label>
+                    {% endfor %}
+                  </fieldset>
+
+                  <div class="mt-2" x-show="scope === 'selected'" x-cloak>
+                    {{ public_key_form.exportable_experiments.errors }}
+                    <select x-ref="allowlist" name="exportable_experiments" multiple
+                            class="chatbot-allowlist w-full">
+                      {% for chatbot in public_key_form.fields.exportable_experiments.queryset %}
+                        <option value="{{ chatbot.id }}"
+                                {% if chatbot.id|stringformat:"s" in submitted_allowlist_ids %}selected{% endif %}>
+                          {{ chatbot.name }}{% if chatbot.is_archived %} {% translate "(archived)" %}{% endif %}
+                        </option>
+                      {% endfor %}
+                    </select>
+                    <p class="text-neutral-500 section-subtitle whitespace-normal mt-1">
+                      {{ public_key_form.exportable_experiments.help_text }}
+                    </p>
+                    <div class="pg-inline-buttons mt-2">
+                      <button type="button" class="btn btn-xs btn-outline" x-ref="selectAll">{% translate "Select all" %}</button>
+                      <button type="button" class="btn btn-xs btn-outline" x-ref="clearAll">{% translate "Clear" %}</button>
+                    </div>
+                  </div>
+
+                  <div class="alert alert-warning mt-3" x-show="changedMidMigration" x-cloak>
+                    <span class="section-subtitle whitespace-normal">
+                      {% translate "A migration is in progress. Adding a chatbot makes the sync on the other server re-read what it has already copied. Removing a chatbot does not delete what was copied, and resumes its scheduled messages and triggers on this server, so it may fire on both servers." %}
+                    </span>
+                  </div>
+
+                  <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
                     <div class="min-w-0">
                       <label class="label cursor-pointer gap-2">
                         <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
                                 {% if request.team.is_migrating %}checked{% endif %}>
                         <span class="section-subtitle">{% translate "Migration mode" %}</span>
                       </label>
-                      <p class="text-neutral-500 section-subtitle whitespace-normal">
+                      <p class="text-neutral-500 section-subtitle whitespace-normal"
+                         x-show="scope === 'all'">
                         {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
                       </p>
+                      <p class="text-neutral-500 section-subtitle whitespace-normal"
+                         x-show="scope === 'selected'" x-cloak>
+                        {% translate "While enabled, scheduled messages and event triggers for the selected chatbots are paused and will not fire. Other chatbots keep running." %}
+                      </p>
                     </div>
-                    <input class="btn btn-primary" type="submit" value="{% translate "Save key" %}">
+                    <input class="btn btn-primary" type="submit" value="{% translate "Save" %}">
                   </div>
                 </form>
               </div>
