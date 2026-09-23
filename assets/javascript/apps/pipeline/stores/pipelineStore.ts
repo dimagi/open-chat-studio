@@ -217,15 +217,14 @@ const createPipelineStore: StateCreator<
       data: {
         ...data,
         id: newId,
-        // The name is how other nodes reach this one's result, through
-        // `temp_state.outputs.<name>`, so it carries over: a swap is not a rename anyone asked
-        // for, and a reference left pointing at a name nothing answers to fails when the pipeline
-        // runs. An auto-generated name reads as the old type once the swap is done, but it can be
-        // referenced like any other, so it carries over as well; a node with no name at all takes
-        // the new id, as a freshly dropped node does. Colour is the user's marking on this spot in
-        // the graph, so it carries over too - but only when it is set. A `color: undefined`
-        // key would leave the client's params one key longer than the saved ones, which
-        // `computePipelineDiff` reads as a change forever.
+        // Other nodes reach this one's result through `temp_state.outputs.<name>`, so the name
+        // carries over: a reference to a name no node has fails when the pipeline runs. An
+        // auto-generated name still reads as the old type after the swap, but it can be referenced
+        // like any other, so it carries over too; a node with no name takes the new id, as a
+        // freshly dropped node does. The colour is the user's rather than the node type's, so it
+        // carries over as well - but only when it is set. A `color: undefined` key would leave the
+        // client's params one key longer than the saved ones, which `computePipelineDiff` reads as
+        // a change forever.
         params: {...data.params, name, ...(color !== undefined && {color})},
       },
     };
