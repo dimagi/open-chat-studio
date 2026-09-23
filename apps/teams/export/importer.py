@@ -14,6 +14,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_de
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.events.versioning import get_event_action_param_specs
 from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
@@ -116,6 +117,19 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
             result[key] = [store.get_target(label, as_int(v)) or v for v in value]
         else:
             result[key] = store.get_target(label, as_int(value)) or value
+    return result
+
+
+def remap_event_action_params(params: dict, action_type: str, store: FKTranslationStore) -> dict:
+    """Rewrite the resource ids an event action holds in its params. Which params carry an id is
+    declared in ``apps.events.versioning``; references the sync doesn't copy have no translation and
+    are left as-is, matching ``remap_node_params``."""
+    result = dict(params)
+    for spec in get_event_action_param_specs(action_type):
+        value = result.get(spec.param_name)
+        if value in (None, "", 0):
+            continue
+        result[spec.param_name] = store.get_target(spec.model_label.lower(), as_int(value)) or value
     return result
 
 
@@ -429,10 +443,14 @@ class Importer:
             field_values[field.name] = row[field.name]
 
     def _remap_embedded_resource_ids(self, model_label: str, field_values: dict) -> None:
-        """Rewrite the source resource ids buried in a node's params in place. Pipeline data is
+        """Rewrite the source resource ids buried in a row's params in place. Pipeline data is
         layout-only (ADR-0046) and carries no resource ids, so it imports as-is."""
         if model_label == "pipelines.node" and "params" in field_values:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
+        elif model_label == "events.eventaction" and "params" in field_values:
+            field_values["params"] = remap_event_action_params(
+                field_values["params"], field_values.get("action_type", ""), self.store
+            )
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
         """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member
