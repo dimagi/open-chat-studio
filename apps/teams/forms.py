@@ -7,6 +7,9 @@ from django.core.exceptions import ValidationError
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
+from apps.experiments.models import Experiment
+
+from .export.selection import selectable_chatbots, selected_experiment_ids
 from .helpers import create_default_team_for_user
 from .metadata import get_team_metadata_fields
 from .models import Invitation, Membership, Team
@@ -143,7 +146,33 @@ class TeamChangeForm(forms.ModelForm):
         }
 
 
+EXPORT_SCOPE_ALL = "all"
+EXPORT_SCOPE_SELECTED = "selected"
+
+
 class TeamPublicKeyForm(forms.ModelForm):
+    export_scope = forms.ChoiceField(
+        choices=(
+            (EXPORT_SCOPE_ALL, _("All chatbots")),
+            (EXPORT_SCOPE_SELECTED, _("Only selected chatbots")),
+        ),
+        widget=forms.RadioSelect,
+        label=_("What may be exported"),
+    )
+    # Declared here rather than in Meta.fields so the form saves it itself: ModelForm would save it
+    # through Experiment's default manager, which hides archived chatbots.
+    exportable_experiments = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        label=_("Chatbots"),
+        help_text=_(
+            "Selecting a chatbot includes all of its versions, including ones published later. "
+            "Chatbots created after you save are not included. Team members, tags, pricing rules and "
+            "notifications are always exported for the whole team, and notifications can mention "
+            "chatbots that are not selected."
+        ),
+    )
+
     class Meta:
         model = Team
         fields = ("public_key", "is_migrating")
@@ -161,6 +190,20 @@ class TeamPublicKeyForm(forms.ModelForm):
             "public_key": forms.Textarea(attrs={"rows": 4, "placeholder": "-----BEGIN PUBLIC KEY-----"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        team = self.instance
+        # The queryset is also the validation: a published version's id or another team's chatbot is
+        # rejected.
+        if team.pk is None:
+            self.fields["exportable_experiments"].queryset = Experiment.objects.none()
+            saved = []
+        else:
+            self.fields["exportable_experiments"].queryset = selectable_chatbots(team).order_by("name")
+            saved = selected_experiment_ids(team)
+        self.initial.setdefault("exportable_experiments", saved)
+        self.initial.setdefault("export_scope", EXPORT_SCOPE_SELECTED if saved else EXPORT_SCOPE_ALL)
+
     def clean_public_key(self):
         value = self.cleaned_data.get("public_key", "")
         if not value:
@@ -170,6 +213,24 @@ class TeamPublicKeyForm(forms.ModelForm):
         except (ValueError, UnsupportedAlgorithm) as e:
             raise ValidationError(_("Enter a valid PEM-encoded public key.")) from e
         return value
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("export_scope") == EXPORT_SCOPE_ALL:
+            cleaned["exportable_experiments"] = self.fields["exportable_experiments"].queryset.none()
+        elif not cleaned.get("exportable_experiments"):
+            self.add_error(
+                "exportable_experiments",
+                ValidationError(_("Pick at least one chatbot, or choose All chatbots.")),
+            )
+        return cleaned
+
+    def _save_m2m(self):
+        super()._save_m2m()
+        # Through the base manager so archived chatbots are seen, and via the related manager so the
+        # m2m_changed signal the audit log listens to still fires.
+        allowlist = self.instance.exportable_experiments(manager="_base_manager")
+        allowlist.set(self.cleaned_data["exportable_experiments"])
 
 
 class TeamMigrationForm(forms.ModelForm):

@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from celery_progress.backend import PROGRESS_STATE
 from django.contrib import messages
@@ -50,6 +52,7 @@ def _team_files_export_context(team):
 def _manage_team_context(request, team, *, team_form=None, public_key_form=None):
     pending_invitations = Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at")
     integration_rows = get_integration_rows(request, team)
+    public_key_form = public_key_form or TeamPublicKeyForm(instance=team)
     return {
         "team": team,
         "active_tab": "manage-team",
@@ -58,7 +61,11 @@ def _manage_team_context(request, team, *, team_form=None, public_key_form=None)
         "invitation_form": InvitationForm(team=team),
         "pending_invitations": pending_invitations,
         "notify_recipients_form": NotifyRecipientsForm,
-        "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
+        "public_key_form": public_key_form,
+        # The mid-migration warning compares the picker against what is saved, not what is bound.
+        "saved_allowlist_ids": json.dumps(public_key_form.initial["exportable_experiments"]),
+        # The bound values on a rejected submit, so a validation error doesn't lose the admin's picks.
+        "submitted_allowlist_ids": [str(pk) for pk in public_key_form["exportable_experiments"].value()],
         "role_choices": ROLE_CHOICES,
         "integration_new_choices": get_integration_new_choices(request, team),
         "integrations_table_url": reverse("single_team:integrations_table", args=[team.slug]),
@@ -178,20 +185,19 @@ def send_invitation_view(request, team_slug):
 @require_POST
 @permission_required("teams.change_team", raise_exception=True)
 def set_public_key(request, team_slug):
-    """Saves the public key and the migration-mode toggle together, matching the mockup's
-    single "Save key" action for the whole Migration public key card."""
+    """Saves the public key, the export scope and the migration-mode toggle together: they are set
+    in one action on the Migration card, before a migration starts."""
     form = TeamPublicKeyForm(request.POST, instance=request.team)
     if form.is_valid():
         form.save()
-        messages.success(request, _("Public key saved!"))
+        messages.success(request, _("Migration settings saved."))
     else:
-        messages.error(request, _("Could not save the public key."))
+        messages.error(request, _("Could not save the migration settings."))
         # ModelForm.is_valid() has already written the submitted (rejected) values onto
         # request.team in memory via _post_clean(), even though nothing was saved. The
-        # migration-mode checkbox below reads request.team.is_migrating directly, so
+        # migration-mode checkbox and the card's badges read request.team directly, so
         # refresh the instance from the database to undo that in-memory mutation -- this
-        # doesn't touch form.errors, which is what still surfaces the "public_key" field
-        # error to the user.
+        # doesn't touch form.errors, which is what still surfaces the field errors.
         request.team.refresh_from_db()
     return render(
         request,
