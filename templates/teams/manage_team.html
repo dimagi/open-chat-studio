@@ -345,7 +345,7 @@
 
                   <div class="alert alert-warning mt-3" x-show="changedMidMigration" x-cloak>
                     <span class="section-subtitle whitespace-normal">
-                      {% translate "A migration is in progress. Changing this makes the sync on the other server restart every resource from the beginning, and removing a chatbot does not delete what it has already copied." %}
+                      {% translate "A migration is in progress. Adding a chatbot makes the sync on the other server re-read what it has already copied. Removing a chatbot does not delete what was copied, and resumes its scheduled messages and triggers on this server, so it may fire on both servers." %}
                     </span>
                   </div>
 
