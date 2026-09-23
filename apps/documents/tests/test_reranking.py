@@ -131,6 +131,22 @@ class TestRerankStage:
         assert {result.id for result in results} == {first.id, second.id}
         assert results[0].rerank_score == 0.9
 
+    def test_reranks_metadata_filtered_candidates(self):
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        first = add_chunk(
+            collection, file, "Paris is the capital of France.", unit_vector(0), metadata={"country": "FR"}
+        )
+        second = add_chunk(collection, file, "Lyon is a city in France.", unit_vector(1), metadata={"country": "FR"})
+        add_chunk(collection, file, "Berlin is the capital of Germany.", unit_vector(2), metadata={"country": "DE"})
+
+        reranker = StubReranker([RerankedDocument(1, 0.9), RerankedDocument(0, 0.1)])
+        results = search_with_reranker(
+            collection, "capital of France", reranker, top_k=2, metadata_filters={"country": "FR"}
+        )
+
+        assert len(reranker.calls[0][1]) == 2
+        assert [result.id for result in results] == [second.id, first.id]
+
     def test_returns_only_what_the_reranker_ranked(self):
         """ "Fewer candidates than asked for" is a legitimate answer; the stage must not pad it
         back out with candidates the reranker rejected."""

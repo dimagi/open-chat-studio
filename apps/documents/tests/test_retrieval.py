@@ -318,6 +318,142 @@ class TestSearchCollection:
         assert collection.search_fetch_k == 40
 
 
+def _filtered_search(collection, query, metadata_filters, *, top_k=5, hybrid=False):
+    """Run a filtered search, failing if it embeds the query: filtered search is lexical only."""
+    embed = mock.Mock(side_effect=AssertionError("a filtered search must not embed the query"))
+    with mock.patch.object(type(collection), "get_query_vector", embed):
+        with override_flag(HYBRID_FLAG, active=hybrid):
+            return search_collection(collection, query, top_k=top_k, metadata_filters=metadata_filters)
+
+
+@pytest.mark.django_db()
+class TestMetadataFilteredSearch:
+    def test_returns_only_rows_whose_metadata_matches(self):
+        collection, file = make_indexed_collection()
+        match = add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+        add_chunk(collection, file, "clinic hours", unit_vector(1), metadata={"district": "Mitchells Plain"})
+
+        results = _filtered_search(collection, "clinic", {"district": "Khayelitsha"})
+
+        assert [chunk.id for chunk in results] == [match.id]
+
+    @pytest.mark.parametrize("hybrid", [pytest.param(False, id="flag-off"), pytest.param(True, id="flag-on")])
+    def test_runs_whether_or_not_hybrid_search_is_on(self, hybrid):
+        collection, file = make_indexed_collection()
+        match = add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+
+        results = _filtered_search(collection, "clinic", {"district": "Khayelitsha"}, hybrid=hybrid)
+
+        assert [chunk.id for chunk in results] == [match.id]
+
+    def test_every_pair_must_match(self):
+        collection, file = make_indexed_collection()
+        english = {"district": "Khayelitsha", "language": "en"}
+        xhosa = {"district": "Khayelitsha", "language": "xh"}
+        both = add_chunk(collection, file, "clinic hours", unit_vector(0), metadata=english)
+        add_chunk(collection, file, "clinic hours", unit_vector(1), metadata=xhosa)
+
+        results = _filtered_search(collection, "clinic", {"district": "Khayelitsha", "language": "en"})
+
+        assert [chunk.id for chunk in results] == [both.id]
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            pytest.param({"district": "khayelitsha"}, id="different-case"),
+            pytest.param({"region": "Khayelitsha"}, id="key-missing"),
+            pytest.param(None, id="no-metadata"),
+        ],
+    )
+    def test_rows_without_the_exact_value_are_excluded(self, metadata):
+        collection, file = make_indexed_collection()
+        add_chunk(collection, file, "clinic hours", unit_vector(0), metadata=metadata)
+
+        assert _filtered_search(collection, "clinic", {"district": "Khayelitsha"}) == []
+
+    def test_ranks_matching_rows_by_lexical_relevance(self):
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        khayelitsha = {"district": "Khayelitsha"}
+        weak = add_chunk(collection, file, "clinic", unit_vector(0), metadata=khayelitsha)
+        strong_text = "clinic hours: the clinic opens at eight"
+        strong = add_chunk(collection, file, strong_text, unit_vector(1), metadata=khayelitsha)
+
+        results = _filtered_search(collection, "clinic hours", {"district": "Khayelitsha"})
+
+        assert [chunk.id for chunk in results] == [strong.id, weak.id]
+
+    def test_a_query_that_matches_no_row_text_finds_nothing(self):
+        collection, file = make_indexed_collection()
+        add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+
+        assert _filtered_search(collection, "vaccination", {"district": "Khayelitsha"}) == []
+
+    @pytest.mark.parametrize(
+        ("language", "query"),
+        [
+            pytest.param(SearchLanguage.ENGLISH, "what is the", id="stopwords-only"),
+            pytest.param(SearchLanguage.SIMPLE, "", id="empty"),
+            pytest.param(SearchLanguage.SIMPLE, "?!", id="punctuation-only"),
+        ],
+    )
+    def test_a_query_with_no_searchable_terms_returns_the_first_matching_rows(self, language, query):
+        collection, file = make_indexed_collection(search_language=language)
+        first = add_chunk(collection, file, "row one", unit_vector(0), metadata={"district": "Khayelitsha"})
+        add_chunk(collection, file, "row two", unit_vector(1), metadata={"district": "Mitchells Plain"})
+        second = add_chunk(collection, file, "row three", unit_vector(2), metadata={"district": "Khayelitsha"})
+        add_chunk(collection, file, "row four", unit_vector(3), metadata={"district": "Khayelitsha"})
+
+        results = _filtered_search(collection, query, {"district": "Khayelitsha"}, top_k=2)
+
+        assert [chunk.id for chunk in results] == [first.id, second.id]
+
+    def test_respects_top_k(self):
+        collection, file = make_indexed_collection()
+        for index in range(4):
+            add_chunk(collection, file, "clinic hours", unit_vector(index), metadata={"district": "Khayelitsha"})
+
+        assert len(_filtered_search(collection, "clinic", {"district": "Khayelitsha"}, top_k=3)) == 3
+
+    def test_excludes_rows_of_unindexed_files(self):
+        collection, _ = make_indexed_collection()
+        pending_file = FileFactory.create(team=collection.team)
+        CollectionFile.objects.create(collection=collection, file=pending_file, status=FileStatus.PENDING)
+        add_chunk(collection, pending_file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+
+        assert _filtered_search(collection, "clinic", {"district": "Khayelitsha"}) == []
+
+    def test_does_not_leak_across_collections(self):
+        collection, file = make_indexed_collection()
+        mine = add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+        other, other_file = make_indexed_collection()
+        add_chunk(other, other_file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+
+        results = _filtered_search(collection, "clinic", {"district": "Khayelitsha"})
+
+        assert [chunk.id for chunk in results] == [mine.id]
+
+    def test_filtered_rows_carry_their_result_fields_without_extra_queries(self, django_assert_num_queries):
+        collection, file = make_indexed_collection()
+        add_chunk(collection, file, "clinic hours", unit_vector(0), metadata={"district": "Khayelitsha"})
+
+        results = _filtered_search(collection, "clinic", {"district": "Khayelitsha"})
+
+        with django_assert_num_queries(0):
+            assert results[0].metadata == {"district": "Khayelitsha"}
+            assert results[0].file.name == file.name
+
+    def test_no_filters_searches_as_before(self):
+        collection, file = make_indexed_collection()
+        near = add_chunk(collection, file, "totally unrelated prose", unit_vector(0))
+        far = add_chunk(collection, file, "quokka", unit_vector(1))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=False):
+                results = search_collection(collection, "quokka", top_k=2, metadata_filters={})
+
+        assert [chunk.id for chunk in results] == [near.id, far.id]
+
+
 @pytest.mark.django_db()
 class TestLexicalSearchLanguage:
     """The configuration used to build a chunk's vector and to parse the query must agree, and it

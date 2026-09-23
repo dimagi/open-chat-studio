@@ -40,7 +40,7 @@ def make_indexed_collection(**kwargs):
     return collection, file
 
 
-def add_chunk(collection, file, text, embedding, context=""):
+def add_chunk(collection, file, text, embedding, context="", metadata=None):
     chunk = FileChunkEmbeddingFactory.create(
         team=collection.team,
         collection=collection,
@@ -48,6 +48,7 @@ def add_chunk(collection, file, text, embedding, context=""):
         text=text,
         context=context,
         embedding=embedding,
+        metadata=metadata,
     )
     # Build the lexical vector through the same helper the indexing pipeline uses, so these tests
     # exercise the production path rather than a reimplementation of it.
@@ -82,7 +83,7 @@ class StubReranker(Reranker):
         return self._ranking
 
 
-def search_with_reranker(collection, query, reranker, *, top_k=5, context=None, hybrid=False):
+def search_with_reranker(collection, query, reranker, *, top_k=5, context=None, hybrid=False, metadata_filters=None):
     """Run `search_collection` with `reranker` as the collection's reranker.
 
     `Collection.get_reranker` is stubbed rather than the provider SDK so these tests exercise the
@@ -92,7 +93,9 @@ def search_with_reranker(collection, query, reranker, *, top_k=5, context=None, 
     with mock.patch.object(type(collection), "get_query_vector", return_value=unit_vector(0)):
         with mock.patch.object(type(collection), "get_reranker", return_value=reranker):
             with override_flag(HYBRID_FLAG, active=hybrid):
-                return search_collection(collection, query, top_k=top_k, context=context)
+                return search_collection(
+                    collection, query, top_k=top_k, context=context, metadata_filters=metadata_filters
+                )
 
 
 def rerankable_collection(**kwargs):
