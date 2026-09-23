@@ -168,3 +168,26 @@ class TestFileChunksPageForRowImport:
         assert "language" in body
         assert ">en<" in body
         assert "Chunk Size" not in body
+
+
+@pytest.mark.django_db()
+class TestCollectionFilesListForRowImport:
+    def test_row_import_file_shows_its_metadata_columns_instead_of_chunk_sizes(
+        self, logged_in_client, team, local_collection
+    ):
+        file = FileFactory.create(team=team, name="faq.csv")
+        CollectionFile.objects.create(
+            collection=local_collection,
+            file=file,
+            status=FileStatus.COMPLETED,
+            metadata={"row_import": {"metadata_columns": ["language"]}},
+        )
+
+        url = reverse("documents:collection_files_list", args=[team.slug, local_collection.id])
+        response = logged_in_client.get(url)
+
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert "Row import" in body
+        assert "language" in body
+        assert "Size:  tokens" not in body
