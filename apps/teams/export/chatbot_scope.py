@@ -16,6 +16,7 @@ from django.db.models import Model, Q, QuerySet
 
 from apps.events.versioning import get_event_action_param_specs
 from apps.teams.export.selection import expand_to_family, selected_experiment_ids
+from apps.utils.fields import as_int
 
 
 def _model(label: str) -> type[Model]:
@@ -130,9 +131,9 @@ class ChatbotScope:
             for spec in get_event_action_param_specs(action_type):
                 if spec.model_label.lower() != "pipelines.pipeline":
                     continue
-                value = (params or {}).get(spec.param_name)
-                if value:
-                    ids.append(int(value))
+                pipeline_id = as_int((params or {}).get(spec.param_name))
+                if pipeline_id:
+                    ids.append(pipeline_id)
         return ids
 
     @cached_property
