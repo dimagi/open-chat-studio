@@ -79,6 +79,7 @@
                           type="button"
                           data-action="translate-remaining-messages"
                           class="btn btn-primary"
+                          hx-disinherit="hx-sync"
                           hx-post="{% url 'experiments:translate_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                           hx-vals='{"language": "{{ language }}"}'
                           hx-include="#control-panel, #translation-provider-remaining, #translation-provider-model-remaining"
