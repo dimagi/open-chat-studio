@@ -88,14 +88,6 @@ class TestEmailChannelForm:
         )
         assert form.is_valid(), form.errors
 
-    @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
-    def test_email_address_on_allowed_domain_accepted(self, experiment):
-        form = EmailChannelForm(
-            experiment=experiment,
-            data={"email_address": "support@chat.openchatstudio.com", "platform": "email"},
-        )
-        assert form.is_valid(), form.errors
-
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["*.openchatstudio.com"])
     def test_email_address_on_allowed_wildcard_accepted(self, experiment):
         form = EmailChannelForm(

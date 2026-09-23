@@ -1,4 +1,5 @@
 import copy
+from typing import cast
 
 import factory
 import factory.django
@@ -42,12 +43,38 @@ _DEFAULT_PIPELINE_DATA = {
 class NodeFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Node
+        skip_postgeneration_save = True
 
     flow_id = factory.Faker("uuid4")
     type = "Passthrough"
     label = "Passthrough"
     params = factory.LazyFunction(dict)
     pipeline = factory.SubFactory("apps.utils.factories.pipelines.PipelineFactory")
+
+    @factory.post_generation
+    def resource_fks(self, create, *args, **kwargs):
+        """Derive the resource FK columns from ``params``, as the real write path does.
+
+        A column the caller passed directly is overlaid onto the params the sync reads, so it
+        wins while every other resource params names is still derived. The overlay is not
+        persisted -- the sync saves the FK columns alone -- so a node built with columns but no
+        ids in params keeps params free of them.
+        """
+        if not create:
+            return
+        # ``self`` is the created Node here, not the factory class whose ``params`` is a declaration.
+        node = cast("Node", self)
+        explicit = {
+            f"{name}_id": value
+            for name in Node.resource_fk_fields()
+            if (value := getattr(node, f"{name}_id")) is not None
+        }
+        stored_params = node.params
+        node.params = {**(stored_params or {}), **explicit}
+        try:
+            node._sync_resource_fk_fields()
+        finally:
+            node.params = stored_params
 
 
 class PipelineFactory(factory.django.DjangoModelFactory):

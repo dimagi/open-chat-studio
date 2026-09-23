@@ -7,6 +7,7 @@ class Migration(migrations.Migration):
         # Retained so the graph stays stable for environments that already applied this.
         ("teams", "0013_team_files_export_team_files_export_task_id"),
         ("evaluations", "0018_evaluator_llm_provider_fks"),
+        ("pipelines", "0027_backfill_node_fks"),
     ]
 
     operations = [

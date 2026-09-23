@@ -5,6 +5,7 @@ from django.apps import apps as global_apps
 from django.db import connection, transaction
 from pydantic import BaseModel
 
+from apps.pipelines.models import Node
 from apps.service_providers.llm_service.model_parameters import (
     AnthropicReasoningParameters,
     BasicParameters,
@@ -22,7 +23,7 @@ from apps.service_providers.llm_service.model_parameters import (
     OpenAIReasoningParameters,
 )
 from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
-from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
+from apps.utils.deletion import get_related_objects
 
 
 @dataclasses.dataclass
@@ -421,25 +422,37 @@ def _repoint_evaluators(custom_model, global_model) -> None:
     evaluators.update(llm_provider_model_id=global_model.id)
 
 
+def _repoint_pipeline_nodes(custom_model, global_model) -> None:
+    """Move every pipeline node on ``custom_model`` to ``global_model``.
+
+    Written through params, which ``set_params`` mirrors onto the FK column; writing the column
+    alone leaves the stale id in params for the next ``create_new_version`` to re-derive from.
+    Queried off the real ``Node`` model because ``custom_model`` is historical when this runs
+    from a migration, and historical rows have no ``set_params``.
+    """
+    for node in Node.objects.filter(llm_provider_model_id=custom_model.id):
+        _update_pipeline_node_param(node, "llm_provider_model_id", global_model.id)
+
+
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
     # Evaluators first: the generic pass below cannot tell an absent relation (an old
     # migration state) from one with nothing to repoint. Once done they drop out of it.
     _repoint_evaluators(custom_model, global_model)
+    # Nodes before the generic pass too: handed historical models it repoints their FK column
+    # directly, which would leave the deleted model's id in params with nothing left to find.
+    _repoint_pipeline_nodes(custom_model, global_model)
 
     for obj in get_related_objects(custom_model):
         fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]
         if not fields:
             # Pipelines surfaced via the Node.llm_provider_model reverse FK have no
-            # direct field to repoint here; their nodes are handled via params below.
+            # direct field to repoint here; their nodes are handled by
+            # ``_repoint_pipeline_nodes`` above.
             continue
         field = fields[0]
         setattr(obj, field.attname, global_model.id)
         obj.save(update_fields=[field.name])
-
-    related_pipeline_nodes = get_related_pipelines_queryset(custom_model, "llm_provider_model_id")
-    for node in related_pipeline_nodes.all():
-        _update_pipeline_node_param(node, "llm_provider_model_id", global_model.id)
 
     custom_model.delete()
 

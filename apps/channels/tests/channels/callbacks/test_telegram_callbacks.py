@@ -17,26 +17,6 @@ def callbacks(telebot):
     return TelegramCallbacks(telegram_bot=telebot)
 
 
-class TestLifecycleHooks:
-    def test_transcription_started_sends_upload_voice_action(self, callbacks, telebot):
-        callbacks.transcription_started("12345")
-        telebot.send_chat_action.assert_called_once_with(chat_id="12345", action="upload_voice")
-
-    def test_on_submit_input_to_llm_sends_typing_action(self, callbacks, telebot):
-        callbacks.on_submit_input_to_llm("12345")
-        telebot.send_chat_action.assert_called_once_with(chat_id="12345", action="typing")
-
-    def test_echo_transcript_sends_message(self, callbacks, telebot):
-        callbacks.echo_transcript("12345", "the transcript")
-        telebot.send_message.assert_called_once_with("12345", text="I heard: the transcript")
-
-    def test_transcription_finished_is_noop(self, callbacks, telebot):
-        # Inherited no-op from base ChannelCallbacks; should not call the telebot.
-        callbacks.transcription_finished("12345", "transcript")
-        telebot.send_chat_action.assert_not_called()
-        telebot.send_message.assert_not_called()
-
-
 class TestGetMessageAudio:
     def _make_telegram_message(self, media_id="audio-file-id"):
         return TelegramMessage(

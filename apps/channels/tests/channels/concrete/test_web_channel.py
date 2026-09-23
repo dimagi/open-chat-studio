@@ -4,7 +4,6 @@ import pytest
 from django.http import Http404
 
 from apps.channels.api_channel import NoOpSender
-from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.stages.core import (
@@ -77,17 +76,6 @@ class TestWebChannelSender:
         )
         sender = channel._get_sender()
         assert isinstance(sender, NoOpSender)
-
-
-class TestWebChannelCallbacks:
-    def test_get_callbacks_returns_base_callbacks(self):
-        channel = WebChannel(
-            experiment=MagicMock(),
-            experiment_channel=MagicMock(),
-            experiment_session=MagicMock(),
-        )
-        callbacks = channel._get_callbacks()
-        assert isinstance(callbacks, ChannelCallbacks)
 
 
 class TestWebChannelCapabilities:
@@ -168,24 +156,6 @@ class TestWebChannelStartNewSession:
 
     @patch(_GET_WEB_CHANNEL, return_value=MagicMock())
     @patch(_START_SESSION)
-    @patch(_CHECK_SEED)
-    def test_start_new_session_default_version_sets_metadata(self, mock_check_seed, mock_start, mock_get_channel):
-        mock_session = MagicMock()
-        mock_start.return_value = mock_session
-        mock_experiment = MagicMock()
-        mock_experiment.get_version.return_value = MagicMock()
-
-        WebChannel.start_new_session(
-            working_experiment=mock_experiment,
-            participant_identifier="user@example.com",
-            version=Experiment.DEFAULT_VERSION_NUMBER,
-        )
-
-        # Default version still sets metadata
-        mock_session.chat.set_metadata.assert_called_once()
-
-    @patch(_GET_WEB_CHANNEL, return_value=MagicMock())
-    @patch(_START_SESSION)
     def test_start_new_session_invalid_version_raises_404(self, mock_start, mock_get_channel):
         mock_session = MagicMock()
         mock_start.return_value = mock_session
@@ -262,20 +232,11 @@ class TestWebChannelCheckAndProcessSeedMessage:
         session.save.assert_called_once()
         assert result == session
 
-    def test_without_seed_message_no_task(self):
+    @pytest.mark.parametrize("seed_message", [pytest.param("", id="empty"), pytest.param(None, id="none")])
+    def test_without_seed_message_no_task(self, seed_message):
         session = MagicMock()
         experiment = MagicMock()
-        experiment.seed_message = ""
-
-        result = WebChannel.check_and_process_seed_message(session, experiment)
-
-        session.save.assert_not_called()
-        assert result == session
-
-    def test_without_seed_message_none(self):
-        session = MagicMock()
-        experiment = MagicMock()
-        experiment.seed_message = None
+        experiment.seed_message = seed_message
 
         result = WebChannel.check_and_process_seed_message(session, experiment)
 

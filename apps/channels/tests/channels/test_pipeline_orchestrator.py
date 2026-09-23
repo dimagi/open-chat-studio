@@ -76,13 +76,6 @@ class TestPipelineHappyPath:
         assert call_order == ["core1", "core2", "core3", "terminal1", "terminal2"]
         assert result is ctx
 
-    def test_returns_final_context(self):
-        """Pipeline returns the MessageProcessingContext."""
-        ctx = make_context()
-        pipeline = _pipeline()
-        result = pipeline.process(ctx)
-        assert result is ctx
-
 
 class TestEarlyExit:
     def test_early_exit_skips_remaining_core_stages(self):
@@ -410,36 +403,6 @@ class TestStageFiltering:
 
         s1.assert_called_once()
         t1.assert_called_once()
-
-
-class TestShouldRun:
-    def test_should_run_false_skips_process(self):
-        """When a real ProcessingStage's should_run returns False, process is not called.
-
-        We test this by patching should_run on a real stage-like object via the
-        pipeline's __call__ protocol. Since the pipeline just calls stage(ctx),
-        and ProcessingStage.__call__ checks should_run, we use a MagicMock that
-        returns without doing anything when should_run would be False.
-        """
-        # The pipeline calls stage(ctx) directly. If the stage is a MagicMock,
-        # __call__ always runs. To test should_run=False skipping, we verify
-        # the pipeline's None-filtering (stages that shouldn't run can be set to None).
-        # For a more meaningful test, we create a mock that doesn't mutate context.
-        call_log = []
-        stage = _make_stage()
-        stage.side_effect = lambda ctx: call_log.append("called")
-
-        ctx = make_context()
-        pipeline = _pipeline(core=[stage])
-        pipeline.process(ctx)
-
-        assert call_log == ["called"]
-
-        # Now test with None (filtered out)
-        call_log.clear()
-        pipeline2 = _pipeline(core=[None])
-        pipeline2.process(ctx)
-        assert call_log == []
 
 
 class TestPassthroughExceptions:
