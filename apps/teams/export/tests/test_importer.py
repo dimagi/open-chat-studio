@@ -15,6 +15,7 @@ from apps.api.export.serializers import build_resource_serializer
 from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.events.models import EventAction
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
@@ -361,6 +362,40 @@ def test_node_params_and_fk_columns_are_remapped(store):
     assert node.llm_provider_id == provider_pk
     assert node.params["llm_provider_id"] == provider_pk
     assert Pipeline.objects.get(pk=pipeline_pk).team_id == team_pk
+
+
+def test_event_action_pipeline_id_is_remapped(store):
+    """A pipeline_start action's params carry the source pipeline id, which is rewritten to the target pk."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows(
+        "pipelines.pipeline",
+        [
+            {
+                "id": 100,
+                "name": "Flow",
+                "data": {"nodes": [], "edges": []},
+                "version_number": 1,
+                "is_archived": False,
+                "working_version": None,
+                "created_at": PAST,
+                "updated_at": PAST,
+            }
+        ],
+    )
+    action_row = {
+        "id": 300,
+        "action_type": "pipeline_start",
+        "params": {"pipeline_id": 100, "input_type": "last_message"},
+        "working_version": None,
+        "is_archived": False,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("events.eventaction", [action_row])
+
+    action = EventAction.objects.get(pk=store.get_target("events.eventaction", 300))
+    assert action.params["pipeline_id"] == store.get_target("pipelines.pipeline", 100)
 
 
 def test_importing_user_creates_team_membership_with_role_groups(store):
