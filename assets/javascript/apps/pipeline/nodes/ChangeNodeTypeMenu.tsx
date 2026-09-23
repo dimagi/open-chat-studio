@@ -32,7 +32,9 @@ export default function ChangeNodeTypeMenu({nodeId, currentType}: {nodeId: strin
         <li className="menu-title">Change node type</li>
         {options.map((schema) => (
           <li key={schema.title}>
-            <a onClick={() => changeNodeType(nodeId, schema.title)}>{schema["ui:label"]}</a>
+            <button type="button" onClick={() => changeNodeType(nodeId, schema.title)}>
+              {schema["ui:label"]}
+            </button>
           </li>
         ))}
       </ul>
