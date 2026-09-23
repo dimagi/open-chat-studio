@@ -70,8 +70,18 @@ def test_delete_task_visits_every_file_across_batches(scoped_to_document_source)
     document_source = DocumentSourceFactory.create(collection=collection) if scoped_to_document_source else None
     total = DELETE_BATCH_SIZE * 2 + 50
     CollectionFileFactory.create_batch(total, collection=collection, document_source=document_source)
-    expected_ids = set(CollectionFile.objects.filter(collection=collection).values_list("id", flat=True))
-    assert len(expected_ids) == total
+    # A second source in the same collection: delete_document_source_task must leave its file alone,
+    # delete_collection_task must take it with the rest.
+    sibling_file = CollectionFileFactory.create(
+        collection=collection, document_source=DocumentSourceFactory.create(collection=collection)
+    )
+    target_files = (
+        CollectionFile.objects.filter(document_source=document_source)
+        if document_source is not None
+        else CollectionFile.objects.filter(collection=collection)
+    )
+    expected_ids = set(target_files.values_list("id", flat=True))
+    assert len(expected_ids) == (total if document_source is not None else total + 1)
 
     deleted_ids = set()
 
@@ -96,7 +106,8 @@ def test_delete_task_visits_every_file_across_batches(scoped_to_document_source)
     # A row that is never passed to the helper keeps its index entry and its blob, even where a
     # cascade later removes the DB rows.
     assert deleted_ids == expected_ids
-    assert not CollectionFile.objects.filter(collection=collection).exists()
+    remaining_ids = set(CollectionFile.objects.filter(collection=collection).values_list("id", flat=True))
+    assert remaining_ids == ({sibling_file.id} if document_source is not None else set())
 
 
 @pytest.mark.django_db()
