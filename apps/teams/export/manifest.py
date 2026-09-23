@@ -120,7 +120,14 @@ SECRET_REGISTRY: dict[str, list[str]] = {
 # not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
 # the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
-    "teams.team": ["members", "public_key", "files_export", "files_export_task_id", "is_migrating"],
+    "teams.team": [
+        "members",
+        "public_key",
+        "files_export",
+        "files_export_task_id",
+        "is_migrating",
+        "exportable_experiments",
+    ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.
     "service_providers.authprovider": ["_auth_data"],

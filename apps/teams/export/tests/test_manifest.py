@@ -311,3 +311,9 @@ def test_event_actions_of_every_trigger_type_are_exported():
     entry = manifest.get_manifest_entry("event_actions")
     pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
     assert {trigger.action_id for trigger in triggers} <= pks
+
+
+def test_the_allowlist_is_not_exported():
+    """The allowlist is per-server operational state, and load_team imports the team before any
+    experiment exists, so the importer could not translate its FKs."""
+    assert "exportable_experiments" in manifest.EXCLUDE_REGISTRY["teams.team"]
