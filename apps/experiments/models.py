@@ -1128,6 +1128,8 @@ class Participant(BaseTeamModel):
             models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
         ]
 
     @classmethod
@@ -1452,6 +1454,8 @@ class ParticipantData(BaseTeamModel):
     class Meta:
         indexes = [
             models.Index(fields=["experiment"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="partdata_updated_at_id_idx"),
         ]
         # A bot cannot have a link to multiple data entries for the same Participant
         # Multiple bots can have a link to the same ParticipantData record
@@ -1559,6 +1563,8 @@ class ExperimentSession(BaseTeamModel):
                 functions.Coalesce("last_activity_at", "created_at").desc(),
                 name="expsession_team_lastact_c_idx",
             ),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="expsession_updated_at_id_idx"),
         ]
 
     def __str__(self):
