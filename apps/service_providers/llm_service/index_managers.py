@@ -503,18 +503,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         except RowImportError as exc:
             raise FileReadException(str(exc)) from exc
 
-        metadata_columns = collection_file.row_import.metadata_columns
         chunk_ids: list[int] = []
         failures: list[RowFailure] = []
         try:
             for batch in chunk_list(sheet.rows, ROW_EMBED_BATCH_SIZE):
-                texts = [render_row(file.name, sheet.headers, row) for row in batch]
-                embeddings = [
-                    _row_chunk(collection_file, row, text, vector, metadata_columns)
-                    for row, text, vector in self._embed_batch(file, batch, texts, failures)
-                ]
-                if embeddings:
-                    chunk_ids.extend(_chunk_ids(FileChunkEmbedding.objects.bulk_create(embeddings)))
+                chunk_ids.extend(self._write_row_batch(collection_file, sheet.headers, batch, failures))
             if not chunk_ids:
                 raise FileReadException(format_row_failures(failures, total_rows=len(failures)))
             self._try_build_search_vectors(chunk_ids, collection_file.collection)
@@ -522,6 +515,21 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=chunk_ids).delete()
             raise
+
+    def _write_row_batch(
+        self, collection_file: CollectionFile, headers: list[str], rows: list[ParsedRow], failures: list[RowFailure]
+    ) -> list[int]:
+        """Embed one batch of rows and write their chunks, returning the ids written."""
+        file = collection_file.file
+        metadata_columns = collection_file.row_import.metadata_columns
+        texts = [render_row(file.name, headers, row) for row in rows]
+        embeddings = [
+            _row_chunk(collection_file, row, text, vector, metadata_columns)
+            for row, text, vector in self._embed_batch(file, rows, texts, failures)
+        ]
+        if not embeddings:
+            return []
+        return _chunk_ids(FileChunkEmbedding.objects.bulk_create(embeddings))
 
     def _embed_batch(
         self, file: File, rows: list[ParsedRow], texts: list[str], failures: list[RowFailure]
