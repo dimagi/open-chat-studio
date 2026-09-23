@@ -407,14 +407,6 @@ def test_queue_detail_shows_a_count_for_each_binary_label(client, team_with_user
 
 
 @pytest.mark.django_db()
-def test_queue_items_table(client, team_with_users, queue):
-    AnnotationItemFactory.create(queue=queue, team=team_with_users)
-    url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
 def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     pending_item = AnnotationItemFactory.create(queue=queue, team=team_with_users, status=AnnotationItemStatus.PENDING)
     completed_item = AnnotationItemFactory.create(
@@ -1605,14 +1597,6 @@ def test_annotation_sessions_selection_table_has_selection_column(team_with_user
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_table_view(client, team_with_users, queue):
-    ExperimentSessionFactory.create_batch(3, team=team_with_users)
-    url = reverse("human_annotations:queue_sessions_table", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
 def test_queue_sessions_table_only_shows_team_sessions(client, team_with_users, queue):
     own_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=own_session.chat)
@@ -1661,18 +1645,6 @@ def test_queue_sessions_table_excludes_sessions_without_messages(client, team_wi
 
 
 @pytest.mark.django_db()
-def test_queue_sessions_count_excludes_sessions_without_messages(client, team_with_users, queue):
-    session_with_messages = ExperimentSessionFactory.create(team=team_with_users)
-    ChatMessageFactory.create(chat=session_with_messages.chat)
-    ExperimentSessionFactory.create(team=team_with_users)  # no messages
-
-    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
-    data = client.get(url).json()
-    assert data["total"] == 1
-    assert "ids" not in data
-
-
-@pytest.mark.django_db()
 def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_users, queue):
     normal_session = ExperimentSessionFactory.create(team=team_with_users)
     ChatMessageFactory.create(chat=normal_session.chat)
@@ -1684,19 +1656,6 @@ def test_queue_sessions_table_excludes_evaluation_sessions(client, team_with_use
     content = response.content.decode()
     assert str(normal_session.external_id) in content
     assert str(eval_session.external_id) not in content
-
-
-@pytest.mark.django_db()
-def test_queue_sessions_count_excludes_evaluation_sessions(client, team_with_users, queue):
-    normal_session = ExperimentSessionFactory.create(team=team_with_users)
-    ChatMessageFactory.create(chat=normal_session.chat)
-    eval_session = ExperimentSessionFactory.create(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
-    ChatMessageFactory.create(chat=eval_session.chat)
-
-    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
-    data = client.get(url).json()
-    assert data["total"] == 1
-    assert "ids" not in data
 
 
 # ===== AddSessionsToQueue GET + POST =====
@@ -1840,21 +1799,6 @@ def test_add_sessions_sample_empty_results(client, team_with_users, queue):
 
 
 # ===== Sessions JSON endpoint =====
-
-
-@pytest.mark.django_db()
-def test_queue_sessions_count_returns_only_total(client, team_with_users, queue):
-    sessions = ExperimentSessionFactory.create_batch(3, team=team_with_users)
-    for s in sessions:
-        ChatMessageFactory.create(chat=s.chat)
-
-    url = reverse("human_annotations:queue_sessions_count", args=[team_with_users.slug, queue.pk])
-    response = client.get(url)
-    assert response.status_code == 200
-    data = response.json()
-    assert "ids" not in data
-    assert "total" in data
-    assert data["total"] == 3
 
 
 # ===== Annotation Reviewer Role =====

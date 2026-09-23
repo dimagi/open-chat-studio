@@ -46,6 +46,7 @@ dependencies = [
     "langchain-openai>=1.4.1",
     "langchain_google_genai",
     "langchain-voyageai",
+    "voyageai==0.5.0",
     "langchain-community>=0.4.2",
     "langfuse>=4.14.1",
     "langgraph>=1.2.9",
@@ -61,7 +62,9 @@ dependencies = [
     "pydantic",
     "pydub", # Audio transcription
     "pygments", # JSON syntax highlighting in templates
-    "RestrictedPython",
+    # 8.3 fixed CVE-2026-55830: the no-leading-underscore name check skipped
+    # positional-only parameters, letting sandboxed code shadow the guard hooks.
+    "RestrictedPython>=8.4",
     "sentry-sdk",
     "slack-bolt",
     "taskbadger>=2.5.2",
@@ -149,6 +152,43 @@ filterwarnings = [
     "ignore:The FORMS_URLFIELD_ASSUME_HTTPS transitional setting is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
 ]
 
+[tool.coverage.run]
+# The repo root rather than `apps`/`config`, so reported paths keep their leading directory
+# and match the repo for Codecov. Naming the subdirectories instead makes coverage store each
+# file relative to its own source root, which turns `apps/web/views.py` into `web/views.py`.
+source = ["."]
+# sys.monitoring costs ~13% of the suite's runtime where the C tracer costs ~31%. It cannot
+# measure branches before Python 3.14, which is why `branch` stays off.
+core = "sysmon"
+relative_files = true
+omit = [
+    ".venv/*",
+    "node_modules/*",
+    "components/*",
+    "docs/*",
+    "locust/*",
+    # Dev and CI tooling, not the application. `scripts/` is not a package, so coverage cannot
+    # discover the files in it that no test imports, which would leave it half-measured.
+    "scripts/*",
+    "tasks.py",
+    "manage.py",
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "*/conftest.py",
+    "apps/utils/factories/*",
+    # Imported only by a deployed process, so it can never report anything but 0%.
+    "config/settings_production.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(typing\\.)?overload",
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff]
 exclude = [
     ".direnv",
@@ -231,6 +271,8 @@ banned-module-level-imports = [
     "markitdown",
     "transformers",
     "pandas",
+    # Imports transformers (already banned above) on the way in; 1.2s cumulative.
+    "voyageai",
 ]
 
 [dependency-groups]

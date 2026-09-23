@@ -24,8 +24,7 @@ def compute_aggregates_for_run(run: EvaluationRun) -> list[EvaluationRunAggregat
         if result_data:  # Skip results with errors
             _collect_aggregatable_values(result_data, field_values_by_evaluator[evaluator_id])
 
-    # One bulk fetch for the schemas; EvaluationResult.evaluator is CASCADE so an id
-    # from results always resolves outside a delete race.
+    # One bulk fetch for the schemas.
     evaluators = Evaluator.objects.in_bulk(field_values_by_evaluator)
 
     aggregates = []

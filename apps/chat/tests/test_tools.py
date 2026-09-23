@@ -11,10 +11,12 @@ from django.db import IntegrityError, connection
 from django.utils import timezone
 from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId, StructuredTool
+from pydantic import create_model
 from pydantic_core import PydanticUndefined
 from time_machine import travel
 
 from apps.chat.agent import tools
+from apps.chat.agent.openapi_tool import FunctionDef
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
     CITATION_PROMPT,
@@ -28,6 +30,7 @@ from apps.chat.agent.tools import (
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
+    get_custom_action_tools,
     get_mcp_tool_instances,
 )
 from apps.chat.models import ChatAttachment
@@ -36,6 +39,7 @@ from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.teams.utils import set_current_team
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -648,6 +652,37 @@ def test_get_mcp_tool_instances(fetch_tools, team):
     )
     tools = get_mcp_tool_instances(node, team)
     assert len(tools) == 1
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.chat.agent.tools.openapi_spec_op_to_function_def")
+def test_get_custom_action_tools_dedupes_colliding_sanitized_names(mock_function_def):
+    """`FunctionDef.name` is sanitized per-operation (see `openapi_spec_op_to_function_def`), which
+    has no visibility into sibling operations. Two operations whose raw operation IDs sanitize to
+    the same string (e.g. "get foo" and "get/foo" both -> "get_foo") must still end up with
+    distinct tool names here -- LangGraph's ToolNode indexes tools by name and silently drops an
+    earlier tool whose name a later one reuses."""
+    mock_function_def.side_effect = lambda spec, path, method: FunctionDef(
+        name="get_foo",
+        description="A test operation",
+        method="get",
+        url="https://example.com/foo",
+        args_schema=create_model("Empty"),
+    )
+
+    custom_action = CustomActionFactory.create(allowed_operations=["weather_get", "pollen_get"])
+    node = NodeFactory.create()
+    CustomActionOperationFactory.create(custom_action=custom_action, node=node, operation_id="weather_get")
+    CustomActionOperationFactory.create(custom_action=custom_action, node=node, operation_id="pollen_get")
+
+    tool_list = get_custom_action_tools(node)
+
+    assert len(tool_list) == 2
+    names = [tool.name for tool in tool_list]
+    assert len(set(names)) == 2, f"expected unique tool names, got {names}"
+    assert names[0] == "get_foo"
+    assert names[1] != "get_foo"
+    assert names[1].startswith("get_foo_")
 
 
 @pytest.mark.django_db()

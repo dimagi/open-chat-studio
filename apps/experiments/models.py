@@ -10,7 +10,6 @@ from functools import cached_property
 from typing import Self, cast
 from uuid import uuid4
 
-import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -47,7 +46,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
-from apps.trace.models import Trace, TraceStatus
+from apps.trace.models import Trace, TraceStatus, participant_data_from_trace
 from apps.utils.deletion import (
     get_related_experiment_versions_queryset,
     get_related_pipeline_nodes_queryset,
@@ -109,6 +108,15 @@ class VersionFieldDisplayFormatters:
         template = get_template("generic/chip.html")
         url = pipeline.get_absolute_url()
         return template.render({"chip": Chip(label=name, url=url)})
+
+    @staticmethod
+    def format_wiring(wiring: set[tuple[str, str, str, str]]) -> str:
+        """A pipeline's wires as ``source.handle -> target.handle`` lines, one per wire.
+
+        Sorted, because the wiring is a set and the comparison UI diffs these strings: an
+        unstable order would show every wire as changed whenever any one of them did.
+        """
+        return "\n".join(sorted(f"{source}.{out} -> {target}.{into}" for source, out, target, into in wiring))
 
     @staticmethod
     def format_custom_action_operation(op) -> str:
@@ -187,15 +195,15 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+        return get_related_pipeline_nodes_queryset(self, "source_material")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
-        return get_related_experiment_versions_queryset(self, "source_material_id")
+        return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
     def archive(self):
         """Mirrors Collection.archive()'s in-use guard."""
-        if has_related_pipeline_references(self, "source_material_id"):
+        if has_related_pipeline_references(self, "source_material"):
             return False
         super().archive()
         return True
@@ -1838,10 +1846,7 @@ class ExperimentSession(BaseTeamModel):
         trace = self.latest_trace
         if trace is None:
             return self.participant_data_from_experiment
-        snapshot = trace.participant_data or {}
-        if trace.participant_data_diff:
-            return dictdiffer.patch(trace.participant_data_diff, snapshot)
-        return snapshot
+        return participant_data_from_trace(trace)
 
     @cached_property
     def experiment_version(self) -> Experiment:

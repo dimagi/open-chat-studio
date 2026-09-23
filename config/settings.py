@@ -497,6 +497,7 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
         "apps.api.schema.mirror_unknown_key_rejection",
+        "apps.api.schema.unrequire_readonly_nullable_fields",
         "apps.api.schema.set_export_description",
         "apps.api.schema.set_example_urls",
     ],
@@ -512,6 +513,7 @@ SPECTACULAR_SETTINGS = {
         "EvaluationModeEnum": "apps.evaluations.models.EvaluationMode",
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
+        "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,

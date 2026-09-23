@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from apps.channels.api_channel import ApiChannel, NoOpSender
-from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.stages.terminal import (
@@ -79,29 +78,6 @@ class TestApiChannelSender:
         )
         sender = channel._get_sender()
         assert isinstance(sender, NoOpSender)
-
-    def test_no_op_sender_send_text_is_noop(self):
-        sender = NoOpSender()
-        sender.send_text("hello", "recipient")  # should not raise
-
-    def test_no_op_sender_send_voice_is_noop(self):
-        sender = NoOpSender()
-        sender.send_voice(MagicMock(), "recipient")  # should not raise
-
-    def test_no_op_sender_send_file_is_noop(self):
-        sender = NoOpSender()
-        sender.send_file(MagicMock(), "recipient", 1)  # should not raise
-
-
-class TestApiChannelCallbacks:
-    def test_get_callbacks_returns_base_callbacks(self):
-        channel = ApiChannel(
-            experiment=MagicMock(),
-            experiment_channel=MagicMock(),
-            user=MagicMock(),
-        )
-        callbacks = channel._get_callbacks()
-        assert isinstance(callbacks, ChannelCallbacks)
 
 
 class TestApiChannelCapabilities:

@@ -146,6 +146,25 @@ def test_python_evaluator_with_missing_output():
     assert evaluator_output.result == {"has_output": False, "output_value": "NO OUTPUT"}
 
 
+@pytest.mark.parametrize("hook", ["_write_", "_getattr_", "_getitem_", "_print_", "_inplacevar_"])
+def test_python_evaluator_cannot_shadow_guard_hook_via_positional_only_param(hook):
+    """Positional-only parameters must not be able to shadow an injected guard hook.
+
+    RestrictedPython's "no leading underscore in variable names" check skipped
+    positional-only parameters before 8.3 (CVE-2026-55830 / GHSA-ffg3-p8fm-mjx2). The
+    evaluator shares ``RestrictedPythonExecutionMixin`` with the Python node, so it has
+    the same exposure.
+    """
+    code = textwrap.dedent(f"""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            def inner({hook}, /):
+                return 1
+            return {{"result": inner(None)}}
+        """)
+    with pytest.raises(ValidationError, match=f'"{hook}" is an invalid variable name'):
+        PythonEvaluator(code=code)
+
+
 @pytest.mark.django_db()
 def test_python_evaluator_receives_participant_data_and_session_state():
     """These reach main() through **kwargs, so the existing signature stays valid."""

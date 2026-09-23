@@ -10,6 +10,7 @@ from apps.teams.models import Flag
 from apps.teams.utils import unset_current_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
+from apps.utils.pytest import restore_serialized_database
 
 
 @pytest.fixture()
@@ -92,11 +93,11 @@ def _django_db_restore_serialized(
 ) -> Generator[None]:
     """Restore database data at the end of the session.
 
-    Integration tests that use TransactionTestCase (e.g. live_server tests) flush the DB after each
-    test, destroying migration-seeded data. This fixture re-deserializes that data so the DB is clean
-    for the next run when `--reuse-db` (`keepdb`) is active.
+    Tests that use TransactionTestCase (e.g. live_server tests) flush the DB after each test,
+    destroying migration-seeded data. This fixture restores the snapshot pytest-django took at the
+    start of the session so the DB is clean for the next run when `--reuse-db` (`keepdb`) is active.
 
-    This is only relevant when running integration tests (pytest -m integration) together with --reuse-db.
+    pytest-django only takes that snapshot when a selected test asks for `serialized_rollback`.
     """
     yield
 
@@ -104,7 +105,7 @@ def _django_db_restore_serialized(
         with django_db_blocker.unblock():
             for connection in connections.all(initialized_only=True):
                 if hasattr(connection, "_test_serialized_contents"):
-                    connection.creation.deserialize_db_from_string(connection._test_serialized_contents)
+                    restore_serialized_database(connection, connection._test_serialized_contents)
 
 
 @pytest.fixture(autouse=True, scope="session")

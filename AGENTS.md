@@ -55,6 +55,7 @@ Facts that reviewers and agents repeatedly get wrong:
 ## Useful commands
 
 * Run python tests: `uv run pytest path/to/test.py -v` (all tests in a file)
+* Coverage report: `uv run pytest --cov --cov-report=html`, then open `htmlcov/index.html`. Measures `apps/` and `config/` only; tests, factories, migrations and dev tooling are omitted (`[tool.coverage.run]` in `pyproject.toml`)
 * Lint & format python: `uv run inv ruff --paths path/to/file.py` (runs `ruff check --fix` then `ruff format`)
 * Type check: `uv run inv typecheck` (runs both `ty` and `tsc`; `--paths` scopes the Python check, `--python`/`--js` limit it to one)
 * Build JS & CSS: `pnpm run dev`

@@ -3,17 +3,27 @@
 **Date:** 2026-08-20
 **Component:** `CodeNode` (Python Node) — `apps/pipelines/nodes/nodes.py`
 **Sandbox engine:** `RestrictedPythonExecutionMixin` — `apps/utils/python_execution.py`
-**RestrictedPython version:** 8.1
+**RestrictedPython version:** 8.4
 **Method:** The sandbox's globals/builtins construction was replicated faithfully and
 probed with ~60 escape, resource-exhaustion, and state-tampering test cases. Findings
-below were confirmed by execution against RestrictedPython 8.1; the runtime wiring was
-verified by reading the production code paths.
+below were originally confirmed by execution against RestrictedPython 8.1 and rechecked
+case by case on 8.4 (behaviour is unchanged); the runtime wiring was verified by reading
+the production code paths.
 
 > **Scope note.** This is a defensive assessment of our own sandbox. It documents
 > where the isolation boundary holds and where it leaks, with reproductions and
 > remediations. The tractable fixes (findings 1, 4, 5 and the `+=` half of 6) are
 > implemented in the same PR as this document; the remainder are tracked as issues.
 > See the "Remediation status" callout and per-finding "Remediation" sections.
+>
+> **Version floor.** `pyproject.toml` requires `RestrictedPython>=8.4`. RestrictedPython
+> 8.3 fixed [CVE-2026-55830 / GHSA-ffg3-p8fm-mjx2](https://github.com/zopefoundation/RestrictedPython/security/advisories/GHSA-ffg3-p8fm-mjx2):
+> the "no leading underscore in variable names" check skipped **positional-only**
+> parameters, so `def inner(_write_, /): ...` compiled and let node code rebind a guard
+> hook for the whole nested scope. Every finding below assumes the hooks cannot be
+> shadowed, so do not relax that floor. Regression coverage:
+> `TestSandboxHardening::test_cannot_shadow_guard_hook_via_positional_only_param` and
+> `::test_shadowed_write_hook_cannot_poison_shared_module`.
 
 ---
 
@@ -56,11 +66,11 @@ execution running on the same Celery worker process, until that worker restarts.
 All of the following were **blocked** (compile-time `SyntaxError` unless noted):
 
 - `import os` / any module outside `{json, re, datetime, time, random}` → `ImportError` at runtime via `guarded_import`.
-- `__import__(...)`, and any name/attribute starting with `_` → compile error ("invalid ... because it starts with `_`"). This kills the whole dunder-walk family: `().__class__.__bases__[0].__subclasses__()`, `main.__globals__`, `x.__init__.__globals__`, `json.__loader__`, etc.
+- `__import__(...)`, and any name/attribute starting with `_` → compile error ("invalid ... because it starts with `_`"). This kills the whole dunder-walk family: `().__class__.__bases__[0].__subclasses__()`, `main.__globals__`, `x.__init__.__globals__`, `json.__loader__`, etc. This check covers **positional-only** parameters (`def inner(_write_, /)`) only on RestrictedPython >= 8.3 — see the version-floor callout above.
 - `eval(...)`, `exec(...)`, `compile(...)`, `open(...)`, `globals()`, `vars()`, `getattr(...)`, `type(...)`, `breakpoint(...)` → blocked (compile error or `NameError`).
 - `"{0.__class__}".format(x)` → `NotImplementedError` (RestrictedPython blocks `str.format`).
 - `f(*args)` / `f(**kwargs)` call unpacking → `NameError: _apply_ is not defined` (RestrictedPython rewrites these to `_apply_(...)`, which the sandbox does not provide). This is why the `*args`/`**kwargs` spellings in Finding 4 fail at runtime even though they slip past the source regex.
-- `class Foo: ...` → fails with `NameError: __metaclass__`. Note this is **missing sandbox setup, not an intentional policy**: RestrictedPython 8.1 rewrites class bodies to reference `__metaclass__` and expects `__name__` in the execution globals, neither of which is provided. It happens to block class-based escape attempts, but should be made an explicit, clearly-messaged policy (see #6 / issue #4243).
+- `class Foo: ...` → fails with `NameError: __metaclass__`. Note this is **missing sandbox setup, not an intentional policy**: RestrictedPython rewrites class bodies to reference `__metaclass__` and expects `__name__` in the execution globals, neither of which is provided. It happens to block class-based escape attempts, but should be made an explicit, clearly-messaged policy (see #6 / issue #4243).
 - Attribute reads are additionally guarded at **runtime** by `safer_getattr` (present as `_getattr_` inside the builtins), so dunder access is blocked even when it slips past the compiler.
 - `setattr`/`delattr` are the guarded RestrictedPython variants (`guarded_setattr`/`guarded_delattr`). These do **not** perform an independent underscore-name check — they route the target through `full_write_guard`, which wraps any non-`dict`/`list` object so the write raises. Underscore-prefixed *names* are instead rejected earlier, at compile time. (Direct attribute assignment — `obj.attr = x` — goes through our own `_write_`/`restricted_write` guard instead, which is scoped to block only modules/types; see Findings 1 and 5.)
 
@@ -281,13 +291,13 @@ These break legitimate user code and are worth fixing alongside the security wor
   raised `NameError: name '_inplacevar_' is not defined`, because the sandbox globals never
   defined `_inplacevar_` (RestrictedPython rewrites `x += 1` to `_inplacevar_("+=", x, 1)`).
   **✅ Fixed in this PR:** we register an application-owned `restricted_inplacevar` that
-  allowlists the in-place operators and dispatches to `operator.i*`. RestrictedPython 8.1
+  allowlists the in-place operators and dispatches to `operator.i*`. RestrictedPython
   ships **no** such helper (there is no `guarded_inplacevar`/`protected_inplacevar` in
-  `Guards.py`), so it must be app-owned. Augmented assignment on subscripts/attributes
+  `Guards.py` as of 8.4), so it must be app-owned. Augmented assignment on subscripts/attributes
   (`d["k"] += 1`) stays blocked by RestrictedPython's own compile-time policy — write
   `d["k"] = d["k"] + 1`. Covered by `TestSandboxHardening::test_augmented_assignment_supported`.
 - **`class` definitions fail** (`NameError: __metaclass__`). This is missing sandbox setup,
-  not an intentional restriction: RestrictedPython 8.1 rewrites class bodies to reference
+  not an intentional restriction: RestrictedPython rewrites class bodies to reference
   `__metaclass__` and expects `__name__` in the execution globals. Decision needed
   ([#4243](https://github.com/dimagi/open-chat-studio/issues/4243)): either support classes
   by supplying a safe `__metaclass__`/`__name__` and retest, or reject class definitions
@@ -320,5 +330,7 @@ Before this PR there were **no** tests exercising sandbox escapes for
 the HTTP client). This PR adds `TestSandboxHardening` in
 `apps/pipelines/tests/test_code_node.py`, covering: module-poisoning is blocked, poisoning
 does not leak across executions, augmented assignment works, and reserved keys are enforced
-at runtime under the validator-bypass spellings. Recommended follow-up: extend it into a
+at runtime under the validator-bypass spellings. The class has since grown a case for the
+positional-only guard-hook shadowing bypass (CVE-2026-55830), mirrored for the evaluator in
+`apps/evaluations/tests/test_python_evaluator.py`. Recommended follow-up: extend it into a
 broader escape/resource regression suite that also encodes the "blocked" list above.
