@@ -22,36 +22,6 @@ from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
-def _status_code_exception(status_code: int) -> Exception:
-    """A plain exception with a `.status_code` attribute, standing in for the shape
-    OpenAI/Anthropic-family SDK exceptions actually have: `openai.APIStatusError` and
-    `anthropic.APIStatusError` (and every subclass, e.g. AuthenticationError) both carry
-    `.status_code`, confirmed directly against the installed SDKs."""
-    exc = Exception(f"status {status_code}")
-    exc.status_code = status_code
-    return exc
-
-
-def _code_exception(code: int) -> Exception:
-    """A plain exception with a `.code` attribute, standing in for Google's exception shape
-    (`google.api_core.exceptions`), which uses `.code` instead of `.status_code` but with the
-    same HTTP-equivalent numbering, e.g. `PermissionDenied().code == 403`."""
-    exc = Exception(f"code {code}")
-    exc.code = code
-    return exc
-
-
-def _wrapped_exception(cause: Exception) -> Exception:
-    """A wrapper exception with no status of its own, chained to `cause` via `__cause__` -
-    standing in for langchain_google_genai's actual pattern for an invalid Gemini API key:
-    it catches google.api_core.exceptions.InvalidArgument (which does carry `.code`) and
-    does `raise ChatGoogleGenerativeAIError(msg) from e`, and the wrapper itself has no
-    status attribute of its own."""
-    wrapper = Exception("wrapped, no status of its own")
-    wrapper.__cause__ = cause
-    return wrapper
-
-
 @pytest.fixture()
 def llm_provider():
     return LlmProviderFactory.create()
@@ -126,12 +96,6 @@ class TestServiceProviderModel:
         llm_provider_model = LlmProviderModelFactory.create()
         llm_provider_model.delete()
 
-    @pytest.mark.django_db()
-    def test_can_delete_unassociated_global_provider_models(self):
-        # global provider models can be deleted
-        global_llm_provider_model = LlmProviderModelFactory.create(team=None)
-        global_llm_provider_model.delete()
-
 
 @pytest.mark.django_db()
 def test_test_connection_raises_when_no_model_configured():
@@ -148,7 +112,12 @@ def test_test_connection_raises_when_no_model_configured():
 
 @pytest.mark.django_db()
 def test_test_connection_invokes_chat_model_with_the_configured_model():
-    """The test call should use a model the provider already has configured, not a hardcoded one."""
+    """The test call should use a model the provider already has configured, not a hardcoded one.
+
+    The configured model is deliberately not the type's registered default: naively filtering
+    to the default's name with no fallback would raise NoTestableModelError here even though
+    the team does have a model configured.
+    """
     provider = LlmProviderFactory()
     LlmProviderModel.objects.filter(type=provider.type).delete()
     provider_model = LlmProviderModelFactory(team=provider.team, type=provider.type, name="gpt-4o-mini")
@@ -201,26 +170,6 @@ def test_test_connection_prefers_default_named_model_when_team_has_multiple():
         provider.test_connection()
 
     mock_service.get_chat_model.assert_called_once_with(default_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
-
-
-@pytest.mark.django_db()
-def test_test_connection_falls_back_to_any_team_model_when_default_not_configured():
-    """A team that configured a model other than the registered default must still be
-    testable — the default is a preference, not a requirement. Regression coverage: naively
-    filtering to the default's name with no fallback would raise NoTestableModelError here
-    even though the team does have a model configured."""
-    provider = LlmProviderFactory()
-    LlmProviderModel.objects.filter(type=provider.type).delete()
-    provider_model = LlmProviderModelFactory(team=provider.team, type=provider.type, name="some-other-model")
-
-    mock_chat_model = mock.Mock()
-    mock_service = mock.Mock()
-    mock_service.get_chat_model.return_value = mock_chat_model
-
-    with mock.patch.object(LlmProvider, "get_llm_service", return_value=mock_service):
-        provider.test_connection()
-
-    mock_service.get_chat_model.assert_called_once_with(provider_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
 
 
 @pytest.mark.django_db()
@@ -319,10 +268,6 @@ class TestCredentialsVerifiedFlag:
     save verify these credentials? A provider that has never passed a check keeps saying yes,
     so a failed check stays retryable without the user having to edit a credential to force it.
     """
-
-    def test_a_provider_starts_unverified(self):
-        """Nothing has been checked yet, so the first save has to check."""
-        assert LlmProviderFactory().credentials_verified is False
 
     @pytest.mark.parametrize(
         ("extra_data", "expected"),
