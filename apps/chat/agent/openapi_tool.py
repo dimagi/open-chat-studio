@@ -15,14 +15,14 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
-from pydantic import BaseModel, Field, create_model, model_serializer
+from pydantic import BaseModel, Field
 
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
-from apps.utils.schema_utils import sanitize_property_name
+from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 if TYPE_CHECKING:
@@ -365,43 +365,10 @@ def _get_basic_type(data_type: DataType) -> type:
         raise ValueError(f"Unsupported type: {data_type}")
 
 
-class _OriginalNameSerializerMixin(BaseModel):
-    """Base for models built by `_create_model`: renames each field back to its original
-    (pre-sanitization) OpenAPI parameter name whenever the model is serialized. This makes the
-    rename transparent to every caller of `model_dump()` (directly, or via anything built on top
-    of it, e.g. a nested model's own dump) rather than requiring everyone to remember to call a
-    special dump function instead of the normal one.
-    """
-
-    @model_serializer(mode="wrap")
-    def _serialize_with_original_names(self, handler) -> dict:
-        dumped = handler(self)
-        mapping = getattr(type(self), "__ocs_param_name_mapping__", {})
-        return {mapping.get(key, key): value for key, value in dumped.items()}
-
-
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
-    """Builds a Pydantic model from OpenAPI-derived `properties`, sanitizing each key so the
-    resulting JSON schema is valid for every provider (notably Anthropic's
-    `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original mapping is stashed on the model as
-    `__ocs_param_name_mapping__` and applied by `_OriginalNameSerializerMixin` so a plain
-    `model_dump()` already reflects the real parameter names the OpenAPI spec defines.
-    """
-    sanitized_properties = {}
-    param_name_mapping: dict[str, str] = {}
-    taken: set[str] = set()
-
-    for prop_name, prop_value in properties.items():
-        sanitized_name = sanitize_property_name(prop_name, taken)
-        taken.add(sanitized_name)
-        param_name_mapping[sanitized_name] = prop_name
-        sanitized_properties[sanitized_name] = prop_value
-
-    model = create_model(
-        _make_model_name(name), __base__=_OriginalNameSerializerMixin, **sanitized_properties, **kwargs
-    )
-    model.__ocs_param_name_mapping__ = param_name_mapping
-    return model
+    """Builds a Pydantic model from OpenAPI-derived `properties`. See
+    `create_model_with_sanitized_names` for how property names are sanitized and restored."""
+    return create_model_with_sanitized_names(_make_model_name(name), properties, **kwargs)
 
 
 def _make_model_name(name, suffix="Model"):

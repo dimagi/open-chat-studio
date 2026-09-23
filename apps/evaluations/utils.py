@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import dictdiffer
 from django.db.models import F
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
@@ -17,7 +17,7 @@ from apps.evaluations.field_definitions import FieldDefinition
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
-from apps.utils.schema_utils import sanitize_property_name
+from apps.utils.schema_utils import create_model_with_sanitized_names
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -510,10 +510,11 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
             "field_name": FieldDefinition(...)
         }
 
-    Field names are sanitized so the model's JSON schema keys are valid tool/property names for
-    every provider (notably Anthropic's `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original
-    mapping is stashed on the returned model as `__ocs_field_name_mapping__` so callers can restore
-    the original names once the LLM result comes back.
+    Field names are sanitized (see `create_model_with_sanitized_names`) so the model's JSON schema
+    keys are valid tool/property names for every provider (notably Anthropic's
+    `^[a-zA-Z0-9_.-]{1,64}$`). A plain `model_dump()` on an instance of the returned model already
+    comes back keyed by the original field names, so callers don't need to translate an LLM result
+    back themselves.
 
     Args:
         schema: Dictionary mapping field names to FieldDefinition objects
@@ -522,23 +523,11 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
     Returns:
         Dynamically created Pydantic BaseModel class
     """
-
-    pydantic_fields = {}
-    field_name_mapping: dict[str, str] = {}
-    taken: set[str] = set()
-
-    for field_name, field_def in schema.items():
-        sanitized_name = sanitize_property_name(field_name, taken)
-        taken.add(sanitized_name)
-        field_name_mapping[sanitized_name] = field_name
-        pydantic_fields[sanitized_name] = (
-            field_def.python_type,
-            Field(**field_def.pydantic_fields),
-        )
-
-    model = create_model(model_name, **pydantic_fields)
-    model.__ocs_field_name_mapping__ = field_name_mapping
-    return model
+    fields = {
+        field_name: (field_def.python_type, Field(**field_def.pydantic_fields))
+        for field_name, field_def in schema.items()
+    }
+    return create_model_with_sanitized_names(model_name, fields)
 
 
 def get_use_in_aggregations(field_def: dict) -> bool:

@@ -148,8 +148,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         )
         with track_evaluator_usage(usage_context) as callbacks:
             result_model = llm_with_retry.invoke(formatted_prompt, config={"callbacks": callbacks})
-        field_name_mapping = getattr(output_model, "__ocs_field_name_mapping__", {})
-        result = {field_name_mapping.get(name, name): value for name, value in result_model.model_dump().items()}
+        result = result_model.model_dump()
         return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
 

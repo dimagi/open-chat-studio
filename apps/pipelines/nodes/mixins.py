@@ -9,7 +9,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
@@ -42,7 +42,7 @@ from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETE
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.utils.json import dict_to_json_schema
-from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN
+from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
@@ -337,9 +337,8 @@ class RouterMixin(BaseModel):
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
-        return create_model(
-            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
-        )
+        route_field = (Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
+        return create_model_with_sanitized_names("RouterOutput", {"route": route_field})
 
     def get_output_map(self):
         """Returns a mapping of the form:
