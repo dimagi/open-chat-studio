@@ -378,16 +378,21 @@ class TestLocalIndexManagerRowImport:
         )
         assert FileChunkEmbedding.objects.filter(file=collection_file.file).count() == 2
 
-    def test_all_rows_failing_marks_the_file_failed(self, collection_file, index_manager):
+    def test_a_batch_whose_every_row_fails_marks_the_file_failed_with_the_batch_error(
+        self, collection_file, index_manager
+    ):
         with (
-            mock.patch.object(index_manager, "get_embedding_vectors", side_effect=RuntimeError("batch failed")),
-            mock.patch.object(index_manager, "get_embedding_vector", side_effect=ValueError("no key")),
+            mock.patch.object(
+                index_manager, "get_embedding_vectors", side_effect=RuntimeError("Error code: 429 - rate limited")
+            ),
+            mock.patch.object(index_manager, "get_embedding_vector", side_effect=ValueError("no key")) as row_spy,
         ):
             index_manager.add_files(CollectionFile.objects.filter(id=collection_file.id).iterator(1))
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
-        assert collection_file.failure_reason.startswith("FileReadException: 3 of 3 rows failed to index.")
+        assert collection_file.failure_reason == "RuntimeError: Error code: 429 - rate limited"
+        assert row_spy.call_count == 3
         assert not FileChunkEmbedding.objects.filter(file=collection_file.file).exists()
 
     def test_unparseable_sheet_marks_the_file_failed(self, local_index_instance, index_manager):

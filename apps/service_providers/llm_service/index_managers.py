@@ -517,6 +517,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     def _embed_batch(
         self, file: File, rows: list[ParsedRow], texts: list[str], failures: list[RowFailure]
     ) -> Iterator[tuple[ParsedRow, str, Vector]]:
+        """Embed one batch, falling back to one call per row when the batch call fails.
+
+        A batch where every row also fails singly is a provider-wide error rather than bad rows,
+        so the batch exception is raised and the file fails as a whole, which keeps it retryable.
+        """
         try:
             vectors = self.get_embedding_vectors(texts)
         except Exception as exc:
@@ -524,15 +529,21 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 "Batch embedding failed, retrying rows one at a time",
                 extra={"file_id": file.id, "error": str(exc)},
             )
-            vectors = None
-        if vectors is not None:
+            batch_error = exc
+        else:
             yield from zip(rows, texts, vectors, strict=True)
             return
+        batch_failures: list[RowFailure] = []
         for row, text in zip(rows, texts, strict=True):
             try:
-                yield row, text, self.get_embedding_vector(text, input_type="document")
+                vector = self.get_embedding_vector(text, input_type="document")
             except Exception as exc:
-                failures.append(RowFailure(row_number=row.row_number, reason=format_failure_reason(exc)))
+                batch_failures.append(RowFailure(row_number=row.row_number, reason=format_failure_reason(exc)))
+                continue
+            yield row, text, vector
+        if len(batch_failures) == len(rows):
+            raise batch_error
+        failures.extend(batch_failures)
 
     def chunk_file(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
