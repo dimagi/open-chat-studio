@@ -1,17 +1,17 @@
 import contextlib
 import logging
+import math
 import uuid
 import zipfile
 from datetime import timedelta
 from io import BytesIO
-from itertools import groupby
+from itertools import batched, groupby
 
 import openai
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
-from django.core.paginator import Paginator
 from django.db import DatabaseError, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
@@ -37,6 +37,8 @@ from apps.teams.utils import current_team
 from apps.utils.celery import Queues, TaskbadgerTaskWrapper
 
 logger = get_task_logger("ocs.documents")
+
+DELETE_BATCH_SIZE = 100
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
@@ -254,6 +256,21 @@ def async_create_collection_version(collection_id: int):
         Collection.objects.filter(id=collection_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
 
+def _delete_collection_files_in_batches(
+    collection: Collection,
+    queryset: QuerySet[CollectionFile],
+    tb_task: TaskbadgerTaskWrapper,
+    is_index_deletion: bool = False,
+):
+    collection_file_ids = list(queryset.order_by("id").values_list("id", flat=True))
+    total_batches = math.ceil(len(collection_file_ids) / DELETE_BATCH_SIZE)
+    for number, batch in enumerate(batched(collection_file_ids, DELETE_BATCH_SIZE, strict=False), start=1):
+        with transaction.atomic():
+            collection_files = list(CollectionFile.objects.filter(id__in=batch).select_related("file"))
+            bulk_delete_collection_files(collection, collection_files, is_index_deletion=is_index_deletion)
+        tb_task.set_progress(number, total_batches)
+
+
 @shared_task(
     bind=True,
     base=TaskbadgerTask,
@@ -279,11 +296,9 @@ def delete_collection_task(self, collection_id: int):
         return
 
     tb_task = TaskbadgerTaskWrapper(self)
-    paginator = Paginator(collection.collectionfile_set.order_by("id"), per_page=100, orphans=25)
-    for page in paginator:
-        with transaction.atomic():
-            bulk_delete_collection_files(collection, page.object_list, is_index_deletion=True)
-        tb_task.set_progress(page.number, paginator.num_pages)
+    _delete_collection_files_in_batches(
+        collection, collection.collectionfile_set.all(), tb_task, is_index_deletion=True
+    )
 
     if collection.is_index and collection.openai_vector_store_id:
         collection.remove_remote_index()
@@ -315,12 +330,10 @@ def delete_document_source_task(self, document_source_id: int):
         return
 
     tb_task = TaskbadgerTaskWrapper(self)
-    paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
     with current_team(document_source.team):
-        for page in paginator:
-            with transaction.atomic():
-                bulk_delete_collection_files(document_source.collection, page.object_list)
-            tb_task.set_progress(page.number, paginator.num_pages)
+        _delete_collection_files_in_batches(
+            document_source.collection, document_source.collectionfile_set.all(), tb_task
+        )
 
         if not document_source.has_versions:
             document_source.delete()
