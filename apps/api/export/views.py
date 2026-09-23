@@ -19,12 +19,13 @@ from rest_framework.views import APIView
 from apps.api.export.permissions import IsTeamAdmin
 from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
+from apps.teams.export.chatbot_scope import build_scope
 from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
     entry_model,
     get_manifest_entry,
-    team_scoped_queryset,
+    scoped_queryset,
 )
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_public_key
 
@@ -111,7 +112,9 @@ class ResourceView(_ExportAPIView):
             context["public_key"] = load_public_key(request.team.public_key)
 
         limit = _parse_limit(request.query_params.get("limit", DEFAULT_LIMIT))
-        queryset = team_scoped_queryset(entry, request.team)
+        # The chatbot scope is the team's own allowlist, never a client preference: an API key alone
+        # must not widen what may leave this server.
+        queryset = scoped_queryset(entry, request.team, build_scope(request.team))
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
         serializer = build_resource_serializer(entry_model(entry.model))(rows, many=True, context=context)

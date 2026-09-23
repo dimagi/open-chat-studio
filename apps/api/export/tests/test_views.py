@@ -14,7 +14,8 @@ from apps.experiments.models import Participant
 from apps.pipelines.models import Pipeline
 from apps.teams.export import seal as seal_mod
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
-from apps.utils.factories.experiment import ConsentFormFactory, ParticipantFactory
+from apps.utils.factories.evaluations import EvaluatorFactory
+from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ParticipantFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -277,3 +278,77 @@ def test_team_endpoint_reports_migration_status_and_public_key_presence(public_k
     assert body["has_public_key"] is expected_has_public_key  # a boolean presence flag, never the key material
     assert "public_key" not in body  # the raw key field must never appear alongside the boolean
     assert "members" not in body
+
+
+def test_manifest_classifies_every_resource():
+    response = APIClient().get(reverse("api:export:manifest"))
+    entries = {e["resource"]: e["scope"] for e in response.json()["entries"]}
+    assert entries["chatbots"] == "owned"
+    assert entries["llm_providers"] == "referenced"
+    assert entries["evaluators"] == "excluded"
+
+
+def test_team_endpoint_reports_an_empty_selection(team):
+    client = ApiTestClient(_admin(team), team)
+    assert client.get(reverse("api:export:team")).json()["exportable_chatbots"] == []
+
+
+def test_team_endpoint_reports_the_selection(team):
+    chatbot = ExperimentFactory(team=team, name="Support bot")
+    team.exportable_experiments.add(chatbot)
+
+    client = ApiTestClient(_admin(team), team)
+    body = client.get(reverse("api:export:team")).json()
+
+    assert body["exportable_chatbots"] == [{"public_id": str(chatbot.public_id), "name": "Support bot"}]
+
+
+def test_team_endpoint_reports_an_archived_selected_chatbot(team):
+    chatbot = ExperimentFactory(team=team, name="Retired bot", is_archived=True)
+    team.exportable_experiments.add(chatbot)
+
+    client = ApiTestClient(_admin(team), team)
+    body = client.get(reverse("api:export:team")).json()
+
+    assert body["exportable_chatbots"] == [{"public_id": str(chatbot.public_id), "name": "Retired bot"}]
+
+
+def test_team_endpoint_never_exports_the_raw_allowlist(team):
+    """The allowlist holds source pks the target cannot translate, and load_team imports the team
+    before any experiment exists."""
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    client = ApiTestClient(_admin(team), team)
+    assert "exportable_experiments" not in client.get(reverse("api:export:team")).json()
+
+
+def test_a_resource_is_scoped_to_the_selected_chatbot(team):
+    mine = ExperimentFactory(team=team)
+    theirs = ExperimentFactory(team=team)
+    team.exportable_experiments.add(mine)
+
+    client = ApiTestClient(_admin(team), team)
+    ids = {row["id"] for row in client.get(_resource_url("chatbots")).json()["results"]}
+
+    assert ids == {mine.id}
+    assert theirs.id not in ids
+
+
+def test_a_resource_is_unscoped_without_a_selection(team):
+    mine = ExperimentFactory(team=team)
+    theirs = ExperimentFactory(team=team)
+
+    client = ApiTestClient(_admin(team), team)
+    ids = {row["id"] for row in client.get(_resource_url("chatbots")).json()["results"]}
+
+    assert {mine.id, theirs.id} <= ids
+
+
+def test_an_excluded_resource_is_empty_while_a_selection_is_active(team):
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    EvaluatorFactory(team=team)
+
+    client = ApiTestClient(_admin(team), team)
+    body = client.get(_resource_url("evaluators")).json()
+
+    assert body["results"] == []
+    assert body["has_more"] is False

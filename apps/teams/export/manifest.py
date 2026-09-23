@@ -14,7 +14,7 @@ from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 from drf_spectacular.generators import SchemaGenerator
 
 from apps.files.models import FilePurpose
-from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope, scope_class_for
 
 
 @dataclass(frozen=True)
@@ -323,6 +323,9 @@ def build_manifest() -> dict:
                 "resource": e.resource,
                 "cursor": e.cursor,
                 "secret": e.secret,
+                # Which rows a chatbot-scoped export serves for this model. The client skips an
+                # "excluded" resource outright while a selection is active.
+                "scope": scope_class_for(e.model).value,
             }
             for e in MANIFEST_ENTRIES
         ],
