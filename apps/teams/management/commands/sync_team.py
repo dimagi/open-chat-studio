@@ -25,12 +25,18 @@ from pathlib import Path
 import requests
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.teams.export.chatbot_scope import ScopeClass
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, schema_checksum
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
-from apps.teams.export.translation import ALL_CHATBOTS_KEY, FKTranslationStore, page_cursor
+from apps.teams.export.translation import (
+    ALL_CHATBOTS_KEY,
+    FKTranslationStore,
+    page_cursor,
+    selection_key,
+)
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
@@ -224,9 +230,9 @@ def run_sync(
     enforce_schema=True,
     on_user_created=send_password_reset_email,
     style=None,
-    cursor_key=ALL_CHATBOTS_KEY,
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
+    cursor_key, chatbots = resolve_selection(client, store)
 
     importer = Importer(
         store,
@@ -238,6 +244,9 @@ def run_sync(
         with mute_signals():
             load_team(importer, client, store)
             for entry in manifest["entries"]:
+                if chatbots and entry.get("scope") == ScopeClass.EXCLUDED:
+                    write(_style_synced_line(f"skipped {entry['resource']} (not migrated)", 0, style))
+                    continue
                 count = _sync_resource(importer, client, store, entry, page_limit, cursor_key)
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
     except requests.HTTPError as exc:
@@ -246,6 +255,28 @@ def run_sync(
             raise
         raise CommandError(friendly) from exc
     return importer
+
+
+def resolve_selection(client, store) -> tuple[str, list[dict]]:
+    """The cursor namespace for this run, and the chatbots the source says it will serve.
+
+    The selection is the source's own allowlist, so it can change between runs. A narrower selection
+    reuses the cursors of any wider one already synced, including a full-team sync, because the source
+    then serves a subset of the same rows. A wider one has rows below those cursors that were never
+    fetched, so it starts from the beginning.
+    """
+    chatbots = client.get_team().get("exportable_chatbots") or []
+    public_ids = [chatbot["public_id"] for chatbot in chatbots]
+    key = selection_key(public_ids)
+    if key != ALL_CHATBOTS_KEY and not store.cursors_for(key):
+        selected = set(public_ids)
+        wider = [other for other, ids in store.selections().items() if other != key and selected <= set(ids)]
+        if store.cursors_for(ALL_CHATBOTS_KEY):
+            wider.append(ALL_CHATBOTS_KEY)
+        for other in wider:
+            store.seed_cursors_from(other, key)
+    store.record_selection(key, public_ids)
+    return key, chatbots
 
 
 def _sync_resource(importer, client, store, entry, page_limit, cursor_key) -> int:

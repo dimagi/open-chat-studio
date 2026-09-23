@@ -312,16 +312,17 @@ def test_rerun_is_a_no_op_and_resumes_from_stored_cursor(make_store, tmp_path, k
     store = make_store(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
     run_sync(first, store, keypair[1])
-    # once for the readiness precondition, once to fetch and import the team
-    assert first.get_team_calls == 2
+    # once for the readiness precondition, once for the chatbot selection, once to fetch and import
+    # the team (ResourceFetcher caches the response, so this is one request per run)
+    assert first.get_team_calls == 3
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
-    # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
-    # not to re-import the team (that's loaded from the target DB)
-    assert second.get_team_calls == 1
+    # the team is already synced, so the rerun reads the team only for the readiness precondition and
+    # the selection, not to re-import it (that's loaded from the target DB)
+    assert second.get_team_calls == 2
     # the second run resumes each pk resource from the cursor the first run stored
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
@@ -587,3 +588,91 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
 
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
+
+
+def _with_excluded_evaluators(manifest):
+    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"].append(
+        {
+            "model": "evaluations.evaluator",
+            "resource": "evaluators",
+            "cursor": "pk",
+            "secret": False,
+            "scope": "excluded",
+        }
+    )
+    return manifest
+
+
+def test_excluded_resources_are_not_requested_under_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" not in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_excluded_resources_are_requested_without_a_selection(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    _with_excluded_evaluators(manifest)
+    store = make_store(tmp_path / "team.sqlite")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert "evaluators" in {resource for resource, _cursor in client.iter_calls}
+
+
+def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
+    """The source then serves a subset of what it served, so every cursor is still valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "referenced"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_path, keypair):
+    """A full-team sync served a superset of any selection, so its cursors stay valid."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "referenced"
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "5") in client.iter_calls
+
+
+def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, keypair):
+    """Adding a chatbot puts rows below the cursor that were never synced, so resuming would skip them."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    manifest["entries"][0]["scope"] = "referenced"
+    store = make_store(tmp_path / "team.sqlite")
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", None) in client.iter_calls

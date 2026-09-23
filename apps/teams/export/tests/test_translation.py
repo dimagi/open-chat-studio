@@ -10,6 +10,7 @@ from apps.teams.export.translation import (
     derive_pk_cursor,
     derive_updated_at_cursor,
     page_cursor,
+    selection_key,
 )
 
 
@@ -168,3 +169,42 @@ def test_page_cursor_for_an_updated_at_resource():
     keyset = json.loads(base64.b64decode(page_cursor("updated_at_id", rows)))
     assert keyset == {"updated_at": "2026-01-02T00:00:00+00:00", "id": 7}
     assert page_cursor("updated_at_id", []) is None
+
+
+def test_selection_key_of_nothing_is_the_all_key():
+    assert selection_key([]) == ALL_CHATBOTS_KEY
+
+
+def test_selection_key_ignores_order():
+    assert selection_key(["b", "a"]) == selection_key(["a", "b"])
+
+
+def test_selection_key_differs_per_selection():
+    assert selection_key(["a"]) != selection_key(["a", "b"])
+
+
+def test_selections_round_trip(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    store.record_selection("k1", ["b", "a"])
+    assert store.selections() == {"k1": ["a", "b"]}
+
+
+def test_seed_cursors_copies_one_selection_to_another(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor("wide", "chat.chat", "c1")
+    store.set_cursor("wide", "chat.chatmessage", "c2")
+
+    store.seed_cursors_from("wide", "narrow")
+
+    assert store.cursors_for("narrow") == {"chat.chat": "c1", "chat.chatmessage": "c2"}
+    assert store.cursors_for("wide") == {"chat.chat": "c1", "chat.chatmessage": "c2"}
+
+
+def test_seed_cursors_does_not_overwrite_an_existing_cursor(make_store, tmp_path):
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor("wide", "chat.chat", "c1")
+    store.set_cursor("narrow", "chat.chat", "already")
+
+    store.seed_cursors_from("wide", "narrow")
+
+    assert store.get_cursor("narrow", "chat.chat") == "already"
