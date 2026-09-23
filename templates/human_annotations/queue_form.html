@@ -32,16 +32,17 @@
       <div class="space-y-4">
         <template x-for="(field, index) in fields" :key="field._id">
           <div class="card bg-base-200 p-4"
-               @dragover.prevent
+               @dragover="onDragOver(index, $event)"
+               @dragleave="$el.contains($event.relatedTarget) || (dragOverIndex = null)"
                @drop.prevent="onDrop(index)"
-               :class="dragIndex !== null && dragIndex !== index && 'ring ring-primary/40'">
+               :class="dragIndex !== null && dragIndex !== index && dragOverIndex === index && 'ring ring-primary/40'">
             <div class="mb-2">
               <div class="flex gap-2 items-center mb-1"
                    :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
                 <span class="cursor-grab text-base-content/50 px-1"
                       draggable="true"
                       @dragstart="onDragStart(index, $event)"
-                      @dragend="dragIndex = null"
+                      @dragend="endDrag()"
                       title="{% translate "Drag to re-order" %}">
                   <i class="fa fa-grip-vertical"></i>
                 </span>
@@ -281,6 +282,7 @@
         locked: {{ schema_locked|yesno:"true,false" }},
         fields: [],
         dragIndex: null,
+        dragOverIndex: null,
 
         init() {
           const el = document.getElementById('existing-schema');
@@ -340,13 +342,26 @@
           event.dataTransfer.setData('text/plain', String(index));
         },
 
+        onDragOver(index, event) {
+          event.preventDefault();
+          if (this.dragIndex !== null) {
+            this.dragOverIndex = index;
+          }
+        },
+
         onDrop(index) {
           if (this.dragIndex === null || this.dragIndex === index) {
+            this.endDrag();
             return;
           }
           const [moved] = this.fields.splice(this.dragIndex, 1);
           this.fields.splice(index, 0, moved);
+          this.endDrag();
+        },
+
+        endDrag() {
           this.dragIndex = null;
+          this.dragOverIndex = null;
         },
 
         onTypeChange(field) {
