@@ -1175,3 +1175,50 @@ def test_row_without_a_target_is_imported_even_when_the_timestamp_matches(store)
 
     row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
     assert importer.import_rows("service_providers.llmprovider", [row]) == 1
+
+
+def test_a_row_whose_fk_was_nulled_is_reapplied_on_reread(store):
+    """A nullable FK whose target wasn't synced yet is nulled on import. When a later run re-reads the
+    row with its target now present, the unchanged timestamp must not skip the repair."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows(
+        "pipelines.pipeline",
+        [
+            {
+                "id": 100,
+                "name": "Flow",
+                "data": {"nodes": [], "edges": []},
+                "version_number": 1,
+                "is_archived": False,
+                "working_version": None,
+                "created_at": PAST,
+                "updated_at": PAST,
+            }
+        ],
+    )
+    node_row = {
+        "id": 200,
+        "flow_id": "n1",
+        "type": "LLMResponseWithPrompt",
+        "label": "",
+        "params": {"name": "n1"},
+        "llm_provider": 7,
+        "pipeline": 100,
+        "working_version": None,
+        "is_archived": False,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("pipelines.node", [node_row])
+    node = Node.objects.get(pk=store.get_target("pipelines.node", 200))
+    assert node.llm_provider_id is None
+
+    importer.import_rows(
+        "service_providers.llmprovider",
+        [{"id": 7, "name": "P", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}],
+    )
+    importer.import_rows("pipelines.node", [node_row])
+
+    node.refresh_from_db()
+    assert node.llm_provider_id == store.get_target("service_providers.llmprovider", 7)
