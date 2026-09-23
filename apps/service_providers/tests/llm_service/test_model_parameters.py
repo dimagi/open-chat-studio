@@ -1,10 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import (
-    ClaudeOpus47Parameters,
-    ClaudeOpus55Parameters,
     ClaudeSonnet46Parameters,
     GPT6SolParameters,
     GPT52Parameters,
