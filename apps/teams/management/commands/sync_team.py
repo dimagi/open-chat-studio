@@ -107,13 +107,13 @@ def _load_private_key(private_key_path: str | None):
     return None
 
 
-def check_source_team_ready(client, write=lambda _m: None) -> None:
+def check_source_team_ready(client, write=lambda _m: None) -> dict:
     """Block the sync unless the source team is in migration mode and has a public key registered --
     both must be set. The export API no longer enforces migration mode server-side, so the client
     checks it here from the team endpoint's ``is_migrating`` / ``has_public_key`` status (the latter is a
     boolean saying whether a key is registered). Also prints what the source says it will export, so
     the operator sees the server's answer rather than assuming. Raises CommandError listing whatever
-    is missing."""
+    is missing. Returns the source's team payload."""
     team = client.get_team()
     problems = []
     if not team.get("is_migrating"):
@@ -130,6 +130,7 @@ def check_source_team_ready(client, write=lambda _m: None) -> None:
             write(f"  - {chatbot['name']}")
     else:
         write("The source will export the whole team.")
+    return team
 
 
 def check_force_delete_allowed(client) -> None:
@@ -149,11 +150,13 @@ def _prompt(message: str) -> str:
 def check_sync_preconditions(client, private_key, enforce_schema=True, store=None, write=lambda _m: None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
     its export schema matches ours, we hold a key for any sealed secrets, and the source team is
-    ready to export (migration mode on, public key set). When a ``store`` is given, also ask the
-    operator to confirm the team's files were moved to this server's storage backend -- that happens
-    outside this command and the sync fails without it. The answer is recorded in the store only once
-    every check passes, so an aborted run asks again while a rerun after a clean preflight doesn't.
-    Returns the manifest. Raises CommandError on any failure, before any rows are imported."""
+    ready to export (migration mode on, public key set). When a ``store`` is given and the source
+    exports the whole team, also ask the operator to confirm the team's files were moved to this
+    server's storage backend -- that happens outside this command and the sync fails without it. A
+    partial sync skips the question: its files are fetched from the source one by one. The answer is
+    recorded in the store only once every check passes, so an aborted run asks again while a rerun
+    after a clean preflight doesn't. Returns the manifest. Raises CommandError on any failure, before
+    any rows are imported."""
 
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
@@ -169,10 +172,16 @@ def check_sync_preconditions(client, private_key, enforce_schema=True, store=Non
             "would be imported as unreadable tokens. Pass --private-key-path with the team's key."
         )
 
-    check_source_team_ready(client, write)
+    team = check_source_team_ready(client, write)
 
-    files_confirmation_needed = store is not None and not store.has_flag(FILES_CONFIRMED_FLAG)
-    if files_confirmation_needed:
+    if team.get("exportable_chatbots"):
+        # The files export bundles a whole team, so there is nothing for the operator to have moved.
+        # Importer._handle_missing_object fetches each blob from the source as its row lands, and the
+        # report lists the ones the source had no content for.
+        write("Files for the selected chatbots will be backfilled from the source as they are needed.")
+        return manifest
+
+    if store is not None and not store.has_flag(FILES_CONFIRMED_FLAG):
         answer = _prompt(
             "Have you exported the team's files from the source server and imported them into "
             "this server's storage backend? [yes/no]: "
@@ -183,7 +192,6 @@ def check_sync_preconditions(client, private_key, enforce_schema=True, store=Non
                 "server's storage backend before syncing, otherwise the sync will fail. Do that "
                 "first, then rerun this command."
             )
-    if files_confirmation_needed:
         store.set_flag(FILES_CONFIRMED_FLAG)
     return manifest
 
