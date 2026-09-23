@@ -4,6 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from apps.chat.bots import EventBot
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -74,3 +75,18 @@ def test_get_user_message_with_llm_provider(mock_get_llm_service):
     assert session.participant.name in calls[0][0].content
     assert calls[0][1].type == "human"
     assert calls[0][1].content == "Test event prompt"
+
+
+@pytest.mark.django_db()
+def test_event_bot_history_skips_a_marked_human_message():
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+    filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+    filtered.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = {"kind": "refusal", "provider_reason": "r"}
+    filtered.save(update_fields=["metadata"])
+    bot = EventBot(session, session.experiment, TraceInfo(name="test"))
+
+    history = bot.get_conversation_history()
+
+    assert "fine" in history
+    assert "bad" not in history

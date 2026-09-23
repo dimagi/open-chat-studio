@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from apps.chat.bots import PipelineTestBot
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.pipelines.exceptions import (
     NodeUserConfigRunError,
     PipelineBuildError,
@@ -43,6 +43,7 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
         return {"error": e.message}
     except (
         GenerationError,
+        ModelRefusedTurnError,
         NodeUserConfigRunError,
         PipelineNodeBuildError,
         PipelineNodeRunError,

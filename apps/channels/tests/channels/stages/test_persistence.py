@@ -160,3 +160,15 @@ class TestPersistenceStageDB:
         self.stage(ctx)
 
         ctx.trace_service.set_output_message_id.assert_not_called()
+
+    def test_early_exit_metadata_lands_on_the_reply(self):
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        outcome = {"kind": "refusal", "provider_reason": "refusal"}
+        ctx = make_context(experiment=experiment, experiment_session=session, early_exit_response="Declined.")
+        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: outcome}
+
+        self.stage(ctx)
+
+        message = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.AI)
+        assert message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] == outcome

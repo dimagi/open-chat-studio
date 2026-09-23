@@ -1,7 +1,7 @@
 import pytest
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.pipelines.models import PipelineChatHistoryModes
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -100,3 +100,68 @@ class TestEmptyHumanMessageReplay:
         messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
 
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
+
+
+def test_model_turn_outcome_is_an_internal_metadata_key():
+    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in ChatMessageMetadataKeys.internal_keys()
+    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME not in ChatMessageMetadataKeys.attachment_keys()
+
+
+@pytest.mark.django_db()
+class TestHistoryExcludesFilteredHumanMessages:
+    def _mark(self, message):
+        message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = {
+            "kind": "content_filter",
+            "provider_reason": "x",
+        }
+        message.save(update_fields=["metadata"])
+
+    def test_marked_human_message_is_skipped_on_replay(self):
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="ok")
+        filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="I can't answer that.")
+
+        messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+
+        assert [m.content for m in messages] == ["fine", "ok", "I can't answer that."]
+
+    def test_a_compression_marker_on_a_skipped_message_still_stops_the_walk(self):
+        # PipelineChatHistoryModes.SUMMARIZE as a saved message's compression_marker collides with
+        # ChatMessage.is_summary, which raises on save(); TRUNCATE_TOKENS is a real, saveable marker
+        # (matches the pattern in test_chat.py).
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="older")
+        filtered = ChatMessage.objects.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="bad",
+            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: PipelineChatHistoryModes.TRUNCATE_TOKENS},
+        )
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="reply")
+
+        messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
+
+        assert [m.content for m in messages] == ["reply"]
+
+    def test_marked_ai_message_is_not_excluded(self):
+        session = ExperimentSessionFactory.create()
+        reply = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="declined")
+        self._mark(reply)
+
+        assert reply.is_excluded_from_history is False
+
+    def test_marked_human_message_is_skipped_in_full_history(self):
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="ok")
+        filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="reply")
+
+        messages = session.chat.get_langchain_messages()
+
+        assert [m.content for m in messages] == ["fine", "ok", "reply"]

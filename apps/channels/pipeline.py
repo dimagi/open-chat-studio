@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException, ProviderConfigurationError, UserActionableError
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -83,6 +84,10 @@ class MessageProcessingContext:
     # exception OR when the catch-all error handler generates an error message.
     # Stages do NOT set this directly; they raise EarlyExitResponse.
     early_exit_response: str | None = None
+
+    # Metadata for the AI message persisted from early_exit_response, e.g. the outcome of a
+    # refused model turn. Set alongside early_exit_response; read by PersistenceStage.
+    early_exit_metadata: dict = field(default_factory=dict)
 
     # Set by QueryExtractionStage when a voice note yielded no query -- no speech in it,
     # nothing able to transcribe it, or transcription failed outright. It defers the error
@@ -277,11 +282,22 @@ class MessageProcessingPipeline:
         if isinstance(e, UserActionableError):
             # Answered, never re-raised -- see ADR-0065.
             logger.info("Participant-actionable error: %s", e)
+            self._record_turn_outcome(ctx, e)
             ctx.early_exit_response = self._generate_error_message(ctx, e)
             return None
         ctx.early_exit_response = self._generate_error_message(ctx, e)
         ctx.processing_errors.append(str(e))
         return e
+
+    def _record_turn_outcome(self, ctx: MessageProcessingContext, error: Exception) -> None:
+        """Mark the reply and the human message that led to a refused or filtered turn."""
+        outcome = getattr(error, "message_metadata", None)
+        if not outcome:
+            return
+        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: dict(outcome)}
+        if ctx.human_message is not None:
+            ctx.human_message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = dict(outcome)
+            ctx.human_message.save(update_fields=["metadata"])
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.
@@ -313,11 +329,25 @@ class MessageProcessingPipeline:
         return self._user_message(ctx, prompt, exception)
 
     def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
-        """Ask EventBot for a participant-facing message, falling back to the canned reply."""
-        trace_info = TraceInfo(name="error", metadata={"error": str(exception)})
+        """Ask EventBot for a participant-facing message, falling back to a reply that needs no model."""
+        metadata = {"error": str(exception), **getattr(exception, "trace_metadata", {})}
+        trace_info = TraceInfo(name="error", metadata=metadata)
         event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
         try:
-            return event_bot.get_user_message(prompt)
+            message = event_bot.get_user_message(prompt)
         except Exception:
+            if isinstance(exception, UserActionableError):
+                logger.info("EventBot could not phrase a %s; replying with its text", type(exception).__name__)
+                return str(exception)
             logger.exception("Failed to generate error message via EventBot, falling back to default")
             return self.DEFAULT_ERROR_RESPONSE_TEXT
+        return message or self._fallback_reply(exception)
+
+    def _fallback_reply(self, exception: Exception) -> str:
+        """Return the exception's own message for a participant-actionable error, the canned text otherwise.
+
+        An empty reply would otherwise be sent as nothing at all.
+        """
+        if isinstance(exception, UserActionableError):
+            return str(exception)
+        return self.DEFAULT_ERROR_RESPONSE_TEXT

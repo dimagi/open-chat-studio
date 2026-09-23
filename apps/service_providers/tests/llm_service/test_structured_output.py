@@ -4,9 +4,9 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel, ValidationError
 
+from apps.service_providers.llm_service.outcomes import provider_reason
 from apps.service_providers.llm_service.structured_output import (
     NoStructuredOutputError,
-    stop_reason,
     structured_output_runnable,
     unwrap_structured_output,
 )
@@ -55,7 +55,7 @@ def test_returns_the_parsed_model_when_the_tool_is_called():
         pytest.param(
             AIMessage(content=[{"type": "refusal", "refusal": "declined"}]),
             "declined",
-            "",
+            "refusal",
             id="responses-api-refusal-block",
         ),
     ],
@@ -90,9 +90,17 @@ def test_a_refusal_wins_over_the_parsing_error_it_caused():
     assert exc_info.value.model_text == "declined"
 
 
-def test_stop_reason_reads_the_provider_metadata():
-    assert stop_reason(AIMessage(content="", response_metadata={"stop_reason": "refusal"})) == "refusal"
-    assert stop_reason(AIMessage(content="no metadata")) == ""
+def test_provider_reason_reads_the_provider_metadata():
+    assert provider_reason(AIMessage(content="", response_metadata={"stop_reason": "refusal"})) == "refusal"
+    assert provider_reason(AIMessage(content="no metadata")) == ""
+
+
+def test_provider_reason_reads_responses_api_incomplete_details():
+    message = AIMessage(
+        content=[], response_metadata={"status": "incomplete", "incomplete_details": {"reason": "content_filter"}}
+    )
+
+    assert provider_reason(message) == "content_filter"
 
 
 def test_a_missing_tool_call_raised_by_the_provider_adapter_is_no_structured_output():
