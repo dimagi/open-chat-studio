@@ -167,8 +167,8 @@ class TestDownloadTeamFilesView:
         assert "existing-task" in response.content.decode()
 
 
-def _manage_team_url(team):
-    return reverse("single_team:manage_team", args=[team.slug])
+def _data_section_url(team):
+    return reverse("single_team:manage_team_section", args=[team.slug, "data"])
 
 
 @pytest.mark.django_db()
@@ -181,6 +181,10 @@ class TestDownloadButtonVisibility:
         ],
     )
     def test_button_visibility(self, request, client, team, user_fixture, should_see):
+        """Non-admins have no Data section at all, so the button is unreachable rather than hidden."""
         client.force_login(request.getfixturevalue(user_fixture))
-        response = client.get(_manage_team_url(team))
-        assert (_download_files_url(team) in response.content.decode()) is should_see
+        response = client.get(_data_section_url(team))
+        if not should_see:
+            assert response.status_code == 404
+            return
+        assert _download_files_url(team) in response.content.decode()

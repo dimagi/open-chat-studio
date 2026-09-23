@@ -1,0 +1,57 @@
+{% load i18n %}
+<section class="app-card" id="flags">
+  <h2 class="pg-subtitle font-bold">{% translate "Feature Flags" %}</h2>
+  <span class="text-neutral-500 section-subtitle">{% translate "Enable or disable experimental features for your team." %}</span>
+  <hr class="my-2">
+
+  {% if not is_team_admin %}
+    <div class="alert alert-warning mb-4">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <h3 class="font-medium">{% translate "Read-only View" %}</h3>
+        <p class="text-sm mt-1">
+          {% translate "Only team administrators can modify feature flags. Contact your team admin to make changes." %}
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'single_team:feature_flags' request.team.slug %}"
+        hx-post="{% url 'single_team:feature_flags' request.team.slug %}"
+        hx-target="#team-settings-body" hx-swap="innerHTML" class="my-2">
+    {% csrf_token %}
+    {{ flags_form.non_field_errors }}
+
+    <div class="grid gap-4">
+      {% for field in flags_form %}
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <input type="checkbox" name="{{ field.name }}" class="checkbox checkbox-primary"
+                   {% if field.value %}checked{% endif %}
+                   {% if not is_team_admin %}disabled{% endif %}>
+            <div class="flex-1">
+              <div class="label-text font-medium">{{ field.label }}</div>
+              <div class="label-text-alt text-base-content/60">{{ field.help_text }}</div>
+            </div>
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if is_team_admin %}
+      <div class="mt-6 flex gap-2">
+        <input type="submit" class="btn btn-primary" value="{% translate "Save Changes" %}">
+      </div>
+    {% endif %}
+  </form>
+
+  <div class="alert alert-info mt-6">
+    <i class="fa-solid fa-circle-info"></i>
+    <div>
+      <h3 class="font-medium">{% translate "About Feature Flags" %}</h3>
+      <p class="text-sm mt-1">
+        {% translate "Feature flags allow you to enable experimental features for your team. Changes will take effect immediately for all team members." %}
+      </p>
+    </div>
+  </div>
+</section>

@@ -32,18 +32,29 @@ def _url(team):
     return reverse("single_team:internal_metadata", args=[team.slug])
 
 
+def _section_url(team):
+    return reverse("single_team:manage_team_section", args=[team.slug, "internal-metadata"])
+
+
 @pytest.mark.django_db()
 def test_staff_can_view(team, staff_member, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
     client = Client()
     client.force_login(staff_member)
-    response = client.get(_url(team))
+    response = client.get(_section_url(team))
     assert response.status_code == 200
+    assert response.context["active_section"].key == "internal-metadata"
     assert b"Team Owner" in response.content
-    assert response.context["breadcrumbs"] == [
-        ("Team Settings", reverse("single_team:manage_team", args=[team.slug])),
-        ("Internal Metadata", None),
-    ]
+
+
+@pytest.mark.django_db()
+def test_get_on_the_save_endpoint_redirects_to_the_section(team, staff_member, settings):
+    settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
+    client = Client()
+    client.force_login(staff_member)
+    response = client.get(_url(team))
+    assert response.status_code == 302
+    assert response.url == _section_url(team)
 
 
 @pytest.mark.django_db()
@@ -51,8 +62,8 @@ def test_non_staff_member_gets_404(team, member, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
     client = Client()
     client.force_login(member)
-    response = client.get(_url(team))
-    assert response.status_code == 404
+    assert client.get(_url(team)).status_code == 404
+    assert client.get(_section_url(team)).status_code == 404
 
 
 @pytest.mark.django_db()

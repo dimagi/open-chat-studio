@@ -45,8 +45,8 @@ def _set_public_key_url(team):
     return reverse("single_team:set_public_key", args=[team.slug])
 
 
-def _manage_team_url(team):
-    return reverse("single_team:manage_team", args=[team.slug])
+def _data_section_url(team):
+    return reverse("single_team:manage_team_section", args=[team.slug, "data"])
 
 
 @pytest.mark.django_db()
@@ -117,15 +117,13 @@ class TestSetPublicKey:
 
     def test_data_export_section_visible_to_admin(self, client, team, admin):
         client.force_login(admin)
-        response = client.get(_manage_team_url(team))
+        response = client.get(_data_section_url(team))
         assert response.status_code == 200
         assert "Migration public key" in response.content.decode()
 
     def test_data_export_section_hidden_from_member(self, client, team, member):
         client.force_login(member)
-        response = client.get(_manage_team_url(team))
-        assert response.status_code == 200
-        assert "Migration public key" not in response.content.decode()
+        assert client.get(_data_section_url(team)).status_code == 404
 
     def test_setting_public_key_is_audited(self, client, team, admin):
         client.force_login(admin)

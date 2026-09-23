@@ -1,0 +1,22 @@
+{% load i18n %}
+{% comment %}
+  The htmx swap target for the settings nav: both halves are replaced together so the
+  active nav item stays in step with the section on show.
+{% endcomment %}
+<aside class="w-56 shrink-0 hidden lg:block self-start sticky top-4" id="team-settings-nav">
+  {% include "teams/components/settings_nav.html" %}
+</aside>
+<div class="flex-1 flex flex-col gap-6 min-w-0" id="team-settings-content">
+  {% comment %}
+    The sidebar is hidden below the lg breakpoint, so narrow screens switch sections
+    through this instead.
+  {% endcomment %}
+  <select class="select select-bordered w-full lg:hidden" data-cy="nav-section-select"
+          aria-label="{% translate "Settings section" %}"
+          onchange="window.location = this.value;">
+    {% for item in nav_sections %}
+      <option value="{{ item.url }}" {% if item.is_active %}selected{% endif %}>{{ item.label }}</option>
+    {% endfor %}
+  </select>
+  {% include active_section.template %}
+</div>

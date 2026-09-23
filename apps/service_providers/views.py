@@ -355,10 +355,12 @@ class CreateServiceProvider(
         return f"{verb} and Verify"
 
     def _breadcrumbs(self, instance):
-        manage_team_url = reverse("single_team:manage_team", args=[self.request.team.slug])
         return [
-            (_("Team Settings"), manage_team_url),
-            (self.provider_type.label, f"{manage_team_url}#integrations"),
+            (_("Team Settings"), reverse("single_team:manage_team", args=[self.request.team.slug])),
+            (
+                self.provider_type.label,
+                reverse("single_team:manage_team_section", args=[self.request.team.slug, "integrations"]),
+            ),
             (_("Edit") if instance else _("Create"), None),
         ]
 

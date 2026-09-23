@@ -1,5 +1,3 @@
-from celery.result import AsyncResult
-from celery_progress.backend import PROGRESS_STATE
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -13,7 +11,6 @@ from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import (
     InvitationForm,
-    NotifyRecipientsForm,
     TeamChangeForm,
     TeamMfaForm,
     TeamMigrationForm,
@@ -23,76 +20,8 @@ from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async, start_team_files_export
 from apps.teams.utils import current_team
-from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
-from apps.web.forms import set_form_fields_disabled
-
-_ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
-
-
-def _team_files_export_context(team):
-    """Resume progress for an in-flight export, or surface the last completed one.
-
-    An in-flight task_id takes priority: it may be replacing an older
-    `files_export` file, and the progress UI is mutually exclusive with the
-    ready-to-download state.
-    """
-    task_id = team.files_export_task_id
-    if task_id:
-        if AsyncResult(task_id).state in _ACTIVE_EXPORT_STATES:
-            return {"files_export_task_id": task_id}
-        team.mark_files_export_finished()
-    if team.files_export_id and team.files_export.file:
-        return {"files_export_file": team.files_export}
-    return {}
-
-
-def _manage_team_context(request, team, *, team_form=None, public_key_form=None):
-    pending_invitations = Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at")
-    integration_rows = get_integration_rows(request, team)
-    return {
-        "team": team,
-        "active_tab": "manage-team",
-        "page_title": _("My Team | {team}").format(team=team),
-        "team_form": team_form or TeamChangeForm(instance=team),
-        "invitation_form": InvitationForm(team=team),
-        "pending_invitations": pending_invitations,
-        "notify_recipients_form": NotifyRecipientsForm,
-        "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
-        "role_choices": ROLE_CHOICES,
-        "integration_new_choices": get_integration_new_choices(request, team),
-        "integrations_table_url": reverse("single_team:integrations_table", args=[team.slug]),
-        "members_table_url": reverse("single_team:members_table", args=[team.slug]),
-        "stats": {
-            "members": team.membership_set.count(),
-            "integrations": len(integration_rows),
-            "pending_invites": pending_invitations.count(),
-        },
-        **_team_files_export_context(team),
-    }
-
-
-@login_and_team_required
-def manage_team(request, team_slug):
-    team = request.team
-    team_form = None
-    is_team_admin = request.team_membership.is_team_admin()
-    if request.method == "POST":
-        if is_team_admin:
-            team_form = TeamChangeForm(request.POST, instance=team)
-            if team_form.is_valid():
-                messages.success(request, _("Team details saved!"))
-                team_form.save()
-                if request.team.slug != team_slug:
-                    return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
-        else:
-            messages.error(request, "Sorry you don't have permission to do that.")
-    if team_form is None:
-        team_form = TeamChangeForm(instance=team)
-    if not is_team_admin:
-        set_form_fields_disabled(team_form, True)
-
-    return render(request, "teams/manage_team.html", _manage_team_context(request, team, team_form=team_form))
+from apps.teams.views.team_settings import render_team_settings
 
 
 @login_required
@@ -193,14 +122,12 @@ def set_public_key(request, team_slug):
         # doesn't touch form.errors, which is what still surfaces the "public_key" field
         # error to the user.
         request.team.refresh_from_db()
-    return render(
-        request,
-        "teams/manage_team.html",
-        _manage_team_context(request, request.team, public_key_form=form),
-    )
+    return render_team_settings(request, "data", public_key_form=form)
 
 
-def _set_team_boolean_field(request, form_class, field_name, *, enabled_message, disabled_message, error_message):
+def _set_team_boolean_field(
+    request, form_class, field_name, section, *, enabled_message, disabled_message, error_message
+):
     """Shared toggle-a-single-boolean-field flow for the team settings forms."""
     form = form_class(request.POST, instance=request.team)
     if form.is_valid():
@@ -209,11 +136,7 @@ def _set_team_boolean_field(request, form_class, field_name, *, enabled_message,
         messages.success(request, enabled_message if armed else disabled_message)
     else:
         messages.error(request, error_message)
-    return render(
-        request,
-        "teams/manage_team.html",
-        _manage_team_context(request, request.team),
-    )
+    return render_team_settings(request, section)
 
 
 @require_POST
@@ -223,6 +146,7 @@ def set_migration_lock(request, team_slug):
         request,
         TeamMigrationForm,
         "is_migrating",
+        "data",
         enabled_message=_("Migration mode enabled."),
         disabled_message=_("Migration mode disabled."),
         error_message=_("Could not update migration mode."),
@@ -236,6 +160,7 @@ def set_require_mfa(request, team_slug):
         request,
         TeamMfaForm,
         "require_mfa",
+        "members",
         enabled_message=_("MFA requirement enabled."),
         disabled_message=_("MFA requirement disabled."),
         error_message=_("Could not update the MFA requirement."),

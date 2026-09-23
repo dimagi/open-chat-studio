@@ -63,7 +63,7 @@ class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMix
         }
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return reverse("single_team:manage_team_section", args=[self.request.team.slug, "notifications"])
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -92,7 +92,7 @@ class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return NotificationChannel.objects.filter(team=self.request.team)
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return reverse("single_team:manage_team_section", args=[self.request.team.slug, "notifications"])
 
 
 @method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")

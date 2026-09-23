@@ -1,0 +1,84 @@
+{% load form_tags i18n %}
+<section class="app-card" id="data">
+  <h2 class="pg-subtitle font-bold">{% translate "Data & migration" %}</h2>
+  <span class="text-neutral-500 section-subtitle">{% translate "Export this team's files, or seal secret data with a public key before moving it to another instance." %}</span>
+
+  <div class="flex flex-col gap-4 mt-2">
+    <div class="app-card">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h3 class="pg-subtitle font-bold text-sm">{% translate "Download team files" %}</h3>
+          <span class="text-neutral-500 section-subtitle">{% translate "A zip archive of every file belonging to this team." %}</span>
+        </div>
+        <div id="team-files-download-wrapper">
+          {% if files_export_task_id %}
+            {% include "teams/partials/download_files_progress.html" with task_id=files_export_task_id %}
+          {% else %}
+            {% if files_export_file %}
+              <p class="my-2 text-muted text-sm">
+                {% blocktranslate with created=files_export_file.created_at %}Last export created {{ created }}.{% endblocktranslate %}
+              </p>
+            {% endif %}
+            <form hx-post="{% url 'single_team:download_team_files' request.team.slug %}"
+                  hx-target="#team-files-download-wrapper"
+                  hx-swap="innerHTML">
+              {% csrf_token %}
+              <div class="pg-inline-buttons">
+                {% if files_export_file %}
+                  <a id="ocs-ready-download-link"
+                     class="btn btn-outline"
+                     href="{% url 'files:base' team.slug files_export_file.id %}?allow_s3">
+                    <i class="fa-solid fa-download mr-1"></i>{% translate "Download Export" %}
+                  </a>
+                  <button type="submit" class="btn btn-outline">{% translate "Regenerate export" %}</button>
+                {% else %}
+                  <button type="submit" class="btn btn-outline">
+                    <i class="fa-solid fa-download mr-1"></i>{% translate "Download" %}
+                  </button>
+                {% endif %}
+              </div>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="app-card">
+      <div class="flex justify-between items-start">
+        <div>
+          <h3 class="pg-subtitle font-bold text-sm">{% translate "Migration public key" %}</h3>
+          <span class="text-neutral-500 section-subtitle">{% translate "Seals secret data exported from this team during a migration." %}</span>
+        </div>
+        {% if team.public_key %}
+          <span class="badge badge-success">{% translate "Set" %}</span>
+        {% else %}
+          <span class="badge badge-warning">{% translate "Not set" %}</span>
+        {% endif %}
+      </div>
+      <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}" class="mt-2">
+        {% csrf_token %}
+        {{ public_key_form.non_field_errors }}
+        {% render_form_fields public_key_form "public_key" %}
+        <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+          <div class="min-w-0">
+            <label class="label cursor-pointer gap-2">
+              <input type="checkbox" name="is_migrating" class="checkbox checkbox-sm shrink-0"
+                      {% if request.team.is_migrating %}checked{% endif %}>
+              <span class="section-subtitle">{% translate "Migration mode" %}</span>
+            </label>
+            <p class="text-neutral-500 section-subtitle whitespace-normal">
+              {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
+            </p>
+          </div>
+          <input class="btn btn-primary" type="submit" value="{% translate "Save key" %}">
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h3 class="pg-subtitle font-bold text-sm">{% translate "Danger Zone" %}</h3>
+  <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
+</section>
+{% include "teams/components/delete_team_modal.html" %}

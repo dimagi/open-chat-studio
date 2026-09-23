@@ -1,0 +1,28 @@
+{% load i18n team_tags %}
+<section class="app-card" id="automation">
+  <h2 class="pg-subtitle font-bold">{% translate "Developers" %}</h2>
+  <span class="text-neutral-500 section-subtitle">{% translate "Custom actions your chatbots can call, and applications authorised against this team's API." %}</span>
+  <div class="flex flex-col gap-4 mt-2">
+    <div class="overflow-x-auto">
+      {% with button_style="btn-outline" title_class="pg-subtitle" %}
+        {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
+        {% url "custom_actions:table" request.team.slug as actions_table_url %}
+        {% url "custom_actions:new" request.team.slug as actions_new_url %}
+        {% translate "Let chatbots call external services over HTTP during a session." as actions_subtitle %}
+        {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" new_button_label="Add action" %}
+      {% endwith %}
+    </div>
+    {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
+    {% if can_view_oauth_apps %}
+      <div class="overflow-x-auto">
+        {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}
+        {% url "oauth_apps:table" request.team.slug as oauth_apps_table_url %}
+        {% url "oauth_apps:new" request.team.slug as oauth_apps_new_url %}
+        {% translate "Applications that read or write this team's data through the API." as oauth_apps_subtitle %}
+        {% with button_style="btn-outline" title_class="pg-subtitle" %}
+          {% include "generic/object_home_content.html" with new_object_url=oauth_apps_new_url title="OAuth applications" table_url=oauth_apps_table_url allow_new=allow_new_oauth_app subtitle=oauth_apps_subtitle data_cy_title="title-oauth-apps" new_button_label="Register app" %}
+        {% endwith %}
+      </div>
+    {% endif %}
+  </div>
+</section>

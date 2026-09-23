@@ -1,37 +1,17 @@
-{% load i18n team_tags waffle_tags %}
+{% load i18n %}
 <nav class="flex flex-col gap-1 mb-4">
-  <a href="#integrations" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-    <span><i class="fa-solid fa-plug mr-2"></i>{% translate "Integrations" %}</span><span class="nav-count">{{ stats.integrations }}</span>
-  </a>
-  {% flag "flag_slack_notifications" %}
-    {% has_perm "ocs_notifications" "view_notificationchannel" as can_view_notification_channels %}
-    {% if can_view_notification_channels %}
-      <a href="#notifications" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-        <span><i class="fa-solid fa-bell mr-2"></i>{% translate "Notifications" %}</span>
-      </a>
-    {% endif %}
-  {% endflag %}
-  <a href="#members" class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-    <span><i class="fa-solid fa-users mr-2"></i>{% translate "Members" %}</span><span class="nav-count">{{ stats.members }}</span>
-  </a>
-  <a href="#automation" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-    <i class="fa-solid fa-code mr-2"></i>{% translate "Developer" %}
-  </a>
-  {% if request.team_membership.is_team_admin %}
-    <a href="#data" class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-      <i class="fa-solid fa-box-archive mr-2"></i>{% translate "Data" %}
+  {% for item in nav_sections %}
+    <a href="{{ item.url }}"
+       hx-get="{{ item.url }}"
+       hx-target="#team-settings-body"
+       hx-swap="innerHTML"
+       hx-push-url="true"
+       data-cy="nav-{{ item.key }}"
+       class="flex justify-between items-center rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200{% if item.is_active %} settings-nav-active{% endif %}">
+      <span><i class="fa-solid {{ item.icon }} mr-2"></i>{{ item.label }}</span>
+      {% if item.count != None %}<span class="nav-count">{{ item.count }}</span>{% endif %}
     </a>
-  {% endif %}
-  <a href="{% url "single_team:feature_flags" request.team.slug %}"
-     class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-    <i class="fa-solid fa-flag mr-2"></i>{% translate "Feature Flags" %}
-  </a>
-  {% if request.user.is_staff %}
-    <a href="{% url "single_team:internal_metadata" request.team.slug %}"
-       class="rounded-lg px-3 py-2 text-sm font-semibold hover:bg-base-200">
-      <i class="fa-solid fa-database mr-2"></i>{% translate "Internal Metadata" %}
-    </a>
-  {% endif %}
+  {% endfor %}
 </nav>
 <div class="app-card p-4 text-sm">
   <p class="uppercase text-xs text-neutral-500 mb-2">{% translate "Team" %}</p>

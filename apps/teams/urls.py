@@ -14,6 +14,7 @@ team_urlpatterns = (
     [
         # team management views
         path("", views.manage_team, name="manage_team"),
+        path("section/<slug:section>/", views.manage_team, name="manage_team_section"),
         path("delete", views.delete_team, name="delete_team"),
         path("members/<int:membership_id>/", views.team_membership_details, name="team_membership_details"),
         path("members/<int:membership_id>/remove/", views.remove_team_membership, name="remove_team_membership"),
