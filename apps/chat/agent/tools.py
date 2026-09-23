@@ -46,7 +46,7 @@ IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})
 CHUNK_TEMPLATE = """
 <file>
   <file_id>{file_id}</file_id>
-  <filename>{file_name}</filename>{metadata}
+  <filename>{file_name}</filename>{metadata}{row}
   <context>
     <![CDATA[{chunk}]]>
   </context>
@@ -103,6 +103,31 @@ def _format_metadata_block(metadata: dict | None) -> str:
         return ""
     inner = "\n".join(lines)
     return f"\n  <metadata>\n{inner}\n  </metadata>"
+
+
+def _format_row_block(embedding: FileChunkEmbedding) -> str:
+    """Build a `<row>` XML block for a chunk that came from a sheet row.
+
+    Kept apart from the file `<metadata>` block so `METADATA_BLOCKLIST`, which names
+    loader-internal file keys, cannot drop a sheet column that happens to share a name.
+    """
+    if embedding.metadata is None:
+        return ""
+    lines = [f"    <row_number>{embedding.page_number}</row_number>"]
+    used_tags: set[str] = set()
+    columns = []
+    for key, value in embedding.metadata.items():
+        if value in (None, ""):
+            continue
+        tag = _sanitize_tag(key)
+        if tag in used_tags:
+            continue
+        used_tags.add(tag)
+        columns.append(f"      <{tag}>{_format_metadata_value(value)}</{tag}>")
+    if columns:
+        lines.append("    <columns>\n" + "\n".join(columns) + "\n    </columns>")
+    inner = "\n".join(lines)
+    return f"\n  <row>\n{inner}\n  </row>"
 
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -214,6 +239,7 @@ def _perform_collection_search(
                     file_name=escape(embedding.file.name),
                     file_id=embedding.file_id,
                     metadata=_format_metadata_block(embedding.file.metadata),
+                    row=_format_row_block(embedding),
                     chunk=embedding.text,
                 ).strip()
                 for embedding in embeddings
@@ -244,7 +270,7 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
   <file_id>{embedding.file_id}</file_id>
   <filename>{escape(embedding.file.name)}</filename>
   <collection_id>{collection.id}</collection_id>
-  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}
+  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}{_format_row_block(embedding)}
   <context>
     <![CDATA[{embedding.text}]]>
   </context>

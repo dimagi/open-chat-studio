@@ -22,7 +22,7 @@ from apps.documents.tests.retrieval_helpers import (
 from apps.documents.views import _result_score_kind
 from apps.service_providers.llm_service.index_managers import LocalIndexManager
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.files import FileFactory
+from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 
 
 def _fuse(ranked_lists, weights, k=None) -> list[int]:
@@ -289,6 +289,23 @@ class TestSearchCollection:
         get_query_vector.assert_not_called()
         assert [result.id for result in results] == [chunk.id]
 
+    def test_search_results_carry_row_metadata_without_extra_queries(self, django_assert_num_queries):
+        collection = CollectionFactory.create(is_index=True, is_remote_index=False)
+        chunk = FileChunkEmbeddingFactory.create(
+            collection=collection,
+            team=collection.team,
+            page_number=7,
+            metadata={"language": "en"},
+            embedding=[0.5] * settings.EMBEDDING_VECTOR_SIZE,
+        )
+        CollectionFile.objects.create(collection=collection, file=chunk.file, status=FileStatus.COMPLETED)
+
+        results = search_collection(collection, "clinic", top_k=1, query_vector=[0.5] * settings.EMBEDDING_VECTOR_SIZE)
+
+        with django_assert_num_queries(0):
+            assert results[0].metadata == {"language": "en"}
+            assert results[0].page_number == 7
+
     def test_per_collection_values_are_used(self):
         collection = CollectionFactory.create(search_dense_weight=0.25, search_fetch_k=7)
         assert collection.search_dense_weight == 0.25
@@ -379,7 +396,7 @@ class TestLexicalSearchLanguage:
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == []
 
         # Re-indexing the chunk under the new language brings it back.
-        LocalIndexManager._build_search_vectors([chunk], collection)
+        LocalIndexManager._build_search_vectors([chunk.id], collection)
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == [chunk.id]
 
     def test_stopword_only_query_falls_back_to_dense(self):

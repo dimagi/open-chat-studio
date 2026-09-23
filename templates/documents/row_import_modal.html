@@ -1,0 +1,27 @@
+{% load i18n %}
+<dialog id="importRowsModal" class="modal">
+  <div class="modal-box max-w-none w-2/3 max-h-4/5 overflow-y-auto">
+    <h3 class="font-bold text-lg mb-2">{% translate "Import Rows" %}</h3>
+    <p class="text-sm text-base-content/70 mb-4">
+      {% blocktranslate %}Each row of a csv or tsv file becomes one searchable record. Tick the columns to store as metadata on every row.{% endblocktranslate %}
+    </p>
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+    <form class="flex flex-col gap-4"
+          action="{% url 'documents:row_import' team.slug collection.id %}"
+          method="post"
+          enctype="multipart/form-data"
+          hx-post="{% url 'documents:row_import_preview' team.slug collection.id %}"
+          hx-trigger="change from:find input[name='file']"
+          hx-target="#row-import-preview"
+          hx-swap="innerHTML"
+          hx-encoding="multipart/form-data"
+          hx-indicator="#row-import-spinner">
+      {% csrf_token %}
+      <input name="file" type="file" class="file-input" accept="{{ row_import_supported_file_types }}" required />
+      <i id="row-import-spinner" class="htmx-indicator fa fa-spinner fa-pulse"></i>
+      <div id="row-import-preview"></div>
+    </form>
+  </div>
+</dialog>

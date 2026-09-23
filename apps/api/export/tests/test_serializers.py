@@ -280,4 +280,4 @@ def test_pydantic_schema_field_serializes_as_json_object():
     instance = CollectionFile.objects.get(pk=cf.pk)
     data = build_resource_serializer(CollectionFile)(instance, context={"public_key": None}).data
     rendered = json.loads(JSONRenderer().render(data))
-    assert rendered["metadata"] == metadata
+    assert rendered["metadata"] == {**metadata, "row_import": None}

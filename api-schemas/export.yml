@@ -4266,6 +4266,12 @@ components:
           items:
             type: number
             format: double
+        metadata:
+          nullable: true
+        content_hash:
+          type: string
+          nullable: true
+          maxLength: 64
         is_archived:
           type: boolean
         file:

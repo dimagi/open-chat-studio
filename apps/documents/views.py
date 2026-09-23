@@ -40,6 +40,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
+from apps.documents.row_import import ROW_IMPORT_EXTENSIONS
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
 from apps.documents.utils import delete_collection_file
@@ -119,6 +120,8 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_files": settings.MAX_FILES_PER_COLLECTION,
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": _visible_source_types(request),
+        "row_import_supported_file_types": ",".join(ROW_IMPORT_EXTENSIONS),
+        "max_metadata_columns": settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS,
         "read_only": collection.is_a_version,
         "breadcrumbs": [_collections_crumb(team_slug), (collection.name, None)],
         **_indexing_progress(collection),
@@ -864,12 +867,12 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             collection_id=collection_id,
         )
 
-        chunking_strategy = collection_file.metadata.chunking_strategy
+        chunking_strategy = collection_file.chunking_strategy
 
         context.update(
             {
-                "chunk_size": chunking_strategy.chunk_size,
-                "chunk_overlap": chunking_strategy.chunk_overlap,
+                "chunk_size": chunking_strategy.chunk_size if chunking_strategy else None,
+                "chunk_overlap": chunking_strategy.chunk_overlap if chunking_strategy else None,
                 "collection": collection_file.collection,
                 "file": collection_file.file,
                 "breadcrumbs": [

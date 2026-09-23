@@ -280,6 +280,8 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     # language, so the vector is built with `Collection.search_language` at index time.
     # See `apps.documents.retrieval`: the query must use the same configuration or nothing matches.
     search_vector = SearchVectorField(null=True, editable=False)
+    metadata = SanitizedJSONField(null=True, blank=True, default=None)
+    content_hash = models.CharField(max_length=64, null=True, blank=True)  # noqa: DJ001
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -292,7 +294,10 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     objects = FileChunkEmbeddingObjectManager()
 
     class Meta:
-        indexes = [GinIndex(fields=["search_vector"], name="file_chunk_search_vector_idx")]
+        indexes = [
+            GinIndex(fields=["search_vector"], name="file_chunk_search_vector_idx"),
+            GinIndex(fields=["metadata"], name="file_chunk_metadata_idx", opclasses=["jsonb_path_ops"]),
+        ]
 
     @property
     def contextualized_text(self) -> str:

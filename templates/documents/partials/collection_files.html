@@ -37,14 +37,24 @@
                   <span class="text-xs text-base-content/70">{{ collection_file.chunk_count|default:0 }} chunks</span>
                 </div>
               {% endif %}
-              <div class="flex flex-row items-center gap-2">
-                <span class="text-xs text-base-content/70">Chunking Strategy:</span>
-                <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens
+              {% if collection_file.chunking_strategy %}
+                <div class="flex flex-row items-center gap-2">
+                  <span class="text-xs text-base-content/70">Chunking Strategy:</span>
+                  <div class="badge badge-sm badge-ghost">Size: {{ collection_file.chunking_strategy.chunk_size }} tokens
+                  </div>
+                  <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }}
+                    tokens
+                  </div>
                 </div>
-                <div class="badge badge-sm badge-ghost">Overlap: {{ collection_file.chunking_strategy.chunk_overlap }}
-                  tokens
+              {% elif collection_file.row_import %}
+                <div class="flex flex-row items-center gap-2">
+                  <div class="badge badge-sm badge-ghost">Row import</div>
+                  {% if collection_file.row_import.metadata_columns %}
+                    <div class="badge badge-sm badge-ghost">{{ collection_file.row_import.metadata_columns|join:", " }}
+                    </div>
+                  {% endif %}
                 </div>
-              </div>
+              {% endif %}
             {% else %}
               <span
                   class="text-xs text-base-content/70">{{ collection_file.file.summary|default:'No summary available' }}</span>
