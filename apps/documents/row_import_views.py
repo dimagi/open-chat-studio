@@ -39,6 +39,8 @@ def _parse_uploaded_sheet(uploaded_file):
     extension = Path(uploaded_file.name).suffix.lower()
     if extension not in ROW_IMPORT_EXTENSIONS:
         raise RowImportError("Row import accepts csv or tsv files only")
+    if uploaded_file.size > settings.MAX_FILE_SIZE_MB * 1000 * 1000:
+        raise RowImportError(f"The file is larger than {settings.MAX_FILE_SIZE_MB} MB")
     sheet = parse_sheet(uploaded_file.read(), filename=uploaded_file.name)
     uploaded_file.seek(0)
     return sheet, oversized_row_numbers(sheet, filename=uploaded_file.name)

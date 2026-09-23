@@ -36,6 +36,15 @@ def upload(name=b"faq.csv", data=FAQ_CSV):
 
 @pytest.mark.django_db()
 class TestRowImportPreview:
+    def test_file_over_the_size_limit_is_reported(self, logged_in_client, team, local_collection, settings):
+        settings.MAX_FILE_SIZE_MB = 0.00001
+        url = reverse("documents:row_import_preview", args=[team.slug, local_collection.id])
+        response = logged_in_client.post(url, {"file": upload()})
+
+        assert response.status_code == 200
+        assert "larger than" in response.content.decode()
+        assert 'name="metadata_columns"' not in response.content.decode()
+
     def test_shows_headers_sample_rows_and_column_checkboxes(self, logged_in_client, team, local_collection):
         url = reverse("documents:row_import_preview", args=[team.slug, local_collection.id])
         response = logged_in_client.post(url, {"file": upload()})
@@ -103,6 +112,14 @@ class TestRowImport:
     def test_wrong_extension_is_rejected(self, logged_in_client, team, local_collection):
         url = reverse("documents:row_import", args=[team.slug, local_collection.id])
         response = logged_in_client.post(url, {"file": upload(name="faq.xlsx")})
+
+        assert response.status_code == 302
+        assert not File.objects.filter(team=team).exists()
+
+    def test_file_over_the_size_limit_is_rejected(self, logged_in_client, team, local_collection, settings):
+        settings.MAX_FILE_SIZE_MB = 0.00001
+        url = reverse("documents:row_import", args=[team.slug, local_collection.id])
+        response = logged_in_client.post(url, {"file": upload()})
 
         assert response.status_code == 302
         assert not File.objects.filter(team=team).exists()
