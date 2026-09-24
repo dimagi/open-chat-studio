@@ -6,6 +6,7 @@ than on calls to a mock. That is the only way to confirm trace-level attributes 
 the observation Langfuse reads them from.
 """
 
+import contextlib
 import uuid
 from unittest import mock
 
@@ -57,7 +58,9 @@ def exported_spans(public_key):
 def tracer(public_key, exported_spans):
     client, _exporter = exported_spans
     tracer = LangFuseTracer("langfuse", {"public_key": public_key})
-    with mock.patch("apps.service_providers.tracing.langfuse.client_manager.get", return_value=client):
+    with mock.patch(
+        "apps.service_providers.tracing.langfuse.client_manager.checkout", return_value=contextlib.nullcontext(client)
+    ):
         yield tracer
 
 
