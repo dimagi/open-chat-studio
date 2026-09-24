@@ -170,6 +170,30 @@ def test_migrate_vector_stores_does_cleanup(
 
 
 @pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_migrate_vector_stores_skips_cleanup_when_no_previous_provider(
+    add_files_to_index_mock, remote_collection_index, remote_index_manager_mock
+):
+    """Test that the migration task does not attempt cleanup when from_llm_provider_id is None.
+
+    Regression: passing None caused LlmProvider.objects.get(id=None) to raise DoesNotExist.
+    """
+    file = FileFactory.create(team=remote_collection_index.team, external_id="old-file-id")
+    CollectionFile.objects.create(
+        file=file,
+        collection=remote_collection_index,
+        status=FileStatus.PENDING,
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+    # Should not raise even though from_llm_provider_id is None
+    migrate_vector_stores(
+        remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=None
+    )
+    remote_index_manager_mock.delete_remote_index.assert_not_called()
+    remote_index_manager_mock.client.files.delete.assert_not_called()
+
+
+@pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
 def test_create_collection_zip_task_creates_zip_with_all_files(progress_recorder_mock):
     collection = CollectionFactory.create(name="test-collection")
