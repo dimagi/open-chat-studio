@@ -120,10 +120,10 @@ function engagementDashboard() {
                     ? monthStart.toLocaleDateString(undefined, {month: 'long', year: 'numeric', timeZone: 'UTC'})
                     : '';
                 const partialRange = monthStart
-                    ? `${monthStart.toLocaleDateString(undefined, {month: 'short', day: 'numeric', timeZone: 'UTC'})}\u2013${today.getDate()}`
+                    ? `${monthStart.toLocaleDateString(undefined, {month: 'short', day: 'numeric', timeZone: 'UTC'})}\u2013${today.getUTCDate()}`
                     : '';
-                const partialRangeTitle = `${monthName} so far \u2014 this month is not over, so the value covers a partial month`;
-                const partialRangeCaption = partialRange ? `${partialRange} so far` : '';
+                const partialRangeTitle = `Data through ${today.getUTCDate()} ${monthName} \u2014 the month is not over, so this covers a partial month`;
+                const partialRangeCaption = partialRange;
 
                 const mauSeries = summary.map(row => row.mau || 0);
                 const coreSeries = summary.map(row => row.core_users_rate || 0);

@@ -17,7 +17,7 @@ function parseIso(iso) {
 
 // "Sep 2025, Oct, Nov, ... Jan 2026, Feb" -- the year appears only when it changes,
 // which keeps a 7-bar axis readable without repeating it on every label.
-function monthLabels(rows, {partialSuffix = ''} = {}) {
+function monthLabels(rows, {markPartial = false} = {}) {
     let previousYear = null;
     return rows.map((row, index) => {
         const parsed = parseIso(row.month);
@@ -26,9 +26,14 @@ function monthLabels(rows, {partialSuffix = ''} = {}) {
             ? {month: 'short', timeZone: UTC}
             : {month: 'short', year: 'numeric', timeZone: UTC};
         previousYear = year;
-        const label = parsed.toLocaleDateString(undefined, options);
-        const isPartial = partialSuffix && row.in_progress && index === rows.length - 1;
-        return isPartial ? label + partialSuffix : label;
+        // The newest month is still filling. Labelling it with the day the data runs to
+        // ("Sep 24") says that concretely, where a shorter bar alone would read as a decline.
+        // UTC, because the service buckets in UTC -- local time could name the wrong day.
+        if (markPartial && row.in_progress && index === rows.length - 1) {
+            const month = parsed.toLocaleDateString(undefined, {month: 'short', timeZone: UTC});
+            return `${month} ${new Date().getUTCDate()}`;
+        }
+        return parsed.toLocaleDateString(undefined, options);
     });
 }
 
@@ -103,7 +108,7 @@ class EngagementChartManager extends ChartManager {
         ];
 
         const chartData = {
-            labels: monthLabels(data, {partialSuffix: ' (so far)'}),
+            labels: monthLabels(data, {markPartial: true}),
             datasets: series.map(({label, key, color}) => ({
                 label,
                 data: data.map(item => item[key]),
