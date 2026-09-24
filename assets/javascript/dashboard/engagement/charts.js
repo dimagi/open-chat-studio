@@ -7,8 +7,6 @@ import {ordinalRamp, vizToken} from "./viz.js";
 const MAX_BAR_THICKNESS = 24;
 const BAR_RADIUS = 4;
 const SURFACE_GAP = 2;
-const LINE_WIDTH = 2;
-const POINT_RADIUS = 4;
 // The API sends ISO dates; Date parses those as UTC midnight, so every format call
 // must also read them as UTC or a negative-offset viewer sees the previous day.
 const UTC = 'UTC';
@@ -19,16 +17,18 @@ function parseIso(iso) {
 
 // "Sep 2025, Oct, Nov, ... Jan 2026, Feb" -- the year appears only when it changes,
 // which keeps a 7-bar axis readable without repeating it on every label.
-function monthLabels(rows) {
+function monthLabels(rows, {partialSuffix = ''} = {}) {
     let previousYear = null;
-    return rows.map(row => {
+    return rows.map((row, index) => {
         const parsed = parseIso(row.month);
         const year = parsed.getUTCFullYear();
         const options = year === previousYear
             ? {month: 'short', timeZone: UTC}
             : {month: 'short', year: 'numeric', timeZone: UTC};
         previousYear = year;
-        return parsed.toLocaleDateString(undefined, options);
+        const label = parsed.toLocaleDateString(undefined, options);
+        const isPartial = partialSuffix && row.in_progress && index === rows.length - 1;
+        return isPartial ? label + partialSuffix : label;
     });
 }
 
@@ -72,24 +72,6 @@ class EngagementChartManager extends ChartManager {
         };
     }
 
-    lineScales() {
-        return {
-            x: {
-                ...this.defaultOptions.scales.x,
-                ticks: {...this.defaultOptions.scales.x.ticks, color: vizToken('--viz-ink-muted')},
-                grid: {display: false},
-                border: {color: vizToken('--viz-axis')}
-            },
-            y: {
-                ...this.defaultOptions.scales.y,
-                beginAtZero: true,
-                ticks: {...this.defaultOptions.scales.y.ticks, precision: 0, color: vizToken('--viz-ink-muted')},
-                grid: {color: vizToken('--viz-grid'), drawTicks: false},
-                border: {display: false}
-            }
-        };
-    }
-
     chartPlugins(tooltipTitle) {
         return {
             ...this.defaultOptions.plugins,
@@ -109,13 +91,9 @@ class EngagementChartManager extends ChartManager {
         if (!ctx) return;
         this.destroyChart('engagementFrequency');
 
-        const lastIndex = data.length - 1;
-        // The final month is still in progress, so its closing segment is dashed rather than
-        // implying a completed month's value.
-        const inProgressSegment = {
-            borderDash: context => (context.p1DataIndex === lastIndex ? [5, 4] : undefined)
-        };
-
+        // Part-to-whole: the four buckets partition that month's active participants, so the
+        // stack height is MAU and each segment is a cohort. The ordinal ramp reads correctly
+        // here because filled segments give it real area to work with.
         const ramp = ordinalRamp();
         const series = [
             {label: '1 week', key: '1_week', color: ramp[0]},
@@ -125,28 +103,26 @@ class EngagementChartManager extends ChartManager {
         ];
 
         const chartData = {
-            labels: monthLabels(data),
+            labels: monthLabels(data, {partialSuffix: ' (so far)'}),
             datasets: series.map(({label, key, color}) => ({
                 label,
                 data: data.map(item => item[key]),
-                borderColor: color,
                 backgroundColor: color,
-                pointBackgroundColor: color,
-                pointRadius: POINT_RADIUS,
-                pointHoverRadius: POINT_RADIUS + 2,
-                pointBorderColor: vizToken('--viz-surface'),
-                pointBorderWidth: SURFACE_GAP,
-                borderWidth: LINE_WIDTH,
-                fill: false,
-                tension: 0,
-                segment: inProgressSegment
+                maxBarThickness: MAX_BAR_THICKNESS,
+                borderColor: vizToken('--viz-surface'),
+                borderWidth: {top: SURFACE_GAP},
+                borderRadius: BAR_RADIUS
             }))
         };
 
         this.charts.engagementFrequency = new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: chartData,
-            options: {...this.defaultOptions, plugins: this.chartPlugins(monthTooltipTitle(data)), scales: this.lineScales()}
+            options: {
+                ...this.defaultOptions,
+                plugins: this.chartPlugins(monthTooltipTitle(data)),
+                scales: this.stackedScales()
+            }
         });
     }
 
