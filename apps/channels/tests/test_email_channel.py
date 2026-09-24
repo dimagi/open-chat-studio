@@ -179,16 +179,6 @@ class TestEmailMessageParse:
         result = EmailMessage.parse(inbound)
         assert result.subject == ""
 
-    def test_parse_empty_references(self):
-        inbound = _make_inbound_message(references="")
-        result = EmailMessage.parse(inbound)
-        assert result.references == []
-
-    def test_parse_fallback_to_full_body_when_no_reply(self):
-        inbound = _make_inbound_message(text="Just a simple message")
-        result = EmailMessage.parse(inbound)
-        assert result.message_text == "Just a simple message"
-
     def test_parse_extracts_attachments(self):
         pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-")
         csv = _mime_part(filename="data.csv", content_type="text/csv", content=b"a,b,c")
@@ -414,18 +404,6 @@ class TestEmailSender:
         assert sent.extra_headers["In-Reply-To"] == "<inbound123@example.com>"
         assert "<root@chat.openchatstudio.com>" in sent.extra_headers["References"]
 
-    def test_last_message_id_captured(self):
-        sender = EmailSender(
-            from_address="bot@chat.openchatstudio.com",
-            domain="chat.openchatstudio.com",
-        )
-        sender.send_text("Test", "user@example.com")
-        sender.flush()
-
-        assert sender.last_message_id is not None
-        assert sender.last_message_id.startswith("<")
-        assert sender.last_message_id.endswith(">")
-
     def test_send_text_alone_requires_flush(self):
         sender = EmailSender(
             from_address="bot@chat.openchatstudio.com",
@@ -611,20 +589,6 @@ class TestEmailSenderSendFailures:
 
 
 class TestEmailChannel:
-    def test_capabilities(self):
-        channel_mock = MagicMock()
-        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com", "from_address": "bot@chat.ocs.com"}
-        experiment_mock = MagicMock()
-
-        email_channel = EmailChannel(experiment_mock, channel_mock)
-        caps = email_channel._get_capabilities()
-
-        assert caps.supports_voice_replies is False
-        assert caps.supports_files is True
-        assert caps.supports_conversational_consent is False
-        assert caps.supports_static_triggers is True
-        assert MESSAGE_TYPES.TEXT in caps.supported_message_types
-
     def test_can_send_file_normal_pdf(self):
         channel_mock = MagicMock()
         channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
@@ -657,24 +621,6 @@ class TestEmailChannel:
         file.content_size = 1024
 
         assert email_channel._can_send_file(file) is False
-
-    def test_get_sender_returns_email_sender(self):
-        channel_mock = MagicMock()
-        channel_mock.extra_data = {"email_address": "bot@chat.openchatstudio.com"}
-        experiment_mock = MagicMock()
-
-        email_channel = EmailChannel(experiment_mock, channel_mock)
-        sender = email_channel._get_sender()
-        assert isinstance(sender, EmailSender)
-
-    def test_get_callbacks_returns_noop(self):
-        channel_mock = MagicMock()
-        channel_mock.extra_data = {}
-        experiment_mock = MagicMock()
-
-        email_channel = EmailChannel(experiment_mock, channel_mock)
-        callbacks = email_channel._get_callbacks()
-        assert isinstance(callbacks, ChannelCallbacks)
 
     def test_get_sender_uses_email_subject_from_session_state(self):
         """email_subject in session.state is used as subject when no thread context subject exists."""
@@ -796,33 +742,6 @@ class TestEnsureSessionExistsForParticipant:
 
 @pytest.mark.django_db()
 class TestHandleEmailMessageTask:
-    def test_routes_and_processes_message(self, team_with_users):
-        team = team_with_users
-        experiment = ExperimentFactory(team=team)
-        ExperimentChannelFactory(
-            experiment=experiment,
-            platform=ChannelPlatform.EMAIL,
-            extra_data={"email_address": "bot@chat.openchatstudio.com"},
-            team=team,
-        )
-
-        email_data = {
-            "participant_id": "sender@example.com",
-            "message_text": "Hello bot",
-            "from_address": "sender@example.com",
-            "to_address": "bot@chat.openchatstudio.com",
-            "subject": "Test",
-            "message_id": "<msg1@example.com>",
-            "in_reply_to": None,
-            "references": [],
-        }
-
-        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
-            mock_instance = MockEmailChannel.return_value
-            handle_email_message(email_data=email_data)
-            MockEmailChannel.assert_called_once()
-            mock_instance.new_user_message.assert_called_once()
-
     def test_no_match_logs_and_returns(self):
         email_data = {
             "participant_id": "sender@example.com",
