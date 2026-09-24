@@ -186,9 +186,7 @@ def test_migrate_vector_stores_skips_cleanup_when_no_previous_provider(
         metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
     )
     # Should not raise even though from_llm_provider_id is None
-    migrate_vector_stores(
-        remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=None
-    )
+    migrate_vector_stores(remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=None)
     remote_index_manager_mock.delete_remote_index.assert_not_called()
     remote_index_manager_mock.client.files.delete.assert_not_called()
 
