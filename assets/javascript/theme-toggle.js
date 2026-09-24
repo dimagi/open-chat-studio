@@ -23,10 +23,32 @@ function syncDarkMode() {
   setTheme(theme);
 }
 
+function syncWidgetThemes(resolvedTheme) {
+  document.querySelectorAll('open-chat-studio-widget').forEach((widget) => {
+    widget.setAttribute('theme', resolvedTheme);
+  });
+}
+function observeWidgetThemes() {
+  const observer = new MutationObserver((mutations) => {
+    const hasNewWidget = mutations.some((mutation) =>
+      [...mutation.addedNodes].some(
+        (node) =>
+          node.nodeType === Node.ELEMENT_NODE &&
+          (node.matches('open-chat-studio-widget') || node.querySelector('open-chat-studio-widget')),
+      ),
+    );
+    if (hasNewWidget) {
+      syncWidgetThemes(document.documentElement.dataset.theme || lightTheme);
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+}
 function setTheme(theme) {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-  if (theme === darkTheme || (theme === systemTheme && prefersDark)) {
+  const resolvedTheme = theme === darkTheme || (theme === systemTheme && prefersDark) ? darkTheme : lightTheme;
+  syncWidgetThemes(resolvedTheme);
+  if (resolvedTheme === darkTheme) {
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', darkTheme);
     // set a cookie and use it during server rendering to avoid a flicker across page loads
@@ -54,3 +76,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 syncDarkMode();
+observeWidgetThemes();

@@ -294,6 +294,86 @@
   }
 }
 
+:host([theme='dark']) {
+  --button-background-color: #374151;
+  --button-background-color-hover: #4b5563;
+  --button-text-color: #f3f4f6;
+  --button-text-color-hover: #bfdbfe;
+  --button-border-color: #6b7280;
+  --button-border-color-hover: #9ca3af;
+  --chat-window-bg-color: #1f2937;
+  --chat-window-border-color: #4b5563;
+  --chat-window-shadow-color: rgba(0, 0, 0, 0.4);
+  --header-bg-hover-color: #374151;
+  --header-border-color: #4b5563;
+  --header-button-text-color: #d1d5db;
+  --header-button-bg-hover-color: #374151;
+  --header-text-color: #f3f4f6;
+  --starter-question-bg-hover-color: #1e3a5f;
+  --starter-question-text-color: #93c5fd;
+  --starter-question-border-color: #60a5fa;
+  --starter-question-border-hover-color: #93c5fd;
+  --message-user-bg-color: #1e3a5f;
+  --message-user-text-color: #f3f4f6;
+  --message-user-link-color: #93c5fd;
+  --message-assistant-bg-color: #374151;
+  --message-assistant-text-color: #f3f4f6;
+  --message-assistant-link-color: #93c5fd;
+  --message-system-bg-color: #4a2945;
+  --message-system-text-color: #f3f4f6;
+  --message-system-link-color: #f9a8d4;
+  --message-timestamp-color: rgba(229, 231, 235, 0.7);
+  --message-timestamp-assistant-color: rgba(209, 213, 219, 0.7);
+  --input-border-color: #6b7280;
+  --input-text-color: #f3f4f6;
+  --input-placeholder-color: #9ca3af;
+  --input-outline-focus-color: #60a5fa;
+  --send-button-bg-color: #2563eb;
+  --send-button-bg-hover-color: #3b82f6;
+  --send-button-text-color: #ffffff;
+  --send-button-bg-disabled-color: #4b5563;
+  --send-button-text-disabled-color: #d1d5db;
+  --loading-text-color: #d1d5db;
+  --loading-spinner-track-color: #4b5563;
+  --loading-spinner-fill-color: #60a5fa;
+  --typing-progress-bg-color: #2563eb;
+  --scrollbar-track-color: #374151;
+  --scrollbar-thumb-color: #6b7280;
+  --scrollbar-thumb-hover-color: #9ca3af;
+  --error-text-color: #f87171;
+  --success-text-color: #34d399;
+  --banner-default-bg-color: #374151;
+  --banner-default-text-color: #f3f4f6;
+  --banner-default-border-color: #6b7280;
+  --banner-info-bg-color: #1e3a5f;
+  --banner-info-text-color: #bfdbfe;
+  --banner-info-border-color: #3b82f6;
+  --banner-warning-bg-color: #713f12;
+  --banner-warning-text-color: #fef08a;
+  --banner-warning-border-color: #a16207;
+  --banner-error-bg-color: #7f1d1d;
+  --banner-error-text-color: #fecaca;
+  --banner-error-border-color: #b91c1c;
+  --code-bg-assistant-color: #1f2937;
+  --code-text-assistant-color: #f3f4f6;
+  --code-border-assistant-color: #6b7280;
+  --confirmation-overlay-bg-color: rgba(0, 0, 0, 0.7);
+  --confirmation-title-color: #f3f4f6;
+  --confirmation-button-cancel-bg-color: #374151;
+  --confirmation-button-cancel-bg-hover-color: #4b5563;
+  --confirmation-button-cancel-text-color: #f3f4f6;
+  --file-attachment-button-bg-hover-color: #374151;
+  --file-attachment-button-text-color: #d1d5db;
+  --file-attachment-button-text-disabled-color: #9ca3af;
+  --selected-files-bg-color: #1f2937;
+  --selected-files-border-color: #4b5563;
+  --selected-file-bg-color: #374151;
+  --selected-file-name-color: #f3f4f6;
+  --selected-file-size-color: #9ca3af;
+  --selected-file-remove-icon-color: #f87171;
+  --selected-file-remove-icon-hover-color: #fca5a5;
+  color-scheme: dark;
+}
 @layer components {
   #ocs-chat-window {
     z-index: var(--chat-z-index);

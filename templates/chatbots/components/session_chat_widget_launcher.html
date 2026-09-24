@@ -48,6 +48,7 @@
       widget.setAttribute('visible', 'true');
       widget.setAttribute('position', 'right');
       widget.setAttribute('persistent-session', 'false');
+      widget.setAttribute('theme', document.documentElement.dataset.theme || 'light');
       if (button.dataset.allowAttachments === 'true') {
         widget.setAttribute('allow-attachments', 'true');
       }

@@ -6,7 +6,7 @@
 \<script type="module" src="{% widget_script_url %}"\>\<\/script\>
 
 <!-- place this where you want the widget button to appear -->
-{% if oauth %}<open-chat-studio-widget id="ocs-chat-{{ experiment.public_id }}" visible="false"  chatbot-id="{{ experiment.public_id }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>
+{% if oauth %}<open-chat-studio-widget theme="{% if dark_mode %}dark{% else %}light{% endif %}" id="ocs-chat-{{ experiment.public_id }}" visible="false"  chatbot-id="{{ experiment.public_id }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>
 
 <!-- this chatbot requires an OAuth token: mint a short-lived one in your backend (never put a client secret in the page) -->
 \<script\>
@@ -14,5 +14,5 @@
     const response = await fetch('/your-backend/mint-ocs-token', {cache: forceRefresh ? 'reload' : 'default'});
     return (await response.json()).access_token;
   };
-\<\/script\>{% else %}<open-chat-studio-widget visible="false"  chatbot-id="{{ experiment.public_id }}" embed-key="{{ embed_key }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>{% endif %}
+\<\/script\>{% else %}<open-chat-studio-widget theme="{% if dark_mode %}dark{% else %}light{% endif %}" visible="false"  chatbot-id="{{ experiment.public_id }}" embed-key="{{ embed_key }}" button-text="Let's Chat" position="right" expanded="false"></open-chat-studio-widget>{% endif %}
 {% comment %}djlint:on{% endcomment %}

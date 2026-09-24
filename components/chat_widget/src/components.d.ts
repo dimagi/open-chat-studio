@@ -125,6 +125,11 @@ export namespace Components {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * The resolved theme supplied by the embedding application. External embeds default to the existing light appearance.
+          * @default 'light'
+         */
+        "theme": 'light' | 'dark';
         "translationsUrl"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
@@ -277,6 +282,11 @@ declare namespace LocalJSX {
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
+        /**
+          * The resolved theme supplied by the embedding application. External embeds default to the existing light appearance.
+          * @default 'light'
+         */
+        "theme"?: 'light' | 'dark';
         "translationsUrl"?: string;
         /**
           * The text to display while the assistant is typing/preparing a response.
@@ -305,6 +315,7 @@ declare namespace LocalJSX {
     interface OpenChatStudioWidgetAttributes {
         "chatbotId": string;
         "apiBaseUrl": string;
+        "theme": 'light' | 'dark';
         "buttonText": string;
         "iconUrl": string;
         "embedKey": string;
