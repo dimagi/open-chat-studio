@@ -42,6 +42,10 @@ class TokenEndpointAuthMethod:
 class OAuthTokenError(Exception):
     """Raised when an OAuth access token cannot be obtained."""
 
+    def __init__(self, message, *, error_code=None):
+        super().__init__(message)
+        self.error_code = error_code
+
 
 class OAuthReconnectRequired(OAuthTokenError):
     """The provider must be connected again by an administrator."""
@@ -62,7 +66,22 @@ class OAuthTokenManager:
         token = self.provider._auth_data
         if _token_is_valid(token, self.provider.config):
             return token["access_token"]
+        if (
+            self.provider.type == "oauth_authorization_code"
+            and token.get("config_fingerprint")
+            and token["config_fingerprint"] != _config_fingerprint(self.provider.config)
+        ):
+            self._mark_reconnect_required()
+            raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
         return self._refetch_with_lock()
+
+    def _mark_reconnect_required(self) -> None:
+        model = type(self.provider)
+        with transaction.atomic():
+            provider = model.objects.select_for_update().get(pk=self.provider.pk)
+            provider._auth_data = {**provider._auth_data, "reconnect_required": True}
+            provider.save(update_fields=["_auth_data"])
+            self.provider._auth_data = provider._auth_data
 
     def _refetch_with_lock(self) -> str:
         """Fetch a fresh token under a row lock.
@@ -78,11 +97,22 @@ class OAuthTokenManager:
             if _token_is_valid(provider._auth_data, provider.config):
                 token = provider._auth_data
             else:
-                if provider.type == "oauth_authorization_code":
-                    token = _refresh_authorization_code_token(provider.config, provider._auth_data)
-                else:
-                    token = _fetch_client_credentials_token(provider.config)
+                try:
+                    if provider.type == "oauth_authorization_code":
+                        if provider._auth_data.get("config_fingerprint") and provider._auth_data[
+                            "config_fingerprint"
+                        ] != _config_fingerprint(provider.config):
+                            raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
+                        token = _refresh_authorization_code_token(provider.config, provider._auth_data)
+                    else:
+                        token = _fetch_client_credentials_token(provider.config)
+                except OAuthReconnectRequired:
+                    if provider.type == "oauth_authorization_code":
+                        provider._auth_data = {**provider._auth_data, "reconnect_required": True}
+                        provider.save(update_fields=["_auth_data"])
+                    raise
                 token["config_fingerprint"] = _config_fingerprint(provider.config)
+                token.pop("reconnect_required", None)
                 provider._auth_data = token
                 provider.save(update_fields=["_auth_data"])
             # Keep the in-memory instance in sync so subsequent reads see the token.
@@ -106,8 +136,10 @@ def _config_fingerprint(config: dict) -> str:
 
 def _is_expired(token: dict) -> bool:
     expires_at = token.get("expires_at")
-    if not expires_at:
+    if "expires_at" not in token:
         return True
+    if expires_at is None:
+        return False
     return time.time() >= (expires_at - EXPIRY_SKEW_SECONDS)
 
 
@@ -124,7 +156,7 @@ def _fetch_client_credentials_token(config: dict) -> dict:
     client = BackendApplicationClient(client_id=config["client_id"])
     body, request_kwargs = _prepare_token_request(client, config, scope)
     response_text = _post_token_request(token_url, body, request_kwargs)
-    return _parse_token_response(client, response_text, token_url)
+    return _parse_token_response(client, response_text, token_url, default_ttl=DEFAULT_TOKEN_TTL_SECONDS)
 
 
 def build_pkce_pair() -> tuple[str, str]:
@@ -156,7 +188,9 @@ def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
             client, _post_token_request(config["token_url"], body, kwargs), config["token_url"]
         )
     except OAuthTokenError as exc:
-        raise OAuthReconnectRequired(str(exc)) from exc
+        if exc.error_code == "invalid_grant":
+            raise OAuthReconnectRequired(str(exc)) from exc
+        raise
     token.setdefault("refresh_token", refresh_token)
     return token
 
@@ -199,20 +233,30 @@ def _post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
     return response.text
 
 
-def _parse_token_response(client: BackendApplicationClient, response_text: str, token_url: str) -> dict:
+def _parse_token_response(
+    client: BackendApplicationClient, response_text: str, token_url: str, default_ttl: int | None = None
+) -> dict:
     """Parse the token response and normalise it to the fields we persist."""
     try:
         token = client.parse_request_body_response(response_text)
     except OAuth2Error as exc:
-        raise OAuthTokenError(f"Invalid OAuth token response from {token_url}: {exc}") from exc
+        raise OAuthTokenError(
+            f"Invalid OAuth token response from {token_url}: {exc}", error_code=getattr(exc, "error", None)
+        ) from exc
 
     if not token.get("access_token"):
         raise OAuthTokenError(f"OAuth token response from {token_url} did not contain an access token")
 
     # Persist only the fields we need; drop oauthlib's transient extras.
-    return {
+    result = {
         "access_token": token["access_token"],
         "token_type": token.get("token_type", "Bearer"),
-        "expires_at": token.get("expires_at") or (time.time() + DEFAULT_TOKEN_TTL_SECONDS),
         **({"refresh_token": token["refresh_token"]} if token.get("refresh_token") else {}),
     }
+    if token.get("expires_at") is not None:
+        result["expires_at"] = token["expires_at"]
+    elif default_ttl is not None:
+        result["expires_at"] = time.time() + default_ttl
+    else:
+        result["expires_at"] = None
+    return result

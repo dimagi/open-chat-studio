@@ -21,7 +21,7 @@
   if (!root) return;
   const values = {
     github: { authorize_url: "https://github.com/login/oauth/authorize", token_url: "https://github.com/login/oauth/access_token", scope: "read:user user:email", token_endpoint_auth_method: "client_secret_post" },
-    google: { authorize_url: "https://accounts.google.com/o/oauth2/v2/auth", token_url: "https://oauth2.googleapis.com/token", scope: "openid email profile", token_endpoint_auth_method: "client_secret_basic" },
+    google: { authorize_url: "https://accounts.google.com/o/oauth2/v2/auth", token_url: "https://oauth2.googleapis.com/token", scope: "openid email profile", token_endpoint_auth_method: "client_secret_basic", authorization_params: JSON.stringify({ access_type: "offline", prompt: "consent" }) },
     microsoft: { authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token", scope: "openid profile email offline_access", token_endpoint_auth_method: "client_secret_basic" }
   };
   const preset = root.querySelector("#id_provider_preset");
