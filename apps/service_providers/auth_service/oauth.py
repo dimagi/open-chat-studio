@@ -66,11 +66,7 @@ class OAuthTokenManager:
         token = self.provider._auth_data
         if _token_is_valid(token, self.provider.config):
             return token["access_token"]
-        if (
-            self.provider.type == "oauth_authorization_code"
-            and token.get("config_fingerprint")
-            and token["config_fingerprint"] != _config_fingerprint(self.provider.config)
-        ):
+        if _authorization_code_config_changed(self.provider):
             self._mark_reconnect_required()
             raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
         return self._refetch_with_lock()
@@ -79,18 +75,31 @@ class OAuthTokenManager:
         model = type(self.provider)
         with transaction.atomic():
             provider = model.objects.select_for_update().get(pk=self.provider.pk)
-            provider._auth_data = {**provider._auth_data, "reconnect_required": True}
-            provider.save(update_fields=["_auth_data"])
+            self._persist_reconnect_required(provider)
             self.provider._auth_data = provider._auth_data
 
-    def _refetch_with_lock(self) -> str:
-        """Fetch a fresh token under a row lock.
+    @staticmethod
+    def _persist_reconnect_required(provider) -> None:
+        provider._auth_data = {**provider._auth_data, "reconnect_required": True}
+        provider.save(update_fields=["_auth_data"])
 
-        A team-level token is shared across many concurrent Celery pipeline runs.
-        On expiry they race to refetch; the lock + re-check ensures exactly one
-        token request is made. A short, dedicated transaction is used because the
-        caller may be inside a long transaction or on a read replica.
-        """
+    @staticmethod
+    def _persist_token(provider, token) -> None:
+        token["config_fingerprint"] = _config_fingerprint(provider.config)
+        token.pop("reconnect_required", None)
+        provider._auth_data = token
+        provider.save(update_fields=["_auth_data"])
+
+    @staticmethod
+    def _get_fresh_token(provider) -> dict:
+        if _authorization_code_config_changed(provider):
+            raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
+        if provider.type == "oauth_authorization_code":
+            return _refresh_authorization_code_token(provider.config, provider._auth_data)
+        return _fetch_client_credentials_token(provider.config)
+
+    def _refetch_with_lock(self) -> str:
+        """Fetch a fresh token under a row lock and re-check after waiting."""
         model = type(self.provider)
         with transaction.atomic():
             provider = model.objects.select_for_update().get(pk=self.provider.pk)
@@ -98,26 +107,21 @@ class OAuthTokenManager:
                 token = provider._auth_data
             else:
                 try:
-                    if provider.type == "oauth_authorization_code":
-                        if provider._auth_data.get("config_fingerprint") and provider._auth_data[
-                            "config_fingerprint"
-                        ] != _config_fingerprint(provider.config):
-                            raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
-                        token = _refresh_authorization_code_token(provider.config, provider._auth_data)
-                    else:
-                        token = _fetch_client_credentials_token(provider.config)
+                    token = self._get_fresh_token(provider)
                 except OAuthReconnectRequired:
                     if provider.type == "oauth_authorization_code":
-                        provider._auth_data = {**provider._auth_data, "reconnect_required": True}
-                        provider.save(update_fields=["_auth_data"])
+                        self._persist_reconnect_required(provider)
                     raise
-                token["config_fingerprint"] = _config_fingerprint(provider.config)
-                token.pop("reconnect_required", None)
-                provider._auth_data = token
-                provider.save(update_fields=["_auth_data"])
-            # Keep the in-memory instance in sync so subsequent reads see the token.
+                self._persist_token(provider, token)
             self.provider._auth_data = token
         return token["access_token"]
+
+
+def _authorization_code_config_changed(provider) -> bool:
+    if provider.type != "oauth_authorization_code":
+        return False
+    fingerprint = provider._auth_data.get("config_fingerprint")
+    return bool(fingerprint) and fingerprint != _config_fingerprint(provider.config)
 
 
 def _token_is_valid(token: dict, config: dict) -> bool:
