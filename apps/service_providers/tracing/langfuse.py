@@ -506,7 +506,6 @@ class ClientManager:
                 logger.debug("Shutting down all langfuse clients (%s)", len(self._entries))
             detached = self._remove_clients(list(self._entries))
         _shutdown_detached(detached)
-        LangfuseResourceManager.reset()
 
 
 client_manager = ClientManager()

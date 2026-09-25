@@ -100,6 +100,7 @@ def test_pruning_a_client_stops_every_thread_it_started(manager, config):
     assert leaked == []
 
 
+@pytest.mark.usefixtures("manager")
 @pytest.mark.parametrize(
     ("first_rate", "second_rate", "expected_traced"),
     [
@@ -108,7 +109,7 @@ def test_pruning_a_client_stops_every_thread_it_started(manager, config):
     ],
 )
 def test_each_chatbot_is_sampled_at_its_own_rate(
-    manager, config, exporter, mock_session, first_rate, second_rate, expected_traced
+    config, exporter, mock_session, first_rate, second_rate, expected_traced
 ):
     """Two chatbots share a trace provider (one public_key) but set different sample rates.
     The chatbot whose client was built first used to fix the rate for both.
