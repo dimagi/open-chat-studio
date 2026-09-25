@@ -28,6 +28,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from apps.chatbots.views import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
+from apps.service_providers.views import oauth_callback
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
@@ -86,6 +87,7 @@ urlpatterns = [
         {"sitemaps": sitemaps},
         name="django.contrib.sitemaps.views.sitemap",
     ),
+    path("service_providers/auth/oauth/callback/", oauth_callback, name="service_providers_oauth_callback"),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
     path("c/<slug:token>/", public_link_page, name="public_link"),
     path("notifications/", include("apps.ocs_notifications.urls")),

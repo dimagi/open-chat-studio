@@ -508,6 +508,43 @@ class OAuthClientCredentialsConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
     )
 
 
+class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    custom_template = "service_providers/oauth_authorization_code_config_form.html"
+    obfuscate_fields = ["client_secret"]
+
+    provider_preset = forms.ChoiceField(
+        label=_("Provider preset"),
+        choices=[
+            ("custom", _("Custom")),
+            ("github", _("GitHub")),
+            ("google", _("Google")),
+            ("microsoft", _("Microsoft")),
+        ],
+        initial="custom",
+        required=False,
+        help_text=_("Presets only fill the fields below; all values remain editable."),
+    )
+    additional_searchable_fields = ["client_id"]
+
+    client_id = forms.CharField(label=_("Client ID"))
+    client_secret = forms.CharField(label=_("Client Secret"))
+    authorize_url = forms.URLField(label=_("Authorization URL"), validators=[URLValidator(schemes=["https"])])
+    token_url = forms.URLField(label=_("Token URL"), validators=[URLValidator(schemes=["https"])])
+    scope = forms.CharField(label=_("Scope"), required=False)
+    token_endpoint_auth_method = forms.ChoiceField(
+        label=_("Token Endpoint Authentication"),
+        choices=[
+            ("client_secret_basic", _("HTTP Basic")),
+            ("client_secret_post", _("Request Body (client_secret_post)")),
+        ],
+        initial="client_secret_basic",
+    )
+
+    def save(self, instance):
+        self.cleaned_data.pop("provider_preset", None)
+        return super().save(instance)
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 

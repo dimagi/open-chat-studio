@@ -75,6 +75,17 @@
           {% endif %}
         {% endif %}
       {% endif %}
+      {% if oauth_redirect_uri %}
+        <div class="mt-6 p-4 bg-base-200 rounded-box" data-testid="oauth-authorization-settings">
+          <div class="font-semibold">OAuth connection</div>
+          <div class="text-sm mt-2">Callback URI (register this with your provider):</div>
+          <code class="text-xs break-all">{{ oauth_redirect_uri }}</code>
+          <div class="flex items-center gap-3 mt-3">
+            <span>Status: {{ oauth_status }}</span>
+            <a class="btn btn-outline btn-sm" href="{{ oauth_connect_url }}">{% if oauth_status == "connected" %}Reconnect{% else %}Connect{% endif %}</a>
+          </div>
+        </div>
+      {% endif %}
       {% if can_verify_credentials %}
         {% comment %}
         The label says up front whether saving will also verify credentials. button_text

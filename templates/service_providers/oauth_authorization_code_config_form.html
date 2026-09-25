@@ -1,0 +1,34 @@
+{% load form_tags i18n %}
+<div data-oauth-preset-form>
+  <p class="text-sm text-base-content/70 mb-4">{% translate "OCS cannot create the Client ID or Client Secret. Obtain them from your OAuth provider." %}</p>
+  {% render_field form.provider_preset %}
+  <div class="text-sm mt-2 mb-4" data-oauth-preset-links>
+    <span data-preset-link="custom">{% translate "Configure your OAuth provider manually." %}</span>
+    <span data-preset-link="github" hidden><a href="https://github.com/settings/developers" target="_blank" rel="noopener noreferrer">{% translate "Create a GitHub OAuth App" %}</a></span>
+    <span data-preset-link="google" hidden><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">{% translate "Create Google OAuth credentials" %}</a></span>
+    <span data-preset-link="microsoft" hidden><a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer">{% translate "Create a Microsoft app registration" %}</a></span>
+  </div>
+  {% render_field form.client_id %}
+  {% render_field form.client_secret %}
+  {% render_field form.authorize_url %}
+  {% render_field form.token_url %}
+  {% render_field form.scope %}
+  {% render_field form.token_endpoint_auth_method %}
+</div>
+<script>
+(() => {
+  const root = document.querySelector("[data-oauth-preset-form]");
+  if (!root) return;
+  const values = {
+    github: { authorize_url: "https://github.com/login/oauth/authorize", token_url: "https://github.com/login/oauth/access_token", scope: "read:user user:email", token_endpoint_auth_method: "client_secret_post" },
+    google: { authorize_url: "https://accounts.google.com/o/oauth2/v2/auth", token_url: "https://oauth2.googleapis.com/token", scope: "openid email profile", token_endpoint_auth_method: "client_secret_basic" },
+    microsoft: { authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token", scope: "openid profile email offline_access", token_endpoint_auth_method: "client_secret_basic" }
+  };
+  const preset = root.querySelector("#id_provider_preset");
+  preset.addEventListener("change", () => {
+    const selected = values[preset.value];
+    if (selected) Object.entries(selected).forEach(([name, value]) => { root.querySelector(`#id_${name}`).value = value; });
+    root.querySelectorAll("[data-preset-link]").forEach(link => { link.hidden = link.dataset.presetLink !== preset.value; });
+  });
+})();
+</script>
