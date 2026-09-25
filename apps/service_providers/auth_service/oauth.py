@@ -1,12 +1,14 @@
+import base64
 import hashlib
 import json
+import secrets
 import time
 from typing import TYPE_CHECKING
 
 import httpx
 from django.conf import settings
 from django.db import transaction
-from oauthlib.oauth2 import BackendApplicationClient, OAuth2Error
+from oauthlib.oauth2 import BackendApplicationClient, OAuth2Error, WebApplicationClient
 
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -41,6 +43,10 @@ class OAuthTokenError(Exception):
     """Raised when an OAuth access token cannot be obtained."""
 
 
+class OAuthReconnectRequired(OAuthTokenError):
+    """The provider must be connected again by an administrator."""
+
+
 class OAuthTokenManager:
     """Resolves a valid OAuth access token for an ``AuthProvider``.
 
@@ -72,7 +78,10 @@ class OAuthTokenManager:
             if _token_is_valid(provider._auth_data, provider.config):
                 token = provider._auth_data
             else:
-                token = _fetch_client_credentials_token(provider.config)
+                if provider.type == "oauth_authorization_code":
+                    token = _refresh_authorization_code_token(provider.config, provider._auth_data)
+                else:
+                    token = _fetch_client_credentials_token(provider.config)
                 token["config_fingerprint"] = _config_fingerprint(provider.config)
                 provider._auth_data = token
                 provider.save(update_fields=["_auth_data"])
@@ -116,6 +125,40 @@ def _fetch_client_credentials_token(config: dict) -> dict:
     body, request_kwargs = _prepare_token_request(client, config, scope)
     response_text = _post_token_request(token_url, body, request_kwargs)
     return _parse_token_response(client, response_text, token_url)
+
+
+def build_pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
+    refresh_token = old_token.get("refresh_token")
+    if not refresh_token:
+        raise OAuthReconnectRequired("OAuth authorization must be connected again")
+    _validate_token_url(config["token_url"])
+    client = WebApplicationClient(client_id=config["client_id"])
+    method = config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
+    body = client.prepare_refresh_body(
+        refresh_token=refresh_token,
+        scope=config.get("scope") or None,
+        include_client_id=method == TokenEndpointAuthMethod.CLIENT_SECRET_POST,
+        client_secret=config["client_secret"] if method == TokenEndpointAuthMethod.CLIENT_SECRET_POST else None,
+    )
+    kwargs = (
+        {}
+        if method == TokenEndpointAuthMethod.CLIENT_SECRET_POST
+        else {"auth": httpx.BasicAuth(config["client_id"], config["client_secret"])}
+    )
+    try:
+        token = _parse_token_response(
+            client, _post_token_request(config["token_url"], body, kwargs), config["token_url"]
+        )
+    except OAuthTokenError as exc:
+        raise OAuthReconnectRequired(str(exc)) from exc
+    token.setdefault("refresh_token", refresh_token)
+    return token
 
 
 def _validate_token_url(token_url: str) -> None:
@@ -171,4 +214,5 @@ def _parse_token_response(client: BackendApplicationClient, response_text: str, 
         "access_token": token["access_token"],
         "token_type": token.get("token_type", "Bearer"),
         "expires_at": token.get("expires_at") or (time.time() + DEFAULT_TOKEN_TTL_SECONDS),
+        **({"refresh_token": token["refresh_token"]} if token.get("refresh_token") else {}),
     }
