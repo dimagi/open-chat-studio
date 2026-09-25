@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 from langfuse._client.resource_manager import LangfuseResourceManager
+from opentelemetry.sdk.trace import TracerProvider
 
 from apps.service_providers.tracing.langfuse import ClientManager
 
@@ -89,7 +90,9 @@ def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_clie
     client = client_manager.get(config)
 
     # Assert
-    langfuse_mock.assert_called_with(**config)
+    kwargs = langfuse_mock.call_args.kwargs
+    assert isinstance(kwargs.pop("tracer_provider"), TracerProvider)
+    assert kwargs == config
     assert len(mock_client_registry.registry) == 1
     assert client == mock_client_registry.registry[config["public_key"]]
     assert len(client_manager._entries) == 1
@@ -122,33 +125,33 @@ def test_get_creates_different_clients_for_different_configs(client_manager, con
     assert len(client_manager._entries) == 2
 
 
-def test_get_rebuilds_the_client_when_the_config_changes_for_the_same_public_key(client_manager, config, langfuse_mock):
-    """The scenario the cache-key change exists for: a config change (e.g. a new sample_rate)
-    for a public_key already cached must build a fresh client, not silently keep serving the
-    settings the client was first built with.
+def test_get_rebuilds_the_client_when_the_secret_changes_for_the_same_public_key(client_manager, config, langfuse_mock):
+    """A rotated secret for a public_key already cached must build a fresh client, not
+    silently keep serving the credentials the client was first built with.
     """
-    client_manager.get({**config, "sample_rate": 0.5})
+    client_manager.get(config)
     langfuse_mock.reset_mock()
 
-    client_manager.get({**config, "sample_rate": 0.9})
+    client_manager.get({**config, "secret_key": "rotated_secret"})
 
-    langfuse_mock.assert_called_with(**{**config, "sample_rate": 0.9})
+    assert langfuse_mock.call_args.kwargs["secret_key"] == "rotated_secret"
     # Only the current config for this public_key is tracked -- the stale entry was evicted
     # immediately, not left for the next stale-prune pass.
     assert len(client_manager._entries) == 1
 
 
-def test_get_reuses_the_client_when_the_config_is_unchanged_including_sample_rate(
-    client_manager, config, langfuse_mock
-):
-    sampled_config = {**config, "sample_rate": 0.5}
-    first_client = client_manager.get(sampled_config)
+def test_get_reuses_the_client_across_sample_rates_for_the_same_public_key(client_manager, config, langfuse_mock):
+    """Chatbots sharing a trace provider can each set their own sample rate. The tracer
+    samples each trace itself, so the rate must not force a client per rate.
+    """
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
     langfuse_mock.reset_mock()
 
-    second_client = client_manager.get(sampled_config)
+    second_client = client_manager.get({**config, "sample_rate": 0.9})
 
     langfuse_mock.assert_not_called()
     assert first_client is second_client
+    first_client.shutdown.assert_not_called()
 
 
 def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_manager, config, langfuse_mock):
@@ -156,9 +159,9 @@ def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_ma
     cache on hash(config) only forces a rebuild if the stale public_key entry it shares with
     the SDK is actually evicted, not just dropped from our own bookkeeping.
     """
-    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    first_client = client_manager.get(config)
 
-    client_manager.get({**config, "sample_rate": 0.9})
+    client_manager.get({**config, "secret_key": "rotated_secret"})
 
     first_client.shutdown.assert_called_once()
     assert LangfuseResourceManager._instances[config["public_key"]] is not first_client
@@ -169,10 +172,10 @@ def test_config_change_shuts_the_stale_client_down_without_holding_the_lock(clie
     holding `_lock` across it would stall every other team's `get()`.
     """
     lock_state = []
-    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    first_client = client_manager.get(config)
     first_client.shutdown.side_effect = lambda: lock_state.append(_lock_is_free(client_manager))
 
-    client_manager.get({**config, "sample_rate": 0.9})
+    client_manager.get({**config, "secret_key": "rotated_secret"})
 
     assert lock_state == [True]
 
@@ -205,17 +208,38 @@ def test_a_failing_shutdown_does_not_abort_the_prune_pass(client_manager, langfu
 
 def test_a_failed_client_build_still_shuts_the_detached_instance_down(client_manager, config, langfuse_mock):
     """A detached instance is out of both caches, so `get()` is the last thing that can stop
-    its threads. Reachable on any provider serving two chatbots with different sample rates,
-    which alternate config hashes under one public_key.
+    its threads.
     """
-    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    first_client = client_manager.get(config)
     langfuse_mock.side_effect = RuntimeError("can't start new thread")
 
     with pytest.raises(RuntimeError, match="can't start new thread"):
-        client_manager.get({**config, "sample_rate": 0.9})
+        client_manager.get({**config, "secret_key": "rotated_secret"})
 
     first_client.shutdown.assert_called_once()
     assert client_manager._entries == {}
+
+
+def test_a_config_change_defers_shutdown_of_a_checked_out_client_until_it_is_released(
+    client_manager, config, langfuse_mock
+):
+    with client_manager.checkout(config) as first_client:
+        client_manager.get({**config, "secret_key": "rotated_secret"})
+        first_client.shutdown.assert_not_called()
+
+    first_client.shutdown.assert_called_once()
+    assert LangfuseResourceManager._instances[config["public_key"]] is not first_client
+
+
+def test_prune_skips_a_checked_out_client(client_manager, config, langfuse_mock):
+    client_manager.max_clients = 0
+
+    with client_manager.checkout(config) as client:
+        client_manager._entries[_hash(client_manager, config)].last_used -= client_manager.stale_timeout + 1
+        client_manager._prune_stale()
+
+    client.shutdown.assert_not_called()
+    assert _hash(client_manager, config) in client_manager._entries
 
 
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
