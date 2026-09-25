@@ -27,9 +27,13 @@ def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
     shape (a dict or list) therefore reaches `aggregate_binary_field` and is
     counted in `excluded_count`, where the evaluation-run side would have dropped
     it before it was ever counted.
+
+    Each field's stats also carry `authoritative_count` and `unresolved_count`,
+    splitting `count` by whether the value came from an authoritative annotation.
     """
     aggregatable_fields = _get_aggregatable_fields(queue)
     field_values = defaultdict(list)
+    authoritative_values = defaultdict(list)
     items = queue.items.prefetch_related(
         Prefetch(
             "annotations",
@@ -45,15 +49,20 @@ def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
             for field_name, value in ann.data.items():
                 if field_name in aggregatable_fields and value is not None:
                     field_values[field_name].append(value)
+                    if ann.is_authoritative:
+                        authoritative_values[field_name].append(value)
 
-    agg_data = {
-        field_name: (
-            aggregate_binary_field(values)
-            if (queue.schema.get(field_name) or {}).get("type") == "binary"
-            else aggregate_field(values)
+    agg_data = {}
+    for field_name, values in field_values.items():
+        aggregate = (
+            aggregate_binary_field if (queue.schema.get(field_name) or {}).get("type") == "binary" else aggregate_field
         )
-        for field_name, values in field_values.items()
-    }
+        stats = aggregate(values)
+        if "count" in stats:
+            authoritative_count = aggregate(authoritative_values[field_name]).get("count", 0)
+            stats["authoritative_count"] = authoritative_count
+            stats["unresolved_count"] = stats["count"] - authoritative_count
+        agg_data[field_name] = stats
 
     obj, _ = AnnotationQueueAggregate.objects.update_or_create(
         queue=queue,

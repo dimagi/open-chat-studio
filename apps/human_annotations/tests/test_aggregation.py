@@ -219,4 +219,28 @@ def test_binary_field_aggregates_as_rate(team):
         "count": 3,
         "mean": 0.6667,
         "true_count": 2,
+        "authoritative_count": 3,
+        "unresolved_count": 0,
     }
+
+
+@pytest.mark.django_db()
+def test_aggregation_splits_count_by_authoritative(team, queue_with_int_schema):
+    user1 = team.members.first()
+    user2 = team.members.last()
+    queue = queue_with_int_schema
+    queue.num_reviews_required = 2
+    queue.save(update_fields=["num_reviews_required"])
+
+    resolved = _make_item_and_annotate(queue, team, user1, {"score": 1})
+    auth = Annotation.objects.create(item=resolved, team=team, reviewer=user2, data={"score": 5})
+    auth.is_authoritative = True
+    auth.save(update_fields=["is_authoritative"])
+    unresolved = _make_item_and_annotate(queue, team, user1, {"score": 2})
+    Annotation.objects.create(item=unresolved, team=team, reviewer=user2, data={"score": 4})
+
+    agg = compute_aggregates_for_queue(queue)
+
+    assert agg.aggregates["score"]["count"] == 3
+    assert agg.aggregates["score"]["authoritative_count"] == 1
+    assert agg.aggregates["score"]["unresolved_count"] == 2

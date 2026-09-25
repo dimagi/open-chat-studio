@@ -71,8 +71,16 @@
           <div class="border border-base-300 rounded-lg p-3">
             <div class="flex justify-between items-center mb-2">
               <span class="font-medium">{{ field_name }}</span>
-              <span class="text-xs text-base-content/60">n={{ stats.count }}</span>
+              <span class="text-xs text-base-content/60 tooltip tooltip-left"
+                    data-tip="Resolved items contribute their authoritative annotation. Other items contribute every submitted annotation.">
+                {{ stats.count }} annotation{{ stats.count|pluralize }}
+              </span>
             </div>
+            {% if stats.authoritative_count and stats.unresolved_count %}
+              <div class="text-xs text-base-content/60 -mt-1 mb-2">
+                {{ stats.authoritative_count }} authoritative · {{ stats.unresolved_count }} from unresolved items
+              </div>
+            {% endif %}
             {% if stats.type == "numeric" %}
               <div class="grid grid-cols-2 gap-1 text-sm">
                 <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
