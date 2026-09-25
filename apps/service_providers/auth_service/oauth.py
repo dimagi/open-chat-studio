@@ -42,9 +42,10 @@ class TokenEndpointAuthMethod:
 class OAuthTokenError(Exception):
     """Raised when an OAuth access token cannot be obtained."""
 
-    def __init__(self, message, *, error_code=None):
+    def __init__(self, message, *, error_code=None, error_description=None):
         super().__init__(message)
         self.error_code = error_code
+        self.error_description = error_description
 
 
 class OAuthReconnectRequired(OAuthTokenError):
@@ -180,6 +181,7 @@ def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
         refresh_token=refresh_token,
         scope=config.get("scope") or None,
         include_client_id=method == TokenEndpointAuthMethod.CLIENT_SECRET_POST,
+        client_id=config["client_id"],
         client_secret=config["client_secret"] if method == TokenEndpointAuthMethod.CLIENT_SECRET_POST else None,
     )
     kwargs = (
@@ -233,8 +235,33 @@ def _post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
+        response = getattr(exc, "response", None)
+        if response is not None and response.is_error:
+            error_code, error_description = _extract_oauth_error(response)
+            if error_code or error_description:
+                details = f"OAuth token request failed ({response.status_code})"
+                if error_code:
+                    details += f": {error_code}"
+                if error_description:
+                    details += f" - {error_description}"
+                raise OAuthTokenError(details, error_code=error_code, error_description=error_description) from exc
         raise OAuthTokenError(f"Failed to fetch OAuth token from {token_url}: {exc}") from exc
     return response.text
+
+
+def _extract_oauth_error(response: httpx.Response) -> tuple[str | None, str | None]:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None, None
+    if not isinstance(payload, dict):
+        return None, None
+    error_code = payload.get("error")
+    error_description = payload.get("error_description")
+    return (
+        error_code if isinstance(error_code, str) else None,
+        error_description if isinstance(error_description, str) else None,
+    )
 
 
 def _parse_token_response(
