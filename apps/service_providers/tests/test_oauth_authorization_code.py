@@ -13,6 +13,7 @@ from apps.service_providers.auth_service.oauth import (
     OAuthTokenError,
     OAuthTokenManager,
     _config_fingerprint,
+    _post_token_request,
     _refresh_authorization_code_token,
     build_pkce_pair,
 )
@@ -372,3 +373,33 @@ def test_connect_includes_custom_params_but_protects_protocol_params(client, tea
     assert query["client_id"] == ["client"]
     assert query["state"] != ["attacker"]
     assert query["response_type"] == ["code"]
+
+
+def test_token_endpoint_structured_error_is_retained(httpx_mock):
+    httpx_mock.add_response(
+        url="https://auth.example.test/token",
+        status_code=400,
+        json={"error": "invalid_grant", "error_description": "Token has been expired or revoked."},
+    )
+    with pytest.raises(OAuthTokenError) as exc_info:
+        _post_token_request("https://auth.example.test/token", "grant_type=refresh_token", {})
+    assert exc_info.value.error_code == "invalid_grant"
+    assert exc_info.value.error_description == "Token has been expired or revoked."
+    assert "grant_type" not in str(exc_info.value)
+    assert "refresh_token" not in str(exc_info.value)
+
+
+def test_refresh_request_contains_expected_field_names(httpx_mock):
+    httpx_mock.add_response(
+        url="https://auth.example.test/token",
+        status_code=400,
+        json={"error": "invalid_request", "error_description": "bad request"},
+    )
+    with patch("apps.service_providers.auth_service.oauth._validate_token_url"), pytest.raises(OAuthTokenError):
+        _refresh_authorization_code_token(
+            {**CONFIG, "token_endpoint_auth_method": "client_secret_post"},
+            {"refresh_token": "refresh"},
+        )
+    request = httpx_mock.get_request()
+    fields = {part.split("=", 1)[0] for part in request.content.decode().split("&")}
+    assert {"grant_type", "refresh_token", "client_id", "client_secret"} <= fields
