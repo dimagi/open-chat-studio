@@ -146,7 +146,7 @@ def test_connect_is_team_scoped_and_generates_pkce_redirect(client, team_with_us
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
-    with patch("apps.service_providers.views._validate_token_url"):
+    with patch("apps.service_providers.oauth_views._validate_token_url"):
         response = client.get(url)
     assert response.status_code == 302
     query = parse_qs(urlparse(response["Location"]).query)
@@ -188,7 +188,7 @@ def test_provider_preset_choices_default_to_custom(team_with_users):
 def _connect(client, team, provider):
     client.force_login(team.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team.slug, "pk": provider.pk})
-    with patch("apps.service_providers.views._validate_token_url"):
+    with patch("apps.service_providers.oauth_views._validate_token_url"):
         response = client.get(url)
     query = parse_qs(urlparse(response["Location"]).query)
     return query["state"][0]
@@ -200,9 +200,9 @@ def test_callback_exchanges_code_and_persists_tokens(client, team_with_users):
     original_config = provider.config.copy()
     state = _connect(client, team_with_users, provider)
     with (
-        patch("apps.service_providers.views._validate_token_url"),
+        patch("apps.service_providers.oauth_views._validate_token_url"),
         patch(
-            "apps.service_providers.views._post_token_request",
+            "apps.service_providers.oauth_views._post_token_request",
             return_value='{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600}',
         ) as exchange,
     ):
