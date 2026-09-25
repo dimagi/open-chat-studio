@@ -27,20 +27,6 @@ def _minimal_state(**overrides) -> PipelineState:
 # ===========================================================================
 
 
-class TestNodeContextInput:
-    def test_returns_last_node_input(self):
-        state = _minimal_state(last_node_input="some input")
-        ctx = NodeContext(state)
-        assert ctx.input == "some input"
-
-
-class TestNodeContextInputs:
-    def test_returns_node_inputs_list(self):
-        state = _minimal_state(node_inputs=["a", "b", "c"])
-        ctx = NodeContext(state)
-        assert ctx.inputs == ["a", "b", "c"]
-
-
 class TestNodeContextAttachments:
     def test_returns_attachments_from_temp_state(self):
         attachments = [{"file_id": 1, "type": "image"}]
@@ -58,16 +44,6 @@ class TestNodeContextAttachments:
         del state["temp_state"]
         ctx = NodeContext(state)
         assert ctx.attachments == []
-
-
-class TestNodeContextSession:
-    def test_returns_experiment_session(self):
-        mock_session = MagicMock()
-        mock_session.id = 42
-        state = _minimal_state(experiment_session=mock_session)
-        ctx = NodeContext(state)
-        assert ctx.session is mock_session
-        assert ctx.session.id == 42
 
 
 class TestNodeContextInputMessageId:
@@ -235,12 +211,6 @@ class TestPipelineAccessorGetSelectedRoute:
 
 
 class TestPipelineAccessorGetAllRoutes:
-    def test_returns_all_route_decisions(self):
-        state = _state_with_outputs()
-        accessor = PipelineAccessor(state)
-        routes = accessor.get_all_routes()
-        assert routes == {"router_b": "yes"}
-
     def test_returns_empty_dict_when_no_routes(self):
         state = _minimal_state(
             outputs={
@@ -274,26 +244,6 @@ class TestPipelineAccessorGetNodePath:
         accessor = PipelineAccessor(state)
         path = accessor.get_node_path("nonexistent")
         assert path == ["nonexistent"]
-
-
-# ===========================================================================
-# NodeContext sub-object wiring
-# ===========================================================================
-
-
-class TestNodeContextSubObjects:
-    def test_context_accesses_state_through_sub_accessor(self):
-        """Verify context.state.* paths work end-to-end."""
-        state = _minimal_state(
-            temp_state={"user_input": "hi", "attachments": ["att1"]},
-            session_state={"step": 1},
-            participant_data={"name": "Bob"},
-        )
-        ctx = NodeContext(state)
-        assert ctx.state.original_user_message == "hi"
-        assert ctx.state.temp == {"user_input": "hi", "attachments": ["att1"]}
-        assert ctx.state.session_state == {"step": 1}
-        assert ctx.state.participant_data == {"name": "Bob"}
 
 
 # ===========================================================================

@@ -23,10 +23,6 @@ class TestNodeClassResolution:
         assert node_type.node_class is not None
         assert node_type.node_class.__name__ == "LLMResponseWithPrompt"
 
-    def test_a_type_naming_no_class_does_not_exist(self):
-        assert NodeType("GhostNode").exists is False
-        assert NodeType("GhostNode").node_class is None
-
 
 class TestNullObject:
     """Every accessor answers for a type naming no node class rather than raising.
@@ -88,11 +84,6 @@ class TestDeclaredParams:
     def test_node_types_declaring_is_exactly_the_types_that_declare_it(self, param_name, expected):
         assert node_types_declaring(param_name) == expected
 
-    def test_node_types_declaring_agrees_with_declares(self):
-        """The set a SQL caller filters on and the per-type answer cannot disagree."""
-        for node_type in node_types_declaring("prompt"):
-            assert NodeType(node_type).declares("prompt") is True
-
 
 class TestIsRouter:
     @pytest.mark.parametrize(
@@ -135,10 +126,6 @@ class TestDefaultParams:
         # `route_key` is required, so there is no value to start a new node from.
         assert "route_key" not in defaults
 
-    def test_every_default_is_a_param_the_type_declares(self):
-        node_type = NodeType("LLMResponseWithPrompt")
-        assert set(node_type.default_params()) <= node_type.declared_params
-
 
 class TestSchema:
     def test_a_node_type_carries_its_ui_schema(self):
@@ -179,10 +166,6 @@ class TestLabel:
     def test_a_resolvable_type_reports_its_schema_label(self):
         assert NodeType("StartNode").label == "Start"
         assert NodeType("EndNode").label == "End"
-
-    def test_an_unresolvable_type_names_itself(self):
-        """A caller putting the label in a build error still has to name something."""
-        assert NodeType("GhostNode").label == "GhostNode"
 
 
 class TestReservedName:

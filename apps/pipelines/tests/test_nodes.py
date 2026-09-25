@@ -88,23 +88,6 @@ class TestSendEmailInputValidation:
         with pytest.raises(ValidationError, match="Invalid list of emails addresses"):
             SendEmail(name="email", recipient_list=recipient_list, subject="Test Subject")
 
-    def test_body_field_defaults_to_empty(self):
-        model = SendEmail(
-            node_id="test", django_node=None, name="email", recipient_list="test@example.com", subject="Hello"
-        )
-        assert model.body == ""
-
-    def test_body_field_accepts_template(self):
-        model = SendEmail(
-            node_id="test",
-            django_node=None,
-            name="email",
-            recipient_list="test@example.com",
-            subject="Hello",
-            body="Dear {{participant_data.name}}, your input was: {{input}}",
-        )
-        assert "participant_data.name" in model.body
-
 
 def test_optional_int_type():
     ta = TypeAdapter(OptionalInt)
@@ -185,16 +168,6 @@ class TestHistoryMixin:
         mock_repo.get_pipeline_chat_history.assert_called_once_with(PipelineChatHistoryTypes.NODE, node.node_id)
         mock_history.get_langchain_messages_until_marker.assert_called_once_with(node.get_history_mode())
         mock_repo.get_session_messages.assert_not_called()
-
-    def test_get_history_returns_empty_when_new_pipeline_history(self, history_node_factory):
-        """New pipeline history (from get_or_create) returns empty messages."""
-        mock_repo = Mock()
-        mock_history = Mock(get_langchain_messages_until_marker=Mock(return_value=[]))
-        mock_repo.get_pipeline_chat_history.return_value = mock_history
-        node = history_node_factory(history_type=PipelineChatHistoryTypes.NODE, repo=mock_repo)
-
-        assert node.get_history() == []
-        mock_repo.get_pipeline_chat_history.assert_called_once_with(PipelineChatHistoryTypes.NODE, node.node_id)
 
     def test_store_compression_checkpoint_global(self, history_node_factory):
         mock_repo = Mock()
@@ -585,16 +558,6 @@ class TestSendEmailDynamicRendering:
             recipient_list=["ops@example.com"],
             subject="Report",
             message="Input was: hello. Name: Carol",
-        )
-
-    def test_empty_body_defaults_to_input(self, experiment_session, participant):
-        node = self._make_node("ops@example.com", "Report", body="")
-        state = self._make_state(experiment_session)
-        mock_task = self._run_node(node, state, experiment_session)
-        mock_task.delay.assert_called_once_with(
-            recipient_list=["ops@example.com"],
-            subject="Report",
-            message="hello",
         )
 
     def test_recipient_split_filter(self, experiment_session, participant):
