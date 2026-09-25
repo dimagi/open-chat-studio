@@ -22,13 +22,22 @@ from apps.service_providers.auth_service.oauth import (
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.teams.decorators import login_and_team_required
+from apps.web.meta import absolute_url
 
 _OAUTH_STATE_SALT = "service-providers-oauth-state"
 _OAUTH_STATE_MAX_AGE = 600
+_RESERVED_AUTHORIZATION_PARAMS = {
+    "client_id",
+    "redirect_uri",
+    "response_type",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+}
 
 
 def _oauth_redirect_uri(request):
-    return request.build_absolute_uri(reverse("service_providers_oauth_callback"))
+    return absolute_url(reverse("service_providers_oauth_callback"))
 
 
 def _pending_state_matches(item, payload, user_id):
@@ -60,6 +69,11 @@ def _get_provider(payload):
     )
 
 
+def _user_can_change_provider(provider, user):
+    membership = provider.team.membership_set.filter(user=user).first()
+    return membership is not None and membership.has_perm("service_providers.change_authprovider")
+
+
 def _provider_edit_url(provider):
     return reverse(
         "service_providers:edit", kwargs={"team_slug": provider.team.slug, "provider_type": "auth", "pk": provider.pk}
@@ -71,10 +85,12 @@ def _exchange_code(request, provider, code, verifier):
     client = WebApplicationClient(provider.config["client_id"])
     url, _headers, body = client.prepare_token_request(
         provider.config["token_url"],
-        authorization_response=request.build_absolute_uri(),
         redirect_url=_oauth_redirect_uri(request),
         code=code,
         code_verifier=verifier,
+        client_secret=provider.config["client_secret"]
+        if provider.config.get("token_endpoint_auth_method") == TokenEndpointAuthMethod.CLIENT_SECRET_POST
+        else None,
     )
     method = provider.config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
     kwargs = (
@@ -115,6 +131,11 @@ def oauth_connect(request, team_slug: str, pk: int):
     request.session.modified = True
     _validate_token_url(provider.config["authorize_url"])
     client = WebApplicationClient(provider.config["client_id"])
+    extra_params = {
+        key: value
+        for key, value in (provider.config.get("authorization_params") or {}).items()
+        if key not in _RESERVED_AUTHORIZATION_PARAMS
+    }
     url = client.prepare_request_uri(
         provider.config["authorize_url"],
         redirect_uri=_oauth_redirect_uri(request),
@@ -122,6 +143,7 @@ def oauth_connect(request, team_slug: str, pk: int):
         state=state,
         code_challenge=challenge,
         code_challenge_method="S256",
+        **extra_params,
     )
     return redirect(url)
 
@@ -133,7 +155,7 @@ def oauth_callback(request):
     except (signing.BadSignature, KeyError, TypeError):
         return HttpResponseBadRequest("Invalid or expired OAuth state")
     provider = _get_provider(payload)
-    if not request.user.has_perm("service_providers.change_authprovider"):
+    if not _user_can_change_provider(provider, request.user):
         raise PermissionDenied
     target = _provider_edit_url(provider)
     if request.GET.get("error"):

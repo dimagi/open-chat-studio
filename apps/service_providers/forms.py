@@ -531,6 +531,12 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
     authorize_url = forms.URLField(label=_("Authorization URL"), validators=[URLValidator(schemes=["https"])])
     token_url = forms.URLField(label=_("Token URL"), validators=[URLValidator(schemes=["https"])])
     scope = forms.CharField(label=_("Scope"), required=False)
+    authorization_params = forms.JSONField(
+        label=_("Additional Authorization Request Parameters"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=_('Optional JSON object, for example: {"access_type": "offline"}.'),
+    )
     token_endpoint_auth_method = forms.ChoiceField(
         label=_("Token Endpoint Authentication"),
         choices=[
@@ -540,8 +546,17 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
         initial="client_secret_basic",
     )
 
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("provider_preset") == "google" and not cleaned.get("authorization_params"):
+            cleaned["authorization_params"] = {"access_type": "offline", "prompt": "consent"}
+        return cleaned
+
     def save(self, instance):
         self.cleaned_data.pop("provider_preset", None)
+        params = self.cleaned_data.pop("authorization_params", None)
+        if params:
+            self.cleaned_data["authorization_params"] = params
         return super().save(instance)
 
 

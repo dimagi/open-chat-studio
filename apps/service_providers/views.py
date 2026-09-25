@@ -401,7 +401,11 @@ class CreateServiceProvider(
             )
         if isinstance(instance, AuthProvider) and subtype == AuthProviderType.oauth_authorization_code:
             ctx["oauth_redirect_uri"] = _oauth_redirect_uri(self.request)
-            ctx["oauth_status"] = "connected" if instance._auth_data.get("access_token") else "not connected"
+            ctx["oauth_status"] = (
+                "reconnect required"
+                if instance._auth_data.get("reconnect_required")
+                else ("connected" if instance._auth_data.get("access_token") else "not connected")
+            )
             ctx["oauth_connect_url"] = reverse(
                 "service_providers:oauth_connect", kwargs={"team_slug": self.request.team.slug, "pk": instance.pk}
             )
