@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import views
+from . import oauth_views, views
 
 app_name = "service_providers"
 
@@ -11,7 +11,7 @@ whatsapp_urls = [
 ]
 
 urlpatterns = [
-    path("auth/<int:pk>/oauth/connect/", views.oauth_connect, name="oauth_connect"),
+    path("auth/<int:pk>/oauth/connect/", oauth_views.oauth_connect, name="oauth_connect"),
     path("llm_provider_model/create/", views.create_llm_provider_model, name="llm_provider_model_new"),
     path(
         "llm_provider_model/<int:pk>/delete/",

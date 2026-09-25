@@ -28,7 +28,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from apps.chatbots.views import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
-from apps.service_providers.views import oauth_callback
+from apps.service_providers.oauth_views import oauth_callback
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap

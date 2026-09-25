@@ -1,6 +1,5 @@
 import json
 import logging
-import secrets
 from datetime import timedelta
 from decimal import Decimal
 
@@ -9,7 +8,6 @@ from django import views as django_views
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -21,7 +19,6 @@ from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
-from oauthlib.oauth2 import WebApplicationClient
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -54,15 +51,7 @@ from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
-from .auth_service.oauth import (
-    OAuthTokenError,
-    TokenEndpointAuthMethod,
-    _config_fingerprint,
-    _parse_token_response,
-    _post_token_request,
-    _validate_token_url,
-    build_pkce_pair,
-)
+from .oauth_views import _oauth_redirect_uri
 from .usages import get_provider_usages
 from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
 
@@ -84,113 +73,6 @@ def _lookup_subtype_by_slug(subtype_enum, slug):
         if str(member) == slug:
             return member
     raise KeyError(slug)
-
-
-_OAUTH_STATE_SALT = "service-providers-oauth-state"
-_OAUTH_STATE_MAX_AGE = 600
-
-
-def _oauth_redirect_uri(request):
-    return request.build_absolute_uri(reverse("service_providers_oauth_callback"))
-
-
-@login_and_team_required
-@permission_required("service_providers.change_authprovider", raise_exception=True)
-def oauth_connect(request, team_slug: str, pk: int):
-    if request.team.slug != team_slug:
-        raise PermissionDenied
-    provider = get_object_or_404(
-        AuthProvider, team=request.team, pk=pk, type=AuthProviderType.oauth_authorization_code.value
-    )
-    verifier, challenge = build_pkce_pair()
-    nonce = secrets.token_urlsafe(24)
-    payload = {"provider_id": provider.pk, "team_id": provider.team_id, "user_id": request.user.pk, "nonce": nonce}
-    state = signing.dumps(payload, salt=_OAUTH_STATE_SALT)
-    pending = request.session.get("oauth_pending", {})
-    pending[nonce] = {
-        "verifier": verifier,
-        "provider_id": provider.pk,
-        "team_id": provider.team_id,
-        "user_id": request.user.pk,
-    }
-    request.session["oauth_pending"] = pending
-    request.session.modified = True
-    _validate_token_url(provider.config["authorize_url"])
-    client = WebApplicationClient(provider.config["client_id"])
-    url = client.prepare_request_uri(
-        provider.config["authorize_url"],
-        redirect_uri=_oauth_redirect_uri(request),
-        scope=(provider.config.get("scope") or "").split() or None,
-        state=state,
-        code_challenge=challenge,
-        code_challenge_method="S256",
-    )
-    return redirect(url)
-
-
-@login_required
-def oauth_callback(request):
-    state = request.GET.get("state")
-    try:
-        payload = signing.loads(state, salt=_OAUTH_STATE_SALT, max_age=_OAUTH_STATE_MAX_AGE)
-        pending = request.session.get("oauth_pending", {})
-        item = pending.pop(payload["nonce"], None)
-        request.session["oauth_pending"] = pending
-        request.session.modified = True
-        if (
-            not item
-            or item["user_id"] != request.user.pk
-            or item["provider_id"] != payload["provider_id"]
-            or item["team_id"] != payload["team_id"]
-        ):
-            raise signing.BadSignature("invalid oauth state")
-    except (signing.BadSignature, KeyError, TypeError):
-        return HttpResponseBadRequest("Invalid or expired OAuth state")
-    provider = get_object_or_404(
-        AuthProvider,
-        team_id=payload["team_id"],
-        pk=payload["provider_id"],
-        type=AuthProviderType.oauth_authorization_code.value,
-    )
-    if not request.user.has_perm("service_providers.change_authprovider"):
-        raise PermissionDenied
-    target = reverse(
-        "service_providers:edit", kwargs={"team_slug": provider.team.slug, "provider_type": "auth", "pk": provider.pk}
-    )
-    if request.GET.get("error"):
-        messages.error(request, _("OAuth authorization was denied. Connect the provider again to retry."))
-        return redirect(target)
-    code = request.GET.get("code")
-    if not code:
-        return HttpResponseBadRequest("OAuth callback did not contain an authorization code")
-    _validate_token_url(provider.config["token_url"])
-    client = WebApplicationClient(provider.config["client_id"])
-    url, _headers, body = client.prepare_token_request(
-        provider.config["token_url"],
-        authorization_response=request.build_absolute_uri(),
-        redirect_url=_oauth_redirect_uri(request),
-        code=code,
-        code_verifier=item["verifier"],
-    )
-    method = provider.config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
-    kwargs = (
-        {"auth": httpx.BasicAuth(provider.config["client_id"], provider.config["client_secret"])}
-        if method == TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
-        else {}
-    )
-    if method == TokenEndpointAuthMethod.CLIENT_SECRET_POST:
-        body += "&client_secret=" + provider.config["client_secret"]
-    try:
-        token = _parse_token_response(client, _post_token_request(url, body, kwargs), url)
-    except OAuthTokenError as exc:
-        messages.error(request, str(exc))
-        return redirect(target)
-    provider._auth_data = {**token, "config_fingerprint": ""}
-
-    provider._auth_data["config_fingerprint"] = _config_fingerprint(provider.config)
-    provider.save(update_fields=["_auth_data"])
-    messages.success(request, _("OAuth provider connected."))
-    return redirect(target)
 
 
 class ServiceProviderMixin:
