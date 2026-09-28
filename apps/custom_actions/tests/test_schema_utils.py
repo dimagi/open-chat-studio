@@ -15,6 +15,7 @@ from apps.custom_actions.schema_utils import (
     get_operations_from_spec_dict,
 )
 from apps.utils.openapi import OpenAPISpec
+from apps.utils.schema_utils import sanitize_property_name
 
 
 def load_test_data(filename: str) -> dict:
@@ -489,10 +490,15 @@ def test_operation_id_and_description_fallbacks():
     assert (operation.operation_id, operation.description) == ("a_b_c_d_get", "S")
 
 
-def test_operation_ids_match_function_def_names():
+def test_function_def_names_are_sanitized_operation_ids():
     spec_dict = _one_operation_spec()
     spec_dict["paths"]["/other"] = {"get": {"operationId": "get-other.v2"}, "delete": {}}
+    spec_dict["paths"]["/space"] = {"get": {"operationId": "Get Something Cool"}}
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    for operation in get_operations_from_spec(spec, spec_dict):
+    operations = get_operations_from_spec(spec, spec_dict)
+    for operation in operations:
         function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
-        assert function_def.name == operation.operation_id
+        assert function_def.name == sanitize_property_name(operation.operation_id)
+
+    space_operation = next(op for op in operations if op.path == "/space")
+    assert space_operation.operation_id == "Get Something Cool"
