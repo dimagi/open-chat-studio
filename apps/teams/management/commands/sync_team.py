@@ -25,7 +25,6 @@ from pathlib import Path
 import requests
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.teams.export.chatbot_scope import ScopeClass
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
@@ -254,10 +253,7 @@ def run_sync(
         with mute_signals():
             load_team(importer, client, store)
             for entry in manifest["entries"]:
-                if chatbots and entry.get("scope") == ScopeClass.EXCLUDED:
-                    write(_style_synced_line(f"skipped {entry['resource']} (not migrated)", 0, style))
-                    continue
-                reread = bool(chatbots) and _can_gain_older_rows(entry)
+                reread = bool(chatbots) and entry["reread_under_selection"]
                 count = _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=reread)
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
     except requests.HTTPError as exc:
@@ -288,13 +284,6 @@ def resolve_selection(client, store) -> tuple[str, list[dict]]:
             store.seed_cursors_from(other, key)
     store.record_selection(key, public_ids)
     return key, chatbots
-
-
-def _can_gain_older_rows(entry) -> bool:
-    """Whether a selection's row set for this resource can gain a row below its cursor. Referenced
-    resources are defined by what the selected chatbots use now, so an existing provider, file or
-    collection joins the set when a chatbot starts using it, keeping its old pk and timestamp."""
-    return entry.get("scope") == ScopeClass.REFERENCED
 
 
 def _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=False) -> int:

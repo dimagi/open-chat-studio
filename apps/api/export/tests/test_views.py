@@ -282,12 +282,12 @@ def test_team_endpoint_reports_migration_status_and_public_key_presence(public_k
     assert "members" not in body
 
 
-def test_manifest_classifies_every_resource():
+def test_manifest_flags_resources_to_reread_under_a_selection():
     response = APIClient().get(reverse("api:export:manifest"))
-    entries = {e["resource"]: e["scope"] for e in response.json()["entries"]}
-    assert entries["chatbots"] == "owned"
-    assert entries["llm_providers"] == "referenced"
-    assert entries["evaluators"] == "excluded"
+    entries = {e["resource"]: e["reread_under_selection"] for e in response.json()["entries"]}
+    assert entries["chatbots"] is False
+    assert entries["llm_providers"] is True
+    assert entries["evaluators"] is False
 
 
 def test_team_endpoint_reports_an_empty_selection(team):

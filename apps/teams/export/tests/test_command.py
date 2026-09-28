@@ -81,6 +81,7 @@ def _scenario(public_key):
             "resource": "llm_provider",
             "cursor": "pk",
             "secret": True,
+            "reread_under_selection": False,
         },
     ]
     rows = {
@@ -232,7 +233,13 @@ def test_files_confirmation_fails_cleanly_without_a_terminal(make_store, tmp_pat
 def _new_user_scenario():
     """A manifest and rows whose only entry is a single user the target does not have yet."""
     entries = [
-        {"model": "users.customuser", "resource": "user", "cursor": "pk", "secret": False},
+        {
+            "model": "users.customuser",
+            "resource": "user",
+            "cursor": "pk",
+            "secret": False,
+            "reread_under_selection": False,
+        },
     ]
     rows = {
         "teams": [
@@ -594,37 +601,20 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
 
 
-def _with_excluded_evaluators(manifest):
-    manifest["entries"][0]["scope"] = "referenced"
+def test_every_resource_is_requested_under_a_selection(make_store, tmp_path, keypair):
+    """The source decides which rows a selection covers, so the client requests every resource."""
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
     manifest["entries"].append(
         {
             "model": "evaluations.evaluator",
             "resource": "evaluators",
             "cursor": "pk",
             "secret": False,
-            "scope": "excluded",
+            "reread_under_selection": False,
         }
     )
-    return manifest
-
-
-def test_excluded_resources_are_not_requested_under_a_selection(make_store, tmp_path, keypair):
-    public_key, private = keypair
-    manifest, rows = _scenario(public_key)
-    _with_excluded_evaluators(manifest)
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
-    store = make_store(tmp_path / "team.sqlite")
-
-    client = FakeClient(manifest, rows)
-    run_sync(client, store, private, on_user_created=None)
-
-    assert "evaluators" not in {resource for resource, _cursor in client.iter_calls}
-
-
-def test_excluded_resources_are_requested_without_a_selection(make_store, tmp_path, keypair):
-    public_key, private = keypair
-    manifest, rows = _scenario(public_key)
-    _with_excluded_evaluators(manifest)
     store = make_store(tmp_path / "team.sqlite")
 
     client = FakeClient(manifest, rows)
@@ -637,7 +627,6 @@ def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
     """The source then serves a subset of what it served, so every cursor is still valid."""
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
-    manifest["entries"][0]["scope"] = "owned"
     store = make_store(tmp_path / "team.sqlite")
 
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}, {"public_id": "b", "name": "B"}]
@@ -654,7 +643,6 @@ def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_pa
     """A full-team sync served a superset of any selection, so its cursors stay valid."""
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
-    manifest["entries"][0]["scope"] = "owned"
     store = make_store(tmp_path / "team.sqlite")
     store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
 
@@ -669,7 +657,7 @@ def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, key
     """Adding a chatbot puts rows below the cursor that were never synced, so resuming would skip them."""
     public_key, private = keypair
     manifest, rows = _scenario(public_key)
-    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"][0]["reread_under_selection"] = True
     store = make_store(tmp_path / "team.sqlite")
 
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
@@ -682,11 +670,11 @@ def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, key
     assert ("llm_provider", None) in client.iter_calls
 
 
-def test_referenced_resources_are_reread_from_the_start_under_a_selection(make_store, tmp_path, keypair):
+def test_flagged_resources_are_reread_from_the_start_under_a_selection(make_store, tmp_path, keypair):
     """A shared row the chatbot starts using later can have a lower pk than the stored cursor, so a
-    referenced resource is re-read in full while a selection is active."""
+    resource the source flags is re-read in full while a selection is active."""
     manifest, rows = _scenario(keypair[0])
-    manifest["entries"][0]["scope"] = "referenced"
+    manifest["entries"][0]["reread_under_selection"] = True
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
     store = make_store(tmp_path / "team.sqlite")
     run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)
@@ -697,9 +685,9 @@ def test_referenced_resources_are_reread_from_the_start_under_a_selection(make_s
     assert ("llm_provider", None) in client.iter_calls
 
 
-def test_owned_resources_resume_from_their_cursor_under_a_selection(make_store, tmp_path, keypair):
+def test_unflagged_resources_resume_from_their_cursor_under_a_selection(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
-    manifest["entries"][0]["scope"] = "owned"
+    manifest["entries"][0]["reread_under_selection"] = False
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "a", "name": "A"}]
     store = make_store(tmp_path / "team.sqlite")
     run_sync(FakeClient(manifest, rows), store, keypair[1], on_user_created=None)

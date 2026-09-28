@@ -142,9 +142,10 @@ class ManifestEntrySerializer(serializers.Serializer):
     resource = serializers.CharField(help_text="URL-facing resource name the endpoint is mounted at.")
     cursor = serializers.CharField(help_text="Pagination cursor type: pk | updated_at_id.")
     secret = serializers.BooleanField(help_text="Whether rows carry fields sealed under the team public key.")
-    scope = serializers.CharField(
-        help_text="How a chatbot-scoped export filters this model: owned | referenced | excluded. "
-        "`excluded` resources are served empty while the team has a chatbot selection."
+    reread_under_selection = serializers.BooleanField(
+        help_text="Whether to re-read this resource from the start on every sync while the team has a "
+        "chatbot selection. Rows can join the served set below a stored cursor when a selected chatbot "
+        "starts using them."
     )
 
 
