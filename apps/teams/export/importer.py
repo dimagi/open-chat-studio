@@ -461,14 +461,19 @@ class Importer:
             if field.name in row and row[field.name] is not None:
                 timestamps[field.name] = parse_datetime(row[field.name])
         elif isinstance(field, models.ForeignKey):
-            source_pk = row.get(field.name)
-            target_pk = resolve_fk(field, source_pk, self.store)
-            field_values[field.attname] = target_pk
-            synced_target = field.related_model._meta.label_lower in MANIFEST_LABELS
-            return source_pk is not None and target_pk is None and synced_target
+            return self._collect_fk(field, row, field_values)
         elif field.name in row and field.name not in named:
             field_values[field.name] = row[field.name]
         return False
+
+    def _collect_fk(self, field: models.ForeignKey, row: dict, field_values: dict) -> bool:
+        """Translate one FK to its target id. Returns whether it was nulled because its synced
+        target has no translation yet."""
+        source_pk = row.get(field.name)
+        target_pk = resolve_fk(field, source_pk, self.store)
+        field_values[field.attname] = target_pk
+        synced_target = field.related_model._meta.label_lower in MANIFEST_LABELS
+        return source_pk is not None and target_pk is None and synced_target
 
     def _remap_embedded_resource_ids(self, model_label: str, field_values: dict) -> None:
         """Rewrite the source resource ids buried in a row's params in place. Pipeline data is
