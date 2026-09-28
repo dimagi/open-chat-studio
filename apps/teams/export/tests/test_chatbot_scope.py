@@ -2,28 +2,258 @@
 other one's rows stay out."""
 
 import pytest
+from django.db.models import QuerySet
 
-from apps.chat.models import Chat
+from apps.annotations.models import CustomTaggedItem, UserComment
+from apps.assessments.models import Score
+from apps.events.models import EventAction
+from apps.pipelines.models import PipelineChatMessages
 from apps.teams.export import manifest
-from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope, narrow_to_scope
+from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
+from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
-from apps.utils.factories.events import StaticTriggerFactory
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
+from apps.utils.factories.evaluations import EvaluationResultFactory
+from apps.utils.factories.events import (
+    ScheduledMessageFactory,
+    ScheduledTriggerFactory,
+    StaticTriggerFactory,
+    TimeoutTriggerFactory,
+)
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
-    ConsentFormFactory,
     ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantDataFactory,
     ParticipantFactory,
     SourceMaterialFactory,
+    SyntheticVoiceFactory,
 )
 from apps.utils.factories.files import FileFactory
-from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.human_annotations import AnnotationFactory
+from apps.utils.factories.pipelines import (
+    NodeFactory,
+    PipelineChatHistoryFactory,
+    PipelineChatMessagesFactory,
+    PipelineFactory,
+)
+from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
+    EmbeddingProviderModelFactory,
+    LlmProviderFactory,
+    LlmProviderModelFactory,
+    MessagingProviderFactory,
+    TraceProviderFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 
 pytestmark = pytest.mark.django_db
+
+
+def _ids(scope_set: list[int] | QuerySet) -> set[int]:
+    """A scope set as ids, whether it is an id list or a one-column ``values()`` queryset."""
+    if isinstance(scope_set, list):
+        return set(scope_set)
+    return {next(iter(row.values())) for row in scope_set}
+
+
+def _pks(queryset) -> set[int]:
+    return set(queryset.values_list("pk", flat=True))
+
+
+def _select(team, **experiment_fields):
+    chatbot = ExperimentFactory(team=team, **experiment_fields)
+    team.exportable_experiments.add(chatbot)
+    return chatbot
+
+
+def _set(chatbot, **fields):
+    for name, value in fields.items():
+        setattr(chatbot, name, value)
+    chatbot.save()
+    return chatbot
+
+
+def _node(chatbot, **fields):
+    return NodeFactory(pipeline=chatbot.pipeline, **fields)
+
+
+def _collection(chatbot, **fields):
+    """A collection the chatbot's pipeline uses, with no providers unless ``fields`` sets them."""
+    collection = CollectionFactory(
+        team=chatbot.team, **{"llm_provider": None, "embedding_provider_model": None, **fields}
+    )
+    _node(chatbot, collection=collection)
+    return collection
+
+
+def _session(chatbot):
+    return ExperimentSessionFactory(experiment=chatbot, team=chatbot.team)
+
+
+def _attachment_file(chatbot):
+    attachment = _session(chatbot).chat.attachments.create(tool_type="code_interpreter")
+    file = FileFactory(team=chatbot.team)
+    attachment.files.add(file)
+    return file
+
+
+def _collection_file(chatbot):
+    return CollectionFileFactory(collection=_collection(chatbot), file=FileFactory(team=chatbot.team)).file
+
+
+def _collection_index(chatbot):
+    collection = CollectionFactory(team=chatbot.team, llm_provider=None, embedding_provider_model=None)
+    _node(chatbot).collection_indexes.add(collection)
+    return collection
+
+
+def _custom_action(chatbot, **fields):
+    action = CustomActionFactory(team=chatbot.team, **fields)
+    CustomActionOperationFactory(custom_action=action, node=_node(chatbot))
+    return action
+
+
+def _document_source_auth(chatbot):
+    provider = AuthProviderFactory(team=chatbot.team)
+    DocumentSourceFactory(collection=_collection(chatbot), auth_provider=provider)
+    return provider
+
+
+def _scheduled_message(chatbot, participant):
+    return ScheduledMessageFactory(
+        team=chatbot.team,
+        experiment=chatbot,
+        participant=participant,
+        action=None,
+        custom_schedule_params={"name": "Test", "time_period": "days", "frequency": 1, "repetitions": 1},
+    )
+
+
+# Each case links one row to a chatbot and returns it. The test links one to the selected chatbot and
+# one to another chatbot, so every path is checked for both inclusion and isolation.
+SCOPE_SET_CASES = [
+    # --- owned by the chatbot ---
+    pytest.param("sessions", _session, id="session"),
+    pytest.param("chats", lambda c: _session(c).chat, id="chat"),
+    pytest.param("chat_messages", lambda c: ChatMessageFactory(chat=_session(c).chat), id="chat_message"),
+    pytest.param("participants", lambda c: _session(c).participant, id="participant-session"),
+    pytest.param(
+        "participants",
+        lambda c: ParticipantDataFactory(team=c.team, experiment=c).participant,
+        id="participant-participant_data",
+    ),
+    pytest.param(
+        "participants",
+        lambda c: _scheduled_message(c, participant=ParticipantFactory(team=c.team)).participant,
+        id="participant-scheduled_message",
+    ),
+    pytest.param("channel_ids", lambda c: ExperimentChannelFactory(team=c.team, experiment=c), id="channel"),
+    # --- reached by what the chatbot uses ---
+    pytest.param("pipeline_ids", lambda c: c.pipeline, id="pipeline"),
+    pytest.param("node_ids", _node, id="node"),
+    pytest.param("collection_ids", lambda c: _collection(c), id="collection-node"),
+    pytest.param("collection_ids", _collection_index, id="collection-node_index"),
+    pytest.param("files", _collection_file, id="file-collection"),
+    pytest.param("files", _attachment_file, id="file-chat_attachment"),
+    pytest.param(
+        "files",
+        lambda c: _set(c, synthetic_voice=SyntheticVoiceFactory(file=FileFactory(team=c.team))).synthetic_voice.file,
+        id="file-synthetic_voice",
+    ),
+    pytest.param("custom_action_ids", _custom_action, id="custom_action"),
+    pytest.param(
+        "source_material_ids",
+        lambda c: _node(c, source_material=SourceMaterialFactory(team=c.team)).source_material,
+        id="source_material",
+    ),
+    pytest.param("consent_form_ids", lambda c: c.consent_form, id="consent_form"),
+    pytest.param("synthetic_voice_ids", lambda c: c.synthetic_voice, id="synthetic_voice-chatbot"),
+    pytest.param(
+        "synthetic_voice_ids",
+        lambda c: _node(c, synthetic_voice=SyntheticVoiceFactory()).synthetic_voice,
+        id="synthetic_voice-node",
+    ),
+    pytest.param(
+        "llm_provider_ids",
+        lambda c: _node(c, llm_provider=LlmProviderFactory(team=c.team)).llm_provider,
+        id="llm_provider-node",
+    ),
+    *[
+        pytest.param(
+            "llm_provider_ids",
+            lambda c, field=field: getattr(_collection(c, **{field: LlmProviderFactory(team=c.team)}), field),
+            id=f"llm_provider-collection_{field}",
+        )
+        for field in ("llm_provider", "contextualizer_llm_provider", "reranker_provider")
+    ],
+    pytest.param(
+        "llm_provider_model_ids",
+        lambda c: _node(c, llm_provider_model=LlmProviderModelFactory(team=c.team)).llm_provider_model,
+        id="llm_provider_model-node",
+    ),
+    pytest.param(
+        "llm_provider_model_ids",
+        lambda c: (
+            _collection(c, contextualizer_llm_model=LlmProviderModelFactory(team=c.team)).contextualizer_llm_model
+        ),
+        id="llm_provider_model-collection_contextualizer",
+    ),
+    pytest.param(
+        "embedding_provider_model_ids",
+        lambda c: (
+            _collection(
+                c, embedding_provider_model=EmbeddingProviderModelFactory(team=c.team, name=f"model-{c.id}")
+            ).embedding_provider_model
+        ),
+        id="embedding_provider_model",
+    ),
+    pytest.param("voice_provider_ids", lambda c: c.voice_provider, id="voice_provider-chatbot"),
+    pytest.param(
+        "voice_provider_ids",
+        lambda c: (
+            _set(
+                c, synthetic_voice=SyntheticVoiceFactory(voice_provider=VoiceProviderFactory(team=c.team))
+            ).synthetic_voice.voice_provider
+        ),
+        id="voice_provider-synthetic_voice",
+    ),
+    pytest.param(
+        "messaging_provider_ids",
+        lambda c: (
+            ExperimentChannelFactory(
+                team=c.team, experiment=c, messaging_provider=MessagingProviderFactory(team=c.team)
+            ).messaging_provider
+        ),
+        id="messaging_provider",
+    ),
+    pytest.param(
+        "auth_provider_ids",
+        lambda c: _custom_action(c, auth_provider=AuthProviderFactory(team=c.team)).auth_provider,
+        id="auth_provider-custom_action",
+    ),
+    pytest.param("auth_provider_ids", _document_source_auth, id="auth_provider-document_source"),
+    pytest.param(
+        "trace_provider_ids",
+        lambda c: _set(c, trace_provider=TraceProviderFactory(team=c.team)).trace_provider,
+        id="trace_provider",
+    ),
+]
+
+
+@pytest.mark.parametrize(("scope_set", "link"), SCOPE_SET_CASES)
+def test_scope_set_follows_the_selected_chatbot(scope_set, link):
+    team = TeamFactory()
+    mine = link(_select(team))
+    theirs = link(ExperimentFactory(team=team))
+
+    ids = _ids(getattr(build_scope(team), scope_set))
+
+    assert mine.id in ids
+    assert theirs.id not in ids
 
 
 def test_build_scope_is_none_without_a_selection():
@@ -43,181 +273,144 @@ def test_build_scope_covers_the_selected_family():
     assert other.id not in scope.experiment_ids
 
 
-def test_sessions_chats_and_messages_follow_the_family():
+def test_channels_include_the_teams_shared_ones():
+    """Team-level channels (web, API, evaluations, widget) carry no experiment."""
     team = TeamFactory()
-    mine = ExperimentFactory(team=team)
-    theirs = ExperimentFactory(team=team)
-    team.exportable_experiments.add(mine)
-    my_session = ExperimentSessionFactory(experiment=mine, team=team)
-    their_session = ExperimentSessionFactory(experiment=theirs, team=team)
-    my_message = ChatMessageFactory(chat=my_session.chat)
-    their_message = ChatMessageFactory(chat=their_session.chat)
-
-    scope = build_scope(team)
-
-    assert set(scope.sessions.values_list("pk", flat=True)) == {my_session.id}
-    assert set(Chat.objects.filter(pk__in=scope.chats).values_list("pk", flat=True)) == {my_session.chat_id}
-    assert set(scope.chat_messages.values_list("pk", flat=True)) == {my_message.id}
-    assert their_message.id not in set(scope.chat_messages.values_list("pk", flat=True))
-
-
-def test_participants_include_ones_reachable_only_through_participant_data():
-    """ParticipantData.participant is non-null, so a participant with data for the chatbot but no
-    session must still be exported or resolve_fk raises on import."""
-
-    team = TeamFactory()
-    chatbot = ExperimentFactory(team=team)
-    team.exportable_experiments.add(chatbot)
-    with_session = ExperimentSessionFactory(experiment=chatbot, team=team).participant
-    data_only = ParticipantFactory(team=team)
-    ParticipantDataFactory(team=team, experiment=chatbot, participant=data_only)
-    unrelated = ParticipantFactory(team=team)
-
-    ids = set(build_scope(team).participants.values_list("pk", flat=True))
-
-    assert {with_session.id, data_only.id} <= ids
-    assert unrelated.id not in ids
-
-
-def test_channels_cover_the_chatbots_own_and_the_teams_shared_ones():
-    team = TeamFactory()
-    mine = ExperimentFactory(team=team)
-    theirs = ExperimentFactory(team=team)
-    team.exportable_experiments.add(mine)
-    my_channel = ExperimentChannelFactory(team=team, experiment=mine)
-    their_channel = ExperimentChannelFactory(team=team, experiment=theirs)
+    _select(team)
     shared = ExperimentChannelFactory(team=team, experiment=None)
 
-    ids = set(build_scope(team).channel_ids)
-
-    assert {my_channel.id, shared.id} <= ids
-    assert their_channel.id not in ids
+    assert shared.id in build_scope(team).channel_ids
 
 
-def test_pipeline_and_node_closure_follows_the_chatbots_pipeline():
+@pytest.mark.parametrize(
+    ("pipeline_id", "is_included"),
+    [pytest.param("valid", True, id="valid"), pytest.param("not-a-number", False, id="malformed")],
+)
+def test_pipeline_closure_reads_pipelines_named_in_event_actions(pipeline_id, is_included):
+    """A malformed legacy value is skipped rather than breaking the scope every request builds."""
     team = TeamFactory()
-    pipeline = PipelineFactory(team=team)
-    node = NodeFactory(pipeline=pipeline)
-    chatbot = ExperimentFactory(team=team, pipeline=pipeline)
-    other_pipeline = PipelineFactory(team=team)
-    ExperimentFactory(team=team, pipeline=other_pipeline)
-    team.exportable_experiments.add(chatbot)
-
-    scope = build_scope(team)
-
-    assert pipeline.id in scope.pipeline_ids
-    assert other_pipeline.id not in scope.pipeline_ids
-    assert node.id in scope.node_ids
-
-
-def test_pipeline_closure_includes_one_named_in_an_event_action():
-
-    team = TeamFactory()
-    chatbot = ExperimentFactory(team=team)
-    team.exportable_experiments.add(chatbot)
+    chatbot = _select(team)
     started = PipelineFactory(team=team)
     trigger = StaticTriggerFactory(experiment=chatbot)
     trigger.action.action_type = "pipeline_start"
-    trigger.action.params = {"pipeline_id": started.id}
+    trigger.action.params = {"pipeline_id": started.id if pipeline_id == "valid" else pipeline_id}
     trigger.action.save()
 
-    assert started.id in build_scope(team).pipeline_ids
+    ids = build_scope(team).pipeline_ids
+
+    assert (started.id in ids) is is_included
+    assert chatbot.pipeline_id in ids
 
 
-def test_referenced_resources_include_their_working_versions():
+def _published_pipeline(team, working):
+    return ExperimentFactory(team=team, pipeline=PipelineFactory(team=team, working_version=working)).pipeline
+
+
+def _published_file(team, working):
+    chatbot = ExperimentFactory(team=team)
+    file = FileFactory(team=team, working_version=working)
+    CollectionFileFactory(collection=_collection(chatbot), file=file)
+    return chatbot, file
+
+
+@pytest.mark.parametrize("resource", [pytest.param("pipeline", id="pipeline"), pytest.param("file", id="file")])
+def test_referenced_resources_include_their_working_versions(resource):
     """A published resource carries a self-referential working_version FK; exporting it without its
     working row leaves a link the target cannot resolve."""
     team = TeamFactory()
-    working_pipeline = PipelineFactory(team=team)
-    published_pipeline = PipelineFactory(team=team, working_version=working_pipeline)
-    chatbot = ExperimentFactory(team=team, pipeline=published_pipeline)
-    team.exportable_experiments.add(chatbot)
+    if resource == "pipeline":
+        working = PipelineFactory(team=team)
+        mine = PipelineFactory(team=team, working_version=working)
+        _select(team, pipeline=mine)
+        theirs = _published_pipeline(team, working=working)
+        ids = set(build_scope(team).pipeline_ids)
+    else:
+        working = FileFactory(team=team)
+        chatbot, mine = _published_file(team, working=working)
+        team.exportable_experiments.add(chatbot)
+        _other, theirs = _published_file(team, working=working)
+        ids = _ids(build_scope(team).files)
 
-    assert {working_pipeline.id, published_pipeline.id} <= set(build_scope(team).pipeline_ids)
+    assert {working.id, mine.id} <= ids
+    assert theirs.id not in ids
 
 
-def test_provider_closure_follows_the_nodes_and_the_chatbot():
+TRIGGER_FACTORIES = [StaticTriggerFactory, TimeoutTriggerFactory, ScheduledTriggerFactory]
+
+
+def _generic_target(kind):
+    return {
+        "chat": lambda c: _session(c).chat,
+        "message": lambda c: ChatMessageFactory(chat=_session(c).chat),
+        "session": _session,
+    }[kind]
+
+
+# Each case links one row of ``model`` to a chatbot and returns it.
+OWNED_ROW_CASES = [
+    *[
+        pytest.param(
+            EventAction,
+            lambda c, factory=factory: factory(experiment=c).action,
+            id=f"event_action-{factory._meta.model.__name__}",
+        )
+        for factory in TRIGGER_FACTORIES
+    ],
+    *[
+        pytest.param(
+            model,
+            lambda c, factory=factory, kind=kind: factory(team=c.team, target=_generic_target(kind)(c)),
+            id=f"{model.__name__}-{kind}",
+        )
+        for model, factory in ((CustomTaggedItem, CustomTaggedItemFactory), (UserComment, UserCommentFactory))
+        for kind in ("chat", "message", "session")
+    ],
+    pytest.param(Score, lambda c: ScoreFactory(team=c.team, session=_session(c)), id="Score-session"),
+    pytest.param(
+        PipelineChatMessages,
+        lambda c: PipelineChatMessagesFactory(chat_history=PipelineChatHistoryFactory(session=_session(c))),
+        id="PipelineChatMessages",
+    ),
+]
+
+
+@pytest.mark.parametrize(("model", "link"), OWNED_ROW_CASES)
+def test_scope_rule_follows_the_selected_chatbot(model, link):
+    """Generic-FK rows matter most: the import raises on one whose target was not synced."""
     team = TeamFactory()
-    provider = LlmProviderFactory(team=team)
-    unused = LlmProviderFactory(team=team)
-    pipeline = PipelineFactory(team=team)
-    NodeFactory(pipeline=pipeline, llm_provider=provider)
-    chatbot = ExperimentFactory(team=team, pipeline=pipeline)
-    team.exportable_experiments.add(chatbot)
+    mine = link(_select(team))
+    theirs = link(ExperimentFactory(team=team))
 
-    ids = build_scope(team).llm_provider_ids
+    pks = _pks(narrow_to_scope(model.objects.all(), model_label=model._meta.label_lower, scope=build_scope(team)))
 
-    assert provider.id in ids
-    assert unused.id not in ids
+    assert mine.id in pks
+    assert theirs.id not in pks
 
 
-def test_collection_and_file_closure_follows_the_nodes():
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        pytest.param(lambda team: {"automated_result": EvaluationResultFactory(team=team)}, id="evaluation_result"),
+        pytest.param(lambda team: {"review": AnnotationFactory(team=team)}, id="human_annotation"),
+    ],
+)
+def test_scores_from_excluded_models_are_left_out(provenance):
+    """Their provenance FK points at a model the scoped export serves empty."""
     team = TeamFactory()
-    collection = CollectionFactory(team=team, llm_provider=None, embedding_provider_model=None)
-    used_file = FileFactory(team=team)
-    CollectionFileFactory(collection=collection, file=used_file)
-    unused_file = FileFactory(team=team)
-    pipeline = PipelineFactory(team=team)
-    NodeFactory(pipeline=pipeline, collection=collection)
-    chatbot = ExperimentFactory(team=team, pipeline=pipeline)
-    team.exportable_experiments.add(chatbot)
+    score = ScoreFactory(team=team, session=_session(_select(team)), **provenance(team))
 
-    scope = build_scope(team)
+    scoped = narrow_to_scope(Score.objects.all(), model_label="assessments.score", scope=build_scope(team))
 
-    assert collection.id in scope.collection_ids
-    file_ids = set(scope.files.values_list("pk", flat=True))
-    assert used_file.id in file_ids
-    assert unused_file.id not in file_ids
+    assert score.id not in _pks(scoped)
 
 
-def test_file_closure_includes_chat_attachments():
-
-    team = TeamFactory()
-    chatbot = ExperimentFactory(team=team)
-    team.exportable_experiments.add(chatbot)
-    session = ExperimentSessionFactory(experiment=chatbot, team=team)
-    attachment = session.chat.attachments.create(tool_type="code_interpreter")
-    attached = FileFactory(team=team)
-    attachment.files.add(attached)
-
-    assert attached.id in set(build_scope(team).files.values_list("pk", flat=True))
-
-
-def test_consent_form_and_source_material_follow_the_chatbot():
-    team = TeamFactory()
-    consent = ConsentFormFactory(team=team)
-    material = SourceMaterialFactory(team=team)
-    pipeline = PipelineFactory(team=team)
-    NodeFactory(pipeline=pipeline, source_material=material)
-    chatbot = ExperimentFactory(team=team, pipeline=pipeline, consent_form=consent)
-    team.exportable_experiments.add(chatbot)
-
-    scope = build_scope(team)
-
-    assert consent.id in scope.consent_form_ids
-    assert material.id in scope.source_material_ids
-
-
-def test_scope_sets_are_computed_once(django_assert_num_queries):
-    team = TeamFactory()
-    chatbot = ExperimentFactory(team=team)
-    team.exportable_experiments.add(chatbot)
-    scope = build_scope(team)
-
-    first = scope.experiment_ids
-    with django_assert_num_queries(0):
-        assert scope.experiment_ids == first == [chatbot.id]
-
-
-def test_every_manifest_model_has_a_scope_rule():
-    """A model added to the manifest must be classified, or a chatbot-scoped sync silently serves it
-    team-wide and drags in another chatbot's rows."""
-    unclassified = {e.model for e in manifest.MANIFEST_ENTRIES} - set(CHATBOT_SCOPE_REGISTRY)
-    assert not unclassified, "Add these to CHATBOT_SCOPE_REGISTRY: " + ", ".join(sorted(unclassified))
-
-
-def test_scope_registry_has_no_entries_for_unsynced_models():
-    assert set(CHATBOT_SCOPE_REGISTRY) <= {e.model for e in manifest.MANIFEST_ENTRIES}
+def test_scope_registry_matches_the_manifest():
+    """A manifest model without a rule would be served team-wide and drag in another chatbot's rows."""
+    manifest_models = {e.model for e in manifest.MANIFEST_ENTRIES}
+    assert set(CHATBOT_SCOPE_REGISTRY) == manifest_models, (
+        f"Unclassified: {sorted(manifest_models - set(CHATBOT_SCOPE_REGISTRY))}; "
+        f"not synced: {sorted(set(CHATBOT_SCOPE_REGISTRY) - manifest_models)}"
+    )
 
 
 def test_the_excluded_classes_are_exactly_the_brief():
@@ -230,11 +423,6 @@ def test_participants_are_reread_under_a_selection():
     assert CHATBOT_SCOPE_REGISTRY["experiments.participant"].reread_under_selection
 
 
-def test_team_wide_resources_are_not_reread_under_a_selection():
-    """They are served whole, so no row can join the set below the cursor."""
-    assert not CHATBOT_SCOPE_REGISTRY["users.customuser"].reread_under_selection
-
-
 def test_every_scope_rule_builds_a_runnable_queryset():
     """A misspelt lookup path raises FieldError only when the queryset runs. Running each rule once
     against an empty database is enough to catch that."""
@@ -244,16 +432,3 @@ def test_every_scope_rule_builds_a_runnable_queryset():
 
     for entry in manifest.MANIFEST_ENTRIES:
         list(manifest.scoped_queryset(entry, team, scope)[:1])
-
-
-def test_a_malformed_pipeline_id_in_an_event_action_is_ignored():
-    """One bad legacy value must not break the scope every resource request builds."""
-    team = TeamFactory()
-    chatbot = ExperimentFactory(team=team)
-    team.exportable_experiments.add(chatbot)
-    trigger = StaticTriggerFactory(experiment=chatbot)
-    trigger.action.action_type = "pipeline_start"
-    trigger.action.params = {"pipeline_id": "not-a-number"}
-    trigger.action.save()
-
-    assert build_scope(team).pipeline_ids == [chatbot.pipeline_id]
