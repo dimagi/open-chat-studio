@@ -75,7 +75,7 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
         return self
 
     def get_loader_kwargs(self) -> dict[str, Any]:
-        """Get the appropriate kwargs for ConfluenceLoader based on the specified option"""
+        """Get the Confluence query options for the configured loading option."""
         kwargs: dict[str, Any] = {
             "url": self.base_url,
             "max_pages": self.max_pages,
