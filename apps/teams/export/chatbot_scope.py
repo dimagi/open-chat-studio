@@ -7,8 +7,8 @@ When a team has a chatbot selection, every export request is filtered in three s
    about which model is being exported.
 2. ``CHATBOT_SCOPE_REGISTRY`` holds one ``ScopeRule`` per exported model. The rule's ``build_q`` picks
    the ``ChatbotScope`` sets that model needs and returns a ``Q`` filter for it.
-3. ``manifest.scoped_queryset`` looks up the model's rule, calls ``build_q`` with the scope, and
-   filters the team's rows with the result.
+3. ``narrow_to_scope`` looks up the model's rule, calls ``build_q`` with the scope, and filters the
+   team's rows with the result.
 
 With no selection, ``build_scope`` returns None and the team's rows are served unfiltered.
 
@@ -19,7 +19,6 @@ stay querysets, because ``pk__in`` on a materialised list does not scale for a b
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import cached_property
 
 from django.apps import apps
@@ -299,43 +298,38 @@ def build_scope(team) -> ChatbotScope | None:
     return ChatbotScope(selected) if selected else None
 
 
-class ScopeClass(StrEnum):
-    """How a model is filtered when a chatbot selection is active."""
-
-    OWNED = "owned"
-    """Belongs to a chatbot: filtered by a path to the experiment family."""
-
-    REFERENCED = "referenced"
-    """Shared across the team: kept when the selected chatbots reach it."""
-
-    EXCLUDED = "excluded"
-    """Served empty."""
-
-
 @dataclass(frozen=True)
 class ScopeRule:
-    """How one model is filtered under a selection. ``build_q`` maps the scope to a filter on that
-    model's rows; it is None for an excluded model."""
+    """How one model is filtered under a selection.
 
-    scope_class: ScopeClass
-    build_q: Callable[[ChatbotScope], Q] | None = None
+    ``build_q`` maps the scope to a filter on that model's rows; None serves the model empty.
+    ``reread_under_selection`` tells the sync client to read the model from the start on every run,
+    because rows can join the served set below its stored cursor.
+    """
+
+    build_q: Callable[[ChatbotScope], Q] | None
+    reread_under_selection: bool = False
 
 
 def _owned(build_q: Callable[[ChatbotScope], Q]) -> ScopeRule:
-    return ScopeRule(ScopeClass.OWNED, build_q)
+    """Belongs to a chatbot: filtered by a path to the experiment family. A row is in or out of the
+    set for its whole life, so the client's cursor stays valid."""
+    return ScopeRule(build_q)
 
 
 def _referenced(build_q: Callable[[ChatbotScope], Q]) -> ScopeRule:
-    return ScopeRule(ScopeClass.REFERENCED, build_q)
+    """Shared across the team: kept when the selected chatbots reach it. An existing row joins the set
+    when a selected chatbot starts using it, keeping its old pk and timestamp."""
+    return ScopeRule(build_q=build_q, reread_under_selection=True)
 
 
 def _excluded() -> ScopeRule:
-    return ScopeRule(ScopeClass.EXCLUDED)
+    return ScopeRule(None)
 
 
 def _team_wide() -> ScopeRule:
     """Kept whole. Used where narrowing buys nothing and only adds a way for a row's FK to fail."""
-    return ScopeRule(ScopeClass.REFERENCED, lambda _scope: Q())
+    return ScopeRule(lambda _scope: Q())
 
 
 def _generic_target_q(scope: ChatbotScope, ct_field: str, id_field: str) -> Q:
@@ -355,9 +349,9 @@ def _generic_target_q(scope: ChatbotScope, ct_field: str, id_field: str) -> Q:
     return query
 
 
-# One rule per manifest model, applied by ``manifest.scoped_queryset``. Hand-written: the shortest
-# path is not always the right one, and several cross nullable FKs where "no path" and "path to null"
-# mean different things.
+# One rule per manifest model, applied by ``narrow_to_scope``. Hand-written: the shortest path is not
+# always the right one, and several cross nullable FKs where "no path" and "path to null" mean
+# different things.
 CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     # --- (a) owned by the chatbot ---------------------------------------------------------------
     "experiments.experiment": _owned(lambda s: Q(pk__in=s.experiment_ids)),
@@ -441,5 +435,11 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
 }
 
 
-def scope_class_for(model_label: str) -> ScopeClass:
-    return CHATBOT_SCOPE_REGISTRY[model_label].scope_class
+def narrow_to_scope(queryset: QuerySet, model_label: str, scope: ChatbotScope | None) -> QuerySet:
+    """``queryset`` filtered by the model's rule, or unchanged when no selection is active."""
+    if scope is None:
+        return queryset
+    rule = CHATBOT_SCOPE_REGISTRY[model_label]
+    if rule.build_q is None:
+        return queryset.none()
+    return queryset.filter(rule.build_q(scope))

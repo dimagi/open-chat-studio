@@ -287,6 +287,7 @@ def test_manifest_flags_resources_to_reread_under_a_selection():
     entries = {e["resource"]: e["reread_under_selection"] for e in response.json()["entries"]}
     assert entries["chatbots"] is False
     assert entries["llm_providers"] is True
+    assert entries["users"] is False
     assert entries["evaluators"] is False
 
 

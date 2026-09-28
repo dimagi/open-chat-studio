@@ -14,7 +14,7 @@ from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 from drf_spectacular.generators import SchemaGenerator
 
 from apps.files.models import FilePurpose
-from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope, ScopeClass, scope_class_for
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope, narrow_to_scope
 
 
 @dataclass(frozen=True)
@@ -290,17 +290,10 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
 
 def scoped_queryset(entry: ManifestEntry, team, scope: ChatbotScope | None = None) -> QuerySet:
     """The rows this request may serve: the team's, narrowed to the chatbot scope when one is active.
-
-    The model's ``CHATBOT_SCOPE_REGISTRY`` rule turns ``scope`` into the filter. An excluded resource
-    returns nothing rather than the team's rows, since importing one would reference an experiment
-    that was never synced."""
-    queryset = team_scoped_queryset(entry, team)
-    if scope is None:
-        return queryset
-    rule = CHATBOT_SCOPE_REGISTRY[entry.model]
-    if rule.build_q is None:
-        return queryset.none()
-    return queryset.filter(rule.build_q(scope))
+    An excluded resource returns nothing rather than the team's rows, since importing one would
+    reference an experiment that was never synced."""
+    scoped_queryset = team_scoped_queryset(entry=entry, team=team)
+    return narrow_to_scope(queryset=scoped_queryset, model_label=entry.model, scope=scope)
 
 
 @cache
@@ -325,9 +318,7 @@ def build_manifest() -> dict:
                 "resource": e.resource,
                 "cursor": e.cursor,
                 "secret": e.secret,
-                # A referenced row joins a selection's row set when a selected chatbot starts using
-                # it, keeping its old pk and timestamp, so it can land below the client's cursor.
-                "reread_under_selection": scope_class_for(e.model) is ScopeClass.REFERENCED,
+                "reread_under_selection": CHATBOT_SCOPE_REGISTRY[e.model].reread_under_selection,
             }
             for e in MANIFEST_ENTRIES
         ],

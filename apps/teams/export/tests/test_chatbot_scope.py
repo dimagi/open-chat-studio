@@ -5,7 +5,7 @@ import pytest
 
 from apps.chat.models import Chat
 from apps.teams.export import manifest
-from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ScopeClass, build_scope
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
 from apps.utils.factories.events import StaticTriggerFactory
@@ -220,22 +220,19 @@ def test_scope_registry_has_no_entries_for_unsynced_models():
     assert set(CHATBOT_SCOPE_REGISTRY) <= {e.model for e in manifest.MANIFEST_ENTRIES}
 
 
-def test_excluded_rules_carry_no_query_and_the_others_do():
-    for label, rule in CHATBOT_SCOPE_REGISTRY.items():
-        if rule.scope_class is ScopeClass.EXCLUDED:
-            assert rule.build_q is None, label
-        else:
-            assert rule.build_q is not None, label
-
-
 def test_the_excluded_classes_are_exactly_the_brief():
-    excluded = {label for label, rule in CHATBOT_SCOPE_REGISTRY.items() if rule.scope_class is ScopeClass.EXCLUDED}
+    excluded = {label for label, rule in CHATBOT_SCOPE_REGISTRY.items() if rule.build_q is None}
     assert {label.split(".")[0] for label in excluded} == {"evaluations", "human_annotations", "analysis"}
 
 
-def test_participants_are_referenced_so_a_selection_rereads_them():
+def test_participants_are_reread_under_a_selection():
     """A participant who first talked to another chatbot joins the scope without their row changing."""
-    assert CHATBOT_SCOPE_REGISTRY["experiments.participant"].scope_class is ScopeClass.REFERENCED
+    assert CHATBOT_SCOPE_REGISTRY["experiments.participant"].reread_under_selection
+
+
+def test_team_wide_resources_are_not_reread_under_a_selection():
+    """They are served whole, so no row can join the set below the cursor."""
+    assert not CHATBOT_SCOPE_REGISTRY["users.customuser"].reread_under_selection
 
 
 def test_every_scope_rule_builds_a_runnable_queryset():
