@@ -268,6 +268,8 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
     for p in params:
         if p.param_schema:
             schema = spec.get_schema(p.param_schema)
+        elif not p.content:
+            raise ValueError(f"Parameter {p.name} has no schema")
         else:
             media_type_schema = next(iter(p.content.values())).media_type_schema
             schema = spec.get_schema(media_type_schema)

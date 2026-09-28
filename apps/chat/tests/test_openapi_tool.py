@@ -437,3 +437,9 @@ def test_function_def_name_url_and_description():
     assert function_def.name == "list_things"
     assert function_def.url == "https://api.example.com/things"
     assert function_def.description == "List things"
+
+
+def test_parameter_without_schema_raises_value_error():
+    spec = _single_op_spec([{"name": "x", "in": "query", "type": "string"}])
+    with pytest.raises(ValueError, match="Parameter x has no schema"):
+        openapi_spec_op_to_function_def(spec, "/things", "get")
