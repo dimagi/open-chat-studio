@@ -486,23 +486,18 @@ class AttachMediaTool(CustomBaseTool):
         )
         return chat_attachment
 
-    def _get_attachable_file(self, file_id: int) -> File | None:
-        """Resolve a file from the node's media collection, or None.
+    def _get_attachable_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Map each requested id that is a file in the node's media collection to that file.
 
         `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
         to look up. The scoping belongs here: attaching is what makes
         `ChatMessage.get_attached_files()` return the file, so that read's `chatattachment__chat`
         filter confirms the association rather than checking it.
         """
-        return (
-            File.objects.filter(
-                id=file_id,
-                team_id=self.experiment_session.team_id,
-                collections__id=self.collection_id,
-            )
-            .distinct()
-            .first()
-        )
+        return File.objects.filter(
+            team_id=self.experiment_session.team_id,
+            collections__id=self.collection_id,
+        ).in_bulk(file_ids)
 
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
@@ -516,8 +511,9 @@ class AttachMediaTool(CustomBaseTool):
         # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
         # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
+        attachable_files = self._get_attachable_files(file_ids)
         for file_id in file_ids:
-            file = self._get_attachable_file(file_id)
+            file = attachable_files.get(file_id)
             if file is None:
                 response.append(f"* {file_id}: File not found.")
                 continue
