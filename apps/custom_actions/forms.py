@@ -4,13 +4,13 @@ from urllib.parse import urljoin
 from django import forms
 from django.conf import settings
 from django.core.validators import URLValidator
-from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.custom_actions.fields import JsonOrYamlField
 from apps.custom_actions.models import CustomAction
 from apps.custom_actions.schema_utils import get_operations_from_spec
 from apps.service_providers.models import AuthProvider
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 

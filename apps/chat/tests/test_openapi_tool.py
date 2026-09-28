@@ -1,9 +1,9 @@
 import pytest
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import Tool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+from apps.utils.openapi import OpenAPISpec
 
 
 def test_openapi_spec_to_openai_function():
@@ -406,3 +406,34 @@ def _make_openapi_schema(properties, name="Test API", path="/test", method="get"
             }
         },
     }
+
+
+def _single_op_spec(parameters, **operation):
+    return OpenAPISpec.from_spec_dict(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "version": "1"},
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {"/things": {"get": {"operationId": "list-things", "parameters": parameters, **operation}}},
+        }
+    )
+
+
+def test_object_query_parameter_is_supported():
+    spec = _single_op_spec([{"name": "filter", "in": "query", "schema": {"type": "object"}}])
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.args_schema(params={"filter": {"a": 1}}).params.filter == {"a": 1}
+
+
+def test_cookie_parameter_is_passed_as_cookies():
+    spec = _single_op_spec([{"name": "session", "in": "cookie", "required": True, "schema": {"type": "string"}}])
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.args_schema(cookies={"session": "abc"}).cookies.session == "abc"
+
+
+def test_function_def_name_url_and_description():
+    spec = _single_op_spec([], summary="List things")
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.name == "list_things"
+    assert function_def.url == "https://api.example.com/things"
+    assert function_def.description == "List things"

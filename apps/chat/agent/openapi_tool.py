@@ -11,8 +11,6 @@ from urllib.parse import urljoin
 import httpx
 from django.conf import settings
 from langchain_classic.chains.openai_functions.openapi import _format_url
-from langchain_community.tools import APIOperation
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field
@@ -22,6 +20,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -235,20 +234,19 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
             raise ValueError("Only application/json request bodies are supported")
 
     # Assemble final model
-    api_op = APIOperation.from_openapi_spec(spec, path, method)
     # Sanitized so it's a valid Anthropic tool name -- operation IDs are usually already safe, but
     # a hand-written OpenAPI spec can give one that isn't (spaces, punctuation, non-ASCII, ...).
-    function_name = sanitize_property_name(api_op.operation_id)
+    function_name = sanitize_property_name(spec.get_cleaned_operation_id(op, path, method))
+    description = spec.get_operation_description(path, op)
     args_schema = _create_model(
-        function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
+        function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=description
     )
 
-    url = urljoin(api_op.base_url, api_op.path)
     return FunctionDef(
         name=function_name,
-        description=api_op.description,
+        description=description,
         method=method,
-        url=url,
+        url=urljoin(spec.base_url, path),
         args_schema=args_schema,
     )
 

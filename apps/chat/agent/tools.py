@@ -12,7 +12,6 @@ from xml.sax.saxutils import escape
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
@@ -34,6 +33,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
