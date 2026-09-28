@@ -5049,16 +5049,16 @@ components:
         secret:
           type: boolean
           description: Whether rows carry fields sealed under the team public key.
-        scope:
-          type: string
-          description: 'How a chatbot-scoped export filters this model: owned | referenced
-            | excluded. `excluded` resources are served empty while the team has a
-            chatbot selection.'
+        reread_under_selection:
+          type: boolean
+          description: Whether to re-read this resource from the start on every sync
+            while the team has a chatbot selection. Rows can join the served set below
+            a stored cursor when a selected chatbot starts using them.
       required:
       - cursor
       - model
+      - reread_under_selection
       - resource
-      - scope
       - secret
     MessageTypeEnum:
       enum:
