@@ -152,6 +152,43 @@ filterwarnings = [
     "ignore:The FORMS_URLFIELD_ASSUME_HTTPS transitional setting is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
 ]
 
+[tool.coverage.run]
+# The repo root rather than `apps`/`config`, so reported paths keep their leading directory
+# and match the repo for Codecov. Naming the subdirectories instead makes coverage store each
+# file relative to its own source root, which turns `apps/web/views.py` into `web/views.py`.
+source = ["."]
+# sys.monitoring costs ~13% of the suite's runtime where the C tracer costs ~31%. It cannot
+# measure branches before Python 3.14, which is why `branch` stays off.
+core = "sysmon"
+relative_files = true
+omit = [
+    ".venv/*",
+    "node_modules/*",
+    "components/*",
+    "docs/*",
+    "locust/*",
+    # Dev and CI tooling, not the application. `scripts/` is not a package, so coverage cannot
+    # discover the files in it that no test imports, which would leave it half-measured.
+    "scripts/*",
+    "tasks.py",
+    "manage.py",
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "*/conftest.py",
+    "apps/utils/factories/*",
+    # Imported only by a deployed process, so it can never report anything but 0%.
+    "config/settings_production.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(typing\\.)?overload",
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff]
 exclude = [
     ".direnv",

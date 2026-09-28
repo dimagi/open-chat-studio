@@ -34,8 +34,6 @@ def _first_party_models():
 IGNORED_MODELS = frozenset(
     {
         "api.userapikey",
-        "assistants.openaiassistant",
-        "assistants.toolresources",
         "banners.banner",
         "dashboard.dashboardcache",
         "dashboard.dashboardfilter",

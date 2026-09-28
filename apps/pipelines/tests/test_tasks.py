@@ -1,5 +1,8 @@
+from unittest import mock
+
 import pytest
 
+from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeRunError
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.pipelines import PipelineFactory
@@ -50,3 +53,43 @@ class TestGetResponseForPipelineTestMessage:
         result = get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="test", user_id=user.id)
 
         assert result == CONFIG_ERROR
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(PipelineBuildError("bad graph"), id="pipeline_build_error"),
+            pytest.param(CodeNodeRunError("name 'foo' is not defined"), id="code_node_run_error"),
+        ],
+    )
+    def test_configuration_error_is_returned(self, exc, team_with_users):
+        pipeline = self._valid_pipeline(team_with_users)
+
+        with mock.patch("apps.pipelines.tasks.PipelineTestBot.process_input", side_effect=exc):
+            result = get_response_for_pipeline_test_message(
+                pipeline_id=pipeline.id, message_text="test", user_id=team_with_users.members.first().id
+            )
+
+        assert result == {"error": str(exc)}
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(PipelineNodeRunError("ORMRepository not set"), id="pipeline_node_run_error"),
+            pytest.param(KeyError("missing"), id="unexpected_error"),
+        ],
+    )
+    def test_other_errors_are_raised(self, exc, team_with_users):
+        pipeline = self._valid_pipeline(team_with_users)
+
+        with (
+            mock.patch("apps.pipelines.tasks.PipelineTestBot.process_input", side_effect=exc),
+            pytest.raises(type(exc)),
+        ):
+            get_response_for_pipeline_test_message(
+                pipeline_id=pipeline.id, message_text="test", user_id=team_with_users.members.first().id
+            )
+
+    def _valid_pipeline(self, team):
+        pipeline = create_pipeline_model([start_node(), end_node()], pipeline=PipelineFactory.create(team=team))
+        pipeline.save()
+        return pipeline

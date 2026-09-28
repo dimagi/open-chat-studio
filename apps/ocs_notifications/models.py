@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.teams.models import BaseTeamModel
 from apps.utils.fields import SanitizedJSONField
+from apps.web.meta import ensure_absolute_url
 
 
 class LevelChoices(models.IntegerChoices):
@@ -78,6 +79,15 @@ class NotificationEvent(BaseTeamModel):
     title = models.CharField(max_length=255)
     message = models.TextField()
     links = SanitizedJSONField(null=True)
+
+    @property
+    def absolute_links(self) -> dict[str, str]:
+        """The event's links as absolute urls, for delivery outside the app.
+
+        Links to OCS pages are stored site-relative, which the in-app notification list renders
+        as-is; Slack and email need a host. Links that already name one (traces, docs) are kept.
+        """
+        return {label: ensure_absolute_url(url) for label, url in (self.links or {}).items()}
 
 
 class EventUserQuerySet(models.QuerySet):

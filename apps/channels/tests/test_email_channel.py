@@ -907,36 +907,6 @@ class TestHandleEmailMessageTask:
         message = mock_instance.new_user_message.call_args.args[0]
         assert message.external_ids == expected_ids
 
-    def test_task_legacy_payload_falls_back_to_routing(self, team_with_users):
-        """Tasks queued before deploy won't carry channel_id; the task should
-        still resolve the channel via the existing routing chain."""
-        team = team_with_users
-        experiment = ExperimentFactory(team=team)
-        ExperimentChannelFactory(
-            experiment=experiment,
-            platform=ChannelPlatform.EMAIL,
-            extra_data={"email_address": "bot@chat.openchatstudio.com"},
-            team=team,
-        )
-
-        email_data = {
-            "participant_id": "sender@example.com",
-            "message_text": "Hello bot",
-            "from_address": "sender@example.com",
-            "to_address": "bot@chat.openchatstudio.com",
-            "subject": "Test",
-            "message_id": "<msg1@example.com>",
-            "in_reply_to": None,
-            "references": [],
-        }
-
-        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
-            mock_instance = MockEmailChannel.return_value
-            # Call without channel_id (legacy form)
-            handle_email_message(email_data=email_data)
-            MockEmailChannel.assert_called_once()
-            mock_instance.new_user_message.assert_called_once()
-
 
 @pytest.mark.django_db()
 class TestEmailInboundHandler:

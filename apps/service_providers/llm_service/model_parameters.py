@@ -42,6 +42,15 @@ class GPT6ReasoningEffortParameter(TextChoices):
     MAX = "max", "Max"
 
 
+class GPT6SolReasoningEffortParameter(TextChoices):
+    NONE = "none", "None"
+    LOW = "low", "Low"
+    MEDIUM = "medium", "Medium"
+    HIGH = "high", "High"
+    XHIGH = "xhigh", "XHigh"
+    MAX = "max", "Max"
+
+
 class Claude46EffortParameter(TextChoices):
     LOW = "low", "Low"
     MEDIUM = "medium", "Medium"
@@ -198,6 +207,19 @@ class GPT6Parameters(LLMModelParamBase):
     )
 
 
+class GPT6SolParameters(LLMModelParamBase):
+    # gpt-6-sol and gpt-6-luna take the same effort range as gpt-6-astra plus `none`, so
+    # GPT6Parameters does not fit. Temperature and top_p stay unexposed at every effort level,
+    # including `none`: the GPT-6 migration guide rejects both parameters family-wide, and
+    # GPT-5.1 likewise exposes `none` effort without them. The API returns a 400 for a parameter
+    # it does not accept, so offering them is worse than omitting them.
+    effort: GPT6SolReasoningEffortParameter = Field(
+        title="Reasoning Effort",
+        default=GPT6SolReasoningEffortParameter.MEDIUM,
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=GPT6SolReasoningEffortParameter.labels),
+    )
+
+
 class GPT5ProParameters(LLMModelParamBase):
     # gpt-5-pro only supports high effort, which is also its default
     verbosity: OpenAIVerbosityParameter = Field(
@@ -224,16 +246,6 @@ class ClaudeHaikuLatestParameters(AnthropicBaseParameters):
         description="The maximum number of tokens to generate in the completion.",
         ge=1,
         le=8192,
-    )
-
-
-class ClaudeOpus4_20250514Parameters(AnthropicBaseParameters):
-    max_tokens: int = Field(
-        title="Max Output Tokens",
-        default=32000,
-        description="The maximum number of tokens to generate in the completion.",
-        ge=1,
-        le=32000,
     )
 
 
@@ -387,6 +399,30 @@ class ClaudeOpus47Parameters(LLMModelParamBase):
         default=False,
         description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
         "At the default effort level (high), Claude will almost always think. "
+        "At lower effort levels, Claude may skip thinking for simpler problems.",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+
+class ClaudeOpus55Parameters(ClaudeOpus47Parameters):
+    """Parameters for Claude Opus 5.5.
+
+    Identical to Opus 4.7 apart from the effort default: Anthropic documents 'medium' as the API
+    default for Opus 5.5, where the models sharing ClaudeOpus47Parameters default to 'high'.
+    """
+
+    effort: Claude47EffortParameter = Field(
+        title="Reasoning Effort",
+        default=Claude47EffortParameter.MEDIUM,
+        description="Control intelligence, speed, and cost tradeoffs with adaptive thinking. "
+        "Use 'xhigh' for coding and agentic use cases.",
+        json_schema_extra=UiSchema(widget=Widgets.select, enum_labels=Claude47EffortParameter.labels),
+    )
+    adaptive_thinking: bool = Field(
+        title="Enable Adaptive Thinking",
+        default=False,
+        description="Let Claude dynamically decide when and how much to think with adaptive thinking mode. "
+        "At higher effort levels, Claude will almost always think. "
         "At lower effort levels, Claude may skip thinking for simpler problems.",
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )

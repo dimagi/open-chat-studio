@@ -24,6 +24,8 @@ dump.rdb
 .envrc
 .python-version
 .coverage
+coverage.xml
+htmlcov/
 venv
 .venv/
 .ruff_cache/

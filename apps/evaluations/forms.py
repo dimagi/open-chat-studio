@@ -5,6 +5,7 @@ from io import StringIO
 
 from django import forms
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.forms.models import construct_instance
 from django.forms.widgets import RadioSelect
 from django.http import QueryDict
@@ -47,18 +48,21 @@ class EvaluatorCheckboxWidget(forms.CheckboxSelectMultiple):
     def __init__(self, *args, evaluator_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._evaluator_queryset = evaluator_queryset
-        self._mode_by_id = {}
+        self._evaluator_by_id = {}
 
     def optgroups(self, name, value, attrs=None):
         if self._evaluator_queryset is not None:
-            self._mode_by_id = {str(e.id): e.evaluation_mode for e in self._evaluator_queryset}
+            self._evaluator_by_id = {str(e.id): e for e in self._evaluator_queryset}
         return super().optgroups(name, value, attrs)
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
-        mode = self._mode_by_id.get(str(value), "")
-        if mode:
-            option["attrs"]["data-evaluation-mode"] = mode
+        evaluator = self._evaluator_by_id.get(str(value))
+        if evaluator is None:
+            return option
+        option["attrs"]["data-evaluation-mode"] = evaluator.evaluation_mode
+        if evaluator.is_archived:
+            option["label"] = f"{label} (archived)"
         return option
 
 
@@ -148,7 +152,7 @@ class EvaluationConfigForm(forms.ModelForm):
         self.team = team
 
         self.fields["dataset"].queryset = EvaluationDataset.objects.filter(team=team)
-        evaluator_qs = Evaluator.objects.filter(team=team)
+        evaluator_qs = self._pickable_evaluators(team)
         self.fields["evaluators"].queryset = evaluator_qs
         if isinstance(self.fields["evaluators"].widget, EvaluatorCheckboxWidget):
             self.fields["evaluators"].widget._evaluator_queryset = evaluator_qs
@@ -191,6 +195,13 @@ class EvaluationConfigForm(forms.ModelForm):
     def _get_version_choices(self, experiment_id: int):
         """Get all versions for a specific experiment including working version"""
         return Experiment.objects.all_versions_queryset(experiment_id).filter(team=self.team)
+
+    def _pickable_evaluators(self, team):
+        """Active evaluators, plus the archived ones already on this config so they can be unticked."""
+        pickable = Q(is_archived=False)
+        if self.instance.pk:
+            pickable |= Q(id__in=self.instance.evaluators.values("id"))
+        return Evaluator.objects.filter(team=team).filter(pickable)
 
     def clean(self):
         cleaned_data = super().clean()

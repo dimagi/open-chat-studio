@@ -332,10 +332,10 @@ jobs:
       - name: Set test flags
         id: test_flags
         run: |
-          # On main, run with migrations (and coverage) so migrations stay exercised before deploy.
+          # On main, run with migrations so they stay exercised before deploy.
           # On PRs, skip migrations for faster feedback.
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            echo "flags=--cov --cov-report=xml" >> "$GITHUB_OUTPUT"
+            echo "flags=" >> "$GITHUB_OUTPUT"
           else
             echo "flags=--no-migrations" >> "$GITHUB_OUTPUT"
           fi
@@ -345,10 +345,12 @@ jobs:
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
           PYTHONWARNINGS: default
-        run: uv run pytest -n auto ${{ steps.test_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
+        run: uv run pytest -n auto --cov --cov-report=xml ${{ steps.test_flags.outputs.flags }} --junitxml=junit.xml -o junit_family=legacy
 
+      # No `if:`, so this runs only when the tests passed. A failed run still writes a
+      # coverage report, and uploading that partial report would become the baseline every
+      # later PR compares against.
       - name: Upload results to Codecov
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

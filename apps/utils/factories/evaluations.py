@@ -179,21 +179,37 @@ class EvaluationConfigFactory(DjangoModelFactory):
 
     @factory.post_generation
     def evaluators(self, create, extracted, **kwargs):
+        """Add the given evaluators, or one default; an explicit empty list leaves the config with none."""
         if not create:
             return
-        if extracted:
-            for evaluator in extracted:
-                self.evaluators.add(evaluator)
-        else:
+        if extracted is None:
             self.evaluators.add(EvaluatorFactory.create())
+            return
+        for evaluator in extracted:
+            self.evaluators.add(evaluator)
 
 
 class EvaluationRunFactory(DjangoModelFactory):
     class Meta:
         model = EvaluationRun
+        skip_postgeneration_save = True
 
     team = factory.SubFactory(TeamFactory)
     config = factory.SubFactory(EvaluationConfigFactory)
+
+    @factory.post_generation
+    def evaluator_ids(self, create, extracted, **kwargs):
+        """Freeze the config's members into the plan, as `EvaluationConfig.run()` does, unless given.
+
+        Only a created run has a saved config to read members from; a built one keeps
+        whatever plan it was given.
+        """
+        if extracted is None and create:
+            extracted = list(self.config.active_evaluators.values_list("id", flat=True))
+        if extracted is not None:
+            self.evaluator_ids = extracted
+        if create:
+            self.save(update_fields=["evaluator_ids"])
 
 
 class EvaluationResultFactory(DjangoModelFactory):

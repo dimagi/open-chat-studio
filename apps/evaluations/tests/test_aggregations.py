@@ -311,6 +311,16 @@ class TestBinaryAggregationDispatch:
         (aggregate,) = compute_aggregates_for_run(run)
         assert aggregate.aggregates["score"]["type"] == "numeric"
 
+    def test_binary_field_still_routes_by_schema_after_the_evaluator_is_archived(self):
+        """Recompute resolves the schema through an unfiltered manager even when the evaluator is archived."""
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"correct": 1}, {"correct": 0}, {"correct": 1}])
+        evaluator.archive()
+
+        (aggregate,) = compute_aggregates_for_run(run)
+
+        assert aggregate.aggregates["correct"]["type"] == "binary"
+
 
 class TestAggregateBinaryField:
     @pytest.mark.parametrize(

@@ -1,6 +1,9 @@
 # Markdown that is consumed by tooling rather than published to the docs site.
 # A top-level heading would change their meaning, so MD041 must not apply to them.
 
+# OpenCodeReview rule text, passed to the review model verbatim
+.opencodereview/rules/
+
 # Workflow templates
 .github/ISSUE_TEMPLATE/
 .github/pull_request_template.md

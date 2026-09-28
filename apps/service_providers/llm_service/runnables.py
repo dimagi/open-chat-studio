@@ -13,10 +13,6 @@ lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message  # ty:
 logger = logging.getLogger("ocs.runnables")
 
 
-class GenerationError(Exception):
-    pass
-
-
 class GenerationCancelled(Exception):
     def __init__(self, output: ChainOutput):
         self.output = output

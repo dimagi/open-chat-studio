@@ -294,8 +294,8 @@ class BasePipelineNode(BaseModel, ABC):
             # recently is this run's primary input.
             inputs = state.get_node_inputs(node_id, incoming_nodes)
             if not inputs:
-                raise PipelineNodeRunError(
-                    f"Cannot determine which input to use for node {node_id}",
+                sentry_sdk.set_context(
+                    "Node input",
                     {
                         "node_name": self.name,
                         "node_id": node_id,
@@ -304,6 +304,7 @@ class BasePipelineNode(BaseModel, ABC):
                         "pipeline_path": state["path"],
                     },
                 )
+                raise PipelineNodeRunError(f"Cannot determine which input to use for node {node_id}")
             source_node_id, last_input = inputs[-1]
             state["last_node_input"] = last_input
             state["node_inputs"] = [value for _source_node_id, value in inputs]

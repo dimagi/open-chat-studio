@@ -475,6 +475,7 @@ class Command(BaseCommand):
                 params=dict(evaluator.params),
                 llm_provider_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_id"),
                 llm_provider_model_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_model_id"),
+                is_archived=evaluator.is_archived,
             )
             ctx.evaluators[evaluator.id] = new_evaluator
 

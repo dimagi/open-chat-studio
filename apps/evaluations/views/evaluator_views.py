@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
+from django.db.models import Count, Exists, OuterRef, ProtectedError, QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -21,13 +22,23 @@ from apps.evaluations.const import (
 )
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
-from apps.evaluations.models import Evaluator
+from apps.evaluations.models import EvaluationResult, EvaluationRunAggregate, Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.schema_utils import collapse_optional_types, resolve_references
+from apps.utils.tables import render_table_row
 from apps.web.waf import WafRule, waf_allow
+
+
+def annotated_evaluators(team) -> QuerySet[Evaluator]:
+    """This team's evaluators annotated with run history and config membership for the table."""
+    return Evaluator.objects.filter(team=team).annotate(
+        has_history=Exists(EvaluationResult.objects.filter(evaluator=OuterRef("pk")))
+        | Exists(EvaluationRunAggregate.objects.filter(evaluator=OuterRef("pk"))),
+        config_count=Count("evaluationconfig", distinct=True),
+    )
 
 
 class EvaluatorHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -51,11 +62,8 @@ class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignor
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return (
-            Evaluator.objects.filter(team=self.request.team)
-            # .annotate(run_count=Count("runs"))
-            # .order_by("name")
-        )
+        """Return this team's evaluators annotated with run history and config membership for the table."""
+        return annotated_evaluators(self.request.team)
 
 
 class EvaluatorFormsetMixin:
@@ -198,13 +206,44 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
 
     def delete(self, request, team_slug: str, pk: int):
-        """Delete the evaluator, returning 409 if a related run is still in progress."""
-        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        """Archive the evaluator if it has history, else delete it; 409 while a related run is in flight."""
+        evaluator = get_object_or_404(annotated_evaluators(request.team), pk=pk)
         try:
-            evaluator.delete()
+            archived = _delete_or_archive(evaluator)
         except InFlightRunsError as e:
             return HttpResponse(", ".join(e.messages), status=409)
-        return HttpResponse(status=200)
+        if not archived:
+            return HttpResponse(status=200)
+        return render_table_row(request, EvaluatorTable, evaluator)
+
+
+def _delete_or_archive(evaluator: Evaluator) -> bool:
+    """Archive the evaluator when it has history, else delete it; returns True when archived.
+
+    `evaluator` carries the `has_history` annotation from `annotated_evaluators`. A result
+    can still land between that check and the delete, in which case the protected foreign
+    keys refuse the delete and the evaluator is archived instead.
+    """
+    if evaluator.has_history:
+        evaluator.archive()
+        return True
+    try:
+        evaluator.delete()
+    except ProtectedError:
+        evaluator.archive()
+        return True
+    return False
+
+
+class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "evaluations.delete_evaluator"
+
+    def post(self, request, team_slug: str, pk: int):
+        """Restore an archived evaluator and return its re-rendered row."""
+        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        evaluator.unarchive()
+        row = annotated_evaluators(request.team).get(pk=evaluator.pk)
+        return render_table_row(request, EvaluatorTable, row)
 
 
 def _submitted_output_schema(form, instance) -> dict:

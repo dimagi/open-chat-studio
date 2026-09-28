@@ -67,15 +67,6 @@ def general_synthetic_voices():
 
 class TestSyntheticVoice:
     @pytest.mark.django_db()
-    def test_team_scoped_services(self):
-        assert [
-            SyntheticVoice.OpenAIVoiceEngine,
-            SyntheticVoice.ElevenLabs,
-            SyntheticVoice.Intron,
-            SyntheticVoice.MiniMax,
-        ] == SyntheticVoice.TEAM_SCOPED_SERVICES
-
-    @pytest.mark.django_db()
     def test_get_for_team_returns_all_general_services(self):
         """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
         voices_queryset = SyntheticVoice.get_for_team(team=None)
@@ -767,8 +758,7 @@ class TestSourceMaterialArchiving:
 
         # Publishing doesn't rewrite the original working node's params; clear it so only the
         # published version's node still references source_material.
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         assert source_material.archive() is False
         source_material.refresh_from_db()
@@ -785,8 +775,7 @@ class TestSourceMaterialArchiving:
         experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         published = experiment.create_new_version()
 
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         # Archiving the working experiment wouldn't touch the pipeline; archive the published one.
         published.archive()

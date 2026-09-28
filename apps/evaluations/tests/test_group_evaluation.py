@@ -3,7 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.evaluations.models import EvaluationConfig, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.exceptions import NoActiveEvaluatorsError
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tests.coordination import sweep
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -59,15 +60,13 @@ def test_group_evaluation_with_multiple_evaluators():
 
 @pytest.mark.django_db()
 def test_empty_evaluation_config():
-    """Test that empty evaluation config is handled correctly"""
-    # Create config with no evaluators
+    """A config with no evaluators cannot start a run, so no run row is created."""
     evaluation_config = cast("EvaluationConfig", EvaluationConfigFactory.create(evaluators=[]))
 
-    evaluation_run = evaluation_config.run()
+    with pytest.raises(NoActiveEvaluatorsError):
+        evaluation_config.run()
 
-    # A run is still created; it stays PENDING until the coordinator picks it up.
-    evaluation_run.refresh_from_db()
-    assert evaluation_run.status == EvaluationRunStatus.PENDING
+    assert not EvaluationRun.objects.filter(config=evaluation_config).exists()
 
 
 @pytest.mark.django_db()

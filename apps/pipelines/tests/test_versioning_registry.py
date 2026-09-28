@@ -24,7 +24,7 @@ ALL_SPECS = [
 
 assert ALL_SPECS, "Versioned param registry must not be empty"
 
-# Specs whose model has a get_related_nodes_queryset guard (not OpenAiAssistant, which has its own).
+# Specs whose model has a get_related_nodes_queryset guard.
 GUARD_FACTORIES = {
     Collection: CollectionFactory,
     SourceMaterial: SourceMaterialFactory,

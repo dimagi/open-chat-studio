@@ -79,6 +79,7 @@ IGNORE_APPS = {
     "socialaccount",
     "sso",
     "staticfiles",
+    "assistants",  # retired feature, historical migrations only (#4254)
     "taggit",
     "template_partials",
     "tz_detect",
