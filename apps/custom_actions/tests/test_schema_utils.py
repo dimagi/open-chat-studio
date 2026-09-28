@@ -4,12 +4,17 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.custom_actions.schema_utils import (
     APIOperationDetails,
     ParameterDetail,
     _resolve_schema_type,
+    get_operations_from_spec,
     get_operations_from_spec_dict,
 )
+from apps.utils.openapi import OpenAPISpec
 
 
 def load_test_data(filename: str) -> dict:
@@ -399,3 +404,95 @@ class TestResolveSchemaType:
     def test_variant_without_type_key_defaults_to_string(self):
         """A resolved $ref that is a complex object without a top-level type key."""
         assert _resolve_schema_type({"anyOf": [{"properties": {"foo": {}}}]}) == "string"
+
+
+def _one_operation_spec(parameters=None, body=None):
+    operation = {"operationId": "op", "parameters": parameters or []}
+    if body:
+        operation["requestBody"] = {"content": {"application/json": {"schema": body}}}
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "t", "version": "1"},
+        "servers": [{"url": "https://x.com"}],
+        "paths": {"/p/{id}": {"post": operation}},
+    }
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        pytest.param(
+            _one_operation_spec(
+                [{"name": "tags", "in": "query", "schema": {"type": "array", "items": {"type": "string"}}}]
+            ),
+            [("tags", "query", "array", False, None)],
+            id="array-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "c", "in": "query", "schema": {"type": "string", "enum": ["a", "b"]}}]),
+            [("c", "query", "string", False, None)],
+            id="enum-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "o", "in": "query", "schema": {"type": "object"}}]),
+            [("o", "query", "object", False, None)],
+            id="object-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "k", "in": "cookie", "required": True, "schema": {"type": "string"}}]),
+            [("k", "cookie", "string", True, None)],
+            id="required-cookie",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "X-A", "in": "header", "schema": {"type": "integer", "default": 3}}]),
+            [("X-A", "header", "integer", False, 3)],
+            id="header-with-default",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                body={
+                    "type": "object",
+                    "required": ["a"],
+                    "properties": {
+                        "a": {"type": "array", "items": {"type": "integer"}},
+                        "n": {"type": "object", "properties": {"z": {"type": "string"}}},
+                        "o": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                    },
+                }
+            ),
+            [
+                ("a", "body", "array", True, None),
+                ("n", "body", "object", False, None),
+                ("o", "body", "boolean", False, None),
+            ],
+            id="object-body",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "array", "items": {"type": "string"}}),
+            [("body", "body", "array", True, None)],
+            id="non-object-body",
+        ),
+    ],
+)
+def test_parameter_extraction(spec, expected):
+    [operation] = get_operations_from_spec_dict(spec)
+    assert [(p.name, p.param_in, p.schema_type, p.required, p.default) for p in operation.parameters] == expected
+
+
+def test_operation_id_and_description_fallbacks():
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/a-b/c.d": {"get": {"summary": "S"}}},
+    }
+    [operation] = get_operations_from_spec_dict(spec)
+    assert (operation.operation_id, operation.description) == ("a_b_c_d_get", "S")
+
+
+def test_operation_ids_match_function_def_names():
+    spec_dict = _one_operation_spec()
+    spec_dict["paths"]["/other"] = {"get": {"operationId": "get-other.v2"}, "delete": {}}
+    spec = OpenAPISpec.from_spec_dict(spec_dict)
+    for operation in get_operations_from_spec(spec, spec_dict):
+        function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
+        assert function_def.name == operation.operation_id

@@ -1,11 +1,9 @@
 from typing import Any, Literal
 
 from django.core.exceptions import ValidationError
-from langchain_community.tools import APIOperation
-from langchain_community.utilities.openapi import OpenAPISpec
-from openapi_pydantic import DataType
 from pydantic import BaseModel, Field
 
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import resolve_references
 
 
@@ -99,26 +97,27 @@ class APIOperationDetails(BaseModel):
         return f"{self.method.upper()}: {self.description or self.operation_id}"
 
 
-def get_operations_from_spec_dict(spec_dict) -> list[APIOperationDetails]:
-    spec = OpenAPISpec.from_spec_dict(spec_dict)
-    return get_operations_from_spec(spec, spec_dict)
+PARAMETER_LOCATIONS = ("path", "query", "header", "cookie")
 
 
-def get_operations_from_spec(spec, spec_dict=None) -> list[APIOperationDetails]:
-    # When spec_dict is None, parameter locations (path/query/etc.) cannot be resolved;
-    # all non-body parameters will default to param_in="query".
-    resolved_spec = resolve_references(spec_dict) if spec_dict else None
+def get_operations_from_spec_dict(spec_dict: dict) -> list[APIOperationDetails]:
+    return get_operations_from_spec(OpenAPISpec.from_spec_dict(spec_dict), spec_dict)
+
+
+def get_operations_from_spec(spec: OpenAPISpec, spec_dict: dict) -> list[APIOperationDetails]:
+    resolved_spec = resolve_references(spec_dict)
     operations = []
-    for path in spec.paths:
+    for path in spec.paths or {}:
         for method in spec.get_methods_for_path(path):
-            op = APIOperation.from_openapi_spec(spec, path, method)
+            operation = spec.get_operation(path, method)
+            resolved_operation = resolved_spec.get("paths", {}).get(path, {}).get(method, {})
             operations.append(
                 APIOperationDetails(
-                    operation_id=op.operation_id,
-                    description=op.description,
+                    operation_id=spec.get_cleaned_operation_id(operation, path, method),
+                    description=spec.get_operation_description(path, operation),
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(op, resolved_spec, path, method),
+                    parameters=_extract_parameters(resolved_operation),
                 )
             )
     return operations
@@ -142,63 +141,51 @@ def _resolve_schema_type(prop_schema: dict) -> str:
     return "string"
 
 
-def _extract_parameters(
-    operation: APIOperation, resolved_spec: dict | None = None, path: str = "", method: str = ""
-) -> list[ParameterDetail]:
-    """Extract parameter details from OpenAPI spec.
-
-    Extracts both query/path parameters and request body parameters.
-    Looks up parameter location (path, query, etc.) from the resolved spec.
-    """
-    # Build a map of parameter name -> param_in from the resolved spec
-    param_in_map = {}
-    body_prop_schemas: dict[str, dict] = {}
-    if resolved_spec and path and method:
-        resolved_op = resolved_spec.get("paths", {}).get(path, {}).get(method, {})
-        for param_spec in resolved_op.get("parameters", []):
-            param_name = param_spec.get("name")
-            param_in = param_spec.get("in", "query")
-            if param_name:
-                param_in_map[param_name] = param_in
-        # Pre-resolve body property schemas for type lookup (handles anyOf/oneOf)
-        body_schema = (
-            resolved_op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
-        )
-        body_prop_schemas = body_schema.get("properties", {})
-
+def _extract_parameters(resolved_operation: dict) -> list[ParameterDetail]:
+    """Read the parameters and JSON request body properties of an operation with its references resolved."""
     parameters = []
-    for prop in operation.properties:
-        param_in = param_in_map.get(prop.name, "query")
-        schema_type = prop.type
-        if not isinstance(schema_type, str):
-            # prop.type can be a DataType enum or a dynamically created enum class
-            schema_type = schema_type.value if isinstance(schema_type, DataType) else "string"
+    for param in resolved_operation.get("parameters", []):
+        if not param.get("name") or param.get("in") not in PARAMETER_LOCATIONS:
+            continue
+        schema = param.get("schema", {})
         parameters.append(
             ParameterDetail(
-                name=prop.name,
-                required=prop.required,
-                schema_type=schema_type,
-                description=prop.description,
-                default=prop.default,
-                param_in=param_in,
+                name=param["name"],
+                description=param.get("description"),
+                required=param.get("required", False),
+                schema_type=_resolve_schema_type(schema),
+                default=schema.get("default"),
+                param_in=param["in"],
             )
         )
 
-    # Extract request body parameters (these are always in the body)
-    if operation.request_body:
-        for param in operation.request_body.properties:
-            params = param.model_dump()
-            if isinstance(param.type, DataType):
-                params["schema_type"] = param.type.value
-                # UGLY HACK! DataType.Array is converted into a string like "Array<DataType.STRING>"
-                # See langchain_community/tools/openapi/utils/api_models.py:315
-            elif isinstance(param.type, str) and param.type.startswith("Array<"):
-                params["schema_type"] = DataType.ARRAY.value
-            elif param.type is None:
-                # Type could not be determined by langchain (e.g. anyOf/oneOf schemas
-                # from Pydantic v2); resolve from the spec_dict property schema.
-                params["schema_type"] = _resolve_schema_type(body_prop_schemas.get(param.name, {}))
-            params["param_in"] = "body"
-            parameters.append(ParameterDetail.model_validate(params))
+    body_schema = resolved_operation.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
+    if body_schema is None:
+        return parameters
 
+    properties = body_schema.get("properties")
+    if body_schema.get("type") == "object" and properties:
+        required = set(body_schema.get("required", []))
+        for name, prop in properties.items():
+            parameters.append(
+                ParameterDetail(
+                    name=name,
+                    description=prop.get("description"),
+                    required=name in required,
+                    schema_type=_resolve_schema_type(prop),
+                    default=prop.get("default"),
+                    param_in="body",
+                )
+            )
+    else:
+        parameters.append(
+            ParameterDetail(
+                name="body",
+                description=body_schema.get("description"),
+                required=True,
+                schema_type=_resolve_schema_type(body_schema),
+                default=body_schema.get("default"),
+                param_in="body",
+            )
+        )
     return parameters
