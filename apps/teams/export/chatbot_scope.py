@@ -1,9 +1,20 @@
 """Which rows a chatbot-scoped export may serve.
 
-One ``ChatbotScope`` is built per request and answers "which rows of model X" for every resource.
-Bounded sets resolve to id lists, so a dependent filter is an indexed ``IN`` the planner estimates
-well; the session-, chat-, message- and file-sized sets stay querysets, because ``pk__in`` on a
-materialised list does not scale for a busy chatbot.
+When a team has a chatbot selection, every export request is filtered in three steps:
+
+1. ``build_scope`` turns the team's allowlist into a ``ChatbotScope``: the ids of everything the
+   selected chatbots own or use (experiments, sessions, pipelines, providers, ...). It knows nothing
+   about which model is being exported.
+2. ``CHATBOT_SCOPE_REGISTRY`` holds one ``ScopeRule`` per exported model. The rule's ``build_q`` picks
+   the ``ChatbotScope`` sets that model needs and returns a ``Q`` filter for it.
+3. ``manifest.scoped_queryset`` looks up the model's rule, calls ``build_q`` with the scope, and
+   filters the team's rows with the result.
+
+With no selection, ``build_scope`` returns None and the team's rows are served unfiltered.
+
+A new ``ChatbotScope`` is built per request. Bounded sets resolve to id lists, so a dependent filter
+is an indexed ``IN`` the planner estimates well; the session-, chat-, message- and file-sized sets
+stay querysets, because ``pk__in`` on a materialised list does not scale for a busy chatbot.
 """
 
 from collections.abc import Callable, Sequence
@@ -47,7 +58,11 @@ def _ids_from(label: str, base: Q, column: str) -> QuerySet:
 
 
 class ChatbotScope:
-    """The rows one team's chatbot allowlist may export."""
+    """The id sets a chatbot selection covers, for ``CHATBOT_SCOPE_REGISTRY`` rules to filter by.
+
+    Each property is one set (experiments, sessions, pipelines, providers, ...), computed on first
+    use. Properties build on each other, e.g. ``chats`` comes from the sessions of ``experiment_ids``.
+    """
 
     def __init__(self, selected_ids: Sequence[int]):
         self.selected_ids = list(selected_ids)
@@ -294,11 +309,14 @@ class ScopeClass(StrEnum):
     """Shared across the team: kept when the selected chatbots reach it."""
 
     EXCLUDED = "excluded"
-    """Served empty. The client skips these resources entirely."""
+    """Served empty."""
 
 
 @dataclass(frozen=True)
 class ScopeRule:
+    """How one model is filtered under a selection. ``build_q`` maps the scope to a filter on that
+    model's rows; it is None for an excluded model."""
+
     scope_class: ScopeClass
     build_q: Callable[[ChatbotScope], Q] | None = None
 
@@ -337,8 +355,9 @@ def _generic_target_q(scope: ChatbotScope, ct_field: str, id_field: str) -> Q:
     return query
 
 
-# One rule per manifest model. Hand-written: the shortest path is not always the right one, and
-# several cross nullable FKs where "no path" and "path to null" mean different things.
+# One rule per manifest model, applied by ``manifest.scoped_queryset``. Hand-written: the shortest
+# path is not always the right one, and several cross nullable FKs where "no path" and "path to null"
+# mean different things.
 CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     # --- (a) owned by the chatbot ---------------------------------------------------------------
     "experiments.experiment": _owned(lambda s: Q(pk__in=s.experiment_ids)),
