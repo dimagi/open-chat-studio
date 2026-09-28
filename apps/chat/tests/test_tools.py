@@ -666,8 +666,8 @@ def _sibling_collection(collection, **kwargs):
 
 
 @pytest.mark.django_db()
-def test_get_node_tools_scopes_attach_media_to_the_nodes_collections():
-    """The tool must never be built without the collections that bound what it may share."""
+def test_get_node_tools_scopes_attach_media_to_the_nodes_media_collection():
+    """The tool must never be built without the collection that bounds what it may share."""
     session = ExperimentSessionFactory.create()
     media = CollectionFactory(team=session.team)
     index = _sibling_collection(media, is_index=True)
@@ -679,7 +679,7 @@ def test_get_node_tools_scopes_attach_media_to_the_nodes_collections():
 
     attach_tools = [tool for tool in node_tools if tool.name == AgentTools.ATTACH_MEDIA]
     assert len(attach_tools) == 1
-    assert sorted(attach_tools[0].allowed_collection_ids) == sorted([media.id, index.id])
+    assert attach_tools[0].collection_id == media.id
 
 
 @pytest.mark.django_db()
@@ -857,20 +857,20 @@ class TestAttachMediaTool(BaseTestAgentTool):
     def _collection_file(self, collection, **kwargs):
         return CollectionFileFactory(collection=collection, **kwargs).file
 
-    def _invoke_tool(self, session, allowed_collection_ids=(), **tool_kwargs):
+    def _attach_files(self, session, collection, file_ids):
         tool = tools.AttachMediaTool(
             experiment_session=session,
             tool_callbacks=ToolCallbacks(),
-            allowed_collection_ids=list(allowed_collection_ids),
+            collection_id=collection.id,
         )
-        return tool.action(**tool_kwargs)
+        return tool.action(file_ids=file_ids)
 
     def test_attach_files(self, session, collection):
         chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
         assert chat_attachment.files.count() == 0
 
         files = [self._collection_file(collection) for _ in range(3)]
-        response = self._invoke_tool(session, [collection.id], file_ids=[file.id for file in files])
+        response = self._attach_files(session=session, collection=collection, file_ids=[file.id for file in files])
 
         assert chat_attachment.files.count() == 3
         assert all(str(file.id) in response for file in files)
@@ -883,34 +883,22 @@ class TestAttachMediaTool(BaseTestAgentTool):
         other_team_file = FileFactory()
         assert other_team_file.team_id != session.team_id
 
-        response = self._invoke_tool(session, [collection.id], file_ids=[other_team_file.id])
+        response = self._attach_files(session=session, collection=collection, file_ids=[other_team_file.id])
 
         assert f"* {other_team_file.id}: File not found." in response
         chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
         assert chat_attachment.files.count() == 0
 
-    def test_file_outside_the_configured_collections_is_not_attachable(self, session, collection):
-        """Same team, but not in a collection this node was configured with: the bot has no
-        business sharing it and never saw its id in the first place."""
-        unconfigured = self._collection_file(_sibling_collection(collection))
+    def test_file_outside_the_media_collection_is_not_attachable(self, session, collection):
+        """Same team, but not in the node's media collection. This includes files in an indexed
+        collection: the tool only shares media."""
+        index_file = self._collection_file(_sibling_collection(collection, is_index=True))
         loose_file = FileFactory(team=session.team)
 
-        response = self._invoke_tool(session, [collection.id], file_ids=[unconfigured.id, loose_file.id])
+        response = self._attach_files(session=session, collection=collection, file_ids=[index_file.id, loose_file.id])
 
-        assert f"* {unconfigured.id}: File not found." in response
+        assert f"* {index_file.id}: File not found." in response
         assert f"* {loose_file.id}: File not found." in response
-
-    def test_file_in_a_second_allowed_collection_is_attachable_once(self, session, collection):
-        """A file in more than one allowed collection must not make the lookup ambiguous."""
-        second_collection = _sibling_collection(collection)
-        file = self._collection_file(collection)
-        CollectionFileFactory(collection=second_collection, file=file)
-
-        response = self._invoke_tool(session, [collection.id, second_collection.id], file_ids=[file.id])
-
-        assert f"* {file.id} ({file.name}): attached." in response
-        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
-        assert list(chat_attachment.files.values_list("id", flat=True)) == [file.id]
 
     def test_integrity_error_on_one_file_does_not_break_the_others(self, session, collection):
         """A DB error attaching one file must leave the loop able to attach the rest.
@@ -945,7 +933,9 @@ class TestAttachMediaTool(BaseTestAgentTool):
                 )
 
         with mock.patch.object(ToolCallbacks, "attach_file", side_effect=duplicate_the_attachment_row):
-            response = self._invoke_tool(session, [collection.id], file_ids=[failing_file.id, ok_file.id])
+            response = self._attach_files(
+                session=session, collection=collection, file_ids=[failing_file.id, ok_file.id]
+            )
 
         assert f"* {failing_file.id}: Error fetching file." in response
         assert ok_file.name in response
@@ -972,7 +962,9 @@ class TestAttachMediaTool(BaseTestAgentTool):
                 raise IntegrityError("simulated failure attaching the first file")
 
         with mock.patch.object(ToolCallbacks, "attach_file", side_effect=fail_for_first_file):
-            response = self._invoke_tool(session, [collection.id], file_ids=[failing_file.id, ok_file.id])
+            response = self._attach_files(
+                session=session, collection=collection, file_ids=[failing_file.id, ok_file.id]
+            )
 
         assert f"* {failing_file.id}: Error fetching file." in response
         chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")

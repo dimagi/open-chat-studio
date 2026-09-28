@@ -477,7 +477,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
-    allowed_collection_ids: list[int]
+    collection_id: int
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -487,7 +487,7 @@ class AttachMediaTool(CustomBaseTool):
         return chat_attachment
 
     def _get_attachable_file(self, file_id: int) -> File | None:
-        """Resolve one of the files this node is configured to share, or None.
+        """Resolve a file from the node's media collection, or None.
 
         `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
         to look up. The scoping belongs here: attaching is what makes
@@ -498,7 +498,7 @@ class AttachMediaTool(CustomBaseTool):
             File.objects.filter(
                 id=file_id,
                 team_id=self.experiment_session.team_id,
-                collections__id__in=self.allowed_collection_ids,
+                collections__id=self.collection_id,
             )
             .distinct()
             .first()
@@ -819,13 +819,13 @@ def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
     # attach-media is not user-selectable (see AgentTools.user_tool_choices); it is added here so
-    # that it can be given the node's collections. Drop any copy carried in the node's own tool
+    # that it can be given the node's media collection. Drop any copy carried in the node's own tool
     # list so it cannot be built unscoped.
     tool_names = [name for name in node.tool_names if name != AgentTools.ATTACH_MEDIA]
     tool_kwargs = {}
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
-        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"allowed_collection_ids": node.attachable_collection_ids()}
+        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"collection_id": node.collection_id}
     tools = get_tool_instances(tool_names, experiment_session, tool_callbacks, tool_kwargs)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
