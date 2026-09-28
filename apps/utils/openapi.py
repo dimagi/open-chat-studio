@@ -2,7 +2,7 @@
 
 import copy
 import re
-from typing import Self
+from typing import Literal, Self, overload
 
 from openapi_pydantic import OpenAPI, Operation, Parameter, PathItem, Reference, RequestBody, Schema
 from pydantic import ValidationError
@@ -92,7 +92,16 @@ class OpenAPISpec(OpenAPI):
             parameter = self._get_component("parameters", parameter)
         return parameter
 
-    def _get_component(self, kind: str, ref: Reference):
+    @overload
+    def _get_component(self, kind: Literal["schemas"], ref: Reference) -> Schema: ...
+
+    @overload
+    def _get_component(self, kind: Literal["parameters"], ref: Reference) -> Parameter | Reference: ...
+
+    @overload
+    def _get_component(self, kind: Literal["requestBodies"], ref: Reference) -> RequestBody | Reference: ...
+
+    def _get_component(self, kind: str, ref: Reference) -> Parameter | RequestBody | Schema | Reference:
         name = ref.ref.split("/")[-1]
         components = getattr(self.components, kind, None) or {}
         if name not in components:
