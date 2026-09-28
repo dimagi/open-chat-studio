@@ -29,6 +29,59 @@ class TestFromSpecDict:
         operation = spec.get_operation("/a", "get")
         assert [p.name for p in spec.get_parameters_for_operation(operation)] == ["ok"]
 
+    def test_invalid_body_property_leaf_is_dropped(self):
+        body_schema = {"type": "object", "properties": {"ok": {"type": "string"}, "bad": {"type": "file"}}}
+        request_body = {"content": {"application/json": {"schema": body_schema}}}
+        spec = OpenAPISpec.from_spec_dict(_spec({"/a": {"post": {"requestBody": request_body}}}))
+        body = spec.get_request_body_for_operation(spec.get_operation("/a", "post"))
+        assert body is not None
+        schema = spec.get_schema(body.content["application/json"].media_type_schema)
+        assert schema.properties is not None
+        assert list(schema.properties) == ["ok", "bad"]
+        assert schema.properties["ok"].type == "string"
+        assert schema.properties["bad"].type is None
+
+    def test_invalid_required_parameter_raises(self):
+        params = [{"name": "x", "in": "nowhere", "required": True, "schema": {"type": "string"}}]
+        expected = r"Invalid OpenAPI spec: Input should be .* at paths//a/get/parameters/0/Parameter/in"
+        with pytest.raises(ValueError, match=expected):
+            OpenAPISpec.from_spec_dict(_spec({"/a": {"get": {"parameters": params}}}))
+
+    def test_required_swagger_body_parameter_raises(self):
+        spec_dict = {
+            "swagger": "2.0",
+            "info": {"title": "t", "version": "1"},
+            "paths": {
+                "/pet": {
+                    "put": {
+                        "operationId": "updatePet",
+                        "parameters": [{"name": "body", "in": "body", "required": True, "schema": {"type": "object"}}],
+                    }
+                }
+            },
+        }
+        with pytest.raises(ValueError, match="Invalid OpenAPI spec"):
+            OpenAPISpec.from_spec_dict(spec_dict)
+
+    def test_request_body_without_content_raises(self):
+        with pytest.raises(ValueError, match="Invalid OpenAPI spec"):
+            OpenAPISpec.from_spec_dict(_spec({"/a": {"post": {"requestBody": {"required": True}}}}))
+
+    def test_invalid_parts_are_removed_in_batches(self, monkeypatch):
+        validations = []
+        validate = OpenAPISpec.model_validate
+
+        def counting_validate(obj):
+            validations.append(obj)
+            return validate(obj)
+
+        monkeypatch.setattr(OpenAPISpec, "model_validate", counting_validate)
+        params = [{"name": f"p{i}", "in": "nowhere"} for i in range(400)] + [{"name": "ok", "in": "query"}]
+        spec = OpenAPISpec.from_spec_dict(_spec({"/a": {"get": {"parameters": params}}}))
+        assert len(validations) <= 3
+        operation = spec.get_operation("/a", "get")
+        assert [p.name for p in spec.get_parameters_for_operation(operation)] == ["ok"]
+
     def test_does_not_mutate_input(self):
         spec_dict = _spec({"/a": {"get": {"operationId": 5}}})
         OpenAPISpec.from_spec_dict(spec_dict)
