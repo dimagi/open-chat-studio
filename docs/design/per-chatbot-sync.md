@@ -457,9 +457,9 @@ single list that `resource_view` applies to every resource, so it is one entry r
 
 A state DB written by the previous release has no `cursors` rows and no stored source `updated_at`
 values. The first `sync_team` run after the upgrade therefore reads every resource from the start
-and cannot skip any row, so it costs the same as a sync into an empty target. The result is correct,
-because the upserts are idempotent, and later runs skip unchanged rows as usual. Operators with a
-sync in progress should plan for that one long run, or finish the sync on the old release first.
+and cannot skip any row. The result is correct, because the upserts are idempotent, and later runs
+skip unchanged rows as usual. Operators with a sync in progress should plan for that one long run, or
+finish the sync on the old release first.
 
 ### `frozen_experiment_q()` lands on hot paths
 
