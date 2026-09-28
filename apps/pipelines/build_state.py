@@ -36,9 +36,8 @@ def deprecated_models(pipeline: Pipeline) -> dict:
     """
     nodes_by_model_id = {}
     for node in pipeline.node_set.all():
-        model_id = _referenced_model_id(node)
-        if model_id is not None:
-            nodes_by_model_id.setdefault(model_id, []).append(node.flow_id)
+        if node.llm_provider_model_id is not None:
+            nodes_by_model_id.setdefault(node.llm_provider_model_id, []).append(node.flow_id)
     if not nodes_by_model_id:
         return {}
 
@@ -50,15 +49,6 @@ def deprecated_models(pipeline: Pipeline) -> dict:
         for flow_id in nodes_by_model_id[model.id]:
             warnings[flow_id] = warning
     return warnings
-
-
-def _referenced_model_id(node: Node) -> int | None:
-    """The LLM model id a node's params name, or None if it names none."""
-    model_id = (node.params or {}).get("llm_provider_model_id")
-    try:
-        return int(model_id)
-    except (TypeError, ValueError):
-        return None
 
 
 def unwired_handles(pipeline: Pipeline) -> dict:

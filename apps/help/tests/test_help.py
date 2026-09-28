@@ -1,4 +1,6 @@
+import inspect
 import json
+import re
 from unittest import mock
 
 import pydantic as pydantic_module
@@ -7,7 +9,12 @@ from django.test import RequestFactory
 from pydantic import BaseModel
 
 import apps.experiments.filters  # noqa: F401 — trigger filter registration
-from apps.help.agents.code_generate import CodeGenerateAgent, CodeGenerateInput, CodeGenerateOutput
+from apps.help.agents.code_generate import (
+    CodeGenerateAgent,
+    CodeGenerateInput,
+    CodeGenerateOutput,
+    _get_system_prompt,
+)
 from apps.help.agents.filter import FilterOutput
 from apps.help.agents.progress_messages import (
     ProgressMessagesAgent,
@@ -16,56 +23,12 @@ from apps.help.agents.progress_messages import (
 )
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import AGENT_REGISTRY, register_agent
-from apps.help.utils import extract_function_signature, get_python_node_coder_prompt
 from apps.help.views import run_agent
+from apps.pipelines.nodes.base import PipelineState
+from apps.pipelines.nodes.context import NodeContext
+from apps.pipelines.nodes.nodes import CodeNode
+from apps.pipelines.repository import InMemoryPipelineRepository
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
-
-
-def test_get_python_node_coder_prompt():
-    current_code = "bla bla bla"
-    error = "alb alb alb"
-    prompt = get_python_node_coder_prompt(current_code, error)
-    assert "get_participant_data" in prompt
-    assert current_code in prompt
-    assert error in prompt
-
-
-class TestExtractFunctionSignature:
-    def test_function_with_args(self):
-        def func_with_args(a, b, c=10):
-            """Function with arguments."""
-
-        result = extract_function_signature("func_with_args", func_with_args)
-        expected = 'def func_with_args(a, b, c=10):\n    """Function with arguments."""\n'
-        assert result == expected
-
-    def test_function_without_docstring(self):
-        def no_docstring_func(x):
-            return x
-
-        result = extract_function_signature("no_docstring_func", no_docstring_func)
-        expected = "def no_docstring_func(x):\n    pass\n"
-        assert result == expected
-
-    def test_function_with_multiline_docstring(self):
-        def multiline_func():
-            """This is a function with a multiline docstring.
-
-            It has multiple lines.
-            And provides detailed information."""
-
-        result = extract_function_signature("multiline_func", multiline_func)
-        expected = '''def multiline_func():
-    """This is a function with a multiline docstring.
-
-    It has multiple lines.
-    And provides detailed information."""
-'''
-        assert result == expected
-
-    def test_non_callable_object_returns_none(self):
-        result = extract_function_signature("not_callable", "string")
-        assert result is None
 
 
 class TestAgentRegistry:
@@ -388,6 +351,80 @@ class TestCodeGenerateAgent:
         tracer.trace.assert_called_once()  # one trace covers both attempts
         for call in mock_agent.invoke.call_args_list:
             assert call.kwargs["config"]["callbacks"] == [callback]
+
+    def test_build_system_prompt_includes_minimal_diff_instruction_when_current_code_present(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+        prompt = agent._build_system_prompt("def main(input: str, **kwargs) -> str:\n    return input", error=None)
+        assert "Make the smallest possible edit" in prompt
+
+    def test_build_system_prompt_omits_minimal_diff_instruction_when_no_current_code(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="write hello world"))
+        prompt = agent._build_system_prompt("", error=None)
+        assert "Make the smallest possible edit" not in prompt
+
+    def test_build_system_prompt_allows_leading_comments(self):
+        agent = CodeGenerateAgent(input=CodeGenerateInput(query="fix this"))
+        prompt = agent._build_system_prompt("", error=None)
+        assert "Comment lines" in prompt
+        assert "nothing else before it" not in prompt
+
+    def test_system_prompt_documents_every_sandbox_function(self):
+        node = CodeNode(name="test", node_id="123", django_node=None, code="")
+        node._repo = InMemoryPipelineRepository()
+        mock_state = PipelineState(outputs={}, experiment_session=None)
+        functions = node._get_custom_functions(
+            state=mock_state, context=NodeContext(mock_state), output_state=mock_state, print_collectors=[]
+        )
+        # "_print_" is a RestrictedPython internal hook, not part of the documented API.
+        # "http" is documented via its methods (http.get, http.post, ...), not the bare name.
+        documented_names = {name for name in functions if not name.startswith("_") and name != "http"}
+
+        prompt = _get_system_prompt()
+        missing = sorted(name for name in documented_names if name not in prompt)
+        assert not missing, f"Sandbox functions missing from the AI prompt: {missing}"
+
+    def test_documented_signatures_match_real_parameter_names(self):
+        node = CodeNode(name="test", node_id="123", django_node=None, code="")
+        node._repo = InMemoryPipelineRepository()
+        mock_state = PipelineState(outputs={}, experiment_session=None)
+        functions = node._get_custom_functions(
+            state=mock_state, context=NodeContext(mock_state), output_state=mock_state, print_collectors=[]
+        )
+
+        prompt = _get_system_prompt()
+        # A prompt-only doc convention (e.g. "def name(args) -> ReturnType:") -- not real code,
+        # so parsed with a regex rather than actually executed.
+        documented_signatures = dict(re.findall(r"def (\w+)\(([^)]*)\)", prompt))
+
+        def param_names(param_list: str) -> list[str]:
+            return [p.split(":")[0].split("=")[0].strip().lstrip("*") for p in param_list.split(",") if p.strip()]
+
+        mismatches = []
+        for name, obj in functions.items():
+            if name not in documented_signatures or not callable(obj):
+                continue
+            documented_params = param_names(documented_signatures[name])
+            real_params = list(inspect.signature(obj).parameters)
+            if documented_params != real_params:
+                mismatches.append(f"{name}: documented {documented_params}, real {real_params}")
+
+        assert not mismatches, "Documented parameter names don't match the real signature:\n" + "\n".join(mismatches)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "http.Error",
+            "http.TimeoutError",
+            "http.ConnectionError",
+            "http.InvalidURL",
+            "http.RequestLimitExceeded",
+            "http.RequestTooLarge",
+            "http.ResponseTooLarge",
+            "http.AuthProviderError",
+        ],
+    )
+    def test_system_prompt_documents_http_exception(self, name):
+        assert name in _get_system_prompt()
 
 
 class TestProgressMessagesAgent:

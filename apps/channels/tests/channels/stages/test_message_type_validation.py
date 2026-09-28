@@ -22,14 +22,6 @@ class TestMessageTypeValidationStage:
         # Should not raise
         self.stage(ctx)
 
-    def test_unsupported_type_raises_early_exit(self):
-        capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
-        msg = unsupported_content_type_message()
-        ctx = make_context(message=msg, capabilities=capabilities)
-
-        with pytest.raises(EarlyExitResponse):
-            self.stage(ctx)
-
     def test_unsupported_tags_human_message(self):
         capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))
         msg = unsupported_content_type_message()

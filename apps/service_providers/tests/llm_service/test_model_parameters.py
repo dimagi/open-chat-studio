@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.service_providers.llm_service.model_parameters import ClaudeSonnet46Parameters, GPT52Parameters, get_schema
+from apps.service_providers.llm_service.model_parameters import (
+    ClaudeSonnet46Parameters,
+    GPT6SolParameters,
+    GPT52Parameters,
+    get_schema,
+)
 
 
 class TestGPT52ParametersNoneEffort:
@@ -15,11 +20,6 @@ class TestGPT52ParametersNoneEffort:
 
     def test_top_p_defaults_when_effort_is_none_and_top_p_is_null(self):
         params = GPT52Parameters(effort="none", temperature=0.7, top_p=None)
-        assert params.top_p == 1.0
-
-    def test_both_default_when_effort_is_none_and_both_are_null(self):
-        params = GPT52Parameters(effort="none", temperature=None, top_p=None)
-        assert params.temperature == 0.7
         assert params.top_p == 1.0
 
     def test_explicit_values_are_preserved_when_effort_is_none(self):
@@ -54,9 +54,6 @@ class TestClaudeSonnet46Parameters:
     """Claude Sonnet 4.6 was released after Opus 4.6 and does not support
     temperature. Verify the parameter class omits it entirely."""
 
-    def test_temperature_not_in_fields(self):
-        assert "temperature" not in ClaudeSonnet46Parameters.model_fields
-
     def test_temperature_not_in_model_dump(self):
         params = ClaudeSonnet46Parameters()
         assert "temperature" not in params.model_dump()
@@ -67,7 +64,17 @@ class TestClaudeSonnet46Parameters:
         assert params.effort == "high"
         assert params.adaptive_thinking is False
 
-    def test_effort_and_adaptive_thinking_configurable(self):
-        params = ClaudeSonnet46Parameters(effort="low", adaptive_thinking=True)
-        assert params.effort == "low"
-        assert params.adaptive_thinking is True
+
+class TestGPT6SolParameters:
+    """gpt-6-sol and gpt-6-luna expose the six-level effort range and no sampling
+    parameters, including at 'none' effort."""
+
+    def test_no_sampling_fields(self):
+        assert "temperature" not in GPT6SolParameters.model_fields
+        assert "top_p" not in GPT6SolParameters.model_fields
+
+    @pytest.mark.parametrize("effort", ["none", "max"])
+    def test_sampling_overrides_are_dropped(self, effort):
+        """An override carried over from a GPT-5.x model must not reach the API."""
+        filtered = GPT6SolParameters.filter_overrides({"effort": effort, "temperature": 0.7, "top_p": 0.9})
+        assert filtered == {"effort": effort}

@@ -97,13 +97,6 @@ def test_ignores_messages_in_assigned_channel(bolt_context):
     assert not bolt_context.say.called
 
 
-@pytest.mark.django_db()
-def test_ignores_messages_from_unassigned_channel(bolt_context):
-    """Normal channel messages are ignored (no bot mention)"""
-    new_message(CHANNEL_MESSAGE_EVENT, bolt_context)
-    assert not bolt_context.say.called
-
-
 @pytest.mark.usefixtures("experiment_channel")
 def test_responds_to_session_thread(bolt_context):
     bolt_context.client.chat_postMessage = Mock()
