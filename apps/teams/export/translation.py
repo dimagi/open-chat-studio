@@ -21,10 +21,10 @@ class FKTranslationStore:
         """Open (creating if needed) the SQLite store at ``path`` and load its table into an
         in-memory index for fast lookups."""
         self._conn = sqlite3.connect(str(path))
-        # A sync commits per row; WAL with synchronous=NORMAL avoids an fsync per commit. A crash can
-        # lose the last few commits, which a rerun re-fetches.
+        # synchronous=FULL: a mapping lost to a power failure after its Postgres row committed would
+        # make a rerun create that row again for models with no natural-key match (e.g. chat messages).
         self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA synchronous=FULL")
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS fk_translation ("
             "content_type TEXT NOT NULL, source_key INTEGER NOT NULL, target_key INTEGER, "
