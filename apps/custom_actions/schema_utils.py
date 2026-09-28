@@ -117,7 +117,7 @@ def get_operations_from_spec(spec: OpenAPISpec, spec_dict: dict) -> list[APIOper
                     description=spec.get_operation_description(path, operation),
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(resolved_operation),
+                    parameters=_extract_parameters(resolved_operation, spec_dict),
                 )
             )
     return operations
@@ -141,13 +141,34 @@ def _resolve_schema_type(prop_schema: dict) -> str:
     return "string"
 
 
-def _extract_parameters(resolved_operation: dict) -> list[ParameterDetail]:
+def _follow_ref(node: dict, spec_dict: dict) -> dict:
+    """The target at the end of `node`'s `$ref` chain, or `node` itself when the chain is cyclic or dangling."""
+    seen = set()
+    current = node
+    while isinstance(current, dict) and "$ref" in current:
+        ref = current["$ref"]
+        if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
+            return node
+        seen.add(ref)
+        target = spec_dict
+        for key in ref[2:].split("/"):
+            if not isinstance(target, dict) or key not in target:
+                return node
+            target = target[key]
+        if not isinstance(target, dict):
+            return node
+        current = {**target, **{key: value for key, value in current.items() if key != "$ref"}}
+    return current
+
+
+def _extract_parameters(resolved_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
     """Read the parameters and JSON request body properties of an operation with its references resolved."""
     parameters = []
     for param in resolved_operation.get("parameters", []):
+        param = _follow_ref(param, spec_dict)
         if not param.get("name") or param.get("in") not in PARAMETER_LOCATIONS:
             continue
-        schema = param.get("schema", {})
+        schema = _follow_ref(param.get("schema", {}), spec_dict)
         parameters.append(
             ParameterDetail(
                 name=param["name"],
@@ -159,14 +180,17 @@ def _extract_parameters(resolved_operation: dict) -> list[ParameterDetail]:
             )
         )
 
-    body_schema = resolved_operation.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
+    request_body = _follow_ref(resolved_operation.get("requestBody", {}), spec_dict)
+    body_schema = request_body.get("content", {}).get("application/json", {}).get("schema")
     if body_schema is None:
         return parameters
+    body_schema = _follow_ref(body_schema, spec_dict)
 
     properties = body_schema.get("properties")
     if body_schema.get("type") == "object" and properties:
         required = set(body_schema.get("required", []))
         for name, prop in properties.items():
+            prop = _follow_ref(prop, spec_dict)
             parameters.append(
                 ParameterDetail(
                     name=name,

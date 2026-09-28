@@ -407,16 +407,19 @@ class TestResolveSchemaType:
         assert _resolve_schema_type({"anyOf": [{"properties": {"foo": {}}}]}) == "string"
 
 
-def _one_operation_spec(parameters=None, body=None):
+def _one_operation_spec(parameters=None, body=None, components=None):
     operation = {"operationId": "op", "parameters": parameters or []}
     if body:
         operation["requestBody"] = {"content": {"application/json": {"schema": body}}}
-    return {
+    spec = {
         "openapi": "3.0.0",
         "info": {"title": "t", "version": "1"},
         "servers": [{"url": "https://x.com"}],
         "paths": {"/p/{id}": {"post": operation}},
     }
+    if components:
+        spec["components"] = components
+    return spec
 
 
 @pytest.mark.parametrize(
@@ -472,6 +475,53 @@ def _one_operation_spec(parameters=None, body=None):
             _one_operation_spec(body={"type": "array", "items": {"type": "string"}}),
             [("body", "body", "array", True, None)],
             id="non-object-body",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                body={"$ref": "#/components/schemas/Location"},
+                components={
+                    "schemas": {
+                        "Location": {
+                            "type": "object",
+                            "properties": {"coordinates": {"$ref": "#/components/schemas/Coordinates"}},
+                        },
+                        "Coordinates": {"type": "object", "properties": {"lat": {"type": "number"}}},
+                    }
+                },
+            ),
+            [("coordinates", "body", "object", False, None)],
+            id="nested-ref-body-property",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"$ref": "#/components/parameters/P1"}],
+                components={
+                    "parameters": {
+                        "P1": {"$ref": "#/components/parameters/P2"},
+                        "P2": {"name": "q", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    }
+                },
+            ),
+            [("q", "query", "integer", True, None)],
+            id="ref-to-ref-parameter",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"$ref": "#/components/parameters/P1"}],
+                body={"type": "object", "properties": {"loop": {"$ref": "#/components/schemas/A"}}},
+                components={
+                    "parameters": {
+                        "P1": {"$ref": "#/components/parameters/P2"},
+                        "P2": {"$ref": "#/components/parameters/P1"},
+                    },
+                    "schemas": {
+                        "A": {"$ref": "#/components/schemas/B"},
+                        "B": {"$ref": "#/components/schemas/A"},
+                    },
+                },
+            ),
+            [("loop", "body", "string", False, None)],
+            id="cyclic-refs",
         ),
     ],
 )
