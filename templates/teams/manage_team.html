@@ -76,8 +76,7 @@
           <i class="fa-solid fa-pencil mr-1"></i>{% translate "Edit" %}
         </label>
       </div>
-      <form method="post" action="{% url "single_team:manage_team_section" team.slug active_section.key %}"
-            class="hidden peer-checked:flex items-center gap-2 flex-1 min-w-0" id="general">
+      <form method="post" class="hidden peer-checked:flex items-center gap-2 flex-1 min-w-0" id="general">
         {% csrf_token %}
         {{ team_form.name }}
         {% if request.team_membership.is_team_admin %}
