@@ -6,6 +6,7 @@ from django.db.models import QuerySet
 
 from apps.annotations.models import CustomTaggedItem, UserComment
 from apps.assessments.models import Score
+from apps.cost_tracking.models import UsageRecord
 from apps.events.models import EventAction
 from apps.pipelines.models import PipelineChatMessages
 from apps.teams.export import manifest
@@ -13,9 +14,10 @@ from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope,
 from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
 from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
-from apps.utils.factories.evaluations import EvaluationResultFactory
+from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationResultFactory
 from apps.utils.factories.events import (
     ScheduledMessageFactory,
     ScheduledTriggerFactory,
@@ -366,6 +368,7 @@ OWNED_ROW_CASES = [
         for kind in ("chat", "message", "session")
     ],
     pytest.param(Score, lambda c: ScoreFactory(team=c.team, session=_session(c)), id="Score-session"),
+    pytest.param(UsageRecord, lambda c: UsageRecordFactory(team=c.team, experiment=c), id="UsageRecord"),
     pytest.param(
         PipelineChatMessages,
         lambda c: PipelineChatMessagesFactory(chat_history=PipelineChatHistoryFactory(session=_session(c))),
@@ -388,20 +391,37 @@ def test_scope_rule_follows_the_selected_chatbot(model, link):
 
 
 @pytest.mark.parametrize(
-    "provenance",
+    ("model", "make"),
     [
-        pytest.param(lambda team: {"automated_result": EvaluationResultFactory(team=team)}, id="evaluation_result"),
-        pytest.param(lambda team: {"review": AnnotationFactory(team=team)}, id="human_annotation"),
+        pytest.param(
+            Score,
+            lambda c: ScoreFactory(
+                team=c.team, session=_session(c), automated_result=EvaluationResultFactory(team=c.team)
+            ),
+            id="Score-evaluation_result",
+        ),
+        pytest.param(
+            Score,
+            lambda c: ScoreFactory(team=c.team, session=_session(c), review=AnnotationFactory(team=c.team)),
+            id="Score-human_annotation",
+        ),
+        pytest.param(
+            UsageRecord,
+            lambda c: UsageRecordFactory(
+                team=c.team, experiment=c, evaluation_config=EvaluationConfigFactory(team=c.team)
+            ),
+            id="UsageRecord-evaluation_config",
+        ),
     ],
 )
-def test_scores_from_excluded_models_are_left_out(provenance):
+def test_rows_from_excluded_models_are_left_out(model, make):
     """Their provenance FK points at a model the scoped export serves empty."""
     team = TeamFactory()
-    score = ScoreFactory(team=team, session=_session(_select(team)), **provenance(team))
+    row = make(_select(team))
 
-    scoped = narrow_to_scope(Score.objects.all(), model_label="assessments.score", scope=build_scope(team))
+    scoped = narrow_to_scope(model.objects.all(), model_label=model._meta.label_lower, scope=build_scope(team))
 
-    assert score.id not in _pks(scoped)
+    assert row.id not in _pks(scoped)
 
 
 def test_scope_registry_matches_the_manifest():

@@ -369,7 +369,11 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     "trace.trace": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
     "pipelines.pipelinechathistory": _owned(lambda s: Q(session_id__in=s.sessions)),
     "pipelines.pipelinechatmessages": _owned(lambda s: Q(chat_history__session_id__in=s.sessions)),
-    "cost_tracking.usagerecord": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    # Chatbot usage only. An evaluator's usage also names the chatbot it judged, but its evaluation
+    # config is excluded and nullable, so keeping the row would count evaluation cost as chatbot cost.
+    "cost_tracking.usagerecord": _owned(
+        lambda s: Q(experiment_id__in=s.experiment_ids, evaluation_config__isnull=True)
+    ),
     "annotations.customtaggeditem": _owned(lambda s: _generic_target_q(s, "content_type", "object_id")),
     "annotations.usercomment": _owned(lambda s: _generic_target_q(s, "content_type", "object_id")),
     # Session scores only. A score hanging off an evaluation result or a human annotation belongs to
