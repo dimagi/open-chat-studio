@@ -56,7 +56,7 @@ from apps.channels.widget_versions import (
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.chat.utils import safe_link_url
 from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.content_type import detect_content_type_from_file
@@ -67,6 +67,7 @@ from apps.service_providers.llm_service.image_types import (
     DENIED_IMAGE_EXTENSIONS,
     image_type_names,
 )
+from apps.users.models import CustomUser
 from apps.web.waf import WafRule, waf_allow
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
@@ -490,7 +491,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
     return channel
 
 
-def _session_user(request, public_visitor: bool):
+def _session_user(request, public_visitor: bool) -> CustomUser | None:
     """The authenticated user the session belongs to, or None for anonymous and public-channel callers."""
     if request.user.is_authenticated and not public_visitor:
         return request.user
@@ -514,7 +515,7 @@ def _resolve_participant(user, team, platform, remote_id: str) -> Participant | 
     return participant
 
 
-def _start_session(request, experiment, experiment_channel, participant, user, version_number):
+def _start_session(request, experiment, experiment_channel, participant, user, version_number) -> ExperimentSession:
     """Start a session on the chatbot for this participant, recording the embedding page as its source."""
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
     return ApiChannel.start_new_session(
