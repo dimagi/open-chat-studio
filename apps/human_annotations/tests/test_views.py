@@ -17,6 +17,7 @@ from apps.human_annotations.models import (
     AnnotationItem,
     AnnotationItemStatus,
     AnnotationQueue,
+    AnnotationQueueAggregate,
     AnnotationStatus,
 )
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
@@ -404,6 +405,41 @@ def test_queue_detail_shows_a_count_for_each_binary_label(client, team_with_user
     assert "3/4" in content
     assert "Incorrect:" in content
     assert "1/4" in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("authoritative_count", "unresolved_count", "shows_split"),
+    [
+        pytest.param(27, 116, True, id="mixed"),
+        pytest.param(85, 0, False, id="all_resolved"),
+        pytest.param(0, 116, False, id="none_resolved"),
+    ],
+)
+def test_queue_detail_aggregate_count_split(
+    client, team_with_users, queue, authoritative_count, unresolved_count, shows_split
+):
+    count = authoritative_count + unresolved_count
+    AnnotationQueueAggregate.objects.create(
+        queue=queue,
+        team=team_with_users,
+        aggregates={
+            "quality_score": {
+                "type": "numeric",
+                "count": count,
+                "mean": 3.0,
+                "authoritative_count": authoritative_count,
+                "unresolved_count": unresolved_count,
+            }
+        },
+    )
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, queue.pk])
+    content = client.get(url).content.decode()
+
+    assert f"{count} annotations" in content
+    split = f"{authoritative_count} authoritative · {unresolved_count} from unresolved items"
+    assert (split in content) is shows_split
 
 
 @pytest.mark.django_db()
