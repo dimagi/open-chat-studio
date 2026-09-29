@@ -1,5 +1,6 @@
 from unittest.mock import Mock, call, patch
 
+import pydantic
 import pytest
 from tenacity import wait_none
 
@@ -98,6 +99,11 @@ class TestConfluenceDocumentLoader:
         expected = {"url": "https://site.atlassian.net/wiki", "max_pages": 500, "space_key": "DEMO"}
         assert kwargs == expected
 
+    @pytest.mark.parametrize("max_pages", [pytest.param(0, id="zero"), pytest.param(-1, id="negative")])
+    def test_max_pages_must_be_positive(self, max_pages):
+        with pytest.raises(pydantic.ValidationError, match="max_pages"):
+            ConfluenceSourceConfig(base_url="https://site.atlassian.net/wiki", space_key="DEMO", max_pages=max_pages)
+
     def test_get_loader_kwargs_invalid_page_ids(self):
         config = ConfluenceSourceConfig(base_url="https://site.atlassian.net/wiki", page_ids="123, abc, 789")
         with pytest.raises(ValueError, match="Page IDs must be comma-separated integers"):
@@ -106,11 +112,11 @@ class TestConfluenceDocumentLoader:
 
 class TestLoadDocuments:
     def test_space_documents_and_metadata(self, client):
-        client.get_all_pages_from_space.side_effect = [[_page(1)], []]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": [_page(1)]}, {"results": []}]
         [document] = _load(space_key="DEMO")
 
         client.confluence_class.assert_called_once_with(url=BASE_URL, username="jack", password="secret", cloud=True)
-        client.get_all_pages_from_space.assert_any_call(
+        client.get_all_pages_from_space_raw.assert_any_call(
             space="DEMO", start=0, limit=50, status="current", expand="body.storage,version"
         )
         assert document.content == b"Hello world"
@@ -127,13 +133,13 @@ class TestLoadDocuments:
         }
 
     def test_space_pagination_stops_at_max_pages(self, client):
-        client.get_all_pages_from_space.side_effect = [
-            [_page(i) for i in range(50)],
-            [_page(i) for i in range(50, 100)],
+        client.get_all_pages_from_space_raw.side_effect = [
+            {"results": [_page(i) for i in range(50)]},
+            {"results": [_page(i) for i in range(50, 100)]},
         ]
         documents = _load(space_key="DEMO", max_pages=60)
         assert len(documents) == 60
-        assert [c.kwargs["start"] for c in client.get_all_pages_from_space.call_args_list] == [0, 50]
+        assert [c.kwargs["start"] for c in client.get_all_pages_from_space_raw.call_args_list] == [0, 50]
 
     def test_label_fetches_each_page_by_id(self, client):
         client.get_all_pages_by_label.side_effect = [[{"id": "1"}, {"id": "2"}, {"id": "1"}], []]
@@ -180,7 +186,7 @@ class TestLoadDocuments:
     )
     def test_restricted_and_archived_pages_are_skipped(self, client, config_kwargs):
         pages = {"1": _page(1), "2": _page(2, status="archived"), "3": _page(3)}
-        client.get_all_pages_from_space.side_effect = [list(pages.values()), []]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": list(pages.values())}, {"results": []}]
         client.get_all_pages_by_label.side_effect = [[{"id": i} for i in pages], []]
         client.get.return_value = {"results": list(pages.values()), "_links": {}}
         client.get_page_by_id.side_effect = lambda page_id, expand: pages[str(page_id)]
@@ -192,15 +198,22 @@ class TestLoadDocuments:
         assert [d.metadata["id"] for d in _load(**config_kwargs)] == ["1"]
 
     def test_blank_pages_are_skipped(self, client):
-        client.get_all_pages_from_space.side_effect = [[_page(1, html="<p>  </p>"), _page(2)], []]
+        client.get_all_pages_from_space_raw.side_effect = [
+            {"results": [_page(1, html="<p>  </p>"), _page(2)]},
+            {"results": []},
+        ]
         assert [d.metadata["id"] for d in _load(space_key="DEMO")] == ["2"]
 
     def test_transient_errors_are_retried(self, client):
-        client.get_all_pages_from_space.side_effect = [ConnectionError("boom"), [_page(1)], []]
+        client.get_all_pages_from_space_raw.side_effect = [
+            ConnectionError("boom"),
+            {"results": [_page(1)]},
+            {"results": []},
+        ]
         assert len(_load(space_key="DEMO")) == 1
 
     def test_errors_propagate_after_retries(self, client):
-        client.get_all_pages_from_space.side_effect = ConnectionError("boom")
+        client.get_all_pages_from_space_raw.side_effect = ConnectionError("boom")
         with pytest.raises(ConnectionError):
             _load(space_key="DEMO")
-        assert client.get_all_pages_from_space.call_count == 3
+        assert client.get_all_pages_from_space_raw.call_count == 3

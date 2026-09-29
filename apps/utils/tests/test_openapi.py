@@ -147,6 +147,88 @@ def test_parameter_and_request_body_references_are_resolved():
     assert not isinstance(schema.properties["name"], Reference)
 
 
+def _ref(kind, name):
+    return {"$ref": f"#/components/{kind}/{name}"}
+
+
+def _resolve_node(spec):
+    return spec.get_schema(Reference.model_validate(_ref("schemas", "Node")))
+
+
+@pytest.mark.parametrize(
+    ("paths", "components", "resolve"),
+    [
+        pytest.param(
+            {"/a": {"get": {"parameters": [_ref("parameters", "P1")]}}},
+            {"parameters": {"P1": _ref("parameters", "P2"), "P2": _ref("parameters", "P1")}},
+            lambda spec: spec.get_parameters_for_operation(spec.get_operation("/a", "get")),
+            id="cyclic-parameter",
+        ),
+        pytest.param(
+            {"/a": {"post": {"requestBody": _ref("requestBodies", "B1")}}},
+            {"requestBodies": {"B1": _ref("requestBodies", "B2"), "B2": _ref("requestBodies", "B1")}},
+            lambda spec: spec.get_request_body_for_operation(spec.get_operation("/a", "post")),
+            id="cyclic-request-body",
+        ),
+        pytest.param(
+            None,
+            {"schemas": {"Node": {"type": "object", "properties": {"child": _ref("schemas", "Node")}}}},
+            _resolve_node,
+            id="self-referencing-property",
+        ),
+        pytest.param(
+            None,
+            {
+                "schemas": {
+                    "Node": {
+                        "type": "object",
+                        "properties": {"children": {"type": "array", "items": _ref("schemas", "Node")}},
+                    }
+                }
+            },
+            _resolve_node,
+            id="self-referencing-items",
+        ),
+        pytest.param(
+            None,
+            {
+                "schemas": {
+                    "Node": {
+                        "type": "object",
+                        "properties": {"next": {"anyOf": [_ref("schemas", "Node"), {"type": "null"}]}},
+                    }
+                }
+            },
+            _resolve_node,
+            id="self-referencing-any-of",
+        ),
+    ],
+)
+def test_cyclic_references_raise(paths, components, resolve):
+    spec = OpenAPISpec.from_spec_dict(_spec(paths, components=components))
+    with pytest.raises(ValueError, match="Cyclic reference"):
+        resolve(spec)
+
+
+def test_schema_referenced_more_than_once_is_resolved():
+    spec = OpenAPISpec.from_spec_dict(
+        _spec(
+            components={
+                "schemas": {
+                    "Pair": {
+                        "type": "object",
+                        "properties": {"a": _ref("schemas", "Thing"), "b": _ref("schemas", "Thing")},
+                    },
+                    "Thing": {"type": "object", "properties": {"name": {"type": "string"}}},
+                }
+            }
+        )
+    )
+    schema = spec.get_schema(Reference.model_validate(_ref("schemas", "Pair")))
+    assert schema.properties is not None
+    assert [schema.properties[key].type for key in ("a", "b")] == ["object", "object"]
+
+
 @pytest.mark.parametrize(
     ("operation_id", "path", "method", "expected"),
     [

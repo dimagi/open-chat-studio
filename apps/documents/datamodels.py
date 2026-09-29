@@ -60,7 +60,7 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
     page_ids: str = pydantic.Field(default="", description="Comma-separated list of page IDs")
 
     # Additional options
-    max_pages: int = pydantic.Field(default=1000, description="Maximum number of pages to load")
+    max_pages: int = pydantic.Field(default=1000, ge=1, description="Maximum number of pages to load")
 
     @pydantic.model_validator(mode="after")
     def validate_loading_options(self):

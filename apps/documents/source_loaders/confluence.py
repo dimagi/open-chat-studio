@@ -71,9 +71,9 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
         max_pages = options["max_pages"]
         if space_key := options.get("space_key"):
             yield from _paginate(
-                lambda start: client.get_all_pages_from_space(
+                lambda start: client.get_all_pages_from_space_raw(
                     space=space_key, start=start, limit=BATCH_SIZE, status="current", expand=PAGE_EXPAND
-                ),
+                )["results"],
                 max_pages,
             )
         elif label := options.get("label"):

@@ -266,13 +266,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
     properties = {}
     required = []
     for p in params:
-        if p.param_schema:
-            schema = spec.get_schema(p.param_schema)
-        elif not p.content:
-            raise ValueError(f"Parameter {p.name} has no schema")
-        else:
-            media_type_schema = next(iter(p.content.values())).media_type_schema
-            schema = spec.get_schema(media_type_schema)
+        schema = _parameter_schema(spec, p)
         if p.name and not schema.title:
             schema.title = p.name
         if p.description and not schema.description:
@@ -281,6 +275,15 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
             required.append(p.name)
         properties[p.name] = _schema_to_pydantic(spec, schema)
     return _create_model(name, properties)
+
+
+def _parameter_schema(spec: OpenAPISpec, p: Parameter) -> Schema:
+    """The resolved schema of `p`, from its `schema` or else from its first `content` media type."""
+    if p.param_schema:
+        return spec.get_schema(p.param_schema)
+    if not p.content:
+        raise ValueError(f"Parameter {p.name} has no schema")
+    return spec.get_schema(next(iter(p.content.values())).media_type_schema)
 
 
 def _schema_to_pydantic(spec: OpenAPISpec, schema: Schema | Reference) -> tuple[type, Field]:

@@ -443,3 +443,27 @@ def test_parameter_without_schema_raises_value_error():
     spec = _single_op_spec([{"name": "x", "in": "query", "type": "string"}])
     with pytest.raises(ValueError, match="Parameter x has no schema"):
         openapi_spec_op_to_function_def(spec, "/things", "get")
+
+
+def test_recursive_request_body_schema_raises_value_error():
+    node = {"type": "object", "properties": {"child": {"$ref": "#/components/schemas/Node"}}}
+    spec = OpenAPISpec.from_spec_dict(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "version": "1"},
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {
+                "/things": {
+                    "post": {
+                        "operationId": "create-thing",
+                        "requestBody": {
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Node"}}}
+                        },
+                    }
+                }
+            },
+            "components": {"schemas": {"Node": node}},
+        }
+    )
+    with pytest.raises(ValueError, match="Cyclic reference: #/components/schemas/Node"):
+        openapi_spec_op_to_function_def(spec, "/things", "post")

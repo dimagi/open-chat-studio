@@ -161,15 +161,21 @@ def _follow_ref(node: dict, spec_dict: dict) -> dict:
         if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
             return node
         seen.add(ref)
-        target = spec_dict
-        for key in ref[2:].split("/"):
-            if not isinstance(target, dict) or key not in target:
-                return node
-            target = target[key]
-        if not isinstance(target, dict):
+        target = _lookup_pointer(spec_dict, ref[2:].split("/"))
+        if target is None:
             return node
         current = {**target, **{key: value for key, value in current.items() if key != "$ref"}}
     return current
+
+
+def _lookup_pointer(spec_dict: dict, keys: list[str]) -> dict | None:
+    """The dict that `keys` lead to from the root of `spec_dict`, or None when there is none."""
+    target = spec_dict
+    for key in keys:
+        if not isinstance(target, dict) or key not in target:
+            return None
+        target = target[key]
+    return target if isinstance(target, dict) else None
 
 
 def _extract_parameters(resolved_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
