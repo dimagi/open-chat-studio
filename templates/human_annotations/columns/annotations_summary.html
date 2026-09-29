@@ -1,4 +1,3 @@
-{% load default_tags %}
 {% with annotations=record.submitted_annotations %}
   {% if annotations %}
     {% for ann in annotations|slice:":3" %}
