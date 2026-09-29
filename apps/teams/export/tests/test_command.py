@@ -557,7 +557,6 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     Team.objects.create(name="Keep", slug="imported-team-z")
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
-    monkeypatch.setattr(sync_team, "check_force_delete_allowed", lambda _client: None)
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
 
@@ -735,21 +734,6 @@ def test_report_counts_rows_left_untouched(capsys):
     assert "left untouched: 7" in capsys.readouterr().out
 
 
-def test_force_delete_is_refused_while_the_source_has_a_selection(keypair):
-    """--force-delete drops the whole local team, which would destroy chatbots synced under an
-    earlier selection."""
-    manifest, rows = _scenario(keypair[0])
-    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
-
-    with pytest.raises(CommandError, match="only part of the team"):
-        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
-
-
-def test_force_delete_is_allowed_for_a_whole_team_sync(keypair):
-    manifest, rows = _scenario(keypair[0])
-    sync_team.check_force_delete_allowed(FakeClient(manifest, rows))  # does not raise
-
-
 def test_preflight_prints_what_the_source_will_export(keypair):
     manifest, rows = _scenario(keypair[0])
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
@@ -768,19 +752,6 @@ def test_preflight_says_when_the_whole_team_is_exported(keypair):
     check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
 
     assert "The source will export the whole team." in lines
-
-
-def test_force_delete_is_refused_before_the_prompt(tmp_path, monkeypatch, keypair):
-    manifest, rows = _scenario(keypair[0])
-    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
-    Team.objects.create(name="Keep", slug="imported-team-z")
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
-    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite the refusal"))
-
-    with pytest.raises(CommandError, match="only part of the team"):
-        Command().handle(**_force_delete_options(tmp_path))
-
-    assert Team.objects.filter(slug="imported-team-z").exists()
 
 
 def test_a_partial_sync_does_not_ask_about_the_files_bundle(make_store, tmp_path, keypair, monkeypatch):
@@ -823,19 +794,6 @@ def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_
 def test_report_limits_the_webhook_command_to_the_synced_chatbots(capsys):
     Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
     assert "reregister_webhooks --team-slug=acme --chatbot=abc" in capsys.readouterr().out
-
-
-def test_the_force_delete_refusal_does_not_suggest_deleting_chatbots_by_hand(keypair):
-    """Rows deleted on the target sit below the stored cursors and keep their translations, so a rerun
-    would never restore them."""
-    manifest, rows = _scenario(keypair[0])
-    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
-
-    with pytest.raises(CommandError) as excinfo:
-        sync_team.check_force_delete_allowed(FakeClient(manifest, rows))
-
-    assert "by hand" not in str(excinfo.value)
-    assert "rerun without --force-delete" in str(excinfo.value)
 
 
 def test_report_warns_that_turning_off_migration_mode_resumes_every_synced_chatbot(capsys):

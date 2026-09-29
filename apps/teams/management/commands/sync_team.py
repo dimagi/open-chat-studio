@@ -55,11 +55,6 @@ SELECTION_CHANGED_MESSAGE = (
     "The source team's chatbot selection changed during the sync, so the run stopped before importing "
     "rows from two selections. Rerun to sync the new selection."
 )
-FORCE_DELETE_WITH_SELECTION = (
-    "The source is exporting only part of the team, so --force-delete would also destroy chatbots "
-    "synced under an earlier selection. Re-importing a single chatbot from scratch is not supported; "
-    "rerun without --force-delete to bring the synced chatbots up to date."
-)
 
 # Known source-server refusals, matched by status code and detail marker, with the friendly
 # message to show the operator instead of a raw HTTP traceback.
@@ -130,12 +125,6 @@ def check_source_team_ready(client, write=lambda _m: None) -> dict:
     else:
         write("The source will export the whole team.")
     return team
-
-
-def check_force_delete_allowed(client) -> None:
-    """Refuse a whole-team delete while the source is exporting a selection."""
-    if client.get_team().get("exportable_chatbots"):
-        raise CommandError(FORCE_DELETE_WITH_SELECTION)
 
 
 def _prompt(message: str) -> str:
@@ -390,7 +379,7 @@ class Command(BaseCommand):
         enforce_schema = not options["skip_schema_check"]
 
         if options["force_delete"]:
-            self._run_force_delete(options, client)
+            self._run_force_delete(options)
 
         with FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite") as store:
             check_sync_preconditions(
@@ -418,9 +407,8 @@ class Command(BaseCommand):
                 skipped_rows=importer.skipped_rows,
             )
 
-    def _run_force_delete(self, options, client):
+    def _run_force_delete(self, options):
         """Confirm and delete the local team plus its sync state."""
-        check_force_delete_allowed(client)
         if not self._confirm_force_delete(options["team_slug"]):
             raise CommandError("Aborted: --force-delete not confirmed.")
         force_delete_team(
