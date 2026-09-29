@@ -555,7 +555,8 @@ def _force_delete_options(tmp_path, **overrides):
 def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     """An interactive --force-delete that isn't confirmed must abort before deleting anything."""
     Team.objects.create(name="Keep", slug="imported-team-z")
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
+    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": []}]})
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
@@ -564,6 +565,29 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
         Command().handle(**_force_delete_options(tmp_path))
 
     assert Team.objects.filter(slug="imported-team-z").exists()  # declined -> nothing deleted
+
+
+@pytest.mark.parametrize(
+    ("exportable_chatbots", "warns_about_files"),
+    [
+        pytest.param([], True, id="whole-team"),
+        pytest.param([{"public_id": "abc", "name": "Support bot"}], False, id="selected-chatbots"),
+    ],
+)
+def test_force_delete_warns_about_files_only_for_whole_team_sync(
+    tmp_path, monkeypatch, exportable_chatbots, warns_about_files
+):
+    """A partial sync backfills files from the source, so the warning only asks for a manual re-import
+    when the whole team is synced."""
+    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
+    out = io.StringIO()
+
+    with pytest.raises(CommandError, match="not confirmed"):
+        Command(stdout=out).handle(**_force_delete_options(tmp_path))
+
+    assert ("must be re-imported" in out.getvalue()) is warns_about_files
 
 
 def test_serialized_row_round_trips_through_importer(make_store, tmp_path, keypair):

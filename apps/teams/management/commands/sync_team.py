@@ -379,7 +379,7 @@ class Command(BaseCommand):
         enforce_schema = not options["skip_schema_check"]
 
         if options["force_delete"]:
-            self._run_force_delete(options)
+            self._run_force_delete(options, client)
 
         with FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite") as store:
             check_sync_preconditions(
@@ -407,9 +407,10 @@ class Command(BaseCommand):
                 skipped_rows=importer.skipped_rows,
             )
 
-    def _run_force_delete(self, options):
+    def _run_force_delete(self, options, client):
         """Confirm and delete the local team plus its sync state."""
-        if not self._confirm_force_delete(options["team_slug"]):
+        partial = bool(client.get_team().get("exportable_chatbots"))
+        if not self._confirm_force_delete(options["team_slug"], partial=partial):
             raise CommandError("Aborted: --force-delete not confirmed.")
         force_delete_team(
             options["team_slug"],
@@ -504,12 +505,14 @@ class Command(BaseCommand):
             self.stdout.write(f"  - {identifier}: {error}")
         self.stdout.write("  They were imported, and a rerun won't retry the email; send theirs by hand.")
 
-    def _confirm_force_delete(self, team_slug) -> bool:
-        self.stdout.write(
-            self.style.WARNING(
-                f"--force-delete will permanently delete the local team '{team_slug}' and all its data "
-                "before re-importing. This also removes the team's files from backend storage, so they "
-                "must be re-imported after the delete completes."
-            )
+    def _confirm_force_delete(self, team_slug, partial) -> bool:
+        warning = (
+            f"--force-delete will permanently delete the local team '{team_slug}' and all its data "
+            "before re-importing. This also removes the team's files from backend storage"
         )
+        if partial:
+            warning += "; the sync fetches them from the source again."
+        else:
+            warning += ", so they must be re-imported after the delete completes."
+        self.stdout.write(self.style.WARNING(warning))
         return _prompt("Type 'yes' to continue: ") == "yes"
