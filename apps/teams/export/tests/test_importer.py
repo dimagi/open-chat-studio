@@ -677,6 +677,28 @@ def test_rerun_after_interruption_creates_exactly_one_row(store, monkeypatch):
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
 
 
+def test_rerun_recreates_a_row_whose_postgres_commit_failed_after_its_mapping_was_stored(store, monkeypatch):
+    """The store commits its mapping before Postgres commits the row. If the Postgres side then
+    fails, a rerun must recreate the row instead of skipping it as unchanged."""
+    real_record = store.record
+
+    def record_then_fail(content_type, source_key, target_key=None, **kwargs):
+        real_record(content_type, source_key, target_key, **kwargs)
+        if target_key is not None:
+            raise RuntimeError("Postgres commit failed after the mapping was stored")
+
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    monkeypatch.setattr(store, "record", record_then_fail)
+    with pytest.raises(RuntimeError):
+        importer.import_rows("service_providers.llmprovider", [row])
+    monkeypatch.undo()
+
+    assert importer.import_rows("service_providers.llmprovider", [row]) == 1
+    assert LlmProvider.objects.filter(pk=store.get_target("service_providers.llmprovider", 5)).exists()
+
+
 def _comment_row(source_id, user_src, content_type="chat.chatmessage", object_id=88):
     return {
         "id": source_id,

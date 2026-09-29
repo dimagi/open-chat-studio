@@ -322,9 +322,13 @@ class Importer:
             if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
                 _bypass_auto_now_update(model, instance.pk, timestamps)
 
-            # A row whose FK was nulled for a target not synced yet is recorded without its timestamp, so
-            # a later re-read re-applies it instead of skipping it as unchanged.
-            source_updated_at = None if nulled_fk else row.get("updated_at")
+            # The store commits on its own, before Postgres does. The mapping goes in first without the
+            # timestamp, so a failed Postgres commit leaves a row a rerun re-imports, not one it skips.
+            self.store.record(model_label, source_pk, instance.pk)
+
+        # A row whose FK was nulled for a target not synced yet keeps no timestamp, so a later re-read
+        # re-applies it instead of skipping it as unchanged.
+        if not nulled_fk and (source_updated_at := row.get("updated_at")) is not None:
             self.store.record(model_label, source_pk, instance.pk, source_updated_at=source_updated_at)
         return instance, created
 
