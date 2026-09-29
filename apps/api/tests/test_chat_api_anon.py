@@ -26,6 +26,7 @@ def session(experiment):
 
 @pytest.mark.django_db()
 def test_start_chat_session(team_with_users, api_client, experiment):
+    """An anonymous start returns a token, an anon participant and consent, and ignores session_data."""
     url = reverse("api:chat:start-session")
     session_state = {"page_url": "https://example.com"}
     data = {
@@ -269,6 +270,7 @@ def test_start_chat_session_ignores_unknown_timezone(api_client, experiment, tim
 
 @pytest.mark.django_db()
 def test_start_chat_session_without_timezone_records_none(api_client, experiment):
+    """A start without a timezone stores no participant data for the chatbot."""
     url = reverse("api:chat:start-session")
     response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json")
     assert response.status_code == 201

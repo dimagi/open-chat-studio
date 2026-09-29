@@ -72,6 +72,7 @@ def session(experiment):
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_auth(authed_user, authed_client, experiment):
+    """An authenticated start identifies the participant by the caller's email."""
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
     response = authed_client.post(url, data=data, format="json")
@@ -109,6 +110,7 @@ def test_start_chat_session_with_auth_requires_remote_id_to_match_user(authed_cl
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_session_state(authed_user, authed_client, experiment):
+    """An authenticated start stores session_data as the session's state."""
     url = reverse("api:chat:start-session")
     data = {
         "chatbot_id": experiment.public_id,
