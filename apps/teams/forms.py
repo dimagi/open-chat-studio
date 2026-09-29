@@ -166,10 +166,8 @@ class TeamPublicKeyForm(forms.ModelForm):
         required=False,
         label=_("Chatbots"),
         help_text=_(
-            "Selecting a chatbot includes all of its versions, including ones published later. "
-            "Chatbots created after you save are not included. Team members, tags, pricing rules and "
-            "notifications are always exported for the whole team, and notifications can mention "
-            "chatbots that are not selected."
+            "Includes all versions of each selected chatbot. New chatbots are not added automatically. "
+            "Team members, tags, pricing rules and notifications are always exported."
         ),
     )
 
