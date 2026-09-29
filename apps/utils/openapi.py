@@ -195,4 +195,8 @@ def _is_request_body(path: tuple) -> bool:
 
 def _is_body_content_or_schema(rest: tuple) -> bool:
     """Whether `rest`, relative to a request body, is the body, its content, a media type or a media type's schema."""
-    return not rest or (rest[0] == "content" and (len(rest) <= 2 or rest[2:] == ("schema",)))
+    if not rest:
+        return True
+    if rest[0] != "content":
+        return False
+    return len(rest) <= 2 or rest[2:] == ("schema",)
