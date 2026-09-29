@@ -151,15 +151,15 @@ class TestChatFileUploadAPI:
         ],
     )
     def test_uploaded_by_precedence(
-        self, api_client, experiment, team_with_users, participant_identifier, authenticated, remote_id, expected
+        self, api_client, experiment, participant_identifier, authenticated, remote_id, expected
     ):
         """The uploader is the participant, else the signed-in user's email, else the remote id, else "unknown"."""
-        participant = ParticipantFactory.create(team=team_with_users, identifier=participant_identifier)
+        participant = ParticipantFactory.create(team=experiment.team, identifier=participant_identifier)
         session = ExperimentSessionFactory.create(
             experiment=experiment, participant=participant, session_token_required=False
         )
         if authenticated:
-            member = team_with_users.members.first()
+            member = experiment.team.members.first()
             member.email = "member@example.com"
             member.save()
             api_client.force_authenticate(member)
