@@ -514,6 +514,26 @@ def _resolve_participant(user, team, platform, remote_id: str) -> Participant | 
     return participant
 
 
+def _start_session(request, experiment, experiment_channel, participant, user, version_number):
+    """Start a session on the chatbot for this participant, recording the embedding page as its source."""
+    metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
+    return ApiChannel.start_new_session(
+        working_experiment=experiment,
+        experiment_channel=experiment_channel,
+        participant_identifier=participant.identifier,
+        participant_user=user,
+        metadata=metadata,
+        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
+    )
+
+
+def _apply_session_data(session, user, session_data) -> None:
+    """Store caller-supplied session data as the session's state, for authenticated callers only."""
+    if user is not None and session_data:
+        session.state = session_data
+        session.save(update_fields=["state"])
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -650,20 +670,8 @@ def chat_start_session(request):
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
-    metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
-
-    session = ApiChannel.start_new_session(
-        working_experiment=experiment,
-        experiment_channel=experiment_channel,
-        participant_identifier=participant.identifier,
-        participant_user=user,
-        metadata=metadata,
-        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
-    )
-
-    if user is not None and session_data:
-        session.state = session_data
-        session.save(update_fields=["state"])
+    session = _start_session(request, experiment, experiment_channel, participant, user, version_number)
+    _apply_session_data(session, user, session_data)
 
     session_token, expires_at = _issue_or_opt_out_session_token(session, experiment_channel)
 
