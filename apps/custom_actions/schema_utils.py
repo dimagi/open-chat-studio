@@ -101,10 +101,11 @@ PARAMETER_LOCATIONS = ("path", "query", "header", "cookie")
 
 
 def get_operations_from_spec_dict(spec_dict: dict) -> list[APIOperationDetails]:
-    return get_operations_from_spec(OpenAPISpec.from_spec_dict(spec_dict), spec_dict)
+    return get_operations_from_spec(OpenAPISpec.from_spec_dict(spec_dict))
 
 
-def get_operations_from_spec(spec: OpenAPISpec, spec_dict: dict) -> list[APIOperationDetails]:
+def get_operations_from_spec(spec: OpenAPISpec) -> list[APIOperationDetails]:
+    spec_dict = spec.document
     resolved_spec = resolve_references(spec_dict)
     operations = []
     for path in spec.paths or {}:
@@ -153,10 +154,12 @@ def _single_type(schema_type) -> str:
 
 
 def _follow_ref(node: dict, spec_dict: dict) -> dict:
-    """The target at the end of `node`'s `$ref` chain, or `node` itself when the chain is cyclic or dangling."""
+    """The end of `node`'s `$ref` chain: `node` if the chain is cyclic or dangling, `{}` if `node` is not a dict."""
+    if not isinstance(node, dict):
+        return {}
     seen = set()
     current = node
-    while isinstance(current, dict) and "$ref" in current:
+    while "$ref" in current:
         ref = current["$ref"]
         if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
             return node

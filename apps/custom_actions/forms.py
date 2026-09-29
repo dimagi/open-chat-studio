@@ -144,7 +144,7 @@ def validate_api_schema(api_schema):
 def validate_api_schema_full(operations, schema, server_url, url_validator):
 
     spec = OpenAPISpec.from_spec_dict(schema)
-    operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec, schema)}
+    operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
     invalid_operations = set(operations) - set(operations_by_id)
     if invalid_operations:
         raise forms.ValidationError(

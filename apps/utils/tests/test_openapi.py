@@ -22,6 +22,7 @@ class TestFromSpecDict:
         operation = spec.get_operation("/a", "get")
         assert operation.operationId is None
         assert operation.summary == "s"
+        assert spec.document["paths"]["/a"]["get"] == {"summary": "s"}
 
     def test_invalid_parameter_is_dropped(self):
         params = [{"name": "bad", "in": "nowhere"}, {"name": "ok", "in": "query"}]

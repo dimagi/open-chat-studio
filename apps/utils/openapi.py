@@ -5,7 +5,7 @@ import re
 from typing import Literal, Self, overload
 
 from openapi_pydantic import OpenAPI, Operation, Parameter, PathItem, Reference, RequestBody, Schema
-from pydantic import ValidationError
+from pydantic import PrivateAttr, ValidationError
 from pydantic_core import ErrorDetails
 
 HTTP_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
@@ -16,6 +16,7 @@ class OpenAPISpec(OpenAPI):
 
     # openapi-pydantic only accepts 3.1.x; 3.0 and Swagger documents are parsed as best effort.
     openapi: str = "3.1.0"
+    _document: dict = PrivateAttr(default_factory=dict)
 
     @classmethod
     def from_spec_dict(cls, spec_dict: dict) -> Self:
@@ -24,11 +25,19 @@ class OpenAPISpec(OpenAPI):
         spec_dict = copy.deepcopy(spec_dict)
         while True:
             try:
-                return cls.model_validate(spec_dict)
+                spec = cls.model_validate(spec_dict)
             except ValidationError as e:
                 errors = e.errors()
                 if not _remove_invalid_parts(spec_dict, errors):
                     raise ValueError(f"Invalid OpenAPI spec: {errors[0]['msg']}") from e
+            else:
+                spec._document = spec_dict
+                return spec
+
+    @property
+    def document(self) -> dict:
+        """The spec dict this was built from, without the parts that failed validation."""
+        return self._document
 
     @property
     def base_url(self) -> str:

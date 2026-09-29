@@ -423,7 +423,7 @@ class TestResolveSchemaType:
 
 
 def _one_operation_spec(parameters=None, body=None, components=None):
-    operation = {"operationId": "op", "parameters": parameters or []}
+    operation = {"operationId": "op", "parameters": [] if parameters is None else parameters}
     if body:
         operation["requestBody"] = {"content": {"application/json": {"schema": body}}}
     spec = {
@@ -546,6 +546,53 @@ def _one_operation_spec(parameters=None, body=None, components=None):
             [("q", "query", "string", False, None), ("n", "body", "integer", False, None)],
             id="openapi-31-nullable-list-types",
         ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": "string"}]),
+            [("p", "query", "string", False, None)],
+            id="string-parameter-schema",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": None}]),
+            [("p", "query", "string", False, None)],
+            id="null-parameter-schema",
+        ),
+        pytest.param(_one_operation_spec(["p"]), [], id="string-parameter"),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": {"anyOf": ["integer"]}}]),
+            [("p", "query", "string", False, None)],
+            id="string-any-of-member",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": {"anyOf": {"type": "integer"}}}]),
+            [("p", "query", "string", False, None)],
+            id="any-of-not-a-list",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": {"a": "string"}}),
+            [("body", "body", "object", True, None)],
+            id="invalid-body-property-is-dropped",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": ["a"]}),
+            [("body", "body", "object", True, None)],
+            id="body-properties-not-a-mapping",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [
+                    {"name": "p", "in": "query", "description": 5, "schema": {"type": "string"}},
+                    {"name": "q", "in": "query", "required": "maybe", "schema": {"type": "string"}},
+                ]
+            ),
+            [("p", "query", "string", False, None), ("q", "query", "string", False, None)],
+            id="invalid-parameter-fields-are-dropped",
+        ),
+        pytest.param(_one_operation_spec(5), [], id="parameters-not-a-list"),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "required": 5, "properties": {"a": {"type": "string"}}}),
+            [("a", "body", "string", False, None)],
+            id="body-required-not-a-list",
+        ),
     ],
 )
 def test_parameter_extraction(spec, expected):
@@ -568,7 +615,7 @@ def test_function_def_names_are_sanitized_operation_ids():
     spec_dict["paths"]["/other"] = {"get": {"operationId": "get-other.v2"}, "delete": {}}
     spec_dict["paths"]["/space"] = {"get": {"operationId": "Get Something Cool"}}
     spec = OpenAPISpec.from_spec_dict(spec_dict)
-    operations = get_operations_from_spec(spec, spec_dict)
+    operations = get_operations_from_spec(spec)
     for operation in operations:
         function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
         assert function_def.name == sanitize_property_name(operation.operation_id)
