@@ -406,6 +406,21 @@ class TestResolveSchemaType:
         """A resolved $ref that is a complex object without a top-level type key."""
         assert _resolve_schema_type({"anyOf": [{"properties": {"foo": {}}}]}) == "string"
 
+    @pytest.mark.parametrize(
+        ("schema", "expected"),
+        [
+            pytest.param({"type": ["string", "null"]}, "string", id="nullable-list"),
+            pytest.param({"type": ["null", "integer"]}, "integer", id="nullable-list-null-first"),
+            pytest.param({"type": ["integer"]}, "integer", id="single-item-list"),
+            pytest.param({"type": ["string", "integer"]}, "string", id="multi-type-list"),
+            pytest.param({"type": []}, "string", id="empty-list"),
+            pytest.param({"anyOf": [{"type": ["boolean", "null"]}]}, "boolean", id="anyof-variant-list"),
+            pytest.param({"oneOf": [{"type": ["number", "string"]}]}, "string", id="oneof-variant-multi-type-list"),
+        ],
+    )
+    def test_openapi_31_list_type(self, schema, expected):
+        assert _resolve_schema_type(schema) == expected
+
 
 def _one_operation_spec(parameters=None, body=None, components=None):
     operation = {"operationId": "op", "parameters": parameters or []}
@@ -522,6 +537,14 @@ def _one_operation_spec(parameters=None, body=None, components=None):
             ),
             [("loop", "body", "string", False, None)],
             id="cyclic-refs",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"name": "q", "in": "query", "schema": {"type": ["string", "null"]}}],
+                body={"type": "object", "properties": {"n": {"type": ["integer", "null"]}}},
+            ),
+            [("q", "query", "string", False, None), ("n", "body", "integer", False, None)],
+            id="openapi-31-nullable-list-types",
         ),
     ],
 )

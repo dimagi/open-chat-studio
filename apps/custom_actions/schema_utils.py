@@ -132,12 +132,23 @@ def _resolve_schema_type(prop_schema: dict) -> str:
     back to ``"string"`` when the type cannot be determined.
     """
     if "type" in prop_schema:
-        return prop_schema["type"]
+        return _single_type(prop_schema["type"])
     for key in ("anyOf", "oneOf"):
         variants = prop_schema.get(key, [])
         non_null = [item for item in variants if item.get("type") != "null"]
         if len(non_null) == 1 and "type" in non_null[0]:
-            return non_null[0]["type"]
+            return _single_type(non_null[0]["type"])
+    return "string"
+
+
+def _single_type(schema_type) -> str:
+    """The one non-null type named by `schema_type`, which OpenAPI 3.1 allows to be a list, else ``"string"``."""
+    if isinstance(schema_type, str):
+        return schema_type
+    if isinstance(schema_type, list):
+        non_null = [item for item in schema_type if item != "null"]
+        if len(non_null) == 1 and isinstance(non_null[0], str):
+            return non_null[0]
     return "string"
 
 
