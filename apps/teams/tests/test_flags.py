@@ -143,6 +143,12 @@ class TestFeatureFlagsSection:
         client.post(reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"})
         assert not Flag.objects.filter(name=MANAGEABLE_FLAG, teams=team_with_users).exists()
 
+    def test_get_redirects_to_the_section(self, client, team_with_users):
+        client.force_login(self._admin(team_with_users))
+        response = client.get(reverse("single_team:feature_flags", args=[team_with_users.slug]))
+        assert response.status_code == 302
+        assert response.url == reverse("single_team:manage_team_section", args=[team_with_users.slug, "flags"])
+
 
 @pytest.mark.django_db()
 def test_create_missing_flags_row_carries_no_global_override(request, settings):

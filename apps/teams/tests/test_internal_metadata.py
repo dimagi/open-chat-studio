@@ -47,6 +47,16 @@ def test_staff_can_view(team, staff_member, settings):
 
 
 @pytest.mark.django_db()
+def test_get_on_the_save_endpoint_redirects_to_the_section(team, staff_member, settings):
+    settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
+    client = Client()
+    client.force_login(staff_member)
+    response = client.get(_url(team))
+    assert response.status_code == 302
+    assert response.url == _section_url(team)
+
+
+@pytest.mark.django_db()
 def test_non_staff_member_gets_404(team, member, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
     client = Client()
