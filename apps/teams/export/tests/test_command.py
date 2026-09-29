@@ -789,10 +789,3 @@ def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_
         check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
 
     assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
-
-
-def test_report_warns_that_turning_off_migration_mode_resumes_every_synced_chatbot(capsys):
-    """Migration mode on the target is team-wide, so switching it off to cut one chatbot over also
-    starts the others, which may still be live on the source."""
-    Command()._report(sync_complete=True, team_slug="acme", chatbots=[{"public_id": "abc", "name": "Support bot"}])
-    assert "Turning off migration mode on this server" in capsys.readouterr().out

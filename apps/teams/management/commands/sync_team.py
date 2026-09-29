@@ -484,13 +484,6 @@ class Command(BaseCommand):
                 "migrated for the whole team, and notifications can mention the other chatbots."
             )
         )
-        self.stdout.write(
-            self.style.WARNING(
-                "Turning off migration mode on this server resumes scheduled messages and triggers "
-                "for every chatbot synced so far. Leave it on until each of them has been cut over, "
-                "or they will fire here and on the source."
-            )
-        )
 
     def _report_missing_files(self, missing_files: Sequence[str]) -> None:
         self.stdout.write("")
