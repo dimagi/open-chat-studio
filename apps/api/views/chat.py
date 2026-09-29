@@ -183,7 +183,7 @@ def validate_file_upload(file):
 def chat_upload_file(request, session_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
@@ -768,7 +768,7 @@ def chat_send_message(request, session_id):
 
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     # Verify session is active
     if session.is_complete:
@@ -951,7 +951,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
