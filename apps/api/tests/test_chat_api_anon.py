@@ -281,7 +281,6 @@ def test_start_chat_session_loads_the_team_with_the_chatbot(api_client, experime
     """Starting a session reads the chatbot's team in the same query as the chatbot."""
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": experiment.public_id}
-    api_client.post(url, data=data, format="json")
 
     with CaptureQueriesContext(connection) as ctx:
         response = api_client.post(url, data=data, format="json")
