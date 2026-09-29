@@ -11,12 +11,26 @@
     The sidebar is hidden below the lg breakpoint, so narrow screens switch sections
     through this instead.
   {% endcomment %}
-  <select class="select select-bordered w-full lg:hidden" data-cy="nav-section-select"
-          aria-label="{% translate "Settings section" %}"
-          onchange="window.location = this.value;">
-    {% for item in nav_sections %}
-      <option value="{{ item.url }}" {% if item.is_active %}selected{% endif %}>{{ item.label }}</option>
-    {% endfor %}
-  </select>
+  <div class="dropdown w-full lg:hidden" data-cy="nav-section-menu">
+    <div tabindex="0" role="button" class="btn btn-outline w-full justify-between"
+         aria-label="{% translate "Settings section" %}">
+      <span><i class="fa-solid {{ active_section.icon }} mr-2"></i>{{ active_section.label }}</span>
+      <i class="fa-solid fa-chevron-down"></i>
+    </div>
+    <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 w-full p-2 shadow-sm border">
+      {% for item in nav_sections %}
+        <li>
+          <a href="{{ item.url }}"
+             hx-get="{{ item.url }}"
+             hx-target="#team-settings-body"
+             hx-swap="innerHTML"
+             hx-push-url="true"
+             data-cy="nav-menu-{{ item.key }}">
+            <i class="fa-solid {{ item.icon }}"></i>{{ item.label }}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% include active_section.template %}
 </div>

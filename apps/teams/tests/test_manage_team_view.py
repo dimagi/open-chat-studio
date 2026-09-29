@@ -94,14 +94,14 @@ def test_htmx_request_returns_only_the_settings_body(client, team, admin):
 
 
 @pytest.mark.django_db()
-def test_narrow_screens_get_a_section_select(client, team, admin):
+def test_narrow_screens_get_a_section_menu(client, team, admin):
     client.force_login(admin)
     response = client.get(_section_url(team, "developer"))
 
     content = response.content.decode()
-    assert 'data-cy="nav-section-select"' in content
-    assert f'<option value="{_section_url(team, "members")}" >' in content
-    assert f'<option value="{_section_url(team, "developer")}" selected>' in content
+    assert 'data-cy="nav-section-menu"' in content
+    assert 'data-cy="nav-menu-members"' in content
+    assert 'data-cy="nav-menu-developer"' in content
 
 
 @pytest.mark.django_db()

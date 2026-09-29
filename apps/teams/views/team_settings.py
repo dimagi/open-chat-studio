@@ -243,15 +243,19 @@ def render_team_settings(request, section_key: str | None = None, *, team_form=N
 
 @login_and_team_required
 def manage_team(request, team_slug, section=None):
-    team_form = None
-    if request.method == "POST":
-        if request.team_membership.is_team_admin():
-            team_form = TeamChangeForm(request.POST, instance=request.team)
-            if team_form.is_valid():
-                messages.success(request, _("Team details saved!"))
-                team_form.save()
-                if request.team.slug != team_slug:
-                    return HttpResponseRedirect(section_url(request.team.slug, section))
-        else:
-            messages.error(request, "Sorry you don't have permission to do that.")
+    if request.method != "POST":
+        return render_team_settings(request, section)
+
+    if not request.team_membership.is_team_admin():
+        messages.error(request, "Sorry you don't have permission to do that.")
+        return render_team_settings(request, section)
+
+    team_form = TeamChangeForm(request.POST, instance=request.team)
+    if not team_form.is_valid():
+        return render_team_settings(request, section, team_form=team_form)
+
+    team_form.save()
+    messages.success(request, _("Team details saved!"))
+    if request.team.slug != team_slug:
+        return HttpResponseRedirect(section_url(request.team.slug, section))
     return render_team_settings(request, section, team_form=team_form)
