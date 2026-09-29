@@ -1,9 +1,7 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
-  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  <script src="{% static 'js/teams-bundle.js' %}"></script>
-  <style>
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>  <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
       opacity: 0;
@@ -85,6 +83,60 @@
       // Recompute after the tables load via htmx, since that changes page height.
       document.body.addEventListener('htmx:afterSettle', setActive);
     });
+
+    // Alpine component for the migration card's chatbot allowlist picker.
+    window.chatbotAllowlist = function ({scope = 'all', initialSelection = [], isMigrating = false} = {}) {
+      // Kept outside the returned object so Alpine does not wrap the TomSelect instance in a proxy.
+      let picker = null;
+
+      return {
+        scope,
+        initialSelection,
+        selection: [],
+
+        init() {
+          picker = new window.TomSelect(this.$refs.allowlist, {
+            plugins: ['remove_button'],
+            maxItems: null,
+            searchField: ['text'],
+            hideSelected: true,
+            closeAfterSelect: true,
+            onChange: (values) => {
+              this.selection = (values || []).map(Number);
+            },
+          });
+          this.selection = picker.getValue().map(Number);
+          this.syncPickerState();
+          this.$watch('scope', () => this.syncPickerState());
+        },
+
+        destroy() {
+          picker?.destroy();
+          picker = null;
+        },
+
+        syncPickerState() {
+          if (this.scope === 'all') {
+            picker.disable();
+          } else {
+            picker.enable();
+          }
+        },
+
+        selectAll() {
+          picker.setValue(Object.keys(picker.options));
+        },
+
+        clearAll() {
+          picker.clear();
+        },
+
+        get changedMidMigration() {
+          const sorted = (ids) => JSON.stringify([...ids].sort());
+          return isMigrating && sorted(this.selection) !== sorted(this.initialSelection);
+        },
+      };
+    };
   </script>
 {% endblock page_head %}
 
