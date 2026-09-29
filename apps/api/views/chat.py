@@ -490,6 +490,30 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
     return channel
 
 
+def _session_user(request, public_visitor: bool):
+    """The authenticated user the session belongs to, or None for anonymous and public-channel callers."""
+    if request.user.is_authenticated and not public_visitor:
+        return request.user
+    return None
+
+
+def _resolve_participant(user, team, platform, remote_id: str) -> Participant | Response:
+    """The participant for this session, or a 400 when an authenticated caller's remote ID is not their email."""
+    if user is None:
+        return Participant.create_anonymous(team, platform, remote_id)
+    # Enforce this for authenticated users
+    # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
+    if remote_id != user.email:
+        return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+    participant, _created = Participant.objects.get_or_create(
+        identifier=user.email,
+        team=team,
+        platform=platform,
+        defaults={"user": user, "remote_id": ""},
+    )
+    return participant
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -618,28 +642,10 @@ def chat_start_session(request):
         return refusal
     experiment_version = experiment_version or published
 
-    if request.user.is_authenticated and not public_visitor:
-        user = request.user
-        participant_id = user.email
-        # Enforce this for authenticated users
-        # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
-        if remote_id != participant_id:
-            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
-        remote_id = ""
-    else:
-        user = None
-        participant_id = None
-
-    # Create or get participant
-    if user is not None:
-        participant, _created = Participant.objects.get_or_create(
-            identifier=participant_id,
-            team=team,
-            platform=experiment_channel.platform,
-            defaults={"user": user, "remote_id": remote_id},
-        )
-    else:
-        participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
+    user = _session_user(request, public_visitor)
+    participant = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    if isinstance(participant, Response):
+        return participant
 
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
