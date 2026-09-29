@@ -637,7 +637,9 @@ def chat_start_session(request):
         mark_widget_request(request)
 
     # Always look up the working version by public_id
-    experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+    experiment = get_object_or_404(
+        Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
+    )
 
     oauth_channel = oauth_resolved_channel(request)
     embed_key_channel = _resolve_embed_key_channel(request, experiment)

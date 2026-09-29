@@ -1,6 +1,8 @@
 from unittest import mock
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -272,3 +274,18 @@ def test_start_chat_session_without_timezone_records_none(api_client, experiment
     assert response.status_code == 201
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
     assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_loads_the_team_with_the_chatbot(api_client, experiment):
+    """Starting a session reads the chatbot's team in the same query as the chatbot."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id}
+    api_client.post(url, data=data, format="json")
+
+    with CaptureQueriesContext(connection) as ctx:
+        response = api_client.post(url, data=data, format="json")
+
+    assert response.status_code == 201
+    team_queries = [q["sql"] for q in ctx.captured_queries if 'FROM "teams_team"' in q["sql"]]
+    assert team_queries == []
