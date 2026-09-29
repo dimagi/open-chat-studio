@@ -24,6 +24,7 @@ const config = {
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
     'evaluationTrends': './assets/javascript/apps/evaluations/trend-charts.js',
     'human_annotations': './assets/javascript/apps/human_annotations/session-selector.js',
+    'teams': './assets/javascript/apps/teams/chatbot-allowlist.js',
   },
 
   output: {

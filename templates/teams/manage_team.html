@@ -2,6 +2,7 @@
 {% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  <script src="{% static 'js/teams-bundle.js' %}"></script>
   <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
@@ -266,30 +267,11 @@
               </div>
 
               <div class="app-card"
-                   x-data="{
+                   x-data="chatbotAllowlist({
                      scope: '{{ public_key_form.export_scope.value|default:'all'|escapejs }}',
                      initialSelection: {{ saved_allowlist_ids|default:'[]' }},
-                     selection: [],
-                     get changedMidMigration() {
-                       return {{ team.is_migrating|yesno:'true,false' }}
-                         && JSON.stringify([...this.selection].sort()) !== JSON.stringify([...this.initialSelection].sort());
-                     }
-                   }"
-                   x-init="
-                     const picker = new window.TomSelect($refs.allowlist, {
-                       plugins: ['remove_button'],
-                       maxItems: null,
-                       searchField: ['text'],
-                       hideSelected: true,
-                       closeAfterSelect: true,
-                       onChange: (values) => { selection = (values || []).map(Number); }
-                     });
-                     selection = picker.getValue().map(Number);
-                     $watch('scope', (value) => value === 'all' ? picker.disable() : picker.enable());
-                     if (scope === 'all') { picker.disable(); }
-                     $refs.selectAll.addEventListener('click', () => picker.setValue(Object.keys(picker.options)));
-                     $refs.clearAll.addEventListener('click', () => picker.clear());
-                   ">
+                     isMigrating: {{ team.is_migrating|yesno:'true,false' }},
+                   })">
                 <div class="flex justify-between items-start">
                   <div>
                     <h3 class="pg-subtitle font-bold text-sm">{% translate "Migration" %}</h3>
@@ -338,8 +320,8 @@
                       {{ public_key_form.exportable_experiments.help_text }}
                     </p>
                     <div class="pg-inline-buttons mt-2">
-                      <button type="button" class="btn btn-xs btn-outline" x-ref="selectAll">{% translate "Select all" %}</button>
-                      <button type="button" class="btn btn-xs btn-outline" x-ref="clearAll">{% translate "Clear" %}</button>
+                      <button type="button" class="btn btn-xs btn-outline" @click="selectAll()">{% translate "Select all" %}</button>
+                      <button type="button" class="btn btn-xs btn-outline" @click="clearAll()">{% translate "Clear" %}</button>
                     </div>
                   </div>
 
