@@ -1,13 +1,4 @@
-"""The team settings page: a sidebar of sections, one of which is rendered at a time.
-
-Each section is declared once in ``SETTINGS_SECTIONS``, so its visibility rule is shared
-between the nav that links to it and the view that serves it: a section a user cannot see
-in the nav 404s when they request it directly.
-
-Clicking a nav item issues an htmx GET against the section's own URL, which swaps the
-sidebar and the section body together. The same URL served without the htmx header
-renders the whole page, so deep links, refreshes and back/forward all work.
-"""
+"""Team settings page, rendering one section at a time from ``SETTINGS_SECTIONS``."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
