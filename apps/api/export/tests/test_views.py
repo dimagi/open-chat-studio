@@ -280,6 +280,8 @@ def test_team_endpoint_reports_migration_status_and_public_key_presence(public_k
     assert body["has_public_key"] is expected_has_public_key  # a boolean presence flag, never the key material
     assert "public_key" not in body  # the raw key field must never appear alongside the boolean
     assert "members" not in body
+    assert "files_export" not in body
+    assert "files_export_task_id" not in body
 
 
 def test_manifest_flags_resources_to_reread_under_a_selection():

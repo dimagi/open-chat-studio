@@ -228,9 +228,9 @@ def build_team_serializer():
     row, so migration mode isn't replicated to the target), ``has_public_key`` -- a method field
     collapsing the key to a boolean, whether one is registered, never the key material itself -- and
     ``exportable_chatbots``, which says how much of the team this server will serve. The raw
-    ``public_key`` and ``exportable_experiments`` fields are excluded alongside ``members``: the
-    allowlist holds source pks the target cannot translate, and ``load_team`` imports the team row
-    before any experiment exists."""
+    ``public_key`` and ``exportable_experiments`` fields are excluded along with the rest of the
+    importable row's excluded fields: the allowlist holds source pks the target cannot translate, and
+    ``load_team`` imports the team row before any experiment exists."""
     base = build_resource_serializer(entry_model(TEAM_MODEL))
 
     class TeamExportSerializer(base):
@@ -242,8 +242,8 @@ def build_team_serializer():
         )
 
         class Meta(base.Meta):
-            # Replaces the base's exclude list rather than extending it.
-            exclude = ["members", "public_key", "exportable_experiments"]
+            # Everything the importable row drops except ``is_migrating``, which the client preflights on.
+            exclude = [field for field in base.Meta.exclude if field != "is_migrating"]
 
         def get_has_public_key(self, team) -> bool:
             return bool(team.public_key)
