@@ -498,21 +498,21 @@ def _session_user(request, public_visitor: bool) -> CustomUser | None:
     return None
 
 
-def _resolve_participant(user, team, platform, remote_id: str) -> Participant | Response:
-    """The participant for this session, or a 400 when an authenticated caller's remote ID is not their email."""
+def _resolve_participant(user, team, platform, remote_id: str) -> tuple[Participant | None, Response | None]:
+    """The participant for this session, or the 400 that refuses a caller whose remote ID is not their email."""
     if user is None:
-        return Participant.create_anonymous(team, platform, remote_id)
+        return Participant.create_anonymous(team, platform, remote_id), None
     # Enforce this for authenticated users
     # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
     if remote_id != user.email:
-        return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+        return None, Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
     participant, _created = Participant.objects.get_or_create(
         identifier=user.email,
         team=team,
         platform=platform,
         defaults={"user": user, "remote_id": ""},
     )
-    return participant
+    return participant, None
 
 
 def _start_session(request, experiment, experiment_channel, participant, user, version_number) -> ExperimentSession:
@@ -666,9 +666,9 @@ def chat_start_session(request):
     experiment_version = experiment_version or published
 
     user = _session_user(request, public_visitor)
-    participant = _resolve_participant(user, team, experiment_channel.platform, remote_id)
-    if isinstance(participant, Response):
-        return participant
+    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    if refusal:
+        return refusal
 
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
