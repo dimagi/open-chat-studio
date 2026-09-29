@@ -212,6 +212,11 @@ class TestLoadDocuments:
         ]
         assert len(_load(space_key="DEMO")) == 1
 
+    def test_transient_restriction_errors_are_retried(self, client):
+        client.get_all_pages_from_space_raw.side_effect = [{"results": [_page(1)]}, {"results": []}]
+        client.get_all_restrictions_for_content.side_effect = [ConnectionError("boom"), _unrestricted()]
+        assert len(_load(space_key="DEMO")) == 1
+
     def test_errors_propagate_after_retries(self, client):
         client.get_all_pages_from_space_raw.side_effect = ConnectionError("boom")
         with pytest.raises(ConnectionError):

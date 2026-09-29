@@ -44,13 +44,9 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
     def load_documents(self) -> Iterator[SourceDocument]:
         """Load documents from Confluence using configured options"""
         try:
-            username = self.auth_provider.config.get("username")
-            if not username:
-                raise ValueError("Confluence authentication requires username or email")
-
             client = Confluence(
                 url=self.config.base_url,
-                username=username,
+                username=self.auth_provider.config.get("username"),
                 password=self.auth_provider.config.get("password"),
                 cloud=True,
             )
@@ -146,5 +142,5 @@ def _search_cql(client: Confluence, cql: str, max_pages: int) -> list[dict]:
 def _is_public(client: Confluence, page: dict) -> bool:
     if page["status"] != "current":
         return False
-    read = client.get_all_restrictions_for_content(page["id"])["read"]["restrictions"]
+    read = _with_retries(client.get_all_restrictions_for_content)(page["id"])["read"]["restrictions"]
     return not read["user"]["results"] and not read["group"]["results"]

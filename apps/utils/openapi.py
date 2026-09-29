@@ -32,7 +32,7 @@ class OpenAPISpec(OpenAPI):
 
     @property
     def base_url(self) -> str:
-        return self.servers[0].url
+        return self.servers[0].url if self.servers else "/"
 
     def get_methods_for_path(self, path: str) -> list[str]:
         path_item = self._get_path_item(path)

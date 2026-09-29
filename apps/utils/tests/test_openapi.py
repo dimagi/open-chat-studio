@@ -93,10 +93,11 @@ class TestFromSpecDict:
     [
         pytest.param([{"url": "https://api.example.com"}], "https://api.example.com", id="declared"),
         pytest.param(None, "/", id="missing"),
+        pytest.param([], "/", id="empty"),
     ],
 )
 def test_base_url(servers, expected):
-    extra = {"servers": servers} if servers else {}
+    extra = {"servers": servers} if servers is not None else {}
     assert OpenAPISpec.from_spec_dict(_spec(**extra)).base_url == expected
 
 
