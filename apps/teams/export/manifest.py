@@ -292,8 +292,8 @@ def scoped_queryset(entry: ManifestEntry, team, scope: ChatbotScope | None = Non
     """The rows this request may serve: the team's, narrowed to the chatbot scope when one is active.
     An excluded resource returns nothing rather than the team's rows, since importing one would
     reference an experiment that was never synced."""
-    scoped_queryset = team_scoped_queryset(entry=entry, team=team)
-    return narrow_to_scope(queryset=scoped_queryset, model_label=entry.model, scope=scope)
+    queryset = team_scoped_queryset(entry=entry, team=team)
+    return narrow_to_scope(queryset=queryset, model_label=entry.model, scope=scope)
 
 
 @cache
