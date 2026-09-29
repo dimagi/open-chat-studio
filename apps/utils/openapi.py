@@ -51,9 +51,10 @@ class OpenAPISpec(OpenAPI):
         return [self._resolve_parameter(p) for p in operation.parameters or []]
 
     def get_request_body_for_operation(self, operation: Operation) -> RequestBody | None:
-        request_body, seen = operation.requestBody, set()
+        request_body, seen = operation.requestBody, frozenset()
         while isinstance(request_body, Reference):
-            request_body = self._get_component("requestBodies", _visit(request_body, seen))
+            seen = _add_ref(seen, request_body)
+            request_body = self._get_component("requestBodies", request_body)
         return request_body
 
     def get_referenced_schema(self, ref: Reference) -> Schema:
@@ -81,21 +82,19 @@ class OpenAPISpec(OpenAPI):
         return path_item
 
     def _resolve_parameter(self, parameter: Parameter | Reference) -> Parameter:
-        seen = set()
+        seen = frozenset()
         while isinstance(parameter, Reference):
-            parameter = self._get_component("parameters", _visit(parameter, seen))
+            seen = _add_ref(seen, parameter)
+            parameter = self._get_component("parameters", parameter)
         return parameter
 
     def _resolve_schema(self, schema: Reference | Schema, seen: frozenset[str]) -> Schema:
         """`seen` holds the references on the path from the root schema, so a schema used twice is not a cycle."""
         if isinstance(schema, Reference):
-            if schema.ref in seen:
-                raise ValueError(f"Cyclic reference: {schema.ref}")
-            seen = seen | {schema.ref}
+            seen = _add_ref(seen, schema)
             schema = self.get_referenced_schema(schema)
         if schema.properties is not None:
-            for name, prop in schema.properties.items():
-                schema.properties[name] = self._resolve_schema(prop, seen)
+            schema.properties = {name: self._resolve_schema(prop, seen) for name, prop in schema.properties.items()}
         if schema.items is not None:
             schema.items = self._resolve_schema(schema.items, seen)
         for key in ("allOf", "anyOf", "oneOf"):
@@ -120,12 +119,11 @@ class OpenAPISpec(OpenAPI):
         return components[name]
 
 
-def _visit(ref: Reference, seen: set[str]) -> Reference:
-    """Add `ref` to `seen`, raising if it is already there."""
+def _add_ref(seen: frozenset[str], ref: Reference) -> frozenset[str]:
+    """`seen` with `ref` added, raising if it is already there."""
     if ref.ref in seen:
         raise ValueError(f"Cyclic reference: {ref.ref}")
-    seen.add(ref.ref)
-    return ref
+    return seen | {ref.ref}
 
 
 def _remove_invalid_parts(document: dict, errors: list[ErrorDetails]) -> bool:
@@ -150,9 +148,11 @@ def _invalid_part(document: dict, error: ErrorDetails) -> tuple:
         # `$ref` is the only required field of `Reference`: this is the failed branch of a `X | Reference` union.
         return ()
     path = _existing_path(document, error["loc"])
-    if path and path[-1] in ("name", "in") and _is_parameter(path[:-1]):
+    if not path:
+        return ()
+    if path[-1] in ("name", "in") and _is_parameter(path[:-1]):
         path = path[:-1]
-    if path and _is_essential(document, path):
+    if _is_essential(document, path):
         raise ValueError(f"Invalid OpenAPI spec: {error['msg']} at {'/'.join(map(str, error['loc']))}")
     return path
 
