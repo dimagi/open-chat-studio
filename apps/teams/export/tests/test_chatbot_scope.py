@@ -10,7 +10,8 @@ from apps.cost_tracking.models import UsageRecord
 from apps.events.models import EventAction
 from apps.pipelines.models import PipelineChatMessages
 from apps.teams.export import manifest
-from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope, narrow_to_scope
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, build_scope, narrow_to_scope, read_selection
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
 from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -273,6 +274,20 @@ def test_build_scope_covers_the_selected_family():
 
     assert set(scope.experiment_ids) == {working.id, published.id}
     assert other.id not in scope.experiment_ids
+
+
+def test_read_selection_without_a_selection_is_the_whole_team():
+    assert read_selection(TeamFactory()) == (ALL_CHATBOTS_KEY, None)
+
+
+def test_read_selection_pairs_the_key_with_the_scope():
+    team = TeamFactory()
+    first, second = _select(team), _select(team)
+
+    key, scope = read_selection(team)
+
+    assert key == selection_key([str(first.public_id), str(second.public_id)])
+    assert set(scope.experiment_ids) == {first.id, second.id}
 
 
 def test_channels_include_the_teams_shared_ones():

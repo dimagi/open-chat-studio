@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 from apps.api.export.permissions import IsTeamAdmin
 from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
-from apps.teams.export.chatbot_scope import build_scope
+from apps.teams.export.chatbot_scope import read_selection
 from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
@@ -28,7 +28,7 @@ from apps.teams.export.manifest import (
     scoped_queryset,
 )
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_public_key
-from apps.teams.export.selection import SELECTION_CHANGED_DETAIL, current_selection_key
+from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
 
 from .serializers import (
     ManifestSerializer,
@@ -116,12 +116,13 @@ class ResourceView(_ExportAPIView):
         # A client pages each resource under the selection it read at the start of its run; rows served
         # under a different allowlist could reference rows its earlier pages never included.
         selection = request.query_params.get("selection")
-        if selection is not None and selection != current_selection_key(request.team):
+        current_key, scope = read_selection(request.team)
+        if selection is not None and selection != current_key:
             return Response({"detail": SELECTION_CHANGED_DETAIL}, status=status.HTTP_409_CONFLICT)
 
         # The chatbot scope is the team's own allowlist, never a client preference: an API key alone
         # must not widen what may leave this server.
-        queryset = scoped_queryset(entry, request.team, build_scope(request.team))
+        queryset = scoped_queryset(entry, request.team, scope)
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
         serializer = build_resource_serializer(entry_model(entry.model))(rows, many=True, context=context)

@@ -25,7 +25,8 @@ from django.apps import apps
 from django.db.models import Model, Q, QuerySet
 
 from apps.events.versioning import get_event_action_param_specs
-from apps.teams.export.selection import expand_to_family, selected_experiment_ids
+from apps.teams.export.selection import expand_to_family, selected_chatbots
+from apps.teams.export.translation import selection_key
 from apps.utils.fields import as_int
 
 
@@ -294,8 +295,14 @@ def build_scope(team) -> ChatbotScope | None:
     An empty allowlist means the whole team, so a chatbot created after the selection was saved is
     exportable exactly when no selection is active.
     """
-    selected = selected_experiment_ids(team)
-    return ChatbotScope(selected) if selected else None
+    return read_selection(team)[1]
+
+
+def read_selection(team) -> tuple[str, ChatbotScope | None]:
+    """The team's selection key and export scope, built from one read of the allowlist so they agree."""
+    chatbots = list(selected_chatbots(team).values_list("id", "public_id"))
+    key = selection_key([str(public_id) for _, public_id in chatbots])
+    return key, ChatbotScope([pk for pk, _ in chatbots]) if chatbots else None
 
 
 @dataclass(frozen=True)
