@@ -134,6 +134,7 @@ class TestChatFileUploadAPI:
         assert file_obj.metadata["session_id"] == str(session.external_id)
 
     def test_upload_without_files_is_rejected(self, api_client, session):
+        """A request with no files is refused with a 400 and an explanatory error."""
         url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
         response = api_client.post(url, {}, format="multipart")
 
@@ -152,6 +153,7 @@ class TestChatFileUploadAPI:
     def test_uploaded_by_precedence(
         self, api_client, experiment, team_with_users, participant_identifier, authenticated, remote_id, expected
     ):
+        """The uploader is the participant, else the signed-in user's email, else the remote id, else "unknown"."""
         participant = ParticipantFactory.create(team=team_with_users, identifier=participant_identifier)
         session = ExperimentSessionFactory.create(
             experiment=experiment, participant=participant, session_token_required=False

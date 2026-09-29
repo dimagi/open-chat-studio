@@ -21,6 +21,7 @@ SESSION_ENDPOINTS = [
 
 @pytest.fixture()
 def api_client():
+    """An unauthenticated DRF test client."""
     return APIClient()
 
 
@@ -28,6 +29,7 @@ def api_client():
 @pytest.mark.parametrize("authenticated", [pytest.param(False, id="anonymous"), pytest.param(True, id="authenticated")])
 @pytest.mark.parametrize(("url_name", "method", "extra_kwargs"), SESSION_ENDPOINTS)
 def test_unknown_session_is_refused_with_403(api_client, authenticated, url_name, method, extra_kwargs):
+    """Every session endpoint answers 403 for an unknown session id, for anonymous and signed-in callers."""
     if authenticated:
         api_client.force_authenticate(UserFactory.create())
     url = reverse(f"api:chat:{url_name}", kwargs={"session_id": uuid.uuid4(), **extra_kwargs})
@@ -38,6 +40,7 @@ def test_unknown_session_is_refused_with_403(api_client, authenticated, url_name
 
 
 def _upload_payload():
+    """Build a multipart payload holding one small text file."""
     return {"files": SimpleUploadedFile("note.txt", b"hello", content_type="text/plain")}
 
 
@@ -51,6 +54,7 @@ VIEW_GUARD_ENDPOINTS = [
 @pytest.mark.django_db()
 @pytest.mark.parametrize(("url_name", "method", "make_payload", "request_format"), VIEW_GUARD_ENDPOINTS)
 def test_session_the_view_cannot_load_is_a_404(api_client, experiment, url_name, method, make_payload, request_format):
+    """A view that cannot load its session responds 404."""
     session = ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
     url = reverse(f"api:chat:{url_name}", kwargs={"session_id": session.external_id})
     format_kwargs = {"format": request_format} if request_format else {}
@@ -63,6 +67,7 @@ def test_session_the_view_cannot_load_is_a_404(api_client, experiment, url_name,
 
 @pytest.mark.django_db()
 def test_upload_to_a_session_the_view_cannot_load_stores_no_file(api_client, experiment):
+    """An upload to a session the view cannot load creates no File."""
     session = ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
     url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
 
