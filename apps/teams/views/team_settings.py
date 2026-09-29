@@ -237,7 +237,9 @@ def render_team_settings(request, section_key: str | None = None, *, team_form=N
     """Render one settings section: the body alone over htmx, the whole page otherwise."""
     section = get_section(request, section_key)
     context = _settings_context(request, section, team_form=team_form) | extra_context
-    template = "teams/partials/settings_body.html" if request.htmx else "teams/manage_team.html"
+    # htmx swaps a history-restore response into <body>, so it needs the whole page.
+    is_nav_swap = request.htmx and not request.htmx.history_restore_request
+    template = "teams/partials/settings_body.html" if is_nav_swap else "teams/manage_team.html"
     return render(request, template, context)
 
 
