@@ -59,6 +59,17 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_start_chat_session_stores_the_remote_id_on_the_anonymous_participant(api_client, experiment):
+    """An anonymous caller's participant_remote_id is kept as the participant's remote ID."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": "remote-123"}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant.remote_id == "remote-123"
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("referer", "expected_embed_source"),
     [

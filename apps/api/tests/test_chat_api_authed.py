@@ -81,6 +81,17 @@ def test_start_chat_session_with_auth(authed_user, authed_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_start_chat_session_with_auth_stores_no_remote_id_on_the_participant(authed_user, authed_client, experiment):
+    """The participant of an authenticated caller is identified by email, so its remote ID stays empty."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant.remote_id == ""
+
+
+@pytest.mark.django_db()
 def test_start_chat_session_with_auth_requires_remote_id(authed_client, experiment):
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": experiment.public_id}
