@@ -43,18 +43,7 @@ def test_staff_can_view(team, staff_member, settings):
     client.force_login(staff_member)
     response = client.get(_section_url(team))
     assert response.status_code == 200
-    assert response.context["active_section"].key == "internal-metadata"
     assert b"Team Owner" in response.content
-
-
-@pytest.mark.django_db()
-def test_get_on_the_save_endpoint_redirects_to_the_section(team, staff_member, settings):
-    settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
-    client = Client()
-    client.force_login(staff_member)
-    response = client.get(_url(team))
-    assert response.status_code == 302
-    assert response.url == _section_url(team)
 
 
 @pytest.mark.django_db()

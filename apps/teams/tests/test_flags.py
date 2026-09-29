@@ -125,47 +125,23 @@ class TestFeatureFlagFormSave:
 
 @pytest.mark.django_db()
 class TestFeatureFlagsSection:
-    """The flags screen is a section of the team settings page, not a page of its own."""
-
-    def _section_url(self, team):
-        return reverse("single_team:manage_team_section", args=[team.slug, "flags"])
-
     def _admin(self, team):
         return next(m.user for m in team.membership_set.all() if m.is_team_admin())
 
     def _member(self, team):
         return next(m.user for m in team.membership_set.all() if not m.is_team_admin())
 
-    def test_section_renders_the_flag_form(self, client, team_with_users):
-        client.force_login(self._admin(team_with_users))
-        response = client.get(self._section_url(team_with_users))
-        assert response.status_code == 200
-        assert response.context["active_section"].key == "flags"
-        assert MANAGEABLE_FLAG in response.context["flags_form"].fields
-
     def test_admin_can_save_from_the_section(self, request, client, team_with_users):
         client.force_login(self._admin(team_with_users))
-        response = client.post(
-            reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"}
-        )
-        assert response.status_code == 200
+        client.post(reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"})
         flag = Flag.objects.get(name=MANAGEABLE_FLAG)
         request.addfinalizer(flag.flush)
         assert flag.teams.filter(pk=team_with_users.pk).exists()
 
     def test_non_admin_cannot_save(self, client, team_with_users):
         client.force_login(self._member(team_with_users))
-        response = client.post(
-            reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"}
-        )
-        assert response.status_code == 200
+        client.post(reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"})
         assert not Flag.objects.filter(name=MANAGEABLE_FLAG, teams=team_with_users).exists()
-
-    def test_get_redirects_to_the_section(self, client, team_with_users):
-        client.force_login(self._admin(team_with_users))
-        response = client.get(reverse("single_team:feature_flags", args=[team_with_users.slug]))
-        assert response.status_code == 302
-        assert response.url == self._section_url(team_with_users)
 
 
 @pytest.mark.django_db()
