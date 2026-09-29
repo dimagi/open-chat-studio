@@ -443,45 +443,11 @@ class Command(BaseCommand):
             self.stdout.write(f"Rows already up to date and left untouched: {skipped_rows}")
 
         if chatbots:
-            self.stdout.write("")
-            self.stdout.write(self.style.MIGRATE_HEADING("Chatbots synced"))
-            for chatbot in chatbots:
-                self.stdout.write(f"  - {chatbot['name']}")
-            self.stdout.write("")
-            self.stdout.write(
-                self.style.WARNING(
-                    "Only these chatbots were migrated. Evaluations, human annotations and transcript "
-                    "analyses were not migrated for them, and neither was anything belonging to this "
-                    "team's other chatbots. Team members, tags, pricing rules and notifications were "
-                    "migrated for the whole team, and notifications can mention the other chatbots."
-                )
-            )
-            self.stdout.write(
-                self.style.WARNING(
-                    "Turning off migration mode on this server resumes scheduled messages and triggers "
-                    "for every chatbot synced so far. Leave it on until each of them has been cut over, "
-                    "or they will fire here and on the source."
-                )
-            )
-
+            self._report_chatbots(chatbots)
         if missing_files:
-            self.stdout.write("")
-            self.stdout.write(
-                self.style.WARNING(
-                    f"{len(missing_files)} file(s) had no content on the source and were imported without it:"
-                )
-            )
-            for name in missing_files:
-                self.stdout.write(f"  - {name}")
-
+            self._report_missing_files(missing_files)
         if notification_failures:
-            self.stdout.write("")
-            self.stdout.write(
-                self.style.WARNING(f"{len(notification_failures)} user(s) could not be sent a password-reset email:")
-            )
-            for identifier, error in notification_failures:
-                self.stdout.write(f"  - {identifier}: {error}")
-            self.stdout.write("  They were imported, and a rerun won't retry the email; send theirs by hand.")
+            self._report_notification_failures(notification_failures)
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
@@ -503,6 +469,47 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("Sync complete."))
         else:
             self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
+
+    def _report_chatbots(self, chatbots: Sequence[dict]) -> None:
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("Chatbots synced"))
+        for chatbot in chatbots:
+            self.stdout.write(f"  - {chatbot['name']}")
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                "Only these chatbots were migrated. Evaluations, human annotations and transcript "
+                "analyses were not migrated for them, and neither was anything belonging to this "
+                "team's other chatbots. Team members, tags, pricing rules and notifications were "
+                "migrated for the whole team, and notifications can mention the other chatbots."
+            )
+        )
+        self.stdout.write(
+            self.style.WARNING(
+                "Turning off migration mode on this server resumes scheduled messages and triggers "
+                "for every chatbot synced so far. Leave it on until each of them has been cut over, "
+                "or they will fire here and on the source."
+            )
+        )
+
+    def _report_missing_files(self, missing_files: Sequence[str]) -> None:
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                f"{len(missing_files)} file(s) had no content on the source and were imported without it:"
+            )
+        )
+        for name in missing_files:
+            self.stdout.write(f"  - {name}")
+
+    def _report_notification_failures(self, notification_failures: Sequence[tuple[str, str]]) -> None:
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(f"{len(notification_failures)} user(s) could not be sent a password-reset email:")
+        )
+        for identifier, error in notification_failures:
+            self.stdout.write(f"  - {identifier}: {error}")
+        self.stdout.write("  They were imported, and a rerun won't retry the email; send theirs by hand.")
 
     def _confirm_force_delete(self, team_slug) -> bool:
         self.stdout.write(
