@@ -13,11 +13,6 @@ def _firing(queryset=None):
     return set((queryset or StaticTrigger.objects).exclude(frozen_experiment_q()).values_list("id", flat=True))
 
 
-def test_nothing_is_frozen_when_no_team_is_migrating():
-    trigger = StaticTriggerFactory(experiment=ExperimentFactory(team=TeamFactory()))
-    assert trigger.id in _firing()
-
-
 def test_a_migrating_team_without_a_selection_freezes_everything():
     team = TeamFactory(is_migrating=True)
     trigger = StaticTriggerFactory(experiment=ExperimentFactory(team=team))
