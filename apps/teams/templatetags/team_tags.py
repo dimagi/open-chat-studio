@@ -1,7 +1,5 @@
 from django import template
 
-from apps.teams.export.selection import selected_experiment_count
-
 register = template.Library()
 
 
@@ -17,8 +15,3 @@ def has_perm(context, app_label, permission):
     """
     request = context["request"]
     return request.user.has_perm(f"{app_label}.{permission}")
-
-
-@register.simple_tag
-def exportable_chatbot_count(team) -> int:
-    return selected_experiment_count(team)
