@@ -317,6 +317,11 @@ MFA_TOTP_ISSUER = "Open Chat Studio"
 # to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
 REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
 
+# Privilege elevation ("sudo"): a superuser browsing another team is elevated into it on first
+# access, with no identity proof. Development convenience only — with it off, which is the
+# default outside DEBUG, they have to re-authenticate the way the deployed site demands.
+ELEVATION_WITHOUT_PROOF = env.bool("ELEVATION_WITHOUT_PROOF", default=DEBUG and not IS_TESTING)
+
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")

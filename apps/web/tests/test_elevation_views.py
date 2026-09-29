@@ -1,4 +1,5 @@
 import datetime
+from urllib.parse import quote
 
 import pytest
 from django.urls import reverse, reverse_lazy
@@ -37,7 +38,47 @@ def test_admin_site_redirects_to_elevation(superuser, authed_client):
     elevate_url = reverse("web:elevate_django_admin")
     response = authed_client.get(admin_url)
     assert response.status_code == 302
-    assert response.url == f"{elevate_url}?next={admin_url}"
+    assert response.url == f"{elevate_url}?next={quote(admin_url, safe='')}"
+
+
+@pytest.mark.django_db()
+def test_admin_site_steps_up_staff_as_well_as_superusers(client):
+    """`AdminSite.has_permission` is `is_staff`, so staff have to prove themselves too."""
+    staff = UserFactory.create(is_staff=True)
+    client.force_login(staff)
+    admin_url = reverse("admin:index")
+
+    response = client.get(admin_url)
+
+    assert response.status_code == 302
+    assert response.url == f"{reverse('web:elevate_django_admin')}?next={quote(admin_url, safe='')}"
+
+    elevate(client, reverse("web:elevate_django_admin"), admin_url)
+    assert client.get(admin_url).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_signing_out_of_the_admin_needs_no_elevation(client):
+    """`admin_view` wraps the logout view, so the elevation check has to let it through."""
+    staff = UserFactory.create(is_staff=True)
+    client.force_login(staff)
+
+    response = client.post(reverse("admin:logout"))
+
+    assert response.status_code == 200
+    assert "_auth_user_id" not in client.session
+
+
+@pytest.mark.django_db()
+def test_ocs_admin_is_reached_through_its_own_elevation(superuser, authed_client):
+    """The Django admin grant is a different grant, so it does not open /admin/."""
+    ocs_admin_url = reverse("ocs_admin:home")
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+    assert authed_client.get(ocs_admin_url).status_code == 302
+
+    elevate(authed_client, reverse("web:elevate_ocs_admin"), ocs_admin_url)
+
+    assert authed_client.get(ocs_admin_url).status_code == 200
 
 
 @pytest.mark.django_db()
