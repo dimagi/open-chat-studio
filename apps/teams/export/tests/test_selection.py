@@ -1,6 +1,11 @@
 import pytest
 
-from apps.teams.export.selection import expand_to_family, selectable_chatbots, selected_experiment_ids
+from apps.teams.export.selection import (
+    expand_to_family,
+    selectable_chatbots,
+    selected_chatbots,
+    selected_experiment_ids,
+)
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -26,6 +31,14 @@ def test_selected_experiment_ids_includes_an_archived_chatbot():
     chatbot.is_archived = True
     chatbot.save()
     assert selected_experiment_ids(team) == [chatbot.id]
+
+
+def test_the_allowlist_ignores_another_teams_chatbot():
+    team = TeamFactory()
+    chatbot = ExperimentFactory(team=team)
+    team.exportable_experiments.add(chatbot, ExperimentFactory())
+    assert selected_experiment_ids(team) == [chatbot.id]
+    assert list(selected_chatbots(team)) == [chatbot]
 
 
 def test_expand_to_family_includes_published_and_archived_versions():

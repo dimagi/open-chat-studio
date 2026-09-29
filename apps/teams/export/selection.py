@@ -17,8 +17,9 @@ SELECTION_CHANGED_DETAIL = "The team's chatbot selection changed during the sync
 
 def _allowlist(team: Team) -> QuerySet:
     """The allowlist rows, read from the join table: the related manager goes through
-    ``Experiment.objects``, which hides archived chatbots."""
-    return Team.exportable_experiments.through.objects.filter(team=team)
+    ``Experiment.objects``, which hides archived chatbots. Rows naming another team's chatbot are
+    ignored."""
+    return Team.exportable_experiments.through.objects.filter(team=team, experiment__team=team)
 
 
 def selected_experiment_ids(team: Team) -> list[int]:
