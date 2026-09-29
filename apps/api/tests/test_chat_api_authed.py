@@ -122,6 +122,21 @@ def test_start_chat_session_with_session_state(authed_user, authed_client, exper
 
 
 @pytest.mark.django_db()
+def test_start_chat_session_links_the_authenticated_user_to_an_existing_participant(
+    authed_user, authed_client, experiment
+):
+    """A stored participant with the caller's email but no user is linked to the caller on session start."""
+    for platform in (ChannelPlatform.API, ChannelPlatform.EMBEDDED_WIDGET):
+        Participant.objects.create(identifier=authed_user.email, team=experiment.team, platform=platform, user=None)
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant.user_id == authed_user.id
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("participant_remote_id", "status_code"), [(None, 400), ("", 400), ("123", 400), ("user_email", 201)]
 )
