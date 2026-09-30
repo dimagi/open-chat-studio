@@ -3,6 +3,7 @@ from rest_framework import routers
 
 from apps.api.v2 import views
 from apps.api.v2.channels import TriggerBotMessageView
+from apps.api.v2.content.views import SourceMaterialViewSet
 from apps.api.v2.discovery import (
     ChatbotOptionsView,
     PipelineNodeOptionsView,
@@ -22,6 +23,7 @@ app_name = "v2"
 
 router = routers.SimpleRouter()
 router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
+router.register(r"source-material", SourceMaterialViewSet, basename="source-material")
 
 # The v2 API surface: the renamed chatbot surface and all new endpoints (e.g. inspect).
 # Mounted under the capturing ``v2/`` prefix; unlike v1 there is no unversioned alias.

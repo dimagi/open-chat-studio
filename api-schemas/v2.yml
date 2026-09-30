@@ -1227,6 +1227,159 @@ paths:
                 $ref: '#/components/schemas/NodeTypeNotFound'
           description: No such node type, or the type is deprecated and therefore
             not listed.
+  /api/v2/source-material/:
+    get:
+      operationId: source_material_list
+      description: List the team's source material. Archived ones are not listed.
+      summary: List Source Material
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSourceMaterialResourceList'
+          description: ''
+    post:
+      operationId: source_material_create
+      description: A key that is not listed below is rejected rather than ignored.
+      summary: Create Source Material
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceMaterialResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+  /api/v2/source-material/{id}/:
+    get:
+      operationId: source_material_retrieve
+      description: List, retrieve, create, patch and archive one team-scoped, versioned
+        content model.
+      summary: Retrieve Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    patch:
+      operationId: source_material_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit.
+      summary: Update Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSourceMaterialResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    delete:
+      operationId: source_material_archive
+      description: 'Archive the source material. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. It is refused with
+        `409` while a pipeline node or a live chatbot version still uses it; remove
+        the reference from each node first.'
+      summary: Archive Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveRefused'
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -1631,6 +1784,15 @@ components:
             type: string
       required:
       - paths
+    ArchiveRefused:
+      type: object
+      description: 'The archive 409: why the resource cannot be archived as things
+        stand.'
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     Archived:
       type: object
       description: 'The archive response: that it happened, and what it destroyed
@@ -2107,6 +2269,15 @@ components:
       - consent_text
       - id
       - name
+    ContentArchived:
+      type: object
+      description: The archive response.
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - archived
     Cost:
       type: object
       properties:
@@ -3228,6 +3399,30 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PaginatedSourceMaterialResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     ParticipantIdentity:
       type: object
       properties:
@@ -3341,6 +3536,24 @@ components:
             and always needs one, so this promotes a version; it cannot un-publish
             one. Create a new version that goes live, or make a different version
             the published one, to move it off.
+      additionalProperties: false
+    PatchedSourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
       additionalProperties: false
     PipelineBuildErrors:
       type: object
@@ -3684,6 +3897,28 @@ components:
       - id
       - material
       - topic
+    SourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      required:
+      - id
+      - material
+      - topic
+      additionalProperties: false
     StaticRouterNodeParams:
       type: object
       properties:
