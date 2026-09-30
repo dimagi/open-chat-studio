@@ -38,6 +38,7 @@ from apps.evaluations.export import (
     CategoricalColumn,
     categorical_columns_for_evaluators,
     evaluator_output_columns,
+    is_error_header,
     write_evaluation_csv,
 )
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
@@ -989,9 +990,9 @@ def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk:
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
 
-        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | {"error"}
+        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS)
 
-        result_columns = [col for col in columns if col not in protected_columns and not col.startswith("error (")]
+        result_columns = [col for col in columns if col not in protected_columns and not is_error_header(col)]
         suggestions = generate_evaluation_results_column_suggestions(result_columns, evaluation_run)
         return JsonResponse(
             {
