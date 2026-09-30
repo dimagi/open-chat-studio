@@ -1507,9 +1507,9 @@ paths:
       description: 'Archive the source material. This is a soft delete: it is hidden
         rather than destroyed, and a person can restore it in the web app. A repeat
         of this call answers `404`, which makes it safe to retry. It is refused with
-        `409` while a pipeline node or a live chatbot version still uses it; remove
-        the reference from each node first. A client-credentials token can read but
-        not write; its writes answer `403`.'
+        `409` while a pipeline node or a live chatbot version still uses it. The response
+        lists each chatbot version and node that uses it. A client-credentials token
+        can read but not write; its writes answer `403`.'
       summary: Archive Source Material
       parameters:
       - in: path
@@ -1538,7 +1538,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArchiveRefused'
+                $ref: '#/components/schemas/SourceMaterialInUse'
           description: ''
   /api/v2/trigger_bot/:
     post:
@@ -4041,6 +4041,40 @@ components:
       - label
       - type
       - value
+    ReferencingChatbot:
+      type: object
+      description: A chatbot version whose pipeline uses the source material.
+      properties:
+        chatbot_id:
+          type: string
+          format: uuid
+          description: The chatbot's id, as the chatbot endpoints take it.
+        version_number:
+          type: integer
+        published:
+          type: boolean
+          description: True for the published version, whose nodes cannot be edited;
+            false for the draft.
+        node_ids:
+          type: array
+          items:
+            type: string
+          description: The nodes that use it, as the pipeline node endpoints take
+            them.
+      required:
+      - chatbot_id
+      - node_ids
+      - published
+      - version_number
+    ReferencingPipeline:
+      type: object
+      description: A pipeline outside any listed chatbot, such as an archived chatbot's,
+        that uses the source material.
+      properties:
+        name:
+          type: string
+      required:
+      - name
     RenderTemplateParams:
       type: object
       properties:
@@ -4150,6 +4184,25 @@ components:
       - id
       - material
       - topic
+    SourceMaterialInUse:
+      type: object
+      description: 'The source material archive 409: where it is still used.'
+      properties:
+        detail:
+          type: string
+        chatbots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingChatbot'
+        other_pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingPipeline'
+          description: Only a person can remove these references, in the web app.
+      required:
+      - chatbots
+      - detail
+      - other_pipelines
     SourceMaterialResource:
       type: object
       description: The fields the web app's source material form edits, plus the id

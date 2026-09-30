@@ -59,3 +59,31 @@ class ArchiveRefusedSerializer(serializers.Serializer):
     """The archive 409: why the resource cannot be archived as things stand."""
 
     detail = serializers.CharField()
+
+
+class ReferencingChatbotSerializer(serializers.Serializer):
+    """A chatbot version whose pipeline uses the source material."""
+
+    chatbot_id = serializers.UUIDField(help_text="The chatbot's id, as the chatbot endpoints take it.")
+    version_number = serializers.IntegerField()
+    published = serializers.BooleanField(
+        help_text="True for the published version, whose nodes cannot be edited; false for the draft."
+    )
+    node_ids = serializers.ListField(
+        child=serializers.CharField(), help_text="The nodes that use it, as the pipeline node endpoints take them."
+    )
+
+
+class ReferencingPipelineSerializer(serializers.Serializer):
+    """A pipeline outside any listed chatbot, such as an archived chatbot's, that uses the source material."""
+
+    name = serializers.CharField()
+
+
+class SourceMaterialInUseSerializer(ArchiveRefusedSerializer):
+    """The source material archive 409: where it is still used."""
+
+    chatbots = ReferencingChatbotSerializer(many=True)
+    other_pipelines = ReferencingPipelineSerializer(
+        many=True, help_text="Only a person can remove these references, in the web app."
+    )

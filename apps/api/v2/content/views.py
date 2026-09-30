@@ -5,6 +5,8 @@ an edit here reaches them only once the chatbot is published again. Deleting arc
 destroys.
 """
 
+from collections import defaultdict
+
 from django.db import models, transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
@@ -19,17 +21,69 @@ from apps.api.v2.content.serializers import (
     ArchiveRefusedSerializer,
     ConsentFormResourceSerializer,
     ContentArchivedSerializer,
+    SourceMaterialInUseSerializer,
     SourceMaterialResourceSerializer,
 )
 from apps.api.v2.write.base import DescribesPatch
 from apps.experiments.models import ConsentForm, SourceMaterial
 from apps.oauth.permissions import TokenHasOAuthResourceScope, is_client_credentials_request
+from apps.pipelines.models import Node
 
 
 class ArchiveRefused(APIException):
     """The resource cannot be archived while it is in its current state."""
 
     status_code = status.HTTP_409_CONFLICT
+
+
+class SourceMaterialInUse(ArchiveRefused):
+    """The source material is still used by pipeline nodes."""
+
+    def __init__(self, material: SourceMaterial) -> None:
+        # Assigned rather than passed to ``super().__init__``, which would turn the nested ids and
+        # booleans into strings.
+        self.detail = {
+            "detail": (
+                "This source material is still used by the pipeline nodes listed below. Remove it from "
+                "each draft's nodes, then archive again. A published version keeps using it until the "
+                "chatbot is published again without it, and references under `other_pipelines` can "
+                "only be removed in the web app."
+            ),
+            **_source_material_references(material),
+        }
+
+
+def _source_material_references(material: SourceMaterial) -> dict:
+    """The chatbot versions and other pipelines whose nodes use ``material`` or one of its versions."""
+    chatbots = list(material.get_related_experiments_queryset().select_related("working_version").order_by("id"))
+    material_ids = [*material.versions.values_list("id", flat=True), material.id]
+    pipeline_ids = [chatbot.pipeline_id for chatbot in chatbots]
+    node_ids_by_pipeline = defaultdict(list)
+    for pipeline_id, flow_id in (
+        Node.objects.filter(pipeline_id__in=pipeline_ids, source_material_id__in=material_ids)
+        .order_by("id")
+        .values_list("pipeline_id", "flow_id")
+    ):
+        node_ids_by_pipeline[pipeline_id].append(flow_id)
+    other_pipeline_names = (
+        material.get_related_nodes_queryset()
+        .exclude(pipeline_id__in=node_ids_by_pipeline)
+        .order_by("pipeline__name")
+        .values_list("pipeline__name", flat=True)
+        .distinct()
+    )
+    return {
+        "chatbots": [
+            {
+                "chatbot_id": (chatbot.working_version or chatbot).public_id,
+                "version_number": chatbot.version_number,
+                "published": not chatbot.is_working_version,
+                "node_ids": node_ids_by_pipeline[chatbot.pipeline_id],
+            }
+            for chatbot in chatbots
+        ],
+        "other_pipelines": [{"name": name} for name in other_pipeline_names],
+    }
 
 
 class ReadOnlyForMachineTokens(BasePermission):
@@ -89,7 +143,9 @@ class ContentViewSet(
         raise NotImplementedError
 
 
-def _content_schema(*, noun: str, plural: str, archive_refusal: str):
+def _content_schema(
+    *, noun: str, plural: str, archive_refusal: str, archive_refused_serializer=ArchiveRefusedSerializer
+):
     """The OpenAPI descriptions shared by both content viewsets."""
     operation_prefix = noun.lower().replace(" ", "_")
     tag = plural
@@ -141,7 +197,7 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
             responses={
                 200: ContentArchivedSerializer,
                 404: OpenApiResponse(description="No such resource, or it is archived already."),
-                409: ArchiveRefusedSerializer,
+                409: archive_refused_serializer,
             },
         ),
     )
@@ -151,9 +207,10 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
     noun="Source Material",
     plural="Source Material",
     archive_refusal=(
-        "It is refused with `409` while a pipeline node or a live chatbot version still uses it; "
-        "remove the reference from each node first."
+        "It is refused with `409` while a pipeline node or a live chatbot version still uses it. "
+        "The response lists each chatbot version and node that uses it."
     ),
+    archive_refused_serializer=SourceMaterialInUseSerializer,
 )
 class SourceMaterialViewSet(ContentViewSet):
     serializer_class = SourceMaterialResourceSerializer
@@ -161,10 +218,7 @@ class SourceMaterialViewSet(ContentViewSet):
 
     def archive(self, instance: SourceMaterial) -> None:
         if not instance.archive():
-            raise ArchiveRefused(
-                "This source material is still used by a pipeline node or a live chatbot version. "
-                "Remove it from those nodes, then archive again."
-            )
+            raise SourceMaterialInUse(instance)
 
 
 @_content_schema(
