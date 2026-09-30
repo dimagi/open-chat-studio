@@ -303,6 +303,7 @@ class FeatureFlagForm(forms.Form):
                 for required_flag_name in flag_info.requires:
                     required_flag = self._get_or_create_flag(required_flag_name)
                     required_flag.teams.add(self.team)
+                    required_flag.flush()
             else:
                 flag.teams.remove(self.team)
 

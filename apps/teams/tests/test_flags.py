@@ -2,7 +2,7 @@ import pytest
 from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.teams.flags import Flags
+from apps.teams.flags import FlagInfo, Flags, get_all_flag_info
 from apps.teams.forms import FeatureFlagForm
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
@@ -121,6 +121,24 @@ class TestFeatureFlagFormSave:
         assert form.is_valid()
         form.save()
         assert not flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_checking_a_flag_enables_its_required_flags(self, request, monkeypatch, team_with_users):
+        """The required flag's cached team list must be cleared, or checks keep returning the old state."""
+        self._flag(request)
+        required = Flag.objects.create(name="flag_required_by_manageable")
+        request.addfinalizer(required.flush)
+        assert required.is_active_for_team(team_with_users) is False
+
+        flag_infos: dict[str, FlagInfo] = dict(get_all_flag_info())
+        flag_infos[MANAGEABLE_FLAG] = FlagInfo(
+            slug=MANAGEABLE_FLAG, description="", requires=[required.name], teams_can_manage=True
+        )
+        monkeypatch.setattr("apps.teams.forms.get_all_flag_info", lambda: flag_infos)
+
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on"}, team=team_with_users)
+        assert form.is_valid()
+        form.save()
+        assert Flag.objects.get(name=required.name).is_active_for_team(team_with_users) is True
 
 
 @pytest.mark.django_db()
