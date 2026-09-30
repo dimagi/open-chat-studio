@@ -16,7 +16,7 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.events.views import _delete_event_view
-from apps.experiments.models import Participant
+from apps.experiments.models import ExperimentSession, Participant
 from apps.experiments.services import start_experiment_session
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
@@ -148,6 +148,17 @@ def test_ending_an_ended_session_does_not_fire_end_triggers(mock_enqueue, sessio
     session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
 
     mock_enqueue.assert_not_called()
+
+
+@mock.patch("apps.events.tasks.enqueue_static_triggers.delay")
+@pytest.mark.django_db()
+def test_ending_a_session_from_two_loaded_instances_fires_end_triggers_once(mock_enqueue, session):
+    stale_session = ExperimentSession.objects.get(id=session.id)
+
+    session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
+    stale_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
+
+    mock_enqueue.assert_called_once_with(session.id, StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)

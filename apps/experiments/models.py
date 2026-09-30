@@ -1678,14 +1678,16 @@ class ExperimentSession(BaseTeamModel):
                 "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
             )
 
-        # End triggers can end the session themselves, so re-firing them on an ended session would loop.
-        already_ended = self.ended_at is not None
-        self.update_status(SessionStatus.PENDING_REVIEW)
-
+        self.update_status(SessionStatus.PENDING_REVIEW, commit=False)
         self.ended_at = timezone.now()
-        if commit:
-            self.save()
-        if commit and trigger_type and not already_ended:
+        if not commit:
+            return
+
+        # End triggers can end the session themselves, so re-firing them on an ended session would loop.
+        # Claiming the transition in the database keeps stale instances and concurrent callers from re-firing.
+        newly_ended = ExperimentSession.objects.filter(id=self.id, ended_at__isnull=True).update(ended_at=self.ended_at)
+        self.save()
+        if trigger_type and newly_ended:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
     @property
