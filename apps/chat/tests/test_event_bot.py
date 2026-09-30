@@ -82,7 +82,7 @@ def test_event_bot_history_skips_a_marked_human_message():
     session = ExperimentSessionFactory.create()
     ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
     filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
-    filtered.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = {"kind": "refusal", "provider_reason": "r"}
+    filtered.metadata[ChatMessageMetadataKeys.MODEL_REFUSED] = {"kind": "refusal", "provider_reason": "r"}
     filtered.save(update_fields=["metadata"])
     bot = EventBot(session, session.experiment, TraceInfo(name="test"))
 

@@ -401,11 +401,11 @@ class TestModelRefusedTurn:
         _pipeline(core=[_make_stage(side_effect=error)], terminal=[_make_stage()]).process(ctx)
 
         expected = {"kind": "content_filter", "provider_reason": "SAFETY"}
-        assert ctx.early_exit_metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
-        assert human.metadata == {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: expected}
+        assert ctx.early_exit_metadata == {ChatMessageMetadataKeys.MODEL_REFUSED: expected}
+        assert human.metadata == {ChatMessageMetadataKeys.MODEL_REFUSED: expected}
         assert (
-            ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]
-            is not human.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]
+            ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_REFUSED]
+            is not human.metadata[ChatMessageMetadataKeys.MODEL_REFUSED]
         )
         human.save.assert_called_once_with(update_fields=["metadata"])
         assert ctx.processing_errors == []
@@ -421,7 +421,7 @@ class TestModelRefusedTurn:
 
         _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
 
-        assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in seen[0]
+        assert ChatMessageMetadataKeys.MODEL_REFUSED in seen[0]
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_tolerates_a_missing_human_message(self, mock_gen):
@@ -430,7 +430,7 @@ class TestModelRefusedTurn:
 
         _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
 
-        assert ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME]["kind"] == "refusal"
+        assert ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_REFUSED]["kind"] == "refusal"
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_a_plain_user_actionable_error_sets_no_metadata(self, mock_gen):

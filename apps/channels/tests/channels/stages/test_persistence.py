@@ -166,9 +166,9 @@ class TestPersistenceStageDB:
         session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
         outcome = {"kind": "refusal", "provider_reason": "refusal"}
         ctx = make_context(experiment=experiment, experiment_session=session, early_exit_response="Declined.")
-        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_TURN_OUTCOME: outcome}
+        ctx.early_exit_metadata = {ChatMessageMetadataKeys.MODEL_REFUSED: outcome}
 
         self.stage(ctx)
 
         message = ChatMessage.objects.get(chat=session.chat, message_type=ChatMessageType.AI)
-        assert message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] == outcome
+        assert message.metadata[ChatMessageMetadataKeys.MODEL_REFUSED] == outcome

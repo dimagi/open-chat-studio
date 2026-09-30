@@ -102,15 +102,15 @@ class TestEmptyHumanMessageReplay:
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
 
 
-def test_model_turn_outcome_is_an_internal_metadata_key():
-    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in ChatMessageMetadataKeys.internal_keys()
-    assert ChatMessageMetadataKeys.MODEL_TURN_OUTCOME not in ChatMessageMetadataKeys.attachment_keys()
+def test_model_refused_is_an_internal_metadata_key():
+    assert ChatMessageMetadataKeys.MODEL_REFUSED in ChatMessageMetadataKeys.internal_keys()
+    assert ChatMessageMetadataKeys.MODEL_REFUSED not in ChatMessageMetadataKeys.attachment_keys()
 
 
 @pytest.mark.django_db()
 class TestHistoryExcludesFilteredHumanMessages:
     def _mark(self, message):
-        message.metadata[ChatMessageMetadataKeys.MODEL_TURN_OUTCOME] = {
+        message.metadata[ChatMessageMetadataKeys.MODEL_REFUSED] = {
             "kind": "content_filter",
             "provider_reason": "x",
         }

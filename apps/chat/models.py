@@ -145,13 +145,13 @@ class ChatMessageMetadataKeys(StrEnum):
     TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
     # History / compression
     COMPRESSION_MARKER = "compression_marker"
-    # Model turn outcome (refused or filtered), on the reply and the human message that led to it
-    MODEL_TURN_OUTCOME = "model_turn_outcome"
+    # Refused or filtered model turn, on the reply and the human message that led to it
+    MODEL_REFUSED = "model_refused"
 
     @classmethod
     def internal_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
         """Metadata keys that should be excluded from the API response."""
-        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT, cls.MODEL_TURN_OUTCOME})
+        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT, cls.MODEL_REFUSED})
 
     @classmethod
     def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
@@ -254,7 +254,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     def is_excluded_from_history(self) -> bool:
         """A human message that led to a refused or filtered turn is not replayed, or the next turn fails
         the same way."""
-        return self.is_human_message and ChatMessageMetadataKeys.MODEL_TURN_OUTCOME in self.metadata
+        return self.is_human_message and ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata
 
     @property
     def is_summary(self):
