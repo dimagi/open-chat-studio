@@ -27,6 +27,13 @@ def _minimal_state(**overrides) -> PipelineState:
 # ===========================================================================
 
 
+class TestNodeContextInput:
+    def test_returns_last_node_input(self):
+        state = _minimal_state(last_node_input="some input")
+        ctx = NodeContext(state)
+        assert ctx.input == "some input"
+
+
 class TestNodeContextAttachments:
     def test_returns_attachments_from_temp_state(self):
         attachments = [{"file_id": 1, "type": "image"}]
