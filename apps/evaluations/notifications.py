@@ -29,27 +29,37 @@ def auto_population_rule_disabled_notification(rule: DatasetAutoPopulationRule, 
 
 @silence_exceptions(logger, log_message="Failed to create evaluation run outcome notification")
 def evaluation_run_outcome_notification(run: EvaluationRun) -> None:
-    """Tell the team when a completed run has enough failed results to mislead."""
-    if run.status != EvaluationRunStatus.COMPLETED:
+    """Tell the team when a run failed, or completed with enough failed results to mislead."""
+    if run.status not in (EvaluationRunStatus.FAILED, EvaluationRunStatus.COMPLETED):
         return
-    # A preview is watched as it runs, and its page already shows the same warning.
-    if run.type == EvaluationRunType.PREVIEW:
-        return
-    summary = run.error_summary()
-    if not summary.needs_warning:
-        return
-
-    create_notification(
-        title=f"Evaluation '{run.config.name}' had failed results",
-        message=(
+    if run.status == EvaluationRunStatus.FAILED:
+        title = f"Evaluation '{run.config.name}' failed"
+        message = f"The evaluation run stopped before it finished: {run.error_message}"
+        level = LevelChoices.ERROR
+        links = {"View run": run.get_absolute_url()}
+    else:
+        # A preview is watched as it runs, and its page already shows the same warning.
+        if run.type == EvaluationRunType.PREVIEW:
+            return
+        summary = run.error_summary()
+        if not summary.needs_warning:
+            return
+        title = f"Evaluation '{run.config.name}' had failed results"
+        message = (
             f"{summary.failed_count} of {summary.total_count} messages in the evaluation run failed "
             f"({summary.describe()}). Failed results are left out of the aggregates, tags and trends."
-        ),
-        level=LevelChoices.WARNING,
+        )
+        level = LevelChoices.WARNING
+        links = {"View failed results": f"{run.get_absolute_url()}?{FAILED_FILTER_PARAM}=1"}
+
+    create_notification(
+        title=title,
+        message=message,
+        level=level,
         team=run.team,
         slug="evaluation-run-outcome",
         event_data={"evaluation_run_id": run.id},
         permissions=["evaluations.view_evaluationrun"],
-        links={"View failed results": f"{run.get_absolute_url()}?{FAILED_FILTER_PARAM}=1"},
+        links=links,
         once_per_event_type=True,
     )

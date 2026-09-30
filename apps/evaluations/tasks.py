@@ -497,6 +497,8 @@ def _drive_run(run_id: int) -> None:
         for batch in result.batches:
             evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
         _publish_tick(run, result)
+        if result.terminal == "error":
+            evaluation_run_outcome_notification(run)
         # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
         # this block — a broker error here would otherwise cost the run its completion
         # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
