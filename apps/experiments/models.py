@@ -171,7 +171,8 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     Some Source Material on a particular topic.
     """
 
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # Null when created by a client-credentials (machine) API token, which has no user.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()

@@ -5571,6 +5571,7 @@ components:
           type: boolean
         owner:
           type: integer
+          nullable: true
         working_version:
           type: integer
           nullable: true
@@ -5578,7 +5579,6 @@ components:
       - created_at
       - id
       - material
-      - owner
       - topic
       - updated_at
     SourceMaterialList:
