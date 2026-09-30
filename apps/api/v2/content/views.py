@@ -171,8 +171,9 @@ class SourceMaterialViewSet(ContentViewSet):
     noun="Consent Form",
     plural="Consent Forms",
     archive_refusal=(
-        "Every chatbot using the form, published versions included, is moved onto the team's "
-        "default consent form. The default form itself cannot be archived and answers `409`."
+        "Every chatbot draft using the form is moved onto the team's default consent form; published "
+        "versions keep the form they were published with. The default form itself cannot be archived "
+        "and answers `409`."
     ),
 )
 class ConsentFormViewSet(ContentViewSet):

@@ -1084,10 +1084,11 @@ paths:
       operationId: consent_form_archive
       description: 'Archive the consent form. This is a soft delete: it is hidden
         rather than destroyed, and a person can restore it in the web app. A repeat
-        of this call answers `404`, which makes it safe to retry. Every chatbot using
-        the form, published versions included, is moved onto the team''s default consent
-        form. The default form itself cannot be archived and answers `409`. A client-credentials
-        token can read but not write; its writes answer `403`.'
+        of this call answers `404`, which makes it safe to retry. Every chatbot draft
+        using the form is moved onto the team''s default consent form; published versions
+        keep the form they were published with. The default form itself cannot be
+        archived and answers `409`. A client-credentials token can read but not write;
+        its writes answer `403`.'
       summary: Archive Consent Form
       parameters:
       - in: path
