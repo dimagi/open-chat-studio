@@ -18,12 +18,7 @@ class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSeri
 
     def create(self, validated_data) -> SourceMaterial:
         request = self.context["request"]
-        return SourceMaterial.objects.create(
-            team=request.team,
-            # A client-credentials (machine) token has no user behind it.
-            owner=request.user if request.user.is_authenticated else None,
-            **validated_data,
-        )
+        return SourceMaterial.objects.create(team=request.team, owner=request.user, **validated_data)
 
 
 class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):

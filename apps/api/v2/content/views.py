@@ -10,6 +10,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status
 from rest_framework.exceptions import APIException
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
@@ -22,13 +23,25 @@ from apps.api.v2.content.serializers import (
 )
 from apps.api.v2.write.base import DescribesPatch
 from apps.experiments.models import ConsentForm, SourceMaterial
-from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.oauth.permissions import TokenHasOAuthResourceScope, is_client_credentials_request
 
 
 class ArchiveRefused(APIException):
     """The resource cannot be archived while it is in its current state."""
 
     status_code = status.HTTP_409_CONFLICT
+
+
+class ReadOnlyForMachineTokens(BasePermission):
+    """Refuse writes from client-credentials (machine) tokens.
+
+    A machine application is pinned to some of the team's chatbots, but content is shared by all of them.
+    """
+
+    message = "Client-credentials tokens cannot modify source material or consent forms."
+
+    def has_permission(self, request, view) -> bool:
+        return request.method in SAFE_METHODS or not is_client_credentials_request(request)
 
 
 class ContentViewSet(
@@ -41,7 +54,12 @@ class ContentViewSet(
 ):
     """List, retrieve, create, patch and archive one team-scoped, versioned content model."""
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        DjangoModelPermissionsWithView,
+        TokenHasOAuthResourceScope,
+        ReadOnlyForMachineTokens,
+    ]
     required_scopes = ["chatbots"]
     # No PUT: every edit is a partial update.
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
@@ -75,6 +93,7 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
     """The OpenAPI descriptions shared by both content viewsets."""
     operation_prefix = noun.lower().replace(" ", "_")
     tag = plural
+    machine_tokens = " A client-credentials token can read but not write; its writes answer `403`."
     id_parameter = OpenApiParameter(
         name="id", type=OpenApiTypes.INT, location=OpenApiParameter.PATH, description=f"{noun} ID"
     )
@@ -94,7 +113,7 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
         create=extend_schema(
             operation_id=f"{operation_prefix}_create",
             summary=f"Create {noun}",
-            description="A key that is not listed below is rejected rather than ignored.",
+            description="A key that is not listed below is rejected rather than ignored." + machine_tokens,
             tags=[tag],
         ),
         partial_update=extend_schema(
@@ -104,7 +123,7 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
             description=(
                 "Only the keys you send are changed, and a key that is not listed below is rejected "
                 "rather than ignored. Published chatbot versions keep the content they were "
-                "published with; publish the chatbot again to pick up the edit."
+                "published with; publish the chatbot again to pick up the edit." + machine_tokens
             ),
             tags=[tag],
         ),
@@ -115,7 +134,7 @@ def _content_schema(*, noun: str, plural: str, archive_refusal: str):
             description=(
                 f"Archive the {noun.lower()}. This is a soft delete: it is hidden rather than "
                 "destroyed, and a person can restore it in the web app. A repeat of this call "
-                f"answers `404`, which makes it safe to retry. {archive_refusal}"
+                f"answers `404`, which makes it safe to retry. {archive_refusal}" + machine_tokens
             ),
             tags=[tag],
             request=None,
