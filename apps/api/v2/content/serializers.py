@@ -29,14 +29,6 @@ class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSeri
 class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     """The fields the web app's consent form editor edits, plus the id a chatbot references it by."""
 
-    is_default = serializers.BooleanField(
-        read_only=True,
-        help_text=(
-            "Whether this is the team's default consent form. The default cannot be archived, and "
-            "chatbots using an archived form are moved onto it."
-        ),
-    )
-
     class Meta:
         model = ConsentForm
         fields = [
@@ -49,6 +41,14 @@ class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSeriali
             "confirmation_text",
             "is_default",
         ]
+        extra_kwargs = {
+            "is_default": {
+                "help_text": (
+                    "Whether this is the team's default consent form. The default cannot be archived, "
+                    "and chatbots using an archived form are moved onto it."
+                )
+            }
+        }
 
     def create(self, validated_data) -> ConsentForm:
         return ConsentForm.objects.create(team=self.context["request"].team, **validated_data)

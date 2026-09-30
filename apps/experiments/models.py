@@ -272,9 +272,13 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def archive(self):
+        """Archive the form and move its chatbots onto the team's default. The default itself is refused."""
+        if self.is_default:
+            return False
         super().archive()
-        consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
+        consent_form_id = ConsentForm.objects.filter(team_id=self.team_id, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+        return True
 
     def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         new_version = super().create_new_version(save=False)

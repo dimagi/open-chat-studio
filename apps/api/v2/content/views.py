@@ -71,8 +71,10 @@ class ContentViewSet(
         raise NotImplementedError
 
 
-def _content_schema(*, noun: str, plural: str, operation_prefix: str, tag: str, archive_refusal: str):
+def _content_schema(*, noun: str, plural: str, archive_refusal: str):
     """The OpenAPI descriptions shared by both content viewsets."""
+    operation_prefix = noun.lower().replace(" ", "_")
+    tag = plural
     id_parameter = OpenApiParameter(
         name="id", type=OpenApiTypes.INT, location=OpenApiParameter.PATH, description=f"{noun} ID"
     )
@@ -129,8 +131,6 @@ def _content_schema(*, noun: str, plural: str, operation_prefix: str, tag: str, 
 @_content_schema(
     noun="Source Material",
     plural="Source Material",
-    operation_prefix="source_material",
-    tag="Source Material",
     archive_refusal=(
         "It is refused with `409` while a pipeline node or a live chatbot version still uses it; "
         "remove the reference from each node first."
@@ -151,8 +151,6 @@ class SourceMaterialViewSet(ContentViewSet):
 @_content_schema(
     noun="Consent Form",
     plural="Consent Forms",
-    operation_prefix="consent_form",
-    tag="Consent Forms",
     archive_refusal=(
         "Every chatbot using the form, published versions included, is moved onto the team's "
         "default consent form. The default form itself cannot be archived and answers `409`."
@@ -163,6 +161,5 @@ class ConsentFormViewSet(ContentViewSet):
     model = ConsentForm
 
     def archive(self, instance: ConsentForm) -> None:
-        if instance.is_default:
+        if not instance.archive():
             raise ArchiveRefused("The team's default consent form cannot be archived.")
-        instance.archive()
