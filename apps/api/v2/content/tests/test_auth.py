@@ -71,3 +71,44 @@ def test_there_is_no_provider_endpoint():
     routes += [str(pattern.pattern) for pattern in router.urls]
 
     assert not [route for route in routes if "provider" in route]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("resource", RESOURCES)
+class TestMachineTokens:
+    """A machine token may read content but not write it: content is shared by chatbots outside its allowlist."""
+
+    def _client(self, team):
+        return ApiTestClient(
+            team.members.first(),
+            team,
+            auth_method="oauth_client_credentials",
+            scopes=["chatbots:read", "chatbots:write"],
+        )
+
+    def test_may_read(self, team, resource):
+        row = resource.factory.create(team=team)
+
+        assert self._client(team).get(resource.detail_url(row.id)).status_code == 200
+
+    def test_may_not_create(self, team, resource):
+        client = self._client(team)
+        count_before = resource.model.objects.filter(team=team).count()
+
+        response = client.post(resource.list_url, resource.create_body, format="json")
+
+        assert response.status_code == 403, response.content
+        assert resource.model.objects.filter(team=team).count() == count_before
+
+    @pytest.mark.parametrize("method", ["patch", "delete"])
+    def test_may_not_change(self, team, resource, method):
+        row = resource.factory.create(team=team, **{resource.patch_field: "Before"})
+
+        client = self._client(team)
+
+        response = getattr(client, method)(resource.detail_url(row.id), {resource.patch_field: "X"}, format="json")
+
+        assert response.status_code == 403, response.content
+        row.refresh_from_db()
+        assert getattr(row, resource.patch_field) == "Before"
+        assert row.is_archived is False
