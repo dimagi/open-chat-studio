@@ -99,6 +99,8 @@ class MessageProcessingContext:
 
     # --- Observability ------------------------------------------------------
     processing_errors: list[str] = field(default_factory=list)
+    # The configuration error the pipeline answered with its canned reply instead of raising.
+    configuration_error: Exception | None = None
 
     # --- Human message tags -------------------------------------------------
     # Set by stages (e.g. MessageTypeValidationStage) to tag the human
@@ -273,6 +275,7 @@ class MessageProcessingPipeline:
             )
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
+            ctx.configuration_error = e
             return None
         if isinstance(e, UserActionableError):
             # Answered, never re-raised -- see ADR-0065.

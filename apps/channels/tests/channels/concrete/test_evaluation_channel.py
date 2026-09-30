@@ -6,9 +6,10 @@ from django.db import IntegrityError
 from apps.channels.datamodels import BaseMessage
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.terminal import PersistenceStage
 from apps.channels.tasks import handle_evaluation_message
-from apps.chat.exceptions import ChannelException
+from apps.chat.exceptions import ChannelException, ProviderConfigurationError
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.recorder import UsageContext
@@ -130,7 +131,7 @@ class TestEvaluationChannelEndToEnd:
         mock_process.return_value = ChatMessage(content="Bot response")
         session = ExperimentSessionFactory.create(experiment=evals_experiment, experiment_channel=evals_channel)
 
-        result = handle_evaluation_message(
+        reply = handle_evaluation_message(
             experiment_version=evals_experiment,
             experiment_channel=evals_channel,
             message_text="Test evaluation message",
@@ -138,8 +139,29 @@ class TestEvaluationChannelEndToEnd:
             participant_data={},
         )
 
-        assert isinstance(result, ChatMessage)
-        assert result.content == "Bot response"
+        assert isinstance(reply.message, ChatMessage)
+        assert reply.message.content == "Bot response"
+        assert reply.error is None
+
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_handle_evaluation_message_returns_a_handled_configuration_error(
+        self, mock_process, evals_experiment, evals_channel
+    ):
+        """The pipeline answers a configuration error instead of raising it; the caller still needs to know."""
+        error = ProviderConfigurationError("The LLM provider account has no credit or quota remaining.")
+        mock_process.side_effect = error
+        session = ExperimentSessionFactory.create(experiment=evals_experiment, experiment_channel=evals_channel)
+
+        reply = handle_evaluation_message(
+            experiment_version=evals_experiment,
+            experiment_channel=evals_channel,
+            message_text="Test evaluation message",
+            session=session,
+            participant_data={},
+        )
+
+        assert reply.message.content == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+        assert reply.error is error
 
 
 @pytest.mark.django_db()

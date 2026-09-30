@@ -724,7 +724,7 @@ def run_bot_generation(
             participant_data=participant_data,
             usage_tracer=generation_usage_tracer(experiment, evaluation_run, message_id=message.id),
         )
-        response_content = bot_response.content
+        response_content = bot_response.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
         return session.id, response_content

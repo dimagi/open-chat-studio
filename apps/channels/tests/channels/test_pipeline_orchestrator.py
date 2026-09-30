@@ -222,6 +222,7 @@ class TestUserCausedErrors:
         mock_gen.assert_not_called()
         assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
         assert str(error) in ctx.processing_errors
+        assert ctx.configuration_error is error
         t1.assert_called_once()
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
