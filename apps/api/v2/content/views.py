@@ -1,4 +1,4 @@
-"""The team's content resources, such as source material (#4145).
+"""The team's content resources: source material and consent forms (#4145).
 
 Only working versions are reachable. Published chatbots hold their own snapshot of each resource, so
 an edit here reaches them only once the chatbot is published again. Deleting archives rather than
@@ -16,11 +16,12 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.v2.content.serializers import (
     ArchiveRefusedSerializer,
+    ConsentFormResourceSerializer,
     ContentArchivedSerializer,
     SourceMaterialResourceSerializer,
 )
 from apps.api.v2.write.base import DescribesPatch
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import ConsentForm, SourceMaterial
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
@@ -145,3 +146,23 @@ class SourceMaterialViewSet(ContentViewSet):
                 "This source material is still used by a pipeline node or a live chatbot version. "
                 "Remove it from those nodes, then archive again."
             )
+
+
+@_content_schema(
+    noun="Consent Form",
+    plural="Consent Forms",
+    operation_prefix="consent_form",
+    tag="Consent Forms",
+    archive_refusal=(
+        "Every chatbot using the form, published versions included, is moved onto the team's "
+        "default consent form. The default form itself cannot be archived and answers `409`."
+    ),
+)
+class ConsentFormViewSet(ContentViewSet):
+    serializer_class = ConsentFormResourceSerializer
+    model = ConsentForm
+
+    def archive(self, instance: ConsentForm) -> None:
+        if instance.is_default:
+            raise ArchiveRefused("The team's default consent form cannot be archived.")
+        instance.archive()

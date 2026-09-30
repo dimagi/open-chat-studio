@@ -1,10 +1,10 @@
-"""Request and response serializers for the team's content resources, such as source material."""
+"""Request and response serializers for the team's content resources: source material and consent forms."""
 
 from rest_framework import serializers
 
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import OptionalTextField
-from apps.experiments.models import SourceMaterial
+from apps.experiments.models import ConsentForm, SourceMaterial
 
 
 class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
@@ -24,6 +24,34 @@ class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSeri
             owner=request.user if request.user.is_authenticated else None,
             **validated_data,
         )
+
+
+class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
+    """The fields the web app's consent form editor edits, plus the id a chatbot references it by."""
+
+    is_default = serializers.BooleanField(
+        read_only=True,
+        help_text=(
+            "Whether this is the team's default consent form. The default cannot be archived, and "
+            "chatbots using an archived form are moved onto it."
+        ),
+    )
+
+    class Meta:
+        model = ConsentForm
+        fields = [
+            "id",
+            "name",
+            "consent_text",
+            "capture_identifier",
+            "identifier_label",
+            "identifier_type",
+            "confirmation_text",
+            "is_default",
+        ]
+
+    def create(self, validated_data) -> ConsentForm:
+        return ConsentForm.objects.create(team=self.context["request"].team, **validated_data)
 
 
 class ContentArchivedSerializer(serializers.Serializer):

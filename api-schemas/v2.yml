@@ -962,6 +962,159 @@ paths:
             for this chatbot.'
         '404':
           description: No such chatbot, or it has never created a version.
+  /api/v2/consent-forms/:
+    get:
+      operationId: consent_form_list
+      description: List the team's consent forms. Archived ones are not listed.
+      summary: List Consent Forms
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsentFormResourceList'
+          description: ''
+    post:
+      operationId: consent_form_create
+      description: A key that is not listed below is rejected rather than ignored.
+      summary: Create Consent Form
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentFormResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+  /api/v2/consent-forms/{id}/:
+    get:
+      operationId: consent_form_retrieve
+      description: List, retrieve, create, patch and archive one team-scoped, versioned
+        content model.
+      summary: Retrieve Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    patch:
+      operationId: consent_form_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit.
+      summary: Update Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedConsentFormResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    delete:
+      operationId: consent_form_archive
+      description: 'Archive the consent form. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. Every chatbot using
+        the form, published versions included, is moved onto the team''s default consent
+        form. The default form itself cannot be archived and answers `409`.'
+      summary: Archive Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveRefused'
+          description: ''
   /api/v2/me/:
     get:
       operationId: me
@@ -2269,6 +2422,43 @@ components:
       - consent_text
       - id
       - name
+    ConsentFormResource:
+      type: object
+      description: The fields the web app's consent form editor edits, plus the id
+        a chatbot references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
+      required:
+      - consent_text
+      - id
+      - is_default
+      - name
+      additionalProperties: false
     ContentArchived:
       type: object
       description: The archive response.
@@ -3399,6 +3589,30 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PaginatedConsentFormResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PaginatedSourceMaterialResourceList:
       type: object
       required:
@@ -3499,6 +3713,38 @@ components:
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.
+      additionalProperties: false
+    PatchedConsentFormResource:
+      type: object
+      description: The fields the web app's consent form editor edits, plus the id
+        a chatbot references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
       additionalProperties: false
     PatchedNodeUpdate:
       type: object
