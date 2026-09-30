@@ -16,6 +16,7 @@ from apps.api.permissions import (
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
 )
+from apps.api.v2.content.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
     PipelineNodeOptionsView,
@@ -40,6 +41,7 @@ API_KEY_VIEWS = [
     ChatbotOptionsView,
     ChatbotViewSet,
     ChatCompletionsView,
+    ConsentFormViewSet,
     ExperimentSessionViewSet,
     ExperimentViewSet,
     FileContentView,
@@ -49,6 +51,7 @@ API_KEY_VIEWS = [
     PipelineNodesView,
     PipelineNodeView,
     PipelineOptionsView,
+    SourceMaterialViewSet,
     TriggerBotMessageView,
     UsageView,
 ]
