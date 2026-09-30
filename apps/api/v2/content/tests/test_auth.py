@@ -4,37 +4,10 @@ import pytest
 from django.urls import get_resolver
 
 from apps.api.v2.urls import router
-from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.utils import set_current_team, unset_current_team
-from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
-from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
-from apps.utils.factories.user import UserFactory
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP
 from apps.utils.tests.clients import ApiTestClient
 
-RESOURCES = [
-    pytest.param("source-material", SourceMaterialFactory, {"topic": "T", "material": "M"}, id="source-material"),
-    pytest.param("consent-forms", ConsentFormFactory, {"name": "N", "consent_text": "C"}, id="consent-forms"),
-]
-
-
-@pytest.fixture()
-def team_with_roles(db):
-    """`create_default_groups()` is explicit so the DB-backed groups match backends.py even
-    though pytest runs with --reuse-db."""
-    create_default_groups()
-    team = TeamFactory.create()
-    token = set_current_team(team)
-    try:
-        yield team
-    finally:
-        unset_current_team(token)
-
-
-def _client_for_role(team, group):
-    user = UserFactory.create()
-    add_user_to_team(team, user, [group])
-    return ApiTestClient(user, team)
-
+from .conftest import RESOURCES, client_for_role
 
 ROLE_CASES = [
     pytest.param(CHATBOT_ADMIN_GROUP, True, id="chatbot-admin-may-write"),
@@ -43,62 +16,52 @@ ROLE_CASES = [
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(("path", "factory", "body"), RESOURCES)
+@pytest.mark.parametrize("resource", RESOURCES)
 @pytest.mark.parametrize(("group", "allowed"), ROLE_CASES)
 class TestRoles:
     """Each verb needs the model's own add/change/delete permission, as in the web app."""
 
-    def test_create(self, team_with_roles, group, allowed, path, factory, body):
-        response = _client_for_role(team_with_roles, group).post(f"/api/v2/{path}/", body, format="json")
+    def test_create(self, team_with_roles, group, allowed, resource):
+        response = client_for_role(team_with_roles, group).post(resource.list_url, resource.create_body, format="json")
 
         assert response.status_code == (201 if allowed else 403), response.content
 
-    def test_patch(self, team_with_roles, group, allowed, path, factory, body):
-        row = factory.create(team=team_with_roles)
+    @pytest.mark.parametrize("method", ["patch", "delete"])
+    def test_change(self, team_with_roles, group, allowed, resource, method):
+        row = resource.factory.create(team=team_with_roles)
 
-        response = _client_for_role(team_with_roles, group).patch(f"/api/v2/{path}/{row.id}/", body, format="json")
-
-        assert response.status_code == (200 if allowed else 403), response.content
-
-    def test_archive(self, team_with_roles, group, allowed, path, factory, body):
-        row = factory.create(team=team_with_roles)
-
-        response = _client_for_role(team_with_roles, group).delete(f"/api/v2/{path}/{row.id}/")
+        response = getattr(client_for_role(team_with_roles, group), method)(
+            resource.detail_url(row.id), {resource.patch_field: "X"}, format="json"
+        )
 
         assert response.status_code == (200 if allowed else 403), response.content
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(("path", "factory", "body"), RESOURCES)
+@pytest.mark.parametrize("resource", RESOURCES)
 class TestOAuthScopes:
     """Writes need `chatbots:write`, reads `chatbots:read`: the content is part of a chatbot's composition."""
-
-    @pytest.fixture()
-    def team(self, db):
-        return TeamWithUsersFactory.create()
 
     def _client(self, team, scopes):
         return ApiTestClient(team.members.first(), team, auth_method="oauth", scopes=scopes)
 
-    def test_read_scope_may_read(self, team, path, factory, body):
-        factory.create(team=team)
+    def test_read_scope_may_read(self, team, resource):
+        resource.factory.create(team=team)
 
-        assert self._client(team, ["chatbots:read"]).get(f"/api/v2/{path}/").status_code == 200
+        assert self._client(team, ["chatbots:read"]).get(resource.list_url).status_code == 200
 
-    def test_read_scope_may_not_write(self, team, path, factory, body):
-        response = self._client(team, ["chatbots:read"]).post(f"/api/v2/{path}/", body, format="json")
+    @pytest.mark.parametrize(
+        ("scope", "expected_status"),
+        [
+            pytest.param("chatbots:read", 403, id="read-may-not-write"),
+            pytest.param("chatbots:interact", 403, id="interact-may-not-write"),
+            pytest.param("chatbots:write", 201, id="write-may-write"),
+        ],
+    )
+    def test_write(self, team, resource, scope, expected_status):
+        response = self._client(team, [scope]).post(resource.list_url, resource.create_body, format="json")
 
-        assert response.status_code == 403
-
-    def test_interact_scope_may_not_write(self, team, path, factory, body):
-        response = self._client(team, ["chatbots:interact"]).post(f"/api/v2/{path}/", body, format="json")
-
-        assert response.status_code == 403
-
-    def test_write_scope_may_write(self, team, path, factory, body):
-        response = self._client(team, ["chatbots:write"]).post(f"/api/v2/{path}/", body, format="json")
-
-        assert response.status_code == 201, response.content
+        assert response.status_code == expected_status, response.content
 
 
 def test_there_is_no_provider_endpoint():

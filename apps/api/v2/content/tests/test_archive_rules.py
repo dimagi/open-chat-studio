@@ -5,18 +5,7 @@ import pytest
 from apps.experiments.models import ConsentForm, SourceMaterial
 from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory, SourceMaterialFactory
 from apps.utils.factories.pipelines import NodeFactory
-from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
-
-
-@pytest.fixture()
-def team(db):
-    return TeamWithUsersFactory.create()
-
-
-@pytest.fixture()
-def client(team):
-    return ApiTestClient(team.members.first(), team)
 
 
 @pytest.mark.django_db()
@@ -75,19 +64,22 @@ def test_created_source_material_can_be_wired_into_a_node(client, team):
 
 
 @pytest.mark.django_db()
-def test_a_machine_token_creates_source_material_with_no_owner(team):
-    client = ApiTestClient(
-        team.members.first(), team, auth_method="oauth_client_credentials", scopes=["chatbots:write"]
-    )
+@pytest.mark.parametrize(
+    ("auth_kwargs", "has_owner"),
+    [
+        pytest.param(
+            {"auth_method": "oauth_client_credentials", "scopes": ["chatbots:write"]},
+            False,
+            id="machine-token-no-owner",
+        ),
+        pytest.param({}, True, id="human-credential-owns"),
+    ],
+)
+def test_source_material_owner(team, auth_kwargs, has_owner):
+    client = ApiTestClient(team.members.first(), team, **auth_kwargs)
 
     response = client.post("/api/v2/source-material/", {"topic": "Returns", "material": "30 days."}, format="json")
 
     assert response.status_code == 201, response.content
-    assert SourceMaterial.objects.get(pk=response.json()["id"]).owner is None
-
-
-@pytest.mark.django_db()
-def test_a_human_credential_owns_the_source_material_it_creates(client, team):
-    response = client.post("/api/v2/source-material/", {"topic": "Returns", "material": "30 days."}, format="json")
-
-    assert SourceMaterial.objects.get(pk=response.json()["id"]).owner == team.members.first()
+    expected_owner = team.members.first() if has_owner else None
+    assert SourceMaterial.objects.get(pk=response.json()["id"]).owner == expected_owner

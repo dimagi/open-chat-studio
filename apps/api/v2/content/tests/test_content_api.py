@@ -1,58 +1,11 @@
 """The source material and consent form endpoints (#4145): behaviour both resources share."""
 
-from dataclasses import dataclass
-from typing import Any
-
 import pytest
-from django.db import models
 
-from apps.experiments.models import ConsentForm, SourceMaterial
-from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
-
-@dataclass(frozen=True)
-class Resource:
-    path: str
-    model: type[models.Model]
-    factory: Any
-    create_body: dict
-    patch_field: str
-
-    @property
-    def list_url(self) -> str:
-        return f"/api/v2/{self.path}/"
-
-    def detail_url(self, pk: int) -> str:
-        return f"/api/v2/{self.path}/{pk}/"
-
-
-SOURCE_MATERIAL = Resource(
-    path="source-material",
-    model=SourceMaterial,
-    factory=SourceMaterialFactory,
-    create_body={"topic": "Returns policy", "description": "What we refund", "material": "30 days."},
-    patch_field="topic",
-)
-CONSENT_FORM = Resource(
-    path="consent-forms",
-    model=ConsentForm,
-    factory=ConsentFormFactory,
-    create_body={"name": "Interview consent", "consent_text": "Do you agree?"},
-    patch_field="name",
-)
-RESOURCES = [pytest.param(SOURCE_MATERIAL, id="source-material"), pytest.param(CONSENT_FORM, id="consent-forms")]
-
-
-@pytest.fixture()
-def team(db):
-    return TeamWithUsersFactory.create()
-
-
-@pytest.fixture()
-def client(team):
-    return ApiTestClient(team.members.first(), team)
+from .conftest import RESOURCES
 
 
 @pytest.mark.django_db()
@@ -188,16 +141,15 @@ class TestReadOnlyKey:
         assert response.status_code == 403
         assert not resource.model.objects.filter(**resource.create_body).exists()
 
-    def test_may_not_patch(self, read_only_client, team, resource):
+    @pytest.mark.parametrize("method", ["patch", "delete"])
+    def test_may_not_change(self, read_only_client, team, resource, method):
         row = resource.factory.create(team=team)
 
-        response = read_only_client.patch(resource.detail_url(row.id), {resource.patch_field: "No"}, format="json")
+        response = getattr(read_only_client, method)(
+            resource.detail_url(row.id), {resource.patch_field: "No"}, format="json"
+        )
 
         assert response.status_code == 403
-
-    def test_may_not_archive(self, read_only_client, team, resource):
-        row = resource.factory.create(team=team)
-
-        assert read_only_client.delete(resource.detail_url(row.id)).status_code == 403
         row.refresh_from_db()
+        assert getattr(row, resource.patch_field) != "No"
         assert row.is_archived is False
