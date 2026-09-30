@@ -47,6 +47,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
@@ -526,6 +527,7 @@ def finalize_evaluation_run(run_id: int) -> None:
     with current_team(run.team):
         compute_aggregates_for_run(run)
         reverse_stale_tags(run)
+        evaluation_run_outcome_notification(run)
     # Stamped last: until it is set, the results page treats missing aggregates as "still
     # coming" rather than as this run having none (see `EvaluationRun.is_finalizing`).
     run.finalized_at = timezone.now()

@@ -1,10 +1,13 @@
-"""Failed messages in a run are counted, flagged and filterable."""
+"""Failed messages in a run are counted, flagged and filterable, and a run with many of them warns the team."""
 
 import pytest
 from django.urls import reverse
 
 from apps.evaluations.const import FAILED_FILTER_PARAM
-from apps.evaluations.models import EvaluationRunStatus
+from apps.evaluations.models import EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.notifications import evaluation_run_outcome_notification
+from apps.evaluations.tasks import finalize_evaluation_run
+from apps.ocs_notifications.models import NotificationEvent
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -224,3 +227,62 @@ class TestResultDetail:
         response = logged_in_client.get(self._detail_url(run, first.message_id), FAILED_FILTER)
 
         assert f"/{second.message_id}/" in response.context["next_url"]
+
+
+@pytest.mark.django_db()
+class TestCompletionNotification:
+    def test_notifies_the_team_when_the_run_has_many_failures(self, run, evaluator):
+        _add_results(run, evaluator, failed=3, succeeded=7)
+
+        finalize_evaluation_run(run.id)
+
+        event = NotificationEvent.objects.get(team=run.team)
+        assert "3 of 10" in event.message
+        assert "Provider quota exhausted" in event.message
+        assert next(iter(event.links.values())).endswith("?failed=1")
+
+    def test_no_notification_below_the_threshold(self, run, evaluator):
+        _add_results(run, evaluator, failed=1, succeeded=39)
+
+        finalize_evaluation_run(run.id)
+
+        assert not NotificationEvent.objects.filter(team=run.team).exists()
+
+    @pytest.mark.parametrize("status", [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING])
+    def test_no_notification_before_the_run_ends(self, run, evaluator, status):
+        _add_results(run, evaluator, failed=3, succeeded=7)
+        run.status = status
+
+        evaluation_run_outcome_notification(run)
+
+        assert not NotificationEvent.objects.filter(team=run.team).exists()
+
+    def test_no_notification_for_a_preview(self, run, evaluator):
+        run.type = EvaluationRunType.PREVIEW
+        run.save(update_fields=["type"])
+        _add_results(run, evaluator, failed=3, succeeded=7)
+
+        finalize_evaluation_run(run.id)
+
+        assert not NotificationEvent.objects.filter(team=run.team).exists()
+
+    def test_finalizing_twice_notifies_once(self, run, evaluator):
+        _add_results(run, evaluator, failed=3, succeeded=7)
+
+        finalize_evaluation_run(run.id)
+        finalize_evaluation_run(run.id)
+
+        assert NotificationEvent.objects.filter(team=run.team).count() == 1
+
+    def test_a_failing_notification_does_not_block_finalization(self, run, evaluator, monkeypatch):
+        _add_results(run, evaluator, failed=3, succeeded=7)
+
+        def _boom(**_kwargs):
+            raise RuntimeError("notifications down")
+
+        monkeypatch.setattr("apps.evaluations.notifications.create_notification", _boom)
+
+        finalize_evaluation_run(run.id)
+
+        run.refresh_from_db()
+        assert run.finalized_at is not None
