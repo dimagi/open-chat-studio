@@ -1,9 +1,9 @@
 import React, {useCallback, useEffect, useState} from "react";
 import Component from "./Component";
 import OverlayPanel from "../components/OverlayPanel";
-import {formatDocsForSchema, getCachedData} from "../utils";
+import {addableNodeSchemas, formatDocsForSchema, getCachedData, nodeDataFromSchema} from "../utils";
 import ComponentHelp from "./ComponentHelp";
-import {JsonSchema, NodeData, NodeParams} from "../types/nodeParams";
+import {JsonSchema, NodeData} from "../types/nodeParams";
 import usePipelineStore from "../stores/pipelineStore";
 
 type ComponentListParams = {
@@ -13,17 +13,8 @@ type ComponentListParams = {
 
 export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) {
   const addNode = usePipelineStore((state) => state.addNode);
-  const {defaultValues, nodeSchemas} = getCachedData();
+  const {nodeSchemas} = getCachedData();
   const schemaList = Array.from(nodeSchemas.values()).sort((a, b) => a["ui:label"].localeCompare(b["ui:label"]));
-
-  function getDefaultParamValues(schema: JsonSchema): NodeParams {
-    const defaults: NodeParams = {name: ""};
-    for (const name in schema.properties) {
-      const property = schema.properties[name];
-      defaults[name] = [property.default, defaultValues[name]].find((value) => value !== undefined && value !== null) ?? null;
-    }
-    return defaults;
-  }
 
   //** Help bubble state
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -65,12 +56,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     schema: JsonSchema
   ): void {
     hideHelp();
-    const nodeData: NodeData = {
-      type: schema.title,
-      label: schema["ui:label"],
-      flowType: schema["ui:flow_node_type"],
-      params: getDefaultParamValues(schema),
-    }
+    const nodeData: NodeData = {...nodeDataFromSchema(schema), flowType: schema["ui:flow_node_type"]};
     event.dataTransfer.setData("nodedata", JSON.stringify(nodeData));
   }
 
@@ -82,11 +68,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
       const newNode = {
           type: schema["ui:flow_node_type"],
           position: { x: 1000, y: 200 },
-          data: {
-              type: schema.title,
-              label: schema["ui:label"],
-              params: getDefaultParamValues(schema),
-          },
+          data: nodeDataFromSchema(schema),
       };
       addNode(newNode, { x: newNode.position.x, y: newNode.position.y });
       togglePanel();
@@ -96,7 +78,7 @@ export default function ComponentList({isOpen, setIsOpen}: ComponentListParams) 
     setIsOpen(!isOpen);
   }
 
-  const components = schemaList.filter((schema) => schema["ui:can_add"]).map((schema) => {
+  const components = addableNodeSchemas().map((schema) => {
     return (
       <Component
         key={schema.title}

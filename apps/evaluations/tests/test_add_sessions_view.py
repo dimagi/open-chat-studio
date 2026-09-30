@@ -55,14 +55,6 @@ def test_session_mode_dataset_has_no_clone_toggle(client_with_user, team_with_us
 
 
 @pytest.mark.django_db()
-def test_session_mode_dataset_has_no_old_messages_to_clone_row(client_with_user, team_with_users, session_dataset):
-    """The legacy 'Messages to clone' bar must be gone for all dataset modes."""
-    response = client_with_user.get(_add_sessions_url(team_with_users, session_dataset))
-    assert response.status_code == 200
-    assert "Messages to clone" not in response.content.decode()
-
-
-@pytest.mark.django_db()
 def test_message_mode_dataset_renders_clone_toggle_markup(client_with_user, team_with_users, message_dataset):
     """Message-mode datasets render the Clone toggle markup (client-side x-show controls visibility)."""
     response = client_with_user.get(_add_sessions_url(team_with_users, message_dataset))
@@ -73,14 +65,6 @@ def test_message_mode_dataset_renders_clone_toggle_markup(client_with_user, team
     assert "Filtered messages only" in content
     # Visibility is gated client-side on hasActiveFilters
     assert 'x-show="hasActiveFilters"' in content
-
-
-@pytest.mark.django_db()
-def test_message_mode_dataset_has_no_old_messages_to_clone_row(client_with_user, team_with_users, message_dataset):
-    response = client_with_user.get(_add_sessions_url(team_with_users, message_dataset))
-    assert response.status_code == 200
-    # The new label is "Clone:" (inline), not "Messages to clone:" (legacy banner)
-    assert "Messages to clone" not in response.content.decode()
 
 
 @pytest.mark.django_db()

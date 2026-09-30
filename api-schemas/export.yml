@@ -2146,6 +2146,13 @@ components:
         schema:
           description: Dict of field_name -> FieldDefinition JSON (same format as
             evaluator output_schema)
+        field_order:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Field names in display order; names not listed fall back to
+            schema order
         num_reviews_required:
           type: integer
           maximum: 32767

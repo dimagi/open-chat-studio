@@ -6,7 +6,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import ValidationError
 
-from apps.pipelines.exceptions import NodeUserConfigRunError
+from apps.pipelines.exceptions import NodeUserConfigRunError, PipelineNodeRunError
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
@@ -18,6 +18,7 @@ from apps.pipelines.nodes.nodes import (
     HistoryMixin,
     LLMResponseWithPrompt,
     OptionalInt,
+    Passthrough,
     SendEmail,
     StructuredDataSchemaValidatorMixin,
 )
@@ -656,3 +657,20 @@ class TestSendEmailRuntimeErrors:
         )
         with pytest.raises(NodeUserConfigRunError, match=r'UndefinedError in field "recipient_list"'):
             node.process(incoming_nodes=[], outgoing_nodes=[], state=self._make_state(), config=self._make_config())
+
+
+def test_missing_node_input_error_sends_state_to_sentry_only():
+    node = Passthrough(node_id="node-b", name="b", django_node=None)
+    state = PipelineState(messages=["hi"], outputs={"secret-node": {"output_list": ["secret"]}}, path=[])
+
+    with (
+        patch("apps.pipelines.nodes.base.sentry_sdk.set_context") as set_context,
+        pytest.raises(PipelineNodeRunError) as exc_info,
+    ):
+        node._prepare_state(node_id="node-b", incoming_nodes=["node-a"], state=state)
+
+    assert str(exc_info.value) == "Cannot determine which input to use for node node-b"
+    set_context.assert_called_once()
+    name, sentry_context = set_context.call_args.args
+    assert name == "Node input"
+    assert sentry_context["state_outputs"] == {"secret-node": {"output_list": ["secret"]}}

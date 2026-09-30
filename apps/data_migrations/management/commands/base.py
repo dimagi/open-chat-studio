@@ -12,7 +12,6 @@ from apps.data_migrations.utils.migrations import (
     update_migration_timestamp,
 )
 from apps.experiments.models import Experiment
-from apps.utils.deletion import get_related_pipelines_queryset
 
 
 def get_affected_teams_data(db_model) -> dict:
@@ -28,10 +27,9 @@ def get_affected_teams_data(db_model) -> dict:
 
     teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "evaluators": {}})
 
-    related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
     nodes_by_pipeline = defaultdict(list)
     pipelines = []
-    for node in related_pipeline_nodes.select_related("pipeline").all():
+    for node in db_model.nodes.select_related("pipeline"):
         pipelines.append(node.pipeline)
         nodes_by_pipeline[node.pipeline_id].append(node)
 

@@ -2,15 +2,14 @@ import {Position} from "reactflow";
 import React from "react";
 import {NodeData, NodeParams} from "../types/nodeParams";
 import {LabeledHandle} from "./LabeledHandle";
+import {hasMultipleOutputs, isKeywordRouter, outputHandle} from "../utils";
 
 export default function NodeOutputs({data}: {
   data: NodeData,
 }) {
-  const multipleOutputs = data.type === "RouterNode" || data.type === "BooleanNode" || data.type == "StaticRouterNode";
+  const multipleOutputs = hasMultipleOutputs(data.type);
   const outputNames = getOutputNames(data.type, data.params);
-  const generateOutputHandle = (outputIndex: number) => {
-    return multipleOutputs ? `output_${outputIndex}` : "output";
-  };
+  const generateOutputHandle = (outputIndex: number) => outputHandle(data.type, outputIndex);
 
   const generateOutputLabel = (outputIndex: number, output_label:string) => {
     const defaultIndex = data.params.default_keyword_index;
@@ -51,7 +50,7 @@ export default function NodeOutputs({data}: {
 function getOutputNames(nodeType: string, params: NodeParams) {
   if (nodeType === "BooleanNode") {
     return [new Output("Output True"), new Output("Output False")];
-  } else if (nodeType === "RouterNode" || nodeType == "StaticRouterNode") {
+  } else if (isKeywordRouter(nodeType)) {
     const keywords = Array.isArray(params.keywords) ? params.keywords : [];
     const numberOfOutputs = Math.max(1, keywords.length || 1);
     return Array.from({length: numberOfOutputs}, (_, i) => {

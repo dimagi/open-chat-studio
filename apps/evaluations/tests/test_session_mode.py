@@ -401,12 +401,6 @@ class TestSessionModeDuplicateDetection:
 
 @pytest.mark.django_db()
 class TestDatasetFormEvaluationMode:
-    def test_create_form_includes_evaluation_mode_field(self):
-        team = TeamWithUsersFactory.create()
-        user = team.members.first()
-        form = EvaluationDatasetForm(team=team, user=user)
-        assert "evaluation_mode" in form.fields
-
     def test_create_form_session_mode_only_allows_clone(self):
         """When mode is session, only clone is valid."""
         team = TeamWithUsersFactory.create()

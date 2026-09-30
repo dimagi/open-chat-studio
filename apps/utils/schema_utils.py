@@ -1,6 +1,91 @@
 """JSON Schema / OpenAPI helpers shared across apps."""
 
+import hashlib
+import re
 from copy import deepcopy
+
+from pydantic import BaseModel, create_model, model_serializer
+
+# Anthropic requires tool names and JSON schema `properties` keys to match this pattern; reused
+# wherever we build a schema or tool name from a user-supplied string (evaluator output fields,
+# OpenAPI operation/parameter names) so it survives being sent to Anthropic.
+VALID_PROPERTY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
+
+_INVALID_PROPERTY_CHARS = re.compile(r"[^a-zA-Z0-9_.-]")
+_REPEATED_UNDERSCORES = re.compile(r"_{2,}")
+_MAX_PROPERTY_NAME_LENGTH = 64
+
+
+def sanitize_property_name(name: str, taken: set[str] | None = None) -> str:
+    """Rewrites `name` so it matches `VALID_PROPERTY_NAME_PATTERN` *and* is safe to use as a
+    `pydantic.create_model` field name -- which additionally rejects a name that starts with `_`
+    (`pydantic._internal._fields.is_valid_field_name`), even one that's otherwise a legal property
+    name. A leading invalid character (`"$filter"`, `"(score)"`, `" score"`) would substitute to a
+    leading underscore, so that's stripped along with any leading underscores already in `name`.
+    """
+    if VALID_PROPERTY_NAME_PATTERN.match(name) and not name.startswith("_"):
+        sanitized = name
+    else:
+        sanitized = _REPEATED_UNDERSCORES.sub("_", _INVALID_PROPERTY_CHARS.sub("_", name))
+        sanitized = sanitized.lstrip("_")[:_MAX_PROPERTY_NAME_LENGTH] or "field"
+
+    if taken is None or sanitized not in taken:
+        return sanitized
+
+    suffix = f"_{hashlib.sha1(name.encode()).hexdigest()[:8]}"
+    while True:
+        candidate = f"{sanitized[: _MAX_PROPERTY_NAME_LENGTH - len(suffix)]}{suffix}"
+        if candidate not in taken:
+            return candidate
+        suffix = f"_{hashlib.sha1((name + suffix).encode()).hexdigest()[:8]}"
+
+
+class OriginalNameSerializerMixin(BaseModel):
+    """Base for a model built by `create_model_with_sanitized_names`: renames each field back to
+    its original (pre-sanitization) name whenever the model is serialized. This makes the rename
+    transparent to every caller of `model_dump()` -- directly, or via anything built on top of it,
+    e.g. a nested model's own dump, or LangChain's structured-output result -- rather than
+    requiring everyone to remember to call something other than the normal `model_dump()`.
+    """
+
+    @model_serializer(mode="wrap")
+    def _serialize_with_original_names(self, handler) -> dict:
+        dumped = handler(self)
+        mapping = getattr(type(self), "__ocs_field_name_mapping__", {})
+        return {mapping.get(key, key): value for key, value in dumped.items()}
+
+
+def create_model_with_sanitized_names(model_name: str, fields: dict[str, tuple], **kwargs) -> type[BaseModel]:
+    """Builds a Pydantic model from `fields` -- the same `{name: (type, FieldInfo)}` shape
+    `pydantic.create_model` takes -- sanitizing each key so the model's JSON schema `properties`
+    are valid tool/property names for every provider (notably Anthropic's
+    `^[a-zA-Z0-9_.-]{1,64}$`). The sanitized-to-original mapping is stashed on the model as
+    `__ocs_field_name_mapping__` and applied by `OriginalNameSerializerMixin`, so a plain
+    `model_dump()` on an instance already comes back keyed by the names in `fields` rather than
+    the sanitized ones the schema (and so the LLM) sees.
+
+    Args:
+        model_name: Name for the generated Pydantic model.
+        fields: Mapping of field name to a `(type, FieldInfo)` tuple, as `pydantic.create_model`
+            expects.
+        **kwargs: Passed through to `pydantic.create_model` (e.g. `__doc__`).
+
+    Returns:
+        Dynamically created Pydantic BaseModel class.
+    """
+    sanitized_fields = {}
+    field_name_mapping: dict[str, str] = {}
+    taken: set[str] = set()
+
+    for field_name, field_spec in fields.items():
+        sanitized_name = sanitize_property_name(field_name, taken)
+        taken.add(sanitized_name)
+        field_name_mapping[sanitized_name] = field_name
+        sanitized_fields[sanitized_name] = field_spec
+
+    model = create_model(model_name, __base__=OriginalNameSerializerMixin, **sanitized_fields, **kwargs)
+    model.__ocs_field_name_mapping__ = field_name_mapping
+    return model
 
 
 def resolve_references(openapi_spec: dict) -> dict:

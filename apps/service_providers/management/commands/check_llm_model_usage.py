@@ -1,7 +1,6 @@
 import csv
 
 from django.core.management.base import BaseCommand
-from django.db.models import Q
 
 from apps.analysis.models import TranscriptAnalysis
 from apps.pipelines.models import Node
@@ -79,13 +78,11 @@ class Command(BaseCommand):
         analyses_count = TranscriptAnalysis.objects.filter(llm_provider_model=model).count()
         translation_analyses_count = TranscriptAnalysis.objects.filter(translation_llm_provider_model=model).count()
 
-        # Pipeline nodes (JSON field references). ``Node.objects`` hides archived rows, so
-        # --include-archived has to reach for ``get_all()``; nodes are the only counted resource
-        # with an archived state, so this is what the flag means now.
+        # ``Node.objects`` hides archived rows, so --include-archived has to reach for
+        # ``get_all()``; nodes are the only counted resource with an archived state, so this
+        # is what the flag means now.
         nodes = Node.objects.get_all() if include_archived else Node.objects.all()
-        pipeline_nodes_count = nodes.filter(
-            Q(params__llm_provider_model_id=model.id) | Q(params__llm_provider_model_id=str(model.id))
-        ).count()
+        pipeline_nodes_count = nodes.filter(llm_provider_model=model).count()
 
         total_count = analyses_count + translation_analyses_count + pipeline_nodes_count
 
