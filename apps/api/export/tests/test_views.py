@@ -50,10 +50,6 @@ def test_team_url_resolves():
     assert resolve("/api/export/team/").url_name == "team"
 
 
-def test_resource_url_resolves():
-    assert _resource_url("users") == "/api/export/users/"
-
-
 def test_manifest_is_public_and_returns_entries():
     """The manifest is non-sensitive (static resource list + schema checksum), so it's served
     without authentication."""

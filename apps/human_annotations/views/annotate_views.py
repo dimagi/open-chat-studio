@@ -89,7 +89,7 @@ def _check_assignee_access(queue, user):
 
 def _build_annotations_context(item, user, queue):
     """Build the annotations list for display on the annotate page."""
-    schema_fields = list(queue.schema.keys())
+    schema_fields = queue.ordered_field_names()
     return [
         {
             "annotation_id": ann.id,

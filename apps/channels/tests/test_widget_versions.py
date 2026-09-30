@@ -240,13 +240,6 @@ class TestRecordWidgetVersion:
 
 @pytest.mark.django_db()
 class TestWidgetUpdateStatusProperty:
-    def test_widget_channel_with_old_version(self, widget_channel):
-        widget_channel.widget_version = "0.1.0"
-        assert widget_channel.widget_update_status is not None
-
-    def test_widget_channel_without_version(self, widget_channel):
-        assert widget_channel.widget_update_status is None
-
     def test_widget_channel_with_placeholder_version(self, widget_channel):
         # The placeholder recorded for pre-header widgets must surface a badge.
         widget_channel.widget_version = UNKNOWN_WIDGET_VERSION

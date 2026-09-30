@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models, transaction
 from django.db.models import Exists, OuterRef, Sum
 from django.urls import reverse
@@ -79,6 +80,13 @@ class AnnotationQueue(BaseTeamModel):
         default=dict,
         help_text="Dict of field_name -> FieldDefinition JSON (same format as evaluator output_schema)",
     )
+    field_order = ArrayField(
+        models.TextField(),
+        default=list,
+        blank=True,
+        null=True,
+        help_text="Field names in display order; names not listed fall back to schema order",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -110,10 +118,15 @@ class AnnotationQueue(BaseTeamModel):
     def get_absolute_url(self):
         return reverse("human_annotations:queue_detail", args=[get_slug_for_team(self.team_id), self.id])
 
+    def ordered_field_names(self) -> list[str]:
+        """Field names in display order, de-duplicated and reconciled against the current schema."""
+        known = list(dict.fromkeys(name for name in (self.field_order or []) if name in self.schema))
+        return known + [name for name in self.schema if name not in known]  # ty: ignore[invalid-return-type]
+
     def get_field_definitions(self) -> dict[str, FieldDefinition]:
-        """Parse the raw JSON schema into typed FieldDefinition objects."""
+        """Parse the raw JSON schema into typed FieldDefinition objects, in display order."""
         adapter = TypeAdapter(FieldDefinition)
-        return {name: adapter.validate_python(defn) for name, defn in self.schema.items()}
+        return {name: adapter.validate_python(self.schema[name]) for name in self.ordered_field_names()}
 
     def get_progress(self):
         """Return progress stats including review-level progress for multi-review queues."""

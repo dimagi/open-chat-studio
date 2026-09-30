@@ -155,8 +155,7 @@ class TestDeleteCollection:
         # Case 2 - Remove the collection from the node so that only a pipeline version is using it
         create_remote_index.return_value = "v-321"
         collection.create_new_version()
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         response = client.delete(url)
         assert response.status_code == 200

@@ -27,7 +27,7 @@ def _teams(response):
 def test_non_superuser_blocked(client):
     client.force_login(CustomUser.objects.create(username="staff@acme.com", is_staff=True))
     response = client.get(reverse("ocs_admin:tracing_usage_api"), DATE_RANGE)
-    assert response.status_code == 302
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db()

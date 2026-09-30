@@ -28,6 +28,7 @@ export type PipelineStoreType = {
   setNode: (id: string, update: Node | ((oldState: Node) => Node)) => void;
   getNode: (id: string) => Node | undefined;
   deleteNode: (nodeId: string | Array<string>) => void;
+  changeNodeType: (nodeId: string, newNodeType: string) => void;
   deleteEdge: (edgeId: string | Array<string>) => void;
   onConnect: (connection: Connection) => void;
   addNode: (
