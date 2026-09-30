@@ -243,6 +243,9 @@ class MembershipForm(forms.ModelForm):
         }
 
 
+RENDERED_FLAG_STATE_FIELD = "rendered_enabled_flags"
+
+
 class FeatureFlagForm(forms.Form):
     """Form for managing team feature flags."""
 
@@ -253,6 +256,7 @@ class FeatureFlagForm(forms.Form):
         self._all_flags = None
 
         flag_info = get_all_flag_info()
+        enabled = []
 
         for flag_name, info in flag_info.items():
             if not info.teams_can_manage:
@@ -262,12 +266,19 @@ class FeatureFlagForm(forms.Form):
             help_text = f"Flag: {label}"
             if info.docs_slug:
                 help_text += format_html(' (<a class="link" target="_blank" href="{}">docs</a>)', info.docs_url)
+            is_active = self._is_flag_active_for_team(flag_name)
+            if is_active:
+                enabled.append(flag_name)
             self.fields[flag_name] = forms.BooleanField(
                 label=info.description,
                 required=False,
                 help_text=mark_safe(help_text),
-                initial=self._is_flag_active_for_team(flag_name),
+                initial=is_active,
             )
+
+        self.fields[RENDERED_FLAG_STATE_FIELD] = forms.CharField(
+            widget=forms.HiddenInput(), required=False, initial=",".join(enabled)
+        )
 
     def _is_flag_active_for_team(self, flag_name):
         """Check if a flag is active for the current team."""
@@ -280,18 +291,36 @@ class FeatureFlagForm(forms.Form):
         except Flag.DoesNotExist:
             return False
 
+    def _state_at_render(self) -> dict[str, bool]:
+        """What each checkbox showed on the page that was submitted.
+
+        The rendered state is carried through the POST because `save` acts on the change
+        the user made, not on the difference from a read taken at submit time: between the
+        two, another admin or a change to the flag's global `everyone` may have moved the
+        flag, and neither should be attributed to this submission.
+
+        A submission without the hidden field falls back to the state now, which is all a
+        caller posting the checkboxes alone can be held to.
+        """
+        flag_names = [name for name in self.fields if name != RENDERED_FLAG_STATE_FIELD]
+        if self.is_bound and RENDERED_FLAG_STATE_FIELD in self.data:
+            rendered_on = set(self.data[RENDERED_FLAG_STATE_FIELD].split(","))
+            return {name: name in rendered_on for name in flag_names}
+        return {name: bool(self.fields[name].initial) for name in flag_names}
+
     def save(self):
         """Save the form by updating team flag associations."""
         if not self.team:
             return
 
         flag_infos = get_all_flag_info()
+        state_at_render = self._state_at_render()
 
         for flag_name, is_enabled in self.cleaned_data.items():
             flag_info = flag_infos.get(flag_name)
             if not flag_info or not flag_info.teams_can_manage:
                 continue
-            if is_enabled == self.fields[flag_name].initial:
+            if is_enabled == state_at_render[flag_name]:
                 # A flag on through `everyone` renders ticked; writing the team into the M2M
                 # on an unrelated save would keep the feature past the end of the rollout.
                 continue

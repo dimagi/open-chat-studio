@@ -21,9 +21,14 @@
         hx-target="#team-settings-body" hx-swap="innerHTML" class="my-2">
     {% csrf_token %}
     {{ flags_form.non_field_errors }}
+    {% comment %}
+      Carries the state each checkbox was rendered with, so a save only writes the flags
+      this page actually changed.
+    {% endcomment %}
+    {% for field in flags_form.hidden_fields %}{{ field }}{% endfor %}
 
     <div class="grid gap-4">
-      {% for field in flags_form %}
+      {% for field in flags_form.visible_fields %}
         <div class="form-control">
           <label class="label cursor-pointer justify-start gap-4">
             <input type="checkbox" name="{{ field.name }}" class="checkbox checkbox-primary"
