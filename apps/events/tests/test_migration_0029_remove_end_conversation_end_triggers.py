@@ -12,6 +12,11 @@ _MIGRATION_NAME = "0029_remove_end_conversation_end_triggers"
 _migration = importlib.import_module(f"apps.events.migrations.{_MIGRATION_NAME}")
 
 
+@pytest.fixture(autouse=True)
+def _requires_migrations(requires_migrations):
+    """Every test here loads historical state via the migration graph."""
+
+
 def _run():
     # Historical models have no GenericRelation, so this checks event logs are deleted explicitly.
     historical_apps = MigrationLoader(connection).project_state(("events", _MIGRATION_NAME)).apps
