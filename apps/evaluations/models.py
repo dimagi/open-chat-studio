@@ -19,6 +19,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.const import FINALIZATION_GRACE, PREVIEW_SAMPLE_SIZE
+from apps.evaluations.errors import RunErrorSummary, summarize_errors
 from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import annotate_export_fields, build_evaluation_table_data
 from apps.evaluations.rule_validation import (
@@ -806,6 +807,9 @@ class EvaluationRun(BaseTeamModel):
         self.error_message = error_message
         if save:
             self.save(update_fields=["finished_at", "status", "error_message"])
+
+    def error_summary(self) -> RunErrorSummary:
+        return summarize_errors(self.results.all())
 
     def get_table_data(self, include_ids: bool = False):
         results_qs = annotate_export_fields(self.results.all()).order_by("created_at")

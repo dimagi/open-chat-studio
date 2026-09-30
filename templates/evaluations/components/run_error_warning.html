@@ -1,0 +1,24 @@
+<div role="alert" class="alert alert-warning alert-soft items-start mb-6" data-testid="run-error-warning">
+  <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+  <div class="min-w-0">
+    <h2 class="font-semibold">
+      {{ error_summary.failed_count }} of {{ error_summary.total_count }} message{{ error_summary.total_count|pluralize }} failed
+    </h2>
+    <p class="text-sm">Failed results are left out of the aggregates, tags and trends.</p>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for group in error_summary.groups %}
+        <li>
+          <span class="font-medium">{{ group.count }} · {{ group.source.label }}: {{ group.category.label }}.</span>
+          {{ group.category.hint }}
+        </li>
+      {% endfor %}
+    </ul>
+    <button type="button"
+            class="btn btn-sm mt-3"
+            hx-get="{{ errors_table_url }}"
+            hx-target="#results-table"
+            hx-swap="innerHTML">
+      Show failed results
+    </button>
+  </div>
+</div>

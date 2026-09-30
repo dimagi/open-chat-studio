@@ -32,7 +32,8 @@ from apps.cost_tracking.services.reporting import (
     evaluation_run_costs,
 )
 from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
-from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS, FAILED_FILTER_PARAM
+from apps.evaluations.errors import FAILED_OUTPUT_Q, message_errors
 from apps.evaluations.exceptions import InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import (
     CategoricalColumn,
@@ -334,18 +335,22 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             # "no count yet" from a terminal run that legitimately has zero results.
             context["total_results"] = None
         else:
-            table_url = reverse(
+            base_table_url = reverse(
                 "evaluations:evaluation_results_table",
                 args=[team_slug, kwargs["evaluation_pk"], kwargs["evaluation_run_pk"]],
             )
-            result_id = self.request.GET.get("result_id")
-            if result_id:
-                table_url = f"{table_url}?result_id={result_id}"
+            # Passed through so a link to the page (the run-errors notification's) opens the table filtered.
+            table_params = {
+                key: self.request.GET[key] for key in ("result_id", FAILED_FILTER_PARAM) if self.request.GET.get(key)
+            }
+            table_url = f"{base_table_url}?{urlencode(table_params)}" if table_params else base_table_url
             context["table_url"] = table_url
             # Add total results count
             total_results = evaluation_run.results.count()
             context["total_results"] = total_results
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
+                context["error_summary"] = evaluation_run.error_summary()
+                context["errors_table_url"] = f"{base_table_url}?{FAILED_FILTER_PARAM}=1"
                 context.update(_aggregates_context(evaluation_run, team_slug))
                 context["headline_category_stat"] = _headline_category_stat(context["aggregates"])
 
@@ -411,17 +416,28 @@ class ResultFilterPill:
     field: str | None
     value: str | None
     active: bool
+    failed: bool = False  # the "Errors" pill, which filters on failure rather than a field
 
 
 def _build_result_filter_pills(
-    categorical_columns: list[CategoricalColumn], *, active_field: str | None, active_value: str | None
+    categorical_columns: list[CategoricalColumn],
+    *,
+    active_field: str | None,
+    active_value: str | None,
+    error_count: int = 0,
+    failed_active: bool = False,
 ) -> list[ResultFilterPill]:
-    """ "All" plus one pill per distinct value across every choice/binary output field in
-    the run. Prefixed by field name only when more than one such field is in play, so the
-    common case (one evaluator, one categorical field) gets bare value labels.
+    """ "All", "Errors" when the run has failed results, then one pill per distinct value
+    across every choice/binary output field in the run. Prefixed by field name only when
+    more than one such field is in play, so the common case (one evaluator, one
+    categorical field) gets bare value labels.
     """
     prefix_with_field = len(categorical_columns) > 1
-    pills = [ResultFilterPill(label="All", field=None, value=None, active=active_field is None)]
+    pills = [ResultFilterPill(label="All", field=None, value=None, active=active_field is None and not failed_active)]
+    if error_count:
+        pills.append(
+            ResultFilterPill(label=f"Errors ({error_count})", field=None, value=None, active=failed_active, failed=True)
+        )
     for column in categorical_columns:
         for value in column.values:
             label = f"{column.field_label}: {value.label}" if prefix_with_field else value.label
@@ -497,12 +513,42 @@ class EvaluationResultDataMixin:
     def cost_by_message(self) -> dict[int, Decimal]:
         return evaluation_message_cost(self.evaluation_run.config_id, self.evaluation_run.id)
 
+    @cached_property
+    def failed_message_ids(self) -> set[int]:
+        return set(self.evaluation_run.results.filter(FAILED_OUTPUT_Q).values_list("message_id", flat=True))
+
+    @cached_property
+    def _all_rows(self) -> list[dict]:
+        """Every row of the run, before the active filter pill narrows them."""
+        data = self.evaluation_run.get_table_data(include_ids=True)
+        for row in data:
+            row["has_error"] = row.get("id") in self.failed_message_ids
+        return data
+
+    @cached_property
+    def error_row_count(self) -> int:
+        return sum(1 for row in self._all_rows if row["has_error"])
+
+    def is_failed_filter(self) -> bool:
+        return self.request.GET.get(FAILED_FILTER_PARAM) == "1"
+
     def get_filter_field(self) -> str | None:
+        if self.is_failed_filter():
+            return None
         field = self.request.GET.get("filter_field")
         return field if field in self.categorical_column_keys else None
 
     def get_filter_value(self) -> str | None:
         return self.request.GET.get("filter_value") if self.get_filter_field() else None
+
+    def filter_query(self) -> str:
+        """The active filter as a query string, for links that must keep it (row clicks, prev/next)."""
+        if self.is_failed_filter():
+            return f"?{FAILED_FILTER_PARAM}=1"
+        field = self.get_filter_field()
+        if field is None:
+            return ""
+        return f"?{urlencode({'filter_field': field, 'filter_value': self.get_filter_value()})}"
 
     @cached_property
     def _table_rows(self) -> list[dict]:
@@ -516,9 +562,11 @@ class EvaluationResultDataMixin:
         redundant full-run rebuild is what actually hurts once a run has 1000+ results,
         not the O(n) filter loop itself.
         """
-        data = self.evaluation_run.get_table_data(include_ids=True)
+        data = self._all_rows
         field = self.get_filter_field()
-        if field is not None:
+        if self.is_failed_filter():
+            data = [row for row in data if row["has_error"]]
+        elif field is not None:
             value = self.get_filter_value()
             data = [row for row in data if str(row.get(field)) == value]
         for row in data:
@@ -576,7 +624,11 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
         # `filter_field`/`filter_value` set, the same way `result_id` deep-links do.
         context["table_url"] = self.request.path
         context["filter_pills"] = _build_result_filter_pills(
-            self.categorical_columns, active_field=self.get_filter_field(), active_value=self.get_filter_value()
+            self.categorical_columns,
+            active_field=self.get_filter_field(),
+            active_value=self.get_filter_value(),
+            error_count=self.error_row_count,
+            failed_active=self.is_failed_filter(),
         )
         # The "Results N total" heading lives in this fragment (not the parent template)
         # so it can sit on the same row as the filter pills, right-aligned, and both
@@ -596,8 +648,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
             return type("EmptyTable", (tables.Table,), {})
 
         highlight_result_id = self.get_highlight_result_id()
-        filter_field = self.get_filter_field()
-        filter_value = self.get_filter_value()
+        filter_query = self.filter_query()
 
         if self.is_session_mode:
             column_keys = ["#", "Links", "Session Preview"]
@@ -628,9 +679,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     record.get("id"),
                 ],
             )
-            if filter_field is not None:
-                url = f"{url}?{urlencode({'filter_field': filter_field, 'filter_value': filter_value})}"
-            return url
+            return f"{url}{filter_query}"
 
         # Create Meta class with row_attrs for highlighting, the detail-panel click target,
         # and data-result-id. Drops table-zebra from the default table attrs - alternating
@@ -695,7 +744,14 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                 # Data is stored 0-based (see build_evaluation_table_data); shown 1-based so
                 # a row's table number matches the "#N" heading in its detail panel.
                 return columns.TemplateColumn(
-                    template_code="{{ value|add:1 }}",
+                    template_code=(
+                        '<span class="inline-flex items-center gap-1.5">{{ value|add:1 }}'
+                        "{% if record.has_error %}"
+                        '<span class="badge badge-error badge-xs" data-testid="result-error-badge" '
+                        'title="This result failed"><i class="fa-solid fa-triangle-exclamation"></i>'
+                        '<span class="sr-only">Failed</span></span>'
+                        "{% endif %}</span>"
+                    ),
                     verbose_name="#",
                     orderable=False,
                 )
@@ -777,28 +833,27 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
         # A run's message has one EvaluationResult per evaluator; session/message data is
         # the same across all of them (see `_populate_message_row_fixed_fields`), so any one
         # row gives the session/trace links for the whole panel.
-        result = (
-            EvaluationResult.objects.select_related("session__experiment", "message__session__experiment")
+        results = list(
+            EvaluationResult.objects.select_related("session__experiment", "message__session__experiment", "evaluator")
             .filter(run=self.evaluation_run, message_id=message_id)
-            .first()
+            .order_by("evaluator__name")
         )
-        if result is None:
+        if not results:
             raise Http404("Result not found")
+        result = results[0]
+        errors = message_errors((result.evaluator.name, result.output) for result in results)
 
         team_slug = kwargs["team_slug"]
         evaluation_pk = kwargs["evaluation_pk"]
         evaluation_run_pk = kwargs["evaluation_run_pk"]
-        filter_field = self.get_filter_field()
-        filter_value = self.get_filter_value()
+        filter_query = self.filter_query()
 
         def _detail_url(target_message_id):
             url = reverse(
                 "evaluations:evaluation_result_detail",
                 args=[team_slug, evaluation_pk, evaluation_run_pk, target_message_id],
             )
-            if filter_field is not None:
-                url = f"{url}?{urlencode({'filter_field': filter_field, 'filter_value': filter_value})}"
-            return url
+            return f"{url}{filter_query}"
 
         badges = []
         for column in self.categorical_columns:
@@ -857,6 +912,7 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
             "cost": self.cost_by_message.get(message_id),
             "session_url": session_url,
             "trace_url": trace_url,
+            "errors": errors,
         }
         return render(request, "evaluations/components/evaluation_result_detail_panel.html", context)
 
