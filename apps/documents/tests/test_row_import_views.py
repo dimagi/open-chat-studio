@@ -142,19 +142,26 @@ class TestRowImport:
 
 @pytest.mark.django_db()
 class TestRowImportModalOnCollectionPage:
-    def test_local_index_page_renders_the_modal(self, logged_in_client, team, local_collection):
+    def test_local_index_page_offers_row_import_under_add_files(self, logged_in_client, team, local_collection):
         url = reverse("documents:single_collection_home", args=[team.slug, local_collection.id])
         body = logged_in_client.get(url).content.decode()
 
+        assert 'id="add-files-menu"' in body
+        assert "Upload files" in body
+        assert "Import CSV/TSV rows" in body
+        assert "Import Rows" not in body
         assert "importRowsModal.showModal()" in body
         assert 'id="importRowsModal"' in body
         assert 'accept=".csv,.tsv"' in body
 
-    def test_remote_index_page_has_no_row_import(self, logged_in_client, team):
+    def test_remote_index_page_has_a_plain_add_files_button(self, logged_in_client, team):
         remote = CollectionFactory.create(team=team, is_index=True, is_remote_index=True)
         url = reverse("documents:single_collection_home", args=[team.slug, remote.id])
+        body = logged_in_client.get(url).content.decode()
 
-        assert "importRowsModal" not in logged_in_client.get(url).content.decode()
+        assert "Add Files" in body
+        assert 'id="add-files-menu"' not in body
+        assert "importRowsModal" not in body
 
 
 @pytest.mark.django_db()
