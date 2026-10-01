@@ -92,7 +92,7 @@
     "tailwindcss": "^4.1.4",
     "tom-select": "^2.6.0",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.15"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
