@@ -3,8 +3,10 @@ from collections.abc import Callable, Iterator
 from typing import Self
 
 from atlassian import Confluence
+from atlassian.errors import ApiError
 from bs4 import BeautifulSoup
-from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
+from requests import HTTPError
+from tenacity import before_sleep_log, retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from apps.documents.datamodels import ConfluenceSourceConfig
 from apps.documents.models import Collection, CollectionFile, DocumentSource
@@ -17,15 +19,23 @@ PAGE_EXPAND = "body.storage,version,ancestors"
 BATCH_SIZE = 50
 
 RETRY_WAIT = wait_exponential(multiplier=1, min=2, max=10)
+SKIPPED_STATUS_CODES = (403, 404)
 
 
 def _with_retries[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     return retry(
         reraise=True,
+        retry=retry_if_exception(lambda e: not _is_forbidden_or_missing(e)),
         stop=stop_after_attempt(3),
         wait=RETRY_WAIT,
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )(fn)
+
+
+def _is_forbidden_or_missing(error: BaseException) -> bool:
+    """Whether `error` is Confluence answering 403 or 404, which retrying will not change."""
+    cause = error.reason if isinstance(error, ApiError) else error
+    return isinstance(cause, HTTPError) and getattr(cause.response, "status_code", None) in SKIPPED_STATUS_CODES
 
 
 class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
@@ -52,7 +62,7 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             )
             restricted: dict[str, bool] = {}
             for page in self._fetch_pages(client, self.config.get_loader_kwargs()):
-                if not _is_public(client, page, restricted):
+                if not _for_page(page["id"], _is_public, client, page, restricted):
                     continue
                 # Confluence serves pages as HTML, so unlike the other loaders these are not the
                 # source's own bytes. There is no rawer representation to hand on: the API has no file to serve.
@@ -81,12 +91,14 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             for page in labelled:
                 if page["id"] not in seen:
                     seen.add(page["id"])
-                    yield _with_retries(client.get_page_by_id)(page_id=page["id"], expand=PAGE_EXPAND)
+                    if fetched := _get_page(client, page["id"]):
+                        yield fetched
         elif cql := options.get("cql"):
             yield from _search_cql(client, cql, max_pages)
         elif page_ids := options.get("page_ids"):
             for page_id in page_ids:
-                yield _with_retries(client.get_page_by_id)(page_id=page_id, expand=PAGE_EXPAND)
+                if page := _get_page(client, page_id):
+                    yield page
 
     def _page_metadata(self, page: dict) -> dict:
         source = self.config.base_url.strip("/") + page["_links"]["webui"]
@@ -119,6 +131,21 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
         if new_modified and old_modified:
             return new_modified != old_modified
         return super().should_update_document(document, existing_file)
+
+
+def _for_page[**P, R](page_id, fn: Callable[P, R], /, *args: P.args, **kwargs: P.kwargs) -> R | None:
+    """`fn(*args, **kwargs)`, or None with a warning when Confluence answers 403 or 404 for page `page_id`."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        if not _is_forbidden_or_missing(e):
+            raise
+        logger.warning("Skipping Confluence page %s: %s", page_id, e)
+        return None
+
+
+def _get_page(client: Confluence, page_id) -> dict | None:
+    return _for_page(page_id, _with_retries(client.get_page_by_id), page_id=page_id, expand=PAGE_EXPAND)
 
 
 def _paginate(fetch_batch: Callable[[int], list[dict]], max_pages: int) -> Iterator[dict]:
@@ -156,6 +183,13 @@ def _is_public(client: Confluence, page: dict, restricted: dict[str, bool]) -> b
 
 def _has_read_restrictions(client: Confluence, content_id: str, restricted: dict[str, bool]) -> bool:
     if content_id not in restricted:
-        read = _with_retries(client.get_all_restrictions_for_content)(content_id)["read"]["restrictions"]
-        restricted[content_id] = bool(read["user"]["results"] or read["group"]["results"])
+        try:
+            read = _with_retries(client.get_all_restrictions_for_content)(content_id)["read"]["restrictions"]
+        except Exception as e:
+            if not _is_forbidden_or_missing(e):
+                raise
+            logger.warning("Treating Confluence content %s as restricted: %s", content_id, e)
+            restricted[content_id] = True
+        else:
+            restricted[content_id] = bool(read["user"]["results"] or read["group"]["results"])
     return restricted[content_id]

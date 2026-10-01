@@ -1,7 +1,10 @@
+import logging
 from unittest.mock import Mock, call, patch
 
 import pydantic
 import pytest
+from atlassian.errors import ApiError
+from requests import HTTPError
 from tenacity import wait_none
 
 from apps.documents.datamodels import ConfluenceSourceConfig
@@ -29,6 +32,10 @@ def _unrestricted():
 
 def _restricted():
     return {"read": {"restrictions": {"user": {"results": [{"id": "u"}]}, "group": {"results": []}}}}
+
+
+def _http_error(status_code):
+    return HTTPError(f"HTTP {status_code}", response=Mock(status_code=status_code))
 
 
 def _restricted_ids(*content_ids):
@@ -288,6 +295,62 @@ class TestLoadDocuments:
         client.get_all_pages_from_space_raw.side_effect = [{"results": [_page(1)]}, {"results": []}]
         client.get_all_restrictions_for_content.side_effect = [ConnectionError("boom"), _unrestricted()]
         assert len(_load(space_key="DEMO")) == 1
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(_http_error(403), id="forbidden"),
+            pytest.param(_http_error(404), id="not-found"),
+            pytest.param(ApiError("No content", reason=_http_error(404)), id="wrapped-not-found"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "config_kwargs", [pytest.param({"label": "important"}, id="label"), pytest.param({"page_ids": "1,2"}, id="ids")]
+    )
+    def test_a_page_that_cannot_be_fetched_is_skipped(self, client, caplog, config_kwargs, error):
+        client.get_all_pages_by_label.side_effect = [[{"id": "1"}, {"id": "2"}], []]
+
+        def get_page_by_id(page_id, expand):
+            if str(page_id) == "1":
+                raise error
+            return _page(page_id)
+
+        client.get_page_by_id.side_effect = get_page_by_id
+        with caplog.at_level(logging.WARNING):
+            assert [d.metadata["id"] for d in _load(**config_kwargs)] == ["2"]
+        assert "Skipping Confluence page 1" in caplog.text
+        assert [str(c.kwargs["page_id"]) for c in client.get_page_by_id.call_args_list] == ["1", "2"]
+
+    def test_a_page_whose_restrictions_cannot_be_read_is_skipped(self, client, caplog):
+        pages = [_page(1), _page(2, ancestors=[10]), _page(3, ancestors=[10]), _page(4)]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": pages}, {"results": []}]
+
+        def restrictions(content_id):
+            if content_id in ("1", "10"):
+                raise _http_error(403)
+            return _unrestricted()
+
+        client.get_all_restrictions_for_content.side_effect = restrictions
+        with caplog.at_level(logging.WARNING):
+            assert [d.metadata["id"] for d in _load(space_key="DEMO")] == ["4"]
+        looked_up = [c.args[0] for c in client.get_all_restrictions_for_content.call_args_list]
+        assert sorted(looked_up) == ["1", "10", "2", "3", "4"]
+        assert "Treating Confluence content 10 as restricted" in caplog.text
+
+    def test_a_page_whose_ancestors_cannot_be_read_is_skipped(self, client, caplog):
+        unlisted = _page(1)
+        del unlisted["ancestors"]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": [unlisted, _page(2)]}, {"results": []}]
+        client.get_page_ancestors.side_effect = ApiError("No content", reason=_http_error(404))
+        with caplog.at_level(logging.WARNING):
+            assert [d.metadata["id"] for d in _load(space_key="DEMO")] == ["2"]
+        assert "Skipping Confluence page 1" in caplog.text
+
+    def test_other_page_errors_stop_the_load(self, client):
+        client.get_page_by_id.side_effect = _http_error(500)
+        with pytest.raises(HTTPError):
+            _load(page_ids="1,2")
+        assert client.get_page_by_id.call_count == 3
 
     def test_errors_propagate_after_retries(self, client):
         client.get_all_pages_from_space_raw.side_effect = ConnectionError("boom")
