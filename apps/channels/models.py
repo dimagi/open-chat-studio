@@ -545,3 +545,8 @@ class ExperimentChannel(BaseTeamModel):
             self.end_live_sessions()
         self.deleted = True
         self.save()
+
+    def restore(self):
+        """Reverse of soft_delete(). Sessions ended with the channel stay ended."""
+        self.deleted = False
+        self.save(update_fields=["deleted"])

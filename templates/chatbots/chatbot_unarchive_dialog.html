@@ -1,0 +1,39 @@
+<dialog id="chatbot_unarchive_modal" class="modal">
+  <div class="modal-box max-w-lg p-0 overflow-hidden">
+    <div class="bg-primary/70 px-8 py-8">
+      <h3 class="text-2xl font-semibold text-white">Un-archive this chatbot?</h3>
+      <p class="mt-3 text-base leading-relaxed text-white">
+        This restores the chatbot and all of its versions.
+        <span class="font-bold">Scheduled messages were deleted when it was archived and cannot be restored.</span>
+      </p>
+    </div>
+
+    <form method="post"
+          action="{% url 'chatbots:unarchive' team_slug=team_slug pk=chatbot_id %}"
+          id="unarchive-chatbot-form"
+          class="px-8 py-6">
+      {% csrf_token %}
+      <label class="flex cursor-pointer items-center gap-3">
+        <input type="checkbox" name="restore_channels" class="checkbox checkbox-sm checkbox-primary" />
+        <span class="font-semibold">Also reconnect this chatbot's channels</span>
+      </label>
+      <p class="mt-2 text-sm opacity-60">
+        Archiving released this chatbot's channel identifiers. Any that another chatbot has claimed since stay
+        disconnected, as do Slack channels, and you will be told which.
+      </p>
+    </form>
+
+    <div class="grid grid-cols-2 border-t border-base-300">
+      <form method="dialog" class="contents">
+        <button class="btn btn-ghost h-16 rounded-none border-r border-base-300 text-base font-normal underline underline-offset-4 hover:font-bold">
+          Cancel
+        </button>
+      </form>
+      <button type="submit"
+              form="unarchive-chatbot-form"
+              class="btn btn-ghost h-16 rounded-none text-base font-normal underline underline-offset-4 hover:font-bold">
+        Un-archive
+      </button>
+    </div>
+  </div>
+</dialog>

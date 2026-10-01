@@ -21,6 +21,11 @@
           <div class="badge badge-warning badge-sm">
             Archived
           </div>
+          {% if perms.experiments.change_experiment %}
+            <button class="btn btn-xs h-5 px-2 btn-outline btn-primary no-animation" onclick="chatbot_unarchive_modal.showModal()">
+              <i class="fa-solid fa-recycle"></i> Un-archive
+            </button>
+          {% endif %}
         {% elif deployed_version %}
           <div class="flex flex-row gap-2">
             <div class="tooltip" data-tip="Current published version">
@@ -131,6 +136,9 @@
       {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
       {% include "experiments/share/dialog.html" %}
       <div id="channel_create_edit_modal_placeholder"></div>
+    {% endif %}
+    {% if experiment.is_archived and perms.experiments.change_experiment %}
+      {% include "chatbots/chatbot_unarchive_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug %}
     {% endif %}
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
       <div class="flex items-center gap-2">
