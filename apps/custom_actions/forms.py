@@ -144,10 +144,7 @@ def validate_api_schema(api_schema):
 def validate_api_schema_full(operations, schema, server_url, url_validator):
 
     spec = OpenAPISpec.from_spec_dict(schema)
-    try:
-        operations_by_id = {op.operation_id: op for op in get_operations_from_spec(spec)}
-    except ValueError as e:
-        raise forms.ValidationError(f"Invalid OpenAPI schema: {e}") from e
+    operations_by_id = _operations_by_id(spec)
     invalid_operations = set(operations) - set(operations_by_id)
     if invalid_operations:
         raise forms.ValidationError(
@@ -165,3 +162,10 @@ def validate_api_schema_full(operations, schema, server_url, url_validator):
             openapi_spec_op_to_function_def(spec, op.path, op.method)
         except ValueError as e:
             raise forms.ValidationError({"allowed_operations": f"The '{op}' operation is not supported ({e})"}) from e
+
+
+def _operations_by_id(spec: OpenAPISpec) -> dict:
+    try:
+        return {op.operation_id: op for op in get_operations_from_spec(spec)}
+    except ValueError as e:
+        raise forms.ValidationError(f"Invalid OpenAPI schema: {e}") from e
