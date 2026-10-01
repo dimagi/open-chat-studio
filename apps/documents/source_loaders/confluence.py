@@ -84,15 +84,7 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                 max_pages,
             )
         elif label := options.get("label"):
-            labelled = _paginate(
-                lambda start: client.get_all_pages_by_label(label=label, start=start, limit=BATCH_SIZE), max_pages
-            )
-            seen = set()
-            for page in labelled:
-                if page["id"] not in seen:
-                    seen.add(page["id"])
-                    if fetched := _get_page(client, page["id"]):
-                        yield fetched
+            yield from _pages_by_label(client, label, max_pages)
         elif cql := options.get("cql"):
             yield from _search_cql(client, cql, max_pages)
         elif page_ids := options.get("page_ids"):
@@ -146,6 +138,19 @@ def _for_page[**P, R](page_id, fn: Callable[P, R], /, *args: P.args, **kwargs: P
 
 def _get_page(client: Confluence, page_id) -> dict | None:
     return _for_page(page_id, _with_retries(client.get_page_by_id), page_id=page_id, expand=PAGE_EXPAND)
+
+
+def _pages_by_label(client: Confluence, label: str, max_pages: int) -> Iterator[dict]:
+    labelled = _paginate(
+        lambda start: client.get_all_pages_by_label(label=label, start=start, limit=BATCH_SIZE), max_pages
+    )
+    seen = set()
+    for page_id in (page["id"] for page in labelled):
+        if page_id in seen:
+            continue
+        seen.add(page_id)
+        if page := _get_page(client, page_id):
+            yield page
 
 
 def _paginate(fetch_batch: Callable[[int], list[dict]], max_pages: int) -> Iterator[dict]:
