@@ -197,6 +197,8 @@ def _get_search_tool(node):
         # collections probably deleted
         return None
 
+    metadata_filters = {metadata_filter.key: metadata_filter.value for metadata_filter in node.metadata_filters}
+
     if len(collections) == 1:
         # Single collection: use the existing single-index search tool
         collection = collections[0]
@@ -208,7 +210,10 @@ def _get_search_tool(node):
             )
 
         search_config = SearchToolConfig(
-            index_id=collection.id, max_results=node.max_results, generate_citations=node.generate_citations
+            index_id=collection.id,
+            max_results=node.max_results,
+            generate_citations=node.generate_citations,
+            metadata_filters=metadata_filters,
         )
         return SearchIndexTool(search_config=search_config)
 
@@ -231,6 +236,7 @@ def _get_search_tool(node):
             max_results=node.max_results,
             generate_citations=node.generate_citations,
             allowed_collection_ids=node.collection_index_ids,
+            metadata_filters=metadata_filters,
         )
 
 

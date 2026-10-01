@@ -489,6 +489,46 @@ class TestLLMResponseWithPromptValidation:
             )
 
 
+def _llm_node_with_metadata_filters(**kwargs) -> LLMResponseWithPrompt:
+    provider = LlmProviderFactory.create()
+    return LLMResponseWithPrompt(
+        node_id="test-node",
+        name="Test LLM",
+        django_node=None,
+        llm_provider_id=provider.id,
+        llm_provider_model_id=1,
+        prompt="You are a helpful assistant.",
+        **kwargs,
+    )
+
+
+@pytest.mark.django_db()
+class TestLLMResponseWithPromptMetadataFilters:
+    def test_defaults_to_no_filters(self):
+        assert _llm_node_with_metadata_filters().metadata_filters == []
+
+    def test_null_reads_as_no_filters(self):
+        assert _llm_node_with_metadata_filters(metadata_filters=None).metadata_filters == []
+
+    def test_keeps_filter_pairs_in_order(self):
+        node = _llm_node_with_metadata_filters(
+            metadata_filters=[{"key": "district", "value": "Khayelitsha"}, {"key": "language", "value": ""}]
+        )
+
+        assert [(f.key, f.value) for f in node.metadata_filters] == [("district", "Khayelitsha"), ("language", "")]
+
+    @pytest.mark.parametrize("key", [pytest.param("", id="empty"), pytest.param("   ", id="whitespace")])
+    def test_rejects_a_blank_key(self, key):
+        with pytest.raises(ValidationError, match="Metadata filter keys cannot be blank"):
+            _llm_node_with_metadata_filters(metadata_filters=[{"key": key, "value": "x"}])
+
+    def test_rejects_duplicate_keys(self):
+        with pytest.raises(ValidationError, match="Duplicate metadata filter key: district"):
+            _llm_node_with_metadata_filters(
+                metadata_filters=[{"key": "district", "value": "A"}, {"key": "district", "value": "B"}]
+            )
+
+
 @pytest.mark.django_db()
 class TestSendEmailDynamicRendering:
     @pytest.fixture()

@@ -25,6 +25,7 @@ from collections.abc import Iterable, Sequence
 
 from django.conf import settings
 from django.contrib.postgres.search import SearchQuery, SearchRank
+from django.db import connection
 from django.db.models import F
 from pgvector.django import CosineDistance
 
@@ -53,6 +54,7 @@ def search_collection(
     *,
     query_vector: list[float] | None = None,
     context: str | None = None,
+    metadata_filters: dict[str, str] | None = None,
 ) -> list[FileChunkEmbedding]:
     """Return the `top_k` chunks of `collection` most relevant to `query`.
 
@@ -65,20 +67,24 @@ def search_collection(
         context: Recent conversation turns, when the caller has them. Used only to condition the
             reranker's view of the query, so it changes nothing unless reranking is active for
             this collection.
+        metadata_filters: Values a chunk's `metadata` must contain. When given, only chunks
+            holding all of them are searched, lexically and without the dense ranking.
 
     Returns:
         Chunks ordered most relevant first. `text`, `context`, `file.name` and `file.metadata`
         are loaded; other fields are deferred.
     """
-    if query_vector is None:
-        query_vector = collection.get_query_vector(query)
-
     reranker = collection.get_reranker()
     # A reranker can only improve on the ranking it is given if it is given more than the caller
     # asked for; `rerank_top_n` is that pool. With no reranker nothing widens, and the queries
     # below are exactly the ones hybrid search has always run.
     candidate_count = max(top_k, collection.rerank_top_n) if reranker else top_k
-    candidates = _retrieve_candidates(collection, query, query_vector, candidate_count)
+    if metadata_filters:
+        candidates = _filtered_candidates(collection, query, metadata_filters, candidate_count)
+    else:
+        if query_vector is None:
+            query_vector = collection.get_query_vector(query)
+        candidates = _retrieve_candidates(collection, query, query_vector, candidate_count)
     if reranker is None:
         return candidates
     return _rerank(reranker, query, candidates, top_k, context=context)
@@ -111,6 +117,51 @@ def _retrieve_candidates(
     scores = _rrf_scores([dense_ids, lexical_ids], weights=[dense_weight, 1 - dense_weight])
     fused_ids = _rank_by_score(scores)[:top_k]
     return _load_chunks_in_order(fused_ids, scores)
+
+
+def _filtered_candidates(
+    collection: Collection,
+    query: str,
+    metadata_filters: dict[str, str],
+    limit: int,
+) -> list[FileChunkEmbedding]:
+    """The best `limit` chunks whose metadata contains `metadata_filters`, ranked lexically.
+
+    The dense ranking is left out: an HNSW scan returns a fixed number of nearest rows and the
+    filter is applied after it, so a selective filter can leave few or none of them.
+
+    A row matches if it holds any word of the query, under every search language. `simple` search
+    elsewhere requires all of them, which a question phrased in the user's words rarely meets, and
+    the filter has already cut the rows down to the ones that are relevant.
+
+    A query with no searchable terms returns the first matching rows in index order, which is how
+    a filter alone looks a record up.
+    """
+    matching = (
+        FileChunkEmbedding.objects.filter(collection_id=collection.id)
+        .filter(chunk_from_indexed_file())
+        .filter(metadata__contains=metadata_filters)
+    )
+    if _has_search_terms(query, collection.search_language):
+        search_query = _any_term_query(query, collection.search_language)
+        matching = (
+            matching.filter(search_vector=search_query)
+            .annotate(rank=SearchRank(F("search_vector"), search_query, cover_density=True))
+            .order_by("-rank", "id")
+        )
+    else:
+        matching = matching.order_by("id")
+    return list(matching.select_related("file").only(*_RESULT_ONLY_FIELDS)[:limit])
+
+
+def _has_search_terms(query: str, config: str) -> bool:
+    """Whether `query` keeps any lexeme under `config`, the way chunk text is indexed."""
+    if not query or not query.strip():
+        return False
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT to_tsvector(%s::regconfig, %s) <> ''::tsvector", [config, query])
+        row = cursor.fetchone()
+    return bool(row and row[0])
 
 
 def _rerank(
@@ -290,6 +341,11 @@ def _lexical_search_query(query: str, config: str) -> SearchQuery | None:
         # `websearch_to_tsquery` also accepts quoted phrases and `-exclusions` from the user.
         return SearchQuery(query, config=config, search_type="websearch")
 
+    return _any_term_query(query, config)
+
+
+def _any_term_query(query: str, config: str) -> SearchQuery | None:
+    """A tsquery matching text that holds any one of `query`'s words."""
     terms = [SearchQuery(term, config=config, search_type="plain") for term in query.split()]
     if not terms:
         return None

@@ -50,6 +50,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return VoiceWidget
     case "jinja_template":
         return JinjaWidget
+    case "key_value_pairs":
+        return KeyValuePairsWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -628,6 +630,76 @@ export function ExpandableTextWidget(props: WidgetParams) {
         readOnly={props.readOnly}
       >
       </TextModal>
+    </InputField>
+  );
+}
+
+type KeyValuePair = {key: string; value: string};
+
+function isKeyValuePairList(value: unknown): value is KeyValuePair[] {
+  return Array.isArray(value) && value.every(
+    (item) => typeof item?.key === "string" && typeof item?.value === "string"
+  );
+}
+
+function KeyValuePairsWidget(props: WidgetParams) {
+  const setNode = usePipelineStore((state) => state.setNode);
+  const stored = props.nodeParams[props.name];
+  const pairs = isKeyValuePairList(stored) ? stored : [];
+
+  const setPairs = (update: (current: KeyValuePair[]) => KeyValuePair[]) => {
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        const current = next.data.params[props.name];
+        next.data.params[props.name] = update(isKeyValuePairList(current) ? current : []);
+      })
+    );
+  };
+
+  const addPair = () => setPairs((current) => [...current, {key: "", value: ""}]);
+  const removePair = (index: number) => setPairs((current) => current.filter((_, i) => i !== index));
+  const updatePair = (index: number, field: keyof KeyValuePair, value: string) =>
+    setPairs((current) => current.map((pair, i) => (i === index ? {...pair, [field]: value} : pair)));
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <div className="flex flex-col gap-2">
+        {pairs.map((pair, index) => (
+          <div className="flex items-center gap-2" key={index}>
+            <input
+              className="input input-sm w-full"
+              aria-label={`Key ${index + 1}`}
+              placeholder="Key"
+              value={pair.key}
+              onChange={(event) => updatePair(index, "key", event.target.value)}
+              readOnly={props.readOnly}
+            />
+            <input
+              className="input input-sm w-full"
+              aria-label={`Value ${index + 1}`}
+              placeholder="Value"
+              value={pair.value}
+              onChange={(event) => updatePair(index, "value", event.target.value)}
+              readOnly={props.readOnly}
+            />
+            {!props.readOnly && (
+              <button
+                type="button"
+                className="btn btn-xs btn-ghost"
+                aria-label={`Remove filter ${index + 1}`}
+                onClick={() => removePair(index)}
+              >
+                <i className="fa-solid fa-minus"></i>
+              </button>
+            )}
+          </div>
+        ))}
+        {!props.readOnly && (
+          <button type="button" className="btn btn-xs btn-ghost self-start" onClick={addPair}>
+            <i className="fa-solid fa-plus"></i> Add filter
+          </button>
+        )}
+      </div>
     </InputField>
   );
 }
