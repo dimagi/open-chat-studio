@@ -51,7 +51,7 @@ repos:
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.9.6'
+    rev: 'v3.9.9'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
