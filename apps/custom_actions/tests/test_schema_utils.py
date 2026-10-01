@@ -1,6 +1,7 @@
 """Tests for schema_utils module, including operation extraction and parameter parsing."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -598,6 +599,41 @@ def _one_operation_spec(parameters=None, body=None, components=None):
 def test_parameter_extraction(spec, expected):
     [operation] = get_operations_from_spec_dict(spec)
     assert [(p.name, p.param_in, p.schema_type, p.required, p.default) for p in operation.parameters] == expected
+
+
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        pytest.param(
+            _one_operation_spec([{"$ref": "#/components/parameters/Missing"}]),
+            "Unresolvable reference: #/components/parameters/Missing",
+            id="parameter",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/Missing"}}]),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="parameter-schema",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"$ref": "#/components/schemas/Missing"}),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="body-schema",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": {"a": {"$ref": "#/components/schemas/Missing"}}}),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="body-property",
+        ),
+        pytest.param(
+            _one_operation_spec([{"$ref": "other.yaml#/components/parameters/P"}]),
+            "External references are not supported: other.yaml#/components/parameters/P",
+            id="external",
+        ),
+    ],
+)
+def test_unresolvable_reference_raises(spec, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        get_operations_from_spec_dict(spec)
 
 
 def test_operation_id_and_description_fallbacks():

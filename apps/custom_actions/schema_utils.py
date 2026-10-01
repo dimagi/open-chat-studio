@@ -106,19 +106,19 @@ def get_operations_from_spec_dict(spec_dict: dict) -> list[APIOperationDetails]:
 
 def get_operations_from_spec(spec: OpenAPISpec) -> list[APIOperationDetails]:
     spec_dict = spec.document
-    resolved_spec = resolve_references(spec_dict)
     operations = []
     for path in spec.paths or {}:
+        path_item = _follow_ref(spec_dict.get("paths", {}).get(path), spec_dict)
         for method in spec.get_methods_for_path(path):
             operation = spec.get_operation(path, method)
-            resolved_operation = resolved_spec.get("paths", {}).get(path, {}).get(method, {})
+            raw_operation = _follow_ref(path_item.get(method), spec_dict)
             operations.append(
                 APIOperationDetails(
                     operation_id=spec.get_cleaned_operation_id(operation, path, method),
                     description=spec.get_operation_description(path, operation),
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(resolved_operation, spec_dict),
+                    parameters=_extract_parameters(raw_operation, spec_dict),
                 )
             )
     return operations
@@ -154,21 +154,29 @@ def _single_type(schema_type) -> str:
 
 
 def _follow_ref(node: dict, spec_dict: dict) -> dict:
-    """The end of `node`'s `$ref` chain: `node` if the chain is cyclic or dangling, `{}` if `node` is not a dict."""
+    """The end of `node`'s `$ref` chain, `node` if the chain is cyclic, or `{}` if `node` is not a dict."""
     if not isinstance(node, dict):
         return {}
     seen = set()
     current = node
     while "$ref" in current:
         ref = current["$ref"]
-        if not isinstance(ref, str) or not ref.startswith("#/") or ref in seen:
+        if isinstance(ref, str) and ref in seen:
             return node
         seen.add(ref)
-        target = _lookup_pointer(spec_dict, ref[2:].split("/"))
-        if target is None:
-            return node
+        target = _resolve_pointer(spec_dict, ref)
         current = {**target, **{key: value for key, value in current.items() if key != "$ref"}}
     return current
+
+
+def _resolve_pointer(spec_dict: dict, ref) -> dict:
+    """The dict that the internal reference `ref` points at, raising ValueError when there is none."""
+    if not isinstance(ref, str) or not ref.startswith("#"):
+        raise ValueError(f"External references are not supported: {ref}")
+    target = _lookup_pointer(spec_dict, ref[2:].split("/"))
+    if target is None:
+        raise ValueError(f"Unresolvable reference: {ref}")
+    return target
 
 
 def _lookup_pointer(spec_dict: dict, keys: list[str]) -> dict | None:
@@ -181,10 +189,10 @@ def _lookup_pointer(spec_dict: dict, keys: list[str]) -> dict | None:
     return target if isinstance(target, dict) else None
 
 
-def _extract_parameters(resolved_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
-    """Read the parameters and JSON request body properties of an operation with its references resolved."""
+def _extract_parameters(raw_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
+    """Read the parameters and JSON request body properties of an operation, following its references."""
     parameters = []
-    for param in resolved_operation.get("parameters", []):
+    for param in raw_operation.get("parameters", []):
         param = _follow_ref(param, spec_dict)
         if not param.get("name") or param.get("in") not in PARAMETER_LOCATIONS:
             continue
@@ -200,7 +208,7 @@ def _extract_parameters(resolved_operation: dict, spec_dict: dict) -> list[Param
             )
         )
 
-    request_body = _follow_ref(resolved_operation.get("requestBody", {}), spec_dict)
+    request_body = _follow_ref(raw_operation.get("requestBody", {}), spec_dict)
     body_schema = request_body.get("content", {}).get("application/json", {}).get("schema")
     if body_schema is None:
         return parameters
