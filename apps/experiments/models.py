@@ -1687,6 +1687,7 @@ class ExperimentSession(BaseTeamModel):
         Args:
             commit: Whether to save the model after setting the ended_at value
             trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
+                Events are not triggered if the session had already ended.
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
@@ -1708,12 +1709,14 @@ class ExperimentSession(BaseTeamModel):
                 "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
             )
 
+        # End triggers can end the session themselves, so re-firing them on an ended session would loop.
+        already_ended = self.ended_at is not None
         self.update_status(SessionStatus.PENDING_REVIEW)
 
         self.ended_at = timezone.now()
         if commit:
             self.save()
-        if commit and trigger_type:
+        if commit and trigger_type and not already_ended:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
     @property

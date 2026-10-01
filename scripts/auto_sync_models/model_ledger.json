@@ -563,6 +563,35 @@
       ]
     }
   },
+  "azure/gpt-6.1-sol-2026-09-29": {
+    "first_seen": "2026-09-30",
+    "verdict": "rejected",
+    "reason": "Dated snapshot of a model OCS registers under the undated name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "none",
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "azure/gpt-audio": {
+    "first_seen": "2026-09-30",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
+  "azure/gpt-audio-1.5": {
+    "first_seen": "2026-09-30",
+    "verdict": "rejected",
+    "reason": "Audio/speech model, not a text chat model.",
+    "params": {
+      "reasoning": false
+    }
+  },
   "azure/gpt-audio-1.5-2026-02-23": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -745,6 +774,11 @@
     "verdict": "rejected",
     "reason": "Deep-research agent model, not a chat model."
   },
+  "google/deep-research-pro-preview-12-2025": {
+    "first_seen": "2026-09-30",
+    "verdict": "rejected",
+    "reason": "Deep-research agent model, not a chat model."
+  },
   "google/gemini-2.5-computer-use-preview-10-2025": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -924,6 +958,15 @@
     "reason": "Tool-configuration variant of gemini-3.1-pro-preview, not a separate model.",
     "params": {
       "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-3.8-flash-cyber": {
+    "first_seen": "2026-09-30",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity specialist on the Gemini Enterprise Agent Platform, not a general chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": []
     }
   },
   "google_vertex_ai/gemini-omni-1.1-flash": {
