@@ -154,10 +154,12 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
     "events.statictrigger": "experiment__team",
     "events.timeouttrigger": "experiment__team",
     "events.scheduledtrigger": "experiment__team",
-    # EventAction has no team FK; StaticTrigger and TimeoutTrigger each hold a OneToOneField to it.
+    # EventAction has no team FK; each trigger type holds a OneToOneField to it. A ScheduledMessage's
+    # action is the static or timeout trigger's action that created it, so it needs no branch of its own.
     "events.eventaction": [
         "static_trigger__experiment__team",
         "timeout_trigger__experiment__team",
+        "scheduled_trigger__experiment__team",
     ],
     "pipelines.pipelinechathistory": "session__team",
     "pipelines.pipelinechatmessages": "chat_history__session__team",
@@ -189,9 +191,18 @@ def _customuser_prefetch(team) -> list:
     return [Prefetch("membership_set", queryset=membership.objects.filter(team=team).prefetch_related("groups"))]
 
 
+def _prefetch(*names: str) -> Callable[[object], list]:
+    """A prefetch factory for fields that need no team scoping."""
+    return lambda _team: list(names)
+
+
 # Per-model prefetches, built per request because some are scoped to the team being synced.
+# An m2m field serialized by ``fields = "__all__"`` queries once per row without one.
 PREFETCH_REGISTRY: dict[str, Callable[[object], list]] = {
     "users.customuser": _customuser_prefetch,
+    "chat.chatattachment": _prefetch("files"),
+    "pipelines.node": _prefetch("collection_indexes"),
+    "human_annotations.annotationqueue": _prefetch("assignees"),
 }
 
 

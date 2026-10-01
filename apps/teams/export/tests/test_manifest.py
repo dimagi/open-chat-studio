@@ -1,5 +1,7 @@
 import pytest
 from django.apps import apps
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.api.export.serializers import build_resource_serializer
@@ -8,7 +10,8 @@ from apps.teams.export import manifest
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.events import ScheduledTriggerFactory, StaticTriggerFactory, TimeoutTriggerFactory
+from apps.utils.factories.experiment import ChatFactory, ExperimentFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
@@ -273,3 +276,38 @@ def test_every_resource_serializer_builds():
     for entry in manifest.MANIFEST_ENTRIES:
         serializer = build_resource_serializer(manifest.entry_model(entry.model))()
         assert serializer.fields  # accessing .fields builds them; raises on an unmapped field type
+
+
+@pytest.mark.django_db()
+def test_m2m_resources_are_prefetched():
+    """Serializing an m2m field with fields="__all__" queries once per row unless it is prefetched."""
+    team = TeamFactory()
+    for _ in range(4):
+        chat = ChatFactory(team=team)
+        attachment = chat.attachments.create(tool_type="code_interpreter")
+        attachment.files.add(FileFactory(team=team))
+
+    entry = manifest.get_manifest_entry("chat_attachments")
+    serializer = build_resource_serializer(manifest.entry_model(entry.model))
+    queryset = manifest.team_scoped_queryset(entry, team)
+    with CaptureQueriesContext(connection) as captured:
+        data = serializer(list(queryset), many=True, context={"team": team, "public_key": None}).data
+    assert len(data) == 4
+    assert len(captured) <= 2, [q["sql"] for q in captured]
+
+
+@pytest.mark.django_db()
+def test_event_actions_of_every_trigger_type_are_exported():
+    """Each trigger type holds a non-null OneToOne to its EventAction, so an action left out of the
+    export makes its trigger unimportable (resolve_fk raises on a non-null FK with no translation)."""
+    team = TeamFactory()
+    experiment = ExperimentFactory(team=team)
+    triggers = [
+        StaticTriggerFactory(experiment=experiment),
+        TimeoutTriggerFactory(experiment=experiment),
+        ScheduledTriggerFactory(experiment=experiment),
+    ]
+
+    entry = manifest.get_manifest_entry("event_actions")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert {trigger.action_id for trigger in triggers} <= pks

@@ -28,13 +28,9 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
-from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
+from apps.teams.export.manifest import TEAM_MODEL, schema_checksum
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
-from apps.teams.export.translation import (
-    FKTranslationStore,
-    derive_pk_cursor,
-    derive_updated_at_cursor,
-)
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, FKTranslationStore, page_cursor
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
@@ -85,21 +81,6 @@ def _load_private_key(private_key_path: str | None):
     if env_key:
         return load_private_key(env_key.encode())
     return None
-
-
-def _start_cursor(model_label, cursor_type, store, model):
-    """Resume each model from the rows already synced (no cursor is persisted separately)."""
-    committed = store.committed_targets(model_label)
-    if not committed:
-        return None
-    if cursor_type == "pk":
-        return derive_pk_cursor(committed.keys())
-    source_by_target = {target: source for source, target in committed.items()}
-    pairs = [
-        (updated_at, source_by_target[pk])
-        for pk, updated_at in model.objects.filter(pk__in=source_by_target).values_list("pk", "updated_at")
-    ]
-    return derive_updated_at_cursor(pairs)
 
 
 def check_source_team_ready(client) -> None:
@@ -243,6 +224,7 @@ def run_sync(
     enforce_schema=True,
     on_user_created=send_password_reset_email,
     style=None,
+    cursor_key=ALL_CHATBOTS_KEY,
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
@@ -256,13 +238,8 @@ def run_sync(
         with mute_signals():
             load_team(importer, client, store)
             for entry in manifest["entries"]:
-                model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
-                model = entry_model(model_label)
-                cursor = _start_cursor(model_label, cursor_type, store, model)
-                count = importer.import_rows(
-                    model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit)
-                )
-                write(_style_synced_line(f"synced {count} {resource} rows", count, style))
+                count = _sync_resource(importer, client, store, entry, page_limit, cursor_key)
+                write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
         if friendly is None:
@@ -271,9 +248,24 @@ def run_sync(
     return importer
 
 
+def _sync_resource(importer, client, store, entry, page_limit, cursor_key) -> int:
+    """Import one resource page by page, recording the resume cursor once each page's rows are
+    committed. The cursor is stored rather than derived from the synced rows, because the row set the
+    source serves changes with the chatbot selection."""
+    model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
+    cursor = store.get_cursor(cursor_key, model_label)
+    count = 0
+    for rows in client.iter_pages(resource, start_cursor=cursor, limit=page_limit):
+        count += importer.import_rows(model_label, rows)
+        next_cursor = page_cursor(cursor_type, rows)
+        if next_cursor is not None:
+            store.set_cursor(cursor_key, model_label, next_cursor)
+    return count
+
+
 def force_delete_team(team_slug, state_dir, write=lambda _m: None):
     """Delete the local team (matched by slug) and its sync-state DB so the next run re-imports from
-    scratch. Without resetting the state, the derived cursor would skip the rows that were deleted.
+    scratch. Without resetting the state, the stored cursors would skip the rows that were deleted.
 
     Deletes via the same audited cascade the team-delete view uses, but without the notification
     emails -- nobody should be told their team was deleted during a re-import."""

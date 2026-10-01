@@ -41,6 +41,12 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     )
     metadata = SanitizedJSONField(default=dict)
 
+    class Meta:
+        indexes = [
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="chat_updated_at_id_idx"),
+        ]
+
     @property
     def embed_source(self):
         return self.metadata.get(Chat.MetadataKeys.EMBED_SOURCE)
@@ -195,6 +201,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # which filter created_at without a chat/team prefix.
             models.Index(fields=["created_at"], name="chatmessage_created_at_idx"),
             GinIndex(fields=["external_ids"], name="chatmessage_external_ids_idx"),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
         ]
 
     @classmethod

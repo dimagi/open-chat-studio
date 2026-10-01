@@ -13,6 +13,7 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
+from apps.teams.export.translation import ALL_CHATBOTS_KEY
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -56,9 +57,10 @@ class FakeClient:
         self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100):
         self.iter_calls.append((resource, start_cursor))
-        return list(self.rows_by_resource.get(resource, []))
+        rows = list(self.rows_by_resource.get(resource, []))
+        return iter([rows]) if rows else iter([])
 
     def get_file_content(self, file_id):
         return b""
@@ -305,7 +307,7 @@ def test_run_sync_builds_team_and_resolves_secret_provider(make_store, tmp_path,
     assert store.has_unfilled_targets() is False
 
 
-def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(make_store, tmp_path, keypair):
+def test_rerun_is_a_no_op_and_resumes_from_stored_cursor(make_store, tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
@@ -320,7 +322,7 @@ def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(make_store, tmp_path, 
     # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
     # not to re-import the team (that's loaded from the target DB)
     assert second.get_team_calls == 1
-    # the second run resumes each pk resource from its highest synced source key
+    # the second run resumes each pk resource from the cursor the first run stored
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
 
@@ -421,7 +423,7 @@ def _http_error(status_code, detail):
 
 
 class _RaisingClient(FakeClient):
-    """A FakeClient whose ``get_team`` or ``iter_rows`` raises instead of returning data, to simulate
+    """A FakeClient whose ``get_team`` or ``iter_pages`` raises instead of returning data, to simulate
     an HTTP error surfacing from the source server mid-sync."""
 
     def __init__(self, manifest, rows, error, raise_on):
@@ -434,10 +436,10 @@ class _RaisingClient(FakeClient):
             raise self._error
         return super().get_team()
 
-    def iter_rows(self, resource, start_cursor=None, limit=100):
-        if self._raise_on == "iter_rows":
+    def iter_pages(self, resource, start_cursor=None, limit=100):
+        if self._raise_on == "iter_pages":
             raise self._error
-        return super().iter_rows(resource, start_cursor, limit)
+        return super().iter_pages(resource, start_cursor, limit)
 
 
 @pytest.mark.parametrize(
@@ -478,7 +480,7 @@ def test_missing_public_key_400_raises_friendly_error(make_store, tmp_path, keyp
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, seal_mod.MISSING_PUBLIC_KEY_DETAIL)
-    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_pages")
 
     with pytest.raises(CommandError, match="no public key"):
         run_sync(client, store, keypair[1])
@@ -490,7 +492,7 @@ def test_unrelated_400_is_not_mistaken_for_missing_public_key(make_store, tmp_pa
     manifest, rows = _scenario(keypair[0])
     store = make_store(tmp_path / "t.sqlite")
     error = _http_error(400, "Invalid cursor.")
-    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_pages")
 
     with pytest.raises(requests.HTTPError):
         run_sync(client, store, keypair[1])
@@ -563,3 +565,25 @@ def test_serialized_row_round_trips_through_importer(make_store, tmp_path, keypa
     imported = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", provider.id))
     assert imported.team_id == target_team.id  # assigned from the synced team, not carried in the row
     assert imported.config == {"api_key": "sk-live"}
+
+
+def test_run_sync_resumes_from_the_stored_cursor(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    store = make_store(tmp_path / "team.sqlite")
+    store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "42")
+
+    client = FakeClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None)
+
+    assert ("llm_provider", "42") in client.iter_calls
+
+
+def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair):
+    public_key, private = keypair
+    manifest, rows = _scenario(public_key)
+    store = make_store(tmp_path / "team.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
