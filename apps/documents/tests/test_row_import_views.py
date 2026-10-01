@@ -153,6 +153,7 @@ class TestRowImportModalOnCollectionPage:
         assert "importRowsModal.showModal()" in body
         assert 'id="importRowsModal"' in body
         assert 'accept=".csv,.tsv"' in body
+        assert "Ticked columns are saved with each row so chatbot searches can be filtered by them." in body
 
     def test_remote_index_page_has_a_plain_add_files_button(self, logged_in_client, team):
         remote = CollectionFactory.create(team=team, is_index=True, is_remote_index=True)
