@@ -11,19 +11,29 @@ from apps.documents.source_loaders.confluence import ConfluenceDocumentLoader
 BASE_URL = "https://site.atlassian.net/wiki"
 
 
-def _page(page_id, html="<p>Hello <b>world</b></p>", status="current", when="2026-01-01T00:00:00Z"):
+def _page(page_id, html="<p>Hello <b>world</b></p>", status="current", when="2026-01-01T00:00:00Z", ancestors=()):
     return {
         "id": str(page_id),
         "title": f"Page {page_id}",
         "status": status,
         "body": {"storage": {"value": html}},
         "version": {"when": when},
+        "ancestors": [{"id": str(ancestor_id)} for ancestor_id in ancestors],
         "_links": {"webui": f"/spaces/DEMO/pages/{page_id}"},
     }
 
 
 def _unrestricted():
     return {"read": {"restrictions": {"user": {"results": []}, "group": {"results": []}}}}
+
+
+def _restricted():
+    return {"read": {"restrictions": {"user": {"results": [{"id": "u"}]}, "group": {"results": []}}}}
+
+
+def _restricted_ids(*content_ids):
+    """A `get_all_restrictions_for_content` stand-in that restricts reading `content_ids`."""
+    return lambda content_id: _restricted() if content_id in content_ids else _unrestricted()
 
 
 @pytest.fixture()
@@ -41,10 +51,14 @@ def no_retry_wait():
         yield
 
 
-def _load(**config_kwargs):
+def _load_lazily(**config_kwargs):
     config = ConfluenceSourceConfig(base_url=BASE_URL, **config_kwargs)
     loader = ConfluenceDocumentLoader(Mock(id=7), config, Mock(config={"username": "jack", "password": "secret"}))
-    return list(loader.load_documents())
+    return loader.load_documents()
+
+
+def _load(**config_kwargs):
+    return list(_load_lazily(**config_kwargs))
 
 
 class TestConfluenceDocumentLoader:
@@ -117,7 +131,7 @@ class TestLoadDocuments:
 
         client.confluence_class.assert_called_once_with(url=BASE_URL, username="jack", password="secret", cloud=True)
         client.get_all_pages_from_space_raw.assert_any_call(
-            space="DEMO", start=0, limit=50, status="current", expand="body.storage,version"
+            space="DEMO", start=0, limit=50, status="current", expand="body.storage,version,ancestors"
         )
         assert document.content == b"Hello world"
         assert document.metadata == {
@@ -147,7 +161,10 @@ class TestLoadDocuments:
         documents = _load(label="important")
         assert [d.metadata["id"] for d in documents] == ["1", "2"]
         client.get_page_by_id.assert_has_calls(
-            [call(page_id="1", expand="body.storage,version"), call(page_id="2", expand="body.storage,version")]
+            [
+                call(page_id="1", expand="body.storage,version,ancestors"),
+                call(page_id="2", expand="body.storage,version,ancestors"),
+            ]
         )
 
     def test_cql_follows_next_links(self, client):
@@ -163,7 +180,7 @@ class TestLoadDocuments:
                 params={
                     "cql": "space = DEMO",
                     "limit": 50,
-                    "expand": "body.storage,version",
+                    "expand": "body.storage,version,ancestors",
                     "includeArchivedSpaces": False,
                 },
             ),
@@ -190,12 +207,67 @@ class TestLoadDocuments:
         client.get_all_pages_by_label.side_effect = [[{"id": i} for i in pages], []]
         client.get.return_value = {"results": list(pages.values()), "_links": {}}
         client.get_page_by_id.side_effect = lambda page_id, expand: pages[str(page_id)]
-        restricted = {"read": {"restrictions": {"user": {"results": [{"id": "u"}]}, "group": {"results": []}}}}
-        client.get_all_restrictions_for_content.side_effect = lambda page_id: (
-            restricted if page_id == "3" else _unrestricted()
-        )
+        client.get_all_restrictions_for_content.side_effect = _restricted_ids("3")
 
         assert [d.metadata["id"] for d in _load(**config_kwargs)] == ["1"]
+
+    def test_pages_under_a_restricted_ancestor_are_skipped(self, client):
+        pages = [_page(1, ancestors=[10]), _page(2, ancestors=[20, 21]), _page(3, ancestors=[30])]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": pages}, {"results": []}]
+        client.get_all_restrictions_for_content.side_effect = _restricted_ids("21", "30")
+
+        assert [d.metadata["id"] for d in _load(space_key="DEMO")] == ["1"]
+
+    def test_each_ancestor_restriction_is_looked_up_once(self, client):
+        pages = [_page(1, ancestors=[10]), _page(2, ancestors=[10, 1])]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": pages}, {"results": []}]
+
+        assert [d.metadata["id"] for d in _load(space_key="DEMO")] == ["1", "2"]
+        looked_up = [c.args[0] for c in client.get_all_restrictions_for_content.call_args_list]
+        assert sorted(looked_up) == ["1", "10", "2"]
+
+    def test_ancestors_are_fetched_when_the_page_has_none_listed(self, client):
+        page = _page(1)
+        del page["ancestors"]
+        client.get_all_pages_from_space_raw.side_effect = [{"results": [page]}, {"results": []}]
+        client.get_page_ancestors.return_value = [{"id": "10"}]
+        client.get_all_restrictions_for_content.side_effect = _restricted_ids("10")
+
+        assert _load(space_key="DEMO") == []
+        client.get_page_ancestors.assert_called_once_with("1")
+
+    @pytest.mark.parametrize(
+        ("config_kwargs", "fetch_name", "batches"),
+        [
+            pytest.param(
+                {"space_key": "DEMO"},
+                "get_all_pages_from_space_raw",
+                [{"results": [_page(1)]}, {"results": [_page(2)]}, {"results": []}],
+                id="space",
+            ),
+            pytest.param(
+                {"label": "important"},
+                "get_all_pages_by_label",
+                [[{"id": "1"}], [{"id": "2"}], []],
+                id="label",
+            ),
+            pytest.param(
+                {"cql": "space = DEMO"},
+                "get",
+                [{"results": [_page(1)], "_links": {"next": "/next"}}, {"results": [_page(2)], "_links": {}}],
+                id="cql",
+            ),
+        ],
+    )
+    def test_pages_are_loaded_one_batch_at_a_time(self, client, config_kwargs, fetch_name, batches):
+        fetch = getattr(client, fetch_name)
+        fetch.side_effect = batches
+        client.get_page_by_id.side_effect = lambda page_id, expand: _page(page_id)
+        documents = _load_lazily(**config_kwargs)
+
+        assert next(documents).metadata["id"] == "1"
+        assert fetch.call_count == 1
+        assert [d.metadata["id"] for d in documents] == ["2"]
 
     def test_blank_pages_are_skipped(self, client):
         client.get_all_pages_from_space_raw.side_effect = [

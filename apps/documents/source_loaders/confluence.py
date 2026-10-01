@@ -13,7 +13,7 @@ from apps.service_providers.models import AuthProviderType
 
 logger = logging.getLogger(__name__)
 
-PAGE_EXPAND = "body.storage,version"
+PAGE_EXPAND = "body.storage,version,ancestors"
 BATCH_SIZE = 50
 
 RETRY_WAIT = wait_exponential(multiplier=1, min=2, max=10)
@@ -50,8 +50,9 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                 password=self.auth_provider.config.get("password"),
                 cloud=True,
             )
+            restricted: dict[str, bool] = {}
             for page in self._fetch_pages(client, self.config.get_loader_kwargs()):
-                if not _is_public(client, page):
+                if not _is_public(client, page, restricted):
                     continue
                 # Confluence serves pages as HTML, so unlike the other loaders these are not the
                 # source's own bytes. There is no rawer representation to hand on: the API has no file to serve.
@@ -76,8 +77,11 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             labelled = _paginate(
                 lambda start: client.get_all_pages_by_label(label=label, start=start, limit=BATCH_SIZE), max_pages
             )
-            for page_id in dict.fromkeys(page["id"] for page in labelled):
-                yield _with_retries(client.get_page_by_id)(page_id=page_id, expand=PAGE_EXPAND)
+            seen = set()
+            for page in labelled:
+                if page["id"] not in seen:
+                    seen.add(page["id"])
+                    yield _with_retries(client.get_page_by_id)(page_id=page["id"], expand=PAGE_EXPAND)
         elif cql := options.get("cql"):
             yield from _search_cql(client, cql, max_pages)
         elif page_ids := options.get("page_ids"):
@@ -117,30 +121,41 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
         return super().should_update_document(document, existing_file)
 
 
-def _paginate(fetch_batch: Callable[[int], list[dict]], max_pages: int) -> list[dict]:
-    pages: list[dict] = []
-    while len(pages) < max_pages:
-        batch = _with_retries(fetch_batch)(len(pages))
+def _paginate(fetch_batch: Callable[[int], list[dict]], max_pages: int) -> Iterator[dict]:
+    fetched = 0
+    while fetched < max_pages:
+        batch = _with_retries(fetch_batch)(fetched)
         if not batch:
-            break
-        pages.extend(batch)
-    return pages[:max_pages]
+            return
+        yield from batch[: max_pages - fetched]
+        fetched += len(batch)
 
 
-def _search_cql(client: Confluence, cql: str, max_pages: int) -> list[dict]:
-    pages: list[dict] = []
+def _search_cql(client: Confluence, cql: str, max_pages: int) -> Iterator[dict]:
     params = {"cql": cql, "limit": BATCH_SIZE, "expand": PAGE_EXPAND, "includeArchivedSpaces": False}
     response = _with_retries(client.get)("rest/api/content/search", params=params)
+    fetched = 0
     while True:
-        pages.extend(response.get("results", []))
+        results = response.get("results", [])
+        yield from results[: max_pages - fetched]
+        fetched += len(results)
         next_url = response.get("_links", {}).get("next")
-        if not next_url or len(pages) >= max_pages:
-            return pages[:max_pages]
+        if not next_url or fetched >= max_pages:
+            return
         response = _with_retries(client.get)(next_url)
 
 
-def _is_public(client: Confluence, page: dict) -> bool:
+def _is_public(client: Confluence, page: dict, restricted: dict[str, bool]) -> bool:
+    """Whether `page` is current and has no read restriction of its own or inherited from an ancestor page."""
     if page["status"] != "current":
         return False
-    read = _with_retries(client.get_all_restrictions_for_content)(page["id"])["read"]["restrictions"]
-    return not read["user"]["results"] and not read["group"]["results"]
+    ancestors = page["ancestors"] if "ancestors" in page else _with_retries(client.get_page_ancestors)(page["id"])
+    content_ids = [page["id"], *(ancestor["id"] for ancestor in ancestors)]
+    return not any(_has_read_restrictions(client, content_id, restricted) for content_id in content_ids)
+
+
+def _has_read_restrictions(client: Confluence, content_id: str, restricted: dict[str, bool]) -> bool:
+    if content_id not in restricted:
+        read = _with_retries(client.get_all_restrictions_for_content)(content_id)["read"]["restrictions"]
+        restricted[content_id] = bool(read["user"]["results"] or read["group"]["results"])
+    return restricted[content_id]
