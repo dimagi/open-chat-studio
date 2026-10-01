@@ -121,7 +121,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": _visible_source_types(request),
         "row_import_supported_file_types": ",".join(ROW_IMPORT_EXTENSIONS),
-        "max_metadata_columns": settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS,
+        "max_metadata_columns": settings.COLLECTION_FILE_MAX_METADATA_COLUMNS,
         "read_only": collection.is_a_version,
         "breadcrumbs": [_collections_crumb(team_slug), (collection.name, None)],
         **_indexing_progress(collection),

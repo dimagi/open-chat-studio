@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from apps.documents.datamodels import ChunkingMode
 from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.utils.factories.documents import CollectionFactory
@@ -99,7 +100,8 @@ class TestRowImport:
         collection_file = CollectionFile.objects.get(collection=local_collection, file=file)
         assert collection_file.status == FileStatus.PENDING
         assert collection_file.metadata.chunking_strategy is None
-        assert collection_file.metadata.row_import.metadata_columns == ["language"]
+        assert collection_file.metadata.chunking_mode == ChunkingMode.ROW
+        assert collection_file.metadata.metadata_columns == ["language"]
         delay.assert_called_once_with([collection_file.id])
 
     def test_unknown_metadata_column_is_rejected(self, logged_in_client, team, local_collection):
@@ -163,7 +165,7 @@ class TestFileChunksPageForRowImport:
             collection=local_collection,
             file=file,
             status=FileStatus.COMPLETED,
-            metadata={"row_import": {"metadata_columns": ["language"]}},
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]},
         )
         FileChunkEmbedding.objects.create(
             team=team,
@@ -197,7 +199,7 @@ class TestCollectionFilesListForRowImport:
             collection=local_collection,
             file=file,
             status=FileStatus.COMPLETED,
-            metadata={"row_import": {"metadata_columns": ["language"]}},
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]},
         )
 
         url = reverse("documents:collection_files_list", args=[team.slug, local_collection.id])

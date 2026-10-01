@@ -46,11 +46,11 @@
                     tokens
                   </div>
                 </div>
-              {% elif collection_file.row_import %}
+              {% elif collection_file.is_row_import %}
                 <div class="flex flex-row items-center gap-2">
                   <div class="badge badge-sm badge-ghost">Row import</div>
-                  {% if collection_file.row_import.metadata_columns %}
-                    <div class="badge badge-sm badge-ghost">{{ collection_file.row_import.metadata_columns|join:", " }}
+                  {% if collection_file.metadata.metadata_columns %}
+                    <div class="badge badge-sm badge-ghost">{{ collection_file.metadata.metadata_columns|join:", " }}
                     </div>
                   {% endif %}
                 </div>

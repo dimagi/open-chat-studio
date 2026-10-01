@@ -357,7 +357,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         for collection_file in collection_files:
             embedding_ids: list[int] = []
             try:
-                if collection_file.row_import:
+                if collection_file.is_row_import:
                     embedding_ids, row_failures = self._embed_rows(collection_file)
                     collection_file.failure_reason = format_row_failures(
                         row_failures, total_rows=len(embedding_ids) + len(row_failures)
@@ -521,7 +521,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     ) -> list[int]:
         """Embed one batch of rows and write their chunks, returning the ids written."""
         file = collection_file.file
-        metadata_columns = collection_file.row_import.metadata_columns
+        metadata_columns = collection_file.metadata.metadata_columns
         texts = [render_row(file.name, headers, row) for row in rows]
         embeddings = [
             _row_chunk(collection_file, row, text, vector, metadata_columns)

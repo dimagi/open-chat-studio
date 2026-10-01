@@ -47,7 +47,7 @@ class TestLocalIndexManagerRowImport:
             collection=local_index_instance,
             file=file,
             status=FileStatus.PENDING,
-            metadata={"row_import": {"metadata_columns": ["language"]}},
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]},
         )
 
     def test_one_chunk_per_row_with_metadata(self, collection_file, index_manager):
@@ -125,7 +125,7 @@ class TestLocalIndexManagerRowImport:
             collection=local_index_instance,
             file=file,
             status=FileStatus.PENDING,
-            metadata={"row_import": {"metadata_columns": []}},
+            metadata={"chunking_mode": "row", "metadata_columns": []},
         )
 
         index_manager.add_files(CollectionFile.objects.filter(id=collection_file.id).iterator(1))
@@ -142,7 +142,7 @@ class TestLocalIndexManagerRowImport:
             collection=local_index_instance,
             file=file,
             status=FileStatus.PENDING,
-            metadata={"row_import": {"metadata_columns": []}},
+            metadata={"chunking_mode": "row", "metadata_columns": []},
         )
 
     def test_rows_beyond_the_batch_size_are_sent_in_further_batches(self, large_collection_file, index_manager):
