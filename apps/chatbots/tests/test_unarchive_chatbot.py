@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
@@ -286,6 +288,49 @@ class TestUnarchiveChatbotChannels:
         channel.refresh_from_db()
         assert channel.deleted is True
         assert channel.name in _messages(response)
+
+    @patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+    def test_restored_channel_gets_its_webhook_back(
+        self, set_incoming_webhook, client, team_with_users, chatbot_with_channel, django_capture_on_commit_callbacks
+    ):
+        """A channel deleted on its own had its webhook cleared, and restore cannot tell the two apart."""
+        chatbot, channel = chatbot_with_channel
+        client.force_login(team_with_users.members.first())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            client.post(_unarchive_url(team_with_users, chatbot), {"restore_channels": "on"})
+
+        set_incoming_webhook.assert_called_once_with(channel.extra_data, channel.webhook_url)
+
+    @patch("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook")
+    def test_skipped_channel_gets_no_webhook(
+        self, set_incoming_webhook, client, team_with_users, chatbot_with_channel, django_capture_on_commit_callbacks
+    ):
+        chatbot, _channel = chatbot_with_channel
+        _claim_telegram_token(team_with_users)
+        client.force_login(team_with_users.members.first())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            client.post(_unarchive_url(team_with_users, chatbot), {"restore_channels": "on"})
+
+        set_incoming_webhook.assert_not_called()
+
+    @patch(
+        "apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook",
+        side_effect=Exception("provider unreachable"),
+    )
+    def test_a_provider_failure_does_not_undo_the_restore(
+        self, _set_incoming_webhook, client, team_with_users, chatbot_with_channel, django_capture_on_commit_callbacks
+    ):
+        chatbot, channel = chatbot_with_channel
+        client.force_login(team_with_users.members.first())
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = client.post(_unarchive_url(team_with_users, chatbot), {"restore_channels": "on"})
+
+        assert response.status_code == 302
+        channel.refresh_from_db()
+        assert channel.deleted is False
 
     def test_restores_one_channel_and_skips_another(self, client, team_with_users, chatbot_with_channel):
         chatbot, claimed = chatbot_with_channel
