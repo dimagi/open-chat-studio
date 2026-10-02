@@ -48,7 +48,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
         # Token limits are the total context window Microsoft publishes for the deployment, not the
         # separate input-only figure it also lists.
+        Model("gpt-6.1-sol", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
+        Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
+        Model("gpt-6-luna", 1050000, parameters=GPT6SolParameters),
         Model("gpt-5.6-terra", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
@@ -67,6 +70,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "anthropic": [
         Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
+        Model("claude-sonnet-5-5", 1000000, parameters=ClaudeOpus47Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
@@ -103,6 +107,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.6-terra", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
+        Model("gpt-6.1-sol", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-luna", 1050000, parameters=GPT6SolParameters),

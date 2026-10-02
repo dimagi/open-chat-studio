@@ -6,6 +6,9 @@ genuine rate limits, Anthropic as a 400 alongside malformed requests. Status alo
 therefore cannot tell "wait and retry" apart from "nothing will work until someone
 adds credit", which is why the checks below reach into provider-specific error codes
 and, where Anthropic offers nothing else, the message text. See ADR-0067.
+A filtered prompt is the one case here the participant, not the team, can act on; it is
+translated to a participant-actionable error so the node boundary handles it alongside
+the rest.
 """
 
 import contextlib
@@ -18,7 +21,7 @@ import openai
 from google.api_core import exceptions as google_exceptions
 from langchain_core.exceptions import ContextOverflowError
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 
 # OpenAI reports an exhausted balance as a 429, the same status as a genuine rate limit,
 # distinguished only by these codes.
@@ -103,6 +106,10 @@ BILLING_MESSAGE = "The LLM provider account has no credit or quota remaining:"
 AUTHENTICATION_MESSAGE = "The LLM provider rejected the credentials configured for this chatbot:"
 NOT_FOUND_MESSAGE = "The LLM provider could not find the model this chatbot is configured to use:"
 CONTEXT_OVERFLOW_MESSAGE = "The conversation exceeds the model's context window:"
+TOKEN_LIMIT_MESSAGE = (
+    "The model ran out of output tokens before it produced a reply. Shorten the prompt or history, "
+    "choose a different model, or raise the Max Output Tokens setting where the model has one."
+)
 
 TEAM_ACTIONABLE_MESSAGES = {
     ProviderErrorKind.QUOTA_EXHAUSTED: BILLING_MESSAGE,
@@ -112,22 +119,26 @@ TEAM_ACTIONABLE_MESSAGES = {
 }
 
 
-def translate_provider_error(error: BaseException) -> ProviderConfigurationError | None:
-    """Return the team-actionable error this provider exception represents, or None.
+def translate_provider_error(
+    error: BaseException | None,
+) -> ProviderConfigurationError | ModelRefusedTurnError | None:
+    """Return the actionable error this provider exception represents, or None.
 
-    None covers both "transient, so leave the native type alone for the retry policy"
-    and "not a provider error at all".
+    None covers "transient, so leave the native type alone for the retry policy", "not a
+    provider error at all", and no error at all.
 
     The whole ``__cause__`` chain is examined because LangChain's provider adapters
     re-raise the SDK exception wrapped in one of their own -- langchain-google-genai
     turns every ``InvalidArgument``, a bad API key among them, into a
     ``ChatGoogleGenerativeAIError`` -- and the outer type says nothing useful.
     """
-    if isinstance(error, ProviderConfigurationError):
+    if isinstance(error, ProviderConfigurationError | ModelRefusedTurnError):
         return None
-    if found := _team_actionable_kind(error):
-        kind, cause = found
-        return ProviderConfigurationError(f"{TEAM_ACTIONABLE_MESSAGES[kind]} {_detail(cause)}".strip())
+    for cause in _causes(error):
+        if filtered := _content_filter(cause):
+            return filtered
+        if kind := _team_actionable_kind(cause):
+            return ProviderConfigurationError(f"{TEAM_ACTIONABLE_MESSAGES[kind]} {_detail(cause)}".strip())
     return None
 
 
@@ -139,24 +150,22 @@ def classify_provider_error(error: BaseException) -> ProviderErrorKind | None:
     The team-actionable kinds are checked first because an OpenAI exhausted balance is a
     ``RateLimitError`` too.
     """
-    if found := _team_actionable_kind(error):
-        return found[0]
-    for cause in _causes(error):
-        if kind := _transient_kind(cause):
-            return kind
+    for kind_of in (_team_actionable_kind, _transient_kind):
+        for cause in _causes(error):
+            if kind := kind_of(cause):
+                return kind
     return None
 
 
-def _team_actionable_kind(error: BaseException) -> tuple[ProviderErrorKind, BaseException] | None:
-    for cause in _causes(error):
-        for kind, matches in (
-            (ProviderErrorKind.QUOTA_EXHAUSTED, _is_billing),
-            (ProviderErrorKind.AUTHENTICATION, _is_authentication),
-            (ProviderErrorKind.MODEL_NOT_FOUND, _is_not_found),
-            (ProviderErrorKind.CONTEXT_OVERFLOW, _is_context_overflow),
-        ):
-            if matches(cause):
-                return kind, cause
+def _team_actionable_kind(error: BaseException) -> ProviderErrorKind | None:
+    for kind, matches in (
+        (ProviderErrorKind.QUOTA_EXHAUSTED, _is_billing),
+        (ProviderErrorKind.AUTHENTICATION, _is_authentication),
+        (ProviderErrorKind.MODEL_NOT_FOUND, _is_not_found),
+        (ProviderErrorKind.CONTEXT_OVERFLOW, _is_context_overflow),
+    ):
+        if matches(error):
+            return kind
     return None
 
 
@@ -223,6 +232,23 @@ def _is_context_overflow(error: BaseException) -> bool:
     if isinstance(error, CONTEXT_OVERFLOW_ERRORS):
         return True
     return isinstance(error, openai.BadRequestError) and "context_length_exceeded" in _openai_codes(error)
+
+
+def _content_filter(error: BaseException) -> ModelRefusedTurnError | None:
+    # Azure reports a filtered prompt as a 400 whose ``code`` is content_filter and whose ``type`` is null.
+    if isinstance(error, openai.BadRequestError) and "content_filter" in _openai_codes(error):
+        return ModelRefusedTurnError("content_filter", "content_filter", detail=_content_filter_detail(error))
+    return None
+
+
+def _content_filter_detail(error: openai.BadRequestError) -> dict:
+    # The SDK strips the outer ``error`` envelope, so ``innererror`` sits at the top of ``body``;
+    # ``body`` is a string for a non-JSON response and None when the response was closed unread.
+    body = error.body if isinstance(error.body, dict) else {}
+    inner = body.get("innererror")
+    inner = inner if isinstance(inner, dict) else {}
+    result = inner.get("content_filter_result")
+    return result if isinstance(result, dict) else {}
 
 
 def _openai_codes(error: BaseException) -> set[str]:

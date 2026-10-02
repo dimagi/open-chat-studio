@@ -4,6 +4,7 @@ from django.core.mail import send_mail
 
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.chat.bots import PipelineTestBot
+from apps.chat.exceptions import ModelRefusedTurnError
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.models import Pipeline
 from apps.utils.celery import Queues
@@ -32,5 +33,5 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
     bot = PipelineTestBot(pipeline=pipeline, user_id=user_id)
     try:
         return bot.process_input(message_text)
-    except MessageProcessingPipeline.CONFIGURATION_EXCEPTIONS as e:
+    except (*MessageProcessingPipeline.CONFIGURATION_EXCEPTIONS, ModelRefusedTurnError) as e:
         return {"error": str(e)}

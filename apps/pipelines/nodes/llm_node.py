@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import operator
 from typing import TYPE_CHECKING, Annotated, cast
 
@@ -13,6 +14,7 @@ from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
+from apps.service_providers.llm_service.outcomes import LENGTH_REASONS, classify_turn, raise_for_outcome
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     format_multimodal_input,
@@ -20,6 +22,8 @@ from apps.service_providers.llm_service.utils import (
     populate_reference_section_from_citations,
     remove_citations_from_text,
 )
+
+logger = logging.getLogger("ocs.pipelines.nodes")
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -59,6 +63,12 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     )
     result = invoke_with_image_error_translation(agent, inputs, supported_image_content_types=supported_image_types)
     final_message = _get_final_ai_message(result["messages"])
+    outcome = classify_turn(final_message)
+    if outcome.kind != "answered" or outcome.provider_reason in LENGTH_REASONS:
+        logger.info(
+            "LLM node %s turn outcome %s (provider reason: %s)", node.node_id, outcome.kind, outcome.provider_reason
+        )
+    raise_for_outcome(outcome, node.name)
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
@@ -235,19 +245,18 @@ def _get_search_tool(node):
 
 
 def _get_final_ai_message(messages: list) -> AIMessage:
-    """Return the last AI message with non-empty text content.
+    """Return this turn's reply: the last AI message with text, or the refused or filtered turn that ended it.
 
-    Claude (and some other models) sometimes respond with a non-empty message
-    alongside tool calls, then send further turns that carry only tool calls
-    (a ``tool_use`` block with no text) or an empty content array — signalling
-    completion via the tool flow rather than a follow-up text turn.  Those
-    trailing turns render to empty output, so we walk backwards and return the
-    last message that actually has text.  ``message.text`` handles both plain
-    string content and structured content blocks, ignoring tool-call blocks.
+    Claude and some other models answer alongside tool calls and then send further turns
+    that carry only tool calls or an empty content array, so the walk-back returns the last
+    message that has text. It stops at a refused or filtered turn so an earlier answer is not
+    delivered in its place. Only this turn's messages are considered: replayed history
+    carries the message's DB id in ``additional_kwargs``, the way ``ChatMessage.to_langchain_dict``
+    writes it, and messages produced in this turn do not.
     """
-    for message in reversed(messages):
-        if isinstance(message, AIMessage) and message.text:
+    this_turn = [m for m in messages if "id" not in m.additional_kwargs]
+    ai_messages = [m for m in this_turn if isinstance(m, AIMessage)]
+    for message in reversed(ai_messages):
+        if message.text or classify_turn(message).kind in ("refusal", "content_filter"):
             return message
-    # Fallback: return the last message as-is (preserves existing behaviour
-    # when no AI message has text, e.g. pure tool-call chains).
-    return messages[-1]
+    return ai_messages[-1] if ai_messages else AIMessage(content="")
