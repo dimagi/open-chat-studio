@@ -802,6 +802,7 @@ class AuthProviderType(models.TextChoices):
     bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
     oauth_client_credentials = "oauth_client_credentials", _("OAuth (Client Credentials)")
+    oauth_authorization_code = "oauth_authorization_code", _("OAuth (Authorization Code)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -818,6 +819,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.CommCareAuthConfigForm
             case AuthProviderType.oauth_client_credentials:
                 return forms.OAuthClientCredentialsConfigForm
+            case AuthProviderType.oauth_authorization_code:
+                return forms.OAuthAuthorizationCodeConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
@@ -856,7 +859,7 @@ class AuthProvider(BaseTeamModel):
         return AuthProviderType(self.type)
 
     def get_auth_service(self) -> auth_service.AuthService:
-        if self.type_enum == AuthProviderType.oauth_client_credentials:
+        if self.type_enum in (AuthProviderType.oauth_client_credentials, AuthProviderType.oauth_authorization_code):
             token = OAuthTokenManager(self).get_valid_access_token()
             return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)
