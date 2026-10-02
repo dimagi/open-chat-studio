@@ -191,6 +191,8 @@ def set_public_key(request, team_slug):
     if form.is_valid():
         form.save()
         messages.success(request, _("Migration settings saved."))
+        # A fresh form, so the card's starting allowlist is the one just saved.
+        form = TeamPublicKeyForm(instance=request.team)
     else:
         messages.error(request, _("Could not save the migration settings."))
         # ModelForm.is_valid() has already written the submitted (rejected) values onto
