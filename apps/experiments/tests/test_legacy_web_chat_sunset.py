@@ -170,6 +170,33 @@ def test_session_pages_carry_sunset_headers(url_name, status, client):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("method", "url_name", "status_code"),
+    [
+        pytest.param("post", "experiments:experiment_session_message", 400, id="message"),
+        pytest.param("get", "experiments:get_message_response", 200, id="message-response"),
+        pytest.param("get", "experiments:poll_messages", 200, id="poll-messages"),
+        pytest.param("post", "experiments:end_experiment", 302, id="end"),
+    ],
+)
+def test_message_and_end_views_carry_sunset_headers(method, url_name, status_code, client):
+    session = _participant_session(_experiment(), SessionStatus.ACTIVE, client)
+    experiment = session.experiment
+    team_and_experiment = [experiment.team.slug, experiment.public_id]
+    args_by_view = {
+        "experiments:experiment_session_message": [*team_and_experiment, 0, session.external_id],
+        "experiments:get_message_response": [*team_and_experiment, session.external_id, "unknown-task"],
+        "experiments:poll_messages": [*team_and_experiment, session.external_id],
+        "experiments:end_experiment": [*team_and_experiment, session.external_id],
+    }
+
+    response = getattr(client, method)(reverse(url_name, args=args_by_view[url_name]))
+
+    assert response.status_code == status_code
+    _assert_sunset_headers(response)
+
+
+@pytest.mark.django_db()
 def test_state_redirects_carry_sunset_headers(client):
     session = _web_session(_experiment(), status=SessionStatus.COMPLETE)
     response = client.get(_session_url("chatbots:chatbot_chat", session))
