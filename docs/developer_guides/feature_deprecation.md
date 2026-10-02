@@ -187,7 +187,11 @@ Where the replacement is a true drop-in, a permanent redirect
 (`HttpResponsePermanentRedirect`) is acceptable instead. The `410` stub stays
 for **at least one release cycle** before the URL is deleted entirely.
 
-**Shared sunset module** — a surface retired in phases (headers, then `410 Gone`, with notifications to the teams that still use it) is described once as an `apps.utils.sunset.HttpSunset` spec. Register it from the app's `sunsets.py`, imported in `AppConfig.ready()`. Wrap each view with `sunset_view(spec, gone)`: it adds the sunset headers, and once `sunset_at` has passed and the spec's `enforce_flag` is active for the team it returns the response from `gone` instead. Use `@sunset` alone for views that only need the headers. The daily `notify_http_sunsets` task notifies every team member holding the spec's `audience_permissions` at first detection and at T-30, T-14, T-7 and T-1 days, for the chatbots returned by the spec's `affected_experiments()`.
+**Shared sunset module**: to retire a surface in stages, with headers first, `410 Gone` later and notices to the teams still using it, define an `HttpSunset` spec from `apps.utils.sunset`. Register it in the app's `sunsets.py` and import that module in `AppConfig.ready()`.
+
+Decorate each entry-point view with `sunset_view(spec, gone)`. It adds the sunset headers. Once `sunset_at` has passed and the spec's `enforce_flag` is on for the request's team, it returns `gone(...)` instead of running the view. The date alone never closes a view: someone has to turn the flag on, and turning it off again reopens the view without a deploy. Views that only need the headers use `@sunset` directly.
+
+The daily `notify_http_sunsets` task finds the chatbots returned by the spec's `affected_experiments()` and notifies the team members who hold its `audience_permissions`: once when the team is first detected, then 30, 14, 7 and 1 days before `sunset_at`. A team first detected late skips the milestones that have already passed.
 
 **Versioned API routes** (see
 [ADR-0022](../adr/0022-url-path-api-versioning.md)) deprecate per-version: announce the v1
