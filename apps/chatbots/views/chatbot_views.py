@@ -50,6 +50,7 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.sunsets import LEGACY_WEB_CHAT, legacy_web_chat_gone
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -75,7 +76,9 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
+from apps.utils.sunset import sunset_view
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -809,6 +812,7 @@ def _end_session_from_request(session: ExperimentSession, request) -> None:
     session.end(**end_kwargs)
 
 
+@sunset(LEGACY_WEB_CHAT.sunset_at, successor_url=LEGACY_WEB_CHAT.successor_url)
 @login_and_team_required
 def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
@@ -847,26 +851,6 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
         experiment_id,
         session_id,
         view_name="chatbots:chatbot_session_view",
-    )
-
-
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    try:
-        session = WebChannel.start_new_session(
-            working_experiment=experiment,
-            participant_user=request.user,
-            participant_identifier=request.user.email,
-            timezone=request.session.get("detected_tz", None),
-            version=version_number,
-        )
-    except ChannelDisabledException:
-        messages.error(request, "The web channel is disabled, so no new chat sessions can be started.")
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
-    return HttpResponseRedirect(
-        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
 
 
@@ -935,6 +919,7 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
+@sunset_view(LEGACY_WEB_CHAT, gone=legacy_web_chat_gone)
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
