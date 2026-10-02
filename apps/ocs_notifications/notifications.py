@@ -400,11 +400,8 @@ def deleted_model_notification(
 
 
 @silence_exceptions(logger, log_message="Failed to create HTTP sunset notification")
-def http_sunset_notification(spec: HttpSunset, team, experiments: list, milestone: str) -> bool:
-    """Tell a team's channel admins that a surface their chatbots still use is being retired.
-
-    Returns True when the notification was created; a swallowed failure returns None.
-    """
+def http_sunset_notification(spec: HttpSunset, team, experiments: list, milestone: str) -> None:
+    """Tell a team's channel admins that a surface their chatbots still use is being retired."""
     create_notification(
         title=spec.notification_title,
         message=spec.build_message(experiments, milestone),
@@ -417,4 +414,3 @@ def http_sunset_notification(spec: HttpSunset, team, experiments: list, mileston
         links={**{e.name: e.get_absolute_url() for e in experiments}, "Migration guide": spec.successor_url},
         once_per_event_type=True,
     )
-    return True

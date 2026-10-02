@@ -81,10 +81,12 @@ def test_a_second_run_the_same_day_sends_nothing_new(monkeypatch):
     experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     _register(monkeypatch, [experiment.id])
 
+    _run_at(datetime(2026, 11, 11, 2, 30, tzinfo=UTC))
     _run_at(datetime(2026, 11, 17, 2, 30, tzinfo=UTC))
     _run_at(datetime(2026, 11, 17, 9, 0, tzinfo=UTC))
 
-    assert NotificationEvent.objects.filter(team=experiment.team).count() == 1
+    assert NotificationEvent.objects.filter(team=experiment.team).count() == 2
+    assert _milestones(experiment.team) == ["T-14", "first-detection"]
 
 
 @pytest.mark.django_db()
