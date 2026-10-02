@@ -3,6 +3,7 @@ import pytest
 from celery.exceptions import SoftTimeLimitExceeded
 
 from apps.evaluations.errors import (
+    FAILED_OUTPUT_Q,
     EvaluationErrorCategory,
     EvaluationErrorSource,
     MessageError,
@@ -57,12 +58,22 @@ def test_an_error_without_a_message_is_recorded_by_its_type():
         pytest.param({"result": {"score": 1}}, False, id="success"),
         pytest.param({"error": "boom"}, True, id="evaluator-error"),
         pytest.param({"result": {"score": 1}, "generation_error": "boom"}, True, id="generation-error"),
+        pytest.param({"error": None}, True, id="error-stored-as-null"),
         pytest.param({}, False, id="empty"),
-        pytest.param(None, False, id="none"),
     ],
 )
-def test_is_failed_output(output, failed):
+@pytest.mark.django_db()
+def test_is_failed_output_matches_the_database_filter(output, failed):
+    """The table's badges use the Python check and the run summary the filter, so the two must agree."""
+    run = EvaluationRunFactory.create()
+    EvaluationResultFactory.create(run=run, team=run.team, output=output)
+
     assert is_failed_output(output) is failed
+    assert run.results.filter(FAILED_OUTPUT_Q).exists() is failed
+
+
+def test_a_missing_output_has_not_failed():
+    assert is_failed_output(None) is False
 
 
 @pytest.mark.parametrize(

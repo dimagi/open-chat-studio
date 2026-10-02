@@ -33,10 +33,11 @@ from apps.cost_tracking.services.reporting import (
 )
 from apps.evaluations.breadcrumbs import config_runs_label, evaluations_crumbs, run_label
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS, FAILED_FILTER_PARAM
-from apps.evaluations.errors import FAILED_OUTPUT_Q, message_errors
+from apps.evaluations.errors import is_failed_output, message_errors
 from apps.evaluations.exceptions import InFlightRunsError, NoActiveEvaluatorsError
 from apps.evaluations.export import (
     CategoricalColumn,
+    build_evaluation_table_data,
     categorical_columns_for_evaluators,
     evaluator_output_columns,
     is_error_header,
@@ -513,15 +514,13 @@ class EvaluationResultDataMixin:
         return evaluation_message_cost(self.evaluation_run.config_id, self.evaluation_run.id)
 
     @cached_property
-    def failed_message_ids(self) -> set[int]:
-        return set(self.evaluation_run.results.filter(FAILED_OUTPUT_Q).values_list("message_id", flat=True))
-
-    @cached_property
     def _all_rows(self) -> list[dict]:
         """Every row of the run, before the active filter pill narrows them."""
-        data = self.evaluation_run.get_table_data(include_ids=True)
+        results = list(self.evaluation_run.table_results())
+        failed_message_ids = {result.message_id for result in results if is_failed_output(result.output)}
+        data = build_evaluation_table_data(results, include_ids=True)
         for row in data:
-            row["has_error"] = row.get("id") in self.failed_message_ids
+            row["has_error"] = row.get("id") in failed_message_ids
         return data
 
     @cached_property

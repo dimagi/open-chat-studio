@@ -811,13 +811,16 @@ class EvaluationRun(BaseTeamModel):
     def error_summary(self) -> RunErrorSummary:
         return summarize_errors(self.results.all())
 
-    def get_table_data(self, include_ids: bool = False):
+    def table_results(self) -> models.QuerySet[EvaluationResult]:
+        """The results the table and the CSV download are built from."""
         results_qs = annotate_export_fields(self.results.all()).order_by("created_at")
         if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
             scoped_ids = self.scoped_messages.values_list("id", flat=True)
             results_qs = results_qs.filter(message_id__in=scoped_ids)
+        return results_qs
 
-        return build_evaluation_table_data(results_qs, include_ids=include_ids)
+    def get_table_data(self, include_ids: bool = False):
+        return build_evaluation_table_data(self.table_results(), include_ids=include_ids)
 
 
 class EvaluationResult(BaseTeamModel):
