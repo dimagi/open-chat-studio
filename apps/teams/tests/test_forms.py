@@ -54,6 +54,7 @@ def test_a_published_version_cannot_be_submitted():
 
     form = _post(team, export_scope=EXPORT_SCOPE_SELECTED, exportable_experiments=[published.id])
     assert not form.is_valid()
+    assert len(form.errors["exportable_experiments"]) == 1
 
 
 def test_another_teams_chatbot_cannot_be_submitted():
@@ -62,6 +63,7 @@ def test_another_teams_chatbot_cannot_be_submitted():
 
     form = _post(team, export_scope=EXPORT_SCOPE_SELECTED, exportable_experiments=[theirs.id])
     assert not form.is_valid()
+    assert len(form.errors["exportable_experiments"]) == 1
 
 
 def test_initial_scope_follows_the_saved_allowlist():

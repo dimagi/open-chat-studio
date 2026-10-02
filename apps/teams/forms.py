@@ -216,7 +216,7 @@ class TeamPublicKeyForm(forms.ModelForm):
         cleaned = super().clean()
         if cleaned.get("export_scope") == EXPORT_SCOPE_ALL:
             cleaned["exportable_experiments"] = self.fields["exportable_experiments"].queryset.none()
-        elif not cleaned.get("exportable_experiments"):
+        elif "exportable_experiments" not in self.errors and not cleaned.get("exportable_experiments"):
             self.add_error(
                 "exportable_experiments",
                 ValidationError(_("Pick at least one chatbot, or choose All chatbots.")),
