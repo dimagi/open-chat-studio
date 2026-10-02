@@ -74,7 +74,7 @@ class ProcessingStage(ABC):
     def get_span_notification_config(self):
         """Override to attach a SpanNotificationConfig to this stage's trace span.
         Default: None (no notification)."""
-        return None
+        return
 
     def get_span_inputs(self, ctx: MessageProcessingContext) -> dict[str, Any]:
         """Context recorded on this stage's span, from ``span_input_fields``.

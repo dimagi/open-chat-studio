@@ -38,4 +38,3 @@ class ChannelSender:
         Default is no-op. Override in senders that buffer the response
         (e.g. EmailSender batching text + attachments into a single email).
         """
-        return None

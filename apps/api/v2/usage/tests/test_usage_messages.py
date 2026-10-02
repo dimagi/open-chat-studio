@@ -109,6 +109,28 @@ def test_filter_by_participant_identifier():
 
 
 @pytest.mark.django_db()
+def test_filter_by_participant_remote_id():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    web = ParticipantFactory.create(team=team, remote_id="ext-123", platform="web")
+    api = ParticipantFactory.create(team=team, remote_id="ext-123", platform="api")
+    web_session = ExperimentSessionFactory.create(team=team, participant=web)
+    api_session = ExperimentSessionFactory.create(team=team, participant=api)
+    _add_messages(web_session, human=2)
+    _add_messages(api_session, ai=3)
+    _add_messages(ExperimentSessionFactory.create(team=team), human=9)
+
+    client = ApiTestClient(user, team)
+    response = client.get(
+        reverse(USAGE_URL),
+        {"metric": "messages", "participant_remote_id": "ext-123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"]["messages"] == {"human": 2, "ai": 3, "total": 5}
+
+
+@pytest.mark.django_db()
 def test_team_isolation():
     team = TeamWithUsersFactory.create()
     user = team.members.first()
@@ -175,7 +197,35 @@ def test_tz_shifts_month_boundary():
                 "participant_identifier": "x",
             },
             "only one of",
-            id="both-participant-filters",
+            id="public-id-and-identifier",
+        ),
+        pytest.param(
+            {
+                "metric": "messages",
+                "participant": "00000000-0000-0000-0000-000000000000",
+                "participant_remote_id": "ext-123",
+            },
+            "only one of",
+            id="public-id-and-remote-id",
+        ),
+        pytest.param(
+            {
+                "metric": "messages",
+                "participant_identifier": "x",
+                "participant_remote_id": "ext-123",
+            },
+            "only one of",
+            id="identifier-and-remote-id",
+        ),
+        pytest.param(
+            {
+                "metric": "messages",
+                "participant": "00000000-0000-0000-0000-000000000000",
+                "participant_identifier": "x",
+                "participant_remote_id": "ext-123",
+            },
+            "only one of",
+            id="all-participant-filters",
         ),
     ],
 )

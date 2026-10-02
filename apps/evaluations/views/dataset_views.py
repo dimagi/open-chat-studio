@@ -223,7 +223,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 
     def _get_filter_context_data(self):
         table_url = reverse("evaluations:dataset_sessions_selection_list", args=[self.request.team.slug])
-        context = get_filter_context_data(
+        return get_filter_context_data(
             self.request.team,
             columns=ExperimentSessionFilter.columns(self.request.team),
             filter_class=ExperimentSessionFilter,
@@ -231,7 +231,6 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
             table_container_id="sessions-table",
             table_type=FilterSet.TableType.DATASETS,
         )
-        return context
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -475,8 +474,7 @@ def update_message(request, team_slug, message_id):
         response = render_first_table_row(request, table)
         # Change target to the table row for successful updates
         response = retarget(response, f"#record-{message_id}")
-        response = reswap(response, "outerHTML")
-        return response
+        return reswap(response, "outerHTML")
     return HttpResponse("", status=200)
 
 
@@ -697,7 +695,7 @@ def upload_dataset_csv(request, team_slug: str, pk: int):
         return JsonResponse({"success": True, "task_id": task.id})
 
     except Exception as e:
-        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {str(e)}")
+        logger.error(f"Error starting CSV upload for dataset {dataset.id}: {e!s}")
         return JsonResponse({"error": "An error occurred while starting the CSV upload"}, status=500)
 
 

@@ -81,7 +81,7 @@ class Command(BaseCommand):
         """Mark a migration as applied."""
         name = options["name"]
 
-        migration, created = CustomMigration.objects.get_or_create(name=name)
+        _migration, created = CustomMigration.objects.get_or_create(name=name)
 
         if created:
             self.stdout.write(self.style.SUCCESS(f"Migration '{name}' marked as applied"))

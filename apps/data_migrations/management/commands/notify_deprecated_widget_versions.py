@@ -24,12 +24,12 @@ class Command(IdempotentCommand):
     def perform_migration(self, dry_run=False):
         if not widget_versions.DEPRECATIONS:
             self.stdout.write(self.style.SUCCESS("No widget deprecations configured"))
-            return
+            return None
 
         affected_by_team = self._collect_affected_teams()
         if not affected_by_team:
             self.stdout.write(self.style.SUCCESS("No teams affected by widget deprecations"))
-            return
+            return None
 
         self.stdout.write(f"Found {len(affected_by_team)} affected team(s)")
         if self.verbosity > 1:
@@ -37,7 +37,7 @@ class Command(IdempotentCommand):
 
         if dry_run:
             self.stdout.write(f"Would notify {len(affected_by_team)} team(s)")
-            return
+            return None
 
         for data in affected_by_team.values():
             deprecated_widget_version_notification(

@@ -42,13 +42,7 @@ def mock_client_registry():
 @pytest.fixture()
 def langfuse_mock(mock_client_registry):
     """Mock the Langfuse client."""
-    with (
-        mock.patch(
-            "apps.service_providers.tracing.langfuse._create_client_from_instance",
-            new=lambda instance, public_key: instance,
-        ),
-        mock.patch("langfuse.Langfuse", side_effect=mock_client_registry) as mock_langfuse,
-    ):
+    with mock.patch("langfuse.Langfuse", side_effect=mock_client_registry) as mock_langfuse:
         yield mock_langfuse
 
 
@@ -70,6 +64,26 @@ def _hash(client_manager, config):
     return client_manager._config_hash(config)
 
 
+def _lock_is_free(client_manager) -> bool:
+    """Whether another thread could take the manager's lock right now.
+
+    Probed from a second thread because `_lock` is an RLock: the thread that holds it can
+    re-acquire it and so cannot tell the difference.
+    """
+    result = []
+
+    def probe():
+        acquired = client_manager._lock.acquire(blocking=False)
+        result.append(acquired)
+        if acquired:
+            client_manager._lock.release()
+
+    thread = threading.Thread(target=probe)
+    thread.start()
+    thread.join()
+    return result[0]
+
+
 def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_client_registry):
     # Act
     client = client_manager.get(config)
@@ -78,8 +92,8 @@ def test_get_creates_new_client(client_manager, config, langfuse_mock, mock_clie
     langfuse_mock.assert_called_with(**config)
     assert len(mock_client_registry.registry) == 1
     assert client == mock_client_registry.registry[config["public_key"]]
-    assert len(client_manager.key_timestamps) == 1
-    assert _hash(client_manager, config) in client_manager.key_timestamps
+    assert len(client_manager._entries) == 1
+    assert _hash(client_manager, config) in client_manager._entries
 
 
 def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
@@ -91,8 +105,8 @@ def test_get_reuses_existing_client(client_manager, config, langfuse_mock):
 
     # Assert
     langfuse_mock.assert_not_called()
-    assert first_client == second_client
-    assert len(client_manager.key_timestamps) == 1
+    assert first_client is second_client
+    assert len(client_manager._entries) == 1
 
 
 def test_get_creates_different_clients_for_different_configs(client_manager, config, langfuse_mock):
@@ -105,7 +119,7 @@ def test_get_creates_different_clients_for_different_configs(client_manager, con
 
     # Assert
     assert first_client != second_client
-    assert len(client_manager.key_timestamps) == 2
+    assert len(client_manager._entries) == 2
 
 
 def test_get_rebuilds_the_client_when_the_config_changes_for_the_same_public_key(client_manager, config, langfuse_mock):
@@ -121,7 +135,7 @@ def test_get_rebuilds_the_client_when_the_config_changes_for_the_same_public_key
     langfuse_mock.assert_called_with(**{**config, "sample_rate": 0.9})
     # Only the current config for this public_key is tracked -- the stale entry was evicted
     # immediately, not left for the next stale-prune pass.
-    assert len(client_manager.key_timestamps) == 1
+    assert len(client_manager._entries) == 1
 
 
 def test_get_reuses_the_client_when_the_config_is_unchanged_including_sample_rate(
@@ -134,13 +148,13 @@ def test_get_reuses_the_client_when_the_config_is_unchanged_including_sample_rat
     second_client = client_manager.get(sampled_config)
 
     langfuse_mock.assert_not_called()
-    assert first_client == second_client
+    assert first_client is second_client
 
 
 def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_manager, config, langfuse_mock):
-    """`LangfuseResourceManager` is a singleton keyed by public_key alone -- changing our own
-    cache key to hash(config) only forces a rebuild if the stale public_key entry it shares
-    with the SDK is actually evicted, not just dropped from our own bookkeeping.
+    """`LangfuseResourceManager` is a singleton keyed by public_key alone -- keying our own
+    cache on hash(config) only forces a rebuild if the stale public_key entry it shares with
+    the SDK is actually evicted, not just dropped from our own bookkeeping.
     """
     first_client = client_manager.get({**config, "sample_rate": 0.5})
 
@@ -150,19 +164,73 @@ def test_get_shuts_down_the_stale_sdk_instance_when_the_config_changes(client_ma
     assert LangfuseResourceManager._instances[config["public_key"]] is not first_client
 
 
+def test_config_change_shuts_the_stale_client_down_without_holding_the_lock(client_manager, config, langfuse_mock):
+    """`shutdown()` flushes and can block indefinitely if a consumer thread has died, so
+    holding `_lock` across it would stall every other team's `get()`.
+    """
+    lock_state = []
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    first_client.shutdown.side_effect = lambda: lock_state.append(_lock_is_free(client_manager))
+
+    client_manager.get({**config, "sample_rate": 0.9})
+
+    assert lock_state == [True]
+
+
+def test_prune_shuts_clients_down_without_holding_the_lock(client_manager, config, langfuse_mock):
+    lock_state = []
+    first_client = client_manager.get(config)
+    first_client.shutdown.side_effect = lambda: lock_state.append(_lock_is_free(client_manager))
+    client_manager._entries[_hash(client_manager, config)].last_used -= client_manager.stale_timeout + 1
+
+    client_manager._prune_stale()
+
+    assert lock_state == [True]
+
+
+def test_a_failing_shutdown_does_not_abort_the_prune_pass(client_manager, langfuse_mock):
+    """One team's broken client must not leave every later entry in the pass unpruned."""
+    configs = [{"public_key": f"key_{i}", "secret_key": f"secret_{i}"} for i in range(3)]
+    clients = [client_manager.get(c) for c in configs]
+    clients[0].shutdown.side_effect = RuntimeError("flush blew up")
+    for c in configs:
+        client_manager._entries[_hash(client_manager, c)].last_used -= client_manager.stale_timeout + 1
+
+    client_manager._prune_stale()
+
+    assert client_manager._entries == {}
+    for client in clients:
+        client.shutdown.assert_called_once()
+
+
+def test_a_failed_client_build_still_shuts_the_detached_instance_down(client_manager, config, langfuse_mock):
+    """A detached instance is out of both caches, so `get()` is the last thing that can stop
+    its threads. Reachable on any provider serving two chatbots with different sample rates,
+    which alternate config hashes under one public_key.
+    """
+    first_client = client_manager.get({**config, "sample_rate": 0.5})
+    langfuse_mock.side_effect = RuntimeError("can't start new thread")
+
+    with pytest.raises(RuntimeError, match="can't start new thread"):
+        client_manager.get({**config, "sample_rate": 0.9})
+
+    first_client.shutdown.assert_called_once()
+    assert client_manager._entries == {}
+
+
 def test_prune_stale_clients(client_manager, config, langfuse_mock):
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
     first_client = client_manager.get(config)
     client_manager.get(other_config)  # Get second client
-    assert len(client_manager.key_timestamps) == 2
+    assert len(client_manager._entries) == 2
 
     # Backdate the first client so only it is past the stale timeout
-    client_manager.key_timestamps[_hash(client_manager, config)] -= client_manager.stale_timeout + 1
+    client_manager._entries[_hash(client_manager, config)].last_used -= client_manager.stale_timeout + 1
 
     client_manager._prune_stale()
 
-    assert len(client_manager.key_timestamps) == 1
+    assert len(client_manager._entries) == 1
     first_client.shutdown.assert_called_once()
 
 
@@ -185,20 +253,20 @@ def test_max_clients_limit(client_manager, langfuse_mock, mock_client_registry):
         clients.append(client_manager.get(config))
         time.sleep(0.1)  # Ensure timestamps are different
 
-    assert len(client_manager.key_timestamps) == 4
+    assert len(client_manager._entries) == 4
 
     # Act: add one more client to exceed the limit
     client_manager._prune_stale()
 
     # Assert: should still have 3 clients but the oldest one should be removed
-    assert len(client_manager.key_timestamps) == 3
+    assert len(client_manager._entries) == 3
     clients[0].shutdown.assert_called_once()  # The oldest client should be shut down
 
     # The remaining clients should be the newer ones
-    assert _hash(client_manager, configs[0]) not in client_manager.key_timestamps
-    assert _hash(client_manager, configs[1]) in client_manager.key_timestamps
-    assert _hash(client_manager, configs[2]) in client_manager.key_timestamps
-    assert _hash(client_manager, configs[3]) in client_manager.key_timestamps
+    assert _hash(client_manager, configs[0]) not in client_manager._entries
+    assert _hash(client_manager, configs[1]) in client_manager._entries
+    assert _hash(client_manager, configs[2]) in client_manager._entries
+    assert _hash(client_manager, configs[3]) in client_manager._entries
 
 
 def test_prune_thread_starts_automatically(langfuse_mock):
@@ -208,7 +276,7 @@ def test_prune_thread_starts_automatically(langfuse_mock):
 
         # Assert that Thread was created with correct parameters
         thread_mock.assert_called_once()
-        args, kwargs = thread_mock.call_args
+        _args, kwargs = thread_mock.call_args
         assert kwargs["target"] == client_manager._prune_worker
         assert kwargs["daemon"] is True
 
@@ -238,7 +306,7 @@ def test_thread_safety_with_concurrent_access(client_manager, langfuse_mock):
 
     # Assert
     assert len(results) == 10
-    assert len(client_manager.key_timestamps) == 10
+    assert len(client_manager._entries) == 10
 
 
 def test_prune_worker(client_manager, config, langfuse_mock):

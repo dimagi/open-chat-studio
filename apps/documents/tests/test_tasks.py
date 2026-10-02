@@ -14,18 +14,28 @@ from apps.documents.document_source_service import SyncResult
 from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, ZipIntegrityError
 from apps.documents.models import SYNC_LOCK_TIMEOUT, CollectionFile, DocumentSource, FileStatus
 from apps.documents.tasks import (
+    DELETE_BATCH_SIZE,
     async_create_collection_version,
     create_collection_zip_task,
     delete_collection_task,
+    delete_document_source_task,
     index_collection_files_task,
     migrate_vector_stores,
     sync_all_document_sources_task,
     sync_document_source_task,
 )
+from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
-from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
+
+
+def _drain(collection_files) -> list[CollectionFile]:
+    """The task passes ``QuerySet.iterator()``, i.e. a server-side cursor. Read it to the end:
+    abandoning it part-read leaves the cursor open past the test's transaction rollback, and the
+    error that surfaces when it is finally closed aborts the *next* test's transaction."""
+    return list(collection_files)
 
 
 @pytest.mark.django_db()
@@ -44,6 +54,60 @@ def test_delete_collection_task_deletes_files_of_archived_collection():
         delete_collection_task(collection.id)
 
     assert not CollectionFile.objects.filter(collection=collection).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "scoped_to_document_source",
+    [
+        pytest.param(False, id="collection"),
+        pytest.param(True, id="document_source"),
+    ],
+)
+def test_delete_task_visits_every_file_across_batches(scoped_to_document_source):
+    """The deletion loop shrinks the table it reads from, so it must not page with LIMIT/OFFSET."""
+    collection = CollectionFactory.create(is_index=False)
+    document_source = DocumentSourceFactory.create(collection=collection) if scoped_to_document_source else None
+    total = DELETE_BATCH_SIZE * 2 + 50
+    CollectionFileFactory.create_batch(total, collection=collection, document_source=document_source)
+    # A second source in the same collection: delete_document_source_task must leave its file alone,
+    # delete_collection_task must take it with the rest.
+    sibling_file = CollectionFileFactory.create(
+        collection=collection, document_source=DocumentSourceFactory.create(collection=collection)
+    )
+    target_files = (
+        CollectionFile.objects.filter(document_source=document_source)
+        if document_source is not None
+        else CollectionFile.objects.filter(collection=collection)
+    )
+    expected_ids = set(target_files.values_list("id", flat=True))
+    assert len(expected_ids) == (total if document_source is not None else total + 1)
+
+    deleted_ids = set()
+
+    def spy(collection, collection_files, **kwargs):
+        collection_files = list(collection_files)
+        deleted_ids.update(collection_file.id for collection_file in collection_files)
+        return bulk_delete_collection_files(collection, collection_files, **kwargs)
+
+    with (
+        patch("apps.documents.utils.get_related_m2m_objects", return_value=[]),
+        patch("apps.documents.tasks.bulk_delete_collection_files", spy),
+    ):
+        if document_source is not None:
+            document_source.is_archived = True
+            document_source.save(update_fields=["is_archived"])
+            delete_document_source_task(document_source.id)
+        else:
+            collection.is_archived = True
+            collection.save(update_fields=["is_archived"])
+            delete_collection_task(collection.id)
+
+    # A row that is never passed to the helper keeps its index entry and its blob, even where a
+    # cascade later removes the DB rows.
+    assert deleted_ids == expected_ids
+    remaining_ids = set(CollectionFile.objects.filter(collection=collection).values_list("id", flat=True))
+    assert remaining_ids == ({sibling_file.id} if document_source is not None else set())
 
 
 @pytest.mark.django_db()
@@ -68,15 +132,13 @@ def test_collection_files_grouped_by_chunking_strategy(add_files_to_index_mock, 
     assert add_files_to_index_mock.call_count == 2
 
     # The first call should be for the first file with chunking strategy 800/400
-    iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = list(iterator_param)[0]
-    assert collection_file.id == col_file_1.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[0].kwargs["collection_files"])
+    assert collection_files[0].id == col_file_1.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     # The second call should be for the second file with chunking strategy 1000/100
-    iterator_param = add_files_to_index_mock.mock_calls[1].kwargs["collection_files"]
-    collection_file = list(iterator_param)[0]
-    assert collection_file.id == col_file_2.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[1].kwargs["collection_files"])
+    assert collection_files[0].id == col_file_2.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=1000, chunk_overlap=100)
 
 
@@ -99,9 +161,8 @@ def test_migrate_vector_stores_does_cleanup(
         remote_collection_index.id, from_vector_store_id="old_vs_123", from_llm_provider_id=previous_llm_provider.id
     )
     assert add_files_to_index_mock.call_count == 1
-    iterator_param = add_files_to_index_mock.mock_calls[0].kwargs["collection_files"]
-    collection_file = list(iterator_param)[0]
-    assert collection_file.id == col_file.id
+    collection_files = _drain(add_files_to_index_mock.mock_calls[0].kwargs["collection_files"])
+    assert collection_files[0].id == col_file.id
     add_files_to_index_mock.assert_any_call(collection_files=ANY, chunk_size=800, chunk_overlap=400)
 
     remote_index_manager_mock.delete_remote_index.assert_called()
@@ -260,7 +321,7 @@ def _make_open_mock(exc: Exception):
     @contextmanager
     def _open(*args, **kwargs):
         raise exc
-        yield  # noqa: unreachable — satisfies context manager protocol
+        yield  # unreachable, but satisfies the context manager protocol
 
     return _open
 

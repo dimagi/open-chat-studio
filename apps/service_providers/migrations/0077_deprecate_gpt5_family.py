@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -11,6 +9,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Notify affected teams about the deprecation and recommended replacements.
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
+        # notify_deprecated_models dropped: this release deprecates no new model, and the scan
+        # would otherwise re-run on every deploy.
     ]

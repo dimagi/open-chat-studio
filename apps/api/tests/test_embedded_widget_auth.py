@@ -14,8 +14,7 @@ from apps.utils.factories.experiment import ExperimentSessionFactory
 @pytest.fixture()
 def api_client():
     """Return an API client with session support enabled."""
-    client = APIClient()
-    return client
+    return APIClient()
 
 
 @pytest.fixture()

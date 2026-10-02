@@ -20,6 +20,7 @@ class ExperimentChannelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     def messaging_provider(self, obj):
         if obj.messaging_provider:
             return obj.messaging_provider.name
+        return None
 
     def get_changeform_initial_data(self, request: HttpRequest) -> dict:
         return {"extra_data": {"bot_token": "your token here"}}

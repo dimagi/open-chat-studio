@@ -10,7 +10,6 @@ from functools import cached_property
 from typing import Self, cast
 from uuid import uuid4
 
-import dictdiffer
 import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -47,7 +46,7 @@ from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import current_team, get_slug_for_team
-from apps.trace.models import Trace, TraceStatus
+from apps.trace.models import Trace, TraceStatus, participant_data_from_trace
 from apps.utils.deletion import (
     get_related_experiment_versions_queryset,
     get_related_pipeline_nodes_queryset,
@@ -109,6 +108,15 @@ class VersionFieldDisplayFormatters:
         template = get_template("generic/chip.html")
         url = pipeline.get_absolute_url()
         return template.render({"chip": Chip(label=name, url=url)})
+
+    @staticmethod
+    def format_wiring(wiring: set[tuple[str, str, str, str]]) -> str:
+        """A pipeline's wires as ``source.handle -> target.handle`` lines, one per wire.
+
+        Sorted, because the wiring is a set and the comparison UI diffs these strings: an
+        unstable order would show every wire as changed whenever any one of them did.
+        """
+        return "\n".join(sorted(f"{source}.{out} -> {target}.{into}" for source, out, target, into in wiring))
 
     @staticmethod
     def format_custom_action_operation(op) -> str:
@@ -187,15 +195,15 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+        return get_related_pipeline_nodes_queryset(self, "source_material")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
-        return get_related_experiment_versions_queryset(self, "source_material_id")
+        return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
     def archive(self):
         """Mirrors Collection.archive()'s in-use guard."""
-        if has_related_pipeline_references(self, "source_material_id"):
+        if has_related_pipeline_references(self, "source_material"):
             return False
         super().archive()
         return True
@@ -274,7 +282,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return new_version
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default"]
+        return [*super().get_fields_to_exclude(), "is_default"]
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -464,7 +472,7 @@ class AgentTools(models.TextChoices):
     @classmethod
     def reminder_tools(cls) -> list[Self]:
         return cast(
-            list[Self],
+            "list[Self]",
             [cls.RECURRING_REMINDER, cls.ONE_OFF_REMINDER, cls.DELETE_REMINDER, cls.MOVE_SCHEDULED_MESSAGE_DATE],
         )
 
@@ -838,6 +846,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def trace_service(self):
         if self.trace_provider:
             return self.trace_provider.get_service(sample_rate=self.trace_sample_rate)
+        return None
 
     def get_api_url(self):
         if self.is_working_version:
@@ -963,7 +972,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
+        return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
     def archive(self):
@@ -1119,6 +1128,8 @@ class Participant(BaseTeamModel):
             models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
         ]
 
     @classmethod
@@ -1443,6 +1454,8 @@ class ParticipantData(BaseTeamModel):
     class Meta:
         indexes = [
             models.Index(fields=["experiment"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="partdata_updated_at_id_idx"),
         ]
         # A bot cannot have a link to multiple data entries for the same Participant
         # Multiple bots can have a link to the same ParticipantData record
@@ -1550,6 +1563,8 @@ class ExperimentSession(BaseTeamModel):
                 functions.Coalesce("last_activity_at", "created_at").desc(),
                 name="expsession_team_lastact_c_idx",
             ),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="expsession_updated_at_id_idx"),
         ]
 
     def __str__(self):
@@ -1647,6 +1662,7 @@ class ExperimentSession(BaseTeamModel):
         Args:
             commit: Whether to save the model after setting the ended_at value
             trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
+                Events are not triggered if the session had already ended.
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
@@ -1668,12 +1684,14 @@ class ExperimentSession(BaseTeamModel):
                 "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
             )
 
+        # End triggers can end the session themselves, so re-firing them on an ended session would loop.
+        already_ended = self.ended_at is not None
         self.update_status(SessionStatus.PENDING_REVIEW)
 
         self.ended_at = timezone.now()
         if commit:
             self.save()
-        if commit and trigger_type:
+        if commit and trigger_type and not already_ended:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
     @property
@@ -1740,8 +1758,7 @@ class ExperimentSession(BaseTeamModel):
                     )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
-                    trace_metadata = trace_service.get_trace_metadata()
-                return trace_metadata
+                    return trace_service.get_trace_metadata()
         except Exception as e:
             log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
@@ -1838,10 +1855,7 @@ class ExperimentSession(BaseTeamModel):
         trace = self.latest_trace
         if trace is None:
             return self.participant_data_from_experiment
-        snapshot = trace.participant_data or {}
-        if trace.participant_data_diff:
-            return dictdiffer.patch(trace.participant_data_diff, snapshot)
-        return snapshot
+        return participant_data_from_trace(trace)
 
     @cached_property
     def experiment_version(self) -> Experiment:
@@ -1862,15 +1876,8 @@ class ExperimentSession(BaseTeamModel):
 
     def requires_participant_data(self) -> bool:
         """Determines if participant data is required for this session"""
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: pipelines.nodes imports experiments.models
-            LLMResponseWithPrompt,
-            RouterNode,
-        )
-
         if self.experiment.pipeline:
-            llm_prompts = self.experiment.pipeline.get_node_param_values(LLMResponseWithPrompt, param_name="prompt")
-            router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
-            prompts = llm_prompts + router_prompts
+            prompts = self.experiment.pipeline.get_node_param_values(param_name="prompt")
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
         return False
 

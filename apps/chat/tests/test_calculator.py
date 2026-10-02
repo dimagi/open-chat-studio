@@ -65,6 +65,7 @@ from apps.chat.agent.calculator import (
         ("globals()", UNSUPPORTED_EXPRESSION_ERROR),
     ],
 )
+@pytest.mark.filterwarnings("ignore::SyntaxWarning")  # the malformed expressions are the point
 def test_calculator(expression, result):
     assert calculate(expression) == result
 

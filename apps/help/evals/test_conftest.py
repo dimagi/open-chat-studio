@@ -36,7 +36,7 @@ class TestLlmJudge:
         mock_agent.invoke.return_value = {"structured_response": JudgeResult(passed=False, reason="Not good enough")}
         mock_build.return_value = mock_agent
 
-        passed, reason = llm_judge("bad output", "must be good")
+        passed, _reason = llm_judge("bad output", "must be good")
         assert passed is False
 
 

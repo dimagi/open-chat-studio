@@ -41,6 +41,12 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     )
     metadata = SanitizedJSONField(default=dict)
 
+    class Meta:
+        indexes = [
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="chat_updated_at_id_idx"),
+        ]
+
     @property
     def embed_source(self):
         return self.metadata.get(Chat.MetadataKeys.EMBED_SOURCE)
@@ -63,7 +69,9 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             self.save()
 
     def get_langchain_messages(self) -> list[BaseMessage]:
-        return messages_from_dict([m.to_langchain_dict() for m in self.messages.all()])
+        return messages_from_dict(
+            [m.to_langchain_dict() for m in self.messages.all() if not m.is_excluded_from_history]
+        )
 
     def get_langchain_messages_until_marker(self, marker: str, exclude_message_id=None) -> list[BaseMessage]:
         """Fetch messages from the database until a marker is found. The marker must be one of the
@@ -76,7 +84,8 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
         for message in self.message_iterator(include_summaries, exclude_message_id=exclude_message_id):
-            messages.append(message.to_langchain_dict())
+            if not message.is_excluded_from_history:
+                messages.append(message.to_langchain_dict())
             if message.compression_marker and (not marker or marker == message.compression_marker):
                 break
 
@@ -142,11 +151,13 @@ class ChatMessageMetadataKeys(StrEnum):
     TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
     # History / compression
     COMPRESSION_MARKER = "compression_marker"
+    # Refused or filtered model turn, on the reply and the human message that led to it
+    MODEL_REFUSED = "model_refused"
 
     @classmethod
     def internal_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
         """Metadata keys that should be excluded from the API response."""
-        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT})
+        return frozenset({cls.OPENAI_RUN_ID, cls.OPENAI_FILE_IDS, cls.OPENAI_THREAD_CHECKPOINT, cls.MODEL_REFUSED})
 
     @classmethod
     def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
@@ -195,6 +206,8 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # which filter created_at without a chat/team prefix.
             models.Index(fields=["created_at"], name="chatmessage_created_at_idx"),
             GinIndex(fields=["external_ids"], name="chatmessage_external_ids_idx"),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
         ]
 
     @classmethod
@@ -244,6 +257,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def is_human_message(self):
         return self.message_type == ChatMessageType.HUMAN
+
+    @property
+    def is_excluded_from_history(self) -> bool:
+        """A human message that led to a refused or filtered turn is not replayed, or the next turn fails
+        the same way."""
+        return self.is_human_message and ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata
 
     @property
     def is_summary(self):
@@ -356,13 +375,15 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             return None
         if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
             return rating
+        return None
 
     def get_processor_bot_tag_name(self) -> str | None:
         """Returns the tag of the bot that generated this message"""
         if self.message_type != ChatMessageType.AI:
-            return
+            return None
         if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
             return tag.name
+        return None
 
     def get_absolute_url(self):
         if not self.chat_id or not self.chat.team_id:

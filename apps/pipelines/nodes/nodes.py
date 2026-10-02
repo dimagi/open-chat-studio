@@ -55,6 +55,7 @@ from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_messag
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
+from apps.service_providers.llm_service.outcomes import provider_reason
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
     PromptTemplateContext,
@@ -733,13 +734,12 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             # block is rejected by Anthropic. See `ensure_non_empty_text`.
             agent_input = {"messages": [HumanMessage(content=ensure_non_empty_text(node_input))]}
             result = agent.invoke(agent_input, config=self._config)
-            structured_response = result["structured_response"]
-            keyword = structured_response.route.upper()  # ensure case-insensitive matching
+            keyword = self._route_from_agent_result(result)
         except PydanticValidationError:
             keyword = None
         except OpenAIRefusalError:
-            keyword = default_keyword
-            is_default_keyword = True
+            logger.warning("Router %s got a refusal from the model", self.name)
+            keyword = None
         except StructuredOutputValidationError:
             logger.exception("Structured output validation error in RouterNode")
             keyword = None
@@ -751,6 +751,16 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         if session:
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
+
+    def _route_from_agent_result(self, result: dict) -> str | None:
+        """Return the route the model chose in upper case, or None when it chose none."""
+        structured_response = result.get("structured_response")
+        if structured_response is not None:
+            return structured_response.route.upper()
+        messages = result.get("messages") or []
+        reason = provider_reason(messages[-1]) if messages else ""
+        logger.warning("Router %s got no route from the model (stop reason: %s)", self.name, reason or "none")
+        return None
 
 
 class StaticRouterNode(RouterMixin, PipelineRouterNode):
@@ -822,6 +832,9 @@ class ExtractStructuredData(
         output = json.dumps(output_data)
         return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=output)
 
+    def get_unextracted_output(self, context) -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output="{}")
+
 
 class ExtractParticipantData(
     ExtractStructuredDataNodeMixin, LLMResponse, StructuredDataSchemaValidatorMixin, OutputMessageTagMixin
@@ -878,6 +891,9 @@ class ExtractParticipantData(
         return PipelineState.from_node_output(
             node_name=self.name, node_id=self.node_id, output=context.input, participant_data=output_data
         )
+
+    def get_unextracted_output(self, context) -> PipelineState:
+        return PipelineState.from_node_output(node_name=self.name, node_id=self.node_id, output=context.input)
 
 
 class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMixin):

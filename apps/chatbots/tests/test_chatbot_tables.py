@@ -25,7 +25,7 @@ def test_chatbot_table_redirect_url(team_with_users):
     cache.delete(f"team_slug:{team.id}")
 
     table = ChatbotTable(Experiment.objects.filter(id=experiment.id))
-    row_attrs = list(table.rows)[0].attrs
+    row_attrs = next(iter(table.rows)).attrs
 
     expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
     assert row_attrs["data-redirect-url"] == expected_url
@@ -52,7 +52,7 @@ class TestSessionsTableLastActivityColumn:
 
     def _cell(self, session):
         table = ChatbotSessionsTable(ExperimentSession.objects.filter(id=session.id))
-        return str(list(table.rows)[0].get_cell("last_activity"))
+        return str(next(iter(table.rows)).get_cell("last_activity"))
 
     def test_falls_back_to_created_at(self, sessions):
         never_messaged, _ = sessions
@@ -126,7 +126,7 @@ class TestSessionsTableParticipantColumn:
 
     def _cell(self, session):
         table = ChatbotSessionsTable(ExperimentSession.objects.filter(id=session.id))
-        return str(list(table.rows)[0].get_cell("participant"))
+        return str(next(iter(table.rows)).get_cell("participant"))
 
     def test_chip_stays_on_one_line(self, team_with_users):
         participant = ParticipantFactory.create(

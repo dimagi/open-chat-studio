@@ -75,11 +75,9 @@ class PipelineNodeBuildError(Exception):
     """Exception to raise for errors related to bad parameters or
     missing attributes that are detected during at runtime"""
 
-    pass
-
 
 class PipelineNodeRunError(Exception):
-    pass
+    """Raised when a pipeline node fails at runtime for a reason the user cannot fix; reported to Sentry."""
 
 
 class CodeNodeRunError(Exception):
@@ -93,8 +91,6 @@ class NodeUserConfigRunError(Exception):
     or invalid rendered email addresses in SendEmail / RenderTemplate nodes.
 
     """
-
-    pass
 
 
 class WaitForNextInput(Exception):

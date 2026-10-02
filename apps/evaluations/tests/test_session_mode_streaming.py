@@ -40,14 +40,14 @@ def _make_sessions(count, experiment, channel, messages_per_session=2):
     chat_messages = []
     for session_index in range(count):
         session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=channel)
-        for turn in range(messages_per_session):
-            chat_messages.append(
-                ChatMessage(
-                    chat=session.chat,
-                    message_type=ChatMessageType.HUMAN if turn % 2 == 0 else ChatMessageType.AI,
-                    content=f"session-{session_index} turn-{turn}",
-                )
+        chat_messages.extend(
+            ChatMessage(
+                chat=session.chat,
+                message_type=ChatMessageType.HUMAN if turn % 2 == 0 else ChatMessageType.AI,
+                content=f"session-{session_index} turn-{turn}",
             )
+            for turn in range(messages_per_session)
+        )
         sessions.append(session)
     ChatMessage.objects.bulk_create(chat_messages)
     return sessions

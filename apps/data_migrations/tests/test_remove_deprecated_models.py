@@ -1,15 +1,18 @@
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
 
-from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+
+if TYPE_CHECKING:
+    from apps.pipelines.models import Pipeline
 
 
 def _make_pipeline_referencing(llm_provider_model, llm_provider=None):

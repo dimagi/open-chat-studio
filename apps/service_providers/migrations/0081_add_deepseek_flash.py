@@ -1,21 +1,16 @@
 from django.db import migrations
 
-from apps.cost_tracking.migration_utils import load_pricing_data
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
     dependencies = [
         ("service_providers", "0080_add_gemini_3_8_flash"),
-        # the only load_pricing_data() run in the graph, so it must come after the last
-        # migration that changed the seed data
+        # Retained so the graph stays stable for environments that already applied this.
         ("cost_tracking", "0008_rate_update_20260904"),
-        # llm_model_migration() repoints evaluators off any custom model it replaces, so the
-        # Evaluator FK must be in this migration's app state (see _repoint_evaluators).
+        # Retained so the graph stays stable for environments that already applied this.
         ("evaluations", "0018_evaluator_llm_provider_fks"),
     ]
 
     operations = [
-        llm_model_migration(),
-        load_pricing_data(),
+        # llm_model_migration() and load_pricing_data() moved to 0082_auto_model_sync_20260917 so
+        # they run only once per deploy (the newest migration re-syncs the whole model list).
     ]

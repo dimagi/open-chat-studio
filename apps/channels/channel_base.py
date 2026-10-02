@@ -75,6 +75,11 @@ class ChannelBase(ABC):
 
     def new_user_message(self, message: BaseMessage) -> ChatMessage:
         """Main entry point -- runs a message through the processing pipeline."""
+        response, _ctx = self._process_message(message)
+        return response
+
+    def _process_message(self, message: BaseMessage) -> tuple[ChatMessage, MessageProcessingContext]:
+        """Run the message through the pipeline, returning the reply and the context it left behind."""
         with current_team(self.experiment.team):
             ctx = self._create_context(message)
             pipeline = self._build_pipeline()
@@ -91,7 +96,7 @@ class ChannelBase(ABC):
                     # trace cleanly rather than letting it propagate through the
                     # trace context manager and mark the trace as errored.
                     span.set_outputs({"response": "", "cancelled": True})
-                    return ChatMessage(content="", message_type=ChatMessageType.AI)
+                    return ChatMessage(content="", message_type=ChatMessageType.AI), ctx
 
                 # Determine the response to return
                 if ctx.early_exit_response is not None:
@@ -106,10 +111,10 @@ class ChannelBase(ABC):
                 # Update instance state (for backward compat during migration)
                 self.experiment_session = ctx.experiment_session
 
-                return response
+                return response, ctx
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
-        ctx = MessageProcessingContext(
+        return MessageProcessingContext(
             message=message,
             experiment=self.experiment,
             experiment_channel=self.experiment_channel,
@@ -119,7 +124,6 @@ class ChannelBase(ABC):
             capabilities=self._get_capabilities(),
             trace_service=self.trace_service,
         )
-        return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
         """Build the default processing pipeline. Subclasses can override entirely.

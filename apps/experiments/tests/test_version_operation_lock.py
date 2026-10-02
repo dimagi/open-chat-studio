@@ -38,10 +38,13 @@ class TestStartVersionCreation:
     def test_acquires_lock_before_dispatch(self, apply_async):
         experiment = ExperimentFactory.create()
 
-        assert start_version_creation(experiment, version_description="desc", make_default=True) is True
+        task_id = start_version_creation(experiment, version_description="desc", make_default=True)
 
         experiment.refresh_from_db()
         assert experiment.version_operation_in_progress
+        # The one uuid is the lock token, the Celery task id, and what the caller is handed to
+        # poll with -- so a caller can follow the operation it started.
+        assert task_id == experiment.create_version_task_id
         assert apply_async.call_count == 1
         kwargs = apply_async.call_args.kwargs
         assert kwargs["task_id"] == experiment.create_version_task_id
@@ -55,7 +58,7 @@ class TestStartVersionCreation:
     def test_rejected_while_another_operation_in_flight(self, apply_async):
         experiment = ExperimentFactory.create(create_version_task_id="other-operation")
 
-        assert start_version_creation(experiment) is False
+        assert start_version_creation(experiment) is None
 
         apply_async.assert_not_called()
         experiment.refresh_from_db()

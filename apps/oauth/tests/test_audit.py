@@ -17,13 +17,12 @@ from apps.utils.factories.team import TeamWithUsersFactory
 @pytest.fixture()
 def application(db):
     team = TeamWithUsersFactory.create()
-    app = OAuth2Application.objects.create(
+    return OAuth2Application.objects.create(
         name="machine-app",
         team=team,
         client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
         authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
     )
-    return app
 
 
 def _audited_deltas(application):

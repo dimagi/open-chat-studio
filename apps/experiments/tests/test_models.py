@@ -67,15 +67,6 @@ def general_synthetic_voices():
 
 class TestSyntheticVoice:
     @pytest.mark.django_db()
-    def test_team_scoped_services(self):
-        assert [
-            SyntheticVoice.OpenAIVoiceEngine,
-            SyntheticVoice.ElevenLabs,
-            SyntheticVoice.Intron,
-            SyntheticVoice.MiniMax,
-        ] == SyntheticVoice.TEAM_SCOPED_SERVICES
-
-    @pytest.mark.django_db()
     def test_get_for_team_returns_all_general_services(self):
         """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
         voices_queryset = SyntheticVoice.get_for_team(team=None)
@@ -217,10 +208,10 @@ class TestExperimentSession:
         experiment_b = ExperimentFactory.create(team=participant.team)
         ExperimentSessionFactory.create(participant=participant, experiment=experiment_b, team=participant.team)
 
-        event_action_a, params_a = self._construct_event_action(
+        event_action_a, _params_a = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=experiment_a.id
         )
-        event_action_b, params_b = self._construct_event_action(
+        event_action_b, _params_b = self._construct_event_action(
             time_period=TimePeriod.DAYS, experiment_id=experiment_b.id
         )
         ScheduledMessageFactory.create(
@@ -380,7 +371,7 @@ class TestExperimentSession:
         if custom_experiment:
             event_action_kwargs["experiment_id"] = custom_experiment.id
 
-        event_action, params = self._construct_event_action(**event_action_kwargs)
+        event_action, _params = self._construct_event_action(**event_action_kwargs)
         trigger_action = ScheduleTriggerAction()
         trigger_action.invoke(session, action=event_action)
 
@@ -767,8 +758,7 @@ class TestSourceMaterialArchiving:
 
         # Publishing doesn't rewrite the original working node's params; clear it so only the
         # published version's node still references source_material.
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         assert source_material.archive() is False
         source_material.refresh_from_db()
@@ -785,8 +775,7 @@ class TestSourceMaterialArchiving:
         experiment = ExperimentFactory.create(pipeline=pipeline, team=source_material.team)
         published = experiment.create_new_version()
 
-        node.params = {}
-        node.save()
+        node.set_params({})
 
         # Archiving the working experiment wouldn't touch the pipeline; archive the published one.
         published.archive()

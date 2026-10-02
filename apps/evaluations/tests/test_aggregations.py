@@ -98,6 +98,23 @@ class TestComputeAggregatesForRun:
         aggregates = compute_aggregates_for_run(run)
         assert aggregates[0].aggregates["score"]["count"] == 1
 
+    def test_skips_results_whose_generation_failed(self):
+        """The evaluator scored a response the bot never produced, which says nothing about the bot."""
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(team=run.team)
+
+        EvaluationResultFactory.create(run=run, evaluator=evaluator, team=run.team, output={"result": {"score": 0.5}})
+        EvaluationResultFactory.create(
+            run=run,
+            evaluator=evaluator,
+            team=run.team,
+            output={"result": {"score": 0.0}, "generation_error": "quota"},
+        )
+
+        aggregates = compute_aggregates_for_run(run)
+        assert aggregates[0].aggregates["score"]["count"] == 1
+        assert aggregates[0].aggregates["score"]["mean"] == 0.5
+
 
 @pytest.mark.django_db()
 class TestBuildTrendData:
@@ -310,6 +327,16 @@ class TestBinaryAggregationDispatch:
         run = self._make_run_with_results(evaluator, [{"score": 1}, {"score": 0}])
         (aggregate,) = compute_aggregates_for_run(run)
         assert aggregate.aggregates["score"]["type"] == "numeric"
+
+    def test_binary_field_still_routes_by_schema_after_the_evaluator_is_archived(self):
+        """Recompute resolves the schema through an unfiltered manager even when the evaluator is archived."""
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"correct": 1}, {"correct": 0}, {"correct": 1}])
+        evaluator.archive()
+
+        (aggregate,) = compute_aggregates_for_run(run)
+
+        assert aggregate.aggregates["correct"]["type"] == "binary"
 
 
 class TestAggregateBinaryField:

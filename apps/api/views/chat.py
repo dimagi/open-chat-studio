@@ -632,7 +632,7 @@ def chat_start_session(request):
 
     # Create or get participant
     if user is not None:
-        participant, created = Participant.objects.get_or_create(
+        participant, _created = Participant.objects.get_or_create(
             identifier=participant_id,
             team=team,
             platform=experiment_channel.platform,
@@ -796,7 +796,7 @@ def chat_send_message(request, session_id):
         if files.count() != len(attachment_ids):
             return Response({"error": "One or more file IDs are invalid"}, status=status.HTTP_400_BAD_REQUEST)
         files.update(expiry_date=None)
-        chat_attachment, created = ChatAttachment.objects.get_or_create(
+        chat_attachment, _created = ChatAttachment.objects.get_or_create(
             chat=session.chat,
             tool_type="ocs_attachments",
         )

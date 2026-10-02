@@ -14,7 +14,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
-from apps.api.v2.discovery.node_types import get_node_class
+from apps.api.v2.discovery.node_types import served_node_type
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
@@ -225,9 +225,9 @@ class PipelineNodeEditView(PipelineFacadeView):
         body.is_valid(raise_exception=True)
         label = body.validated_data.get("label")
         node_type = body.validated_data["type"]
-        node_class = get_node_class(node_type)
-        params = writable_params(node_class, body.validated_data["params"])
-        check_references(team=request.team, node_class=node_class, params=params)
+        resolved = served_node_type(node_type)
+        params = writable_params(resolved, body.validated_data["params"])
+        check_references(team=request.team, node_type=resolved, params=params)
         return Response(
             self._edit(request, id, lambda flow: plan_create(flow, node_type, label, params)),
             status=status.HTTP_201_CREATED,

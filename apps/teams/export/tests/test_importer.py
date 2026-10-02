@@ -15,6 +15,7 @@ from apps.api.export.serializers import build_resource_serializer
 from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.events.models import EventAction
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
@@ -24,7 +25,6 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
-from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
@@ -122,8 +122,8 @@ PAST = "2020-01-02T03:04:05+00:00"
 
 
 @pytest.fixture()
-def store(tmp_path):
-    return FKTranslationStore(tmp_path / "team.sqlite")
+def store(make_store, tmp_path):
+    return make_store(tmp_path / "team.sqlite")
 
 
 @pytest.fixture()
@@ -188,7 +188,7 @@ def test_import_carries_provider_verification_state(store, keypair):
     importer = Importer(store, private_key=private_key)
     importer.import_rows("teams.team", [_team_row()])
 
-    def provider_row(api_key, extra_data):
+    def provider_row(api_key, extra_data, updated_at):
         return {
             "id": 5,
             "name": "OpenAI",
@@ -196,15 +196,17 @@ def test_import_carries_provider_verification_state(store, keypair):
             "config": seal_mod.seal({"api_key": api_key}, public_key),
             "extra_data": extra_data,
             "created_at": PAST,
-            "updated_at": PAST,
+            "updated_at": updated_at,
         }
 
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-first", {"verified_credentials": True})])
+    first = provider_row("sk-first", {"verified_credentials": True}, PAST)
+    importer.import_rows("service_providers.llmprovider", [first])
     provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
     assert provider.credentials_verified
 
     rejected = {"verified_credentials": False, "verification_error": "AuthenticationError: bad key"}
-    importer.import_rows("service_providers.llmprovider", [provider_row("sk-second", rejected)])
+    second = provider_row("sk-second", rejected, "2021-01-02T03:04:05+00:00")
+    importer.import_rows("service_providers.llmprovider", [second])
     provider.refresh_from_db()
     assert provider.config == {"api_key": "sk-second"}
     assert not provider.credentials_verified  # not left over from the row this one replaced
@@ -362,6 +364,40 @@ def test_node_params_and_fk_columns_are_remapped(store):
     assert node.llm_provider_id == provider_pk
     assert node.params["llm_provider_id"] == provider_pk
     assert Pipeline.objects.get(pk=pipeline_pk).team_id == team_pk
+
+
+def test_event_action_pipeline_id_is_remapped(store):
+    """A pipeline_start action's params carry the source pipeline id, which is rewritten to the target pk."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows(
+        "pipelines.pipeline",
+        [
+            {
+                "id": 100,
+                "name": "Flow",
+                "data": {"nodes": [], "edges": []},
+                "version_number": 1,
+                "is_archived": False,
+                "working_version": None,
+                "created_at": PAST,
+                "updated_at": PAST,
+            }
+        ],
+    )
+    action_row = {
+        "id": 300,
+        "action_type": "pipeline_start",
+        "params": {"pipeline_id": 100, "input_type": "last_message"},
+        "working_version": None,
+        "is_archived": False,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("events.eventaction", [action_row])
+
+    action = EventAction.objects.get(pk=store.get_target("events.eventaction", 300))
+    assert action.params["pipeline_id"] == store.get_target("pipelines.pipeline", 100)
 
 
 def test_importing_user_creates_team_membership_with_role_groups(store):
@@ -610,10 +646,10 @@ def _fail_when_filling_checkpoint(store):
     after the row is inserted but before its checkpoint is filled."""
     real_record = store.record
 
-    def record(content_type, source_key, target_key=None):
+    def record(content_type, source_key, target_key=None, **kwargs):
         if target_key is not None:
             raise RuntimeError("interrupted before checkpoint was filled")
-        return real_record(content_type, source_key, target_key)
+        return real_record(content_type, source_key, target_key, **kwargs)
 
     return record
 
@@ -639,6 +675,28 @@ def test_rerun_after_interruption_creates_exactly_one_row(store, monkeypatch):
     Importer(store).import_rows("teams.team", [_team_row()])
 
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
+
+
+def test_rerun_recreates_a_row_whose_postgres_commit_failed_after_its_mapping_was_stored(store, monkeypatch):
+    """The store commits its mapping before Postgres commits the row. If the Postgres side then
+    fails, a rerun must recreate the row instead of skipping it as unchanged."""
+    real_record = store.record
+
+    def record_then_fail(content_type, source_key, target_key=None, **kwargs):
+        real_record(content_type, source_key, target_key, **kwargs)
+        if target_key is not None:
+            raise RuntimeError("Postgres commit failed after the mapping was stored")
+
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    monkeypatch.setattr(store, "record", record_then_fail)
+    with pytest.raises(RuntimeError):
+        importer.import_rows("service_providers.llmprovider", [row])
+    monkeypatch.undo()
+
+    assert importer.import_rows("service_providers.llmprovider", [row]) == 1
+    assert LlmProvider.objects.filter(pk=store.get_target("service_providers.llmprovider", 5)).exists()
 
 
 def _comment_row(source_id, user_src, content_type="chat.chatmessage", object_id=88):
@@ -840,7 +898,7 @@ def test_importing_file_backfills_missing_blob_from_the_source(store):
 
     assert fetcher.calls == [501]
     file = File.objects.get(pk=store.get_target("files.file", 501))
-    assert file.file.read() == b"remote-bytes"
+    assert file.read_bytes() == b"remote-bytes"
     _clear_storage("backfilled-501.txt")
 
 
@@ -856,7 +914,7 @@ def test_importing_file_with_present_blob_does_not_fetch(store):
 
     assert fetcher.calls == []
     file = File.objects.get(pk=store.get_target("files.file", 502))
-    assert file.file.read() == b"already-here"
+    assert file.read_bytes() == b"already-here"
     _clear_storage(saved_path)
 
 
@@ -1101,3 +1159,88 @@ def test_a_failing_on_user_created_hook_is_announced_as_it_happens(store, capsys
     output = capsys.readouterr().out
     assert "one@example.com" in output
     assert "Email address is not verified" in output
+
+
+def test_unchanged_row_is_skipped_on_reimport(store, django_assert_num_queries):
+    """A second pass over a row whose source updated_at hasn't moved must not touch the database."""
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    importer.import_rows("service_providers.llmprovider", [row])
+    target_pk = store.get_target("service_providers.llmprovider", 5)
+
+    with django_assert_num_queries(0):
+        assert importer.import_rows("service_providers.llmprovider", [row]) == 0
+    assert importer.skipped_rows == 1
+    assert store.get_target("service_providers.llmprovider", 5) == target_pk
+
+
+def test_changed_row_is_reimported(store):
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    importer.import_rows("service_providers.llmprovider", [row])
+
+    changed = {**row, "name": "OpenAI (renamed)", "updated_at": "2026-02-02T03:04:05+00:00"}
+    assert importer.import_rows("service_providers.llmprovider", [changed]) == 1
+    assert LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5)).name == "OpenAI (renamed)"
+
+
+def test_row_without_a_target_is_imported_even_when_the_timestamp_matches(store):
+    """An interrupted run leaves a checkpoint with a null target. The row does not exist on the
+    target yet, so a matching timestamp must not skip it."""
+    store.record("service_providers.llmprovider", 5, None, source_updated_at=PAST)
+    importer = Importer(store)
+    importer.set_target_team(TeamFactory())
+
+    row = {"id": 5, "name": "OpenAI", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}
+    assert importer.import_rows("service_providers.llmprovider", [row]) == 1
+
+
+def test_a_row_whose_fk_was_nulled_is_reapplied_on_reread(store):
+    """A nullable FK whose target wasn't synced yet is nulled on import. When a later run re-reads the
+    row with its target now present, the unchanged timestamp must not skip the repair."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows(
+        "pipelines.pipeline",
+        [
+            {
+                "id": 100,
+                "name": "Flow",
+                "data": {"nodes": [], "edges": []},
+                "version_number": 1,
+                "is_archived": False,
+                "working_version": None,
+                "created_at": PAST,
+                "updated_at": PAST,
+            }
+        ],
+    )
+    node_row = {
+        "id": 200,
+        "flow_id": "n1",
+        "type": "LLMResponseWithPrompt",
+        "label": "",
+        "params": {"name": "n1"},
+        "llm_provider": 7,
+        "pipeline": 100,
+        "working_version": None,
+        "is_archived": False,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("pipelines.node", [node_row])
+    node = Node.objects.get(pk=store.get_target("pipelines.node", 200))
+    assert node.llm_provider_id is None
+
+    importer.import_rows(
+        "service_providers.llmprovider",
+        [{"id": 7, "name": "P", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}],
+    )
+    importer.import_rows("pipelines.node", [node_row])
+
+    node.refresh_from_db()
+    assert node.llm_provider_id == store.get_target("service_providers.llmprovider", 7)

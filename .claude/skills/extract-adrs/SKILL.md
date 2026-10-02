@@ -1,6 +1,6 @@
 ---
 name: extract-adrs
-description: Extract Architecture Decision Records from a stable design or spec document. Use when a design doc is finished and its decisions should be crystallised into citable ADRs at docs/adr/. Refuses to run on docs with `status: active` frontmatter. Pass the source doc path as the argument.
+description: "Extract Architecture Decision Records from a stable design or spec document. Use when a design doc is finished and its decisions should be crystallised into citable ADRs at docs/adr/. Refuses to run on docs with `status: active` frontmatter. Pass the source doc path as the argument."
 ---
 
 # Extract ADRs from a design doc
@@ -73,6 +73,7 @@ For each approved candidate **one at a time** (not batched):
    - **One idea per sentence.** If a sentence chains three clauses with em-dashes or semicolons, split it or cut the weakest clause.
    - **State each fact once.** Don't restate the Context reasoning in Consequences or Alternatives — cross-reference it ("the main fork, covered in Context") instead of repeating it.
    - **No editorializing or self-praise** ("hits the right point on the rigidity/flexibility curve", "elegantly", "honestly", "the conservative default"). State the trade-off plainly and let it stand.
+   - **No mannered prose.** Metaphor and flourish in place of direct statement — "a dial worth turning" for "a parameter worth varying", "earns its keep" for "still matters". Metaphors drag in connotations you did not choose. Say what you mean; when a literal phrase is available, use it.
    - **Bullets are one sentence:** each Consequence and Alternative is `name → reason`. If you're adding a clause to explain the explanation, cut it.
    - **Soft budgets:** Context ≤ 2 short paragraphs; ≤ 1 sentence of rationale per Decision bullet. A single-decision ADR rarely needs more than ~400 words; a complex multi-model one more than ~700.
    - **Final pass:** re-read the draft and delete every sentence that wouldn't change what a future engineer *does*. If cutting it loses no decision, constraint, or durable identifier, it was prose.

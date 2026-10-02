@@ -76,7 +76,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v6.0.10
+      - uses: pnpm/action-setup@v6.1.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -89,7 +89,7 @@ jobs:
 
       - name: Run Claude Dependabot Analysis
         id: claude_review
-        uses: anthropics/claude-code-action@v1.0.206
+        uses: anthropics/claude-code-action@v1.0.234
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_bots: "dependabot[bot]"

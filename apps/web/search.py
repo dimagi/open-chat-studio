@@ -22,6 +22,7 @@ class SearchableModel:
         results = self.model_cls.objects.filter(**{self.field_name: value})[:2]
         if len(results) == 1:
             return results[0]
+        return None
 
     @property
     def permission(self):

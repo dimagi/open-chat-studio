@@ -76,6 +76,16 @@ class Team(BaseModel):
         db_default=False,
         help_text="When set, the team's outbound message firing is frozen while its data is migrated.",
     )
+    exportable_experiments = models.ManyToManyField(
+        "experiments.Experiment",
+        blank=True,
+        # No reverse relation: the default reverse query name ("team") would clash with Experiment.team.
+        related_name="+",
+        help_text=(
+            "Chatbots this team may export during a migration. Empty means the whole team is "
+            "exportable. Holds working versions; each one's published versions are included."
+        ),
+    )
     require_mfa = models.BooleanField(
         default=False,
         db_default=False,

@@ -358,14 +358,14 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     # Check nodes have remapped params and FK mirror (both must point at the target team)
     for node in Node.objects.filter(pipeline=target_pipeline):
         params = node.params
-        if "llm_provider_id" in params and params["llm_provider_id"]:
+        if params.get("llm_provider_id"):
             # Should reference target team's provider, not source
             assert params["llm_provider_id"] == target_llm_provider.id
             assert params["llm_provider_id"] != source_llm_provider.id
             # FK mirror must be remapped too, not left pointing at the source team
             assert node.llm_provider_id == target_llm_provider.id
 
-        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
+        if params.get("llm_provider_model_id"):
             # Should reference target team's model, not source
             assert params["llm_provider_model_id"] == target_llm_model.id
             assert params["llm_provider_model_id"] != source_llm_model.id

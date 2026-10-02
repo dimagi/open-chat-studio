@@ -63,7 +63,7 @@ def test_parse_rate(rate, expected):
     ],
 )
 def test_parse_rate_rejects_malformed_input(rate):
-    with pytest.raises(ValueError, match="Invalid rate string|Rate must have"):
+    with pytest.raises(ValueError, match=r"Invalid rate string|Rate must have"):
         parse_rate(rate)
 
 

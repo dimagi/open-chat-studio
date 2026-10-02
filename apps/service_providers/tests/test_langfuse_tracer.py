@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from apps.service_providers.tracing.base import TraceContext
+from apps.service_providers.tracing.base import ServiceNotInitializedException, TraceContext
 from apps.service_providers.tracing.langfuse import LangFuseTracer
 from apps.service_providers.tracing.service import TracingService
 
@@ -94,15 +94,12 @@ def test_tracing_service_recovers_when_trace_url_fetch_fails(patched_tracer, moc
     assert entry["trace_provider"] == "langfuse"
 
 
-def test_add_trace_tags_uses_resolved_trace_id(patched_tracer, mock_langfuse_client, mock_session):
-    trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
-
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
-        patched_tracer.add_trace_tags(["tag1", "tag2"])
-
-    mock_langfuse_client._create_trace_tags_via_ingestion.assert_called_once_with(
-        trace_id="trace-abc-123", tags=["tag1", "tag2"]
-    )
+def test_add_trace_tags_outside_a_trace_is_an_error(patched_tracer):
+    """Tags are written onto the root observation, so there is nowhere to put them once the
+    trace has closed. See test_langfuse_otel_export.py for what a tagged trace exports.
+    """
+    with pytest.raises(ServiceNotInitializedException):
+        patched_tracer.add_trace_tags(["tag1"])
 
 
 def test_trace_state_resets_on_exit(patched_tracer, mock_langfuse_client, mock_session):

@@ -37,6 +37,7 @@ def make_mock_file(name, content_type, size, file_data=b"filedata"):
     file.content_type = content_type
     file.content_size = size
     file.file = BytesIO(file_data)
+    file.read_bytes.return_value = file_data
     file.download_link.return_value = f"http://example.com/{name}"
     return file
 

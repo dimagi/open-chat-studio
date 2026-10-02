@@ -1,6 +1,7 @@
 import textwrap
 
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import OuterRef, Prefetch, Subquery
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view, inline_serializer
 from rest_framework import filters, mixins, serializers, status
@@ -12,8 +13,9 @@ from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.trace.models import Trace
 
 update_state_serializer = inline_serializer(
     name="update_state_serializer",
@@ -160,12 +162,39 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         return serializer_class(*args, **kwargs)
 
     def get_queryset(self):
-        queryset = (
-            ExperimentSession.objects.filter(team=self.request.team)
-            .select_related("team", "experiment", "participant")
-            .prefetch_related("chat__tags", "chat__messages__tags")
-            .all()
+        queryset = ExperimentSession.objects.filter(team=self.request.team).select_related(
+            "team", "experiment", "participant"
         )
+        # Participant data is only serialized on the detail endpoint (see
+        # ExperimentSessionSerializer), so only pay for resolving it there. Resolution order in the
+        # serializer: it prefers the latest trace when one exists, and only falls back to
+        # experiment-level participant data when a session has no traces.
+        if self.action == "retrieve":
+            queryset = queryset.prefetch_related(
+                # The queryset fetches only the latest trace per session: participant_data is
+                # resolved from it directly, and any earlier trace would be discarded anyway. A
+                # plain prefetch_related("traces") would load every trace for every session.
+                Prefetch(
+                    "traces",
+                    queryset=Trace.objects.filter(
+                        id=Subquery(
+                            Trace.objects.filter(session_id=OuterRef("session_id"))
+                            .order_by("-timestamp", "-id")
+                            .values("id")[:1]
+                        )
+                    ).only("id", "timestamp", "session_id", "participant_data", "participant_data_diff"),
+                    to_attr="_prefetched_traces",
+                ),
+                # Prefetch participant data so the no-trace fallback path in the serializer
+                # (which would otherwise run one ParticipantData query per session) reads from
+                # the prefetched rows instead.
+                Prefetch(
+                    "participant__data_set",
+                    queryset=ParticipantData.objects.only("id", "participant_id", "experiment_id", "data"),
+                    to_attr="_prefetched_participant_data",
+                ),
+            )
+        queryset = queryset.prefetch_related("chat__tags", "chat__messages__tags")
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         if experiment_id := self.request.query_params.get("experiment"):

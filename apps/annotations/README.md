@@ -23,7 +23,7 @@ Be sure to pass the available tags as a template variable called `available_tags
 </script>
 ```
 
-If you're going to be tagging mutiple objects on the same page (say, a chat and chat messages), you'll have to load the script in the template that is the parent of both object templates. For example, `experiment_session_view.html` includes both `experiment_details.html` (the chat) and `experiment_chat.html` (chat messages), so that makes `experiment_session_view.html` the "parent" template of both of these object templates.
+If you're going to be tagging multiple objects on the same page (say, a chat and chat messages), you'll have to load the script in the template that is the parent of both object templates. For example, `chatbots/chatbot_session_view.html` includes `annotations/tag_ui.html` directly and also includes sub-templates that render additional tagged objects, making it the parent template responsible for loading the script.
 
 ### Adding comments to your model
 Simply add the `UserCommentsMixin` to your model. This will add a `comments` field and provide some helper methods.

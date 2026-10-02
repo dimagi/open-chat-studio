@@ -40,7 +40,7 @@ class TestCeleryQueueCheck:
 
         check.run()
 
-        check.app.control.ping.assert_called_once_with(destination=["worker1"], timeout=1.0)
+        check.app.control.ping.assert_called_once_with(destination=["worker1"], timeout=check.timeout.total_seconds())
 
     @pytest.mark.parametrize(
         ("check_kwargs", "match"),

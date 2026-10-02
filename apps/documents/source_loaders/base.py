@@ -66,7 +66,6 @@ class BaseDocumentLoader[ConfigType](ABC):
         Returns:
             Iterator of SourceDocument objects carrying the source's own bytes
         """
-        pass
 
     def get_document_identifier(self, document: SourceDocument) -> str:
         """

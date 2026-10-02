@@ -12,7 +12,7 @@ class Command(IdempotentCommand):
     atomic = False
     disable_audit = True
 
-    def perform_migration(self, dry_run=False):
+    def perform_migration(self, dry_run=False):  # noqa: C901 - one-shot migration: a branch per backfilled field
         batch_size = 1000
 
         # Get all session IDs that need processing

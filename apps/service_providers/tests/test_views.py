@@ -37,15 +37,13 @@ from apps.utils.factories.service_provider_factories import (
 
 
 def factory_for_model(model):
-    factory = {
+    return {
         LlmProvider: LlmProviderFactory,
         VoiceProvider: VoiceProviderFactory,
         MessagingProvider: MessagingProviderFactory,
         AuthProvider: AuthProviderFactory,
         TraceProvider: TraceProviderFactory,
     }.get(model)
-
-    return factory
 
 
 @pytest.fixture()

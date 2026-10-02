@@ -10,8 +10,11 @@ from apps.channels.pipeline import (
 from apps.chat.exceptions import (
     AudioTranscriptionException,
     ChatException,
+    ModelRefusedTurnError,
+    ProviderConfigurationError,
     UserActionableError,
 )
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.pipelines.exceptions import (
     CodeNodeRunError,
     NodeUserConfigRunError,
@@ -73,13 +76,6 @@ class TestPipelineHappyPath:
         result = pipeline.process(ctx)
 
         assert call_order == ["core1", "core2", "core3", "terminal1", "terminal2"]
-        assert result is ctx
-
-    def test_returns_final_context(self):
-        """Pipeline returns the MessageProcessingContext."""
-        ctx = make_context()
-        pipeline = _pipeline()
-        result = pipeline.process(ctx)
         assert result is ctx
 
 
@@ -201,6 +197,10 @@ class TestUserCausedErrors:
             pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
             pytest.param(CodeNodeRunError("name 'foo' is not defined"), id="code-node-run-error"),
             pytest.param(NodeUserConfigRunError('UndefinedError in field "subject"'), id="node-user-config-run-error"),
+            pytest.param(
+                ProviderConfigurationError("The LLM provider account has no credit or quota remaining."),
+                id="provider-configuration-error",
+            ),
         ],
     )
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
@@ -224,6 +224,7 @@ class TestUserCausedErrors:
         mock_gen.assert_not_called()
         assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
         assert str(error) in ctx.processing_errors
+        assert ctx.configuration_error is error
         t1.assert_called_once()
 
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
@@ -389,6 +390,108 @@ class TestErrorMessageGeneration:
         assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
 
 
+class TestModelRefusedTurn:
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_records_the_outcome_on_the_reply_and_the_human_message(self, mock_gen):
+        mock_gen.return_value = "I can't answer that one."
+        human = MagicMock()
+        human.metadata = {}
+        error = ModelRefusedTurnError("content_filter", "SAFETY", {"safety_ratings": []})
+        ctx = make_context(human_message=human)
+
+        _pipeline(core=[_make_stage(side_effect=error)], terminal=[_make_stage()]).process(ctx)
+
+        expected = {"kind": "content_filter", "provider_reason": "SAFETY"}
+        assert ctx.early_exit_metadata == {ChatMessageMetadataKeys.MODEL_REFUSED: expected}
+        assert human.metadata == {ChatMessageMetadataKeys.MODEL_REFUSED: expected}
+        assert (
+            ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_REFUSED]
+            is not human.metadata[ChatMessageMetadataKeys.MODEL_REFUSED]
+        )
+        human.save.assert_called_once_with(update_fields=["metadata"])
+        assert ctx.processing_errors == []
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_marks_the_human_message_before_the_reply_is_generated(self, mock_gen):
+        """EventBot reads the chat history, so the mark has to be on the record first."""
+        human = MagicMock()
+        human.metadata = {}
+        seen = []
+        mock_gen.side_effect = lambda ctx, e: seen.append(dict(human.metadata)) or "reply"
+        ctx = make_context(human_message=human)
+
+        _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
+
+        assert ChatMessageMetadataKeys.MODEL_REFUSED in seen[0]
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_tolerates_a_missing_human_message(self, mock_gen):
+        mock_gen.return_value = "reply"
+        ctx = make_context(human_message=None)
+
+        _pipeline(core=[_make_stage(side_effect=ModelRefusedTurnError("refusal"))], terminal=[]).process(ctx)
+
+        assert ctx.early_exit_metadata[ChatMessageMetadataKeys.MODEL_REFUSED]["kind"] == "refusal"
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_a_plain_user_actionable_error_sets_no_metadata(self, mock_gen):
+        mock_gen.return_value = "reply"
+        ctx = make_context()
+
+        _pipeline(core=[_make_stage(side_effect=UserActionableError("x"))], terminal=[]).process(ctx)
+
+        assert ctx.early_exit_metadata == {}
+
+
+class TestErrorSpanAndFallback:
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_error_span_carries_the_outcome(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.return_value = "reply"
+        error = ModelRefusedTurnError("content_filter", "SAFETY", {"safety_ratings": [{"blocked": True}]})
+
+        _pipeline()._generate_error_message(make_context(), error)
+
+        metadata = mock_trace_info.call_args.kwargs["metadata"]
+        assert metadata["error"] == str(error)
+        assert metadata["model_turn_outcome"] == "content_filter"
+        assert metadata["provider_reason"] == "SAFETY"
+        assert metadata["detail"] == {"safety_ratings": [{"blocked": True}]}
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_failure_on_a_user_actionable_error_replies_with_its_text(
+        self, mock_trace_info, mock_event_bot_cls, caplog
+    ):
+        mock_event_bot_cls.return_value.get_user_message.side_effect = RuntimeError("filtered too")
+        error = ModelRefusedTurnError("refusal")
+
+        with caplog.at_level("INFO", logger="ocs.channels"):
+            result = _pipeline()._generate_error_message(make_context(), error)
+
+        assert result == str(error)
+        assert not [r for r in caplog.records if r.levelname == "ERROR"]
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_empty_reply_on_a_user_actionable_error_replies_with_its_text(
+        self, mock_trace_info, mock_event_bot_cls
+    ):
+        mock_event_bot_cls.return_value.get_user_message.return_value = ""
+        error = UserActionableError("`x.bmp` is not a supported image type")
+
+        assert _pipeline()._generate_error_message(make_context(), error) == str(error)
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_empty_reply_on_another_error_uses_the_default_text(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.return_value = ""
+
+        result = _pipeline()._generate_error_message(make_context(), RuntimeError("boom"))
+
+        assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+
+
 class TestStageFiltering:
     def test_none_entries_filtered_from_stage_lists(self):
         """None entries in stage lists are filtered out by the constructor."""
@@ -405,36 +508,6 @@ class TestStageFiltering:
 
         s1.assert_called_once()
         t1.assert_called_once()
-
-
-class TestShouldRun:
-    def test_should_run_false_skips_process(self):
-        """When a real ProcessingStage's should_run returns False, process is not called.
-
-        We test this by patching should_run on a real stage-like object via the
-        pipeline's __call__ protocol. Since the pipeline just calls stage(ctx),
-        and ProcessingStage.__call__ checks should_run, we use a MagicMock that
-        returns without doing anything when should_run would be False.
-        """
-        # The pipeline calls stage(ctx) directly. If the stage is a MagicMock,
-        # __call__ always runs. To test should_run=False skipping, we verify
-        # the pipeline's None-filtering (stages that shouldn't run can be set to None).
-        # For a more meaningful test, we create a mock that doesn't mutate context.
-        call_log = []
-        stage = _make_stage()
-        stage.side_effect = lambda ctx: call_log.append("called")
-
-        ctx = make_context()
-        pipeline = _pipeline(core=[stage])
-        pipeline.process(ctx)
-
-        assert call_log == ["called"]
-
-        # Now test with None (filtered out)
-        call_log.clear()
-        pipeline2 = _pipeline(core=[None])
-        pipeline2.process(ctx)
-        assert call_log == []
 
 
 class TestPassthroughExceptions:

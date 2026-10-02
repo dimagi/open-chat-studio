@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -10,7 +9,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, BeforeValidator, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
@@ -42,7 +41,9 @@ from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
+from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
 from apps.utils.json import dict_to_json_schema
+from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
@@ -284,18 +285,18 @@ class HistoryMixin(LLMResponseMixin):
 
         if history_mode == PipelineChatHistoryModes.TRUNCATE_TOKENS:
             return TruncateTokensHistoryMiddleware(token_limit=token_limit, **compressor_kwargs)
+        return None
 
     def save_history(self, human_message: str, ai_message: str):
         if self.history_is_disabled:
-            return
+            return None
 
         if self.use_session_history:
             # Global History is saved outside of the node
-            return
+            return None
 
         history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
-        message = self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
-        return message
+        return self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
 
 
 class RouterMixin(BaseModel):
@@ -337,9 +338,8 @@ class RouterMixin(BaseModel):
 
     def _create_router_schema(self):
         """Create a Pydantic model for structured router output"""
-        return create_model(
-            "RouterOutput", route=(Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
-        )
+        route_field = (Literal[tuple(self.keywords)], Field(description="Selected routing destination"))
+        return create_model_with_sanitized_names("RouterOutput", {"route": route_field})
 
     def get_output_map(self):
         """Returns a mapping of the form:
@@ -375,7 +375,7 @@ class ExtractStructuredDataNodeMixin:
         )
 
     def extraction_chain(self, tool_class, reference_data):
-        structured_output = super().get_chat_model().with_structured_output(tool_class)
+        structured_output = structured_output_runnable(super().get_chat_model(), tool_class)
         return self._prompt_chain(reference_data) | with_llm_retry(structured_output)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
@@ -385,10 +385,17 @@ class ExtractStructuredDataNodeMixin:
         message_chunks = self.chunk_messages(context.input, prompt_token_count=prompt_token_count)
 
         new_reference_data = reference_data
+        extracted = False
         for message_chunk in message_chunks:
             chain = self.extraction_chain(tool_class=ToolClass, reference_data=new_reference_data)
-            output = chain.invoke(message_chunk, config=self._config)
-            output = output.model_dump()
+            try:
+                output = chain.invoke(message_chunk, config=self._config).model_dump()
+            except NoStructuredOutputError as e:
+                logger.warning(
+                    "Node %s extracted nothing from a chunk (stop reason: %s)", self.name, e.reason or "none"
+                )
+                continue
+            extracted = True
             # TOOO: tracing
             # self.logger.info(
             #     f"Chunk {idx}",
@@ -397,9 +404,14 @@ class ExtractStructuredDataNodeMixin:
             # )
             new_reference_data = self.update_reference_data(output, reference_data)
 
+        if not extracted:
+            return self.get_unextracted_output(context)
         return self.get_node_output(context, new_reference_data)
 
     def get_node_output(self, context: "NodeContext", output_data) -> PipelineState:
+        raise NotImplementedError()
+
+    def get_unextracted_output(self, context: "NodeContext") -> PipelineState:
         raise NotImplementedError()
 
     def get_reference_data(self, context: "NodeContext"):
@@ -453,16 +465,11 @@ class ExtractStructuredDataNodeMixin:
         return dict_to_json_schema(data)
 
 
-# Anthropic requires tool property keys to match this pattern. Mirror it here so we can surface a friendly
-# validation error instead of a 500 from a rejected API call.
-_SCHEMA_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
-
-
 def _collect_invalid_schema_keys(schema: dict) -> list[str]:
     """Recursively collect property keys that violate Anthropic's naming rules, mirroring ``dict_to_json_schema``."""
     invalid = []
     for key, val in schema.items():
-        if not _SCHEMA_KEY_PATTERN.match(key):
+        if not VALID_PROPERTY_NAME_PATTERN.match(key):
             invalid.append(key)
         if isinstance(val, list) and val and isinstance(val[0], dict):
             invalid.extend(_collect_invalid_schema_keys(val[0]))

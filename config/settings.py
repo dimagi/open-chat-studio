@@ -166,7 +166,9 @@ MIDDLEWARE = list(
         [
             "corsheaders.middleware.CorsMiddleware",
             "django.middleware.security.SecurityMiddleware",
-            "whitenoise.middleware.WhiteNoiseMiddleware",
+            # Tests never run collectstatic, so whitenoise would warn about the missing STATIC_ROOT
+            # on every test client it is loaded into, and scan the directory when there is one.
+            "whitenoise.middleware.WhiteNoiseMiddleware" if not IS_TESTING else None,
             "debug_toolbar.middleware.DebugToolbarMiddleware" if USE_DEBUG_TOOLBAR else None,
             "django.contrib.sessions.middleware.SessionMiddleware",
             "allauth.account.middleware.AccountMiddleware",
@@ -314,6 +316,11 @@ MFA_TOTP_ISSUER = "Open Chat Studio"
 # test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
 # to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
 REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
+
+# Privilege elevation ("sudo"): a superuser browsing another team is elevated into it on first
+# access, with no identity proof. Development convenience only — with it off, which is the
+# default outside DEBUG, they have to re-authenticate the way the deployed site demands.
+ELEVATION_WITHOUT_PROOF = env.bool("ELEVATION_WITHOUT_PROOF", default=DEBUG and not IS_TESTING)
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
@@ -490,6 +497,7 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
         "apps.api.schema.mirror_unknown_key_rejection",
+        "apps.api.schema.unrequire_readonly_nullable_fields",
         "apps.api.schema.set_export_description",
         "apps.api.schema.set_example_urls",
     ],
@@ -505,6 +513,7 @@ SPECTACULAR_SETTINGS = {
         "EvaluationModeEnum": "apps.evaluations.models.EvaluationMode",
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
+        "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
@@ -746,6 +755,10 @@ if SENTRY_DSN:
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
     # so Django correctly rejects them with a 400. These are pure noise in Sentry.
     ignore_logger("django.security.DisallowedHost")
+    # OTel logs and swallows its own delivery failures, across both the batch processor
+    # and the OTLP exporter; a tracing provider being slow never breaks the chat. Matched
+    # as a glob (ignore_logger uses fnmatch) so a private module rename cannot reopen it.
+    ignore_logger("opentelemetry.*")
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,

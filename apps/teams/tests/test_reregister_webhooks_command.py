@@ -180,7 +180,7 @@ def test_aborts_when_site_url_confirmation_declined(monkeypatch):
         lambda self, extra_data, webhook_url: pytest.fail("webhook registered despite declined confirmation"),
     )
 
-    with pytest.raises(CommandError, match="Site record|SITE_URL_ROOT"):
+    with pytest.raises(CommandError, match=r"Site record|SITE_URL_ROOT"):
         Command().handle(team_slug=channel.team.slug, interactive=True)
 
 

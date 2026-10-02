@@ -56,7 +56,10 @@ import uuid
 
 import httpx
 from Crypto.Cipher import AES
-from flask import Flask, jsonify, request
+
+# Declared in the PEP 723 header above, not a project dependency, so it is absent from the
+# venv ty type-checks against.
+from flask import Flask, jsonify, request  # ty: ignore[unresolved-import]
 
 app = Flask(__name__)
 
@@ -281,7 +284,7 @@ def send_user_message(channel_id: str, message: str) -> None:
             content=body,
             headers={
                 "Content-Type": "application/json",
-                "X-MAC-DIGEST": digest,
+                "X-MAC-DIGEST": digest.decode(),
             },
             timeout=15,
         )

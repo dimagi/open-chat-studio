@@ -5,7 +5,6 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 import dictdiffer
-from langchain_core.language_models import BaseChatModel
 from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
@@ -15,6 +14,7 @@ from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageTy
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession, ParticipantData, SyntheticVoice
 from apps.pipelines.executor import CurrentThreadExecutor, DjangoLangGraphRunner, DjangoSafeContextThreadPoolExecutor
+from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.pipelines.repository import ORMRepository
@@ -25,6 +25,8 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.web.search import get_global_search_url
 
 if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
+
     from apps.channels.datamodels import Attachment
 
 
@@ -137,10 +139,6 @@ class PipelineBot:
         return state
 
     def _run_pipeline(self, input_state, pipeline_to_use):
-        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
-            PipelineGraph,
-        )
-
         graph = PipelineGraph.build_from_pipeline(pipeline_to_use)
         config = self.trace_service.get_langchain_config(
             configurable={
@@ -153,8 +151,7 @@ class PipelineBot:
         runnable = graph.build_runnable()
         runner = DjangoLangGraphRunner(DjangoSafeContextThreadPoolExecutor)
         raw_output = runner.invoke(runnable, input_state, config)
-        output = PipelineState(**raw_output).json_safe()
-        return output
+        return PipelineState(**raw_output).json_safe()
 
     def _process_interrupts(self, output):
         if interrupt := output.get("interrupt"):
@@ -284,18 +281,13 @@ class PipelineTestBot:
         self.user_id = user_id
 
     def process_input(self, input: str) -> PipelineState:
-        from apps.pipelines.graph import (  # noqa: PLC0415 - circular: pipelines.graph imports nodes.nodes which imports pipelines.tasks which imports chat.bots
-            PipelineGraph,
-        )
-
         with temporary_session(self.pipeline.team, self.user_id) as session:
             runnable = PipelineGraph.build_runnable_from_pipeline(self.pipeline)
             state = PipelineState(messages=[input], experiment_session=session)
             config = {"configurable": {"repo": ORMRepository(session=session)}}
             runner = DjangoLangGraphRunner(CurrentThreadExecutor)
             output = runner.invoke(runnable, state, config)
-            output = PipelineState(**output).json_safe()
-        return output
+            return PipelineState(**output).json_safe()
 
 
 class EventBot:
@@ -404,6 +396,8 @@ class EventBot:
     def get_conversation_history(self):
         messages = []
         for message in self.session.chat.message_iterator(with_summaries=False):
+            if message.is_excluded_from_history:
+                continue
             messages.append(f"{message.role}: {message.content}")
             if len(messages) > 10:
                 break

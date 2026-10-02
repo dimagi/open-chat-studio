@@ -10,7 +10,7 @@ class BaseFileFormSet(forms.BaseModelFormSet):
         if not self.accepted_file_types:
             return super().clean()
         invalid_extensions = set()
-        for _key, in_memory_file in self.files.items():
+        for in_memory_file in self.files.values():
             file_extension = in_memory_file.name.rsplit(".", 1)[-1].lower()
             if file_extension not in self.accepted_file_types:
                 invalid_extensions.add(f".{file_extension}")

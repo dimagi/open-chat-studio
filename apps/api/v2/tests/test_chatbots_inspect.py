@@ -15,7 +15,6 @@ from apps.files.models import File
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, llm_response_node, start_node
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
@@ -548,10 +547,6 @@ def _full_bot():
         allowed_operations=["weather_get"],
         auth_provider=auth_provider,
     )
-    assistant = OpenAiAssistantFactory.create(
-        team=team, name="Helper", assistant_id="asst_123", instructions="Be helpful", temperature=1.0, top_p=1.0
-    )
-
     pipeline = PipelineFactory.create(
         team=team,
         name="Support flow",
@@ -652,7 +647,6 @@ def _full_bot():
         index_collection=index_collection,
         index_file=index_file,
         action=action,
-        assistant=assistant,
         schedule_trigger=schedule_trigger,
         timeout_trigger=timeout_trigger,
     )

@@ -26,6 +26,7 @@ from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
+from apps.evaluations.errors import evaluator_error_output, generation_error_fields, is_failed_output
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import (
     annotate_export_fields,
@@ -46,6 +47,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
@@ -56,6 +58,7 @@ from apps.evaluations.utils import (
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues
@@ -140,28 +143,46 @@ def _create_evaluation_result(
     return evaluation_result
 
 
+@dataclass(frozen=True)
+class BotGeneration:
+    session_id: int | None
+    response: str = ""
+    error: Exception | None = None
+
+
 def _run_evaluator_on_message(
     evaluation_run: EvaluationRun,
     evaluator: Evaluator,
     message: EvaluationMessage,
-    bot_response: str | None,
-    session_id: int | None,
+    generation: BotGeneration,
 ) -> None:
     """Run a single evaluator over a single message and persist the outcome.
 
     On evaluator failure an error result is stored (matching the no-retry behaviour);
-    on success the result is written and its Score rows are derived.
+    on success the result is written and its Score rows are derived. A failed generation
+    is still evaluated, and every result for the message records why it failed.
     """
+    session_id = generation.session_id
+    generation_fields = generation_error_fields(generation.error) if generation.error else {}
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
-        output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
+        output = evaluator.run(message, generation.response, usage_context=usage_context).model_dump()
     except Exception as e:
-        logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        if isinstance(e, NoStructuredOutputError):
+            logger.warning(
+                "Evaluator %s returned no structured output for message %s (stop reason: %s)",
+                evaluator.id,
+                message.id,
+                e.reason or "none",
+            )
+        else:
+            logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+        output = evaluator_error_output(e) | generation_fields
+        _create_evaluation_result(evaluation_run, evaluator, message, output, session_id, apply_tags=False)
         return
 
     evaluation_result = _create_evaluation_result(
-        evaluation_run, evaluator, message, output, session_id, apply_tags=True
+        evaluation_run, evaluator, message, output | generation_fields, session_id, apply_tags=True
     )
     if evaluation_result is None:
         return
@@ -230,9 +251,9 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
 
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
-        session_id, bot_response = None, ""
+        generation = BotGeneration(session_id=None)
         if generation_experiment is not None:
-            session_id, bot_response = run_bot_generation(
+            generation = run_bot_generation(
                 evaluation_run.team, message, generation_experiment, evaluation_run=evaluation_run
             )
 
@@ -245,7 +266,7 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
             if evaluator is None:
                 logger.warning(f"Evaluator {evaluator_id} not found, skipping")
                 continue
-            _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id)
+            _run_evaluator_on_message(evaluation_run, evaluator, message, generation)
 
 
 @shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT, queue=Queues.EVALUATIONS)
@@ -476,6 +497,8 @@ def _drive_run(run_id: int) -> None:
         for batch in result.batches:
             evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
         _publish_tick(run, result)
+        if result.terminal == "error":
+            evaluation_run_outcome_notification(run)
         # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
         # this block — a broker error here would otherwise cost the run its completion
         # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
@@ -506,6 +529,7 @@ def finalize_evaluation_run(run_id: int) -> None:
     with current_team(run.team):
         compute_aggregates_for_run(run)
         reverse_stale_tags(run)
+        evaluation_run_outcome_notification(run)
     # Stamped last: until it is set, the results page treats missing aggregates as "still
     # coming" rather than as this run having none (see `EvaluationRun.is_finalizing`).
     run.finalized_at = timezone.now()
@@ -652,17 +676,17 @@ def _maybe_apply_tag_rules(
     evaluation_result: EvaluationResult,
     message: EvaluationMessage,
 ) -> None:
-    """Skip tagging on preview runs or results with errors; otherwise apply rules."""
+    """Skip tagging on preview runs or failed results; otherwise apply rules."""
     if evaluation_run.type == EvaluationRunType.PREVIEW:
         return
-    if (evaluation_result.output or {}).get("error"):
+    if is_failed_output(evaluation_result.output):
         return
     apply_rules_to_result(evaluation_result, evaluator, message)
 
 
 def run_bot_generation(
     team: Team, message: EvaluationMessage, experiment: Experiment, *, evaluation_run: EvaluationRun
-) -> tuple[int | None, str | None]:
+) -> BotGeneration:
     """
     Run the evaluation message through the bot to generate a response.
 
@@ -696,7 +720,7 @@ def run_bot_generation(
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        return None, None
+        return BotGeneration(session_id=None, error=e)
 
     try:
         # Extract the input message content
@@ -706,7 +730,7 @@ def run_bot_generation(
         participant_data = session.participant.global_data | participant_data
 
         # Call the bot with the evaluation message and session
-        bot_response = handle_evaluation_message(
+        reply = handle_evaluation_message(
             experiment_version=experiment,
             experiment_channel=evaluation_channel,
             message_text=input_content,
@@ -714,15 +738,15 @@ def run_bot_generation(
             participant_data=participant_data,
             usage_tracer=generation_usage_tracer(experiment, evaluation_run, message_id=message.id),
         )
-        response_content = bot_response.content
+        response_content = reply.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return session.id, response_content
+        return BotGeneration(session_id=session.id, response=response_content, error=reply.error)
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        return session.id, None
+        return BotGeneration(session_id=session.id, error=e)
 
 
 def _create_message_history(chat: Chat, history: list[dict]) -> None:
@@ -799,7 +823,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         csv_file = File.objects.get(id=file_id, team_id=team_id)
 
         try:
-            csv_content = csv_file.file.read().decode("utf-8")
+            csv_content = csv_file.read_bytes().decode("utf-8")
             with current_team(team):
                 rows, columns = _parse_csv_content(csv_content, progress_recorder)
                 if not rows:
@@ -818,12 +842,12 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         finally:
             csv_file.delete()
     except Exception as e:
-        logger.error(f"Error in CSV upload task for dataset {dataset_id}: {str(e)}")
+        logger.error(f"Error in CSV upload task for dataset {dataset_id}: {e!s}")
         return {"success": False, "error": str(e)}
 
 
 @shared_task(bind=True, queue=Queues.BACKGROUND)
-def create_dataset_from_csv_task(
+def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped CSV column and row-level error
     self,
     dataset_id: int,
     file_id: int,
@@ -865,7 +889,7 @@ def create_dataset_from_csv_task(
 
     try:
         try:
-            csv_content = csv_file.file.read().decode("utf-8")
+            csv_content = csv_file.read_bytes().decode("utf-8")
             csv_reader = csv.DictReader(StringIO(csv_content))
         except UnicodeDecodeError as e:
             logger.error(f"Failed to decode CSV file {file_id}: {e}")
@@ -1147,7 +1171,7 @@ def process_csv_rows(
                 stats["created_count"] += 1
 
         except Exception as e:
-            stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
+            stats["error_messages"].append(f"Row {row_index + 1}: {e!s}")
             continue
 
         processed_rows = row_index + 1
@@ -1199,11 +1223,11 @@ def _upload_evaluation_run_results(
             }
 
     except Exception as e:
-        logger.error(f"Error in CSV upload task for evaluation run {evaluation_run_id}: {str(e)}")
+        logger.error(f"Error in CSV upload task for evaluation run {evaluation_run_id}: {e!s}")
         return {"success": False, "error": str(e)}
 
 
-def process_evaluation_results_csv_rows(
+def process_evaluation_results_csv_rows(  # noqa: C901 - parser: one branch per mapped column and row-level error
     evaluation_run: EvaluationRun,
     csv_data: list[dict],
     column_mappings: dict,
@@ -1300,7 +1324,7 @@ def process_evaluation_results_csv_rows(
                 else:
                     stats["error_messages"].append(f"Row {row_index + 1}: No results foundand message {message_id}")
         except Exception as e:
-            stats["error_messages"].append(f"Row {row_index + 1}: {str(e)}")
+            stats["error_messages"].append(f"Row {row_index + 1}: {e!s}")
             continue
 
         processed_rows = row_index + 1
@@ -1530,19 +1554,21 @@ def _create_export_file(rows: Iterable[dict], team: Team, filename: str) -> File
         )
 
 
+def _bulk_export_results(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
+    """Every result the bulk export draws on. The row count and the exported rows must agree,
+    so both are built from this one filter.
+    """
+    return EvaluationResult.objects.filter(
+        run__config=config,
+        run__status=EvaluationRunStatus.COMPLETED,
+        run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
+        team=team,
+    )
+
+
 def _count_bulk_export_rows(config: EvaluationConfig, team: Team) -> int:
     """Number of CSV rows the bulk export will produce, which is one per message."""
-    return (
-        EvaluationResult.objects.filter(
-            run__config=config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            team=team,
-        )
-        .values("message_id")
-        .distinct()
-        .count()
-    )
+    return _bulk_export_results(config, team).values("message_id").distinct().count()
 
 
 def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
@@ -1555,12 +1581,7 @@ def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet
     emit a row per message as it reads.
     """
     latest_per_message_and_evaluator = (
-        EvaluationResult.objects.filter(
-            run__config=config,
-            run__status=EvaluationRunStatus.COMPLETED,
-            run__type__in=[EvaluationRunType.FULL, EvaluationRunType.DELTA],
-            team=team,
-        )
+        _bulk_export_results(config, team)
         .order_by("message_id", "evaluator_id", "-run__created_at")
         .distinct("message_id", "evaluator_id")
     )

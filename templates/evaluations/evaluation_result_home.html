@@ -70,6 +70,12 @@
             <div class="text-2xl font-bold">{{ total_results|default_if_none:"—" }}</div>
             <div class="text-xs uppercase tracking-wide text-base-content/60">Results</div>
           </div>
+          {% if error_summary.failed_count %}
+            <div data-testid="run-error-summary">
+              <div class="text-2xl font-bold text-error">{{ error_summary.failed_count }}</div>
+              <div class="text-xs uppercase tracking-wide text-base-content/60">Failed messages</div>
+            </div>
+          {% endif %}
           <div>
             <div class="text-2xl font-bold">
               {% if run_cost.by_model %}
@@ -224,6 +230,9 @@
         </div>
       </div>
 
+      {% if error_summary.needs_warning %}
+        {% include "evaluations/components/run_error_warning.html" %}
+      {% endif %}
       {# Results #}
       <div class="card card-border bg-base-100">
         <div class="card-body p-4">

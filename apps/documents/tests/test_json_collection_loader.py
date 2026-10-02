@@ -214,7 +214,7 @@ class TestItemMetadataPropagation:
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
         loader = _make_loader(json_config)
-        meta = list(loader.load_documents())[0].metadata
+        meta = next(iter(loader.load_documents())).metadata
         for k in ("authors", "publisher", "countries", "diseases", "tags", "regions"):
             assert k not in meta
 
@@ -500,7 +500,7 @@ class TestSSRFAndSizeLimits:
         httpx_mock.add_response(url="https://example.com/feed.json", content=big_payload)
         loader = _make_loader(json_config)
         with mock.patch.object(jc, "MAX_RESPONSE_BYTES", 100):
-            with pytest.raises(ValueError, match="exceeds .* byte cap"):
+            with pytest.raises(ValueError, match=r"exceeds .* byte cap"):
                 list(loader.load_documents())
 
 

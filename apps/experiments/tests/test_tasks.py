@@ -44,9 +44,23 @@ def test_async_export_chat_applies_query_string_filters(mock_recorder_cls):
     query_string = "f_participant=alice&op_participant=equals&f_participant=bob&op_participant=does+not+contain"
     result = async_export_chat.run(experiment.id, query_string, "UTC")
 
-    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).file.read()).decode()
+    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).read_bytes()).decode()
     assert "message from alice" in csv_content
     assert "message from bob" not in csv_content
+
+
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_exports_only_selected_columns(mock_recorder_cls):
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+
+    result = async_export_chat.run(
+        experiment_id=session.experiment_id, query_params="", time_zone="UTC", columns=["message_content"]
+    )
+
+    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).read_bytes()).decode()
+    assert csv_content.lstrip("\ufeff").splitlines()[0] == "Message ID,Message Type,Message Content"
 
 
 class _ReadTracker:
@@ -97,7 +111,7 @@ def test_async_export_chat_streams_temp_file_to_storage(mock_recorder_cls):
     assert all(size > 0 for size in reads), f"export was read unbounded into memory: read sizes {reads}"
 
     file = File.objects.get(id=result["file_id"])
-    csv_content = gzip.decompress(file.file.read()).decode()
+    csv_content = gzip.decompress(file.read_bytes()).decode()
     assert "m49" in csv_content
     assert file.content_size == file.file.size
 

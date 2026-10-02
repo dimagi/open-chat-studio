@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import re
-from io import BytesIO
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -12,7 +11,6 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import Attachment
 from apps.channels.deduplication import is_duplicate_delivery
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
-from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
@@ -40,6 +38,9 @@ from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.users.models import CustomUser
 
 logger = logging.getLogger("ocs.channels")

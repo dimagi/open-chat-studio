@@ -15,13 +15,14 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 if TYPE_CHECKING:
@@ -102,9 +103,9 @@ class OpenAPIOperationExecutor:
             except httpx.HTTPStatusError as e:
                 if e.response and e.response.status_code == 400:
                     raise ToolException(f"Bad request: {e.response.text}") from None
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
             except httpx.HTTPError as e:
-                raise ToolException(f"Error making request: {str(e)}") from None
+                raise ToolException(f"Error making request: {e!s}") from None
 
     def call_api_with_notifications(self, **kwargs) -> Any:
         """Wrapper around call_api that creates notifications for monitoring custom action health.
@@ -162,11 +163,11 @@ class OpenAPIOperationExecutor:
             msg = Message()
             msg["content-disposition"] = content_disposition
             if msg.get_content_disposition() != "attachment":
-                return
+                return None
 
             filename = msg.get_filename()
         except Exception as e:
-            raise ToolException(f"Invalid content-disposition header: {str(e)}") from e
+            raise ToolException(f"Invalid content-disposition header: {e!s}") from e
         return filename or str(uuid.uuid4())
 
     def _get_url(self, path_params):
@@ -235,7 +236,9 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
 
     # Assemble final model
     api_op = APIOperation.from_openapi_spec(spec, path, method)
-    function_name = api_op.operation_id
+    # Sanitized so it's a valid Anthropic tool name -- operation IDs are usually already safe, but
+    # a hand-written OpenAPI spec can give one that isn't (spaces, punctuation, non-ASCII, ...).
+    function_name = sanitize_property_name(api_op.operation_id)
     args_schema = _create_model(
         function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
     )
@@ -268,7 +271,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
         if p.param_schema:
             schema = spec.get_schema(p.param_schema)
         else:
-            media_type_schema = list(p.content.values())[0].media_type_schema
+            media_type_schema = next(iter(p.content.values())).media_type_schema
             schema = spec.get_schema(media_type_schema)
         if p.name and not schema.title:
             schema.title = p.name
@@ -344,7 +347,7 @@ def _get_enum_type(schema) -> type[enum.Enum]:
     if schema.type == DataType.STRING:
         type_ = enum.StrEnum(_make_model_name(schema.title, "Enum"), [(v, v) for v in schema.enum if v])
         type_.__doc__ = schema.description
-        return cast(type[enum.Enum], type_)
+        return cast("type[enum.Enum]", type_)
     else:
         raise ValueError(f"Unsupported enum type: {schema.type}")
 
@@ -363,7 +366,9 @@ def _get_basic_type(data_type: DataType) -> type:
 
 
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
-    return create_model(_make_model_name(name), **properties, **kwargs)
+    """Builds a Pydantic model from OpenAPI-derived `properties`. See
+    `create_model_with_sanitized_names` for how property names are sanitized and restored."""
+    return create_model_with_sanitized_names(_make_model_name(name), properties, **kwargs)
 
 
 def _make_model_name(name, suffix="Model"):

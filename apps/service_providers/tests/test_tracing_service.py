@@ -89,7 +89,7 @@ class TestTracingService:
         with tracing_service.trace(trace_name, mock_session):
             with tracing_service.span(span_name, inputs, metadata) as span_ctx:
                 assert len(mock_tracer.spans) == 1
-                span_id = list(mock_tracer.spans.keys())[0]
+                span_id = next(iter(mock_tracer.spans.keys()))
                 span_data = mock_tracer.spans[span_id]
                 assert span_data["name"] == span_name
                 assert span_data["inputs"] == inputs
@@ -117,7 +117,7 @@ class TestTracingService:
                 pass
 
             # Verify error was recorded
-            span_id = list(mock_tracer.spans.keys())[0]
+            span_id = next(iter(mock_tracer.spans.keys()))
             span_data = mock_tracer.spans[span_id]
             assert span_data["ended"]
             assert span_data["error"] == "Test error"

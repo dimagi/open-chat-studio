@@ -24,6 +24,8 @@ dump.rdb
 .envrc
 .python-version
 .coverage
+coverage.xml
+htmlcov/
 venv
 .venv/
 .ruff_cache/
@@ -56,3 +58,8 @@ CODE_REVIEW.md
 site/
 
 .superpowers/
+
+# Model sync run artifacts, written into the checkout by the auto-update-models workflow
+reconciliation.json
+reconciliation.*.md
+decision_report.md

@@ -67,6 +67,7 @@ class CustomAction(BaseTeamModel):
             path = self.healthcheck_path.lstrip("/")
             root = self.server_url.rstrip("/")
             return root + "/" + path
+        return None
 
     @operations.setter
     def operations(self, value: list[APIOperationDetails]):

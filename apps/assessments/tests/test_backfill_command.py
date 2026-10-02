@@ -66,7 +66,7 @@ def test_backfill_dry_run_reports_counts(historical_data, capsys):
 
 @pytest.mark.django_db()
 def test_backfill_writes_scores_for_historical_data(historical_data):
-    team, session, result = historical_data
+    _team, _session, result = historical_data
     assert Score.objects.count() == 0
 
     call_command("backfill_initial_scores")

@@ -4,6 +4,7 @@ from field_audit import enable_audit
 from field_audit.models import AuditEvent
 
 from apps.teams.models import Team
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
 
@@ -20,6 +21,17 @@ def test_toggling_is_migrating_is_audited():
         team.save()
         events = AuditEvent.objects.by_model(Team).filter(object_pk=team.id)
         assert any("is_migrating" in (e.delta or {}) for e in events)
+
+
+@pytest.mark.django_db()
+def test_changing_the_allowlist_is_audited():
+    """What may leave this server is a security-relevant setting, so a change to it is recorded
+    next to is_migrating and public_key."""
+    with enable_audit():
+        team = TeamFactory()
+        team.exportable_experiments.add(ExperimentFactory(team=team))
+        events = AuditEvent.objects.by_model(Team).filter(object_pk=team.id)
+        assert any("exportable_experiments" in (e.delta or {}) for e in events)
 
 
 def _team_with_admin():
@@ -62,3 +74,28 @@ def test_admin_can_clear_migration_lock(client):
 
     team.refresh_from_db()
     assert team.is_migrating is False
+
+
+@pytest.mark.django_db()
+def test_banner_names_the_number_of_migrating_chatbots(client):
+    team, admin = _team_with_admin()
+    team.is_migrating = True
+    team.save()
+    team.exportable_experiments.add(ExperimentFactory(team=team), ExperimentFactory(team=team, is_archived=True))
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert "2 chatbots in this team are being migrated" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_banner_stays_team_wide_without_a_selection(client):
+    team, admin = _team_with_admin()
+    team.is_migrating = True
+    team.save()
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+
+    assert "This team is undergoing a migration" in response.content.decode()

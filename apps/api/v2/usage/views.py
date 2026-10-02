@@ -29,7 +29,7 @@ class UsageView(APIView):
     # (which is the client-facing one and takes precedence).
     # Team-scoped usage inspection. Returns message counts, session counts, distinct participant
     # counts, cost, and token counts over a time window, optionally bucketed, grouped by a dimension,
-    # and narrowed by participant/chatbot/platform.
+    # and narrowed by participant identity/chatbot/platform.
     # See docs/design/usage-api.md.
 
     permission_classes = [*BASE_PERMISSION_CLASSES, CanViewUsage, TokenHasOAuthResourceScope]
@@ -52,7 +52,8 @@ class UsageView(APIView):
             "- With `granularity` finer than `total`, `results` is one row per time bucket.\n"
             "- With `group_by` set, `results` is cursor-paginated breakdown rows — one per group, or one "
             "per (group, bucket) when combined with a finer granularity.\n\n"
-            "Optionally narrowed by `participant`, `chatbot`, or `platform`.\n\n"
+            "Optionally narrowed by `participant`, `participant_identifier`, `participant_remote_id`, "
+            "`chatbot`, or `platform`.\n\n"
             "> **Tip:** The **Response samples** panel has worked examples for the common cases — pick "
             "one from the **Example** dropdown (single participant, cost + tokens, grouped breakdowns, "
             "and daily timeseries)."
@@ -184,6 +185,7 @@ class UsageView(APIView):
             tz=validated["tz"],
             participant=validated.get("participant"),
             participant_identifier=validated.get("participant_identifier"),
+            participant_remote_id=validated.get("participant_remote_id"),
             chatbot=validated.get("chatbot"),
             platform=validated.get("platform"),
             group_by=validated.get("group_by"),

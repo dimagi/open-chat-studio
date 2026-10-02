@@ -209,8 +209,10 @@ def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
 
     model_choices = []
     for provider in llm_providers:
-        for model in llm_provider_models_by_type.get(provider.type, []):
-            model_choices.append((f"{provider.id}:{model.id}", f"{provider.name} - {model!s}"))
+        model_choices.extend(
+            (f"{provider.id}:{model.id}", f"{provider.name} - {model!s}")
+            for model in llm_provider_models_by_type.get(provider.type, [])
+        )
     return model_choices
 
 

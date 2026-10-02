@@ -63,7 +63,7 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                 yield SourceDocument(content=document.page_content.encode("utf-8"), metadata=document.metadata)
 
         except Exception as e:
-            logger.error(f"Error loading documents from Confluence: {str(e)}")
+            logger.error(f"Error loading documents from Confluence: {e!s}")
             raise
 
     def get_document_identifier(self, document: SourceDocument) -> str:

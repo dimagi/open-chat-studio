@@ -2,7 +2,15 @@ import pytest
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.utils import make_evaluation_messages_from_sessions, merge_binary_labels, parse_history_text
+from apps.evaluations.forms import EvaluationConfigForm
+from apps.evaluations.models import EvaluationMode
+from apps.evaluations.utils import (
+    get_evaluators_with_schema,
+    make_evaluation_messages_from_sessions,
+    merge_binary_labels,
+    parse_history_text,
+)
+from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -240,3 +248,123 @@ class TestMergeBinaryLabels:
     def test_non_binary_stats_unchanged(self):
         stats = {"type": "numeric", "count": 3, "mean": 2.0}
         assert merge_binary_labels(stats, {"type": "int"}) is stats
+
+
+@pytest.mark.django_db()
+def test_get_evaluators_with_schema_excludes_archived(team_with_users):
+    """Archived evaluators are omitted from the schema listing used to build config pickers."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    archived.archive()
+
+    ids = {entry["id"] for entry in get_evaluators_with_schema(team_with_users)}
+
+    assert kept.id in ids
+    assert archived.id not in ids
+
+
+@pytest.mark.django_db()
+def test_a_new_runs_frozen_plan_excludes_archived_evaluators(team_with_users):
+    """A run's frozen evaluator_ids plan drops evaluators archived after the config was built."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[kept, archived])
+    archived.archive()
+
+    run = config.run()
+
+    assert run.evaluator_ids == [kept.id]
+
+
+@pytest.mark.django_db()
+def test_config_picker_offers_only_the_configs_own_archived_members(team_with_users):
+    """The picker hides archived evaluators except those already on the config being edited, which it flags."""
+    EvaluatorFactory.create(team=team_with_users, name="Kept scorer")
+    member = EvaluatorFactory.create(team=team_with_users, name="Retired member")
+    stranger = EvaluatorFactory.create(team=team_with_users, name="Retired stranger")
+    config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[member])
+    member.archive()
+    stranger.archive()
+
+    rendered = str(EvaluationConfigForm(team=team_with_users, instance=config)["evaluators"])
+    rendered_new = str(EvaluationConfigForm(team=team_with_users)["evaluators"])
+
+    assert "Kept scorer" in rendered
+    assert "Retired member" in rendered
+    assert "(archived)" in rendered
+    assert "Retired stranger" not in rendered
+    assert "Retired member" not in rendered_new
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("submit_archived", "expected"),
+    [
+        pytest.param(True, "kept", id="submitted-stays"),
+        pytest.param(False, "detached", id="omitted-detaches"),
+    ],
+)
+def test_editing_a_config_round_trips_its_archived_members(team_with_users, submit_archived, expected):
+    """An archived member stays on the config while its box is ticked and leaves when it is unticked."""
+    kept = EvaluatorFactory.create(team=team_with_users)
+    archived = EvaluatorFactory.create(team=team_with_users)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset, evaluators=[kept, archived])
+    archived.archive()
+    evaluators = [kept.id, archived.id] if submit_archived else [kept.id]
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={"name": "Renamed config", "evaluators": evaluators, "dataset": config.dataset_id},
+        instance=config,
+    )
+    assert form.is_valid(), form.errors
+    form.save()
+
+    members = set(config.evaluators.all())
+    assert members == ({kept, archived} if expected == "kept" else {kept})
+
+
+@pytest.mark.django_db()
+def test_a_config_whose_only_member_is_archived_can_still_be_edited(team_with_users):
+    """Renaming a config keeps working after its last evaluator is archived."""
+    archived = EvaluatorFactory.create(team=team_with_users)
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset, evaluators=[archived])
+    archived.archive()
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={"name": "Renamed config", "evaluators": [archived.id], "dataset": config.dataset_id},
+        instance=config,
+    )
+
+    assert form.is_valid(), form.errors
+    form.save()
+    config.refresh_from_db()
+    assert config.name == "Renamed config"
+    assert set(config.evaluators.all()) == {archived}
+
+
+@pytest.mark.django_db()
+def test_switching_dataset_mode_rejects_a_ticked_archived_member_of_the_old_mode(team_with_users):
+    """An archived member goes through the same mode check as an active one when the dataset changes."""
+    archived = EvaluatorFactory.create(team=team_with_users, name="Old scorer", evaluation_mode=EvaluationMode.MESSAGE)
+    message_dataset = EvaluationDatasetFactory.create(team=team_with_users, evaluation_mode=EvaluationMode.MESSAGE)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=message_dataset, evaluators=[archived])
+    archived.archive()
+    session_dataset = EvaluationDatasetFactory.create(team=team_with_users, evaluation_mode=EvaluationMode.SESSION)
+    session_evaluator = EvaluatorFactory.create(team=team_with_users, evaluation_mode=EvaluationMode.SESSION)
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={
+            "name": config.name,
+            "evaluators": [session_evaluator.id, archived.id],
+            "dataset": session_dataset.id,
+        },
+        instance=config,
+    )
+
+    assert not form.is_valid()
+    assert "Old scorer" in " ".join(form.errors["evaluators"])

@@ -136,9 +136,7 @@ def _compare_filter_values(actual_str: str, expected) -> str | None:
 
 
 def _format_filters(filters: list[dict]) -> str:
-    lines = []
-    for f in filters:
-        lines.append(f"  {f['column']} {f['operator']} {f['value']!r}")
+    lines = [f"  {f['column']} {f['operator']} {f['value']!r}" for f in filters]
     return "\n".join(lines)
 
 

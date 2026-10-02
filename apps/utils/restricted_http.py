@@ -232,8 +232,7 @@ class RestrictedHttpClient:
                             f"Request limit of {settings.RESTRICTED_HTTP_MAX_REQUESTS} exceeded"
                         )
                     self._request_count += 1
-                    result = self._do_request(httpx_kwargs)
-                    return result
+                    return self._do_request(httpx_kwargs)
         except _RetryableRequestError as exc:
             # Retries exhausted on a retryable status — return the response as-is
             return self._build_response_dict(exc.response, body=exc.body)

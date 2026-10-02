@@ -228,7 +228,7 @@ class TestDefaultParser:
 
         assert result.text == "Hello world"
         assert len(result.generated_files) == 1
-        assert result.generated_files.pop().file.read() == b"This is a generated file."
+        assert result.generated_files.pop().read_bytes() == b"This is a generated file."
 
         if expect_citations:
             assert len(result.cited_files) == 1

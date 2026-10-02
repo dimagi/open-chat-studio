@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -5,7 +6,6 @@ from django.core.management import call_command
 
 from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
 from apps.ocs_notifications.utils import toggle_notification_read
-from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
 from apps.teams.backends import get_team_owner_groups
@@ -14,6 +14,9 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import MembershipFactory
+
+if TYPE_CHECKING:
+    from apps.pipelines.models import Pipeline
 
 FAKE_DEPRECATED_MODELS = {
     "openai": [

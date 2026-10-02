@@ -28,9 +28,17 @@ function getTimeSeriesData (start, end, data) {
   return chartData
 }
 
+// Keyed by canvas id, not element: htmx swaps the #charts fragment, so the previous
+// chart sits on a detached canvas that Chart.getChart can no longer reach.
+const chartsByCanvasId = new Map()
+
 export const barChartWithDates = (ctx, start, end, data, label) => {
+  const canvas = ctx.canvas
+  chartsByCanvasId.get(canvas.id)?.destroy()
+  // Chart.js refuses to build a second chart on a canvas that still has a live one.
+  Chart.getChart(canvas)?.destroy()
   const chartData = getTimeSeriesData(start, end, data)
-  return new Chart(ctx, {
+  const chart = new Chart(ctx, {
     type: 'bar',
     data: {
       datasets: [
@@ -65,4 +73,6 @@ export const barChartWithDates = (ctx, start, end, data, label) => {
       }
     }
   })
+  chartsByCanvasId.set(canvas.id, chart)
+  return chart
 }

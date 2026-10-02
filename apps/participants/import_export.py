@@ -94,7 +94,7 @@ def process_participant_import(csv_file, experiment, team):
                     results["updated"] += 1
 
         except Exception as e:
-            results["errors"].append(f"Row {row_num}: {str(e)}")
+            results["errors"].append(f"Row {row_num}: {e!s}")
             continue
 
     return results

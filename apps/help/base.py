@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
@@ -12,6 +11,9 @@ from pydantic import BaseModel
 from apps.help.agent import build_system_agent
 from apps.help.tracing import get_help_agent_tracer
 from apps.service_providers.tracing.base import TraceContext
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger("ocs.help")
 

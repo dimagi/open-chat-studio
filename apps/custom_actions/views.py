@@ -316,7 +316,7 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         except ValueError as e:
             return JsonResponse({"error": str(e)}, status=400)
         except httpx.RequestError as e:
-            return JsonResponse({"error": f"Request failed: {str(e)}"}, status=500)
+            return JsonResponse({"error": f"Request failed: {e!s}"}, status=500)
         except Exception:
             logger.exception("Unexpected error testing endpoint pk=%s", pk)
             return JsonResponse({"error": "An unexpected error occurred"}, status=500)

@@ -2,7 +2,9 @@
     <div class="alert alert-info mb-4">
         <i class="fas fa-info-circle"></i>
         <div class="text-sm">
-            {% if hybrid_search %}
+            {% if score_kind == "rerank" %}
+                <p>Results are ranked by a reranker scoring each document against the query. A <strong>higher</strong> relevance is a better match.</p>
+            {% elif score_kind == "hybrid" %}
                 <p>Results are ranked by a combination of semantic and keyword search. A <strong>higher</strong> score is a better match.</p>
             {% else %}
                 <p>Results are ranked by semantic similarity. <strong>0</strong> = perfect match, <strong>1</strong> = totally unrelated.</p>
@@ -14,8 +16,12 @@
 {% for chunk in chunks %}
     <div class="flex justify-between items-start mb-1">
         <p class="text-sm text-base-content/70">Source: {{ chunk.file.name }}</p>
-        {# Keyed off the flag, not the score: a fused score of 0 is legitimate. #}
-        {% if hybrid_search %}
+        {# Keyed off score_kind, not the score: a score of 0 is legitimate. See _result_score_kind. #}
+        {% if score_kind == "rerank" %}
+            <div class="badge badge-outline badge-sm badge-primary">
+                Relevance: {{ chunk.rerank_score|floatformat:4 }}
+            </div>
+        {% elif score_kind == "hybrid" %}
             <div class="badge badge-outline badge-sm badge-info">
                 Score: {{ chunk.fused_score|floatformat:4 }}
             </div>

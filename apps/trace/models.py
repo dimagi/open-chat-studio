@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+import dictdiffer
 from django.db import models
 from django.db.models import Q
 from django.urls import reverse
@@ -81,3 +82,15 @@ class Trace(models.Model):
 
     def duration_seconds(self) -> float:
         return round(self.duration / 1000, 2)
+
+
+def participant_data_from_trace(trace: Trace) -> dict:
+    """Reconstruct the participant data state as it existed after the given trace.
+
+    Applies ``trace.participant_data_diff`` (if present) to ``trace.participant_data``
+    to produce the final state. Returns the snapshot as-is when no diff is recorded.
+    """
+    snapshot = trace.participant_data or {}
+    if trace.participant_data_diff:
+        return dictdiffer.patch(trace.participant_data_diff, snapshot)
+    return snapshot

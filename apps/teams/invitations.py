@@ -65,6 +65,7 @@ def get_invitation_from_request(request):
             # for now just swallow missing invitation errors
             # these should get picked up by the form validation
             clear_invite_from_session(request)
+    return None
 
 
 def get_invitation_id_from_request(request):

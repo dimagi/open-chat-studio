@@ -59,3 +59,45 @@
     - type: execute
       input: "hello"
       expected: "HELLO"
+    - type: llm_judge
+      criteria: "The code preserves the original input.upper() logic and only adds the requested empty-input check, rather than restructuring or rewriting the function"
+
+# The two cases below use the exact "Check for bugs" prompt from CHECK_FOR_BUGS_PROMPT in
+# assets/javascript/apps/pipeline/nodes/widgets.tsx -- keep this text in sync with that constant.
+- id: check_for_bugs_finds_and_fixes_a_real_bug
+  input:
+    query: >-
+      Review this code for bugs, edge cases, and correctness issues. Fix any you find, making
+      minimal changes. If there are no bugs, return the code unchanged.
+    context: |-
+      def main(input: str, **kwargs) -> str:
+          numbers = [int(x) for x in input.split(",")]
+          total = 0
+          for n in numbers:
+              total = n
+          return str(total)
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: "1,2,3"
+      expected: "6"
+
+- id: check_for_bugs_leaves_correct_code_unchanged
+  input:
+    query: >-
+      Review this code for bugs, edge cases, and correctness issues. Fix any you find, making
+      minimal changes. If there are no bugs, return the code unchanged.
+    context: |-
+      def main(input: str, **kwargs) -> str:
+          return input.upper()
+  checks:
+    - type: syntax
+    - type: has_main
+    - type: code_node
+    - type: execute
+      input: "hello"
+      expected: "HELLO"
+    - type: llm_judge
+      criteria: "The code is functionally equivalent to input.upper() and was not needlessly rewritten, since the original had no bugs"

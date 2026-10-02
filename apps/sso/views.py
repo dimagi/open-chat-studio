@@ -69,6 +69,7 @@ class CustomLoginView(LoginView):
                 return LoginEmailForm
             else:
                 return get_form_class(app_settings.FORMS, "login", self.form_class)
+        return None
 
     def form_valid(self, form):
         if not flag_is_active(self.request, "flag_sso_login"):
@@ -89,10 +90,10 @@ def _redirect_for_sso(request, email, for_signup=False):
     app, email = _get_social_app_for_email(email)
     if app:
         if email in app.settings.get("ignore_list", []):
-            return
+            return None
         if allow_list := app.settings.get("allow_list"):
             if email not in allow_list:
-                return
+                return None
 
         provider = app.get_provider(request)
         # Store email in session to validate later
@@ -104,6 +105,7 @@ def _redirect_for_sso(request, email, for_signup=False):
         if for_signup:
             kwargs["process"] = "signup"
         return redirect(provider.get_login_url(request, **kwargs))
+    return None
 
 
 def _get_social_app_for_email(email):

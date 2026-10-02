@@ -54,7 +54,7 @@ def test_unseal_with_wrong_key_fails(keypair):
     public_pem, _ = keypair
     token = seal_mod.seal({"api_key": "sk-secret"}, seal_mod.load_public_key(public_pem))
     wrong = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    with pytest.raises(ValueError, match="[Dd]ecryption"):
+    with pytest.raises(ValueError, match=r"[Dd]ecryption"):
         seal_mod.unseal(token, wrong)
 
 

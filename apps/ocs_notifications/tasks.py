@@ -67,6 +67,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
             "team_name": notification_event.team.name,
             "notification_url": notification_url,
             "profile_url": profile_url,
+            "links": notification_event.absolute_links,
         }
 
         # Try to render a template if it exists, otherwise use plain text

@@ -312,7 +312,7 @@ class PersistenceStage(ProcessingStage):
             chat=ctx.experiment_session.chat,
             message_type=ChatMessageType.AI,
             content=ctx.early_exit_response,
-            metadata=trace_metadata,
+            metadata={**trace_metadata, **ctx.early_exit_metadata},
         )
         if ctx.trace_service:
             ctx.trace_service.set_output_message_id(ai_message.id)
@@ -369,7 +369,7 @@ class ActivityTrackingStage(ProcessingStage):
             version_number = ctx.experiment.version_number
             current_versions = session.experiment_versions or []
             if version_number not in current_versions:
-                session.experiment_versions = current_versions + [version_number]  # ty: ignore[invalid-assignment]
+                session.experiment_versions = [*current_versions, version_number]  # ty: ignore[invalid-assignment]
                 update_fields.append("experiment_versions")
 
         session.save(update_fields=update_fields)

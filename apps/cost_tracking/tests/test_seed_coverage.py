@@ -16,16 +16,7 @@ REQUIRED_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_OUTPUT)
 # llm_input / llm_output pricing. Every entry needs a one-line reason so a
 # reviewer can decide whether the gap should still hold. Adding a new line
 # here is a deliberate gesture, not a routine fix.
-KNOWN_UNPRICED: set[tuple[str, str]] = {
-    # Transcription model - billed per audio minute, not per token.
-    ("groq", "whisper-large-v3-turbo"),
-    # Pricing not yet in LiteLLM; rate-change workflow will fill these in.
-    ("groq", "gemma2-9b-it"),
-    ("openai", "gpt-5.3"),
-    ("openai", "gpt-5.3-instant"),
-    ("perplexity", "llama-3.1-sonar-large-128k-chat"),
-    ("perplexity", "llama-3.1-sonar-small-128k-chat"),
-}
+KNOWN_UNPRICED: set[tuple[str, str]] = set()
 
 
 @pytest.mark.django_db()

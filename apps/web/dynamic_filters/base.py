@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
 from enum import StrEnum
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from django.db.models import Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
-from .datastructures import ColumnFilterData, FilterParams
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from .datastructures import ColumnFilterData, FilterParams
 
 logger = logging.getLogger("ocs.filters")
 

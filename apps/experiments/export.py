@@ -5,7 +5,9 @@ import io
 import json
 import tempfile
 from collections import OrderedDict
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
+from dataclasses import dataclass
+from typing import Any
 
 import dictdiffer
 
@@ -44,11 +46,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
     session_filter = ExperimentSessionFilter()
-    sessions_queryset = session_filter.apply(
-        sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone
-    )
-
-    return sessions_queryset
+    return session_filter.apply(sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone)
 
 
 def _get_participant_data_for_message(message) -> dict:
@@ -72,6 +70,92 @@ def _get_participant_data_for_message(message) -> dict:
     return {}
 
 
+@dataclass(frozen=True)
+class ExportColumn:
+    """A chat export column.
+
+    Session-level values (``from_session``) are cached once per session; message-level
+    values (``from_message``) are computed for every row.
+    """
+
+    key: str
+    label: str
+    from_message: Callable[[ChatMessage, Any, str | None], Any] | None = None
+    from_session: Callable[[ExperimentSession], Any] | None = None
+    prefetch: tuple[str, ...] = ()
+    required: bool = False
+
+
+EXPORT_COLUMNS: list[ExportColumn] = [
+    ExportColumn(key="message_id", label="Message ID", from_message=lambda m, e, t: m.id, required=True),
+    ExportColumn(key="message_date", label="Message Date", from_message=lambda m, e, t: m.created_at),
+    ExportColumn(key="message_type", label="Message Type", from_message=lambda m, e, t: m.message_type, required=True),
+    ExportColumn(
+        key="message_content",
+        label="Message Content",
+        from_message=lambda m, e, t: get_message_content(m, t) if t else m.content,
+    ),
+    ExportColumn(key="platform", label="Platform", from_session=lambda s: s.get_platform_name()),
+    ExportColumn(
+        key="session_tags",
+        label="Session Tags",
+        from_session=lambda s: _format_tags(s.chat.tags.all()),
+        prefetch=("chat__tags",),
+    ),
+    ExportColumn(
+        key="session_comments",
+        label="Session Comments",
+        from_session=lambda s: _format_comments(s.chat.comments.all()),
+        prefetch=("chat__comments", "chat__comments__user"),
+    ),
+    ExportColumn(key="session_id", label="Session ID", from_session=lambda s: s.external_id),
+    ExportColumn(key="session_state", label="Session State", from_session=lambda s: json.dumps(s.state)),
+    ExportColumn(key="chatbot_id", label="Chatbot ID", from_message=lambda m, e, t: e.public_id),
+    ExportColumn(key="chatbot_name", label="Chatbot Name", from_message=lambda m, e, t: e.name),
+    ExportColumn(key="participant_name", label="Participant Name", from_session=lambda s: s.participant.name),
+    ExportColumn(
+        key="participant_identifier",
+        label="Participant Identifier",
+        from_session=lambda s: s.participant.identifier,
+    ),
+    ExportColumn(
+        key="participant_public_id",
+        label="Participant Public ID",
+        from_session=lambda s: s.participant.public_id,
+    ),
+    ExportColumn(
+        key="message_tags",
+        label="Message Tags",
+        from_message=lambda m, e, t: _format_tags(m.tags.all()),
+        prefetch=("tags",),
+    ),
+    ExportColumn(
+        key="message_comments",
+        label="Message Comments",
+        from_message=lambda m, e, t: _format_comments(m.comments.all()),
+        prefetch=("comments", "comments__user"),
+    ),
+    ExportColumn(key="trace_id", label="Trace ID", from_message=lambda m, e, t: _get_trace_id_for_export(m)),
+    ExportColumn(
+        key="participant_data",
+        label="Participant Data",
+        from_message=lambda m, e, t: json.dumps(_get_participant_data_for_message(m)),
+        prefetch=("input_message_trace", "output_message_trace"),
+    ),
+]
+
+
+def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColumn]:
+    """Return the selected columns in export order, plus required ones. ``None`` selects all.
+
+    Unknown keys are ignored.
+    """
+    if keys is None:
+        return list(EXPORT_COLUMNS)
+    selected = set(keys)
+    return [column for column in EXPORT_COLUMNS if column.required or column.key in selected]
+
+
 def count_export_messages(sessions_queryset) -> int:
     """Total number of messages an export of these sessions will produce.
 
@@ -80,8 +164,12 @@ def count_export_messages(sessions_queryset) -> int:
     return _build_message_queryset(sessions_queryset).count()
 
 
-def _build_message_queryset(sessions_queryset):
-    """Return the base ChatMessage queryset for export, ordered by pk for keyset pagination."""
+def _build_message_queryset(sessions_queryset, columns: list[ExportColumn] = EXPORT_COLUMNS):
+    """Return the ChatMessage queryset for export, ordered by pk for keyset pagination.
+
+    Only the relations the given columns read are prefetched.
+    """
+    prefetch = [lookup for column in columns for lookup in column.prefetch]
     return (
         ChatMessage.objects.filter(
             chat__experiment_session__in=sessions_queryset,
@@ -92,59 +180,17 @@ def _build_message_queryset(sessions_queryset):
             "chat__experiment_session__participant",
             "chat__experiment_session__experiment_channel",
         )
-        .prefetch_related(
-            "tags",
-            "comments",
-            "comments__user",
-            "chat__tags",
-            "chat__comments",
-            "chat__comments__user",
-            "input_message_trace",
-            "output_message_trace",
-        )
+        .prefetch_related(*prefetch)
         .order_by("pk")
     )
 
 
-def _get_export_header(translation_language=None):
-    header = [
-        "Message ID",
-        "Message Date",
-        "Message Type",
-        "Message Content",
-        "Platform",
-        "Session Tags",
-        "Session Comments",
-        "Session ID",
-        "Session State",
-        "Chatbot ID",
-        "Chatbot Name",
-        "Participant Name",
-        "Participant Identifier",
-        "Participant Public ID",
-        "Message Tags",
-        "Message Comments",
-        "Trace ID",
-        "Participant Data",
-    ]
+def _get_export_header(columns: list[ExportColumn], translation_language=None) -> list[str]:
+    header = [column.label for column in columns]
     if translation_language:
         header.append("Message Language")
         header.append("Original Message")
     return header
-
-
-def _build_session_cache_entry(session) -> dict:
-    """Compute and return the per-session values used in every export row for that session."""
-    return {
-        "platform": session.get_platform_name(),
-        "session_tags": _format_tags(session.chat.tags.all()),
-        "session_comments": _format_comments(session.chat.comments.all()),
-        "external_id": session.external_id,
-        "state": json.dumps(session.state),
-        "participant_name": session.participant.name,
-        "participant_identifier": session.participant.identifier,
-        "participant_public_id": session.participant.public_id,
-    }
 
 
 class _SessionCache:
@@ -160,8 +206,9 @@ class _SessionCache:
     already loaded on the message by ``_build_message_queryset``.
     """
 
-    def __init__(self, max_entries: int | None = None):
+    def __init__(self, columns: list[ExportColumn], max_entries: int | None = None):
         self._entries: OrderedDict[int, dict] = OrderedDict()
+        self._session_getters = [(column.key, column.from_session) for column in columns if column.from_session]
         # Resolved at call time rather than bound as a default so the ceiling stays patchable.
         self._max_entries = SESSION_CACHE_MAX_ENTRIES if max_entries is None else max_entries
 
@@ -169,7 +216,7 @@ class _SessionCache:
         try:
             entry = self._entries[session.id]
         except KeyError:
-            entry = _build_session_cache_entry(session)
+            entry = {key: getter(session) for key, getter in self._session_getters}
             self._entries[session.id] = entry
             if len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)
@@ -181,28 +228,14 @@ class _SessionCache:
         return len(self._entries)
 
 
-def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list:
-    """Return an export row list for *message*."""
-    content = get_message_content(message, translation_language) if translation_language else message.content
+def _yield_row_for_message(
+    message, session_cache: _SessionCache, experiment, columns: list[ExportColumn], translation_language
+) -> list:
+    """Return an export row for a single message."""
+    sc = session_cache.get(message.chat.experiment_session)
     row = [
-        message.id,
-        message.created_at,
-        message.message_type,
-        content,
-        sc["platform"],
-        sc["session_tags"],
-        sc["session_comments"],
-        sc["external_id"],
-        sc["state"],
-        experiment.public_id,
-        experiment.name,
-        sc["participant_name"],
-        sc["participant_identifier"],
-        sc["participant_public_id"],
-        _format_tags(message.tags.all()),
-        _format_comments(message.comments.all()),
-        trace_id,
-        json.dumps(participant_data),
+        column.from_message(message, experiment, translation_language) if column.from_message else sc[column.key]
+        for column in columns
     ]
     if translation_language:
         row.append(translation_language)
@@ -210,17 +243,8 @@ def _build_message_row(message, participant_data, sc, experiment, trace_id, tran
     return row
 
 
-def _yield_row_for_message(message, session_cache: _SessionCache, experiment, translation_language) -> list:
-    """Return an export row for a single message."""
-    session = message.chat.experiment_session
-    sc = session_cache.get(session)
-    participant_data = _get_participant_data_for_message(message)
-    trace_id = _get_trace_id_for_export(message)
-    return _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
-
-
 def generate_export_rows(
-    experiment, sessions_queryset, translation_language=None, progress_callback=None
+    experiment, sessions_queryset, translation_language=None, progress_callback=None, columns=None
 ) -> Generator[list]:
     """Yield the header row, then one data row per message across all matching sessions.
 
@@ -230,12 +254,15 @@ def generate_export_rows(
     first time each session is encountered so they are serialised only once no matter
     how many messages belong to that session; see :class:`_SessionCache` for why that
     cache is bounded rather than keeping every session for the life of the export.
-    """
-    yield _get_export_header(translation_language)
 
-    base_qs = _build_message_queryset(sessions_queryset)
+    ``columns`` is a list of column keys to include (see ``EXPORT_COLUMNS``); ``None`` includes all.
+    """
+    export_columns = resolve_export_columns(columns)
+    yield _get_export_header(columns=export_columns, translation_language=translation_language)
+
+    base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)
     last_pk = 0
-    session_cache = _SessionCache()
+    session_cache = _SessionCache(columns=export_columns)
     processed = 0
 
     def report(count):
@@ -248,7 +275,13 @@ def generate_export_rows(
             break
 
         for message in chunk:
-            yield _yield_row_for_message(message, session_cache, experiment, translation_language)
+            yield _yield_row_for_message(
+                message=message,
+                session_cache=session_cache,
+                experiment=experiment,
+                columns=export_columns,
+                translation_language=translation_language,
+            )
             processed += 1
             if processed % PROGRESS_UPDATE_INTERVAL == 0:
                 report(processed)
@@ -289,7 +322,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
 
 
 def export_to_tempfile(
-    experiment, sessions_queryset, translation_language=None, compress=False, progress_callback=None
+    experiment, sessions_queryset, translation_language=None, compress=False, progress_callback=None, columns=None
 ) -> io.BufferedRandom | tempfile.SpooledTemporaryFile[bytes]:
     """Write the CSV export to a temporary file and return it, seeked to 0.
 
@@ -308,6 +341,13 @@ def export_to_tempfile(
     download time for large exports.  The gzip stream is finalised (trailer written)
     before returning so the file is a valid, complete .gz archive.
     """
+    rows = generate_export_rows(
+        experiment=experiment,
+        sessions_queryset=sessions_queryset,
+        translation_language=translation_language,
+        progress_callback=progress_callback,
+        columns=columns,
+    )
     if compress:
         # Use a plain TemporaryFile rather than SpooledTemporaryFile.  The
         # SpooledTemporaryFile + GzipFile combination has known edge cases around
@@ -320,7 +360,7 @@ def export_to_tempfile(
         tmp = tempfile.TemporaryFile(mode="wb+")  # noqa: SIM115
         with gzip.open(tmp, "wt", encoding="utf-8", newline="") as gz:
             writer = csv.writer(gz, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            for row in generate_export_rows(experiment, sessions_queryset, translation_language, progress_callback):
+            for row in rows:
                 writer.writerow(row)
     else:
         # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
@@ -329,7 +369,7 @@ def export_to_tempfile(
         tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")  # noqa: SIM115
         text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
         writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in generate_export_rows(experiment, sessions_queryset, translation_language, progress_callback):
+        for row in rows:
             writer.writerow(row)
         text_wrapper.flush()
         text_wrapper.detach()

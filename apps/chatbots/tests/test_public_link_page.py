@@ -8,7 +8,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
-from apps.chatbots.public_link import CSP
+from apps.chatbots.views.public_link import CSP
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 from apps.utils.factories.user import UserFactory

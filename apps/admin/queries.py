@@ -25,7 +25,7 @@ _QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
 
 
 def get_message_stats(start: datetime, end: datetime):
-    data = (
+    return (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
         .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
         .annotate(date=TruncDate("created_at"))
@@ -33,11 +33,10 @@ def get_message_stats(start: datetime, end: datetime):
         .annotate(count=Count("id"))
         .order_by("date")
     )
-    return data
 
 
 def get_participant_stats(start: datetime, end: datetime):
-    data = (
+    return (
         Participant.objects.filter(created_at__gte=start, created_at__lt=end)
         .exclude(platform=ChannelPlatform.EVALUATIONS)
         .annotate(date=TruncDate("created_at"))
@@ -45,7 +44,6 @@ def get_participant_stats(start: datetime, end: datetime):
         .annotate(count=Count("id"))
         .order_by("date")
     )
-    return data
 
 
 def usage_to_csv(start: datetime, end: datetime):

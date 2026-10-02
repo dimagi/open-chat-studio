@@ -6,14 +6,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, ClassVar, Union
+from typing import Any, ClassVar, Union
 from xml.sax.saxutils import escape
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
 from langchain_community.utilities.openapi import OpenAPISpec
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
 
@@ -34,10 +34,8 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
-
-if TYPE_CHECKING:
-    from apps.pipelines.models import Node
 
 logger = logging.getLogger("ocs.tools")
 
@@ -148,8 +146,33 @@ def _get_search_tool_footer(with_citations: bool):
     return SEARCH_TOOL_BASE_FOOTER.format(citations_note=citations_note)
 
 
+# How many recent turns to hand the reranker as conversation context. Six is three exchanges:
+# enough to carry the referent of a follow-up question ("how much does it cost?"), short enough
+# that the reranker's query stays dominated by the query the LLM actually asked.
+RERANK_CONTEXT_MESSAGE_COUNT = 6
+
+
+def _recent_conversation_context(collection, graph_state: dict) -> str | None:
+    """Return recent human and AI turns already loaded into the graph state."""
+    if not collection.reranking_enabled:
+        return None
+
+    turns = []
+    for message in graph_state.get("messages", []):
+        if isinstance(message, HumanMessage | AIMessage) and (content := message.text.strip()):
+            role = "user" if isinstance(message, HumanMessage) else "assistant"
+            turns.append(f"{role}: {content}")
+    turns = turns[-RERANK_CONTEXT_MESSAGE_COUNT:]
+    return "\n".join(turns) or None
+
+
 def _perform_collection_search(
-    collection, query: str, max_results: int = 5, generate_citations: bool = True, include_collection_info: bool = False
+    collection,
+    query: str,
+    max_results: int = 5,
+    generate_citations: bool = True,
+    include_collection_info: bool = False,
+    graph_state: dict | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -160,11 +183,17 @@ def _perform_collection_search(
         max_results: Maximum number of results to return
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
+        graph_state: The LangGraph state containing the conversation already loaded for the LLM.
 
     Returns:
         Formatted search results string
     """
-    embeddings = search_collection(collection=collection, query=query, top_k=max_results)
+    embeddings = search_collection(
+        collection=collection,
+        query=query,
+        top_k=max_results,
+        context=_recent_conversation_context(collection, graph_state or {}),
+    )
 
     if not embeddings:
         if include_collection_info:
@@ -448,6 +477,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    collection_id: int
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -455,6 +485,19 @@ class AttachMediaTool(CustomBaseTool):
             chat=self.experiment_session.chat, tool_type="ocs_attachments"
         )
         return chat_attachment
+
+    def _get_attachable_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Map each requested id that is a file in the node's media collection to that file.
+
+        `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
+        to look up. The scoping belongs here: attaching is what makes
+        `ChatMessage.get_attached_files()` return the file, so that read's `chatattachment__chat`
+        filter confirms the association rather than checking it.
+        """
+        return File.objects.filter(
+            team_id=self.experiment_session.team_id,
+            collections__id=self.collection_id,
+        ).in_bulk(file_ids)
 
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
@@ -468,13 +511,17 @@ class AttachMediaTool(CustomBaseTool):
         # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
         # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
+        attachable_files = self._get_attachable_files(file_ids)
         for file_id in file_ids:
+            file = attachable_files.get(file_id)
+            if file is None:
+                response.append(f"* {file_id}: File not found.")
+                continue
             try:
                 # One transaction per file, so a failed attachment rolls back on its own and the
                 # loop can keep going. Catching a DB error without leaving the block would abort
                 # the transaction and break every remaining iteration.
                 with transaction.atomic():
-                    file = File.objects.get(id=file_id)
                     chat_attachment.files.add(file_id)
                     self.tool_callbacks.attach_file(file_id)
                     file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
@@ -496,8 +543,6 @@ class AttachMediaTool(CustomBaseTool):
                             )
                         file_response = f"{file_response} {link_text}"
                     response.append(file_response)
-            except File.DoesNotExist:
-                response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
                 response.append(f"* {file_id}: Error fetching file.")
 
@@ -519,7 +564,7 @@ class SearchIndexTool(CustomBaseTool):
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
 
-    def action(self, query: str) -> str:
+    def action(self, query: str, graph_state: dict | None = None) -> str:
         """
         Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
         rewriting is automatically done by the LLM, since it decides what query to use when invoking this tool.
@@ -531,6 +576,7 @@ class SearchIndexTool(CustomBaseTool):
             max_results=self.search_config.max_results,
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
+            graph_state=graph_state,
         )
 
 
@@ -548,7 +594,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     generate_citations: bool = True
     allowed_collection_ids: list[int]
 
-    def action(self, collection_index_id: int, query: str) -> str:
+    def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
         Search a specific collection index for the most relevant file chunks based on the query.
         """
@@ -568,6 +614,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             max_results=self.max_results,
             generate_citations=self.generate_citations,
             include_collection_info=True,
+            graph_state=graph_state,
         )
 
 
@@ -767,10 +814,15 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.params.get("tools") or []
+    # attach-media is not user-selectable (see AgentTools.user_tool_choices); it is added here so
+    # that it can be given the node's media collection. Drop any copy carried in the node's own tool
+    # list so it cannot be built unscoped.
+    tool_names = [name for name in node.tool_names if name != AgentTools.ATTACH_MEDIA]
+    tool_kwargs = {}
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
-    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"collection_id": node.collection_id}
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks, tool_kwargs)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
@@ -779,7 +831,7 @@ def get_node_tools(
 def get_mcp_tool_instances(node: Node, team: Team):
     """Fetch tools from MCP servers based on the selected tools in the node parameters."""
 
-    mcp_tools = node.params.get("mcp_tools", [])
+    mcp_tools = node.mcp_tool_refs
     if not mcp_tools:
         return []
 
@@ -798,32 +850,51 @@ def get_mcp_tool_instances(node: Node, team: Team):
 
 
 def get_tool_instances(
-    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+    tools_list,
+    experiment_session: ExperimentSession | None = None,
+    tool_callbacks=None,
+    tool_kwargs: dict[str, dict] | None = None,
 ) -> list[BaseTool]:
+    tool_kwargs = tool_kwargs or {}
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         if tool_cls.requires_callbacks and not tool_callbacks:
             raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
-        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
+        tools.append(
+            tool_cls(
+                experiment_session=experiment_session, tool_callbacks=tool_callbacks, **tool_kwargs.get(tool_name, {})
+            )
+        )
     return tools
 
 
 def get_custom_action_tools(action_holder: Union[Experiment, "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
-    return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
+    # LangGraph's ToolNode indexes tools by name and silently drops earlier duplicates, so two
+    # operations whose sanitized names collide (e.g. "get foo" and "get/foo" both -> "get_foo")
+    # must be told apart here, before the tool list reaches `create_agent`.
+    taken_names: set[str] = set()
+    tools = []
+    for operation in operations:
+        tool = get_tool_for_custom_action_operation(operation, taken_names)
+        if tool:
+            tools.append(tool)
+    return tools
 
 
-def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
+def get_tool_for_custom_action_operation(custom_action_operation, taken_names: set[str]) -> BaseTool | None:
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
-        return
+        return None
 
     auth_service = custom_action.get_auth_service()
-    path = list(spec.paths)[0]
+    path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
+    function_def.name = sanitize_property_name(function_def.name, taken_names)
+    taken_names.add(function_def.name)
     return function_def.build_tool(auth_service, custom_action)
 
 

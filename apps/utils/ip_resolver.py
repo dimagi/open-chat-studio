@@ -38,5 +38,5 @@ class CannotResolveHost(Exception):
         self.original_error = original_error
         message = f"Failed to resolve hostname: {hostname}"
         if original_error:
-            message += f" ({str(original_error)})"
+            message += f" ({original_error!s})"
         super().__init__(message)

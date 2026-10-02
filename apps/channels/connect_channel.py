@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
 from apps.channels.channel_base import ChannelBase
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.const import MESSAGE_TYPES
-from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.sender import ChannelSender
 from apps.chat.exceptions import ChannelException
+
+if TYPE_CHECKING:
+    from apps.channels.pipeline import MessageProcessingContext
 
 logger = logging.getLogger("ocs.channels")
 

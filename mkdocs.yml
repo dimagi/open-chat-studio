@@ -142,11 +142,13 @@ nav:
       - 0064 Channels may override the session token lifetime: adr/0064-per-channel-session-token-lifetime-override.md
       - 0065 Participant-actionable errors are answered, not raised: adr/0065-participant-actionable-errors-answered-not-raised.md
       - 0066 Session tokens carry their expiry and are renewed in place: adr/0066-session-tokens-carry-their-expiry-and-renew-in-place.md
+      - 0067 Team-actionable provider errors are configuration errors: adr/0067-team-actionable-provider-errors-are-configuration-errors.md
+      - 0068 Field order is presentation, stored outside the locked schema: adr/0068-field-order-is-presentation-outside-the-locked-schema.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
       - User Docs:
-        - Overview: developer_guides/user_docs/index.md
+        - User Docs: developer_guides/user_docs/index.md
         - Changelog Automation: developer_guides/user_docs/changelog_automation.md
         - Weekly Release Notes: developer_guides/user_docs/release_notes.md
       - API Documentation: developer_guides/api_documentation.md
@@ -168,6 +170,7 @@ nav:
       - Meta Cloud API Integration: developer_guides/code_systems/meta_cloud_api_integration.md
       - Turn.io Integration: developer_guides/code_systems/turn_io_integration.md
       - Index Managers: developer_guides/code_systems/index_managers.md
+      - Collection Retrieval: developer_guides/code_systems/collection_retrieval.md
       - Citations: developer_guides/code_systems/citations.md
       - Notifications: developer_guides/code_systems/notifications.md
     - Testing:
@@ -179,14 +182,15 @@ nav:
     - Releases and Upgrades: hosting/releases.md
     - Configuration: hosting/configuration.md
     - Rate Limiting: hosting/rate_limiting.md
-    - Docker Compose: hosting/docker.md
-    - Heroku: hosting/heroku.md
-    - AWS Fargate: hosting/aws.md
-    - Kamal: hosting/kamal.md
-    - Zero Trust Access:
-      - Overview: hosting/zero_trust_access.md
-      - Cloudflare Tunnel: hosting/cloudflare_tunnel.md
-      - Cloudflare Admin: hosting/cloudflare_admin.md
+    - Deployment Options:
+      - Docker Compose: hosting/docker.md
+      - Heroku: hosting/heroku.md
+      - AWS Fargate: hosting/aws.md
+      - Kamal: hosting/kamal.md
+      - Zero Trust Access:
+        - Overview: hosting/zero_trust_access.md
+        - Cloudflare Tunnel: hosting/cloudflare_tunnel.md
+        - Cloudflare Admin: hosting/cloudflare_admin.md
   - Admin Guides:
     - Overview: admin_guides/index.md
     - Banners System: admin_guides/banners.md

@@ -28,7 +28,7 @@ logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, queue=Queues.BACKGROUND)
-def async_export_chat(self, experiment_id: int, query_params: str, time_zone) -> dict:
+def async_export_chat(self, experiment_id: int, query_params: str, time_zone, columns: list[str] | None = None) -> dict:
     # The filters need a QueryDict (multi-value params, `.getlist()`), but Celery's JSON
     # serializer would flatten one into a plain dict, so the caller passes the raw query
     # string and we rebuild it here.
@@ -48,7 +48,13 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone) ->
     # to disk, avoiding a single large in-memory allocation for the whole CSV.
     # compress=True writes a gzip stream, reducing file size by ~80–90% for typical
     # chat exports and dramatically cutting S3 storage and download time.
-    with export_to_tempfile(experiment, filtered_sessions, compress=True, progress_callback=report_progress) as tmp:
+    with export_to_tempfile(
+        experiment=experiment,
+        sessions_queryset=filtered_sessions,
+        compress=True,
+        progress_callback=report_progress,
+        columns=columns,
+    ) as tmp:
         # Hand the temp file to storage directly rather than via ContentFile(tmp.read()):
         # the storage backend streams it in chunks, so peak memory stays flat instead of
         # scaling with export size. Reading it in one go negates the spooling above and
@@ -76,15 +82,17 @@ def async_create_experiment_version(
         Experiment.release_version_operation_lock(experiment_id)
 
 
-def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> bool:
+def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> str | None:
     """Dispatch async version creation under the version-operation lock.
 
     The lock is acquired before dispatch so a concurrent version operation is
-    rejected atomically. Returns False when another operation is already in flight.
+    rejected atomically. Returns the task id, or None when another operation is
+    already in flight. The one uuid is both the lock token and the Celery task id,
+    so a caller that has to report progress can hand it out as a poll handle.
     """
     task_id = str(uuid4())
     if not experiment.acquire_version_operation_lock(task_id):
-        return False
+        return None
     try:
         async_create_experiment_version.apply_async(
             kwargs={
@@ -97,7 +105,7 @@ def start_version_creation(experiment, version_description: str = "", make_defau
     except Exception:
         Experiment.release_version_operation_lock(experiment.id)
         raise
-    return True
+    return task_id
 
 
 @shared_task(bind=True, base=TaskbadgerTask, queue=Queues.CHAT)
@@ -127,10 +135,7 @@ def get_response_for_webchat_task(
             experiment_session.experiment_channel,
             experiment_session=experiment_session,
         )
-        message_attachments = []
-        if attachments:
-            for file_entry in attachments:
-                message_attachments.append(Attachment.model_validate(file_entry))
+        message_attachments = [Attachment.model_validate(file_entry) for file_entry in attachments or []]
 
         message = BaseMessage(
             participant_id=experiment_session.participant.identifier,

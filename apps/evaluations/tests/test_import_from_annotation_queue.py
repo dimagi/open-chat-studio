@@ -160,7 +160,7 @@ def test_post_with_empty_queue_does_not_dispatch_task(client_with_user, team_wit
 @pytest.mark.django_db()
 def test_idempotent_import_via_task(team_with_users, user, session_dataset, queue_with_session_items):
     """Re-importing the same session through the task is a no-op."""
-    queue, session = queue_with_session_items
+    _queue, session = queue_with_session_items
 
     existing_message = EvaluationMessage.objects.create(
         input={},

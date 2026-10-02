@@ -1,0 +1,13 @@
+{% load i18n %}
+{% if pending_elevation %}
+  <div class="alert alert-warning block mb-4">
+    <p>
+      {% translate "You are requesting elevated access to:" %}
+      <span class="font-bold">{{ pending_elevation.label }}</span>
+    </p>
+    <p class="text-sm">
+      {% translate "Access will be granted for 30 minutes." %}
+      {% translate "You can revoke access at any time." %}
+    </p>
+  </div>
+{% endif %}

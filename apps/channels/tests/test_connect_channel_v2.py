@@ -142,7 +142,7 @@ class TestCommCareConnectChannelIntegration:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
     def test_bot_generates_and_sends_encrypted_message(self, experiment):
         """Full pipeline: task decrypts message, bot responds, sender encrypts and sends."""
-        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
+        _participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
         ExperimentChannelFactory.create(
             team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
         )
@@ -167,7 +167,7 @@ class TestCommCareConnectChannelIntegration:
     def test_pipeline_aborts_silently_when_consent_revoked(self, experiment):
         """Pipeline aborts at consent check: bot is never invoked AND no
         message is sent back to the participant."""
-        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=False)
+        _participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=False)
         ExperimentChannelFactory.create(
             team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
         )
@@ -187,7 +187,7 @@ class TestCommCareConnectChannelIntegration:
     def test_disabled_channel_delivers_its_static_message(self, experiment):
         """The sender encrypts against ParticipantData, so the disabled check has to run
         after the participant stages -- otherwise the message can never be delivered."""
-        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
+        _participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
         ExperimentChannelFactory.create(
             team=experiment.team,
             experiment=experiment,
@@ -212,7 +212,7 @@ class TestCommCareConnectChannelIntegration:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
     def test_disabled_channel_still_honours_revoked_consent(self, experiment):
         """Being disabled is not licence to message someone who has withdrawn consent."""
-        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=False)
+        _participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=False)
         ExperimentChannelFactory.create(
             team=experiment.team,
             experiment=experiment,

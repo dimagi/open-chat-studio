@@ -86,7 +86,7 @@ class CustomActionForm(forms.ModelForm):
         try:
             validate_user_input_url(server_url, strict=not settings.DEBUG)
         except InvalidURL as e:
-            raise forms.ValidationError(f"The server URL is invalid: {str(e)}") from None
+            raise forms.ValidationError(f"The server URL is invalid: {e!s}") from None
 
         return server_url
 
@@ -96,7 +96,7 @@ class CustomActionForm(forms.ModelForm):
 
     def clean(self):
         if self.errors:
-            return
+            return None
 
         schema = self.cleaned_data.get("api_schema")
         server_url = self.cleaned_data.get("server_url")

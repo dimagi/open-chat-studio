@@ -47,9 +47,6 @@ class TeamBackend(ModelBackend):
 
 # Mapping of app labels to content types which are covered by OCS permissions
 CONTENT_TYPES = {
-    # The entry keeps these models permission-covered until they are dropped, which
-    # test_missing_content_types enforces.
-    "assistants": ["openaiassistant", "toolresources"],
     "banners": ["banner"],
     "bot_channels": ["experimentchannel"],
     "chat": ["chat", "chatmessage", "chatattachment"],
@@ -245,8 +242,8 @@ GROUPS = [
             ModelPermSetDef("human_annotations", "annotationitem", [VIEW, CHANGE]),
             ModelPermSetDef("human_annotations", "annotation", [ADD]),
             ModelPermSetDef("human_annotations", "annotationqueueaggregate", [VIEW]),
-        ]
-        + CHAT_VIEWER_PERMS,
+            *CHAT_VIEWER_PERMS,
+        ],
     ),
 ]
 

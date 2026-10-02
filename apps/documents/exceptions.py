@@ -11,8 +11,6 @@ class DocumentSourceDeleted(Exception):
     deletion, raises this, and the whole task is aborted cleanly.
     """
 
-    pass
-
 
 class IndexConfigurationException(Exception):
     pass
@@ -25,8 +23,6 @@ class ZipCreationError(Exception):
     FAILURE and the frontend error panel is shown.
     """
 
-    pass
-
 
 class ZipIntegrityError(ZipCreationError):
     """Raised when a file's byte count does not match its recorded content_size.
@@ -35,5 +31,3 @@ class ZipIntegrityError(ZipCreationError):
     stored metadata, so the task decorator excludes this from autoretry via
     dont_autoretry_for.
     """
-
-    pass

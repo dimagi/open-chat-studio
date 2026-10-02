@@ -29,11 +29,11 @@ class SsoAccountAdapter(DefaultSocialAccountAdapter):
             initial["email"] = self.request_invitation.email
         return initial
 
-    def authentication_error(self, request, provider_id, error=None, exception=None, extra_context=None):
+    def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
         # log the error
         logger.error(
             "Authentication error with provider %s: %s",
-            provider_id,
+            provider.id,
             error,
             exc_info=exception,
             extra=extra_context,

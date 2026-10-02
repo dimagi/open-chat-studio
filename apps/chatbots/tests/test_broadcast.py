@@ -401,7 +401,7 @@ def test_chatbot_home_hides_the_broadcast_button_without_a_channel(experiment, l
 
 
 @pytest.mark.django_db()
-@patch("apps.chatbots.views.send_broadcast_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_broadcast_message.delay")
 def test_broadcast_view_queues_the_selected_channels(delay, experiment, logged_in_client):
     telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
 
@@ -420,7 +420,7 @@ def test_broadcast_view_queues_the_selected_channels(delay, experiment, logged_i
 
 
 @pytest.mark.django_db()
-@patch("apps.chatbots.views.send_broadcast_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_broadcast_message.delay")
 def test_broadcast_view_rejects_a_chatbot_that_is_not_editable(delay, experiment, logged_in_client):
     """An archived chatbot can't be broadcast on, even by POSTing the endpoint directly."""
     telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
@@ -456,7 +456,7 @@ def test_broadcast_view_rejects_a_chatbot_that_is_not_editable(delay, experiment
         pytest.param("own", "Hi", "seven", id="non-numeric-activity-window"),
     ],
 )
-@patch("apps.chatbots.views.send_broadcast_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_broadcast_message.delay")
 def test_broadcast_view_rejects_invalid_input(delay, channel, message, days, experiment, logged_in_client):
     """Nothing is queued unless a live channel of *this* chatbot, a message within the limit and a
     window of at least one day are given."""

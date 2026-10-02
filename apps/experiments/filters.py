@@ -194,8 +194,7 @@ class VersionsFilter(ChoiceColumnFilter):
 
     def apply_any_of(self, queryset, value, timezone=None):
         version_numbers = self._get_version_numbers(value)
-        qs = queryset.filter(experiment_versions__overlap=version_numbers)
-        return qs
+        return queryset.filter(experiment_versions__overlap=version_numbers)
 
     def apply_excludes(self, queryset, value, timezone=None):
         version_numbers = self._get_version_numbers(value)

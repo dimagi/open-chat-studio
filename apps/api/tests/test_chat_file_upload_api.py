@@ -19,8 +19,7 @@ def api_client():
 @pytest.fixture()
 def authed_client(team_with_users):
     user = team_with_users.members.first()
-    client = ApiTestClient(user, team_with_users)
-    return client
+    return ApiTestClient(user, team_with_users)
 
 
 @pytest.fixture()

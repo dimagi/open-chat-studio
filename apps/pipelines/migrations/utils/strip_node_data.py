@@ -17,7 +17,7 @@ so they stick to ``_base_manager`` and plain column access.
 
 import logging
 
-from apps.pipelines.flow import react_flow_node_type
+from apps.pipelines.node_type import NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def rebuild_node_data_in_pipelines(Pipeline, Node):
         for row in rows:
             node = {
                 "id": row.flow_id,
-                "type": react_flow_node_type(row.type),
+                "type": NodeType(row.type).react_flow_type,
                 "data": {"id": row.flow_id, "type": row.type, "label": row.label, "params": row.params},
             }
             # Read the columns directly (not the Node.position property) so a future data

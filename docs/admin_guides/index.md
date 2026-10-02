@@ -2,12 +2,6 @@
 
 This section contains documentation for features that are typically used by system administrators and superusers to manage the Open Chat Studio platform.
 
-## Available Guides
-
-- [Banners System](banners.md) - Create and manage system-wide notification banners
-- [Feature Flags](feature_flags.md) - Manage access to [feature flags](../developer_guides/code_systems/feature_flags.md)
-- [OAuth Applications](oauth_applications.md) - Register global (team-less) OAuth applications
-
 ## Overview
 
 Admin features in Open Chat Studio are designed to help system administrators:
@@ -18,3 +12,9 @@ Admin features in Open Chat Studio are designed to help system administrators:
 - Control feature availability and access
 
 Most admin features require superuser privileges and are accessible through the Django admin interface.
+
+## Available Guides
+
+- [Banners System](banners.md) - Create and manage system-wide notification banners
+- [Feature Flags](feature_flags.md) - Manage access to [feature flags](../developer_guides/code_systems/feature_flags.md)
+- [OAuth Applications](oauth_applications.md) - Register global (team-less) OAuth applications

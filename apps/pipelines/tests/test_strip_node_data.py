@@ -2,6 +2,7 @@ from importlib import import_module
 
 import pytest
 from django.apps import apps as global_apps
+from django.db import connection
 
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
@@ -33,16 +34,37 @@ def _old_format_data():
     }
 
 
+def _unposition(*nodes) -> None:
+    """Put the given rows back in the state a row predating migration 0030 is in: positions NULL.
+
+    The columns are NOT NULL from migration 0033 on, so the state this backfill exists to repair
+    can no longer be written through the ORM. Postgres applies DDL inside the calling test's
+    transaction, so the dropped constraint dies with the test that dropped it — do not call this
+    from a ``transaction=True`` test, which commits.
+    """
+    with connection.cursor() as cursor:
+        # Rows written earlier in the test leave deferred FK triggers pending, and Postgres
+        # refuses to ALTER a table that has them. Django's own migrations flush them the same way.
+        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        cursor.execute(
+            "ALTER TABLE pipelines_node ALTER COLUMN position_x DROP NOT NULL, ALTER COLUMN position_y DROP NOT NULL"
+        )
+    Node._base_manager.filter(pk__in=[node.pk for node in nodes]).update(position_x=None, position_y=None)
+
+
 def _create_old_format_pipeline(team, with_rows=True):
     pipeline = Pipeline.objects.create(team=team, name="old", data=_old_format_data())
     if with_rows:
-        for node in pipeline.data["nodes"]:
+        rows = [
             Node.objects.create(
                 pipeline=pipeline,
                 flow_id=node["id"],
                 type=node["data"]["type"],
                 params=node["data"]["params"],
             )
+            for node in pipeline.data["nodes"]
+        ]
+        _unposition(*rows)
     return pipeline
 
 
@@ -155,20 +177,14 @@ class TestBackfillPositions:
 
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
 
-    def test_reads_serve_backfilled_positions_instead_of_the_origin(self, team):
-        """Why the backfill must ship with the read switch (ADR-0049): until it runs, a row
-        with NULL columns reads back at the origin, and the first save of that pipeline drops
-        the blob holding the only copy of its real layout."""
+    def test_reads_serve_backfilled_positions(self, team):
+        """Why the backfill had to ship with the read switch (ADR-0049): it moves the layout
+        onto the rows reads now come from, before the first save drops the blob holding the
+        only copy of it."""
         pipeline = _create_old_format_pipeline(team)
-
-        assert {node["id"]: node["position"] for node in pipeline.flow_data["nodes"]} == {
-            "start-1": {"x": 0, "y": 0},
-            "end-1": {"x": 0, "y": 0},  # really at x=100 in the blob, served as the origin
-        }
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
-        del pipeline.flow_data  # cached off the pre-backfill rows
         assert {node["id"]: node["position"] for node in pipeline.flow_data["nodes"]} == {
             "start-1": {"x": 0, "y": 0},
             "end-1": {"x": 100, "y": 0},
@@ -222,17 +238,20 @@ class TestBackfillPositions:
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
-        assert pipeline.node_set.get(flow_id="start-1").position is None
-        assert pipeline.node_set.get(flow_id="end-1").position is None
+        # NULL columns, not the origin: unpositioned is only expressible at the column level
+        # now that ``position`` cannot report it.
+        assert pipeline.node_set.get(flow_id="start-1").position_x is None
+        assert pipeline.node_set.get(flow_id="end-1").position_y is None
 
     def test_non_archived_row_wins_flow_id_collision(self, team):
         pipeline = _create_old_format_pipeline(team)
         archived = Node.objects.create(pipeline=pipeline, flow_id="start-1", type="StartNode", is_archived=True)
+        _unposition(archived)
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
         archived.refresh_from_db()
-        assert archived.position is None
+        assert archived.position_x is None
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
 
 

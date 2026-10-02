@@ -203,15 +203,31 @@ def query_collection(request, team_slug: str, pk: int):
     collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team=request.team)
     index_manager = collection.get_index_manager()
     chunks = index_manager.query(index_id=pk, query=request.GET.get("query"), top_k=int(request.GET.get("top_k", 5)))
-    context = {
-        "chunks": chunks,
-        # Derived from the results rather than from the flag: hybrid search falls back to a
-        # dense-only ranking when the query has no lexical matches, and those chunks carry a
-        # distance rather than a fused score. Every chunk in a result set comes from the same
-        # branch, so the first one settles it.
-        "hybrid_search": bool(chunks) and getattr(chunks[0], "fused_score", None) is not None,
-    }
-    return render(request, "documents/collection_query_results.html", context)
+    return render(
+        request,
+        "documents/collection_query_results.html",
+        {"chunks": chunks, "score_kind": _result_score_kind(chunks)},
+    )
+
+
+def _result_score_kind(chunks) -> str:
+    """Which number the preview should show for these results: "rerank", "hybrid" or "dense".
+
+    Derived from the results rather than from the flags, because each retrieval stage falls back
+    to the one beneath it. Hybrid search returns a dense-only ranking when the query has no
+    lexical matches, and reranking returns whatever ranking it was given when the reranker
+    fails -- so a flag being on is not evidence that its stage produced these chunks. The
+    annotation each stage leaves behind is. Every chunk in a result set comes from the same
+    branch, so the first one settles it, and truthiness is never tested: a score of 0 is a real
+    score.
+    """
+    if not chunks:
+        return ""
+    if getattr(chunks[0], "rerank_score", None) is not None:
+        return "rerank"
+    if getattr(chunks[0], "fused_score", None) is not None:
+        return "hybrid"
+    return "dense"
 
 
 class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin):
@@ -438,17 +454,16 @@ def add_collection_files(request, team_slug: str, pk: int):
 
     with transaction.atomic():
         # Create File objects
-        created_files = []
-        for uploaded_file in files:
-            created_files.append(
-                File.objects.create(
-                    team=request.team,
-                    name=uploaded_file.name,
-                    file=uploaded_file,
-                    summary=request.POST[uploaded_file.name] if not collection.is_index else "",
-                    purpose=FilePurpose.COLLECTION,
-                )
+        created_files = [
+            File.objects.create(
+                team=request.team,
+                name=uploaded_file.name,
+                file=uploaded_file,
+                summary=request.POST[uploaded_file.name] if not collection.is_index else "",
+                purpose=FilePurpose.COLLECTION,
             )
+            for uploaded_file in files
+        ]
 
         # Create file links
         status = FileStatus.PENDING if collection.is_index else ""
@@ -625,8 +640,7 @@ class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Si
         if search := self.request.GET.get("search"):
             queryset = similarity_search(queryset, search_phase=search, columns=["name"])
 
-        queryset = queryset.annotate(file_count=Count("files"))
-        return queryset
+        return queryset.annotate(file_count=Count("files"))
 
 
 class CollectionFormMixin:

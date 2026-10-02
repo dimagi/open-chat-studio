@@ -22,5 +22,5 @@ class TestNormalizeSampleRate:
         """Langfuse's own Langfuse.__init__ raises ValueError for a rate outside 0.0-1.0;
         raising here too gives an earlier, OCS-side signal rather than waiting for the SDK's
         own exception deep inside client construction."""
-        with pytest.raises(ValueError, match="Sample rate must be between 0.0 and 1.0"):
+        with pytest.raises(ValueError, match=r"Sample rate must be between 0\.0 and 1\.0"):
             normalize_sample_rate(rate)

@@ -64,7 +64,7 @@ def synced_file(source, monkeypatch):
 
 
 def test_sync_stores_the_pdf_the_source_served(synced_file):
-    assert synced_file.file.read() == PDF_BYTES
+    assert synced_file.read_bytes() == PDF_BYTES
     assert synced_file.content_type == "application/pdf"
     assert synced_file.content_size == len(PDF_BYTES)
     assert synced_file.name == "annual report.pdf"  # percent-decoded, extension intact

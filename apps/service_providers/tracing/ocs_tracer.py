@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import UserActionableError
@@ -16,11 +14,17 @@ from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
+from apps.service_providers.llm_service.error_classification import translate_provider_error
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from langchain_core.outputs import LLMResult
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -328,7 +332,7 @@ class OCSCallbackHandler(BaseCallbackHandler):
         self.tracer = tracer
 
     def _capture_error(self, error: BaseException | None, fallback_message: str, span_name: str) -> None:
-        if isinstance(error, UserActionableError):
+        if _is_participant_actionable(error):
             # The participant can act on this, so the run did not fail (ADR-0065).
             return
 
@@ -368,3 +372,10 @@ class OCSCallbackHandler(BaseCallbackHandler):
 def _error_arg(args, kwargs) -> BaseException | None:
     """LangChain passes the exception positionally on some callbacks and by keyword on others."""
     return kwargs.get("error") or (args[0] if args else None)
+
+
+def _is_participant_actionable(error: BaseException | None) -> bool:
+    """Return whether the error, or what it translates to, is one the participant can act on."""
+    # LangChain reports a provider exception before the node boundary translates it, so the
+    # translation has to be consulted here as well as the type.
+    return isinstance(error, UserActionableError) or isinstance(translate_provider_error(error), UserActionableError)

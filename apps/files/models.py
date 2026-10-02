@@ -182,7 +182,14 @@ class File(BaseTeamModel, VersionsMixin):
             if not self.name:
                 self.name = filename
             if not self.content_type:
-                self.content_type = File.get_content_type(self.file)
+                # Sniffing the type seeks the FieldFile, which opens it against storage when the
+                # blob is already stored. Leave it as we found it rather than holding the handle.
+                was_closed = self.file.closed
+                try:
+                    self.content_type = File.get_content_type(self.file)
+                finally:
+                    if was_closed:
+                        self.file.close()
         super().save(*args, **kwargs)
 
     def duplicate(self):
@@ -196,7 +203,7 @@ class File(BaseTeamModel, VersionsMixin):
             team=self.team,
         )
         if self.file and self.file.storage.exists(self.file.name):
-            new_file_file = ContentFile(self.file.read())
+            new_file_file = ContentFile(self.read_bytes())
             new_file_file.name = self.file.name
             new_file.file = new_file_file  # ty: ignore[invalid-assignment]
         new_file.save()
@@ -236,6 +243,11 @@ class File(BaseTeamModel, VersionsMixin):
             self.archive()
         else:
             self.delete()
+
+    def read_bytes(self) -> bytes:
+        """Read the whole blob and close the storage handle again."""
+        with self.file.open("rb") as handle:
+            return handle.read()
 
     def read_content(self) -> str:
         from apps.documents.readers import Document  # noqa: PLC0415 - circular: documents.readers imports files.models

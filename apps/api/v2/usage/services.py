@@ -121,11 +121,11 @@ class UsageQuery:
     """Validated, team-scoped inputs for a single usage request. Bundling them keeps the many
     aggregation helpers to one parameter and lets the window/filters travel together unchanged.
 
-    The ``participant``/``participant_identifier``/``chatbot`` fields are the raw request handles;
-    :func:`resolve_query_filters` turns them into the ``*_ids`` below **once** per request. The
-    queryset builders filter on those FK-id fields (never the handles), so no metric joins the
-    ``experiment``/``participant`` tables and the archived-inclusive id resolution lives in one place.
-    Build a query, then resolve it before running any aggregation."""
+    The ``participant``/``participant_identifier``/``participant_remote_id``/``chatbot`` fields are
+    the raw request handles; :func:`resolve_query_filters` turns them into the ``*_ids`` below **once**
+    per request. The queryset builders filter on those FK-id fields (never the handles), so no metric
+    joins the ``experiment``/``participant`` tables and the archived-inclusive id resolution lives in
+    one place. Build a query, then resolve it before running any aggregation."""
 
     team: Team
     metrics: Collection[str]
@@ -135,6 +135,7 @@ class UsageQuery:
     granularity: str = GRANULARITY_TOTAL
     participant: str | None = None
     participant_identifier: str | None = None
+    participant_remote_id: str | None = None
     chatbot: str | None = None
     platform: str | None = None
     group_by: str | None = None
@@ -240,15 +241,20 @@ def resolve_query_filters(query: UsageQuery) -> UsageQuery:
     archived-inclusive resolution (``get_all()``) happens in exactly one place. Call this before running
     any aggregation; ``filter_is_empty`` marks a requested filter that matched nobody so the reader
     returns zeros. Idempotent enough to skip when nothing needs resolving."""
-    wants_participant = bool(query.participant or query.participant_identifier)
+    wants_participant = bool(query.participant or query.participant_identifier or query.participant_remote_id)
     if not (wants_participant or query.chatbot):
         return query
     participant_ids = query.participant_ids
     experiment_ids = query.experiment_ids
     is_empty = query.filter_is_empty
     if wants_participant:
-        # An identifier can match several participants (one per platform), so this resolves to a list.
-        lookup = {"public_id": query.participant} if query.participant else {"identifier": query.participant_identifier}
+        # An identifier or remote ID can match several participants, so this resolves to a list.
+        if query.participant:
+            lookup = {"public_id": query.participant}
+        elif query.participant_identifier:
+            lookup = {"identifier": query.participant_identifier}
+        else:
+            lookup = {"remote_id": query.participant_remote_id}
         participant_ids = list(Participant.objects.filter(team=query.team, **lookup).values_list("id", flat=True))
         is_empty = is_empty or not participant_ids
     if query.chatbot:

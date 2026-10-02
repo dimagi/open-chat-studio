@@ -128,6 +128,7 @@ def load_installation(context: BoltContext, next):
 
     context["slack_install"] = installation
     next()
+    return None
 
 
 def get_session_for_thread(channel_id: str, thread_ts: str):

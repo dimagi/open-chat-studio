@@ -372,7 +372,7 @@ class TestTraceFilter:
         Tag.objects.create(team=team, name="urgent")
         input_message.add_tags(["important", "urgent"], team=team, added_by=None)
 
-        trace = TraceFactory.create(
+        return TraceFactory.create(
             team=team,
             experiment=experiment,
             participant=participant,
@@ -380,7 +380,6 @@ class TestTraceFilter:
             duration=1000,
             input_message=input_message,
         )
-        return trace
 
     def test_trace_message_tags_any_of_no_duplicates(self, trace_with_many_message_tags, team):
         queryset = Trace.objects.filter(team=team)

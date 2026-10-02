@@ -84,7 +84,7 @@ class ChannelPlatform(models.TextChoices):
         for platform in used_platforms:
             platform_availability.pop(platform, None)
 
-        return cast(dict[Self, bool], platform_availability)
+        return cast("dict[Self, bool]", platform_availability)
 
     @classmethod
     def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:

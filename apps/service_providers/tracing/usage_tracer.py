@@ -11,19 +11,22 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Any
-
-from langchain_core.callbacks.base import BaseCallbackHandler
+from typing import TYPE_CHECKING, Any
 
 from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
-from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing.const import USAGE_ONLY_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
 
 from .base import ServiceNotInitializedException, TraceContext, Tracer
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from langchain_core.callbacks.base import BaseCallbackHandler
+
+    from apps.experiments.models import ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 

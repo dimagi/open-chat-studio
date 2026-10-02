@@ -139,7 +139,7 @@ def create_api_key(request):
     form = ApiKeyForm(request, request.POST or None)
     if request.method == "POST":
         if form.is_valid():
-            instance, key = form.save()
+            _instance, key = form.save()
             request.session[SESSION_API_KEY] = key
             return HttpResponseLocation(reverse("users:user_profile"), status=201)
 

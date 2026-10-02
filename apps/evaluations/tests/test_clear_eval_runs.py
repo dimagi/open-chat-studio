@@ -305,7 +305,7 @@ class TestClearEvaluationRunsView:
     def test_clear_all_blocked_leaves_applied_tags_untouched(self, client, team_with_users):
         """A blocked clear must not run tag removal (guard precedes the atomic block)."""
         user = team_with_users.members.first()
-        config, chat_message, tag = self._setup_config_with_applied_tag(team_with_users)
+        config, _chat_message, tag = self._setup_config_with_applied_tag(team_with_users)
         EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.PROCESSING)
 
         client.force_login(user)

@@ -163,7 +163,6 @@ class Command(BaseCommand):
         """Report why coverage could not be checked. Losing it only downgrades the fix advice, so it
         is not worth aborting an analysis whose Insights queries have already run."""
         self.stdout.write(self.style.WARNING(f"{reason} Skipping the deployed-coverage check."))
-        return None
 
     def _compile_deployed_patterns(self, deployed):
         compiled, errors = compile_deployed_patterns(deployed)

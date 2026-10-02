@@ -18,6 +18,7 @@ from rest_framework import serializers
 
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
+from apps.channels.models import ChannelPlatform
 from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
@@ -225,3 +226,36 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "seed_message",
             "file_uploads_enabled",
         ]
+
+
+class AttachedChannelSerializer(serializers.Serializer):
+    """One channel standing in the way of archiving, named the way the web app names it.
+
+    Enough for a client to tell a person which channels to go and detach; there is nothing here to
+    address, because no endpoint takes a channel.
+    """
+
+    id = serializers.IntegerField()
+    # The same choice set the `chatbot_inspect` endpoint reports a channel's platform from, so a
+    # client parses one enum across both.
+    platform = serializers.ChoiceField(choices=ChannelPlatform.choices)
+    name = serializers.CharField()
+
+
+class ArchivedSerializer(serializers.Serializer):
+    """The archive response: that it happened, and what it destroyed on the way."""
+
+    archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
+    cancelled_scheduled_messages = serializers.IntegerField(
+        help_text=(
+            "How many of the chatbot's scheduled messages were deleted, finished and "
+            "already-cancelled ones included. They cannot be recovered."
+        )
+    )
+
+
+class ChannelsAttachedSerializer(serializers.Serializer):
+    """The archive 409: why it was refused, and what a person has to do about it."""
+
+    detail = serializers.CharField()
+    channels = AttachedChannelSerializer(many=True)

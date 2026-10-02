@@ -100,6 +100,11 @@ class UsageQuerySerializer(serializers.Serializer):
         max_length=320,
         help_text="Restrict to a single participant by their raw identifier (email/phone).",
     )
+    participant_remote_id = serializers.CharField(
+        required=False,
+        max_length=255,
+        help_text="Restrict to participants by their external-system remote ID.",
+    )
     chatbot = serializers.UUIDField(
         required=False,
         help_text="Restrict to a single chatbot by its ``public_id``.",
@@ -123,9 +128,10 @@ class UsageQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError(f"Unknown timezone: {value}.") from err
 
     def validate(self, attrs: dict) -> dict:
-        if attrs.get("participant") and attrs.get("participant_identifier"):
+        participant_filters = ("participant", "participant_identifier", "participant_remote_id")
+        if sum(bool(attrs.get(field)) for field in participant_filters) > 1:
             raise serializers.ValidationError(
-                "Provide only one of 'participant' or 'participant_identifier', not both."
+                "Provide only one of 'participant', 'participant_identifier', or 'participant_remote_id'."
             )
         if attrs.get("group_by") == GROUP_PARTICIPANT and METRIC_PARTICIPANTS in attrs["metric"]:
             # A per-participant breakdown makes the distinct-participant count trivially 1 per row.

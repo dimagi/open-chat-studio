@@ -7,8 +7,7 @@ from apps.documents.models import DocumentSource
 from apps.evaluations.models import EvaluatorTagRule
 from apps.service_providers.models import AuthProvider
 from apps.utils.deletion import _deletion_order, delete_object_with_auditing_of_related_objects
-from apps.utils.factories.assistants import OpenAiAssistantFactory
-from apps.utils.factories.documents import DocumentSourceFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.evaluations import EvaluatorTagRuleFactory
 from apps.utils.factories.service_provider_factories import AuthProviderFactory, LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -62,18 +61,18 @@ def test_delete_with_auditing(obj_name, delete_events, update_events, expected_s
 def test_deleting_a_team_does_not_remove_llm_providers_from_other_teams():
     """
     There was an issue where if you remove a team that has an LLMProvider, it would clear the LLMProvider FKs from
-    some assistants that were associated with other teams. This test ensures that this issue is fixed.
+    objects that were associated with other teams. This test ensures that this issue is fixed.
     """
     with enable_audit():
         team = TeamFactory.create()
-        assistant = OpenAiAssistantFactory.create(llm_provider=LlmProviderFactory.create(team=team), team=team)
+        collection = CollectionFactory.create(llm_provider=LlmProviderFactory.create(team=team), team=team)
 
         team_to_delete = TeamFactory.create()
         LlmProviderFactory.create(team=team_to_delete)
 
         delete_object_with_auditing_of_related_objects(team_to_delete)
-        assistant.refresh_from_db()
-        assert assistant.llm_provider is not None
+        collection.refresh_from_db()
+        assert collection.llm_provider is not None
 
 
 @pytest.mark.django_db()

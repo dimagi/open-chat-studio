@@ -1,9 +1,7 @@
 import pytest
 from django.core.management import call_command
 
-from apps.assistants.models import ToolResources
 from apps.files.models import File, FilePurpose
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFileFactory
 from apps.utils.factories.experiment import ChatAttachmentFactory, SyntheticVoiceFactory
 from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
@@ -26,11 +24,6 @@ def test_deletes_unreferenced_legacy_files():
 def test_keeps_referenced_and_special_files():
     collection_file = CollectionFileFactory.create()
 
-    assistant = OpenAiAssistantFactory.create()
-    tool_resource = ToolResources.objects.create(assistant=assistant, tool_type="code_interpreter")
-    tool_file = FileFactory.create(team=assistant.team)
-    tool_resource.files.add(tool_file)
-
     attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
     attached_file = FileFactory.create(team=attachment.chat.team)
     attachment.files.add(attached_file)
@@ -50,7 +43,6 @@ def test_keeps_referenced_and_special_files():
 
     kept_files = [
         collection_file.file,
-        tool_file,
         attached_file,
         voice_file,
         embedding_file,

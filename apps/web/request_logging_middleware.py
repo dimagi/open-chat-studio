@@ -85,14 +85,13 @@ class RequestLoggingMiddleware:
             if experiment
             else self._get_field(view_kwargs, post_data, "experiment_id", "chatbot_id")
         )
-        for key, value in {
+        optional_fields = {
             "experiment_id": experiment_id,
             "session_id": self._get_field(view_kwargs, post_data, "session_id"),
             "widget_version": request.headers.get("x-ocs-widget-version"),
             "query": request.META.get("QUERY_STRING", ""),
-        }.items():
-            if value:
-                extra[key] = value
+        }
+        extra.update({key: value for key, value in optional_fields.items() if value})
 
         if response.status_code >= 500:
             logger.error("django_request", extra=extra)

@@ -25,10 +25,10 @@ from apps.chatbots.views import (
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
-    _chatbot_chat_ui,
     chatbot_session_pagination_view,
     home,
 )
+from apps.chatbots.views.chatbot_views import _chatbot_chat_ui
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import (
@@ -44,7 +44,7 @@ from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.events import ScheduledMessageFactory
+from apps.utils.factories.events import ScheduledMessageFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
@@ -886,7 +886,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
 @patch("apps.channels.channel_base.ChannelBase.start_new_session")
-@patch("apps.chatbots.views.send_bot_message.delay")
+@patch("apps.chatbots.views.chatbot_views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
 ):
@@ -1572,3 +1572,25 @@ def test_export_chatbot_session_messages_requires_permission(client, team_with_u
     response = client.get(url)
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("is_ended", "shows_checkbox"),
+    [pytest.param(False, True, id="active"), pytest.param(True, False, id="ended")],
+)
+def test_session_view_fire_end_event_checkbox(client, team_with_users, is_ended, shows_checkbox):
+    team = team_with_users
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    if is_ended:
+        session.end()
+    StaticTriggerFactory.create(experiment=session.experiment, type=StaticTriggerType.CONVERSATION_END)
+    client.force_login(team.members.first())
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    content = client.get(url).content.decode()
+
+    assert ('name="fire_end_event"' in content) is shows_checkbox

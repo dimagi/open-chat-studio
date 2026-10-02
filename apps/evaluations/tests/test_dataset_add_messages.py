@@ -153,7 +153,7 @@ def test_messages_are_persisted_and_linked():
     dataset = EvaluationDataset.objects.create(team=team, name="ds", evaluation_mode=EvaluationMode.MESSAGE)
 
     incoming = [EvaluationMessage(input={"content": "x"}, output={"content": "y"})]
-    created, skipped = dataset.add_messages(incoming)
+    created, _skipped = dataset.add_messages(incoming)
 
     assert len(created) == 1
     message = dataset.messages.get()

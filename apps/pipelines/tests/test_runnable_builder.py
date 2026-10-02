@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from typing import Literal
 from unittest import mock
@@ -575,7 +576,7 @@ class TestRouterNode:
         "LLMClass", [RefusingFakeLlmEcho, PydanticValidationErrorLlmEcho, StructuredOutputValidationErrorLlmEcho]
     )
     def test_router_node_uses_default_keyword_on_error(
-        self, get_llm_service, LLMClass, provider, provider_model, experiment_session
+        self, get_llm_service, LLMClass, provider, provider_model, experiment_session, caplog
     ):
         refusing_llm = LLMClass(include_system_message=True)
         service = FakeLlmService(llm=refusing_llm)
@@ -599,9 +600,57 @@ class TestRouterNode:
             last_node_input="a",
         )
 
-        keyword, is_default_keyword = node._process_conditional(NodeContext(state))
+        with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+            keyword, is_default_keyword = node._process_conditional(NodeContext(state))
         assert keyword == "DEFAULT"
         assert is_default_keyword
+        if LLMClass is RefusingFakeLlmEcho:
+            assert "test router" in caplog.text
+            assert "Refused by OpenAI" not in caplog.text
+
+    @pytest.mark.django_db()
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    @pytest.mark.parametrize(
+        "reply",
+        [
+            pytest.param(AIMessage(content="I can't help with that."), id="prose-reply"),
+            pytest.param(AIMessage(content=[], response_metadata={"stop_reason": "refusal"}), id="anthropic-refusal"),
+        ],
+    )
+    def test_router_node_uses_default_keyword_when_the_model_returns_no_route(
+        self, get_llm_service, reply, provider, provider_model, experiment_session, caplog
+    ):
+        llm = FakeLlmSimpleTokenCount(responses=[reply])
+        get_llm_service.return_value = FakeLlmService(llm=llm)
+        node = RouterNode(
+            node_id="test",
+            django_node=None,
+            name="test router",
+            prompt="PD: {participant_data}",
+            keywords=["default", "a", "b"],
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        node._repo = ORMRepository(session=experiment_session)
+        node.default_keyword_index = 0
+        state = PipelineState(
+            outputs={"123": {"message": "a"}},
+            messages=["a"],
+            experiment_session=experiment_session,
+            node_inputs=["a"],
+            last_node_input="a",
+        )
+
+        with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+            keyword, is_default_keyword = node._process_conditional(NodeContext(state))
+
+        assert keyword == "DEFAULT"
+        assert is_default_keyword
+        assert len(llm.get_calls()) == 1
+        assert "test router" in caplog.text
+        assert "I can't help with that." not in caplog.text
+        if reply.response_metadata.get("stop_reason"):
+            assert "refusal" in caplog.text
 
 
 class TestStaticRouterNode:
@@ -999,6 +1048,72 @@ class TestDataExtraction:
 
         # Expected node output
         assert extracted_data == '{"name": "james"}'
+
+    @pytest.mark.django_db()
+    def test_extract_structured_data_outputs_empty_object_when_the_model_declines(
+        self, provider, provider_model, pipeline, caplog
+    ):
+        session = ExperimentSessionFactory.create()
+        llm = FakeLlmSimpleTokenCount(responses=[AIMessage(content="I can't help with that.")])
+
+        with self.extract_structured_data_pipeline(provider, provider_model, pipeline, llm) as graph:
+            state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+
+            with caplog.at_level(logging.WARNING, logger="ocs.pipelines.nodes"):
+                assert graph.invoke(state, config=config)["messages"][-1] == "{}"
+
+        assert "extracted nothing" in caplog.text
+        assert "I can't help with that." not in caplog.text
+
+    @pytest.mark.django_db()
+    def test_extract_structured_data_skips_a_chunk_the_model_declines(self, provider, provider_model, pipeline):
+        session = ExperimentSessionFactory.create()
+        llm = FakeLlmSimpleTokenCount(
+            responses=[
+                AIMessage(tool_calls=[ToolCall(name="CustomModel", args={"name": "james"}, id="123")], content=""),
+                AIMessage(content="I can't help with that."),
+            ]
+        )
+
+        with (
+            self.extract_structured_data_pipeline(provider, provider_model, pipeline, llm) as graph,
+            mock.patch(
+                "apps.pipelines.nodes.nodes.ExtractStructuredData.chunk_messages",
+                return_value=["james bond", "something the model declines"],
+            ),
+        ):
+            state = PipelineState(messages=["ai: hi user\nhuman: hi there I am John"], experiment_session=session)
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+
+            assert graph.invoke(state, config=config)["messages"][-1] == '{"name": "james"}'
+
+    @pytest.mark.django_db()
+    def test_extract_participant_data_leaves_data_unchanged_when_the_model_declines(
+        self, provider, provider_model, pipeline
+    ):
+        session = ExperimentSessionFactory.create()
+        service = build_fake_llm_service(responses=[AIMessage(content="I can't help with that.")])
+
+        with mock.patch("apps.service_providers.models.LlmProvider.get_llm_service", return_value=service):
+            nodes = [
+                start_node(),
+                extract_participant_data_node(
+                    str(provider.id), str(provider_model.id), '{"name": "the name of the user"}', "profile"
+                ),
+                end_node(),
+            ]
+            runnable = create_runnable(pipeline, nodes)
+            state = PipelineState(
+                messages=["ai: hi user\nhuman: hi there"],
+                experiment_session=session,
+                participant_data={"name": "Ann"},
+            )
+            config = {"configurable": {"repo": ORMRepository(session=session)}}
+            result = runnable.invoke(state, config=config)
+
+        assert result["participant_data"] == {"name": "Ann"}
+        assert result["messages"][-1] == "ai: hi user\nhuman: hi there"
 
     @pytest.mark.django_db()
     def test_extract_participant_data(self, provider, provider_model, pipeline):

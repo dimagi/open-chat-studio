@@ -14,6 +14,7 @@ from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 from drf_spectacular.generators import SchemaGenerator
 
 from apps.files.models import FilePurpose
+from apps.teams.export.chatbot_scope import CHATBOT_SCOPE_REGISTRY, ChatbotScope, narrow_to_scope
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,14 @@ SECRET_REGISTRY: dict[str, list[str]] = {
 # not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
 # the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
-    "teams.team": ["members", "public_key", "files_export", "files_export_task_id", "is_migrating"],
+    "teams.team": [
+        "members",
+        "public_key",
+        "files_export",
+        "files_export_task_id",
+        "is_migrating",
+        "exportable_experiments",
+    ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.
     "service_providers.authprovider": ["_auth_data"],
@@ -154,10 +162,12 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
     "events.statictrigger": "experiment__team",
     "events.timeouttrigger": "experiment__team",
     "events.scheduledtrigger": "experiment__team",
-    # EventAction has no team FK; StaticTrigger and TimeoutTrigger each hold a OneToOneField to it.
+    # EventAction has no team FK; each trigger type holds a OneToOneField to it. A ScheduledMessage's
+    # action is the static or timeout trigger's action that created it, so it needs no branch of its own.
     "events.eventaction": [
         "static_trigger__experiment__team",
         "timeout_trigger__experiment__team",
+        "scheduled_trigger__experiment__team",
     ],
     "pipelines.pipelinechathistory": "session__team",
     "pipelines.pipelinechatmessages": "chat_history__session__team",
@@ -189,9 +199,18 @@ def _customuser_prefetch(team) -> list:
     return [Prefetch("membership_set", queryset=membership.objects.filter(team=team).prefetch_related("groups"))]
 
 
+def _prefetch(*names: str) -> Callable[[object], list]:
+    """A prefetch factory for fields that need no team scoping."""
+    return lambda _team: list(names)
+
+
 # Per-model prefetches, built per request because some are scoped to the team being synced.
+# An m2m field serialized by ``fields = "__all__"`` queries once per row without one.
 PREFETCH_REGISTRY: dict[str, Callable[[object], list]] = {
     "users.customuser": _customuser_prefetch,
+    "chat.chatattachment": _prefetch("files"),
+    "pipelines.node": _prefetch("collection_indexes"),
+    "human_annotations.annotationqueue": _prefetch("assignees"),
 }
 
 
@@ -269,6 +288,14 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     return queryset.prefetch_related(*prefetch_factory(team)) if prefetch_factory else queryset
 
 
+def scoped_queryset(entry: ManifestEntry, team, scope: ChatbotScope | None = None) -> QuerySet:
+    """The rows this request may serve: the team's, narrowed to the chatbot scope when one is active.
+    An excluded resource returns nothing rather than the team's rows, since importing one would
+    reference an experiment that was never synced."""
+    queryset = team_scoped_queryset(entry=entry, team=team)
+    return narrow_to_scope(queryset=queryset, model_label=entry.model, scope=scope)
+
+
 @cache
 def schema_checksum() -> str:
     """Hash of the export API's OpenAPI schema -- the exact shape of the data the sync transfers
@@ -291,6 +318,7 @@ def build_manifest() -> dict:
                 "resource": e.resource,
                 "cursor": e.cursor,
                 "secret": e.secret,
+                "reread_under_selection": CHATBOT_SCOPE_REGISTRY[e.model].reread_under_selection,
             }
             for e in MANIFEST_ENTRIES
         ],

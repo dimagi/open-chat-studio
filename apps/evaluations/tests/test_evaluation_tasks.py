@@ -1,11 +1,14 @@
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
+import anthropic
 import pytest
 import time_machine
 from django.utils import timezone
 
+from apps.assessments.models import Score
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.pipeline import MessageProcessingPipeline
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
@@ -39,6 +42,7 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.experiment import ChatbotFactory, ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.langchain import build_fake_llm_service
+from apps.utils.tests.provider_errors import converted, status_error
 
 
 @pytest.fixture()
@@ -87,11 +91,11 @@ def evaluation_run(evaluation_message, team_with_users, db):
 @pytest.mark.django_db()
 def test_run_bot_generation(experiment, evaluation_message, team_with_users, generation_run):
     """Test that _run_bot_generation calls the bot correctly"""
-    session_id, result = run_bot_generation(
-        team_with_users, evaluation_message, experiment, evaluation_run=generation_run
-    )
+    generation = run_bot_generation(team_with_users, evaluation_message, experiment, evaluation_run=generation_run)
+    session_id = generation.session_id
 
-    assert result == "I heard: " + evaluation_message.input["content"]
+    assert generation.response == "I heard: " + evaluation_message.input["content"]
+    assert generation.error is None
 
     evaluation_channel = ExperimentChannel.objects.get(team=team_with_users, platform=ChannelPlatform.EVALUATIONS)
     assert evaluation_channel.platform == ChannelPlatform.EVALUATIONS
@@ -119,12 +123,10 @@ def test_run_bot_generation_with_participant_data_session_state(evaluation_messa
 
     evaluation_message.participant_data = {"test_pd": "demo_pd"}
     evaluation_message.session_state = {"test_ss": "demo_ss"}
-    session_id, result = run_bot_generation(
-        team_with_users, evaluation_message, experiment, evaluation_run=generation_run
-    )
+    generation = run_bot_generation(team_with_users, evaluation_message, experiment, evaluation_run=generation_run)
 
     data = {"name": "Evaluations Bot"} | evaluation_message.participant_data
-    assert result == f"{data}:{evaluation_message.session_state}"
+    assert generation.response == f"{data}:{evaluation_message.session_state}"
 
 
 @pytest.mark.django_db()
@@ -171,22 +173,43 @@ def test_evaluate_single_message_with_bot_generation(
 
 
 @pytest.mark.django_db()
-@patch("apps.channels.tasks.handle_evaluation_message")
+@pytest.mark.parametrize(
+    "evaluator_case",
+    [
+        pytest.param(
+            ({"return_value": Mock(model_dump=Mock(return_value={"score": 0.8}))}, {"score": 0.8}),
+            id="evaluator-succeeds",
+        ),
+        pytest.param(
+            ({"side_effect": ValueError("judge failed")}, {"error": "judge failed", "error_category": "other"}),
+            id="evaluator-fails",
+        ),
+    ],
+)
+@patch("apps.evaluations.tasks.handle_evaluation_message")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluate_single_message_handles_bot_generation_error(
-    evaluator_run_mock, handle_evaluation_message_mock, evaluation_run, evaluation_message
+    evaluator_run_mock,
+    handle_evaluation_message_mock,
+    experiment,
+    evaluation_run,
+    evaluation_message,
+    evaluator_case,
 ):
-    """Test that evaluation continues even if bot generation fails"""
+    """A failed generation still gets evaluated, and the result records why the generation failed."""
+    evaluator_outcome, evaluator_output = evaluator_case
     run, evaluator = evaluation_run
+    run.generation_experiment = experiment
+    run.save()
 
-    # Mock bot generation failure
-    handle_evaluation_message_mock.side_effect = Exception("Bot generation failed")
-    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
+    handle_evaluation_message_mock.side_effect = status_error(anthropic.RateLimitError, 429, "rate limited")
+    evaluator_run_mock.configure_mock(**evaluator_outcome)
 
     # Run the evaluation task - should not fail
     evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     # Verify evaluator was still called despite bot error, with empty string response since bot failed
+    result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
     evaluator_run_mock.assert_called_once_with(
         evaluation_message,
         "",
@@ -194,14 +217,52 @@ def test_evaluate_single_message_handles_bot_generation_error(
             team_id=run.team_id,
             evaluation_run_id=run.id,
             evaluation_config_id=run.config_id,
+            experiment_id=experiment.get_working_version_id(),
+            session_id=result.session_id,
             evaluator_id=evaluator.id,
             message_id=evaluation_message.id,
         ),
     )
+    assert result.output == {
+        **evaluator_output,
+        "generation_error": "rate limited",
+        "generation_error_category": "rate_limit",
+    }
 
-    # Verify result was still created
-    result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
-    assert result.output == {"score": 0.8}
+
+@pytest.mark.django_db()
+@patch("apps.chat.bots.PipelineBot.process_input")
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluate_single_message_records_a_handled_provider_error(
+    evaluator_run_mock, process_input_mock, experiment, evaluation_run, evaluation_message
+):
+    """A provider error the channel answers with its canned reply still marks the generation as failed."""
+    run, evaluator = evaluation_run
+    run.generation_experiment = experiment
+    run.save()
+    quota_error = status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits.")
+    process_input_mock.side_effect = converted(quota_error)
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"score": 0.1}}))
+
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
+
+    assert evaluator_run_mock.call_args.args[1] == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+    output = EvaluationResult.objects.get(run=run, evaluator=evaluator).output
+    assert output["result"] == {"score": 0.1}
+    assert "reached your specified API usage limits" in output["generation_error"]
+    assert output["generation_error_category"] == "quota_exhausted"
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.models.Evaluator.run")
+def test_evaluator_error_records_its_category(evaluator_run_mock, evaluation_run, evaluation_message):
+    run, evaluator = evaluation_run
+    evaluator_run_mock.side_effect = status_error(anthropic.AuthenticationError, 401, "invalid x-api-key")
+
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
+
+    output = EvaluationResult.objects.get(run=run, evaluator=evaluator).output
+    assert output == {"error": "invalid x-api-key", "error_category": "authentication"}
 
 
 @pytest.mark.django_db()
@@ -366,6 +427,42 @@ def test_evaluate_single_message_skips_tagging_for_preview_run(
     assert EvaluationResult.objects.filter(message=evaluation_message, run=run, evaluator=evaluator).exists()
     assert not expected_output.tags.filter(pk=tag.pk).exists()
     assert AppliedTag.objects.count() == 0
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.handle_evaluation_message")
+@patch("apps.evaluations.models.Evaluator.run")
+def test_failed_generation_is_not_tagged_or_scored(
+    evaluator_run_mock, handle_evaluation_message_mock, experiment, evaluation_run, evaluation_message, team_with_users
+):
+    """A score of a response that was never generated describes nothing, so it must not tag or score the target."""
+    run, evaluator = evaluation_run
+    run.generation_experiment = experiment
+    run.save()
+    chat = ChatFactory.create(team=team_with_users)
+    expected_output = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Generated reply")
+    evaluation_message.expected_output_chat_message = expected_output
+    evaluation_message.session = ExperimentSessionFactory.create(team=team_with_users, chat=chat)
+    evaluation_message.save()
+    tag = EvaluationTagFactory.create(team=team_with_users, name="unacceptable")
+    EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=evaluator,
+        tag=tag,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
+    handle_evaluation_message_mock.side_effect = status_error(anthropic.RateLimitError, 429, "rate limited")
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
+
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
+
+    result = EvaluationResult.objects.get(run=run, evaluator=evaluator)
+    assert result.output["generation_error"] == "rate limited"
+    assert not expected_output.tags.filter(pk=tag.pk).exists()
+    assert AppliedTag.objects.count() == 0
+    assert not Score.objects.filter(automated_result=result).exists()
 
 
 @pytest.mark.django_db()

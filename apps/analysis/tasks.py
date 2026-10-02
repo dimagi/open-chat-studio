@@ -53,8 +53,7 @@ def process_transcript_analysis(self, analysis_id):
             queries = list(analysis.queries.all().order_by("order"))
 
             # Add query names to header
-            for query in queries:
-                header_row.append(query.name or query.prompt[:50])
+            header_row.extend(query.name or query.prompt[:50] for query in queries)
 
             # Add header row to results
             results.append(header_row)
@@ -132,7 +131,7 @@ def process_transcript_analysis(self, analysis_id):
                         session_row.append(answer)
                     except Exception as e:
                         logger.exception(f"Error processing query for session {session.id}: {e}")
-                        session_row.append(f"ERROR: {str(e)}")
+                        session_row.append(f"ERROR: {e!s}")
 
                 # Add completed row to results
                 results.append(session_row)
@@ -163,6 +162,6 @@ def process_transcript_analysis(self, analysis_id):
             analysis.error_message = str(e)
             analysis.job_id = ""
             analysis.save()
-            progress_recorder.set_progress(100, 100, description=f"Analysis failed: {str(e)}")
+            progress_recorder.set_progress(100, 100, description=f"Analysis failed: {e!s}")
         except:  # noqa E722
             pass

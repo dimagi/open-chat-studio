@@ -3,7 +3,7 @@ from apps.ocs_notifications.notifications import AffectedResources, deleted_mode
 from apps.service_providers.llm_service.default_models import DELETED_MODELS, _update_pipeline_node_param
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
-from apps.utils.deletion import get_related_objects, get_related_pipelines_queryset
+from apps.utils.deletion import get_related_objects
 
 
 def _parse_deleted_models():
@@ -55,7 +55,7 @@ class Command(IdempotentCommand):
 
         if not models_to_delete:
             self.stdout.write(self.style.SUCCESS("No deleted models found"))
-            return
+            return None
 
         # Build affected resources per model per team
         affected_by_model = {}  # {db_model.id: {team_id: {"chatbots": set, "pipelines": set}}}
@@ -129,7 +129,7 @@ class Command(IdempotentCommand):
                 if fields_to_update:
                     obj.save(update_fields=[f.name for f in fields_to_update])
 
-        # Update pipeline node references (stored as JSON params, not DB FKs)
-        related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-        for node in related_pipeline_nodes.all():
+        # Nodes are found through the FK column but still repointed through params, which
+        # ``set_params`` then mirrors back onto the column.
+        for node in list(db_model.nodes.all()):
             _update_pipeline_node_param(node, "llm_provider_model_id", new_value)

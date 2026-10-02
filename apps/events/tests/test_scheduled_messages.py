@@ -55,7 +55,7 @@ def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_mes
 @pytest.mark.django_db()
 def test_get_messages_to_fire():
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
     with travel("2024-04-01", tick=False), patch("apps.events.models.functions.Now") as db_time:
@@ -87,7 +87,7 @@ def test_get_messages_to_fire():
 @pytest.mark.django_db()
 def test_get_messages_to_fire_cancelled():
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, experiment_id=session.experiment.id
     )
     with travel("2024-04-01", tick=False), patch("apps.events.models.functions.Now") as db_time:
@@ -213,7 +213,7 @@ def test_error_when_sending_sending_message_to_a_user(set_incoming_webhook, capl
     pending messages"""
 
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period=TimePeriod.DAYS, repetitions=2, experiment_id=session.experiment.id
     )
     with (
@@ -377,7 +377,7 @@ def test_scheduled_message_attempts_success_and_failure(ad_hoc_bot_message, mock
     """Test ScheduledMessageAttempt creation for both success and failure with retry"""
     ad_hoc_bot_message.return_value = {"trace_id": "abc123", "trace_provider": "langfuse"}
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
     sm = ScheduledMessageFactory.create(
@@ -427,7 +427,7 @@ def test_scheduled_message_stops_retry_after_max(ad_hoc_bot_message, mock_retry_
     ad_hoc_bot_message.side_effect = Exception("Forced failure for max retries")
 
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
     sm = ScheduledMessageFactory.create(
@@ -470,7 +470,7 @@ def test_scheduled_message_trace_info_success_and_failure(ad_hoc_bot_message, mo
     ad_hoc_bot_message.return_value = {"trace_id": "xyz123", "trace_provider": "langfuse"}
 
     session = ExperimentSessionFactory.create()
-    event_action, params = _construct_event_action(
+    event_action, _params = _construct_event_action(
         frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
     )
     sm = ScheduledMessageFactory.create(

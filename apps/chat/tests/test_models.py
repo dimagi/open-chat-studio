@@ -1,9 +1,8 @@
 import pytest
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.pipelines.models import PipelineChatHistoryModes
-from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -11,12 +10,10 @@ from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 @pytest.mark.django_db()
 def test_get_attached_files():
-    assistant = OpenAiAssistantFactory.create()
+    """Ids resolve through the chat's own attachments, not by external_id across the team."""
     session = ExperimentSessionFactory.create()
-    assistant_file1 = FileFactory.create(external_id="assistant-file-id-1", team=session.chat.team)
-    assistant_file2 = FileFactory.create(external_id="assistant-file-id-2", team=session.chat.team)
-    tool_resource = assistant.tool_resources.create(tool_type="code_interpreter")
-    tool_resource.files.add(*[assistant_file1, assistant_file2])
+    unattached1 = FileFactory.create(external_id="unattached-file-id-1", team=session.chat.team)
+    unattached2 = FileFactory.create(external_id="unattached-file-id-2", team=session.chat.team)
 
     chat_file1 = FileFactory.create(external_id="chat-file-id-1", team=session.chat.team)
     chat_file2 = FileFactory.create(external_id="chat-file-id-2", team=session.chat.team)
@@ -24,16 +21,15 @@ def test_get_attached_files():
     attachment = chat.attachments.create(tool_type="code_interpreter")
     attachment.files.add(*[chat_file1, chat_file2])
 
-    # Add message with a reference to both the chat and assistant level files
     metadata = {
-        "openai_file_ids": ["assistant-file-id-1", "chat-file-id-1", "assistant-file-id-2", "chat-file-id-2"],
+        "openai_file_ids": ["unattached-file-id-1", "chat-file-id-1", "unattached-file-id-2", "chat-file-id-2"],
     }
     message = ChatMessage.objects.create(chat=chat, message_type="ai", content="Hi", metadata=metadata)
     files = message.get_attached_files()
     assert chat_file1 in files
     assert chat_file2 in files
-    assert assistant_file1 not in files
-    assert assistant_file2 not in files
+    assert unattached1 not in files
+    assert unattached2 not in files
 
 
 @pytest.mark.django_db()
@@ -104,3 +100,68 @@ class TestEmptyHumanMessageReplay:
         messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
 
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
+
+
+def test_model_refused_is_an_internal_metadata_key():
+    assert ChatMessageMetadataKeys.MODEL_REFUSED in ChatMessageMetadataKeys.internal_keys()
+    assert ChatMessageMetadataKeys.MODEL_REFUSED not in ChatMessageMetadataKeys.attachment_keys()
+
+
+@pytest.mark.django_db()
+class TestHistoryExcludesFilteredHumanMessages:
+    def _mark(self, message):
+        message.metadata[ChatMessageMetadataKeys.MODEL_REFUSED] = {
+            "kind": "content_filter",
+            "provider_reason": "x",
+        }
+        message.save(update_fields=["metadata"])
+
+    def test_marked_human_message_is_skipped_on_replay(self):
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="ok")
+        filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="I can't answer that.")
+
+        messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+
+        assert [m.content for m in messages] == ["fine", "ok", "I can't answer that."]
+
+    def test_a_compression_marker_on_a_skipped_message_still_stops_the_walk(self):
+        # PipelineChatHistoryModes.SUMMARIZE as a saved message's compression_marker collides with
+        # ChatMessage.is_summary, which raises on save(); TRUNCATE_TOKENS is a real, saveable marker
+        # (matches the pattern in test_chat.py).
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="older")
+        filtered = ChatMessage.objects.create(
+            chat=session.chat,
+            message_type=ChatMessageType.HUMAN,
+            content="bad",
+            metadata={ChatMessageMetadataKeys.COMPRESSION_MARKER: PipelineChatHistoryModes.TRUNCATE_TOKENS},
+        )
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="reply")
+
+        messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
+
+        assert [m.content for m in messages] == ["reply"]
+
+    def test_marked_ai_message_is_not_excluded(self):
+        session = ExperimentSessionFactory.create()
+        reply = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="declined")
+        self._mark(reply)
+
+        assert reply.is_excluded_from_history is False
+
+    def test_marked_human_message_is_skipped_in_full_history(self):
+        session = ExperimentSessionFactory.create()
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="ok")
+        filtered = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="bad")
+        self._mark(filtered)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="reply")
+
+        messages = session.chat.get_langchain_messages()
+
+        assert [m.content for m in messages] == ["fine", "ok", "reply"]

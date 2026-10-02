@@ -15,7 +15,7 @@ def build_slack_message(notification_event: NotificationEvent) -> dict:
     Returns a ``blocks`` payload plus a plain-text ``text`` fallback (Slack's ``chat_postMessage``
     requires ``text`` when sending blocks, and surfaced it in clients that can't render blocks).
     """
-    links = dict(notification_event.links or {})
+    links = notification_event.absolute_links
     links["View in OCS"] = absolute_url(
         reverse("ocs_notifications:notification_event_home", args=[notification_event.event_type_id])
     )

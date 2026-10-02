@@ -320,7 +320,7 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
         table_url = reverse("ocs_notifications:notification_event_table", args=[self.event_type.id])
 
         title = self.event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
-        context = {
+        return {
             "active_tab": "notifications",
             "title": "Notifications",
             "subtitle": title or "",
@@ -334,8 +334,6 @@ class NotificationEventHome(LoginRequiredMixin, TemplateView):
                 *([(title, None)] if title else []),
             ],
         }
-
-        return context
 
 
 class NotificationEventTableView(LoginRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]

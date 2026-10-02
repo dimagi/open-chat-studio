@@ -1,8 +1,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
-from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -10,6 +9,9 @@ from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import Tracer
 from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.const import SpanLevel
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 class MockTracer(Tracer):

@@ -490,7 +490,7 @@ class TestFilesMode:
     def test_file_outside_package_rejected(self, tmp_path):
         pkg = self._make(tmp_path)
         (tmp_path / "outside.py").write_text("x = 1\n")
-        with pytest.raises(ValueError, match="outside.py"):
+        with pytest.raises(ValueError, match=r"outside\.py"):
             check_package(pkg, files=(tmp_path / "outside.py",))
 
     def test_main_accepts_files_flag(self, tmp_path, capsys, monkeypatch):

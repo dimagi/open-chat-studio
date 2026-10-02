@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from apps.admin.team_data import serialize_team_creator
 from apps.service_providers.models import LlmProvider, LlmProviderTypes, TraceProvider
 from apps.teams.metadata import get_team_metadata_fields
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger("ocs.admin")
 

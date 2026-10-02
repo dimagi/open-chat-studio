@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `ocs_notifications` app provides a **team-scoped notification system** for Open Chat Studio. It alerts team members about important events through in-app messages and email, allowing users to control delivery preferences and severity thresholds.
+The `ocs_notifications` app provides a **team-scoped notification system** for Open Chat Studio. It alerts team members about important events through in-app messages and email, allowing users to control delivery preferences and severity thresholds. See the [User Documentation](https://docs.openchatstudio.com/concepts/notifications/) for details about the user-facing feature.
 
 This system is designed to:
 

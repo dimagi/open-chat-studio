@@ -19,10 +19,11 @@ When this ADR builds on a prior one, add an "Extends: [ADR-NNNN](NNNN-prior-titl
 line under the pill.
 
 Keep it dense — an ADR records the decision, not the implementation. One idea per
-sentence; state each fact once (cross-reference rather than repeat); no editorializing
-or self-praise; Consequences/Alternatives bullets are one sentence each. A single-
-decision ADR rarely needs more than ~400 words. Final pass: cut any sentence that
-wouldn't change what a future engineer does.
+sentence; state each fact once (cross-reference rather than repeat); no editorializing,
+self-praise, or mannered prose (metaphor in place of direct statement);
+Consequences/Alternatives bullets are one sentence each. A single-decision ADR rarely
+needs more than ~400 words. Final pass: cut any sentence that wouldn't change what a
+future engineer does.
 -->
 
 ## Context

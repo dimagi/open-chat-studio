@@ -390,7 +390,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
         return not (has_succeeded or failed)
 
     def get_fields_to_exclude(self):
-        return super().get_fields_to_exclude() + ["action", "experiment", "event_logs"]
+        return [*super().get_fields_to_exclude(), "action", "experiment", "event_logs"]
 
     def _get_version_details(self) -> VersionDetails:
         event_action_type = EventActionType(self.action.action_type).label
@@ -458,7 +458,11 @@ class ScheduledMessage(BaseTeamModel):
 
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
-        indexes = [models.Index(fields=["is_complete"])]
+        indexes = [
+            models.Index(fields=["is_complete"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="schedmessage_updated_at_id_idx"),
+        ]
 
     def save(self, *args, **kwargs):
         self.assign_external_id()
@@ -519,7 +523,7 @@ class ScheduledMessage(BaseTeamModel):
             experiment_session = self.participant.get_latest_session(experiment=self.experiment)
             if not experiment_session:
                 # Schedules probably created by the API
-                return
+                return None
             trace_info = TraceInfo(
                 name="scheduled message",
                 metadata={

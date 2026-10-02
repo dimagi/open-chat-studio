@@ -149,7 +149,9 @@ def test_invalid_format_specifier_not_caught():
     prompt_key = "prompt"
     known_vars = {"source_material"}
 
-    with pytest.raises(ValidationError, match="Invalid prompt variable '{source_material:abcd}'. Remove the ':abcd'."):
+    with pytest.raises(
+        ValidationError, match=re.escape("Invalid prompt variable '{source_material:abcd}'. Remove the ':abcd'.")
+    ):
         validate_prompt_variables(form_data, prompt_key, known_vars)
 
 
@@ -161,7 +163,7 @@ def test_invalid_conversion_caught():
     prompt_key = "prompt"
     known_vars = {"var"}
 
-    with pytest.raises(ValidationError, match="Invalid prompt variable '{var!s}'. Remove the '!s'."):
+    with pytest.raises(ValidationError, match=re.escape("Invalid prompt variable '{var!s}'. Remove the '!s'.")):
         validate_prompt_variables(form_data, prompt_key, known_vars)
 
 
@@ -173,7 +175,7 @@ def test_invalid_conversion_and_specifier_caught():
     prompt_key = "prompt"
     known_vars = {"var"}
 
-    with pytest.raises(ValidationError, match="Invalid prompt variable '{var!r:xyz}'. Remove the '!r:xyz'."):
+    with pytest.raises(ValidationError, match=re.escape("Invalid prompt variable '{var!r:xyz}'. Remove the '!r:xyz'.")):
         validate_prompt_variables(form_data, prompt_key, known_vars)
 
 

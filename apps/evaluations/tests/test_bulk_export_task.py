@@ -63,7 +63,7 @@ def _evaluator_output(score: float, generated_response: str) -> dict:
 
 
 def _read_csv_rows(file_id: int) -> list[dict]:
-    content = File.objects.get(id=file_id).file.read().decode("utf-8")
+    content = File.objects.get(id=file_id).read_bytes().decode("utf-8")
     return list(csv.DictReader(io.StringIO(content)))
 
 

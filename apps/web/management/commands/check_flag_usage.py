@@ -52,7 +52,7 @@ class Command(BaseCommand):
         unused_flags = []
 
         for flag in flags:
-            if flag.name in all_flag_usages and all_flag_usages[flag.name]:
+            if all_flag_usages.get(flag.name):
                 used_flags.append(flag)
             else:
                 unused_flags.append(flag)

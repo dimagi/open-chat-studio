@@ -86,7 +86,7 @@ class Banner(models.Model):
         except Exception as e:
             logger.exception("Error rendering banner")
             if request.user.is_superuser:
-                return f"ERROR: {str(e)}"
+                return f"ERROR: {e!s}"
 
         return ""
 
