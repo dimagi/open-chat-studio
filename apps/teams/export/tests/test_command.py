@@ -555,7 +555,8 @@ def _force_delete_options(tmp_path, **overrides):
 def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     """An interactive --force-delete that isn't confirmed must abort before deleting anything."""
     Team.objects.create(name="Keep", slug="imported-team-z")
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
+    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": []}]})
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
@@ -564,6 +565,29 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
         Command().handle(**_force_delete_options(tmp_path))
 
     assert Team.objects.filter(slug="imported-team-z").exists()  # declined -> nothing deleted
+
+
+@pytest.mark.parametrize(
+    ("exportable_chatbots", "warns_about_files"),
+    [
+        pytest.param([], True, id="whole-team"),
+        pytest.param([{"public_id": "abc", "name": "Support bot"}], False, id="selected-chatbots"),
+    ],
+)
+def test_force_delete_warns_about_files_only_for_whole_team_sync(
+    tmp_path, monkeypatch, exportable_chatbots, warns_about_files
+):
+    """A partial sync backfills files from the source, so the warning only asks for a manual re-import
+    when the whole team is synced."""
+    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
+    out = io.StringIO()
+
+    with pytest.raises(CommandError, match="not confirmed"):
+        Command(stdout=out).handle(**_force_delete_options(tmp_path))
+
+    assert ("must be re-imported" in out.getvalue()) is warns_about_files
 
 
 def test_serialized_row_round_trips_through_importer(make_store, tmp_path, keypair):
@@ -706,3 +730,86 @@ def test_a_selection_change_during_the_run_stops_it_cleanly(make_store, tmp_path
 
     with pytest.raises(CommandError, match="selection changed"):
         run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
+
+
+def test_report_names_the_synced_chatbots(capsys):
+    command = Command()
+    command._report(
+        sync_complete=True,
+        team_slug="acme",
+        chatbots=[{"public_id": "abc", "name": "Support bot"}],
+    )
+    out = capsys.readouterr().out
+    assert "Support bot" in out
+    assert "evaluations" in out.lower()
+    assert "human annotations" in out.lower()
+    assert "transcript analyses" in out.lower()
+
+
+def test_report_omits_the_chatbot_section_for_a_whole_team_sync(capsys):
+    command = Command()
+    command._report(sync_complete=True, team_slug="acme", chatbots=[])
+    out = capsys.readouterr().out
+    assert "Chatbots synced" not in out
+
+
+def test_report_counts_rows_left_untouched(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", skipped_rows=7)
+    assert "left untouched: 7" in capsys.readouterr().out
+
+
+def test_preflight_prints_what_the_source_will_export(keypair):
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export 1 of this team's chatbots:" in lines
+    assert "  - Support bot" in lines
+
+
+def test_preflight_says_when_the_whole_team_is_exported(keypair):
+    manifest, rows = _scenario(keypair[0])
+    lines = []
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], write=lines.append)
+
+    assert "The source will export the whole team." in lines
+
+
+def test_a_partial_sync_does_not_ask_about_the_files_bundle(make_store, tmp_path, keypair, monkeypatch):
+    """create_team_files_zip_task only zips whole teams, so there is no bundle for the operator to
+    have moved. The importer backfills each missing blob from the source instead."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0]["exportable_chatbots"] = [{"public_id": "abc", "name": "Support bot"}]
+    store = make_store(tmp_path / "team.sqlite")
+    monkeypatch.setattr(sync_team, "_prompt", lambda _message: pytest.fail("prompted for the files bundle"))
+
+    lines = []
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store, write=lines.append)
+
+    assert any("backfilled from the source" in line for line in lines)
+
+
+def test_a_whole_team_sync_still_asks_about_the_files_bundle(make_store, tmp_path, keypair, monkeypatch):
+    manifest, rows = _scenario(keypair[0])
+    store = make_store(tmp_path / "team.sqlite")
+    asked = []
+    monkeypatch.setattr(sync_team, "_prompt", lambda message: asked.append(message) or "yes")
+
+    check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
+
+    assert asked
+    assert store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
+
+
+def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_path, keypair, monkeypatch):
+    manifest, rows = _scenario(keypair[0])
+    store = make_store(tmp_path / "team.sqlite")
+    monkeypatch.setattr(sync_team, "_prompt", lambda _message: "no")
+
+    with pytest.raises(CommandError, match="storage backend"):
+        check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
+
+    assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)

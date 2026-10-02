@@ -2,10 +2,12 @@ import pytest
 
 from apps.teams.export.selection import (
     expand_to_family,
+    migrating_chatbot_count,
     selectable_chatbots,
     selected_chatbots,
     selected_experiment_ids,
 )
+from apps.teams.models import Team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -84,3 +86,56 @@ def test_selectable_chatbots_omits_an_archived_chatbot_that_was_never_selected()
     team = TeamFactory()
     ExperimentFactory(team=team, is_archived=True)
     assert list(selectable_chatbots(team)) == []
+
+
+def test_migrating_chatbot_count_is_zero_when_not_migrating(django_assert_num_queries):
+    team = TeamFactory(is_migrating=False)
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    with django_assert_num_queries(0):
+        assert migrating_chatbot_count(team) == 0
+
+
+def test_migrating_chatbot_count_is_cached(django_assert_num_queries):
+    team = TeamFactory(is_migrating=True)
+    team.exportable_experiments.add(ExperimentFactory(team=team))
+    assert migrating_chatbot_count(team) == 1
+    with django_assert_num_queries(0):
+        assert migrating_chatbot_count(team) == 1
+
+
+@pytest.mark.parametrize(
+    ("change", "expected"),
+    [
+        pytest.param(lambda team, kept, other: team.exportable_experiments.add(other), 2, id="add"),
+        pytest.param(lambda team, kept, other: team.exportable_experiments.remove(kept), 0, id="remove"),
+        pytest.param(lambda team, kept, other: team.exportable_experiments.clear(), 0, id="clear"),
+        pytest.param(lambda team, kept, other: team.exportable_experiments.set([other]), 1, id="set"),
+        pytest.param(lambda team, kept, other: kept.delete(), 0, id="chatbot-deleted"),
+    ],
+)
+def test_migrating_chatbot_count_refreshes_when_the_allowlist_changes(change, expected):
+    team = TeamFactory(is_migrating=True)
+    kept = ExperimentFactory(team=team)
+    other = ExperimentFactory(team=team)
+    team.exportable_experiments.add(kept)
+    assert migrating_chatbot_count(team) == 1
+
+    change(team, kept, other)
+
+    assert migrating_chatbot_count(team) == expected
+
+
+def test_migrating_chatbot_count_refreshes_after_migration_mode_is_turned_off():
+    team = TeamFactory(is_migrating=True)
+    assert migrating_chatbot_count(team) == 0
+    # bulk_create sends no signals, so only the migration-mode toggle can clear the cached value.
+    Team.exportable_experiments.through.objects.bulk_create(
+        [Team.exportable_experiments.through(team=team, experiment=ExperimentFactory(team=team))]
+    )
+
+    team.is_migrating = False
+    team.save()
+    team.is_migrating = True
+    team.save()
+
+    assert migrating_chatbot_count(team) == 1
