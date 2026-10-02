@@ -442,21 +442,3 @@ class TestDisabledChannelRefusesSessionStarts:
         session.refresh_from_db()
         assert session.status != SessionStatus.COMPLETE
         assert experiment.sessions.count() == 1
-
-    def test_invitation_is_refused(self, client):
-        """An invitation to a channel that will not talk is worse than no invitation."""
-        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
-        channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
-        channel.enabled = False
-        channel.save()
-        client.force_login(self._console_user(experiment, "invite_participants", "view_experiment"))
-
-        with patch("apps.chatbots.views.chatbot_views.send_experiment_invitation") as send_invitation:
-            response = client.post(
-                reverse("chatbots:chatbots_invitations", args=[experiment.team.slug, experiment.id]),
-                data={"experiment_id": experiment.id, "email": "someone@example.com", "invite_now": "on"},
-            )
-
-        assert response.status_code == 200
-        send_invitation.assert_not_called()
-        assert not ExperimentSession.objects.exists()

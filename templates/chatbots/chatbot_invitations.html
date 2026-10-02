@@ -1,17 +1,12 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags %}
+{% load form_tags sunset_tags %}
 {% block app %}
   <div class="app-card">
     <h1 class="pg-title">{{ experiment_name }} Invitations</h1>
     <h2 class="pg-subtitle">{{ experiment_description }}</h2>
   </div>
   <div class="app-card">
-    <h2 class="pg-subtitle">Add Participants</h2>
-    <form method="post" class="my-2 max-w-md">
-      {% csrf_token %}
-      {% render_form_fields invitation_form %}
-      <input type="submit" class="btn btn-primary mt-2" value="Invite Participant">
-    </form>
+    {% legacy_web_chat_warning %}
   </div>
   <div class="app-card">
     <h2 class="pg-subtitle">All Pending Sessions</h2>

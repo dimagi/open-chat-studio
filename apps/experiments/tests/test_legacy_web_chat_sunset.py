@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.contrib.sites.models import Site
 from django.urls import NoReverseMatch, reverse
 from time_machine import travel
@@ -280,3 +281,73 @@ def test_open_gate_leaves_the_review_page_served(client):
 def test_the_authed_web_session_route_is_gone():
     with pytest.raises(NoReverseMatch):
         reverse("chatbots:start_authed_web_session", args=["team", 1, 0])
+
+
+WARNING_DATE = f"{LEGACY_WEB_CHAT_SUNSET_AT:%d %b %Y}"
+
+
+def _inviter(experiment):
+    user = experiment.team.members.first()
+    for codename in ("invite_participants", "view_experiment"):
+        user.user_permissions.add(Permission.objects.get(codename=codename))
+    return user
+
+
+@pytest.mark.django_db()
+def test_invitations_page_shows_the_warning_and_no_form(client):
+    experiment = _experiment()
+    pending = _web_session(experiment, status=SessionStatus.SETUP)
+    client.force_login(_inviter(experiment))
+
+    response = client.get(reverse("chatbots:chatbots_invitations", args=[experiment.team.slug, experiment.id]))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert WARNING_DATE in content
+    assert LEGACY_WEB_CHAT_SUCCESSOR_URL in content
+    assert "Invite Participant" not in content
+    assert "Send Invitation" not in content
+    assert f"session-{pending.external_id}" in content
+
+
+@pytest.mark.django_db()
+def test_creating_an_invitation_is_refused(client):
+    experiment = _experiment()
+    client.force_login(_inviter(experiment))
+    url = reverse("chatbots:chatbots_invitations", args=[experiment.team.slug, experiment.id])
+
+    response = client.post(
+        url, data={"experiment_id": experiment.id, "email": "someone@example.com", "invite_now": "on"}
+    )
+
+    assert response.status_code == 302
+    assert response.url == url
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+def test_sending_an_invitation_is_refused(client):
+    experiment = _experiment()
+    pending = _web_session(experiment, status=SessionStatus.SETUP)
+    client.force_login(_inviter(experiment))
+    url = reverse("chatbots:send_chatbot_invitation", args=[experiment.team.slug, experiment.id, pending.external_id])
+
+    response = client.post(url)
+
+    assert response.status_code == 403
+    assert WARNING_DATE in response.content.decode()
+    pending.refresh_from_db()
+    assert pending.status == SessionStatus.SETUP
+
+
+@pytest.mark.django_db()
+def test_share_dialog_shows_the_warning(client):
+    experiment = _experiment()
+    client.force_login(experiment.team.members.first())
+
+    response = client.get(reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id]))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert WARNING_DATE in content
+    assert LEGACY_WEB_CHAT_SUCCESSOR_URL in content

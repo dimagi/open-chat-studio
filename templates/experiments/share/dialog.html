@@ -1,7 +1,9 @@
+{% load sunset_tags %}
 <dialog id="sharing_modal" class="modal">
   <div class="modal-box" x-data="{ tab: 'tab-link' }">
     {% url 'chatbots:start_session_public' team.slug experiment.public_id as public_link %}
     <div class="w-full my-4">
+      {% legacy_web_chat_warning %}
       <p class="my-4">Share this link with participants:</p>
       <pre
           class="w-full max-w-min whitespace-pre-wrap overflow-x-scroll"><code>{% absolute_url public_link %}</code></pre>
