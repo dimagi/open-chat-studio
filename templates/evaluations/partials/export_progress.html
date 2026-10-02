@@ -24,6 +24,10 @@ renders. Scoped by task id rather than element ids so several exports can run on
     <button type="button" class="btn btn-ghost btn-xs" onclick="location.reload()">{% translate "Try again" %}</button>
   </span>
 
+  {% translate "Starting..." as starting_message %}
+  {% translate "Export failed." as failed_message %}
+  {% translate "Network error — check your connection." as network_error_message %}
+  {% translate "Server error — please try again." as server_error_message %}
   <script>
     (function () {
       const root = document.getElementById("export-progress-{{ task_id }}");
@@ -55,7 +59,7 @@ renders. Scoped by task id rather than element ids so several exports can run on
 
         onProgress: function (bar, message, progress) {
           bar.style.width = (progress.percent || 0) + "%";
-          message.textContent = progress.description || "Starting...";
+          message.textContent = progress.description || "{{ starting_message|escapejs }}";
         },
 
         // The task returns its failure rather than raising, so a task that completed
@@ -67,21 +71,21 @@ renders. Scoped by task id rather than element ids so several exports can run on
               downloadBaseUrl.replace(/\/0(\/?$)/, "/" + result.file_id + "$1") + "?allow_s3=1";
             downloadLink.style.display = "";
           } else {
-            fail((result && result.error) || "Export failed.");
+            fail((result && result.error) || "{{ failed_message|escapejs }}");
           }
         },
 
         onError: function (_bar, _message, error) {
-          fail((error && error.message) || "Export failed.");
+          fail((error && error.message) || "{{ failed_message|escapejs }}");
         },
         onTaskError: function (_bar, _message, excMessage) {
-          fail(excMessage || "Export failed.");
+          fail(excMessage || "{{ failed_message|escapejs }}");
         },
         onNetworkError: function () {
-          fail("Network error — check your connection.");
+          fail("{{ network_error_message|escapejs }}");
         },
         onHttpError: function () {
-          fail("Server error — please try again.");
+          fail("{{ server_error_message|escapejs }}");
         },
       });
     })();
