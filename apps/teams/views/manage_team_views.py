@@ -21,7 +21,7 @@ from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async, start_team_files_export
 from apps.teams.utils import current_team
 from apps.teams.views.members_views import ROLE_CHOICES
-from apps.teams.views.team_settings import render_team_settings
+from apps.teams.views.team_settings import public_key_context, render_team_settings
 
 
 @login_required
@@ -107,22 +107,23 @@ def send_invitation_view(request, team_slug):
 @require_POST
 @permission_required("teams.change_team", raise_exception=True)
 def set_public_key(request, team_slug):
-    """Saves the public key and the migration-mode toggle together, matching the mockup's
-    single "Save key" action for the whole Migration public key card."""
+    """Saves the public key, the export scope and the migration-mode toggle together: they are set
+    in one action on the Migration card, before a migration starts."""
     form = TeamPublicKeyForm(request.POST, instance=request.team)
     if form.is_valid():
         form.save()
-        messages.success(request, _("Public key saved!"))
+        messages.success(request, _("Migration settings saved."))
+        # A fresh form, so the card's starting allowlist is the one just saved.
+        form = TeamPublicKeyForm(instance=request.team)
     else:
-        messages.error(request, _("Could not save the public key."))
+        messages.error(request, _("Could not save the migration settings."))
         # ModelForm.is_valid() has already written the submitted (rejected) values onto
         # request.team in memory via _post_clean(), even though nothing was saved. The
-        # migration-mode checkbox below reads request.team.is_migrating directly, so
+        # migration-mode checkbox and the card's badges read request.team directly, so
         # refresh the instance from the database to undo that in-memory mutation -- this
-        # doesn't touch form.errors, which is what still surfaces the "public_key" field
-        # error to the user.
+        # doesn't touch form.errors, which is what still surfaces the field errors.
         request.team.refresh_from_db()
-    return render_team_settings(request, "data", public_key_form=form)
+    return render_team_settings(request, "data", **public_key_context(form))
 
 
 def _set_team_boolean_field(

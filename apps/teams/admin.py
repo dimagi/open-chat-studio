@@ -25,6 +25,7 @@ class MembershipInlineAdmin(admin.TabularInline):
 class TeamAdmin(admin.ModelAdmin):
     list_display = ["name", "slug"]
     inlines = (MembershipInlineAdmin,)
+    exclude = ("exportable_experiments",)
 
 
 MAX_TEAMS_DISPLAY = 3

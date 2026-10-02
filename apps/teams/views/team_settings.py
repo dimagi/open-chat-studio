@@ -1,5 +1,6 @@
 """Team settings page, rendering one section at a time from ``SETTINGS_SECTIONS``."""
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -98,9 +99,19 @@ def _members_context(request) -> dict:
     }
 
 
+def public_key_context(public_key_form: TeamPublicKeyForm) -> dict:
+    return {
+        "public_key_form": public_key_form,
+        # The mid-migration warning compares the picker against what is saved, not what is bound.
+        "saved_allowlist_ids": json.dumps(public_key_form.initial["exportable_experiments"]),
+        # The bound values on a rejected submit, so a validation error doesn't lose the admin's picks.
+        "submitted_allowlist_ids": [str(pk) for pk in public_key_form["exportable_experiments"].value()],
+    }
+
+
 def _data_context(request) -> dict:
     return {
-        "public_key_form": TeamPublicKeyForm(instance=request.team),
+        **public_key_context(TeamPublicKeyForm(instance=request.team)),
         "notify_recipients_form": NotifyRecipientsForm(),
         **_team_files_export_context(request.team),
     }

@@ -198,6 +198,10 @@ class EventUser(BaseTeamModel):
 
     class Meta:
         unique_together = ("event_type", "user")
+        indexes = [
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="eventuser_updated_at_id_idx"),
+        ]
 
     def get_absolute_url(self):
         return reverse(

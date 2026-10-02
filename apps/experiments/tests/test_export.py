@@ -9,13 +9,17 @@ import pytest
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments import export as export_mod
 from apps.experiments.export import (
+    EXPORT_COLUMNS,
     SESSION_CACHE_MAX_ENTRIES,
     UTF8_BOM,
+    _build_message_queryset,
     _SessionCache,
     count_export_messages,
     export_rows_to_csv_stream,
     generate_export_rows,
+    resolve_export_columns,
 )
+from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -423,7 +427,7 @@ def test_generate_export_rows_progress_interval_independent_of_chunk_size():
 
 def test_session_cache_evicts_oldest_beyond_max_entries():
     """The cache is an LRU with a hard ceiling, so it can't grow with the session count."""
-    cache = _SessionCache(max_entries=2)
+    cache = _SessionCache(columns=EXPORT_COLUMNS, max_entries=2)
     sessions = [Mock(id=i, external_id=f"s{i}", state={}, get_platform_name=Mock(return_value="Web")) for i in range(3)]
     for session in sessions:
         session.participant = Mock(name=f"p{session.id}", identifier=f"p{session.id}", public_id=f"pub{session.id}")
@@ -442,7 +446,7 @@ def test_session_cache_evicts_oldest_beyond_max_entries():
 
 
 def test_session_cache_default_ceiling_comes_from_module_constant():
-    assert _SessionCache()._max_entries == SESSION_CACHE_MAX_ENTRIES
+    assert _SessionCache(columns=EXPORT_COLUMNS)._max_entries == SESSION_CACHE_MAX_ENTRIES
 
 
 @pytest.mark.django_db()
@@ -498,9 +502,9 @@ def test_generate_export_rows_releases_spent_chunks():
     refs = []
     real_yield = export_mod._yield_row_for_message
 
-    def recording_yield(message, *args):
+    def recording_yield(message, **kwargs):
         refs.append(weakref.ref(message))
-        return real_yield(message, *args)
+        return real_yield(message=message, **kwargs)
 
     first_chunk_alive_later = None
     with (
@@ -519,3 +523,98 @@ def test_generate_export_rows_releases_spent_chunks():
         f"{first_chunk_alive_later}/{chunk_size} messages from the first chunk were still alive "
         "two chunks later -- spent chunks are not being released"
     )
+
+
+FULL_EXPORT_HEADER = [
+    "Message ID",
+    "Message Date",
+    "Message Type",
+    "Message Content",
+    "Platform",
+    "Session Tags",
+    "Session Comments",
+    "Session ID",
+    "Session State",
+    "Chatbot ID",
+    "Chatbot Name",
+    "Participant Name",
+    "Participant Identifier",
+    "Participant Public ID",
+    "Message Tags",
+    "Message Comments",
+    "Trace ID",
+    "Participant Data",
+]
+
+
+def test_export_columns_registry_matches_full_header():
+    assert [column.label for column in EXPORT_COLUMNS] == FULL_EXPORT_HEADER
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("columns", "expected_header"),
+    [
+        pytest.param(None, FULL_EXPORT_HEADER, id="none_means_all"),
+        pytest.param(
+            ["message_content"],
+            ["Message ID", "Message Type", "Message Content"],
+            id="required_columns_always_included",
+        ),
+        pytest.param(
+            ["participant_identifier", "message_content", "session_state"],
+            ["Message ID", "Message Type", "Message Content", "Session State", "Participant Identifier"],
+            id="registry_order_not_selection_order",
+        ),
+        pytest.param(
+            ["bogus", "message_date"], ["Message ID", "Message Date", "Message Type"], id="unknown_keys_ignored"
+        ),
+    ],
+)
+def test_generate_export_rows_selected_columns(columns, expected_header):
+    session = ExperimentSessionFactory.create(participant__identifier="alice", state={"step": 1})
+    message = ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+
+    header, row = list(generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=columns))
+
+    assert header == expected_header
+    values = dict(zip(header, row, strict=True))
+    assert values["Message ID"] == message.id
+    expected_values = {
+        "Message Content": "hello",
+        "Message Type": ChatMessageType.HUMAN,
+        "Session State": json.dumps({"step": 1}),
+        "Participant Identifier": "alice",
+    }
+    for label, expected in expected_values.items():
+        if label in values:
+            assert values[label] == expected
+
+
+@pytest.mark.django_db()
+def test_unselected_columns_are_not_computed():
+    session = _make_session_with_messages(2)
+    with (
+        patch("apps.experiments.export._get_participant_data_for_message") as participant_data_mock,
+        patch("apps.experiments.export._get_trace_id_for_export") as trace_id_mock,
+    ):
+        list(generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["message_content"]))
+
+    participant_data_mock.assert_not_called()
+    trace_id_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("columns", "expected_prefetches"),
+    [
+        pytest.param(["message_content"], set(), id="no_prefetch_needed"),
+        pytest.param(
+            ["participant_data"], {"input_message_trace", "output_message_trace"}, id="participant_data_traces"
+        ),
+        pytest.param(["session_tags"], {"chat__tags"}, id="session_tags"),
+    ],
+)
+def test_message_queryset_prefetches_only_selected_columns(columns, expected_prefetches):
+    queryset = _build_message_queryset(ExperimentSession.objects.none(), columns=resolve_export_columns(columns))
+    assert set(queryset._prefetch_related_lookups) == expected_prefetches

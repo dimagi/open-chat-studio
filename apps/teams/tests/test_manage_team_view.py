@@ -4,6 +4,7 @@ from waffle.testutils import override_flag
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.flags import Flags
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -108,3 +109,35 @@ def test_renaming_the_team_keeps_the_current_section(client, team, admin):
     team.refresh_from_db()
     assert team.name == "Renamed"
     assert response.context["active_section"].key == "members"
+
+
+@pytest.mark.django_db()
+def test_set_public_key_saves_the_allowlist(client, team, admin):
+    chatbot = ExperimentFactory(team=team)
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("single_team:set_public_key", args=[team.slug]),
+        {"public_key": "", "export_scope": "selected", "exportable_experiments": [chatbot.id], "is_migrating": "on"},
+    )
+
+    assert response.status_code == 200
+    assert list(team.exportable_experiments.all()) == [chatbot]
+
+
+@pytest.mark.django_db()
+def test_a_rejected_public_key_re_renders_the_submitted_selection(client, team, admin):
+    """The card reads the bound form, so a rejected key must not lose the admin's unsaved picks."""
+    chatbot = ExperimentFactory(team=team)
+    client.force_login(admin)
+
+    response = client.post(
+        reverse("single_team:set_public_key", args=[team.slug]),
+        {"public_key": "not a key", "export_scope": "selected", "exportable_experiments": [chatbot.id]},
+    )
+
+    assert response.status_code == 200
+    form = response.context["public_key_form"]
+    assert form.errors["public_key"]
+    assert response.context["submitted_allowlist_ids"] == [str(chatbot.id)]
+    assert list(team.exportable_experiments.all()) == []

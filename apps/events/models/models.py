@@ -458,7 +458,11 @@ class ScheduledMessage(BaseTeamModel):
 
     class Meta:
         unique_together = ("experiment", "participant", "external_id")
-        indexes = [models.Index(fields=["is_complete"])]
+        indexes = [
+            models.Index(fields=["is_complete"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="schedmessage_updated_at_id_idx"),
+        ]
 
     def save(self, *args, **kwargs):
         self.assign_external_id()

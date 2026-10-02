@@ -69,7 +69,7 @@ jobs:
           egress-policy: audit
 
       - name: Run OpenCodeReview
-        uses: alibaba/open-code-review@5c7b38381d1fdd36de6cf622a2a1f768243c4704 # v1.12.8
+        uses: alibaba/open-code-review@bccbc15f785269400735d5255540c231e6c02b6d # v1.12.9
         with:
           ocr_version: '1.12.8'
           llm_url: https://api.anthropic.com
