@@ -6,6 +6,7 @@ team settings form, the export scope, and the migration freeze.
 
 from collections.abc import Sequence
 
+from django.core.cache import cache
 from django.db.models import Q, QuerySet
 
 from apps.experiments.models import Experiment
@@ -32,9 +33,27 @@ def selected_chatbots(team: Team) -> QuerySet[Experiment]:
     return Experiment._base_manager.filter(pk__in=_allowlist(team).values("experiment_id"))
 
 
-def selected_experiment_count(team: Team) -> int:
-    """How many chatbots the allowlist holds, archived ones included."""
-    return _allowlist(team).count()
+def migrating_chatbot_count(team: Team) -> int:
+    """How many chatbots the allowlist holds while the team is migrating, archived ones included.
+
+    Cached until the allowlist changes or migration mode is turned off; see ``apps.teams.signals``.
+    """
+    if not team.is_migrating:
+        return 0
+    key = _migrating_chatbot_count_key(team.pk)
+    count = cache.get(key)
+    if count is None:
+        count = _allowlist(team).count()
+        cache.set(key, count, timeout=None)
+    return count
+
+
+def clear_migrating_chatbot_count(team_id: int) -> None:
+    cache.delete(_migrating_chatbot_count_key(team_id))
+
+
+def _migrating_chatbot_count_key(team_id: int) -> str:
+    return f"team:{team_id}:migrating_chatbot_count"
 
 
 def family_q(experiment_ids: Sequence[int] | QuerySet) -> Q:
