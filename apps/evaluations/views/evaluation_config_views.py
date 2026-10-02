@@ -746,7 +746,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     template_code=(
                         '<span class="inline-flex items-center gap-1.5">{{ value|add:1 }}'
                         "{% if record.has_error %}"
-                        '<span class="badge badge-error badge-xs" data-testid="result-error-badge" '
+                        '<span class="text-error text-xs" data-testid="result-error-badge" '
                         'title="This result failed"><i class="fa-solid fa-triangle-exclamation"></i>'
                         '<span class="sr-only">Failed</span></span>'
                         "{% endif %}</span>"
