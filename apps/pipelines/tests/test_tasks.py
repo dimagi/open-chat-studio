@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 
+from apps.chat.exceptions import EmptyModelResponseError, ModelRefusedTurnError
 from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeRunError
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
@@ -53,6 +54,25 @@ class TestGetResponseForPipelineTestMessage:
         result = get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="test", user_id=user.id)
 
         assert result == CONFIG_ERROR
+
+    @mock.patch("apps.pipelines.tasks.PipelineTestBot")
+    def test_refused_turn_is_returned_as_an_error(self, bot_cls, team_with_users):
+        bot_cls.return_value.process_input.side_effect = ModelRefusedTurnError("refusal")
+        pipeline = self._valid_pipeline(team_with_users)
+        user = team_with_users.members.first()
+
+        result = get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="hi", user_id=user.id)
+
+        assert result == {"error": "The assistant declined to answer the last message."}
+
+    @mock.patch("apps.pipelines.tasks.PipelineTestBot")
+    def test_empty_turn_propagates(self, bot_cls, team_with_users):
+        bot_cls.return_value.process_input.side_effect = EmptyModelResponseError("OTHER")
+        pipeline = self._valid_pipeline(team_with_users)
+        user = team_with_users.members.first()
+
+        with pytest.raises(EmptyModelResponseError):
+            get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="hi", user_id=user.id)
 
     @pytest.mark.parametrize(
         "exc",
