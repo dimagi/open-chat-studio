@@ -23,14 +23,14 @@ from apps.teams.utils import get_slug_for_team
 
 
 def manage_applications_url(team_slug: str) -> str:
-    """The team admin page, anchored on the OAuth applications section it is managed from.
+    """The team settings Developer section, anchored on the OAuth applications list.
 
     The anchor is the slugified section title rendered by `generic/object_home_content.html`.
     Lives here rather than in `views` so anything that needs to point an admin at the list --
     including the channel form, on the other side of the two-person setup -- can import it
     without importing the views.
     """
-    return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
+    return f"{reverse('single_team:manage_team_section', args=[team_slug, 'developer'])}#oauth-applications"
 
 
 @audit_fields("allowed_chatbots")

@@ -4,15 +4,17 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from apps.experiments.models import Experiment
 
 from .export.selection import selectable_chatbots, selected_experiment_ids
+from .flags import get_all_flag_info
 from .helpers import create_default_team_for_user
 from .metadata import get_team_metadata_fields
-from .models import Invitation, Membership, Team
+from .models import Flag, Invitation, Membership, Team
 
 
 class TeamSignupForm(SignupForm):
@@ -298,3 +300,111 @@ class MembershipForm(forms.ModelForm):
         widgets = {
             "groups": forms.CheckboxSelectMultiple(),
         }
+
+
+RENDERED_FLAG_STATE_FIELD = "rendered_enabled_flags"
+
+
+class FeatureFlagForm(forms.Form):
+    """Form for managing team feature flags."""
+
+    def __init__(self, *args, **kwargs):
+        self.team = kwargs.pop("team", None)
+        super().__init__(*args, **kwargs)
+
+        self._all_flags = None
+
+        flag_info = get_all_flag_info()
+        enabled = []
+
+        for flag_name, info in flag_info.items():
+            if not info.teams_can_manage:
+                continue
+
+            label = flag_name.split("_", 1)[-1]
+            help_text = f"Flag: {label}"
+            if info.docs_slug:
+                help_text += format_html(' (<a class="link" target="_blank" href="{}">docs</a>)', info.docs_url)
+            is_active = self._is_flag_active_for_team(flag_name)
+            if is_active:
+                enabled.append(flag_name)
+            self.fields[flag_name] = forms.BooleanField(
+                label=info.description,
+                required=False,
+                help_text=mark_safe(help_text),
+                initial=is_active,
+            )
+
+        self.fields[RENDERED_FLAG_STATE_FIELD] = forms.CharField(
+            widget=forms.HiddenInput(), required=False, initial=",".join(enabled)
+        )
+
+    def _is_flag_active_for_team(self, flag_name):
+        """Check if a flag is active for the current team."""
+        if not self.team:
+            return False
+
+        try:
+            flag = Flag.objects.get(name=flag_name)
+            return flag.is_active_for_team(self.team)
+        except Flag.DoesNotExist:
+            return False
+
+    def _state_at_render(self) -> dict[str, bool]:
+        """What each checkbox showed on the page that was submitted.
+
+        The rendered state is carried through the POST because `save` acts on the change
+        the user made, not on the difference from a read taken at submit time: between the
+        two, another admin or a change to the flag's global `everyone` may have moved the
+        flag, and neither should be attributed to this submission.
+
+        A submission without the hidden field falls back to the state now, which is all a
+        caller posting the checkboxes alone can be held to.
+        """
+        flag_names = [name for name in self.fields if name != RENDERED_FLAG_STATE_FIELD]
+        if self.is_bound and RENDERED_FLAG_STATE_FIELD in self.data:
+            rendered_on = set(self.data[RENDERED_FLAG_STATE_FIELD].split(","))
+            return {name: name in rendered_on for name in flag_names}
+        return {name: bool(self.fields[name].initial) for name in flag_names}
+
+    def save(self):
+        """Save the form by updating team flag associations."""
+        if not self.team:
+            return
+
+        flag_infos = get_all_flag_info()
+        state_at_render = self._state_at_render()
+
+        for flag_name, is_enabled in self.cleaned_data.items():
+            flag_info = flag_infos.get(flag_name)
+            if not flag_info or not flag_info.teams_can_manage:
+                continue
+            if is_enabled == state_at_render[flag_name]:
+                # A flag on through `everyone` renders ticked; writing the team into the M2M
+                # on an unrelated save would keep the feature past the end of the rollout.
+                continue
+
+            flag = self._get_or_create_flag(flag_name)
+            if is_enabled:
+                flag.teams.add(self.team)
+                # Auto-enable required flags
+                for required_flag_name in flag_info.requires:
+                    required_flag = self._get_or_create_flag(required_flag_name)
+                    required_flag.teams.add(self.team)
+                    required_flag.flush()
+            else:
+                flag.teams.remove(self.team)
+
+            # Clear the cache to ensure the flag state is updated
+            flag.flush()
+
+    def _get_or_create_flag(self, flag_name):
+        if not self._all_flags:
+            self._all_flags = {flag.name: flag for flag in Flag.get_all()}
+
+        if flag_name not in self._all_flags:
+            flag, _created = Flag.objects.get_or_create(
+                name=flag_name, defaults={"everyone": None, "superusers": False}
+            )
+            self._all_flags[flag_name] = flag
+        return self._all_flags[flag_name]
