@@ -1026,10 +1026,17 @@ OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+COLLECTION_FILE_MAX_METADATA_COLUMNS = 16
 
 # How long a chat session token remains usable from issuance. Activity does not extend it.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Row import into local indexes: one chunk per CSV/TSV row.
+COLLECTION_ROW_IMPORT_MAX_ROWS = 10000
+# Counted with tiktoken cl100k_base. Sized to the smallest input limit among the supported
+# embedding providers so a row that passes preview embeds on any of them.
+COLLECTION_ROW_IMPORT_MAX_ROW_TOKENS = 2000
 
 # Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
 # Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
