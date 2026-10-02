@@ -3,7 +3,12 @@
     manage.py sync_team --source-url=<src> --api-key=<key> --team-slug=<slug> [--private-key-path=<path>]
 
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
-translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
+translation store. Each run makes one pass over the manifest and exits.
+
+It is meant for a one-off migration, not an ongoing sync: run it once, and optionally once more
+shortly afterwards to pick up rows created since the first run. ``--force-delete`` wipes the local
+team and its sync state so the import starts from scratch. After cutover, ``reregister_webhooks``
+points every channel in the team at this server.
 
 The source decides how much of the team moves: a team admin there can limit the export to selected
 chatbots. The command has no chatbot flag; it syncs whatever the source allows and reports it.
