@@ -10,6 +10,8 @@ from langchain_core.runnables import RunnableLambda
 
 from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.service_providers.llm_service.error_classification import (
+    ProviderErrorKind,
+    classify_provider_error,
     translate_provider_error,
     translate_provider_errors,
 )
@@ -18,15 +20,11 @@ from apps.service_providers.llm_service.retry import (
     should_retry_exception,
     with_llm_retry,
 )
-
-
-def _status_error(cls, status: int, message: str, body: dict | None = None):
-    request = httpx.Request("POST", "https://api.example.com/v1/messages")
-    return cls(message, response=httpx.Response(status, request=request), body=body or {})
+from apps.utils.tests.provider_errors import converted, status_error
 
 
 def _openai_error(cls, status: int, message: str, code: str | None = None, type_: str | None = None):
-    return _status_error(cls, status, message, {"message": message, "code": code, "type": type_})
+    return status_error(cls, status, message, {"message": message, "code": code, "type": type_})
 
 
 def _innermost_detail(error: BaseException) -> str:
@@ -63,12 +61,12 @@ TEAM_ACTIONABLE = [
         id="openai_credits_exhausted",
     ),
     pytest.param(
-        _status_error(anthropic.BadRequestError, 400, "Your credit balance is too low to access the Anthropic API."),
+        status_error(anthropic.BadRequestError, 400, "Your credit balance is too low to access the Anthropic API."),
         "no credit or quota remaining",
         id="anthropic_credit_balance_too_low",
     ),
     pytest.param(
-        _status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits."),
+        status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits."),
         "no credit or quota remaining",
         id="anthropic_usage_limit_reached",
     ),
@@ -80,12 +78,12 @@ TEAM_ACTIONABLE = [
         id="openai_bad_key",
     ),
     pytest.param(
-        _status_error(anthropic.AuthenticationError, 401, "API key is invalid."),
+        status_error(anthropic.AuthenticationError, 401, "API key is invalid."),
         "rejected the credentials",
         id="anthropic_bad_key",
     ),
     pytest.param(
-        _status_error(anthropic.NotFoundError, 404, "model: claude-3-5-haiku-latest"),
+        status_error(anthropic.NotFoundError, 404, "model: claude-3-5-haiku-latest"),
         "could not find the model",
         id="anthropic_unknown_model",
     ),
@@ -133,7 +131,7 @@ LEFT_ALONE = [
         True,
         id="openai_genuine_rate_limit",
     ),
-    pytest.param(_status_error(anthropic.OverloadedError, 529, "Overloaded"), True, id="anthropic_overloaded"),
+    pytest.param(status_error(anthropic.OverloadedError, 529, "Overloaded"), True, id="anthropic_overloaded"),
     pytest.param(ValueError("boom"), False, id="unrelated_exception"),
     # A malformed request is wrapped the same way a bad key is, but nobody on the team can fix it.
     pytest.param(
@@ -169,14 +167,14 @@ def test_other_errors_keep_their_native_type(error, retryable):
 
 def test_an_already_translated_error_is_left_alone():
     """Otherwise a second boundary would rebuild it from its own cause."""
-    original = _status_error(anthropic.AuthenticationError, 401, "API key is invalid.")
+    original = status_error(anthropic.AuthenticationError, 401, "API key is invalid.")
     translated = translate_provider_error(original)
 
     assert translate_provider_error(translated) is None
 
 
 def test_context_manager_translates_and_chains():
-    error = _status_error(anthropic.AuthenticationError, 401, "API key is invalid.")
+    error = status_error(anthropic.AuthenticationError, 401, "API key is invalid.")
 
     with pytest.raises(ProviderConfigurationError) as exc_info:  # noqa: SIM117
         with translate_provider_errors():
@@ -266,6 +264,89 @@ def test_translation_wrapper_preserves_bound_kwargs():
 
     assert wrapped.invoke("hi") == "ok"
     assert seen == {"stop": ["x"]}
+
+
+@pytest.mark.parametrize(
+    ("error", "kind"),
+    [
+        pytest.param(
+            status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits."),
+            ProviderErrorKind.QUOTA_EXHAUSTED,
+            id="anthropic_usage_limit_reached",
+        ),
+        pytest.param(
+            _openai_error(openai.RateLimitError, 429, "No credits.", code="insufficient_quota"),
+            ProviderErrorKind.QUOTA_EXHAUSTED,
+            id="openai_quota_is_not_a_rate_limit",
+        ),
+        pytest.param(
+            status_error(anthropic.AuthenticationError, 401, "API key is invalid."),
+            ProviderErrorKind.AUTHENTICATION,
+            id="anthropic_bad_key",
+        ),
+        pytest.param(
+            status_error(anthropic.NotFoundError, 404, "model: claude-3-5-haiku-latest"),
+            ProviderErrorKind.MODEL_NOT_FOUND,
+            id="anthropic_unknown_model",
+        ),
+        pytest.param(
+            ContextOverflowError("Your input exceeds the context window of this model."),
+            ProviderErrorKind.CONTEXT_OVERFLOW,
+            id="langchain_context_overflow",
+        ),
+        pytest.param(
+            _openai_error(openai.RateLimitError, 429, "Rate limit reached", code="rate_limit_exceeded"),
+            ProviderErrorKind.RATE_LIMIT,
+            id="openai_genuine_rate_limit",
+        ),
+        pytest.param(
+            status_error(anthropic.RateLimitError, 429, "Number of request tokens has exceeded your rate limit."),
+            ProviderErrorKind.RATE_LIMIT,
+            id="anthropic_rate_limit",
+        ),
+        pytest.param(
+            google_exceptions.ResourceExhausted("Quota exceeded for requests per minute."),
+            ProviderErrorKind.RATE_LIMIT,
+            id="google_resource_exhausted",
+        ),
+        pytest.param(
+            anthropic.APITimeoutError(request=httpx.Request("POST", "https://api.example.com")),
+            ProviderErrorKind.TIMEOUT,
+            id="anthropic_timeout",
+        ),
+        pytest.param(
+            httpx.ReadTimeout("timed out"),
+            ProviderErrorKind.TIMEOUT,
+            id="httpx_timeout",
+        ),
+        pytest.param(
+            status_error(anthropic.OverloadedError, 529, "Overloaded"),
+            ProviderErrorKind.UNAVAILABLE,
+            id="anthropic_overloaded",
+        ),
+        pytest.param(
+            status_error(openai.InternalServerError, 500, "The server had an error."),
+            ProviderErrorKind.UNAVAILABLE,
+            id="openai_server_error",
+        ),
+        pytest.param(
+            status_error(anthropic.BadRequestError, 400, "messages: text content blocks must be non-empty"),
+            ProviderErrorKind.INVALID_REQUEST,
+            id="anthropic_malformed_request",
+        ),
+        pytest.param(ValueError("boom"), None, id="unrelated_exception"),
+    ],
+)
+def test_classify_provider_error(error, kind):
+    assert classify_provider_error(error) == kind
+
+
+def test_classify_provider_error_reads_the_kind_from_a_converted_error():
+    """The pipeline receives the ProviderConfigurationError an SDK error was converted to, which says
+    nothing about the kind itself, so the kind must be read from its cause."""
+    error = converted(status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits."))
+
+    assert classify_provider_error(error) == ProviderErrorKind.QUOTA_EXHAUSTED
 
 
 AZURE_FILTER_BODY = {

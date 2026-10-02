@@ -22,7 +22,7 @@ from apps.channels.datamodels import (
 )
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.deduplication import connect_external_ids
-from apps.channels.evaluation_channel import EvaluationChannel
+from apps.channels.evaluation_channel import EvaluationChannel, EvaluationReply
 from apps.channels.facebook_channel import FacebookMessengerChannel
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.sureadhere_channel import SureAdhereChannel
@@ -165,7 +165,7 @@ def handle_evaluation_message(
     session: ExperimentSession,
     participant_data: dict,
     usage_tracer: Tracer | None = None,
-) -> ChatMessage:
+) -> EvaluationReply:
     """Synchronously handles the message coming from evaluations.
 
     `usage_tracer` is the only tracer an eval run gets: it bills the LLM calls without
@@ -180,7 +180,7 @@ def handle_evaluation_message(
         participant_data=participant_data,
         usage_tracer=usage_tracer,
     )
-    return channel.new_user_message(message)
+    return channel.generate_reply(message)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)

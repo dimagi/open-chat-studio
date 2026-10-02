@@ -278,9 +278,16 @@ def test_write_scores_from_evaluation_result_is_idempotent(eval_result_on_sessio
 
 
 @pytest.mark.django_db()
-def test_write_scores_from_evaluation_result_error_payload_writes_no_scores(eval_result_on_session):
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param({"error": "boom"}, id="evaluator-error"),
+        pytest.param({"generation_error": "quota"}, id="failed-generation"),
+    ],
+)
+def test_write_scores_from_evaluation_result_failed_result_writes_no_scores(eval_result_on_session, failure):
     _team, _session, result = eval_result_on_session
-    result.output = {"error": "boom"}
+    result.output = {**result.output, **failure}
     result.save()
 
     write_scores_from_evaluation_result(result)
