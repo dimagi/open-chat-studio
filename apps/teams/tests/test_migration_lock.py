@@ -4,6 +4,7 @@ from field_audit import enable_audit
 from field_audit.models import AuditEvent
 
 from apps.teams.models import Team
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
 
@@ -20,6 +21,17 @@ def test_toggling_is_migrating_is_audited():
         team.save()
         events = AuditEvent.objects.by_model(Team).filter(object_pk=team.id)
         assert any("is_migrating" in (e.delta or {}) for e in events)
+
+
+@pytest.mark.django_db()
+def test_changing_the_allowlist_is_audited():
+    """What may leave this server is a security-relevant setting, so a change to it is recorded
+    next to is_migrating and public_key."""
+    with enable_audit():
+        team = TeamFactory()
+        team.exportable_experiments.add(ExperimentFactory(team=team))
+        events = AuditEvent.objects.by_model(Team).filter(object_pk=team.id)
+        assert any("exportable_experiments" in (e.delta or {}) for e in events)
 
 
 def _team_with_admin():

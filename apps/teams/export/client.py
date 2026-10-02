@@ -44,18 +44,20 @@ class ResourceFetcher:
             self._team = self._get("/api/export/team/")
         return self._team
 
-    def get_page(self, resource, cursor=None, limit=100) -> dict:
+    def get_page(self, resource, cursor=None, limit=100, selection=None) -> dict:
         params = {"limit": limit}
         if cursor is not None:
             params["cursor"] = cursor
+        if selection is not None:
+            params["selection"] = selection
         return self._get(f"/api/export/{resource}/", params)
 
-    def iter_pages(self, resource, start_cursor=None, limit=100):
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
         """Yield each page's rows as its own list. The sync writes its resume cursor once a page's
         rows are committed, so it has to see the page boundaries."""
         cursor = start_cursor
         while True:
-            page = self.get_page(resource, cursor, limit)
+            page = self.get_page(resource, cursor, limit, selection)
             yield page["results"]
             if not page.get("has_more"):
                 return
