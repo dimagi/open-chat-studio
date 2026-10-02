@@ -350,7 +350,6 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             context["total_results"] = total_results
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
                 context["error_summary"] = evaluation_run.error_summary()
-                context["errors_table_url"] = f"{base_table_url}?{FAILED_FILTER_PARAM}=1"
                 context.update(_aggregates_context(evaluation_run, team_slug))
                 context["headline_category_stat"] = _headline_category_stat(context["aggregates"])
 
