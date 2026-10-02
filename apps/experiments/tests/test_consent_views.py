@@ -36,3 +36,16 @@ def test_delete(client):
 
     experiment.refresh_from_db()
     assert experiment.consent_form == ConsentForm.objects.get(team=team, is_default=True)
+
+
+@pytest.mark.django_db()
+def test_delete_refuses_the_default_form(client):
+    team = TeamWithUsersFactory.create()
+    default = ConsentForm.get_default(team)
+    client.force_login(team.members.first())
+
+    response = client.delete(reverse("experiments:consent_delete", args=[team.slug, default.id]))
+
+    assert response.status_code == 400
+    default.refresh_from_db()
+    assert default.is_archived is False

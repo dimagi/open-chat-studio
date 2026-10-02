@@ -962,6 +962,163 @@ paths:
             for this chatbot.'
         '404':
           description: No such chatbot, or it has never created a version.
+  /api/v2/consent-forms/:
+    get:
+      operationId: consent_form_list
+      description: List the team's consent forms. Archived ones are not listed.
+      summary: List Consent Forms
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsentFormResourceList'
+          description: ''
+    post:
+      operationId: consent_form_create
+      description: A key that is not listed below is rejected rather than ignored.
+        A client-credentials token can read but not write; its writes answer `403`.
+      summary: Create Consent Form
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentFormResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+  /api/v2/consent-forms/{id}/:
+    get:
+      operationId: consent_form_retrieve
+      description: List, retrieve, create, patch and archive one team-scoped, versioned
+        content model.
+      summary: Retrieve Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    patch:
+      operationId: consent_form_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit. A client-credentials token can read but not write; its writes answer
+        `403`.
+      summary: Update Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedConsentFormResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    delete:
+      operationId: consent_form_archive
+      description: 'Archive the consent form. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. Every chatbot draft
+        using the form is moved onto the team''s default consent form; published versions
+        keep the form they were published with. The default form itself cannot be
+        archived and answers `409`. A client-credentials token can read but not write;
+        its writes answer `403`.'
+      summary: Archive Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchiveRefused'
+          description: ''
   /api/v2/me/:
     get:
       operationId: me
@@ -1227,6 +1384,162 @@ paths:
                 $ref: '#/components/schemas/NodeTypeNotFound'
           description: No such node type, or the type is deprecated and therefore
             not listed.
+  /api/v2/source-material/:
+    get:
+      operationId: source_material_list
+      description: List the team's source material. Archived ones are not listed.
+      summary: List Source Material
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSourceMaterialResourceList'
+          description: ''
+    post:
+      operationId: source_material_create
+      description: A key that is not listed below is rejected rather than ignored.
+        A client-credentials token can read but not write; its writes answer `403`.
+      summary: Create Source Material
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceMaterialResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+  /api/v2/source-material/{id}/:
+    get:
+      operationId: source_material_retrieve
+      description: List, retrieve, create, patch and archive one team-scoped, versioned
+        content model.
+      summary: Retrieve Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    patch:
+      operationId: source_material_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit. A client-credentials token can read but not write; its writes answer
+        `403`.
+      summary: Update Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSourceMaterialResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    delete:
+      operationId: source_material_archive
+      description: 'Archive the source material. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. It is refused with
+        `409` while a pipeline node or a live chatbot version still uses it. The response
+        lists each chatbot version and node that uses it. A client-credentials token
+        can read but not write; its writes answer `403`.'
+      summary: Archive Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialInUse'
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -1631,6 +1944,15 @@ components:
             type: string
       required:
       - paths
+    ArchiveRefused:
+      type: object
+      description: 'The archive 409: why the resource cannot be archived as things
+        stand.'
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     Archived:
       type: object
       description: 'The archive response: that it happened, and what it destroyed
@@ -2107,6 +2429,52 @@ components:
       - consent_text
       - id
       - name
+    ConsentFormResource:
+      type: object
+      description: The fields the web app's consent form editor edits, plus the id
+        a chatbot references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
+      required:
+      - consent_text
+      - id
+      - is_default
+      - name
+      additionalProperties: false
+    ContentArchived:
+      type: object
+      description: The archive response.
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - archived
     Cost:
       type: object
       properties:
@@ -3228,6 +3596,54 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PaginatedConsentFormResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    PaginatedSourceMaterialResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     ParticipantIdentity:
       type: object
       properties:
@@ -3305,6 +3721,38 @@ components:
           type: boolean
           description: Enables file attachments in the web chat interface.
       additionalProperties: false
+    PatchedConsentFormResource:
+      type: object
+      description: The fields the web app's consent form editor edits, plus the id
+        a chatbot references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
+      additionalProperties: false
     PatchedNodeUpdate:
       type: object
       description: |-
@@ -3341,6 +3789,24 @@ components:
             and always needs one, so this promotes a version; it cannot un-publish
             one. Create a new version that goes live, or make a different version
             the published one, to move it off.
+      additionalProperties: false
+    PatchedSourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
       additionalProperties: false
     PipelineBuildErrors:
       type: object
@@ -3575,6 +4041,40 @@ components:
       - label
       - type
       - value
+    ReferencingChatbot:
+      type: object
+      description: A chatbot version whose pipeline uses the source material.
+      properties:
+        chatbot_id:
+          type: string
+          format: uuid
+          description: The chatbot's id, as the chatbot endpoints take it.
+        version_number:
+          type: integer
+        published:
+          type: boolean
+          description: True for the published version, whose nodes cannot be edited;
+            false for the draft.
+        node_ids:
+          type: array
+          items:
+            type: string
+          description: The nodes that use it, as the pipeline node endpoints take
+            them.
+      required:
+      - chatbot_id
+      - node_ids
+      - published
+      - version_number
+    ReferencingPipeline:
+      type: object
+      description: A pipeline outside any listed chatbot, such as an archived chatbot's,
+        that uses the source material.
+      properties:
+        name:
+          type: string
+      required:
+      - name
     RenderTemplateParams:
       type: object
       properties:
@@ -3684,6 +4184,47 @@ components:
       - id
       - material
       - topic
+    SourceMaterialInUse:
+      type: object
+      description: 'The source material archive 409: where it is still used.'
+      properties:
+        detail:
+          type: string
+        chatbots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingChatbot'
+        other_pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingPipeline'
+          description: Only a person can remove these references, in the web app.
+      required:
+      - chatbots
+      - detail
+      - other_pipelines
+    SourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      required:
+      - id
+      - material
+      - topic
+      additionalProperties: false
     StaticRouterNodeParams:
       type: object
       properties:
