@@ -651,6 +651,10 @@ SCHEDULED_TASKS = {
         "task": "apps.channels.tasks.ratchet_widget_auth_levels",
         "schedule": crontab(minute="0", hour="2"),
     },
+    "ocs_notifications.tasks.notify_http_sunsets": {
+        "task": "apps.ocs_notifications.tasks.notify_http_sunsets",
+        "schedule": crontab(minute="30", hour="2"),
+    },
     "ocs_notifications.tasks.cleanup_old_notification_events": {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
         "schedule": timedelta(days=1),

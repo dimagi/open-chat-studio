@@ -119,3 +119,13 @@ def cleanup_old_notification_events():
     """Delete NotificationEvent records older than 3 months."""
     three_months_ago = timezone.now() - timedelta(days=90)
     NotificationEvent.objects.filter(created_at__lt=three_months_ago).delete()
+
+
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
+def notify_http_sunsets():
+    """Send each team the next sunset milestone notice for the retired surfaces its chatbots still use."""
+    from apps.ocs_notifications.sunsets import (  # noqa: PLC0415 - circular: ocs_notifications.utils → ocs_notifications.tasks
+        notify_sunsets,
+    )
+
+    notify_sunsets(timezone.now())
