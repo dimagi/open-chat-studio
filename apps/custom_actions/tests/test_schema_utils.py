@@ -1,15 +1,22 @@
 """Tests for schema_utils module, including operation extraction and parameter parsing."""
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.custom_actions.schema_utils import (
     APIOperationDetails,
     ParameterDetail,
     _resolve_schema_type,
+    get_operations_from_spec,
     get_operations_from_spec_dict,
 )
+from apps.utils.openapi import OpenAPISpec
+from apps.utils.schema_utils import sanitize_property_name
 
 
 def load_test_data(filename: str) -> dict:
@@ -399,3 +406,255 @@ class TestResolveSchemaType:
     def test_variant_without_type_key_defaults_to_string(self):
         """A resolved $ref that is a complex object without a top-level type key."""
         assert _resolve_schema_type({"anyOf": [{"properties": {"foo": {}}}]}) == "string"
+
+    @pytest.mark.parametrize(
+        ("schema", "expected"),
+        [
+            pytest.param({"type": ["string", "null"]}, "string", id="nullable-list"),
+            pytest.param({"type": ["null", "integer"]}, "integer", id="nullable-list-null-first"),
+            pytest.param({"type": ["integer"]}, "integer", id="single-item-list"),
+            pytest.param({"type": ["string", "integer"]}, "string", id="multi-type-list"),
+            pytest.param({"type": []}, "string", id="empty-list"),
+            pytest.param({"anyOf": [{"type": ["boolean", "null"]}]}, "boolean", id="anyof-variant-list"),
+            pytest.param({"oneOf": [{"type": ["number", "string"]}]}, "string", id="oneof-variant-multi-type-list"),
+        ],
+    )
+    def test_openapi_31_list_type(self, schema, expected):
+        assert _resolve_schema_type(schema) == expected
+
+
+def _one_operation_spec(parameters=None, body=None, components=None):
+    operation = {"operationId": "op", "parameters": [] if parameters is None else parameters}
+    if body:
+        operation["requestBody"] = {"content": {"application/json": {"schema": body}}}
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "t", "version": "1"},
+        "servers": [{"url": "https://x.com"}],
+        "paths": {"/p/{id}": {"post": operation}},
+    }
+    if components:
+        spec["components"] = components
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        pytest.param(
+            _one_operation_spec(
+                [{"name": "tags", "in": "query", "schema": {"type": "array", "items": {"type": "string"}}}]
+            ),
+            [("tags", "query", "array", False, None)],
+            id="array-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "c", "in": "query", "schema": {"type": "string", "enum": ["a", "b"]}}]),
+            [("c", "query", "string", False, None)],
+            id="enum-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "o", "in": "query", "schema": {"type": "object"}}]),
+            [("o", "query", "object", False, None)],
+            id="object-query",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "k", "in": "cookie", "required": True, "schema": {"type": "string"}}]),
+            [("k", "cookie", "string", True, None)],
+            id="required-cookie",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "X-A", "in": "header", "schema": {"type": "integer", "default": 3}}]),
+            [("X-A", "header", "integer", False, 3)],
+            id="header-with-default",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                body={
+                    "type": "object",
+                    "required": ["a"],
+                    "properties": {
+                        "a": {"type": "array", "items": {"type": "integer"}},
+                        "n": {"type": "object", "properties": {"z": {"type": "string"}}},
+                        "o": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                    },
+                }
+            ),
+            [
+                ("a", "body", "array", True, None),
+                ("n", "body", "object", False, None),
+                ("o", "body", "boolean", False, None),
+            ],
+            id="object-body",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "array", "items": {"type": "string"}}),
+            [("body", "body", "array", True, None)],
+            id="non-object-body",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                body={"$ref": "#/components/schemas/Location"},
+                components={
+                    "schemas": {
+                        "Location": {
+                            "type": "object",
+                            "properties": {"coordinates": {"$ref": "#/components/schemas/Coordinates"}},
+                        },
+                        "Coordinates": {"type": "object", "properties": {"lat": {"type": "number"}}},
+                    }
+                },
+            ),
+            [("coordinates", "body", "object", False, None)],
+            id="nested-ref-body-property",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"$ref": "#/components/parameters/P1"}],
+                components={
+                    "parameters": {
+                        "P1": {"$ref": "#/components/parameters/P2"},
+                        "P2": {"name": "q", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    }
+                },
+            ),
+            [("q", "query", "integer", True, None)],
+            id="ref-to-ref-parameter",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"$ref": "#/components/parameters/P1"}],
+                body={"type": "object", "properties": {"loop": {"$ref": "#/components/schemas/A"}}},
+                components={
+                    "parameters": {
+                        "P1": {"$ref": "#/components/parameters/P2"},
+                        "P2": {"$ref": "#/components/parameters/P1"},
+                    },
+                    "schemas": {
+                        "A": {"$ref": "#/components/schemas/B"},
+                        "B": {"$ref": "#/components/schemas/A"},
+                    },
+                },
+            ),
+            [("loop", "body", "string", False, None)],
+            id="cyclic-refs",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [{"name": "q", "in": "query", "schema": {"type": ["string", "null"]}}],
+                body={"type": "object", "properties": {"n": {"type": ["integer", "null"]}}},
+            ),
+            [("q", "query", "string", False, None), ("n", "body", "integer", False, None)],
+            id="openapi-31-nullable-list-types",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": "string"}]),
+            [("p", "query", "string", False, None)],
+            id="string-parameter-schema",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": None}]),
+            [("p", "query", "string", False, None)],
+            id="null-parameter-schema",
+        ),
+        pytest.param(_one_operation_spec(["p"]), [], id="string-parameter"),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": {"anyOf": ["integer"]}}]),
+            [("p", "query", "string", False, None)],
+            id="string-any-of-member",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "p", "in": "query", "schema": {"anyOf": {"type": "integer"}}}]),
+            [("p", "query", "string", False, None)],
+            id="any-of-not-a-list",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": {"a": "string"}}),
+            [("body", "body", "object", True, None)],
+            id="invalid-body-property-is-dropped",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": ["a"]}),
+            [("body", "body", "object", True, None)],
+            id="body-properties-not-a-mapping",
+        ),
+        pytest.param(
+            _one_operation_spec(
+                [
+                    {"name": "p", "in": "query", "description": 5, "schema": {"type": "string"}},
+                    {"name": "q", "in": "query", "required": "maybe", "schema": {"type": "string"}},
+                ]
+            ),
+            [("p", "query", "string", False, None), ("q", "query", "string", False, None)],
+            id="invalid-parameter-fields-are-dropped",
+        ),
+        pytest.param(_one_operation_spec(5), [], id="parameters-not-a-list"),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "required": 5, "properties": {"a": {"type": "string"}}}),
+            [("a", "body", "string", False, None)],
+            id="body-required-not-a-list",
+        ),
+    ],
+)
+def test_parameter_extraction(spec, expected):
+    [operation] = get_operations_from_spec_dict(spec)
+    assert [(p.name, p.param_in, p.schema_type, p.required, p.default) for p in operation.parameters] == expected
+
+
+@pytest.mark.parametrize(
+    ("spec", "message"),
+    [
+        pytest.param(
+            _one_operation_spec([{"$ref": "#/components/parameters/Missing"}]),
+            "Unresolvable reference: #/components/parameters/Missing",
+            id="parameter",
+        ),
+        pytest.param(
+            _one_operation_spec([{"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/Missing"}}]),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="parameter-schema",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"$ref": "#/components/schemas/Missing"}),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="body-schema",
+        ),
+        pytest.param(
+            _one_operation_spec(body={"type": "object", "properties": {"a": {"$ref": "#/components/schemas/Missing"}}}),
+            "Unresolvable reference: #/components/schemas/Missing",
+            id="body-property",
+        ),
+        pytest.param(
+            _one_operation_spec([{"$ref": "other.yaml#/components/parameters/P"}]),
+            "External references are not supported: other.yaml#/components/parameters/P",
+            id="external",
+        ),
+    ],
+)
+def test_unresolvable_reference_raises(spec, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        get_operations_from_spec_dict(spec)
+
+
+def test_operation_id_and_description_fallbacks():
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/a-b/c.d": {"get": {"summary": "S"}}},
+    }
+    [operation] = get_operations_from_spec_dict(spec)
+    assert (operation.operation_id, operation.description) == ("a_b_c_d_get", "S")
+
+
+def test_function_def_names_are_sanitized_operation_ids():
+    spec_dict = _one_operation_spec()
+    spec_dict["paths"]["/other"] = {"get": {"operationId": "get-other.v2"}, "delete": {}}
+    spec_dict["paths"]["/space"] = {"get": {"operationId": "Get Something Cool"}}
+    spec = OpenAPISpec.from_spec_dict(spec_dict)
+    operations = get_operations_from_spec(spec)
+    for operation in operations:
+        function_def = openapi_spec_op_to_function_def(spec, operation.path, operation.method)
+        assert function_def.name == sanitize_property_name(operation.operation_id)
+
+    space_operation = next(op for op in operations if op.path == "/space")
+    assert space_operation.operation_id == "Get Something Cool"
