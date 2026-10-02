@@ -74,6 +74,7 @@ MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
 BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
 TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
 RUN_CHUNK_SIZE = 500  # active run ids fetched per round trip when fanning out ticks
+EXPORT_FAILED_MESSAGE = "The export could not be completed."
 
 logger = get_task_logger("ocs.evaluations")
 
@@ -1612,7 +1613,7 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
 
     except Exception as e:
         logger.exception(f"Error exporting bulk evaluation results for config {evaluation_config_id}: {e}")
-        return {"error": str(e)}
+        return {"error": EXPORT_FAILED_MESSAGE}
 
 
 @shared_task(bind=True, queue=Queues.BACKGROUND)
@@ -1635,4 +1636,4 @@ def export_evaluation_run_results_task(self, evaluation_run_id: int, team_id: in
 
     except Exception as e:
         logger.exception(f"Error exporting results for evaluation run {evaluation_run_id}: {e}")
-        return {"error": str(e)}
+        return {"error": EXPORT_FAILED_MESSAGE}

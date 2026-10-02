@@ -7,7 +7,11 @@ from django.urls import reverse
 
 from apps.evaluations.evaluators import EvaluatorResult
 from apps.evaluations.models import EvaluationRunStatus, EvaluationRunType
-from apps.evaluations.tasks import export_evaluation_run_results_task
+from apps.evaluations.tasks import (
+    EXPORT_FAILED_MESSAGE,
+    export_evaluation_bulk_results_task,
+    export_evaluation_run_results_task,
+)
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -162,13 +166,19 @@ def test_export_evaluation_run_results_task_drives_progress_to_completion():
 
 
 @pytest.mark.django_db()
-def test_export_evaluation_run_results_task_returns_error_for_unknown_run():
+@pytest.mark.parametrize(
+    "task",
+    [
+        pytest.param(export_evaluation_run_results_task, id="run"),
+        pytest.param(export_evaluation_bulk_results_task, id="bulk"),
+    ],
+)
+def test_export_task_returns_generic_error_on_failure(task):
     config = EvaluationConfigFactory.create()
 
-    result = export_evaluation_run_results_task(0, config.team_id)
+    result = task(0, config.team_id)
 
-    assert "file_id" not in result
-    assert result["error"]
+    assert result == {"error": EXPORT_FAILED_MESSAGE}
 
 
 @pytest.fixture()
