@@ -77,6 +77,38 @@ ERROR_CATEGORY_HINTS = {
 }
 
 
+@dataclass(frozen=True)
+class MessageError:
+    source: EvaluationErrorSource
+    category: EvaluationErrorCategory
+    message: str
+    evaluator_name: str | None = None  # None for a generation failure
+
+
+@dataclass(frozen=True)
+class ErrorGroup:
+    source: EvaluationErrorSource
+    category: EvaluationErrorCategory
+    count: int
+
+
+@dataclass(frozen=True)
+class RunErrorSummary:
+    """A run's failed messages. Counted by message, the unit the results table shows."""
+
+    failed_count: int
+    total_count: int
+    groups: list[ErrorGroup]
+
+    @property
+    def needs_warning(self) -> bool:
+        return bool(self.total_count) and self.failed_count / self.total_count > ERROR_WARNING_RATE
+
+    def describe(self) -> str:
+        """The groups as one line, e.g. "26 generation failed: Provider quota exhausted; 2 evaluator failed: …"."""
+        return "; ".join(f"{group.count} {group.source.label.lower()}: {group.category.label}" for group in self.groups)
+
+
 def classify_evaluation_error(error: BaseException) -> EvaluationErrorCategory:
     if isinstance(error, NoStructuredOutputError):
         return EvaluationErrorCategory.INVALID_OUTPUT
@@ -117,7 +149,7 @@ def is_failed_output(output: dict | None) -> bool:
     return bool(output) and (ERROR_KEY in output or GENERATION_ERROR_KEY in output)
 
 
-def message_errors(results: Iterable[tuple[str | None, dict | None]]) -> list["MessageError"]:
+def message_errors(results: Iterable[tuple[str | None, dict | None]]) -> list[MessageError]:
     """The failures on one message, from its results as (evaluator name, output) pairs.
 
     A generation failure is copied onto every evaluator's result for the message, so it is
@@ -144,38 +176,6 @@ def message_errors(results: Iterable[tuple[str | None, dict | None]]) -> list["M
                 )
             )
     return [generation, *errors] if generation else errors
-
-
-@dataclass(frozen=True)
-class MessageError:
-    source: EvaluationErrorSource
-    category: EvaluationErrorCategory
-    message: str
-    evaluator_name: str | None = None  # None for a generation failure
-
-
-@dataclass(frozen=True)
-class ErrorGroup:
-    source: EvaluationErrorSource
-    category: EvaluationErrorCategory
-    count: int
-
-
-@dataclass(frozen=True)
-class RunErrorSummary:
-    """A run's failed messages. Counted by message, the unit the results table shows."""
-
-    failed_count: int
-    total_count: int
-    groups: list[ErrorGroup]
-
-    @property
-    def needs_warning(self) -> bool:
-        return bool(self.total_count) and self.failed_count / self.total_count > ERROR_WARNING_RATE
-
-    def describe(self) -> str:
-        """The groups as one line, e.g. "26 generation failed: Provider quota exhausted; 2 evaluator failed: …"."""
-        return "; ".join(f"{group.count} {group.source.label.lower()}: {group.category.label}" for group in self.groups)
 
 
 def summarize_errors(results: QuerySet) -> RunErrorSummary:
