@@ -1,7 +1,6 @@
 from django.db import migrations
 
 from apps.cost_tracking.migration_utils import load_pricing_data
-from apps.service_providers.migration_utils import llm_model_migration
 
 
 class Migration(migrations.Migration):
@@ -16,7 +15,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Seeds anthropic/claude-sonnet-5-5 and gpt-6.1-sol on openai and azure.
-        llm_model_migration(),
+        # llm_model_migration() moved to 0089_deprecate_claude_sonnet_4_5 so it runs only once
+        # per deploy.
         load_pricing_data(),
     ]

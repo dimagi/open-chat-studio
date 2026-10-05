@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -19,8 +17,6 @@ class Migration(migrations.Migration):
     operations = [
         # llm_model_migration() and load_pricing_data() moved to
         # 0088_auto_model_sync_20260930 so they run only once per deploy.
-        # Remove anthropic/claude-opus-4-20250514, openai/chatgpt-4o-latest, groq/gemma-7b-it
-        # and google/gemini-2.0-flash.
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
+        # remove_deprecated_models and notify_deprecated_models moved to
+        # 0089_deprecate_claude_sonnet_4_5 so they run only once per deploy.
     ]
