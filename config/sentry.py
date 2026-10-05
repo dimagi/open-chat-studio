@@ -4,6 +4,10 @@ Kept in a dedicated module (rather than inline in ``settings.py``) so the scrubb
 behaviour can be imported and unit tested without initialising the SDK.
 """
 
+from sentry_sdk.integrations import Integration
+from sentry_sdk.integrations.anthropic import AnthropicIntegration
+from sentry_sdk.integrations.langchain import LangchainIntegration
+from sentry_sdk.integrations.openai import OpenAIIntegration
 from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 
 # Names of variables/dict keys whose values must never reach Sentry. Because we send local
@@ -68,3 +72,16 @@ def get_event_scrubber() -> EventScrubber:
     tucked inside a payload dict), not just top-level stack-frame locals.
     """
     return EventScrubber(denylist=SENTRY_DENYLIST, recursive=True)
+
+
+def get_disabled_integrations() -> list[Integration]:
+    """Auto-enabling integrations to turn off in ``sentry_sdk.init``.
+
+    The LLM client integrations report every failed provider call from their own callbacks, before
+    OCS classifies it, so a revoked key or exhausted credit (which the chat pipeline answers and
+    logs as a warning) and a transient overload (which it retries) each become a Sentry error.
+    Failures OCS does not handle still reach Sentry through the Celery and Django integrations.
+    LangChain's integration deactivates the OpenAI and Anthropic ones while it is active, so all
+    three are disabled together.
+    """
+    return [LangchainIntegration(), OpenAIIntegration(), AnthropicIntegration()]

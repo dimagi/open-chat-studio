@@ -749,7 +749,7 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
-    from config.sentry import get_event_scrubber
+    from config.sentry import get_disabled_integrations, get_event_scrubber
 
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
@@ -775,6 +775,7 @@ if SENTRY_DSN:
             DjangoIntegration(),
             CeleryIntegration(),
         ],
+        disabled_integrations=get_disabled_integrations(),
     )
 
 # Taskbadger setup
