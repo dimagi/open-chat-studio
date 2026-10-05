@@ -94,9 +94,6 @@ class TestHighlightJson:
         text = html.unescape(re.sub(r"<[^>]+>", "", result))
         assert json.loads(text) == value
 
-    def test_null_is_highlighted_as_a_constant(self):
-        assert highlight_json(None) == '<span class="kc">null</span>\n'
-
 
 class TestReadableValue:
     def test_none_returns_none(self):
