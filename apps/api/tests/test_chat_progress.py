@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+import time_machine
 from django.core.cache import cache
 
 from apps.api.progress_messages import get_progress_message, get_progress_messages
@@ -66,30 +67,51 @@ class TestGetProgressMessages:
 
 
 class TestGetProgressMessage:
+    @mock.patch("apps.api.tasks.generate_progress_messages_task")
     @mock.patch("apps.api.progress_messages.ProgressMessagesAgent")
-    def test_returns_none_without_calling_agent_when_cache_empty(self, mock_agent):
-        assert get_progress_message("session-1") is None
+    def test_cache_miss_queues_generation_without_calling_agent(self, mock_agent, mock_task):
+        assert get_progress_message("session-1", "TestBot", "desc") is None
+
         mock_agent.assert_not_called()
+        mock_task.delay.assert_called_once_with(
+            session_id="session-1", chatbot_name="TestBot", chatbot_description="desc"
+        )
+
+    @mock.patch("apps.api.tasks.generate_progress_messages_task")
+    def test_repeated_cache_misses_queue_generation_once(self, mock_task):
+        get_progress_message("session-1", "TestBot", "desc")
+        get_progress_message("session-1", "TestBot", "desc")
+
+        mock_task.delay.assert_called_once()
+
+    def test_read_refreshes_cache_ttl(self):
+        with time_machine.travel("2026-01-01 00:00", tick=False) as traveller:
+            cache.set("progress_messages:session-1", ["First", "Second"], 10)
+            get_progress_message("session-1", "TestBot", "desc")
+
+            traveller.shift(60)
+
+            assert cache.get("progress_messages:session-1") == ["First", "Second"]
 
     def test_returns_cached_messages_in_order(self):
         cache.set("progress_messages:session-1", ["First", "Second", "Third"])
 
-        results = [get_progress_message("session-1") for _ in range(3)]
+        results = [get_progress_message("session-1", "TestBot", "desc") for _ in range(3)]
 
         assert results == ["First", "Second", "Third"]
 
     def test_loops_back_to_first_message_after_last(self):
         cache.set("progress_messages:session-1", ["First", "Second"])
 
-        results = [get_progress_message("session-1") for _ in range(5)]
+        results = [get_progress_message("session-1", "TestBot", "desc") for _ in range(5)]
 
         assert results == ["First", "Second", "First", "Second", "First"]
 
     def test_throttle_key_repeats_message_within_window(self):
         cache.set("progress_messages:session-1", ["First", "Second"])
 
-        first = get_progress_message("session-1", throttle_key="task-1")
-        second = get_progress_message("session-1", throttle_key="task-1")
+        first = get_progress_message("session-1", "TestBot", "desc", throttle_key="task-1")
+        second = get_progress_message("session-1", "TestBot", "desc", throttle_key="task-1")
 
         assert first == second == "First"
 

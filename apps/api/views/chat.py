@@ -1,9 +1,7 @@
 import pathlib
-from functools import partial
 
 from django.conf import settings
 from django.core.cache import cache
-from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -44,7 +42,6 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token_with_expiry
-from apps.api.tasks import generate_progress_messages_task
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
@@ -660,14 +657,6 @@ def chat_start_session(request):
         session.save(update_fields=["state"])
 
     session_token, expires_at = _issue_or_opt_out_session_token(session, experiment_channel)
-    transaction.on_commit(
-        partial(
-            generate_progress_messages_task.delay,
-            session_id=session.external_id,
-            chatbot_name=experiment.name,
-            chatbot_description=experiment.description,
-        )
-    )
 
     # Prepare response data
     response_data = {
@@ -900,7 +889,7 @@ def chat_poll_task_response(request, session_id, task_id):
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 
     if not task_details["complete"]:
-        message_text = get_progress_message(session_id, throttle_key=task_id)
+        message_text = get_progress_message(session_id, experiment.name, experiment.description, throttle_key=task_id)
         message = None
         if message_text:
             message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
