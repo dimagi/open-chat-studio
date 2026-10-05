@@ -1,6 +1,6 @@
 ---
 name: extract-adrs
-description: Extract Architecture Decision Records from a stable design or spec document. Use when a design doc is finished and its decisions should be crystallised into citable ADRs at docs/adr/. Refuses to run on docs with `status: active` frontmatter. Pass the source doc path as the argument.
+description: "Extract Architecture Decision Records from a stable design or spec document. Use when a design doc is finished and its decisions should be crystallised into citable ADRs at docs/adr/. Refuses to run on docs with `status: active` frontmatter. Pass the source doc path as the argument."
 ---
 
 # Extract ADRs from a design doc

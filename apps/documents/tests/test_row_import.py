@@ -2,7 +2,7 @@ import pydantic
 import pytest
 from django.conf import settings
 
-from apps.documents.datamodels import CollectionFileMetadata, RowImportSettings
+from apps.documents.datamodels import ChunkingMode, CollectionFileMetadata
 from apps.documents.models import FAILURE_REASON_MAX_LENGTH
 from apps.documents.row_import import (
     ParsedRow,
@@ -26,37 +26,48 @@ FAQ = (
 )
 
 
-class TestRowImportSettings:
+class TestCollectionFileMetadata:
     def test_metadata_columns_are_capped_at_the_setting(self):
-        cap = settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS
-        RowImportSettings(metadata_columns=[f"c{i}" for i in range(cap)])
+        cap = settings.COLLECTION_FILE_MAX_METADATA_COLUMNS
+        CollectionFileMetadata(metadata_columns=[f"c{i}" for i in range(cap)])
         with pytest.raises(pydantic.ValidationError):
-            RowImportSettings(metadata_columns=[f"c{i}" for i in range(cap + 1)])
+            CollectionFileMetadata(metadata_columns=[f"c{i}" for i in range(cap + 1)])
 
-    def test_collection_file_metadata_without_a_chunking_strategy(self):
-        metadata = CollectionFileMetadata(row_import=RowImportSettings(metadata_columns=["language"]))
+    def test_row_chunking_without_a_chunking_strategy(self):
+        metadata = CollectionFileMetadata(chunking_mode=ChunkingMode.ROW, metadata_columns=["language"])
         assert metadata.chunking_strategy is None
-        assert metadata.row_import.metadata_columns == ["language"]
+        assert metadata.metadata_columns == ["language"]
 
-    def test_existing_metadata_still_loads(self):
+    def test_existing_metadata_loads_as_text_chunking_without_metadata_columns(self):
         metadata = CollectionFileMetadata.model_validate(
             {"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}}
         )
-        assert metadata.row_import is None
+        assert metadata.chunking_mode == ChunkingMode.TEXT
+        assert metadata.metadata_columns == []
         assert metadata.chunking_strategy.chunk_size == 800
 
 
 @pytest.mark.django_db()
 class TestCollectionFileRowImport:
-    def test_row_import_is_none_for_a_text_file(self):
-        collection_file = CollectionFileFactory.create()
-        assert collection_file.row_import is None
-        assert collection_file.chunking_strategy.chunk_size == 400
-
-    def test_row_import_returns_the_settings(self):
-        collection_file = CollectionFileFactory.create(metadata={"row_import": {"metadata_columns": ["language"]}})
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            pytest.param(None, id="no-metadata"),
+            pytest.param({"chunking_strategy": {"chunk_size": 400, "chunk_overlap": 200}}, id="text-chunking"),
+        ],
+    )
+    def test_is_not_a_row_import_without_row_chunking(self, metadata):
+        collection_file = CollectionFileFactory.create(metadata=metadata)
         collection_file.refresh_from_db()
-        assert collection_file.row_import.metadata_columns == ["language"]
+        assert not collection_file.is_row_import
+
+    def test_is_a_row_import_with_row_chunking(self):
+        collection_file = CollectionFileFactory.create(
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]}
+        )
+        collection_file.refresh_from_db()
+        assert collection_file.is_row_import
+        assert collection_file.metadata.metadata_columns == ["language"]
         assert collection_file.chunking_strategy is None
 
 

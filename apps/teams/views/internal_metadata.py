@@ -1,19 +1,17 @@
 from django.contrib import messages
-from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.breadcrumbs import team_settings_crumb
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import TeamMetadataForm
+from apps.web.elevation import Grant, requires_elevation
 
 
 @login_and_team_required
+@requires_elevation(Grant.OCS_ADMIN)
 def internal_metadata(request, team_slug):
     """Staff-only page for viewing and editing a team's internal metadata."""
-    if not request.user.is_staff:
-        raise Http404
-
     team = request.team
     if request.method == "POST":
         form = TeamMetadataForm(request.POST, team=team)

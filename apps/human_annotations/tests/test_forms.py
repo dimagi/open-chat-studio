@@ -54,6 +54,21 @@ def test_build_annotation_form_optional_fields(team):
 
 
 @pytest.mark.django_db()
+def test_build_annotation_form_field_order(team):
+    queue = AnnotationQueueFactory.create(
+        team=team,
+        schema={
+            "score": {"type": "int", "description": "Score"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+        field_order=["score", "notes"],
+    )
+    queue.refresh_from_db()
+
+    assert list(build_annotation_form(queue).base_fields) == ["score", "notes"]
+
+
+@pytest.mark.django_db()
 def test_optional_fields_accept_empty_submission(team):
     queue = AnnotationQueue.objects.create(
         team=team,
@@ -299,3 +314,109 @@ def test_import_from_dataset_form_excludes_other_team_datasets(team):
     EvaluationDatasetFactory.create(team=other_team)
     form = ImportFromDatasetForm(team=team)
     assert form.fields["dataset"].queryset.count() == 0
+
+
+# === AnnotationQueueForm.field_order ===
+
+
+def _queue_form_data(schema, field_order=None, **overrides):
+    """POST payload matching what the Alpine builder submits."""
+    data = {
+        "name": "Test Queue",
+        "description": "",
+        "schema": json.dumps(schema),
+        "num_reviews_required": 1,
+    }
+    if field_order is not None:
+        data["field_order"] = json.dumps(field_order)
+    data.update(overrides)
+    return data
+
+
+SCHEMA_TWO_FIELDS = {
+    "score": {"type": "int", "description": "Score"},
+    "notes": {"type": "string", "description": "Notes"},
+}
+
+# jsonb stores this schema as ("notes", "score") — both names are 5 characters, so the
+# bytewise tiebreak wins. Every expected order below is therefore ("score", "notes"),
+# which is the one order that cannot be produced by falling back to schema order.
+
+
+@pytest.mark.django_db()
+def test_queue_form_persists_field_order(team):
+    form = AnnotationQueueForm(data=_queue_form_data(SCHEMA_TWO_FIELDS, ["score", "notes"]))
+    assert form.is_valid(), form.errors
+
+    queue = form.save(commit=False)
+    queue.team = team
+    queue.created_by = team.members.first()
+    queue.save()
+    queue.refresh_from_db()
+
+    assert queue.field_order == ["score", "notes"]
+    assert queue.ordered_field_names() == ["score", "notes"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("field_order", "expected_stored"),
+    [
+        pytest.param(None, [], id="absent-is-valid-and-stores-empty"),
+        pytest.param([], [], id="empty-list-is-valid"),
+    ],
+)
+def test_queue_form_without_field_order(team, field_order, expected_stored):
+    form = AnnotationQueueForm(data=_queue_form_data(SCHEMA_TWO_FIELDS, field_order))
+    assert form.is_valid(), form.errors
+
+    queue = form.save(commit=False)
+    queue.team = team
+    queue.created_by = team.members.first()
+    queue.save()
+    queue.refresh_from_db()
+
+    assert queue.field_order == expected_stored
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "field_order",
+    [
+        pytest.param(["score"], id="missing-a-schema-field"),
+        pytest.param(["score", "notes", "ghost"], id="names-a-field-not-in-schema"),
+    ],
+)
+def test_queue_form_rejects_field_order_not_matching_schema(team, field_order):
+    form = AnnotationQueueForm(data=_queue_form_data(SCHEMA_TWO_FIELDS, field_order))
+
+    assert not form.is_valid()
+    # str(form.errors) HTML-escapes the apostrophe (schema&#x27;s); check the raw message instead.
+    assert "Field order must list exactly the schema's fields." in form.errors["__all__"]
+
+
+@pytest.mark.django_db()
+def test_reorder_is_allowed_on_a_locked_queue(team):
+    """The headline requirement of #4276: order stays editable after reviews start."""
+    queue = AnnotationQueueFactory.create(team=team, schema=SCHEMA_TWO_FIELDS, field_order=["notes", "score"])
+    item = AnnotationItemFactory.create(queue=queue, team=team)
+    Annotation.objects.create(
+        item=item,
+        team=team,
+        reviewer=team.members.first(),
+        data={"score": 4, "notes": "ok"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.review_count == 1
+
+    form = AnnotationQueueForm(
+        instance=queue,
+        data=_queue_form_data(queue.schema, ["score", "notes"], name=queue.name),
+    )
+    assert form._schema_locked, "queue should be locked once a review exists"
+    assert form.is_valid(), form.errors
+
+    form.save()
+    queue.refresh_from_db()
+    assert queue.ordered_field_names() == ["score", "notes"]

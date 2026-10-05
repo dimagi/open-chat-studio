@@ -2,9 +2,14 @@ import re
 from typing import Any, Literal
 
 import pytest
-from pydantic import create_model
+from pydantic import Field, create_model
 
-from apps.utils.schema_utils import collapse_optional_types, resolve_references
+from apps.utils.schema_utils import (
+    collapse_optional_types,
+    create_model_with_sanitized_names,
+    resolve_references,
+    sanitize_property_name,
+)
 
 
 def test_resolve_simple_reference():
@@ -183,3 +188,73 @@ def test_a_union_with_no_single_type_is_left_as_pydantic_wrote_it(annotation):
 
     assert "anyOf" in schema["properties"]["field"]
     assert "type" not in schema["properties"]["field"]
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("score", "score", id="already-valid-is-untouched"),
+        pytest.param("test__id__get", "test__id__get", id="valid-double-underscore-is-untouched"),
+        pytest.param("X-Custom-Header", "X-Custom-Header", id="hyphens-are-untouched"),
+        pytest.param("score (1-5)", "score_1-5_", id="spaces-and-parens-become-underscores"),
+        pytest.param("my field", "my_field", id="single-space-becomes-underscore"),
+        pytest.param("a/b\\c", "a_b_c", id="slashes-become-underscores"),
+        pytest.param("!!!", "field", id="all-invalid-chars-fall-back-to-field"),
+        pytest.param("", "field", id="empty-string-falls-back-to-field"),
+        pytest.param("a" * 100, "a" * 64, id="over-64-chars-is-truncated"),
+        # `pydantic.create_model` rejects a field name starting with `_` outright, even one that's
+        # otherwise a legal property name -- see
+        # `test_create_model_with_sanitized_names_accepts_names_with_leading_invalid_characters`.
+        pytest.param("$filter", "filter", id="leading-invalid-char-does-not-leave-a-leading-underscore"),
+        pytest.param("(score)", "score_", id="leading-and-trailing-invalid-chars"),
+        pytest.param(" score", "score", id="leading-space-does-not-leave-a-leading-underscore"),
+        pytest.param("_score", "score", id="a-name-already-leading-with-underscore-is-stripped"),
+        pytest.param("___", "field", id="all-underscores-falls-back-to-field"),
+    ],
+)
+def test_sanitize_property_name(name, expected):
+    assert sanitize_property_name(name) == expected
+
+
+def test_sanitize_property_name_is_idempotent():
+    """Anthropic's pattern allows `_`, so re-sanitizing an already-sanitized name must be a no-op --
+    otherwise a caller that sanitizes twice (e.g. once per provider) would keep reshaping it."""
+    once = sanitize_property_name("score (1-5)!!")
+    assert sanitize_property_name(once) == once
+
+
+def test_sanitize_property_name_avoids_collisions_when_truncating_or_replacing():
+    """Two distinct field names that sanitize to the same string must not collapse into one --
+    that would silently drop a field from a dynamically-built schema."""
+    taken: set[str] = set()
+
+    first = sanitize_property_name("my field!", taken)
+    taken.add(first)
+    second = sanitize_property_name("my field?", taken)
+    taken.add(second)
+
+    assert first != second
+    assert {first, second} == taken
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("$filter", id="odata-style-query-param"),
+        pytest.param("(score)", id="leading-and-trailing-invalid-chars"),
+        pytest.param(" score", id="leading-space"),
+        pytest.param("_score", id="name-already-leads-with-underscore"),
+    ],
+)
+def test_create_model_with_sanitized_names_accepts_names_with_leading_invalid_characters(name):
+    """`sanitize_property_name` alone isn't the whole story: `pydantic.create_model` raises
+    `NameError` for a field name starting with `_`, a stricter rule than the Anthropic pattern
+    checks for. A raw name whose first character is invalid (e.g. an OData query param like
+    `$filter`, standard on Microsoft Graph) used to substitute to exactly that -- so this exercises
+    the real `create_model` call `sanitize_property_name`'s own tests can't, and round-trips the
+    original name back out through `model_dump()`."""
+    model = create_model_with_sanitized_names("Probe", {name: (str, Field(...))})
+    field_name = next(iter(model.model_fields))
+
+    assert not field_name.startswith("_")
+    assert model(**{field_name: "value"}).model_dump() == {name: "value"}

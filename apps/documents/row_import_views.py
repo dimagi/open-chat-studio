@@ -10,7 +10,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
 from apps.documents import tasks
-from apps.documents.datamodels import CollectionFileMetadata, RowImportSettings
+from apps.documents.datamodels import ChunkingMode, CollectionFileMetadata
 from apps.documents.models import Collection, CollectionFile, FileStatus
 from apps.documents.row_import import (
     ROW_IMPORT_EXTENSIONS,
@@ -72,7 +72,7 @@ def row_import_preview(request, team_slug: str, pk: int):
             "row_count": len(sheet.rows),
             "oversized_rows": oversized,
             "max_row_tokens": settings.COLLECTION_ROW_IMPORT_MAX_ROW_TOKENS,
-            "max_metadata_columns": settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS,
+            "max_metadata_columns": settings.COLLECTION_FILE_MAX_METADATA_COLUMNS,
         }
     )
     return render(request, "documents/partials/row_import_preview.html", context)
@@ -109,11 +109,10 @@ def row_import(request, team_slug: str, pk: int):
     if unknown:
         messages.error(request, _("Unknown columns: %(columns)s") % {"columns": ", ".join(unknown)})
         return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
-    if len(metadata_columns) > settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS:
+    if len(metadata_columns) > settings.COLLECTION_FILE_MAX_METADATA_COLUMNS:
         messages.error(
             request,
-            _("Choose at most %(max)s metadata columns.")
-            % {"max": settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS},
+            _("Choose at most %(max)s metadata columns.") % {"max": settings.COLLECTION_FILE_MAX_METADATA_COLUMNS},
         )
         return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
@@ -128,7 +127,7 @@ def row_import(request, team_slug: str, pk: int):
             collection=collection,
             file=file,
             status=FileStatus.PENDING,
-            metadata=CollectionFileMetadata(row_import=RowImportSettings(metadata_columns=metadata_columns)),
+            metadata=CollectionFileMetadata(chunking_mode=ChunkingMode.ROW, metadata_columns=metadata_columns),
         )
     tasks.index_collection_files_task.delay([collection_file.id])
 

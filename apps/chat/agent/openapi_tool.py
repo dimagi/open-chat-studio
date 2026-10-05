@@ -15,13 +15,14 @@ from langchain_community.tools import APIOperation
 from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 if TYPE_CHECKING:
@@ -235,7 +236,9 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
 
     # Assemble final model
     api_op = APIOperation.from_openapi_spec(spec, path, method)
-    function_name = api_op.operation_id
+    # Sanitized so it's a valid Anthropic tool name -- operation IDs are usually already safe, but
+    # a hand-written OpenAPI spec can give one that isn't (spaces, punctuation, non-ASCII, ...).
+    function_name = sanitize_property_name(api_op.operation_id)
     args_schema = _create_model(
         function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
     )
@@ -363,7 +366,9 @@ def _get_basic_type(data_type: DataType) -> type:
 
 
 def _create_model(name, properties, **kwargs) -> type[BaseModel]:
-    return create_model(_make_model_name(name), **properties, **kwargs)
+    """Builds a Pydantic model from OpenAPI-derived `properties`. See
+    `create_model_with_sanitized_names` for how property names are sanitized and restored."""
+    return create_model_with_sanitized_names(_make_model_name(name), properties, **kwargs)
 
 
 def _make_model_name(name, suffix="Model"):

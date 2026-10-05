@@ -174,6 +174,12 @@ class UserComment(BaseTeamModel):
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey("content_type", "object_id")
 
+    class Meta:
+        indexes = [
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="usercomment_updated_at_id_idx"),
+        ]
+
     @staticmethod
     @transaction.atomic()
     def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment | None":

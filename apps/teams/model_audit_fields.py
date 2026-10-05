@@ -1,4 +1,13 @@
-TEAM_FIELDS = ["name", "slug", "created_by", "public_key", "metadata", "is_migrating", "require_mfa"]
+TEAM_FIELDS = [
+    "name",
+    "slug",
+    "created_by",
+    "public_key",
+    "metadata",
+    "is_migrating",
+    "require_mfa",
+    "exportable_experiments",
+]
 MEMBERSHIP_FIELDS = ["team", "user"]
 FLAG_FIELDS = [
     "name",

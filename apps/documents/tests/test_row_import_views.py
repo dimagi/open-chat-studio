@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from apps.documents.datamodels import ChunkingMode
 from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.utils.factories.documents import CollectionFactory
@@ -99,7 +100,8 @@ class TestRowImport:
         collection_file = CollectionFile.objects.get(collection=local_collection, file=file)
         assert collection_file.status == FileStatus.PENDING
         assert collection_file.metadata.chunking_strategy is None
-        assert collection_file.metadata.row_import.metadata_columns == ["language"]
+        assert collection_file.metadata.chunking_mode == ChunkingMode.ROW
+        assert collection_file.metadata.metadata_columns == ["language"]
         delay.assert_called_once_with([collection_file.id])
 
     def test_unknown_metadata_column_is_rejected(self, logged_in_client, team, local_collection):
@@ -140,19 +142,27 @@ class TestRowImport:
 
 @pytest.mark.django_db()
 class TestRowImportModalOnCollectionPage:
-    def test_local_index_page_renders_the_modal(self, logged_in_client, team, local_collection):
+    def test_local_index_page_offers_row_import_under_add_files(self, logged_in_client, team, local_collection):
         url = reverse("documents:single_collection_home", args=[team.slug, local_collection.id])
         body = logged_in_client.get(url).content.decode()
 
+        assert 'id="add-files-menu"' in body
+        assert "Upload files" in body
+        assert "Import CSV/TSV rows" in body
+        assert "Import Rows" not in body
         assert "importRowsModal.showModal()" in body
         assert 'id="importRowsModal"' in body
         assert 'accept=".csv,.tsv"' in body
+        assert "Ticked columns are saved with each row so chatbot searches can be filtered by them." in body
 
-    def test_remote_index_page_has_no_row_import(self, logged_in_client, team):
+    def test_remote_index_page_has_a_plain_add_files_button(self, logged_in_client, team):
         remote = CollectionFactory.create(team=team, is_index=True, is_remote_index=True)
         url = reverse("documents:single_collection_home", args=[team.slug, remote.id])
+        body = logged_in_client.get(url).content.decode()
 
-        assert "importRowsModal" not in logged_in_client.get(url).content.decode()
+        assert "Add Files" in body
+        assert 'id="add-files-menu"' not in body
+        assert "importRowsModal" not in body
 
 
 @pytest.mark.django_db()
@@ -163,7 +173,7 @@ class TestFileChunksPageForRowImport:
             collection=local_collection,
             file=file,
             status=FileStatus.COMPLETED,
-            metadata={"row_import": {"metadata_columns": ["language"]}},
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]},
         )
         FileChunkEmbedding.objects.create(
             team=team,
@@ -197,7 +207,7 @@ class TestCollectionFilesListForRowImport:
             collection=local_collection,
             file=file,
             status=FileStatus.COMPLETED,
-            metadata={"row_import": {"metadata_columns": ["language"]}},
+            metadata={"chunking_mode": "row", "metadata_columns": ["language"]},
         )
 
         url = reverse("documents:collection_files_list", args=[team.slug, local_collection.id])

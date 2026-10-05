@@ -195,15 +195,15 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        return get_related_pipeline_nodes_queryset(self, "source_material_id")
+        return get_related_pipeline_nodes_queryset(self, "source_material")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
-        return get_related_experiment_versions_queryset(self, "source_material_id")
+        return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
     def archive(self):
         """Mirrors Collection.archive()'s in-use guard."""
-        if has_related_pipeline_references(self, "source_material_id"):
+        if has_related_pipeline_references(self, "source_material"):
             return False
         super().archive()
         return True
@@ -1128,6 +1128,8 @@ class Participant(BaseTeamModel):
             models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
         ]
 
     @classmethod
@@ -1452,6 +1454,8 @@ class ParticipantData(BaseTeamModel):
     class Meta:
         indexes = [
             models.Index(fields=["experiment"]),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="partdata_updated_at_id_idx"),
         ]
         # A bot cannot have a link to multiple data entries for the same Participant
         # Multiple bots can have a link to the same ParticipantData record
@@ -1559,6 +1563,8 @@ class ExperimentSession(BaseTeamModel):
                 functions.Coalesce("last_activity_at", "created_at").desc(),
                 name="expsession_team_lastact_c_idx",
             ),
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="expsession_updated_at_id_idx"),
         ]
 
     def __str__(self):
@@ -1656,6 +1662,7 @@ class ExperimentSession(BaseTeamModel):
         Args:
             commit: Whether to save the model after setting the ended_at value
             trigger_type: The type of conversation end event to trigger. Leaving this as None will not trigger events.
+                Events are not triggered if the session had already ended.
         Raises:
             ValueError: If trigger_type is specified but commit is not.
         """
@@ -1677,12 +1684,14 @@ class ExperimentSession(BaseTeamModel):
                 "Cannot trigger the generic CONVERSATION_END trigger type. Please specify a more specific type."
             )
 
+        # End triggers can end the session themselves, so re-firing them on an ended session would loop.
+        already_ended = self.ended_at is not None
         self.update_status(SessionStatus.PENDING_REVIEW)
 
         self.ended_at = timezone.now()
         if commit:
             self.save()
-        if commit and trigger_type:
+        if commit and trigger_type and not already_ended:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
     @property

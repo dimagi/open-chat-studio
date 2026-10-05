@@ -12,8 +12,10 @@ from apps.pipelines.models import Pipeline, PipelineEventInputs
 
 from .models import (
     EventAction,
+    EventActionType,
     ScheduledTrigger,
     StaticTrigger,
+    StaticTriggerType,
     TimeoutTrigger,
 )
 
@@ -121,6 +123,11 @@ class EventActionForm(forms.ModelForm):
                 "schedule_trigger",
             ]:
                 raise forms.ValidationError("This action is not allowed when 'A new bot message is received'")
+            if (
+                trigger_type in StaticTriggerType.end_conversation_types()
+                and action_type == EventActionType.END_CONVERSATION
+            ):
+                raise forms.ValidationError("This action is not allowed when the conversation has already ended")
         return cleaned_data
 
     def save(self, commit=True, experiment_id=None):

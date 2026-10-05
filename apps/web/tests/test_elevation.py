@@ -3,9 +3,11 @@ from unittest import mock
 
 import pytest
 from django.contrib.sessions.backends.signed_cookies import SessionStore
+from django.http import Http404
 from django.utils import timezone
 
 from apps.web.elevation import (
+    ENFORCES_ELEVATION_ATTR,
     MAX_CONCURRENT_ELEVATIONS,
     SESSION_KEY,
     Elevation,
@@ -13,6 +15,7 @@ from apps.web.elevation import (
     InvalidGrant,
     TooManyElevations,
     active_elevations,
+    requires_elevation,
 )
 
 
@@ -207,3 +210,81 @@ def test_an_entry_that_no_longer_parses_is_pruned(request_with_real_session):
 def test_a_grant_built_with_a_raw_kind_still_requires_a_superuser():
     staff = mock.Mock(is_staff=True, is_superuser=False)
     assert Grant("team", "acme").may_be_held_by(staff) is False
+
+
+@pytest.fixture()
+def gated_request(rf):
+    """A request for a staff user, who may hold either admin grant but no team grant."""
+
+    def _build(path="/admin/flags/", **role):
+        request = rf.get(path)
+        request.session = {}
+        roles = {"is_staff": True, "is_superuser": False, **role}
+        request.user = mock.Mock(email="staff@example.com", is_anonymous=False, **roles)
+        return request
+
+    return _build
+
+
+@requires_elevation(Grant.OCS_ADMIN)
+def _gated_view(request, *args, **kwargs):
+    return "rendered"
+
+
+@requires_elevation(Grant.OCS_ADMIN, superuser_only=True)
+def _superuser_gated_view(request):
+    return "rendered"
+
+
+@requires_elevation(lambda request, team_slug: Grant.team(team_slug))
+def _team_gated_view(request, team_slug):
+    return "rendered"
+
+
+def test_a_gated_view_renders_once_the_grant_is_held(gated_request):
+    request = gated_request()
+    Elevation(request).add(Grant.OCS_ADMIN)
+
+    assert _gated_view(request) == "rendered"
+
+
+def test_a_gated_view_sends_an_unelevated_user_to_acquire_the_grant(gated_request):
+    response = _gated_view(gated_request(path="/admin/flags/?page=2"))
+
+    assert response.status_code == 302
+    assert response.url == "/sudo/ocs-admin/?next=%2Fadmin%2Fflags%2F%3Fpage%3D2"
+
+
+def test_a_gated_view_is_a_404_for_anyone_who_could_not_hold_the_grant(gated_request):
+    """The same response for every role that is too low, so the surface is not discoverable."""
+    with pytest.raises(Http404):
+        _gated_view(gated_request(is_staff=False))
+
+
+def test_superuser_only_raises_the_bar_above_the_grants_own_role(gated_request):
+    request = gated_request()
+    Elevation(request).add(Grant.OCS_ADMIN)
+
+    with pytest.raises(Http404):
+        _superuser_gated_view(request)
+
+
+def test_superuser_only_still_requires_the_elevation(gated_request):
+    response = _superuser_gated_view(gated_request(is_superuser=True))
+
+    assert response.status_code == 302
+    assert response.url.startswith("/sudo/ocs-admin/")
+
+
+def test_a_grant_can_be_resolved_from_the_view_arguments(gated_request):
+    request = gated_request(path="/a/acme/", is_superuser=True)
+
+    response = _team_gated_view(request, team_slug="acme")
+    assert response.url == "/sudo/team/acme/?next=%2Fa%2Facme%2F"
+
+    Elevation(request).add(Grant.team("acme"))
+    assert _team_gated_view(request, team_slug="acme") == "rendered"
+
+
+def test_a_gated_view_is_marked_for_the_architecture_guard():
+    assert getattr(_gated_view, ENFORCES_ELEVATION_ATTR) is True

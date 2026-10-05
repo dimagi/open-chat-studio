@@ -32,18 +32,14 @@ from apps.events.models import (
 from apps.experiments.models import Experiment
 from apps.utils.deletion import get_related_objects
 
-from .utils import ServiceProvider
-
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from .utils import ServiceProvider
 
 logger = logging.getLogger(__name__)
 
 MatchMode = Literal["exact", "suffix", "contains"]
-
-_PARAM_KEY_BY_PROVIDER_SLUG = {
-    ServiceProvider.llm.slug: "llm_provider_id",
-}
 
 # Reverse-FK related models that aren't useful to surface on the usages page.
 # SyntheticVoice rows are managed inside the voice provider's own edit view,
@@ -123,17 +119,11 @@ def get_provider_usages(provider) -> ProviderUsages:
     "Unlinked Channels" categories. Document sources roll up to their
     parent Collection.
 
-    Pipeline nodes reference providers from a JSON ``params`` blob rather than a
-    foreign key, so they are looked up by param key. Everything else, evaluators
-    included, is reached through a reverse FK.
-
     Each category keeps every referencing object in ``items`` but reports rows
     through ``groups``, which collapses version families to one row apiece — so
     ``total`` counts families, matching what the page shows.
     """
-    service_provider = _service_provider_for(provider)
-    params_key = _PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
-    related = get_related_objects(provider, pipeline_param_key=params_key)
+    related = get_related_objects(provider)
 
     # Per-category dicts dedupe rows that are reachable through more than one
     # reverse relation (e.g. TranscriptAnalysis has both llm_provider and
@@ -340,13 +330,6 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
             by_pipeline[pid][trigger.experiment_id] = trigger.experiment
 
     return {pid: list(exps.values()) for pid, exps in by_pipeline.items()}
-
-
-def _service_provider_for(provider) -> ServiceProvider:
-    for member in ServiceProvider:
-        if isinstance(provider, member.model):
-            return member
-    raise ValueError(f"No ServiceProvider entry for {type(provider).__name__}")
 
 
 def search_providers_by_api_key(

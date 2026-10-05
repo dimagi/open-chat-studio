@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Any, Literal
 
 import pydantic
@@ -13,20 +14,23 @@ class ChunkingStrategy(pydantic.BaseModel):
     chunk_overlap: int = pydantic.Field(description="Number of overlapping tokens between chunks")
 
 
-class RowImportSettings(pydantic.BaseModel):
-    metadata_columns: list[str] = pydantic.Field(
-        default_factory=list,
-        max_length=settings.COLLECTION_ROW_IMPORT_MAX_METADATA_COLUMNS,
-        description="Columns stored as metadata on each row's chunk",
-    )
+class ChunkingMode(StrEnum):
+    TEXT = "text"
+    ROW = "row"
 
 
 class CollectionFileMetadata(pydantic.BaseModel):
     chunking_strategy: ChunkingStrategy | None = pydantic.Field(
         default=None, description="Chunking strategy used for the file"
     )
-    row_import: RowImportSettings | None = pydantic.Field(
-        default=None, description="Present when each row of the file is indexed as its own chunk"
+    chunking_mode: ChunkingMode = pydantic.Field(
+        default=ChunkingMode.TEXT,
+        description="Whether the file is split into text chunks or indexed one chunk per row",
+    )
+    metadata_columns: list[str] = pydantic.Field(
+        default_factory=list,
+        max_length=settings.COLLECTION_FILE_MAX_METADATA_COLUMNS,
+        description="Columns stored as metadata on each chunk",
     )
 
 

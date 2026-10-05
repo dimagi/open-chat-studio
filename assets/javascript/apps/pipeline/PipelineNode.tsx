@@ -1,6 +1,7 @@
 import {Node, NodeProps, NodeToolbar, Position} from "reactflow";
 import React, {ChangeEvent, MouseEvent} from "react";
 import {concatenate, formatDocsForSchema, getCachedData, nodeBorderClass} from "./utils";
+import ChangeNodeTypeMenu from "./nodes/ChangeNodeTypeMenu";
 import usePipelineStore from "./stores/pipelineStore";
 import useEditorStore from "./stores/editorStore";
 import {JsonSchema, NodeData} from "./types/nodeParams";
@@ -74,6 +75,7 @@ export function PipelineNode(nodeProps: NodeProps<NodeData>) {
               onClick={() => deleteNode(id)}>
                 <i className="fa fa-trash-o"></i>
             </button>
+            {!readOnly && <ChangeNodeTypeMenu nodeId={id} currentType={data.type} />}
             {Object.keys(nodeSchema.properties).length > 0 && (
               <button className="btn btn-xs join-item" onClick={() => editNode()}>
                   <i className="fa fa-pencil"></i>

@@ -28,7 +28,7 @@ logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, queue=Queues.BACKGROUND)
-def async_export_chat(self, experiment_id: int, query_params: str, time_zone) -> dict:
+def async_export_chat(self, experiment_id: int, query_params: str, time_zone, columns: list[str] | None = None) -> dict:
     # The filters need a QueryDict (multi-value params, `.getlist()`), but Celery's JSON
     # serializer would flatten one into a plain dict, so the caller passes the raw query
     # string and we rebuild it here.
@@ -48,7 +48,13 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone) ->
     # to disk, avoiding a single large in-memory allocation for the whole CSV.
     # compress=True writes a gzip stream, reducing file size by ~80–90% for typical
     # chat exports and dramatically cutting S3 storage and download time.
-    with export_to_tempfile(experiment, filtered_sessions, compress=True, progress_callback=report_progress) as tmp:
+    with export_to_tempfile(
+        experiment=experiment,
+        sessions_queryset=filtered_sessions,
+        compress=True,
+        progress_callback=report_progress,
+        columns=columns,
+    ) as tmp:
         # Hand the temp file to storage directly rather than via ContentFile(tmp.read()):
         # the storage backend streams it in chunks, so peak memory stays flat instead of
         # scaling with export size. Reading it in one go negates the spooling above and

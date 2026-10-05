@@ -13,7 +13,7 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig, RowImportSettings
+from apps.documents.datamodels import ChunkingMode, ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.documents.rerankers import Reranker
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
@@ -150,10 +150,8 @@ class CollectionFile(models.Model):
         return None
 
     @property
-    def row_import(self) -> RowImportSettings | None:
-        if self.metadata:
-            return self.metadata.row_import
-        return None
+    def is_row_import(self) -> bool:
+        return bool(self.metadata) and self.metadata.chunking_mode == ChunkingMode.ROW
 
     @property
     def status_enum(self):
@@ -450,14 +448,14 @@ class Collection(BaseTeamModel, VersionsMixin):
         return reverse("documents:single_collection_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_related_nodes_queryset(self) -> models.QuerySet:
-        return get_related_pipeline_nodes_queryset(self, "collection_id", "collection_index_ids")
+        return get_related_pipeline_nodes_queryset(self, "collection", "collection_indexes")
 
     def get_related_experiments_queryset(self) -> models.QuerySet:
         """
         Get all experiments that reference this collection through a pipeline. This includes both published and working
         experiments — any experiment whose pipeline references this collection or any of its versions.
         """
-        return get_related_experiment_versions_queryset(self, "collection_id", "collection_index_ids")
+        return get_related_experiment_versions_queryset(self, "collection", "collection_indexes")
 
     @transaction.atomic()
     def archive(self):
@@ -468,7 +466,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             delete_collection_task,
         )
 
-        if has_related_pipeline_references(self, "collection_id", "collection_index_ids"):
+        if has_related_pipeline_references(self, "collection", "collection_indexes"):
             return False
 
         super().archive()

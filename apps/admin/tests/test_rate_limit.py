@@ -14,6 +14,8 @@ from waffle import get_waffle_flag_model
 from apps.admin.views import admin_api_key
 from apps.users.models import CustomUser
 from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
+from apps.utils.tests.elevation import elevate_session
+from apps.web.elevation import Grant
 
 TINY_LIMITS = {"admin_api": {"rate": "2/5m", "fail_open": True}}
 
@@ -53,6 +55,7 @@ def _clear_rate_limit_cache():
 def superuser_client(client):
     user = CustomUser.objects.create(username="admin@acme.com", is_staff=True, is_superuser=True)
     client.force_login(user)
+    elevate_session(client, Grant.OCS_ADMIN)
     return client
 
 

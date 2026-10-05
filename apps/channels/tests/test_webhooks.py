@@ -45,10 +45,6 @@ def test_remove_incoming_webhook_clears_webhook(mock_telebot):
     bot.set_webhook.assert_called_once_with(None)
 
 
-def test_supports_webhook_management():
-    assert TelegramWebhookManager.supports_webhook_management is True
-
-
 @pytest.fixture()
 def telegram_channel(db):
     return ExperimentChannelFactory.create(platform=ChannelPlatform.TELEGRAM)

@@ -34,6 +34,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
 logger = logging.getLogger("ocs.tools")
@@ -507,6 +508,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    collection_id: int
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -514,6 +516,19 @@ class AttachMediaTool(CustomBaseTool):
             chat=self.experiment_session.chat, tool_type="ocs_attachments"
         )
         return chat_attachment
+
+    def _get_attachable_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Map each requested id that is a file in the node's media collection to that file.
+
+        `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
+        to look up. The scoping belongs here: attaching is what makes
+        `ChatMessage.get_attached_files()` return the file, so that read's `chatattachment__chat`
+        filter confirms the association rather than checking it.
+        """
+        return File.objects.filter(
+            team_id=self.experiment_session.team_id,
+            collections__id=self.collection_id,
+        ).in_bulk(file_ids)
 
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
@@ -527,13 +542,17 @@ class AttachMediaTool(CustomBaseTool):
         # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
         # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
+        attachable_files = self._get_attachable_files(file_ids)
         for file_id in file_ids:
+            file = attachable_files.get(file_id)
+            if file is None:
+                response.append(f"* {file_id}: File not found.")
+                continue
             try:
                 # One transaction per file, so a failed attachment rolls back on its own and the
                 # loop can keep going. Catching a DB error without leaving the block would abort
                 # the transaction and break every remaining iteration.
                 with transaction.atomic():
-                    file = File.objects.get(id=file_id)
                     chat_attachment.files.add(file_id)
                     self.tool_callbacks.attach_file(file_id)
                     file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
@@ -555,8 +574,6 @@ class AttachMediaTool(CustomBaseTool):
                             )
                         file_response = f"{file_response} {link_text}"
                     response.append(file_response)
-            except File.DoesNotExist:
-                response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
                 response.append(f"* {file_id}: Error fetching file.")
 
@@ -831,10 +848,15 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.tool_names
+    # attach-media is not user-selectable (see AgentTools.user_tool_choices); it is added here so
+    # that it can be given the node's media collection. Drop any copy carried in the node's own tool
+    # list so it cannot be built unscoped.
+    tool_names = [name for name in node.tool_names if name != AgentTools.ATTACH_MEDIA]
+    tool_kwargs = {}
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
-    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"collection_id": node.collection_id}
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks, tool_kwargs)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
@@ -862,23 +884,40 @@ def get_mcp_tool_instances(node: Node, team: Team):
 
 
 def get_tool_instances(
-    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+    tools_list,
+    experiment_session: ExperimentSession | None = None,
+    tool_callbacks=None,
+    tool_kwargs: dict[str, dict] | None = None,
 ) -> list[BaseTool]:
+    tool_kwargs = tool_kwargs or {}
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         if tool_cls.requires_callbacks and not tool_callbacks:
             raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
-        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
+        tools.append(
+            tool_cls(
+                experiment_session=experiment_session, tool_callbacks=tool_callbacks, **tool_kwargs.get(tool_name, {})
+            )
+        )
     return tools
 
 
 def get_custom_action_tools(action_holder: Union[Experiment, "Node"]) -> list[BaseTool]:
     operations = action_holder.get_custom_action_operations().select_related("custom_action__auth_provider").all()
-    return list(filter(None, [get_tool_for_custom_action_operation(operation) for operation in operations]))
+    # LangGraph's ToolNode indexes tools by name and silently drops earlier duplicates, so two
+    # operations whose sanitized names collide (e.g. "get foo" and "get/foo" both -> "get_foo")
+    # must be told apart here, before the tool list reaches `create_agent`.
+    taken_names: set[str] = set()
+    tools = []
+    for operation in operations:
+        tool = get_tool_for_custom_action_operation(operation, taken_names)
+        if tool:
+            tools.append(tool)
+    return tools
 
 
-def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | None:
+def get_tool_for_custom_action_operation(custom_action_operation, taken_names: set[str]) -> BaseTool | None:
     custom_action = custom_action_operation.custom_action
     spec = OpenAPISpec.from_spec_dict(custom_action_operation.operation_schema)
     if not spec.paths:
@@ -888,6 +927,8 @@ def get_tool_for_custom_action_operation(custom_action_operation) -> BaseTool | 
     path = next(iter(spec.paths))
     method = spec.get_methods_for_path(path)[0]
     function_def = openapi_spec_op_to_function_def(spec, path, method)
+    function_def.name = sanitize_property_name(function_def.name, taken_names)
+    taken_names.add(function_def.name)
     return function_def.build_tool(auth_service, custom_action)
 
 

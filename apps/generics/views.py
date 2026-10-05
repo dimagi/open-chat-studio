@@ -78,7 +78,9 @@ def render_session_details(request, team_slug, experiment_id, session_id, active
             "schedules_table": schedules_table,
             "participant_id": session.participant_id,
             "participant": participant,
-            "has_conversation_end_events": StaticTrigger.objects.filter(
+            # Ending an already-ended session doesn't fire end triggers, so there is nothing to offer.
+            "has_conversation_end_events": not session.ended_at
+            and StaticTrigger.objects.filter(
                 experiment=experiment, type__in=StaticTriggerType.end_conversation_types(), is_active=True
             ).exists(),
         },

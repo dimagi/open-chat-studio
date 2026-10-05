@@ -14,7 +14,6 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.events.tasks import enqueue_static_triggers, enqueue_timed_out_events, poll_scheduled_messages
-from apps.teams.export_service import migrating_team_ids
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -36,13 +35,26 @@ def _arm_migration_lock(team, armed=True):
 
 
 @pytest.mark.django_db()
-def test_migrating_team_ids_lists_only_armed_teams():
-    """Only teams with is_migrating=True appear in migrating_team_ids()."""
-    session = ExperimentSessionFactory()
-    team = session.team
-    assert team.id not in set(migrating_team_ids())
-    _arm_migration_lock(team)
-    assert team.id in set(migrating_team_ids())
+def test_poll_scheduled_messages_fires_for_a_chatbot_outside_the_selection(session):
+    """With a selection, only the selected chatbots are frozen; the rest of the team keeps firing."""
+    ScheduledMessage.objects.create(
+        team=session.team,
+        experiment=session.experiment,
+        participant=session.participant,
+        action=EventActionFactory(params={"name": "Test"}),
+        next_trigger_date=timezone.now(),
+    )
+    session.team.exportable_experiments.add(ExperimentFactory(team=session.team))
+
+    _arm_migration_lock(session.team)
+    with mock.patch.object(ScheduledMessage, "safe_trigger") as mock_trigger:
+        poll_scheduled_messages()
+    mock_trigger.assert_called_once()
+
+    session.team.exportable_experiments.add(session.experiment)
+    with mock.patch.object(ScheduledMessage, "safe_trigger") as mock_trigger:
+        poll_scheduled_messages()
+    mock_trigger.assert_not_called()
 
 
 @pytest.mark.django_db()

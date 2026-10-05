@@ -9,6 +9,9 @@ PREVIEW_SAMPLE_SIZE = 10
 # dead worker would otherwise leave the page polling for aggregates that are never coming.
 FINALIZATION_GRACE = timedelta(minutes=10)
 
+# The results table shows only failed rows when this query parameter is "1".
+FAILED_FILTER_PARAM = "failed"
+
 EVALUATION_RUN_FIXED_HEADERS = [
     "id",
     "session",

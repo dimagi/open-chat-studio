@@ -11,10 +11,12 @@ from django.db import IntegrityError, connection
 from django.utils import timezone
 from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId, StructuredTool
+from pydantic import create_model
 from pydantic_core import PydanticUndefined
 from time_machine import travel
 
 from apps.chat.agent import tools
+from apps.chat.agent.openapi_tool import FunctionDef
 from apps.chat.agent.schemas import WeekdaysEnum
 from apps.chat.agent.tools import (
     CITATION_PROMPT,
@@ -29,7 +31,9 @@ from apps.chat.agent.tools import (
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
+    get_custom_action_tools,
     get_mcp_tool_instances,
+    get_node_tools,
 )
 from apps.chat.models import ChatAttachment
 from apps.events.models import ScheduledMessage, TimePeriod
@@ -37,7 +41,8 @@ from apps.experiments.models import AgentTools, Experiment
 from apps.files.models import FileChunkEmbedding
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.teams.utils import set_current_team
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -701,6 +706,64 @@ def test_get_mcp_tool_instances(fetch_tools, team):
     assert len(tools) == 1
 
 
+def _sibling_collection(collection, **kwargs):
+    """Another collection in the same team, reusing its providers, which are unique per team."""
+    return CollectionFactory(
+        team=collection.team,
+        llm_provider=collection.llm_provider,
+        embedding_provider_model=collection.embedding_provider_model,
+        **kwargs,
+    )
+
+
+@pytest.mark.django_db()
+def test_get_node_tools_scopes_attach_media_to_the_nodes_media_collection():
+    """The tool must never be built without the collection that bounds what it may share."""
+    session = ExperimentSessionFactory.create()
+    media = CollectionFactory(team=session.team)
+    index = _sibling_collection(media, is_index=True)
+    # A stale copy in the node's own tool list must not produce a second, unscoped instance.
+    node = NodeFactory.create(collection=media, params={"tools": [AgentTools.ATTACH_MEDIA]})
+    node.collection_indexes.add(index)
+
+    node_tools = get_node_tools(node, session, tool_callbacks=ToolCallbacks())
+
+    attach_tools = [tool for tool in node_tools if tool.name == AgentTools.ATTACH_MEDIA]
+    assert len(attach_tools) == 1
+    assert attach_tools[0].collection_id == media.id
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.chat.agent.tools.openapi_spec_op_to_function_def")
+def test_get_custom_action_tools_dedupes_colliding_sanitized_names(mock_function_def):
+    """`FunctionDef.name` is sanitized per-operation (see `openapi_spec_op_to_function_def`), which
+    has no visibility into sibling operations. Two operations whose raw operation IDs sanitize to
+    the same string (e.g. "get foo" and "get/foo" both -> "get_foo") must still end up with
+    distinct tool names here -- LangGraph's ToolNode indexes tools by name and silently drops an
+    earlier tool whose name a later one reuses."""
+    mock_function_def.side_effect = lambda spec, path, method: FunctionDef(
+        name="get_foo",
+        description="A test operation",
+        method="get",
+        url="https://example.com/foo",
+        args_schema=create_model("Empty"),
+    )
+
+    custom_action = CustomActionFactory.create(allowed_operations=["weather_get", "pollen_get"])
+    node = NodeFactory.create()
+    CustomActionOperationFactory.create(custom_action=custom_action, node=node, operation_id="weather_get")
+    CustomActionOperationFactory.create(custom_action=custom_action, node=node, operation_id="pollen_get")
+
+    tool_list = get_custom_action_tools(node)
+
+    assert len(tool_list) == 2
+    names = [tool.name for tool in tool_list]
+    assert len(set(names)) == 2, f"expected unique tool names, got {names}"
+    assert names[0] == "get_foo"
+    assert names[1] != "get_foo"
+    assert names[1].startswith("get_foo_")
+
+
 @pytest.mark.django_db()
 class TestSetSessionStateTool(BaseTestAgentTool):
     tool_cls = tools.SetSessionStateTool
@@ -838,18 +901,57 @@ class TestIncrementSessionStateCounterTool(BaseTestAgentTool):
 class TestAttachMediaTool(BaseTestAgentTool):
     tool_cls = tools.AttachMediaTool
 
-    def test_attach_files(self, session):
+    @pytest.fixture()
+    def collection(self, session):
+        return CollectionFactory(team=session.team)
+
+    def _collection_file(self, collection, **kwargs):
+        return CollectionFileFactory(collection=collection, **kwargs).file
+
+    def _attach_files(self, session, collection, file_ids):
+        tool = tools.AttachMediaTool(
+            experiment_session=session,
+            tool_callbacks=ToolCallbacks(),
+            collection_id=collection.id,
+        )
+        return tool.action(file_ids=file_ids)
+
+    def test_attach_files(self, session, collection):
         chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
         assert chat_attachment.files.count() == 0
 
-        files = FileFactory.create_batch(3)
-        response = self._invoke_tool(session, file_ids=[file.id for file in files])
+        files = [self._collection_file(collection) for _ in range(3)]
+        response = self._attach_files(session=session, collection=collection, file_ids=[file.id for file in files])
 
         assert chat_attachment.files.count() == 3
         assert all(str(file.id) in response for file in files)
-        print(response)
 
-    def test_integrity_error_on_one_file_does_not_break_the_others(self, session):
+    def test_file_from_another_team_is_not_attachable(self, session, collection):
+        """`file_ids` is LLM-supplied and File uses an autoincrement PK, so an id from another
+        team's file is both reachable and guessable. Attaching it is what makes
+        ChatMessage.get_attached_files() return it, and on a messaging channel that sends the
+        bytes to the participant."""
+        other_team_file = FileFactory()
+        assert other_team_file.team_id != session.team_id
+
+        response = self._attach_files(session=session, collection=collection, file_ids=[other_team_file.id])
+
+        assert f"* {other_team_file.id}: File not found." in response
+        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
+        assert chat_attachment.files.count() == 0
+
+    def test_file_outside_the_media_collection_is_not_attachable(self, session, collection):
+        """Same team, but not in the node's media collection. This includes files in an indexed
+        collection: the tool only shares media."""
+        index_file = self._collection_file(_sibling_collection(collection, is_index=True))
+        loose_file = FileFactory(team=session.team)
+
+        response = self._attach_files(session=session, collection=collection, file_ids=[index_file.id, loose_file.id])
+
+        assert f"* {index_file.id}: File not found." in response
+        assert f"* {loose_file.id}: File not found." in response
+
+    def test_integrity_error_on_one_file_does_not_break_the_others(self, session, collection):
         """A DB error attaching one file must leave the loop able to attach the rest.
 
         Regression test: `action()` used to be wrapped in a single `transaction.atomic`, with the
@@ -859,7 +961,8 @@ class TestAttachMediaTool(BaseTestAgentTool):
         attaching the remaining files. Each file now gets its own transaction.
         """
         chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
-        failing_file, ok_file = FileFactory.create_batch(2)
+        failing_file = self._collection_file(collection)
+        ok_file = self._collection_file(collection)
 
         through = ChatAttachment.files.through
         table = through._meta.db_table
@@ -881,7 +984,9 @@ class TestAttachMediaTool(BaseTestAgentTool):
                 )
 
         with mock.patch.object(ToolCallbacks, "attach_file", side_effect=duplicate_the_attachment_row):
-            response = self._invoke_tool(session, file_ids=[failing_file.id, ok_file.id])
+            response = self._attach_files(
+                session=session, collection=collection, file_ids=[failing_file.id, ok_file.id]
+            )
 
         assert f"* {failing_file.id}: Error fetching file." in response
         assert ok_file.name in response
@@ -889,7 +994,7 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
 
     @pytest.mark.django_db(transaction=True)
-    def test_first_file_failing_does_not_orphan_the_attachment_row(self, session):
+    def test_first_file_failing_does_not_orphan_the_attachment_row(self, session, collection):
         """The ChatAttachment row must survive a rollback of the first file's transaction.
 
         `chat_attachment` is a cached_property, so it would otherwise be created lazily inside the
@@ -900,14 +1005,17 @@ class TestAttachMediaTool(BaseTestAgentTool):
         Needs a real commit (`transaction=True`): the deferred constraint is only checked there.
         """
         assert not ChatAttachment.objects.filter(chat=session.chat).exists()
-        failing_file, ok_file = FileFactory.create_batch(2)
+        failing_file = self._collection_file(collection)
+        ok_file = self._collection_file(collection)
 
         def fail_for_first_file(file_id):
             if file_id == failing_file.id:
                 raise IntegrityError("simulated failure attaching the first file")
 
         with mock.patch.object(ToolCallbacks, "attach_file", side_effect=fail_for_first_file):
-            response = self._invoke_tool(session, file_ids=[failing_file.id, ok_file.id])
+            response = self._attach_files(
+                session=session, collection=collection, file_ids=[failing_file.id, ok_file.id]
+            )
 
         assert f"* {failing_file.id}: Error fetching file." in response
         chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
