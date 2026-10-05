@@ -1,5 +1,6 @@
 import html
 import json
+import re
 
 import pytest
 from django.template import Context, Template
@@ -76,6 +77,25 @@ class TestHighlightJson:
         result = highlight_json({"hello": "world"})
         assert "hello" in result
         assert "world" in result
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(None, id="none"),
+            pytest.param([1, 2, 3], id="list"),
+            pytest.param({"nested": {"items": [True, None, 1.5]}}, id="nested"),
+            pytest.param({"name": "<script>alert(1)</script>"}, id="html-in-value"),
+        ],
+    )
+    def test_text_content_is_the_json_of_the_value(self, value):
+        # stripping the highlight spans and decoding entities must give back the original JSON;
+        # an unescaped "<script>" would be stripped as a tag and fail the comparison
+        result = highlight_json(value)
+        text = html.unescape(re.sub(r"<[^>]+>", "", result))
+        assert json.loads(text) == value
+
+    def test_null_is_highlighted_as_a_constant(self):
+        assert highlight_json(None) == '<span class="kc">null</span>\n'
 
 
 class TestReadableValue:
