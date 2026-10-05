@@ -20,6 +20,7 @@ something unusable leaves the ranking it was given as it is.
 import functools
 import logging
 import operator
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
@@ -346,7 +347,7 @@ def _lexical_search_query(query: str, config: str) -> SearchQuery | None:
 
 def _any_term_query(query: str, config: str) -> SearchQuery | None:
     """A tsquery matching text that holds any one of `query`'s words."""
-    terms = [SearchQuery(term, config=config, search_type="plain") for term in query.split()]
+    terms = [SearchQuery(term, config=config, search_type="plain") for term in re.findall(r"\w+", query)]
     if not terms:
         return None
     # `|` compiles to `tsquery || tsquery`, fully parameterised. Terms that reduce to nothing

@@ -382,6 +382,22 @@ class TestMetadataFilteredSearch:
 
         assert [chunk.id for chunk in results] == [strong.id, weak.id]
 
+    @pytest.mark.parametrize(
+        "query",
+        [
+            pytest.param("clinic-hours", id="hyphen"),
+            pytest.param("clinic/hours", id="slash"),
+        ],
+    )
+    def test_punctuation_joined_words_match_rows_holding_any_one_of_them(self, query):
+        collection, file = make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        khayelitsha = {"district": "Khayelitsha"}
+        clinic = add_chunk(collection, file, "the clinic opens at eight", unit_vector(0), metadata=khayelitsha)
+
+        results = _filtered_search(collection, query, khayelitsha)
+
+        assert [chunk.id for chunk in results] == [clinic.id]
+
     def test_a_question_matches_rows_sharing_any_of_its_words_under_simple(self):
         collection, file = make_indexed_collection(search_language=SearchLanguage.SIMPLE)
         khayelitsha = {"district": "Khayelitsha"}
