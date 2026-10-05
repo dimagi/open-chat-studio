@@ -56,7 +56,7 @@ from apps.channels.widget_versions import (
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.chat.utils import safe_link_url
 from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
-from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.content_type import detect_content_type_from_file
@@ -67,6 +67,7 @@ from apps.service_providers.llm_service.image_types import (
     DENIED_IMAGE_EXTENSIONS,
     image_type_names,
 )
+from apps.users.models import CustomUser
 from apps.web.waf import WafRule, waf_allow
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
@@ -490,6 +491,50 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
     return channel
 
 
+def _session_user(request, public_visitor: bool) -> CustomUser | None:
+    """The authenticated user the session belongs to, or None for anonymous and public-channel callers."""
+    if request.user.is_authenticated and not public_visitor:
+        return request.user
+    return None
+
+
+def _resolve_participant(user, team, platform, remote_id: str) -> tuple[Participant | None, Response | None]:
+    """The participant for this session, or the 400 that refuses a caller whose remote ID is not their email."""
+    if user is None:
+        return Participant.create_anonymous(team, platform, remote_id), None
+    # Enforce this for authenticated users
+    # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
+    if remote_id != user.email:
+        return None, Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
+    participant, _created = Participant.objects.get_or_create(
+        identifier=user.email,
+        team=team,
+        platform=platform,
+        defaults={"user": user, "remote_id": ""},
+    )
+    return participant, None
+
+
+def _start_session(request, experiment, experiment_channel, participant, user, version_number) -> ExperimentSession:
+    """Start a session on the chatbot for this participant, recording the embedding page as its source."""
+    metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
+    return ApiChannel.start_new_session(
+        working_experiment=experiment,
+        experiment_channel=experiment_channel,
+        participant_identifier=participant.identifier,
+        participant_user=user,
+        metadata=metadata,
+        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
+    )
+
+
+def _apply_session_data(session, user, session_data) -> None:
+    """Store caller-supplied session data as the session's state, for authenticated callers only."""
+    if user is not None and session_data:
+        session.state = session_data
+        session.save(update_fields=["state"])
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -593,7 +638,9 @@ def chat_start_session(request):
         mark_widget_request(request)
 
     # Always look up the working version by public_id
-    experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
+    experiment = get_object_or_404(
+        Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
+    )
 
     oauth_channel = oauth_resolved_channel(request)
     embed_key_channel = _resolve_embed_key_channel(request, experiment)
@@ -618,46 +665,16 @@ def chat_start_session(request):
         return refusal
     experiment_version = experiment_version or published
 
-    if request.user.is_authenticated and not public_visitor:
-        user = request.user
-        participant_id = user.email
-        # Enforce this for authenticated users
-        # Currently this only happens if the chat widget is being hosted on the same OCS instance as the bot
-        if remote_id != participant_id:
-            return Response({"error": "Remote ID must match your email address"}, status=status.HTTP_400_BAD_REQUEST)
-        remote_id = ""
-    else:
-        user = None
-        participant_id = None
-
-    # Create or get participant
-    if user is not None:
-        participant, _created = Participant.objects.get_or_create(
-            identifier=participant_id,
-            team=team,
-            platform=experiment_channel.platform,
-            defaults={"user": user, "remote_id": remote_id},
-        )
-    else:
-        participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
+    user = _session_user(request, public_visitor)
+    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    if refusal:
+        return refusal
 
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
-    metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
-
-    session = ApiChannel.start_new_session(
-        working_experiment=experiment,
-        experiment_channel=experiment_channel,
-        participant_identifier=participant.identifier,
-        participant_user=user,
-        metadata=metadata,
-        version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
-    )
-
-    if user is not None and session_data:
-        session.state = session_data
-        session.save(update_fields=["state"])
+    session = _start_session(request, experiment, experiment_channel, participant, user, version_number)
+    _apply_session_data(session, user, session_data)
 
     session_token, expires_at = _issue_or_opt_out_session_token(session, experiment_channel)
 
