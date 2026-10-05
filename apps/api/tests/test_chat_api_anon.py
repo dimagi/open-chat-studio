@@ -59,6 +59,25 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_start_chat_session_queues_progress_message_generation(
+    api_client, experiment, django_capture_on_commit_callbacks
+):
+    url = reverse("api:chat:start-session")
+    with (
+        mock.patch("apps.api.views.chat.generate_progress_messages_task") as task,
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json")
+    assert response.status_code == 201
+
+    task.delay.assert_called_once_with(
+        session_id=response.json()["session_id"],
+        chatbot_name=experiment.name,
+        chatbot_description=experiment.description,
+    )
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("referer", "expected_embed_source"),
     [
@@ -142,10 +161,11 @@ def test_send_message_rejects_attachment_not_uploaded_for_session(api_client, se
 @pytest.mark.django_db()
 def test_task_poll(api_client, session):
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "123"})
-    with mock.patch("apps.api.views.chat.get_progress_message", return_value=None):
+    with mock.patch("apps.api.progress_messages.ProgressMessagesAgent") as agent:
         response = api_client.get(url)
     response_json = response.json()
     assert response_json == {"message": None, "status": "processing"}
+    agent.assert_not_called()
 
 
 @pytest.mark.django_db()

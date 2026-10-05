@@ -1,8 +1,9 @@
-import logging
 import pathlib
+from functools import partial
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -30,6 +31,7 @@ from apps.api.authentication import (
 from apps.api.chat_consent import consent_refusal, session_consent_block
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
+from apps.api.progress_messages import get_progress_message
 from apps.api.serializers import (
     ChatConsentRequest,
     ChatConsentSerializer,
@@ -42,6 +44,7 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token_with_expiry
+from apps.api.tasks import generate_progress_messages_task
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
@@ -61,7 +64,6 @@ from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.content_type import detect_content_type_from_file
 from apps.files.models import File, FilePurpose
-from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 from apps.service_providers.llm_service.image_types import (
     ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES,
     DENIED_IMAGE_EXTENSIONS,
@@ -97,8 +99,6 @@ CHAT_ACCESS_DENIED_RESPONSE = inline_serializer(
         "code": serializers.CharField(help_text="Always `chat_access_denied`."),
     },
 )
-
-logger = logging.getLogger("ocs.api_chat")
 
 
 def validate_file_upload(file):
@@ -660,6 +660,14 @@ def chat_start_session(request):
         session.save(update_fields=["state"])
 
     session_token, expires_at = _issue_or_opt_out_session_token(session, experiment_channel)
+    transaction.on_commit(
+        partial(
+            generate_progress_messages_task.delay,
+            session_id=session.external_id,
+            chatbot_name=experiment.name,
+            chatbot_description=experiment.description,
+        )
+    )
 
     # Prepare response data
     response_data = {
@@ -892,7 +900,7 @@ def chat_poll_task_response(request, session_id, task_id):
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 
     if not task_details["complete"]:
-        message_text = get_progress_message(session_id, experiment.name, experiment.description, throttle_key=task_id)
+        message_text = get_progress_message(session_id, throttle_key=task_id)
         message = None
         if message_text:
             message = MessageSerializer(ChatMessage(content=message_text, message_type=ChatMessageType.AI)).data
@@ -1052,46 +1060,3 @@ def chat_record_consent(request, session_id):
     if not participant_data.has_consented_to(form_version_id):
         participant_data.record_consent(form_version_id)
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:
-    """Get the next progress message. This will generate new messages if there are no more messages.
-
-    If throttle_key is provided, a new message is only returned once every 5 seconds.
-    Within the 5-second window the same message is returned.
-    """
-    last_key = f"progress_last:{throttle_key}" if throttle_key else None
-    if last_key:
-        last = cache.get(last_key)
-        if last:
-            return last
-
-    key = f"progress_messages:{session_id}"
-    messages = cache.get(key)
-    if not messages:
-        messages = get_progress_messages(chatbot_name, chatbot_description)
-
-    if not messages:
-        return None
-
-    message, *remainder = messages
-    if remainder:
-        cache.set(key, remainder, 24 * 3600)
-    else:
-        cache.delete(key)
-
-    if last_key:
-        cache.set(last_key, message, 5)
-
-    return message
-
-
-def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
-    try:
-        agent = ProgressMessagesAgent(
-            input=ProgressMessagesInput(chatbot_name=chatbot_name, chatbot_description=chatbot_description)
-        )
-        return agent.run().messages
-    except Exception:
-        logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
-        return []

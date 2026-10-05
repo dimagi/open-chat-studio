@@ -3,7 +3,8 @@ from unittest import mock
 import pytest
 from django.core.cache import cache
 
-from apps.api.views.chat import get_progress_message, get_progress_messages
+from apps.api.progress_messages import get_progress_message, get_progress_messages
+from apps.api.tasks import generate_progress_messages_task
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +20,7 @@ class TestGetProgressMessages:
         mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Thinking...", "Almost there..."])}
         mock_build_agent.return_value = mock_agent
 
-        result = get_progress_messages("TestBot", "A test bot")
+        result = get_progress_messages(chatbot_name="TestBot", chatbot_description="A test bot")
 
         assert result == ["Thinking...", "Almost there..."]
 
@@ -27,7 +28,7 @@ class TestGetProgressMessages:
     def test_returns_empty_list_on_agent_build_failure(self, mock_build_agent):
         mock_build_agent.side_effect = Exception("no system agent models configured")
 
-        result = get_progress_messages("TestBot", "A test bot")
+        result = get_progress_messages(chatbot_name="TestBot", chatbot_description="A test bot")
 
         assert result == []
 
@@ -37,7 +38,7 @@ class TestGetProgressMessages:
         mock_agent.invoke.side_effect = RuntimeError("LLM API error")
         mock_build_agent.return_value = mock_agent
 
-        result = get_progress_messages("TestBot", "A test bot")
+        result = get_progress_messages(chatbot_name="TestBot", chatbot_description="A test bot")
 
         assert result == []
 
@@ -47,7 +48,7 @@ class TestGetProgressMessages:
         mock_agent.invoke.return_value = {}
         mock_build_agent.return_value = mock_agent
 
-        result = get_progress_messages("TestBot", "A test bot")
+        result = get_progress_messages(chatbot_name="TestBot", chatbot_description="A test bot")
 
         assert result == []
 
@@ -57,7 +58,7 @@ class TestGetProgressMessages:
         mock_agent.invoke.return_value = {"structured_response": mock.Mock(messages=["Working..."])}
         mock_build_agent.return_value = mock_agent
 
-        get_progress_messages("TestBot", "")
+        get_progress_messages(chatbot_name="TestBot", chatbot_description="")
 
         call_args = mock_agent.invoke.call_args[0][0]
         user_message = call_args["messages"][0]["content"]
@@ -65,35 +66,48 @@ class TestGetProgressMessages:
 
 
 class TestGetProgressMessage:
-    @mock.patch("apps.api.views.chat.get_progress_messages")
-    def test_returns_first_message_and_caches_remainder(self, mock_get_messages):
-        mock_get_messages.return_value = ["First", "Second", "Third"]
+    @mock.patch("apps.api.progress_messages.ProgressMessagesAgent")
+    def test_returns_none_without_calling_agent_when_cache_empty(self, mock_agent):
+        assert get_progress_message("session-1") is None
+        mock_agent.assert_not_called()
 
-        result = get_progress_message("session-1", "TestBot", "desc")
+    def test_returns_cached_messages_in_order(self):
+        cache.set("progress_messages:session-1", ["First", "Second", "Third"])
 
-        assert result == "First"
-        # Second call should use cache, not call get_progress_messages again
-        mock_get_messages.reset_mock()
-        result2 = get_progress_message("session-1", "TestBot", "desc")
-        assert result2 == "Second"
-        mock_get_messages.assert_not_called()
+        results = [get_progress_message("session-1") for _ in range(3)]
 
-    @mock.patch("apps.api.views.chat.get_progress_messages")
-    def test_returns_none_when_no_messages(self, mock_get_messages):
+        assert results == ["First", "Second", "Third"]
+
+    def test_loops_back_to_first_message_after_last(self):
+        cache.set("progress_messages:session-1", ["First", "Second"])
+
+        results = [get_progress_message("session-1") for _ in range(5)]
+
+        assert results == ["First", "Second", "First", "Second", "First"]
+
+    def test_throttle_key_repeats_message_within_window(self):
+        cache.set("progress_messages:session-1", ["First", "Second"])
+
+        first = get_progress_message("session-1", throttle_key="task-1")
+        second = get_progress_message("session-1", throttle_key="task-1")
+
+        assert first == second == "First"
+
+
+class TestGenerateProgressMessagesTask:
+    @mock.patch("apps.api.tasks.get_progress_messages")
+    def test_caches_generated_messages(self, mock_get_messages):
+        mock_get_messages.return_value = ["Thinking...", "Working..."]
+
+        generate_progress_messages_task(session_id="session-1", chatbot_name="TestBot", chatbot_description="desc")
+
+        mock_get_messages.assert_called_once_with(chatbot_name="TestBot", chatbot_description="desc")
+        assert cache.get("progress_messages:session-1") == ["Thinking...", "Working..."]
+
+    @mock.patch("apps.api.tasks.get_progress_messages")
+    def test_caches_nothing_when_generation_fails(self, mock_get_messages):
         mock_get_messages.return_value = []
 
-        result = get_progress_message("session-1", "TestBot", "desc")
+        generate_progress_messages_task(session_id="session-1", chatbot_name="TestBot", chatbot_description="desc")
 
-        assert result is None
-
-    @mock.patch("apps.api.views.chat.get_progress_messages")
-    def test_deletes_cache_when_last_message_consumed(self, mock_get_messages):
-        mock_get_messages.return_value = ["Only one"]
-
-        result = get_progress_message("session-1", "TestBot", "desc")
-
-        assert result == "Only one"
-        # Next call should try to generate again since cache was deleted
-        mock_get_messages.return_value = ["Fresh message"]
-        result2 = get_progress_message("session-1", "TestBot", "desc")
-        assert result2 == "Fresh message"
+        assert cache.get("progress_messages:session-1") is None
