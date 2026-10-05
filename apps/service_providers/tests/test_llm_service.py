@@ -30,7 +30,9 @@ def test_azure_ai_service():
 
 def test_azure_service_maps_effort_to_reasoning_effort():
     service = AzureLlmService(
-        openai_api_key="test", openai_api_base="https://example.openai.azure.com", openai_api_version="2025-04-01-preview"
+        openai_api_key="test",
+        openai_api_base="https://example.openai.azure.com",
+        openai_api_version="2025-04-01-preview",
     )
     llm = service.get_chat_model("gpt-6-luna", effort="low")
     assert llm.reasoning_effort == "low"
