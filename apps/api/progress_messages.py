@@ -7,7 +7,7 @@ from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMe
 logger = logging.getLogger("ocs.api_chat")
 
 PROGRESS_MESSAGES_TTL = 24 * 3600
-GENERATION_LOCK_TIMEOUT = 60
+GENERATION_LOCK_TIMEOUT = 5 * 60
 
 
 def progress_messages_key(session_id) -> str:
@@ -46,7 +46,7 @@ def get_progress_message(session_id, chatbot_name, chatbot_description, throttle
 
 
 def _queue_generation(session_id, chatbot_name, chatbot_description):
-    """Queue progress message generation unless it was queued for this session in the last minute."""
+    """Queue progress message generation unless it was queued for this session in the last 5 minutes."""
     from apps.api.tasks import generate_progress_messages_task  # noqa: PLC0415 - circular import
 
     if cache.add(f"progress_generating:{session_id}", 1, timeout=GENERATION_LOCK_TIMEOUT):
