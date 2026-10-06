@@ -57,11 +57,7 @@ function engagementDashboard() {
             FILTER_KEYS.forEach(key => {
                 const element = document.getElementById(`id_${key}`);
                 if (!element || element.tomselect) return;
-                new TomSelect(element, {
-                    ...TOM_SELECT_CONFIG,
-                    placeholder: FILTER_PLACEHOLDERS[key],
-                    onChange: () => this.handleFilterChange()
-                });
+                new TomSelect(element, {...TOM_SELECT_CONFIG, placeholder: FILTER_PLACEHOLDERS[key]});
             });
         },
 

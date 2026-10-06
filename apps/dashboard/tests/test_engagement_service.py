@@ -246,7 +246,7 @@ class TestGetAverageSessionDuration:
     def test_averages_directly_over_sessions_not_per_bot_averages(self, team, experiment, participant, user):
         other_experiment = Experiment.objects.create(name="Other bot", description="Other bot", team=team, owner=user)
         other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
-        now = timezone.now()
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
 
         def _completed_session(exp, part, minutes):
             session = ExperimentSession.objects.create(

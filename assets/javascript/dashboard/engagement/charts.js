@@ -1,4 +1,3 @@
-import Chart from "chart.js/auto";
 import {ChartManager} from "../charts.js";
 import {ordinalRamp, vizToken} from "./viz.js";
 
@@ -94,7 +93,6 @@ class EngagementChartManager extends ChartManager {
     renderEngagementFrequencyChart(data) {
         const ctx = document.getElementById('engagementFrequencyChart');
         if (!ctx) return;
-        this.destroyChart('engagementFrequency');
 
         // Part-to-whole: the four buckets partition that month's active participants, so the
         // stack height is MAU and each segment is a cohort. The ordinal ramp reads correctly
@@ -120,7 +118,7 @@ class EngagementChartManager extends ChartManager {
             }))
         };
 
-        this.charts.engagementFrequency = new Chart(ctx, {
+        this.createChart('engagementFrequency', ctx, {
             type: 'bar',
             data: chartData,
             options: {
@@ -134,7 +132,6 @@ class EngagementChartManager extends ChartManager {
     renderNewVsReturningChart(data) {
         const ctx = document.getElementById('newVsReturningChart');
         if (!ctx) return;
-        this.destroyChart('newVsReturning');
 
         const chartData = {
             labels: weekLabels(data),
@@ -160,7 +157,7 @@ class EngagementChartManager extends ChartManager {
             ]
         };
 
-        this.charts.newVsReturning = new Chart(ctx, {
+        this.createChart('newVsReturning', ctx, {
             type: 'bar',
             data: chartData,
             options: {...this.defaultOptions, plugins: this.chartPlugins(weekTooltipTitle(data)), scales: this.stackedScales()}

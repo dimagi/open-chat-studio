@@ -635,12 +635,17 @@ export class ChartManager {
         });
     }
 
-    createChart(chartKey, canvas, config) {
+    destroyChart(chartKey, canvas) {
         // Two ways a stale chart survives: the cost panel swaps its HTML, leaving the old
         // chart on a detached canvas only the registry can still reach; and a re-executed
         // script loses the registry, leaving a live chart only the canvas can reach.
         this.charts[chartKey]?.destroy();
-        Chart.getChart(canvas)?.destroy();
+        if (canvas) Chart.getChart(canvas)?.destroy();
+        delete this.charts[chartKey];
+    }
+
+    createChart(chartKey, canvas, config) {
+        this.destroyChart(chartKey, canvas);
         this.charts[chartKey] = new Chart(canvas, config);
     }
 
