@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.urls import reverse
+from langfuse.api import ObservationsV2Meta, ObservationsV2Response, ObservationV2
 
 from apps.service_providers.models import TraceProviderType
 from apps.trace.models import TraceStatus
@@ -30,6 +31,23 @@ def _make_observation(obs_id, name, level="DEFAULT", parent_id=None, start_time=
         start_time=start_time,
         parent_observation_id=parent_id,
     )
+
+
+def _make_v2_observation(obs_id, name, parent_id=None, start_time=datetime(2024, 1, 1, 12, 0, 0), **kwargs):
+    return ObservationV2(
+        id=obs_id,
+        name=name,
+        type="SPAN",
+        project_id="project-1",
+        trace_id=LANGFUSE_TRACE_ID,
+        start_time=start_time,
+        parent_observation_id=parent_id,
+        **kwargs,
+    )
+
+
+def _observations_response(observations, cursor=None):
+    return ObservationsV2Response(data=observations, meta=ObservationsV2Meta(cursor=cursor))
 
 
 class TestGetLangfuseInfo:
@@ -288,18 +306,17 @@ class TestTraceLangfuseSpansView:
                 ]
             },
         )
-        mock_trace_data = MagicMock()
-        mock_trace_data.observations = [_make_observation("obs-1", "Pipeline Run")]
-
         anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
-            mock_api.trace.get.return_value = mock_trace_data
+            mock_api.observations.get_many.return_value = _observations_response(
+                [_make_v2_observation("obs-1", "Pipeline Run")]
+            )
             mock_client_factory.return_value = mock_api
             response = anon_client.get(self._url(team, trace))
 
         assert response.status_code == 200
-        mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
+        assert mock_api.observations.get_many.call_args.kwargs["trace_id"] == LANGFUSE_TRACE_ID
         assert b"Pipeline Run" in response.content
 
     def test_none_trace_id_in_trace_info_returns_not_available(self, anon_client, team, user, trace_provider):
@@ -322,7 +339,7 @@ class TestTraceLangfuseSpansView:
         anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
-            mock_api.trace.get.side_effect = Exception("API unreachable")
+            mock_api.observations.get_many.side_effect = Exception("API unreachable")
             mock_client_factory.return_value = mock_api
             response = anon_client.get(self._url(team, trace))
         assert response.status_code == 200
@@ -331,15 +348,13 @@ class TestTraceLangfuseSpansView:
 
     def test_successful_fetch_renders_observations(self, anon_client, team, user, trace):
         """Successful Langfuse fetch: render span tree with observation names."""
-        root_obs = _make_observation("obs-1", "Pipeline Run")
-        child_obs = _make_observation("obs-2", "LLM Call", parent_id="obs-1")
-        mock_trace_data = MagicMock()
-        mock_trace_data.observations = [root_obs, child_obs]
+        root_obs = _make_v2_observation("obs-1", "Pipeline Run")
+        child_obs = _make_v2_observation("obs-2", "LLM Call", parent_id="obs-1")
 
         anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
-            mock_api.trace.get.return_value = mock_trace_data
+            mock_api.observations.get_many.return_value = _observations_response([root_obs, child_obs])
             mock_client_factory.return_value = mock_api
             response = anon_client.get(self._url(team, trace))
 
@@ -347,21 +362,22 @@ class TestTraceLangfuseSpansView:
         assert b"Pipeline Run" in response.content
         assert b"LLM Call" in response.content
         assert LANGFUSE_TRACE_URL.encode() in response.content
-        mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
+        mock_api.observations.get_many.assert_called_once()
+        call_kwargs = mock_api.observations.get_many.call_args.kwargs
+        assert call_kwargs["trace_id"] == LANGFUSE_TRACE_ID
+        assert call_kwargs["from_start_time"] < trace.timestamp < call_kwargs["to_start_time"]
         assert "flattened_observations" in response.context
         assert response.context["auto_selected_span_id"] == "obs-1"  # no errors, first span
 
     def test_root_observations_sorted_by_start_time(self, anon_client, team, user, trace):
         """Root observations render in chronological order regardless of the order Langfuse returns them."""
-        later_root = _make_observation("obs-2", "Second", start_time=datetime(2024, 1, 1, 12, 0, 1))
-        earlier_root = _make_observation("obs-1", "First", start_time=datetime(2024, 1, 1, 12, 0, 0))
-        mock_trace_data = MagicMock()
-        mock_trace_data.observations = [later_root, earlier_root]
+        later_root = _make_v2_observation("obs-2", "Second", start_time=datetime(2024, 1, 1, 12, 0, 1))
+        earlier_root = _make_v2_observation("obs-1", "First", start_time=datetime(2024, 1, 1, 12, 0, 0))
 
         anon_client.force_login(user)
         with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
             mock_api = MagicMock()
-            mock_api.trace.get.return_value = mock_trace_data
+            mock_api.observations.get_many.return_value = _observations_response([later_root, earlier_root])
             mock_client_factory.return_value = mock_api
             response = anon_client.get(self._url(team, trace))
 
@@ -369,3 +385,42 @@ class TestTraceLangfuseSpansView:
         names = [item["observation"].name for item in response.context["flattened_observations"]]
         assert names == ["First", "Second"]
         assert response.context["auto_selected_span_id"] == "obs-1"
+
+    def test_follows_pagination_cursor(self, anon_client, team, user, trace):
+        anon_client.force_login(user)
+        with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
+            mock_api = MagicMock()
+            mock_api.observations.get_many.side_effect = [
+                _observations_response([_make_v2_observation("obs-1", "Pipeline Run")], cursor="next-page"),
+                _observations_response([_make_v2_observation("obs-2", "LLM Call", parent_id="obs-1")]),
+            ]
+            mock_client_factory.return_value = mock_api
+            response = anon_client.get(self._url(team, trace))
+
+        assert response.status_code == 200
+        names = [item["observation"].name for item in response.context["flattened_observations"]]
+        assert names == ["Pipeline Run", "LLM Call"]
+        cursors = [call.kwargs["cursor"] for call in mock_api.observations.get_many.call_args_list]
+        assert cursors == [None, "next-page"]
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            pytest.param('{"prompt": "hi"}', {"prompt": "hi"}, id="json_object"),
+            pytest.param("plain text", "plain text", id="non_json_string"),
+            pytest.param(None, None, id="none"),
+        ],
+    )
+    def test_decodes_json_input_and_output(self, anon_client, team, user, trace, raw, expected):
+        anon_client.force_login(user)
+        with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
+            mock_api = MagicMock()
+            mock_api.observations.get_many.return_value = _observations_response(
+                [_make_v2_observation("obs-1", "Pipeline Run", input=raw, output=raw)]
+            )
+            mock_client_factory.return_value = mock_api
+            response = anon_client.get(self._url(team, trace))
+
+        observation = response.context["flattened_observations"][0]["observation"]
+        assert observation.input == expected
+        assert observation.output == expected
