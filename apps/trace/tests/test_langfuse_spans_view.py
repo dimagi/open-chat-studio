@@ -403,6 +403,20 @@ class TestTraceLangfuseSpansView:
         cursors = [call.kwargs["cursor"] for call in mock_api.observations.get_many.call_args_list]
         assert cursors == [None, "next-page"]
 
+    def test_repeated_cursor_renders_error(self, anon_client, team, user, trace):
+        anon_client.force_login(user)
+        with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
+            mock_api = MagicMock()
+            mock_api.observations.get_many.return_value = _observations_response(
+                [_make_v2_observation("obs-1", "Pipeline Run")], cursor="same-page"
+            )
+            mock_client_factory.return_value = mock_api
+            response = anon_client.get(self._url(team, trace))
+
+        assert response.status_code == 200
+        assert b"langfuse_error" in response.content
+        assert mock_api.observations.get_many.call_count == 2
+
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [

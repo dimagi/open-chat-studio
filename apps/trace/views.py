@@ -164,9 +164,12 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
                 obs.model_copy(update={"input": _parse_json(obs.input), "output": _parse_json(obs.output)})
                 for obs in response.data
             )
-            cursor = response.meta.cursor
-            if not cursor:
+            next_cursor = response.meta.cursor
+            if not next_cursor:
                 return observations
+            if next_cursor == cursor:
+                raise ValueError(f"Langfuse returned a repeated pagination cursor for trace {langfuse_trace_id}")
+            cursor = next_cursor
 
     def _build_child_map(self, observations) -> dict:
         child_map: dict = defaultdict(list)
