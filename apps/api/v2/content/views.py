@@ -11,12 +11,12 @@ from django.db import models, transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins
-from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.v2.content.exceptions import ArchiveRefused, SourceMaterialInUse
+from apps.api.v2.content.permissions import ReadOnlyForMachineTokens
 from apps.api.v2.content.serializers import (
     ArchiveRefusedSerializer,
     ConsentFormResourceSerializer,
@@ -26,7 +26,7 @@ from apps.api.v2.content.serializers import (
 )
 from apps.api.v2.write.base import DescribesPatch
 from apps.experiments.models import ConsentForm, SourceMaterial
-from apps.oauth.permissions import TokenHasOAuthResourceScope, is_client_credentials_request
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Node
 
 
@@ -61,18 +61,6 @@ def _source_material_references(material: SourceMaterial) -> dict:
         ],
         "other_pipelines": [{"name": name} for name in other_pipeline_names],
     }
-
-
-class ReadOnlyForMachineTokens(BasePermission):
-    """Refuse writes from client-credentials (machine) tokens.
-
-    A machine application is pinned to some of the team's chatbots, but content is shared by all of them.
-    """
-
-    message = "Client-credentials tokens cannot modify source material or consent forms."
-
-    def has_permission(self, request, view) -> bool:
-        return request.method in SAFE_METHODS or not is_client_credentials_request(request)
 
 
 class BaseContentViewSet(
