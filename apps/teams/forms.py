@@ -305,6 +305,13 @@ class MembershipForm(forms.ModelForm):
 RENDERED_FLAG_STATE_FIELD = "rendered_enabled_flags"
 
 
+def _build_flag_field(flag_name: str, info, initial: bool) -> forms.BooleanField:
+    help_text = format_html("Flag: {}", flag_name.split("_", 1)[-1])
+    if info.docs_slug:
+        help_text = format_html('{} (<a class="link" target="_blank" href="{}">docs</a>)', help_text, info.docs_url)
+    return forms.BooleanField(label=info.description, required=False, help_text=help_text, initial=initial)
+
+
 class FeatureFlagForm(forms.Form):
     """Form for managing team feature flags."""
 
@@ -313,28 +320,13 @@ class FeatureFlagForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         self._all_flags = None
+        self._flag_infos = {name: info for name, info in get_all_flag_info().items() if info.teams_can_manage}
 
-        flag_info = get_all_flag_info()
-        enabled = []
+        for flag_name, info in self._flag_infos.items():
+            initial = self._is_flag_active_for_team(flag_name)
+            self.fields[flag_name] = _build_flag_field(flag_name=flag_name, info=info, initial=initial)
 
-        for flag_name, info in flag_info.items():
-            if not info.teams_can_manage:
-                continue
-
-            label = flag_name.split("_", 1)[-1]
-            help_text = f"Flag: {label}"
-            if info.docs_slug:
-                help_text += format_html(' (<a class="link" target="_blank" href="{}">docs</a>)', info.docs_url)
-            is_active = self._is_flag_active_for_team(flag_name)
-            if is_active:
-                enabled.append(flag_name)
-            self.fields[flag_name] = forms.BooleanField(
-                label=info.description,
-                required=False,
-                help_text=mark_safe(help_text),
-                initial=is_active,
-            )
-
+        enabled = [name for name in self._flag_infos if self.fields[name].initial]
         self.fields[RENDERED_FLAG_STATE_FIELD] = forms.CharField(
             widget=forms.HiddenInput(), required=False, initial=",".join(enabled)
         )
@@ -361,42 +353,38 @@ class FeatureFlagForm(forms.Form):
         A submission without the hidden field falls back to the state now, which is all a
         caller posting the checkboxes alone can be held to.
         """
-        flag_names = [name for name in self.fields if name != RENDERED_FLAG_STATE_FIELD]
         if self.is_bound and RENDERED_FLAG_STATE_FIELD in self.data:
             rendered_on = set(self.data[RENDERED_FLAG_STATE_FIELD].split(","))
-            return {name: name in rendered_on for name in flag_names}
-        return {name: bool(self.fields[name].initial) for name in flag_names}
+            return {name: name in rendered_on for name in self._flag_infos}
+        return {name: bool(self.fields[name].initial) for name in self._flag_infos}
 
     def save(self):
         """Save the form by updating team flag associations."""
         if not self.team:
             return
 
-        flag_infos = get_all_flag_info()
-        state_at_render = self._state_at_render()
-
-        for flag_name, is_enabled in self.cleaned_data.items():
-            flag_info = flag_infos.get(flag_name)
-            if not flag_info or not flag_info.teams_can_manage:
-                continue
-            if is_enabled == state_at_render[flag_name]:
+        for flag_name, was_enabled in self._state_at_render().items():
+            is_enabled = self.cleaned_data[flag_name]
+            if is_enabled == was_enabled:
                 # A flag on through `everyone` renders ticked; writing the team into the M2M
                 # on an unrelated save would keep the feature past the end of the rollout.
                 continue
-
-            flag = self._get_or_create_flag(flag_name)
             if is_enabled:
-                flag.teams.add(self.team)
-                # Auto-enable required flags
-                for required_flag_name in flag_info.requires:
-                    required_flag = self._get_or_create_flag(required_flag_name)
-                    required_flag.teams.add(self.team)
-                    required_flag.flush()
+                self._enable_flag(flag_name)
             else:
-                flag.teams.remove(self.team)
+                self._disable_flag(flag_name)
 
-            # Clear the cache to ensure the flag state is updated
+    def _enable_flag(self, flag_name):
+        """Add the team to the flag and to each flag it requires."""
+        for name in [flag_name, *self._flag_infos[flag_name].requires]:
+            flag = self._get_or_create_flag(name)
+            flag.teams.add(self.team)
             flag.flush()
+
+    def _disable_flag(self, flag_name):
+        flag = self._get_or_create_flag(flag_name)
+        flag.teams.remove(self.team)
+        flag.flush()
 
     def _get_or_create_flag(self, flag_name):
         if not self._all_flags:
