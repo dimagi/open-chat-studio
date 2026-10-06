@@ -10,13 +10,13 @@ from collections import defaultdict
 from django.db import models, transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
-from rest_framework import mixins, status
-from rest_framework.exceptions import APIException
+from rest_framework import mixins
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
+from apps.api.v2.content.exceptions import ArchiveRefused, SourceMaterialInUse
 from apps.api.v2.content.serializers import (
     ArchiveRefusedSerializer,
     ConsentFormResourceSerializer,
@@ -28,29 +28,6 @@ from apps.api.v2.write.base import DescribesPatch
 from apps.experiments.models import ConsentForm, SourceMaterial
 from apps.oauth.permissions import TokenHasOAuthResourceScope, is_client_credentials_request
 from apps.pipelines.models import Node
-
-
-class ArchiveRefused(APIException):
-    """The resource cannot be archived while it is in its current state."""
-
-    status_code = status.HTTP_409_CONFLICT
-
-
-class SourceMaterialInUse(ArchiveRefused):
-    """The source material is still used by pipeline nodes."""
-
-    def __init__(self, material: SourceMaterial) -> None:
-        # Assigned rather than passed to ``super().__init__``, which would turn the nested ids and
-        # booleans into strings.
-        self.detail = {
-            "detail": (
-                "This source material is still used by the pipeline nodes listed below. Remove it from "
-                "each draft's nodes, then archive again. A published version keeps using it until the "
-                "chatbot is published again without it, and references under `other_pipelines` can "
-                "only be removed in the web app."
-            ),
-            **_source_material_references(material),
-        }
 
 
 def _source_material_references(material: SourceMaterial) -> dict:
@@ -218,7 +195,7 @@ class SourceMaterialViewSet(BaseContentViewSet):
 
     def archive(self, instance: SourceMaterial) -> None:
         if not instance.archive():
-            raise SourceMaterialInUse(instance)
+            raise SourceMaterialInUse(references=_source_material_references(instance))
 
 
 @_content_schema(
