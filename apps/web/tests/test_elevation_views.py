@@ -287,6 +287,22 @@ def test_elevation_is_recorded(superuser, authed_client):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("forwarded_for", "expected"),
+    [
+        pytest.param("198.51.100.7, 10.0.0.1", "10.0.0.1", id="client-behind-one-proxy"),
+        pytest.param("not-an-ip", None, id="garbage-header"),
+    ],
+)
+def test_elevation_records_the_ip_behind_the_proxy(superuser, authed_client, settings, forwarded_for, expected):
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 1
+    authed_client.defaults["HTTP_X_FORWARDED_FOR"] = forwarded_for
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    assert SuperuserElevation.objects.get().ip == expected
+
+
+@pytest.mark.django_db()
 def test_release_stamps_only_the_current_record(superuser, authed_client):
     acquire_url = reverse("web:elevate_django_admin")
     with travel(datetime.datetime.now(), tick=False) as freezer:

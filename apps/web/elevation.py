@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -6,15 +7,14 @@ from functools import wraps
 from typing import ClassVar
 from urllib.parse import urlencode
 
-from allauth.account.adapter import get_adapter
 from allauth.account.internal import flows
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.utils.rate_limit import forwarded_client_ip
 from apps.web.models import SuperuserElevation
 
 logger = logging.getLogger("ocs.audit")
@@ -242,8 +242,8 @@ def _as_datetime(timestamp: int) -> datetime:
 
 def _client_ip(request) -> str | None:
     try:
-        return get_adapter(request).get_client_ip(request)
-    except PermissionDenied:
+        return str(ipaddress.ip_address(forwarded_client_ip(request)))
+    except ValueError:
         return None
 
 
