@@ -152,7 +152,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v6.0.10
+      - uses: pnpm/action-setup@v6.1.0
         if: steps.check.outputs.skip != 'true'
 
       - name: Set up Node.js
@@ -169,7 +169,7 @@ jobs:
       - name: Run Claude Code
         if: steps.check.outputs.skip != 'true'
         id: claude
-        uses: anthropics/claude-code-action@v1.0.206
+        uses: anthropics/claude-code-action@v1.0.234
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |

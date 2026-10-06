@@ -51,7 +51,7 @@ def add_chunk(collection, file, text, embedding, context=""):
     )
     # Build the lexical vector through the same helper the indexing pipeline uses, so these tests
     # exercise the production path rather than a reimplementation of it.
-    LocalIndexManager._build_search_vectors([chunk], collection)
+    LocalIndexManager._build_search_vectors([chunk.id], collection)
     chunk.refresh_from_db()
     return chunk
 

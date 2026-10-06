@@ -10,7 +10,7 @@ from oauth2_provider.oauth2_validators import OAuth2Validator
 from apps.oauth.models import OAuth2Application, OAuth2Grant
 from apps.oauth.validator import APIScopedValidator
 from apps.teams.utils import current_team
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory, TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -49,6 +49,48 @@ def test_email_verified_claim_reflects_email_confirmation(validator, verified, e
 def test_email_verified_claim_is_scoped_to_openid():
     """The email_verified claim is only emitted within the openid scope."""
     assert APIScopedValidator.oidc_claim_scope["email_verified"] == "openid"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("scopes", "expect_teams"),
+    [
+        pytest.param(["openid", "teams"], True, id="teams-scope-granted"),
+        pytest.param(["openid"], False, id="teams-scope-not-granted"),
+    ],
+)
+def test_teams_claim_lists_the_users_teams(validator, scopes, expect_teams):
+    """The teams claim lists every team the user is a member of, and only when the teams scope is granted."""
+    user = UserFactory.create()
+    teams = [membership.team for membership in MembershipFactory.create_batch(2, user=user)]
+    TeamFactory.create()
+    request = SimpleNamespace(user=user, scopes=scopes)
+
+    claims = validator.get_oidc_claims(None, None, request)
+
+    expected = [{"slug": team.slug, "name": team.name} for team in sorted(teams, key=lambda team: team.slug)]
+    assert claims.get("teams") == (expected if expect_teams else None)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("pin_application_to_team", "expected"),
+    [
+        pytest.param(True, False, id="team-scoped-application"),
+        pytest.param(False, True, id="global-application"),
+    ],
+)
+def test_only_global_applications_can_request_the_teams_scope(validator, settings, pin_application_to_team, expected):
+    """A team-scoped application's tokens only reach its own team, so it may not list the user's other teams."""
+    settings.OAUTH2_PROVIDER = settings.OAUTH2_PROVIDER | {
+        "SCOPES": settings.OAUTH2_PROVIDER["SCOPES"] | settings.OIDC_ONLY_SCOPES
+    }
+    client = OAuth2Application(
+        team=TeamFactory.create() if pin_application_to_team else None,
+        authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+    )
+
+    assert validator.validate_scopes("cid", ["openid", "teams"], client, None) is expected
 
 
 @pytest.mark.django_db()

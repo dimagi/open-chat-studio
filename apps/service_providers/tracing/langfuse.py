@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import dataclasses
 import logging
+import random
 import threading
 import time
 from contextlib import contextmanager
@@ -13,6 +14,7 @@ from langfuse import LangfuseOtelSpanAttributes, propagate_attributes
 from langfuse._client.resource_manager import LangfuseResourceManager
 from langfuse.langchain import CallbackHandler
 from opentelemetry import trace as otel_trace_api
+from opentelemetry.sdk.trace import TracerProvider
 
 from . import Tracer
 from .base import ServiceNotInitializedException, ServiceReentryException, TraceContext
@@ -131,8 +133,12 @@ class LangFuseTracer(Tracer):
     ) -> Iterator[TraceContext]:
         """Context manager for Langfuse trace lifecycle.
 
-        Acquires a Langfuse client from ClientManager, creates a trace,
-        and ensures the client is flushed on exit.
+        Checks a Langfuse client out of ClientManager for the length of the trace,
+        creates a trace, and ensures the client is flushed on exit.
+
+        The trace is sampled here, once per trace, against the config's ``sample_rate``.
+        Chatbots sharing a trace provider share one SDK client, and the SDK can only sample
+        per client. An unsampled trace leaves the tracer not ``ready``, so nothing is sent.
 
         ``session`` may be None when the trace is opened before routing has
         identified a session (e.g. inbound email). Langfuse cannot back-fill
@@ -143,43 +149,46 @@ class LangFuseTracer(Tracer):
         if self.trace_record:
             raise ServiceReentryException("Service does not support reentrant use.")
 
+        if random.random() >= self.config.get("sample_rate", 1.0):
+            yield trace_context
+            return
+
         self.session = session
 
-        # Get client and create trace
-        self.client = client_manager.get(self.config)
         propagate_kwargs: dict[str, str] = {}
         if session is not None:
             propagate_kwargs["session_id"] = str(session.external_id)
             propagate_kwargs["user_id"] = session.participant.identifier
-        try:
-            with propagate_attributes(**propagate_kwargs):
-                with self.client.start_as_current_observation(
-                    name=trace_context.name,
-                    input=inputs,
-                    metadata=metadata,
-                ) as trace:
-                    self.trace_record = trace
-                    self._langfuse_trace_id = self.client.get_current_trace_id()
-                    self._root_otel_span = otel_trace_api.get_current_span()
-                    try:
-                        yield trace_context
-                    except Exception as exc:
-                        if not trace_context.has_error():
-                            trace_context.mark_span_as_error(str(exc), exception=exc)
-                        raise
-                    finally:
-                        self._update_span_from_context(trace, trace_context)
-        finally:
-            if self.trace_record:
-                self.client.flush()
+        with client_manager.checkout(self.config) as self.client:
+            try:
+                with propagate_attributes(**propagate_kwargs):
+                    with self.client.start_as_current_observation(
+                        name=trace_context.name,
+                        input=inputs,
+                        metadata=metadata,
+                    ) as trace:
+                        self.trace_record = trace
+                        self._langfuse_trace_id = self.client.get_current_trace_id()
+                        self._root_otel_span = otel_trace_api.get_current_span()
+                        try:
+                            yield trace_context
+                        except Exception as exc:
+                            if not trace_context.has_error():
+                                trace_context.mark_span_as_error(str(exc), exception=exc)
+                            raise
+                        finally:
+                            self._update_span_from_context(trace, trace_context)
+            finally:
+                if self.trace_record:
+                    self.client.flush()
 
-            # Reset state
-            self.client = None
-            self.trace_record = None
-            self._langfuse_trace_id = None
-            self._root_otel_span = None
-            self._trace_tags = []
-            self.session = None
+                # Reset state
+                self.client = None
+                self.trace_record = None
+                self._langfuse_trace_id = None
+                self._root_otel_span = None
+                self._trace_tags = []
+                self.session = None
 
     @contextmanager
     def span(
@@ -296,13 +305,12 @@ def _detach_sdk_resources(public_key: str) -> LangfuseResourceManager | None:
     SDK gives no way to retire one: ``Langfuse.shutdown()`` stops the consumer threads but
     leaves the instance registered, so the next ``Langfuse(**config)`` hands back a manager
     that will never flush again. Removing the registry entry is therefore what makes a
-    credential or sample-rate change take effect, and what releases an idle team's threads.
+    credential change take effect, and what releases an idle team's threads.
 
     The returned instance still owns live threads. Shutting it down is left to the caller,
     via ``_shutdown_detached``, so it can happen outside ``ClientManager._lock``.
 
-    This is the only place OCS touches Langfuse internals; ``test_sdk_registry_seam_exists``
-    fails if either attribute goes away.
+    ``test_sdk_registry_seam_exists`` fails if either attribute goes away.
     """
     with LangfuseResourceManager._lock:
         return LangfuseResourceManager._instances.pop(public_key, None)
@@ -311,6 +319,11 @@ def _detach_sdk_resources(public_key: str) -> LangfuseResourceManager | None:
 def _shutdown_detached(instances: list[LangfuseResourceManager]) -> None:
     """Shut down instances that ``_detach_sdk_resources`` has already unregistered.
 
+    ``LangfuseResourceManager.shutdown()`` stops only the consumer threads. The span processor
+    belongs to the instance's tracer provider, and the prompt cache's refresh thread to its
+    task manager, so both are shut down here as well. The task manager is private;
+    ``test_sdk_prompt_cache_seam_exists`` fails if it goes away.
+
     ``shutdown()`` flushes and joins the instance's queues, so it can block for as long as
     the flush takes and, if a consumer thread has died, indefinitely. Callers run it with no
     lock of theirs held, so one team's stuck flush cannot stall every other team's ``get()``.
@@ -318,10 +331,15 @@ def _shutdown_detached(instances: list[LangfuseResourceManager]) -> None:
     a concurrent ``get()`` for the same public_key builds a fresh one rather than waiting.
     """
     for instance in instances:
-        try:
-            instance.shutdown()
-        except Exception:
-            logger.exception("Failed to shut down Langfuse client resources")
+        for shutdown in (
+            instance.shutdown,
+            instance.tracer_provider.shutdown,
+            instance.prompt_cache._task_manager.shutdown,
+        ):
+            try:
+                shutdown()
+            except Exception:
+                logger.exception("Failed to shut down Langfuse client resources")
 
 
 @dataclasses.dataclass
@@ -329,6 +347,8 @@ class _CachedClient:
     client: Langfuse
     public_key: str | None
     last_used: float = 0.0
+    in_use: int = 0
+    retired: list[LangfuseResourceManager] = dataclasses.field(default_factory=list)
 
 
 class ClientManager:
@@ -338,11 +358,21 @@ class ClientManager:
     client — on its own ``LangfuseResourceManager`` singleton, so this class exists for the
     two things that singleton does not do:
 
-    * it is keyed by public_key alone, so a rotated secret or a changed sample_rate for a
-      public_key already seen would be silently ignored. Caching by config hash and evicting
-      the SDK's entry on a miss makes the new config take effect.
+    * it is keyed by public_key alone, so a rotated secret for a public_key already seen
+      would be silently ignored. Caching by config hash and evicting the SDK's entry on a
+      miss makes the new config take effect.
     * it never releases a key, so every team that has ever traced in this process keeps its
       threads and connections. Pruning by last use and by ``max_clients`` bounds that.
+
+    ``sample_rate`` is left out of both the cache key and the client: ``LangFuseTracer``
+    samples each trace itself, so chatbots with different rates share one client.
+
+    Each client gets its own ``TracerProvider``, so its span processor is shut down with it.
+    The global provider has no way to remove a processor.
+
+    A shut-down span processor drops every span that ends after it, so a client checked out by
+    a running trace is never shut down under it. Pruning skips such a client, and a config
+    change that evicts one leaves its shutdown to the last ``checkout`` to release it.
     """
 
     def __init__(self, stale_timeout=300, prune_interval=60, max_clients=20) -> None:
@@ -354,10 +384,26 @@ class ClientManager:
         self._start_prune_thread()
 
     @staticmethod
-    def _config_hash(config: dict) -> int:
-        return hash(frozenset(config.items()))
+    def _client_config(config: dict) -> dict:
+        return {key: value for key, value in config.items() if key != "sample_rate"}
+
+    @classmethod
+    def _config_hash(cls, config: dict) -> int:
+        return hash(frozenset(cls._client_config(config).items()))
 
     def get(self, config: dict) -> Langfuse:
+        return self._acquire(config, check_out=False).client
+
+    @contextmanager
+    def checkout(self, config: dict) -> Iterator[Langfuse]:
+        """Yield the client for ``config`` and keep it from being shut down until exit."""
+        entry = self._acquire(config, check_out=True)
+        try:
+            yield entry.client
+        finally:
+            self._release(entry)
+
+    def _acquire(self, config: dict, check_out: bool) -> _CachedClient:
         from langfuse import Langfuse  # noqa: PLC0415 - tests mock langfuse.Langfuse at source module
 
         public_key = config.get("public_key")
@@ -369,17 +415,28 @@ class ClientManager:
                 if entry is None:
                     detached = self._evict_public_key(public_key, keep=config_hash)
                     logger.debug("Creating new Langfuse client with public_key '%s'", public_key)
-                    entry = _CachedClient(client=Langfuse(**config), public_key=public_key)
+                    client = Langfuse(**self._client_config(config), tracer_provider=TracerProvider())
+                    entry = _CachedClient(client=client, public_key=public_key)
                     self._entries[config_hash] = entry
                 entry.last_used = time.time()
-                client = entry.client
+                if check_out:
+                    entry.in_use += 1
         finally:
             # A detached instance is out of both `_entries` and the SDK registry, so nothing
             # else will ever reach it. If `Langfuse()` raises -- `RuntimeError: can't start
             # new thread` under thread exhaustion, say -- this is the only chance to stop its
             # threads, and a leak there would feed the exhaustion that caused it.
             _shutdown_detached(detached)
-        return client
+        return entry
+
+    def _release(self, entry: _CachedClient) -> None:
+        with self._lock:
+            entry.in_use -= 1
+            entry.last_used = time.time()
+            detached = []
+            if entry.in_use == 0:
+                detached, entry.retired = entry.retired, []
+        _shutdown_detached(detached)
 
     def _evict_public_key(self, public_key, keep: int) -> list[LangfuseResourceManager]:
         """Remove any entry cached under a different config hash for this public_key.
@@ -408,14 +465,15 @@ class ClientManager:
             if self._entries:
                 logger.debug("Pruning clients...")
                 now = time.time()
-                stale = [h for h, entry in self._entries.items() if now - entry.last_used > self.stale_timeout]
+                idle = [h for h, entry in self._entries.items() if not entry.in_use]
+                stale = [h for h in idle if now - self._entries[h].last_used > self.stale_timeout]
                 if stale:
                     logger.debug("Pruning %d stale clients", len(stale))
                     detached += self._remove_clients(stale)
 
                 if len(self._entries) > self.max_clients:
-                    # remove the oldest clients until we are below the max
-                    by_age = sorted(self._entries, key=lambda h: self._entries[h].last_used)
+                    # remove the oldest idle clients until we are below the max
+                    by_age = sorted((h for h in idle if h in self._entries), key=lambda h: self._entries[h].last_used)
                     over_limit = by_age[: len(self._entries) - self.max_clients]
                     logger.debug("Pruned %d clients above max limit", len(over_limit))
                     detached += self._remove_clients(over_limit)
@@ -426,22 +484,28 @@ class ClientManager:
 
         Callers hold `self._lock`, so a background prune can't interleave with a concurrent
         `get()` and leave `_entries` inconsistent with the SDK's registry. They shut the
-        returned instances down once they have released that lock.
+        returned instances down once they have released that lock. An entry that is checked
+        out keeps its instance until `_release` shuts it down.
         """
-        entries = [self._entries.pop(config_hash, None) for config_hash in config_hashes]
-        detached = [
-            _detach_sdk_resources(entry.public_key)
-            for entry in entries
-            if entry is not None and entry.public_key is not None
-        ]
-        return [instance for instance in detached if instance is not None]
+        detached = []
+        for config_hash in config_hashes:
+            entry = self._entries.pop(config_hash, None)
+            if entry is None or entry.public_key is None:
+                continue
+            if (instance := _detach_sdk_resources(entry.public_key)) is None:
+                continue
+            if entry.in_use:
+                entry.retired.append(instance)
+            else:
+                detached.append(instance)
+        return detached
 
     def shutdown(self):
         with self._lock:
             if self._entries:
                 logger.debug("Shutting down all langfuse clients (%s)", len(self._entries))
-            LangfuseResourceManager.reset()
-            self._entries.clear()
+            detached = self._remove_clients(list(self._entries))
+        _shutdown_detached(detached)
 
 
 client_manager = ClientManager()

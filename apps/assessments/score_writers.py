@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
 from apps.assessments.models import Score
+from apps.evaluations.errors import is_failed_output
 from apps.utils.fields import sanitize_control_chars
 
 if TYPE_CHECKING:
@@ -121,11 +122,11 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
     """Decompose an EvaluationResult's output into Score rows.
 
     Idempotent: deletes existing Scores for this result then bulk-creates fresh ones.
-    No-op when the result has no associated ExperimentSession or when the output
-    contains an error payload.
+    No-op when the result has no associated ExperimentSession or when it failed
+    (`is_failed_output`).
     """
     output = result.output or {}
-    if "error" in output:
+    if is_failed_output(output):
         return
     session = result.message.session if result.message_id else None
     if session is None:

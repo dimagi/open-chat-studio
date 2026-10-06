@@ -290,6 +290,14 @@ class TestLocalIndexManager:
         with pytest.raises(FileChunkEmbedding.DoesNotExist):
             embedding.refresh_from_db()
 
+    def test_get_embedding_vectors_defaults_to_one_call_per_document(self, index_manager):
+        with mock.patch.object(index_manager, "get_embedding_vector", wraps=index_manager.get_embedding_vector) as spy:
+            result = index_manager.get_embedding_vectors(["a", "b", "c"])
+
+        assert len(result) == 3
+        assert spy.call_count == 3
+        assert all(call.kwargs == {"input_type": "document"} for call in spy.call_args_list)
+
 
 @pytest.mark.django_db()
 class TestLocalIndexManagerContextualization:
@@ -745,6 +753,15 @@ class TestOpenAILocalIndexManager:
             with pytest.raises(ValueError, match="Unknown input_type"):
                 index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
 
+    def test_get_embedding_vectors_sends_one_request_for_the_batch(self, index_manager):
+        vectors = [[0.1] * settings.EMBEDDING_VECTOR_SIZE, [0.2] * settings.EMBEDDING_VECTOR_SIZE]
+        with mock.patch("langchain_openai.OpenAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = vectors
+            result = index_manager.get_embedding_vectors(["first", "second"])
+
+        mock_cls.return_value.embed_documents.assert_called_once_with(["first", "second"])
+        assert result == vectors
+
 
 class TestGoogleLocalIndexManager:
     @pytest.fixture()
@@ -787,6 +804,19 @@ class TestGoogleLocalIndexManager:
         with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings"):
             with pytest.raises(ValueError, match="Unknown input_type"):
                 index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
+
+    def test_get_embedding_vectors_passes_dimensionality_and_task_type(self, index_manager):
+        vectors = [[0.1] * settings.EMBEDDING_VECTOR_SIZE, [0.2] * settings.EMBEDDING_VECTOR_SIZE]
+        with mock.patch("langchain_google_genai.GoogleGenerativeAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = vectors
+            result = index_manager.get_embedding_vectors(["first", "second"])
+
+        mock_cls.return_value.embed_documents.assert_called_once_with(
+            ["first", "second"],
+            output_dimensionality=settings.EMBEDDING_VECTOR_SIZE,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
+        assert result == vectors
 
 
 class TestVoyageAILocalIndexManager:
@@ -836,6 +866,19 @@ class TestVoyageAILocalIndexManager:
                 index_manager.get_embedding_vector("some text", input_type=input_type)
 
         mock_embeddings_cls.assert_not_called()
+
+    def test_get_embedding_vectors_sends_one_request_for_the_batch(self, index_manager):
+        vectors = [[0.1] * settings.EMBEDDING_VECTOR_SIZE, [0.2] * settings.EMBEDDING_VECTOR_SIZE]
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_cls:
+            mock_cls.return_value.embed_documents.return_value = vectors
+            result = index_manager.get_embedding_vectors(["first", "second"])
+
+        mock_cls.return_value.embed_documents.assert_called_once_with(["first", "second"])
+        assert result == vectors
+
+    def test_get_embedding_vectors_rejects_an_empty_string(self, index_manager):
+        with pytest.raises(ValueError, match="empty string"):
+            index_manager.get_embedding_vectors(["first", ""])
 
     def test_embeddings_constructor_kwargs_are_accepted_by_the_installed_client(self):
         """Construct `VoyageAIEmbeddings` for real, unlike every other test in this class.

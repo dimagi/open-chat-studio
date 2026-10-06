@@ -21,7 +21,7 @@ class APIScopedValidator(OAuth2Validator):
     """
 
     oidc_claim_scope = OAuth2Validator.oidc_claim_scope
-    oidc_claim_scope.update({"is_active": "openid", "team": "openid", "email_verified": "openid"})
+    oidc_claim_scope.update({"is_active": "openid", "team": "openid", "email_verified": "openid", "teams": "teams"})
 
     def validate_scopes(self, client_id, scopes, client, request, *args, **kwargs):
         is_valid = super().validate_scopes(client_id, scopes, client, request, *args, **kwargs)
@@ -32,7 +32,9 @@ class APIScopedValidator(OAuth2Validator):
         # never be granted scopes that only make sense for a user (e.g. openid/profile).
         if client and client.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS:
             return set(scopes).issubset(settings.OAUTH_CLIENT_CREDENTIALS_SCOPES)
-        return True
+        # An application registered to a team only ever gets tokens for that team, so it has no use for the
+        # user's other teams.
+        return not (client and client.team_id and "teams" in scopes)
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
@@ -87,6 +89,7 @@ class APIScopedValidator(OAuth2Validator):
                 "name": user.get_full_name(),
                 "is_active": user.is_active,
                 "email_verified": user_has_confirmed_email_address(user, user.email),
+                "teams": lambda request: list(request.user.teams.order_by("slug").values("slug", "name")),
             }
         if team := getattr(request, "team", None):
             claims["team"] = team.slug

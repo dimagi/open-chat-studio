@@ -30,6 +30,7 @@ from apps.evaluations.tasks import (
     finalize_evaluation_run,
 )
 from apps.evaluations.tests.coordination import sweep
+from apps.ocs_notifications.models import LevelChoices, NotificationEvent
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -248,6 +249,9 @@ def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(dis
     assert run.finished_at is not None  # or the run renders no finish time and no duration
     assert dispatch_mock.call_count == 0
     assert EvaluationResult.objects.filter(run=run).count() == 0
+    event = NotificationEvent.objects.get(team=run.team)
+    assert event.event_type.level == LevelChoices.ERROR
+    assert "select a provider and model" in event.message
 
 
 @pytest.mark.django_db()
@@ -612,6 +616,25 @@ def test_sweep_fails_after_max_stalls_without_progress(dispatch_mock, _publish):
     assert run.finished_at is not None
     assert run.stall_count == 3  # mark_failed must not clobber the counter it is saved alongside
     dispatch_mock.assert_not_called()
+    event = NotificationEvent.objects.get(team=run.team)
+    assert "Evaluation stalled" in event.message
+    assert event.links == {"View run": run.get_absolute_url()}
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_a_failed_preview_notifies_too(dispatch_mock, _publish):
+    """Unlike failed results, which its page shows as it runs, a stalled preview has been left unwatched."""
+    run, evaluators, _messages = _make_run(message_count=3, status=EvaluationRunStatus.PENDING)
+    run.type = EvaluationRunType.PREVIEW
+    run.save(update_fields=["type"])
+    evaluators[0].llm_provider = None
+    evaluators[0].save(update_fields=["llm_provider"])
+
+    sweep()
+
+    assert NotificationEvent.objects.filter(team=run.team).count() == 1
 
 
 @pytest.mark.django_db()

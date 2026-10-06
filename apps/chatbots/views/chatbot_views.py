@@ -42,7 +42,7 @@ from apps.events.models import (
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
-from apps.experiments.export import export_rows_to_csv_stream, generate_export_rows
+from apps.experiments.export import EXPORT_COLUMNS, export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -339,6 +339,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "usage_summary": usage_summary,
         "broadcast_form": BroadcastMessageForm(experiment),
+        "export_columns": EXPORT_COLUMNS,
         "breadcrumbs": [
             (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
             (experiment.name, None),

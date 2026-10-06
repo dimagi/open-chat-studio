@@ -107,9 +107,23 @@
                 </form>
               {% endif %}
 
-              <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
-                <i class="fa-regular fa-file"></i> Add Files
-              </button>
+              {% if collection.is_index and not collection.is_remote_index %}
+                <div class="dropdown">
+                  <button type="button" class="join-item btn btn-sm btn-primary"
+                    {% if collection_files_count == max_files_per_collection %} disabled {% endif %}
+                  >
+                    <i class="fa-regular fa-file"></i> Add Files
+                  </button>
+                  <ul id="add-files-menu" tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
+                    <li><button type="button" onclick="chooseFilesModal.showModal()">Upload files</button></li>
+                    <li><button type="button" onclick="importRowsModal.showModal()">Import CSV/TSV rows</button></li>
+                  </ul>
+                </div>
+              {% else %}
+                <button class="join-item btn btn-sm btn-primary" {% if collection_files_count == max_files_per_collection %} disabled {% endif %} onclick="chooseFilesModal.showModal()">
+                  <i class="fa-regular fa-file"></i> Add Files
+                </button>
+              {% endif %}
 
               {% if collection.is_index %}
                 <div class="dropdown">
@@ -137,6 +151,9 @@
 
       <div id="document_source_modal"></div>
       {% include "documents/file_upload_modal.html" %}
+      {% if collection.is_index and not collection.is_remote_index %}
+        {% include "documents/row_import_modal.html" %}
+      {% endif %}
 
       <div class="grid grid-cols-1 gap-4">
         {% for document_source in document_sources %}
