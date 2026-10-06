@@ -34,12 +34,6 @@ if [[ -f "$python_version_file" ]]; then
     UV_PYTHON=$(<"$python_version_file")
 fi
 
-# Nothing below needs the Node dependencies, so they install while the database is set up.
-node_install_log=$(mktemp)
-"$CURRENT_PATH/scripts/bootstrap.sh" --force --yes --skip-checks --only node \
-    < /dev/null > "$node_install_log" 2>&1 &
-node_install_pid=$!
-
 # Prints the install's output once, and fails if the install did.
 finish_node_install() {
     local status=0
@@ -55,7 +49,14 @@ finish_node_install() {
 # the result is handed to every step that needs it: the template name, the ancestor
 # search and the dependency fingerprint.
 migration_stamp_file=$(mktemp)
+node_install_log=$(mktemp)
+node_install_pid=""
 trap 'finish_node_install || true; rm -f "$migration_stamp_file" "$node_install_log"' EXIT
+
+# Nothing below needs the Node dependencies, so they install while the database is set up.
+"$CURRENT_PATH/scripts/bootstrap.sh" --force --yes --skip-checks --only node \
+    < /dev/null > "$node_install_log" 2>&1 &
+node_install_pid=$!
 
 "$CURRENT_PATH/scripts/bootstrap.sh" --force --yes --skip-checks --only python
 
