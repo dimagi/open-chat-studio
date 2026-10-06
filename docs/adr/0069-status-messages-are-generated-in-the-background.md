@@ -24,7 +24,10 @@ only read them from the cache.
 
 - On a cache miss, the poll queues `generate_progress_messages_task` and
   returns `message: null`. A cache lock (`progress_generating:<session_id>`,
-  60 seconds) allows at most one queued task per session per minute.
+  5 minutes) allows at most one queued task per session per 5 minutes. The
+  lock is longer than a slow generation, which can include retries and
+  fallback models, so a poll does not queue a second task while the first is
+  still running.
 - The task caches the agent's output for 24 hours and caches nothing if the
   agent fails. Each read resets the 24-hour expiry, so an active session keeps
   its messages.
@@ -39,7 +42,7 @@ only read them from the cache.
 - A session recovers on its next poll if its messages expire, are evicted, or
   failed to generate.
 - If the agent keeps failing, each polling session makes one LLM attempt per
-  minute.
+  5 minutes.
 - Long waits repeat messages instead of showing new ones.
 
 ## Alternatives considered
