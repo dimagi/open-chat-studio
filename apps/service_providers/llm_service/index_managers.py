@@ -8,7 +8,6 @@ import openai
 from django.conf import settings
 from django.contrib.postgres.search import SearchVector
 from django.db import DatabaseError, transaction
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.documents.exceptions import FileUploadError
 from apps.documents.models import Collection, CollectionFile, FileStatus, format_failure_reason
@@ -574,6 +573,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         Returns:
             list[str]: List of text chunks with specified overlap.
         """
+
+        from langchain_text_splitters import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+            RecursiveCharacterTextSplitter,
+        )
 
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
             model_name="gpt-4",
