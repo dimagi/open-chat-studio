@@ -69,8 +69,8 @@ def check_superuser_team_access(request, team_slug):
         elevation = Elevation(request)
         if elevation.has(grant):
             return True
-        if settings.DEBUG:
-            # allow superusers to access any team in DEBUG mode
+        if settings.ELEVATION_WITHOUT_PROOF:
+            # Development convenience: elevate on first access instead of prompting.
             try:
                 elevation.add(grant)
             except TooManyElevations:

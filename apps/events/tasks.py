@@ -10,7 +10,7 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.experiments.models import ExperimentSession
-from apps.teams.export_service import migrating_team_ids
+from apps.teams.export_service import frozen_experiment_q
 from apps.utils.celery import Queues
 
 logger = get_task_logger("ocs.events")
@@ -34,7 +34,7 @@ def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
 
     queryset = StaticTrigger.objects.filter(
         experiment=experiment_version, type__in=trigger_types_to_filter, is_active=True
-    ).exclude(experiment__team_id__in=migrating_team_ids())
+    ).exclude(frozen_experiment_q())
 
     return queryset.values_list("id", flat=True)
 
@@ -48,11 +48,7 @@ def fire_static_trigger(trigger_id, session_id):
 
 @shared_task(ignore_result=True, queue=Queues.CHAT)
 def enqueue_timed_out_events():
-    active_triggers = (
-        TimeoutTrigger.objects.published_versions()
-        .filter(is_active=True)
-        .exclude(experiment__team_id__in=migrating_team_ids())
-    )
+    active_triggers = TimeoutTrigger.objects.published_versions().filter(is_active=True).exclude(frozen_experiment_q())
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
             if session.is_stale():
@@ -78,7 +74,7 @@ def poll_due_scheduled_triggers():
     due_triggers = (
         ScheduledTrigger.objects.published_versions()
         .filter(is_active=True, fired_at__isnull=True, scheduled_at__lte=timezone.now())
-        .exclude(experiment__team_id__in=migrating_team_ids())
+        .exclude(frozen_experiment_q())
     )
     for trigger in due_triggers:
         fire_scheduled_trigger.delay(trigger.id)
@@ -102,7 +98,7 @@ def fire_scheduled_trigger(trigger_id):
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
-    messages = ScheduledMessage.objects.get_messages_to_fire().exclude(team_id__in=migrating_team_ids())
+    messages = ScheduledMessage.objects.get_messages_to_fire().exclude(frozen_experiment_q())
     for message in messages:
         message.safe_trigger()
 

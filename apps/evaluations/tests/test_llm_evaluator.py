@@ -499,7 +499,10 @@ def test_evaluator_stores_the_model_text_when_no_structured_result_is_returned(
 ):
     result = _run_single_message_evaluation(get_llm_service, llm_provider, llm_provider_model, response)
 
-    assert result.output == {"error": f"The model did not return structured output: {expected_text}"}
+    assert result.output == {
+        "error": f"The model did not return structured output: {expected_text}",
+        "error_category": "invalid_output",
+    }
 
 
 @pytest.mark.django_db()

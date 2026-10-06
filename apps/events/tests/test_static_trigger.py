@@ -138,3 +138,36 @@ def _assert_participant_joined_event_fired(experiment, expected_events):
         )
 
         mock_fire_trigger.assert_has_calls([call(session.id, event) for event in expected_events])
+
+
+@mock.patch("apps.events.tasks.enqueue_static_triggers.delay")
+@pytest.mark.django_db()
+def test_ending_an_ended_session_does_not_fire_end_triggers(mock_enqueue, session):
+    session.end()
+
+    session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_EVENT)
+
+    mock_enqueue.assert_not_called()
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@pytest.mark.django_db()
+def test_end_conversation_action_on_end_trigger_fires_once(session):
+    trigger = StaticTrigger.objects.create(
+        experiment=resolve_published_or_working(session.experiment),
+        action=EventAction.objects.create(action_type=EventActionType.END_CONVERSATION),
+        type=StaticTriggerType.CONVERSATION_END,
+    )
+    real_fire = StaticTrigger.fire
+    fired = []
+
+    def counting_fire(self, session):
+        fired.append(self.id)
+        if len(fired) > 3:
+            raise AssertionError("End trigger is looping")
+        return real_fire(self, session=session)
+
+    with mock.patch.object(StaticTrigger, "fire", counting_fire):
+        session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
+
+    assert fired == [trigger.id]

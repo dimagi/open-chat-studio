@@ -2,7 +2,7 @@ import pytest
 from django.template.loader import get_template
 from django.urls import reverse
 
-from apps.events.models import EventLogStatusChoices
+from apps.events.models import EventLogStatusChoices, StaticTriggerType
 from apps.teams.backends import SUPER_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.utils.factories.events import ScheduledTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -99,3 +99,14 @@ def test_event_logs_template_renders_without_session(client, team_with_users):
     )
     assert "No session" in html
     assert "Session Details" not in html
+
+
+@pytest.mark.django_db()
+def test_create_static_event_view_lists_end_trigger_types(experiment, client, team_with_users):
+    _super_admin_client(client, team_with_users)
+    url = reverse("chatbots:events:static_event_new", args=[experiment.team.slug, experiment.id])
+
+    response = client.get(url)
+
+    assert response.context["end_trigger_types"] == StaticTriggerType.end_conversation_types()
+    assert 'id="end-trigger-types"' in response.content.decode()

@@ -11,6 +11,7 @@ from django.urls import reverse
 
 from apps.channels.web_channel import WebChannel
 from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL
+from apps.experiments.export import EXPORT_COLUMNS
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -672,6 +673,55 @@ def test_generate_chat_export_enqueues_serializable_query_params(delay_mock, exp
     )
 
     assert response.status_code == 200
-    _experiment_id, query_params, _time_zone = delay_mock.call_args.args
+    query_params = delay_mock.call_args.kwargs["query_params"]
     assert isinstance(query_params, str)
     assert query_params == "f_participant=alice&op_participant=equals"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.async_export_chat.delay")
+@pytest.mark.parametrize(
+    ("post_data", "expected_columns"),
+    [
+        pytest.param(
+            {"columns": ["message_id", "message_content", "participant_data"]},
+            ["message_id", "message_content", "participant_data"],
+            id="selected_columns",
+        ),
+        pytest.param({}, None, id="no_columns_field_means_all"),
+    ],
+)
+def test_generate_chat_export_passes_selected_columns(delay_mock, post_data, expected_columns, experiment, client):
+    delay_mock.return_value = "task-123"
+    client.force_login(experiment.team.members.first())
+
+    response = client.post(
+        reverse("experiments:generate_chat_export", args=[experiment.team.slug, experiment.id]),
+        data=post_data,
+        HTTP_HX_REQUEST="true",
+        HTTP_HX_CURRENT_URL="https://example.com/sessions",
+    )
+
+    assert response.status_code == 200
+    assert delay_mock.call_args.kwargs["columns"] == expected_columns
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.async_export_chat.delay")
+def test_export_modal_always_submits_required_columns(delay_mock, experiment, client):
+    """Required columns are posted as hidden inputs, so a "Clear all" selection is never an empty POST."""
+    delay_mock.return_value = "task-123"
+    client.force_login(experiment.team.members.first())
+
+    response = client.post(
+        reverse("experiments:generate_chat_export", args=[experiment.team.slug, experiment.id]),
+        HTTP_HX_REQUEST="true",
+        HTTP_HX_CURRENT_URL="https://example.com/sessions",
+    )
+
+    content = response.content.decode()
+    for column in EXPORT_COLUMNS:
+        if column.required:
+            assert f'<input type="hidden" name="columns" value="{column.key}">' in content
+        else:
+            assert f'name="columns" value="{column.key}" checked>' in content

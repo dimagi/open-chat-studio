@@ -58,6 +58,45 @@ class UserActionableError(ChatException):
     """
 
 
+class ModelRefusedTurnError(UserActionableError):
+    """The model declined the turn or the provider filtered it; the participant can send something else."""
+
+    MESSAGES = {
+        "refusal": "The assistant declined to answer the last message.",
+        "content_filter": "The last message was blocked by the provider's content filter.",
+    }
+
+    def __init__(self, kind: str, provider_reason: str = "", detail: dict | None = None):
+        super().__init__(self.MESSAGES[kind])
+        self.kind = kind
+        self.provider_reason = provider_reason
+        self.detail = detail or {}
+        # Celery result backends rebuild an exception from ``args``, so they must match ``__init__``.
+        self.args = (kind, provider_reason, self.detail)
+
+    def __str__(self) -> str:
+        return self.message
+
+    @property
+    def trace_metadata(self) -> dict:
+        return {"model_turn_outcome": self.kind, "provider_reason": self.provider_reason, "detail": self.detail}
+
+    @property
+    def message_metadata(self) -> dict:
+        return {"kind": self.kind, "provider_reason": self.provider_reason}
+
+
+class EmptyModelResponseError(Exception):
+    """The model returned no text, no tool calls and no stop signal."""
+
+    def __init__(self, provider_reason: str = ""):
+        self.provider_reason = provider_reason
+        super().__init__(provider_reason)
+
+    def __str__(self) -> str:
+        return f"The model returned an empty response (stop reason: {self.provider_reason or 'none'})"
+
+
 class ProviderConfigurationError(ChatException):
     """Raised when an LLM provider rejects a call for a reason only the team can fix.
 

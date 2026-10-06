@@ -317,6 +317,11 @@ MFA_TOTP_ISSUER = "Open Chat Studio"
 # to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
 REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
 
+# Privilege elevation ("sudo"): a superuser browsing another team is elevated into it on first
+# access, with no identity proof. Development convenience only — with it off, which is the
+# default outside DEBUG, they have to re-authenticate the way the deployed site demands.
+ELEVATION_WITHOUT_PROOF = env.bool("ELEVATION_WITHOUT_PROOF", default=DEBUG and not IS_TESTING)
+
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
@@ -1021,10 +1026,17 @@ OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+COLLECTION_FILE_MAX_METADATA_COLUMNS = 16
 
 # How long a chat session token remains usable from issuance. Activity does not extend it.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Row import into local indexes: one chunk per CSV/TSV row.
+COLLECTION_ROW_IMPORT_MAX_ROWS = 10000
+# Counted with tiktoken cl100k_base. Sized to the smallest input limit among the supported
+# embedding providers so a row that passes preview embeds on any of them.
+COLLECTION_ROW_IMPORT_MAX_ROW_TOKENS = 2000
 
 # Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
 # Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
@@ -1153,6 +1165,7 @@ OAUTH2_PROVIDER = {
 OIDC_ONLY_SCOPES = {
     "openid": "OpenID Connect scope",
     "profile": "User Profile",
+    "teams": "List your teams",
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
     OAUTH2_PROVIDER.update(
@@ -1163,7 +1176,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
     )
     OAUTH2_PROVIDER["SCOPES"].update(OIDC_ONLY_SCOPES)
 # Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
-# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
+# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile/teams) are excluded because a
 # machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.
 OAUTH_CLIENT_CREDENTIALS_SCOPES = [
     "chatbots:read",

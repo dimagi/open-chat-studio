@@ -35,7 +35,7 @@ def test_mask_secret(provider_type, secret, expected):
 def test_non_superuser_blocked(client):
     client.force_login(CustomUser.objects.create(username="staff@acme.com", is_staff=True))
     response = client.get(reverse("ocs_admin:provider_keys_api"))
-    assert response.status_code == 302  # user_passes_test redirects to login_url
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db()

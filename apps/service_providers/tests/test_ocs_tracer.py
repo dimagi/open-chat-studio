@@ -1,6 +1,8 @@
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+import httpx
+import openai
 import pytest
 
 from apps.chat.exceptions import ProviderConfigurationError
@@ -146,6 +148,36 @@ class TestOCSCallbackHandler:
         assert tracer.error_detected is True
         assert tracer.error_message == error_message
         assert tracer.error_span_name == "Tool Error"
+
+    def test_on_llm_error_skips_an_error_that_translates_to_participant_actionable(self):
+        """LangChain reports the raw 400 before the node boundary translates it; the turn is answered, not failed."""
+        experiment = Mock(id=456)
+        tracer = OCSTracer(experiment, team_id=123)
+        tracer.trace_id = str(uuid4())  # ty: ignore[invalid-assignment]
+        tracer.session = Mock()
+        request = httpx.Request("POST", "https://example.openai.azure.com/openai/chat/completions")
+        error = openai.BadRequestError(
+            "filtered", response=httpx.Response(400, request=request), body={"code": "content_filter"}
+        )
+
+        OCSCallbackHandler(tracer=tracer).on_llm_error(error=error)
+
+        assert tracer.error_detected is False
+        assert tracer.error_notification_config is None
+
+    def test_on_llm_error_still_records_a_team_actionable_error(self):
+        experiment = Mock(id=456)
+        tracer = OCSTracer(experiment, team_id=123)
+        tracer.trace_id = str(uuid4())  # ty: ignore[invalid-assignment]
+        tracer.session = Mock()
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        error = openai.RateLimitError(
+            "no credits", response=httpx.Response(429, request=request), body={"code": "insufficient_quota"}
+        )
+
+        OCSCallbackHandler(tracer=tracer).on_llm_error(error=error)
+
+        assert tracer.error_detected is True
 
 
 @pytest.mark.django_db()

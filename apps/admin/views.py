@@ -7,7 +7,6 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -60,13 +59,16 @@ from apps.teams.forms import TeamMetadataForm
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
 from apps.utils.rate_limit import client_ip, rate_limited
+from apps.web.elevation import ENFORCES_ELEVATION_ATTR, Grant, requires_elevation
 
 logger = logging.getLogger("ocs.admin")
 
 User = get_user_model()
 
-is_staff = user_passes_test(lambda u: u.is_staff, login_url="/404")
-is_superuser = user_passes_test(lambda u: u.is_superuser, login_url="/404")
+#: Every view under /admin/ is gated on the OCS admin elevation. `superuser_only` keeps the
+#: views that were superuser-only before elevation covered them out of staff reach.
+requires_admin = requires_elevation(Grant.OCS_ADMIN)
+requires_admin_superuser = requires_elevation(Grant.OCS_ADMIN, superuser_only=True)
 
 
 def _has_valid_reporting_token(request):
@@ -98,22 +100,25 @@ def admin_api_key(request, *args, **kwargs):
 
 
 def superuser_or_reporting_token(view_func):
-    """Allow a valid reporting token, else fall back to the superuser-session check.
+    """Allow a valid reporting token, else fall back to the elevated-superuser session check.
 
     Lets headless consumers authenticate with the shared token while the browser
-    admin UI keeps working via the session (same 302-to-/404 for everyone else).
+    admin UI keeps working via the session. The token path skips elevation deliberately:
+    a headless consumer cannot answer a re-authentication prompt.
     """
+    elevated = requires_admin_superuser(view_func)
 
     @functools.wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         if _has_valid_reporting_token(request):
             return view_func(request, *args, **kwargs)
-        return is_superuser(view_func)(request, *args, **kwargs)
+        return elevated(request, *args, **kwargs)
 
+    setattr(_wrapped, ENFORCES_ELEVATION_ATTR, True)
     return _wrapped
 
 
-@is_staff
+@requires_admin
 def admin_home(request):
     return TemplateResponse(
         request,
@@ -174,7 +179,7 @@ def _validated_range(request):
     return start, end, start_timestamp, end_timestamp
 
 
-@is_staff
+@requires_admin
 def usage_chart(request):
     """Render the dashboard skeleton: export buttons plus placeholders that lazy-load each section.
 
@@ -210,7 +215,7 @@ def _render_section(request, template, context_key, query_fn):
     return TemplateResponse(request, template, context={context_key: query_fn(start_timestamp, end_timestamp)})
 
 
-@is_staff
+@requires_admin
 def section_growth(request):
     date_range = _validated_range(request)
     if date_range is None:
@@ -229,12 +234,12 @@ def section_growth(request):
     )
 
 
-@is_staff
+@requires_admin
 def section_team_activity(request):
     return _render_section(request, "admin/sections/team_activity.html", "team_activity", get_team_activity_summary)
 
 
-@is_staff
+@requires_admin
 def section_charts(request):
     date_range = _validated_range(request)
     if date_range is None:
@@ -257,7 +262,7 @@ def section_charts(request):
     )
 
 
-@is_staff
+@requires_admin
 def section_top_teams(request):
     return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
 
@@ -281,7 +286,7 @@ def _team_stat_tiles(team):
     ]
 
 
-@is_staff
+@requires_admin
 def team_detail(request, slug):
     """HTMX panel for a single team: resource counts plus an editable metadata form.
 
@@ -313,7 +318,7 @@ def team_detail(request, slug):
     )
 
 
-@is_staff
+@requires_admin
 def team_metadata(request):
     """Manage-team-metadata page: import/export CSV plus a team search that loads a
     per-team detail/metadata panel inline via HTMX."""
@@ -339,22 +344,22 @@ def team_metadata(request):
     )
 
 
-@is_staff
+@requires_admin
 def section_platform(request):
     return _render_section(request, "admin/sections/platform.html", "platform_breakdown", get_platform_breakdown)
 
 
-@is_staff
+@requires_admin
 def section_top_experiments(request):
     return _render_section(request, "admin/sections/top_experiments.html", "top_experiments", get_top_experiments)
 
 
-@is_staff
+@requires_admin
 def section_whatsapp(request):
     return _render_section(request, "admin/sections/whatsapp.html", "whatsapp_stats", get_whatsapp_message_stats)
 
 
-@is_staff
+@requires_admin
 def export_usage(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -369,14 +374,14 @@ def export_usage(request):
     return response
 
 
-@is_staff
+@requires_admin
 def export_whatsapp(request):
     response = HttpResponse(get_whatsapp_numbers(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="whatsapp_numbers.csv"'
     return response
 
 
-@is_staff
+@requires_admin
 def export_whatsapp_stats(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -391,7 +396,7 @@ def export_whatsapp_stats(request):
     return response
 
 
-@is_staff
+@requires_admin
 def export_top_teams(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -406,7 +411,7 @@ def export_top_teams(request):
     return response
 
 
-@is_staff
+@requires_admin
 def export_top_experiments(request):
     form = _get_form(request)
     if not form.is_valid():
@@ -421,7 +426,7 @@ def export_top_experiments(request):
     return response
 
 
-@is_staff
+@requires_admin
 def export_team_metadata(request):
     response = HttpResponse(team_metadata_to_csv(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="team_metadata.csv"'
@@ -440,7 +445,7 @@ def _string_to_date(date_str: str) -> datetime.date:
     return datetime.strptime(date_str, date_format).date()
 
 
-@is_superuser
+@requires_admin_superuser
 def flags_home(request):
     flags = Flag.objects.prefetch_related("teams").all().order_by("name")
     flag_info_map = get_all_flag_info()
@@ -461,7 +466,7 @@ def flags_home(request):
     )
 
 
-@is_superuser
+@requires_admin_superuser
 def flag_detail(request, flag_name):
     flag = get_object_or_404(Flag, name=flag_name)
     flag_info_map = get_all_flag_info()
@@ -506,7 +511,7 @@ def _apply_delta_names(deltas, field, names, fallback):
                 change[action] = [names.get(obj_id, fallback.format(obj_id)) for obj_id in change[action]]
 
 
-@is_superuser
+@requires_admin_superuser
 def flag_history(request, flag_name):
     flag = get_object_or_404(Flag, name=flag_name)
 
@@ -539,7 +544,7 @@ def flag_history(request, flag_name):
 # Staff-level: team names/slugs are already visible to staff via the dashboard's
 # top-teams table and the team_detail page, which drive this search endpoint.
 @rate_limited("admin_api", key_fn=admin_api_key)
-@is_staff
+@requires_admin
 def teams_api(request):
     query = request.GET.get("q", "").strip()
 
@@ -567,7 +572,7 @@ def teams_api(request):
 
 
 @rate_limited("admin_api", key_fn=admin_api_key)
-@is_superuser
+@requires_admin_superuser
 def users_api(request):
     query = request.GET.get("q", "").strip()
 
@@ -639,7 +644,7 @@ def tracing_usage_api(request):
     return _range_report(request, build_tracing_volume_report)
 
 
-@is_superuser
+@requires_admin_superuser
 @require_http_methods(["POST"])
 def update_flag(request, flag_name):
     """Write the flag's `everyone` and `teams` settings, the only supported inputs."""
@@ -663,7 +668,7 @@ def update_flag(request, flag_name):
         return JsonResponse({"error": "Failed to update flag"}, status=500)
 
 
-@is_superuser
+@requires_admin_superuser
 @require_http_methods(["DELETE"])
 def delete_flag(request, flag_name):
     flag = get_object_or_404(Flag, name=flag_name)
@@ -681,7 +686,7 @@ def delete_flag(request, flag_name):
         return HttpResponse("Failed to delete flag", status=500)
 
 
-@is_superuser
+@requires_admin_superuser
 def configuration(request):
     """View for editing the single OcsConfiguration instance."""
     # Get or create the single configuration instance
@@ -707,9 +712,9 @@ def configuration(request):
     )
 
 
-@is_staff
+@requires_admin_superuser
 def find_provider_by_key(request):
-    """Staff tool: paste an API key + pick a provider type to find usages.
+    """Superuser tool: paste an API key + pick a provider type to find usages.
 
     Iterates providers of the chosen type, decrypts each one's config and
     compares the configured secret fields against the supplied key.

@@ -75,6 +75,20 @@ This is the right thing to do when the client already knows which team the user 
 removes a decision the user cannot get right without context. If the user is not a member of the
 named team, the parameter is ignored and the picker is shown as usual.
 
+## Listing the user's teams
+
+A client that connects several of a user's teams needs to know which teams there are. A global
+application can request the `teams` scope alongside `openid`, and the userinfo endpoint
+(`/o/userinfo/`) and the ID token then include a `teams` claim listing every team the user is a member
+of. Team-scoped applications cannot request this scope.
+
+```json
+{"teams": [{"slug": "team-a", "name": "Team A"}, {"slug": "team-b", "name": "Team B"}]}
+```
+
+The claim reflects membership, not token scope: the token still reaches only the one team it was
+authorized for. Pass each slug as the `team` parameter above to authorize the others.
+
 ## Related settings
 
 Global applications use the same provider configuration as every other OAuth application:
@@ -84,8 +98,8 @@ Global applications use the same provider configuration as every other OAuth app
 - `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS` sets how long an access token lives. A client-credentials token
   requested with `chat:start` alone uses the shorter `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS`, because
   it is meant for the chat widget in a browser.
-- Available scopes are listed under `OAUTH2_PROVIDER["SCOPES"]`; the `openid` and `profile` scopes
-  exist only when OIDC is enabled.
+- Available scopes are listed under `OAUTH2_PROVIDER["SCOPES"]`; the `openid`, `profile` and `teams`
+  scopes exist only when OIDC is enabled.
 
 See [Configuration](../hosting/configuration.md) for these, and
 [Rate Limiting](../hosting/rate_limiting.md) for the limits on `/o/token/`.

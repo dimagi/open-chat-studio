@@ -55,13 +55,13 @@ from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_messag
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
+from apps.service_providers.llm_service.outcomes import provider_reason
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
     PromptTemplateContext,
     SafeAccessWrapper,
 )
 from apps.service_providers.llm_service.retry import with_llm_retry
-from apps.service_providers.llm_service.structured_output import stop_reason
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
@@ -758,7 +758,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         if structured_response is not None:
             return structured_response.route.upper()
         messages = result.get("messages") or []
-        reason = stop_reason(messages[-1]) if messages else ""
+        reason = provider_reason(messages[-1]) if messages else ""
         logger.warning("Router %s got no route from the model (stop reason: %s)", self.name, reason or "none")
         return None
 
