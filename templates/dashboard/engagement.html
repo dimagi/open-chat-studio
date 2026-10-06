@@ -6,13 +6,17 @@
 {% block page_head %}
   {{ block.super }}
   {% comment %}
-    Viz palette. Every value is validated by the dataviz skill's checker against this
-    app's real surfaces -- light #ffffff and DaisyUI dark base-100 #1d232a -- not against
-    the reference surfaces. Re-run the validator before changing any of these.
-      week buckets: ordinal ramp (1 < 2 < 3 < 4+ weeks), one hue, light->dark
-      new/returning: blue + purple. The purple shifts from violet (light) to a
-        pink-leaning magenta (dark) because on a dark surface violet collapses
-        against blue -- every true violet tested fails CVD separation there.
+    Viz palette, checked for contrast and colourblind separation against this app's real
+    surfaces: light #ffffff and DaisyUI dark base-100 #1d232a. Re-check before changing.
+      series and rank accents reuse the product palette from ChartManager
+        (blue #3b82f6, amber #f59e0b, green #10b981) so this page does not introduce a
+        second colour system. Blue sits next to amber, never next to the palette's
+        violet #8b5cf6, which is indistinguishable from blue under deuteranopia.
+      week buckets: ordinal ramp (1 < 2 < 3 < 4+ weeks), one hue, light->dark. The
+        product palette has no ramp, and anchoring one on #3b82f6 puts adjacent steps
+        under the lightness-separation floor, so these steps stay bespoke.
+      grid, axis and delta text keep their own values: the product's #6b7280 is 3.28:1
+        on the dark surface, below the 4.5:1 that small text needs.
   {% endcomment %}
   <style>
     .viz-root {
@@ -21,17 +25,17 @@
       --viz-ordinal-2: #5598e7;
       --viz-ordinal-3: #2a78d6;
       --viz-ordinal-4: #184f95;
-      --viz-series-new: #2a78d6;
-      --viz-series-returning: #4a3aa7;
-      --viz-rank-1: #2a78d6;
-      --viz-rank-2: #eb6834;
-      --viz-rank-3: #1baf7a;
+      --viz-series-new: #3b82f6;
+      --viz-series-returning: #f59e0b;
+      --viz-rank-1: #3b82f6;
+      --viz-rank-2: #f59e0b;
+      --viz-rank-3: #10b981;
       --viz-rank-rest: #898781;
       --viz-ink-muted: #898781;
       --viz-grid: #e1e0d9;
       --viz-axis: #c3c2b7;
       --viz-spark: #c3c2b7;
-      --viz-spark-accent: #2a78d6;
+      --viz-spark-accent: #3b82f6;
       --viz-up: #006300;
       --viz-down: #d03b3b;
     }
@@ -41,17 +45,17 @@
       --viz-ordinal-2: #6da7ec;
       --viz-ordinal-3: #2a78d6;
       --viz-ordinal-4: #1c5cab;
-      --viz-series-new: #3987e5;
-      --viz-series-returning: #d55181;
-      --viz-rank-1: #3987e5;
-      --viz-rank-2: #d95926;
-      --viz-rank-3: #199e70;
+      --viz-series-new: #3b82f6;
+      --viz-series-returning: #f59e0b;
+      --viz-rank-1: #3b82f6;
+      --viz-rank-2: #f59e0b;
+      --viz-rank-3: #10b981;
       --viz-rank-rest: #898781;
       --viz-ink-muted: #898781;
       --viz-grid: #2c2c2a;
       --viz-axis: #383835;
       --viz-spark: #52514e;
-      --viz-spark-accent: #3987e5;
+      --viz-spark-accent: #3b82f6;
       --viz-up: #0ca30c;
       --viz-down: #e66767;
     }
