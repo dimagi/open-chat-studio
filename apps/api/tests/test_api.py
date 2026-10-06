@@ -886,9 +886,9 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
-    connect_client_mock.send_message_to_user.assert_called()
-    kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
-    assert kwargs["message"] == "Time to take a break and brew some coffee"
+    connect_client_mock.create_message.assert_called()
+    kwargs = connect_client_mock.create_message.call_args.kwargs
+    assert kwargs["text"] == "Time to take a break and brew some coffee"
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
     assert session.chat.messages.count() == 1
     first_message = session.chat.messages.first()
@@ -1003,9 +1003,9 @@ def test_generate_bot_message_auto_creates_participant(
 
     if consented:
         # Verify the message was sent
-        connect_client_mock.send_message_to_user.assert_called()
-        kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
-        assert kwargs["message"] == "Welcome! How can I help you today?"
+        connect_client_mock.create_message.assert_called()
+        kwargs = connect_client_mock.create_message.call_args.kwargs
+        assert kwargs["text"] == "Welcome! How can I help you today?"
 
         # Verify session and message were created
         session = ExperimentSession.objects.get(participant=participant, experiment=experiment)
@@ -1014,7 +1014,7 @@ def test_generate_bot_message_auto_creates_participant(
         assert message.message_type == "ai"
         assert message.content == "Welcome! How can I help you today?"
     else:
-        connect_client_mock.send_message_to_user.assert_not_called()
+        connect_client_mock.create_message.assert_not_called()
         assert not ExperimentSession.objects.filter(participant=participant, experiment=experiment).exists()
 
 
@@ -1186,9 +1186,9 @@ def test_trigger_bot_direct_message(
     assert response.status_code == 200
 
     # Message delivered via channel, not via LLM
-    connect_client_mock.send_message_to_user.assert_called()
-    kwargs = connect_client_mock.send_message_to_user.call_args.kwargs
-    assert kwargs["message"] == message
+    connect_client_mock.create_message.assert_called()
+    kwargs = connect_client_mock.create_message.call_args.kwargs
+    assert kwargs["text"] == message
 
     # Message recorded in chat history as an AI message
     session = ExperimentSession.objects.get(participant=participant_data.participant, experiment=experiment)
