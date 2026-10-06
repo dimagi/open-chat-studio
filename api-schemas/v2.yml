@@ -1022,8 +1022,8 @@ paths:
   /api/v2/consent-forms/{id}/:
     get:
       operationId: consent_form_retrieve
-      description: List, retrieve, create, patch and archive one team-scoped, versioned
-        resource model.
+      description: Retrieve the consent form with this ID. An archived one answers
+        `404`.
       summary: Retrieve Consent Form
       parameters:
       - in: path
@@ -1444,8 +1444,8 @@ paths:
   /api/v2/source-material/{id}/:
     get:
       operationId: source_material_retrieve
-      description: List, retrieve, create, patch and archive one team-scoped, versioned
-        resource model.
+      description: Retrieve the source material with this ID. An archived one answers
+        `404`.
       summary: Retrieve Source Material
       parameters:
       - in: path

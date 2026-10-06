@@ -31,6 +31,7 @@ def resource_schema(
             operation_id=f"{operation_prefix}_retrieve",
             parameters=[id_parameter],
             summary=f"Retrieve {noun}",
+            description=f"Retrieve the {noun.lower()} with this ID. An archived one answers `404`.",
             tags=[tag],
         ),
         create=extend_schema(
