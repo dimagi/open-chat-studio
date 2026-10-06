@@ -98,7 +98,7 @@ class ReadOnlyForMachineTokens(BasePermission):
         return request.method in SAFE_METHODS or not is_client_credentials_request(request)
 
 
-class ContentViewSet(
+class BaseContentViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
@@ -212,7 +212,7 @@ def _content_schema(
     ),
     archive_refused_serializer=SourceMaterialInUseSerializer,
 )
-class SourceMaterialViewSet(ContentViewSet):
+class SourceMaterialViewSet(BaseContentViewSet):
     serializer_class = SourceMaterialResourceSerializer
     model = SourceMaterial
 
@@ -230,7 +230,7 @@ class SourceMaterialViewSet(ContentViewSet):
         "and answers `409`."
     ),
 )
-class ConsentFormViewSet(ContentViewSet):
+class ConsentFormViewSet(BaseContentViewSet):
     serializer_class = ConsentFormResourceSerializer
     model = ConsentForm
 
