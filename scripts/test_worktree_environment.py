@@ -916,6 +916,20 @@ def test_setup_migrates_a_template_copy_when_migrate_inputs_changed(
     assert "uv:run python manage.py migrate" not in command_log.read_text()
 
 
+def test_snapshot_warns_when_the_migrate_inputs_cannot_be_recorded(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    template_name = _template_name(worktree, env)
+    inputs_path = _run_worktree_helper(worktree, "ocs_template_inputs_path", worktree, template_name, env=env)
+    Path(inputs_path.stdout.strip()).mkdir(parents=True)
+
+    result = _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert f"Could not record the migrate inputs for {template_name}" in result.stderr
+
+
 def test_setup_migrates_a_copy_of_a_template_with_no_recorded_inputs(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:

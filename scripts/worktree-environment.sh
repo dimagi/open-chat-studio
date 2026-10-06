@@ -758,9 +758,10 @@ ocs_snapshot_template() {
         echo "[ocs] Could not record the stamp for $template_name; it will be pruned rather than reused." >&2
         return 0
     fi
-    # Without it, copies of this template are still migrated; they only lose the skip.
-    ocs_migrate_inputs_fingerprint "$worktree_path" \
-        > "$(ocs_template_inputs_path "$worktree_path" "$template_name")" || true
+    if ! ocs_migrate_inputs_fingerprint "$worktree_path" \
+        > "$(ocs_template_inputs_path "$worktree_path" "$template_name")"; then
+        echo "[ocs] Could not record the migrate inputs for $template_name; copies of it will still be migrated." >&2
+    fi
 }
 
 # Keep the newest few templates plus whichever one this setup relies on, and drop the
