@@ -303,6 +303,16 @@ def test_elevation_records_the_ip_behind_the_proxy(superuser, authed_client, set
 
 
 @pytest.mark.django_db()
+def test_elevation_records_are_listed_in_the_admin(superuser, authed_client):
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    response = authed_client.get(reverse("admin:web_superuserelevation_changelist"))
+
+    assert response.status_code == 200
+    assert "django_admin" in response.content.decode()
+
+
+@pytest.mark.django_db()
 def test_release_stamps_only_the_current_record(superuser, authed_client):
     acquire_url = reverse("web:elevate_django_admin")
     with travel(datetime.datetime.now(), tick=False) as freezer:
