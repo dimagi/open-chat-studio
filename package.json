@@ -97,6 +97,12 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@sentry/cli"
-    ]
+    ],
+    "overrides": {
+      "@codemirror/state": "6.7.6",
+      "@codemirror/view": "6.43.13",
+      "@lezer/common": "1.5.3",
+      "@lezer/highlight": "1.2.5"
+    }
   }
 }
