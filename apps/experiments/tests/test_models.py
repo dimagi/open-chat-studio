@@ -1028,7 +1028,7 @@ class TestExperimentModel:
 
         first_version = experiment.create_new_version()
         second_version = experiment.create_new_version()
-        experiment.archive()
+        assert experiment.archive() is True
         experiment.refresh_from_db()
         first_version.refresh_from_db()
         second_version.refresh_from_db()
@@ -1045,7 +1045,7 @@ class TestExperimentModel:
 
         # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        new_version.archive()
+        assert new_version.archive() is True
         self._assert_archived(new_version.pipeline, True)
 
         # ...but archiving the working experiment leaves the working pipeline alone.

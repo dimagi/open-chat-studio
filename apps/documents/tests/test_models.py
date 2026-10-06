@@ -173,11 +173,21 @@ class TestCollection:
         collection.files.add(file)
 
         # Archive the collection
-        collection.archive()
+        assert collection.archive() is True
 
         # Check that the collection is archived
         assert collection.is_archived
         delete_collection_task.assert_called_once()
+
+    @mock.patch("apps.documents.tasks.delete_document_source_task.delay")
+    def test_archive_document_source(self, delete_document_source_task):
+        document_source = DocumentSourceFactory.create()
+
+        assert document_source.archive() is True
+
+        document_source.refresh_from_db()
+        assert document_source.is_archived
+        delete_document_source_task.assert_called_once_with(document_source.id)
 
     def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
