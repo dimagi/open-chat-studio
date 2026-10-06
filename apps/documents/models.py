@@ -454,7 +454,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         return get_related_experiment_versions_queryset(self, "collection", "collection_indexes")
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archive the collection with its files and remove the index and the files at the remote service, if it has one
         """
@@ -758,7 +758,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
             ],
         )
 
-    def archive(self, delete_files=True):
+    def archive(self, delete_files=True) -> bool:
         from apps.documents.tasks import (  # noqa: PLC0415 - circular: documents.tasks imports documents.models
             delete_document_source_task,
         )
@@ -766,6 +766,7 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
         super().archive()
         if delete_files:
             delete_document_source_task.delay(self.id)
+        return True
 
     def has_sync_errors(self) -> bool:
         """Check if the last sync failed outright or completed with per-file failures."""

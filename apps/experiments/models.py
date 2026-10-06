@@ -201,7 +201,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """Mirrors Collection.archive()'s in-use guard."""
         if has_related_pipeline_references(self, "source_material"):
             return False
@@ -270,7 +270,7 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return reverse("experiments:consent_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """Archive the form and move its chatbots onto the team's default. The default itself is refused."""
         if self.is_default:
             return False
@@ -979,7 +979,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archive the experiment and all versions in the case where this is the working version. The
         linked pipeline for the working version should not be archived.
@@ -995,6 +995,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             if self.pipeline:
                 self.pipeline.archive()
+        return True
 
     @transaction.atomic()
     def unarchive(self):

@@ -361,9 +361,11 @@ class VersionsMixin:
         """Returns a list of fields that should be excluded when comparing two versions."""
         return self.DEFAULT_EXCLUDED_KEYS
 
-    def archive(self):
+    def archive(self) -> bool:
+        """Archive this record. Returns False when the archive is refused."""
         self.is_archived = True
         self.save(update_fields=["is_archived"])
+        return True
 
     def unarchive(self):
         self.is_archived = False
