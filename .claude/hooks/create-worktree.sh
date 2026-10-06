@@ -7,11 +7,11 @@ set -euo pipefail
 input=$(cat)
 base_path=$(jq -r '.base_path // .cwd' <<<"$input")
 source_ref=$(jq -r '.source_ref // empty' <<<"$input")
-name=$(jq -r '.name // .worktree_name // empty' <<<"$input")
+name=$(jq -r '.name // .worktree_name // empty' <<<"$input" \
+    | sed -E 's#[^A-Za-z0-9._-]+#+#g; s#\.\.+#+#g; s#^[-.]+##')
 if [[ -z "$name" ]]; then
     name="wt-$(date +%Y%m%d-%H%M%S)-$RANDOM"
 fi
-name=${name//\//+}
 
 common_dir=$(git -C "$base_path" rev-parse --path-format=absolute --git-common-dir)
 repo_root=$(dirname "$common_dir")
@@ -19,7 +19,7 @@ worktree_path="$repo_root/.claude/worktrees/$name"
 branch="worktree-$name"
 
 if [[ -z "$source_ref" ]]; then
-    git -C "$repo_root" fetch --quiet origin >&2
+    git -C "$repo_root" fetch --quiet origin >&2 || echo "[ocs] Fetch failed; using the last fetched ref." >&2
     source_ref=$(git -C "$repo_root" symbolic-ref --quiet --short refs/remotes/origin/HEAD || echo origin/main)
 fi
 

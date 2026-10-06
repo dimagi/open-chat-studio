@@ -5,7 +5,11 @@ set -euo pipefail
 
 input=$(cat)
 base_path=$(jq -r '.base_path // .cwd' <<<"$input")
-worktree_path=$(jq -r '.worktree_path' <<<"$input")
+worktree_path=$(jq -r '.worktree_path // empty' <<<"$input")
+if [[ -z "$worktree_path" ]]; then
+    echo "[ocs] No worktree_path in the WorktreeRemove input." >&2
+    exit 1
+fi
 
 if [[ -x "$worktree_path/scripts/teardown-worktree.sh" ]]; then
     (cd "$worktree_path" && ./scripts/teardown-worktree.sh) >&2 \
