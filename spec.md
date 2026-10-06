@@ -1,10 +1,10 @@
 # Abuse detection
 
-Code-level changes are in [spec-technical.md](http://spec-technical.md).
+Code-level changes are in [spec-technical.md](spec-technical.md).
 
 ## Summary
 
-Every participant message is checked by cheap built-in rules (markup injection, blocked attachment types). Teams that opt in also have each message's text checked by a moderation provider they configure with their own credentials; OpenAI's moderation API is the only provider type for now. The check runs while the bot generates its response, and the response waits for it.
+Every participant message is checked by a cheap built-in rule for markup injection, and files of blocked types are rejected on every channel. Teams that opt in also have each message's text checked by a moderation provider they configure with their own credentials; OpenAI's moderation API is the only provider type for now. The check runs while the bot generates its response, and the response waits for it.
 
 If the provider flags the message in a severe category (such as `sexual/minors` or `illicit/violent`), the bot's response is discarded, and the participant is told their message was flagged. If the team has auto-block on, the participant also gets a strike. If the provider is rate-limited, fails or is too slow, the response is sent and the team is notified.
 
@@ -99,7 +99,7 @@ See the mockup here: [https\://claude.ai/artifact/AMRejMSiP7dEii1EqF5AHT?sk=1zIY
 - **No expiry**: strikes and blocks last until a team member unblocks the participant.
 - **Every message with text is moderated** when the team has moderation on. Only the participant's message text is checked (the user query; for a voice note, its transcript); attachments are not sent to the provider, because legitimate content (for example health education images) can be misclassified as explicit.
 - **Bot responses are not checked.**
-- **Feature flag off**: moderation, rules, strikes and blocks all stop. Existing blocks and strike counts are kept and apply again when the flag is turned back on.
+- **Feature flag off**: moderation, the markup rule, strikes and blocks all stop. Attachment rejection is not behind the flag. Existing blocks and strike counts are kept and apply again when the flag is turned back on.
 - **Notifications** go to every team member who can edit both chatbots and participants.
 
 ## Identity per channel

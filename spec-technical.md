@@ -41,6 +41,8 @@ Only the categories in `STRIKE_CATEGORIES` give a strike. The provider's result 
 
 So with the flag off, moderation does not run, strikes are not counted and blocks are not enforced. `DeniedParticipant` rows and `Participant.strikes` are kept, and apply again when the flag is turned back on.
 
+[Attachment rejection](#attachment-rejection) is not behind the flag.
+
 ## Data model
 
 All new columns are nullable or have a DB default, so the migrations are safe while the previous release is still serving.
@@ -299,13 +301,12 @@ If the participant is blocked:
 - **Web widget and API:** raise `EarlyExitResponse` with a fixed blocked message. The API returns it as an explicit blocked response.
 - **Messaging channels:** raise `EarlyAbort`, so the participant gets no reply.
 
-### `AbuseRulesStage` (US-6, US-15)
+### `AbuseRulesStage` (US-6)
 
 Runs after `ChatMessageCreationStage` (so `moderation_detail` can be written to the stored message) and before `BotInteractionStage`.
 
 1. **Run the rules.** Each rule is a function that takes the message text, its attachments and the participant, and returns either `None` or the rule's name.
    - `markup`: regex for `<script`, `<iframe`, `on\w+=`, `javascript:`, `data:text/html`, `<svg`, `<img … src=`. Recorded only, no strike.
-   - `blocked_attachment`: see [Attachment rejection](#attachment-rejection).
 2. **Record rule hits.** Write the names of the rules that fired to `moderation_detail.rules` on the human message.
 3. **Start moderation**, if all of these are true:
    - `flag_abuse_detection` is active for the team;
@@ -314,7 +315,7 @@ Runs after `ChatMessageCreationStage` (so `moderation_detail` can be written to 
 
    Then: `ctx.moderation_task_id = moderate_message.delay(...).id`.
 
-Messages from team members and preview sessions are moderated too.
+Messages from [exempt](#exempt-participants) participants are moderated too.
 
 ### `ModerationResultStage` (US-4, US-5, US-11, US-12, US-13)
 
@@ -332,7 +333,7 @@ The first terminal stage. It is a terminal stage, not a core stage, so that it s
    - If the wait times out, the result is discarded even if the task finishes later. The task does not write to the database, so a late result has no effect.
 3. **Skipped** (the task returned `skipped`, the wait timed out, or any error while waiting):
    - set `moderation_status = "skipped"` and `moderation_detail.skip_reason`;
-   - send the team notification (throttled, see [Notifications](#notifications));
+   - send the team notification (see [Notifications](#notifications));
    - send the response as normal.
 4. **Moderation ran:** store the output, and work out which strike categories were flagged:
 
@@ -346,7 +347,7 @@ The first terminal stage. It is a terminal stage, not a core stage, so that it s
    - Otherwise: set `moderation_status = "flagged"`, then continue to step 5.
 5. **Strike categories flagged:**
    - [Replace the response](#replacing-the-response).
-   - If `team.auto_block_enabled` is on and the participant is not exempt (exempt means a team member, or a preview session), increment `Participant.strikes`.
+   - If `team.auto_block_enabled` is on and the participant is not [exempt](#exempt-participants), increment `Participant.strikes`.
    - If the new strike count is `>= STRIKE_LIMIT`: create a `DeniedParticipant` (`source=auto`, with `experiment`, `chat_message`, and a reason listing the strike categories), and notify the team.
 6. **Save** the human message with `update_fields=["moderation_status", "moderation_detail"]`.
 
@@ -370,9 +371,19 @@ On later turns, the flagged human message is left out of the history sent to the
 
 ## Other enforcement points
 
-- **Start-session endpoints** (widget `POST /api/chat/start/`, and the API session start): the same denylist check as `BlockedParticipantStage`. They return an explicit blocked response (US-14).
+- **Start-session endpoints** (widget `POST /api/chat/start/`, and the API session start): the same denylist check as `BlockedParticipantStage`. They return HTTP 403 with `{"code": "participant_blocked", "detail": "<blocked message>"}` (US-14). The chat widget shows `detail` when it gets this code, instead of its generic "Failed to start session" error. The widget change ships as its own PR.
+- **Trigger-bot API** (`handle_trigger_bot_message`, `apps/api/views/channels.py`): if the participant is on the denylist, it returns the same 403 `participant_blocked` response instead of queuing the message, so the caller knows nothing was sent.
 - **Bot-initiated messages:** `ExperimentSession.ad_hoc_bot_message` (`apps/experiments/models.py`) returns without sending if the participant is on the denylist. This covers scheduled messages, reminders and timeout events. The sessions stay open (US-14).
-- **Code node function `block_participant(reason: str)`:** creates a `DeniedParticipant` for the current participant (`source=code_node`, with `experiment` and `reason`). No strikes are added. It is registered with the other code node helpers in `apps/pipelines/nodes/` (US-16).
+- **Code node function `block_participant(reason: str)`:** creates a `DeniedParticipant` for the current participant (`source=code_node`, with `experiment` and `reason`). No strikes are added. It does nothing when the flag is off or the participant is [exempt](#exempt-participants). It is registered with the other code node helpers in `apps/pipelines/nodes/` (US-16).
+
+## Exempt participants
+
+US-17 says team members and chatbot previews get no strikes and are never blocked automatically. `is_exempt(participant, team)` in `apps/moderation` decides this: a participant is exempt when `participant.user` is set and that user is a member of the participant's team. An in-app preview is always such a session, so it needs no separate rule. A session on the working version is not exempt by itself, because unpublished chatbots serve real participants from the working version.
+
+- In-app chat starts the session with `participant_user=request.user` (`start_authed_web_session`), whatever the version.
+- A team member on a messaging channel (Telegram, WhatsApp, …) has no linked user there, so is not exempt.
+- Membership is checked when each message is processed, so a former member is not exempt.
+- Manual blocks still apply to exempt participants.
 
 ## Attachment rejection
 
@@ -388,7 +399,7 @@ All notifications go through `create_notification` (`apps/ocs_notifications/util
 
 | Notification | When | Story |
 | :---- | :---- | :---- |
-| Moderation skipped | Rate-limited, error or timeout. Throttled per team (for example, at most one per hour), because a rate-limited account would otherwise send one per message. | US-5 |
+| Moderation skipped | Rate-limited, error or timeout. Sent for every skipped message; not throttled for now. | US-5 |
 | Participant blocked automatically | A participant reaches the strike limit and auto-block is on. | US-11 |
 | Moderation provider deleted | The team's selected provider is deleted and moderation is turned off. | US-2 |
 
@@ -425,16 +436,7 @@ Check `docs/architecture/package-map.md` for dependency direction before creatin
 
 ## Implementation order
 
-One PR per step, each with its tests.
-
-1. Shared attachment rejection across all channels (abuse type 4).
-2. `flag_abuse_detection`, `DeniedParticipant`, `BlockedParticipantStage`, the start-session and bot-initiated message checks, and manual block/unblock on the participant page.
-3. `ChatMessage.moderation_status` and `moderation_detail` columns (with the concurrent index), then `AbuseRulesStage` with the markup rule writing `moderation_detail.rules`, and the transcript marker for rule hits.
-4. `ModerationProvider` with the OpenAI type, and the Moderation section of team settings (enable, provider, auto-block).
-5. The `moderate_message` task, `ModerationResultStage`, `moderation_detail.output` and `skip_reason`, replacing the response with an `EventBot` message, LLM history exclusion, and the skipped notification.
-6. `Participant.strikes`, automatic blocking and the team notification.
-7. Remaining UI: session-list filters, strike count on the participant page, denylist and status counts in team settings, and the `moderation_status` export column.
-8. `block_participant` code node function.
+The work is split into one PR per task. The tasks, their order and their dependencies are tracked as sub-issues of #4269.
 
 ## Technical notes
 
