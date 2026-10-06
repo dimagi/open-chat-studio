@@ -553,8 +553,6 @@ class ExperimentChannel(BaseTeamModel):
         """Reverse of soft_delete(). Sessions ended with the channel stay ended."""
         self.deleted = False
         self.save(update_fields=["deleted"])
-        # A channel deleted on its own had its webhook cleared (see views.delete_channel), so an
-        # un-archive can meet either kind. Deferred: don't call a provider inside the transaction.
         transaction.on_commit(self._set_remote_webhook)
 
     def _set_remote_webhook(self):

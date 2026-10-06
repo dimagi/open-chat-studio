@@ -462,7 +462,9 @@ def unarchive_chatbot(request, team_slug: str, pk: int):
                 % {"channels": ", ".join(f"{channel.name} ({channel.platform_enum.label})" for channel in skipped)},
             )
     messages.success(request, _("Chatbot restored."))
-    return redirect(reverse("chatbots:single_chatbot_home", kwargs={"team_slug": team_slug, "experiment_id": pk}))
+    return HttpResponseClientRedirect(
+        reverse("chatbots:single_chatbot_home", kwargs={"team_slug": team_slug, "experiment_id": pk})
+    )
 
 
 class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):

@@ -1001,7 +1001,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self.static_triggers.get_all().update(is_archived=False)
         self.scheduled_triggers.get_all().update(is_archived=False)
         if self.is_working_version:
-            # All of them: leaving the default version archived would serve the working version instead.
             for version in self.versions.get_all().filter(is_archived=True):
                 version.unarchive()
         elif self.pipeline:
@@ -1027,7 +1026,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             experiment_id=self.id, deleted=True
         )
         for channel in deleted_channels:
-            # Slack has no identifier key: its conflict rules live in the form, not the model.
             identifier_key = channel.platform_enum.channel_identifier_key
             if not identifier_key:
                 skipped.append(channel)

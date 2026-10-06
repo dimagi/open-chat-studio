@@ -55,7 +55,8 @@ class TestUnarchiveChatbot:
 
         response = client.post(_unarchive_url(team_with_users, chatbot))
 
-        assert response.status_code == 302
+        assert response.status_code == 200
+        assert response.headers["HX-Redirect"].endswith(f"/chatbots/{chatbot.id}/")
         chatbot.refresh_from_db()
         assert chatbot.is_editable is True
 
@@ -84,8 +85,7 @@ class TestUnarchiveChatbot:
         assert trigger.is_archived is False
 
     def test_version_archived_on_its_own_comes_back_too(self, client, team_with_users):
-        """archive() cannot tell a deliberately retired version from collateral, so both return —
-        and a version retired on its own also has its pipeline, nodes and triggers to restore."""
+        """archive() cannot tell a retired version from collateral, so both come back."""
         owner = team_with_users.members.first()
         chatbot = ExperimentFactory.create(team=team_with_users, owner=owner)
         retired = chatbot.create_new_version()
@@ -194,6 +194,7 @@ class TestUnarchiveChatbot:
 
         page = response.content.decode()
         assert _unarchive_url(team_with_users, chatbot) in page
+        assert 'id="unarchive-confirm-options"' in page
         assert 'name="restore_channels"' in page
         assert "Scheduled messages were deleted" in page
 
@@ -328,7 +329,7 @@ class TestUnarchiveChatbotChannels:
         with django_capture_on_commit_callbacks(execute=True):
             response = client.post(_unarchive_url(team_with_users, chatbot), {"restore_channels": "on"})
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         channel.refresh_from_db()
         assert channel.deleted is False
 
