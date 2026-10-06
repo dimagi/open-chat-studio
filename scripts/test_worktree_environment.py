@@ -18,6 +18,7 @@ TEARDOWN_SCRIPT = REPOSITORY_ROOT / "scripts" / "teardown-worktree.sh"
 ENSURE_SETUP_SCRIPT = REPOSITORY_ROOT / "scripts" / "ensure-worktree-setup.sh"
 WORKTREE_ENVIRONMENT_SCRIPT = REPOSITORY_ROOT / "scripts" / "worktree-environment.sh"
 CODEX_HOOKS_FILE = REPOSITORY_ROOT / ".codex" / "hooks.json"
+CREATE_WORKTREE_HOOK = REPOSITORY_ROOT / ".claude" / "hooks" / "create-worktree.sh"
 
 
 # Enough of psql to answer "does this database exist?" and to remember the answer
@@ -416,7 +417,8 @@ def test_setup_configures_a_detached_codex_worktree(
     assert (root / ".env").read_text().endswith("REDIS_URL=redis://localhost:6379/0\n")
 
     command_output = command_log.read_text()
-    assert "bootstrap:--force --yes" in command_output
+    assert "bootstrap:--force --yes --skip-checks --only python" in command_output
+    assert "bootstrap:--force --yes --skip-checks --only node" in command_output
     assert 'CREATE DATABASE "codex_a1b2"' in command_output
     assert "uv:run python manage.py migrate" in command_output
     assert (
@@ -837,7 +839,28 @@ def test_setup_does_not_reconfigure_the_root_checkout(
     _run(SETUP_SCRIPT, cwd=root, env=env)
 
     assert (root / ".env").read_text() == original_env
-    assert command_log.read_text() == "bootstrap:--force --yes\n"
+    assert sorted(command_log.read_text().splitlines()) == [
+        "bootstrap:--force --yes --skip-checks --only node",
+        "bootstrap:--force --yes --skip-checks --only python",
+    ]
+
+
+def test_setup_fails_when_the_node_install_fails(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    _write_executable(
+        worktree / "scripts" / "bootstrap.sh",
+        "#!/usr/bin/env bash\n"
+        'mkdir -p "$PWD/.venv" "$PWD/node_modules"\n'
+        'if [[ "$*" == *"--only node"* ]]; then echo "pnpm exploded"; exit 3; fi\n',
+    )
+
+    result = _run(SETUP_SCRIPT, cwd=worktree, env=env, check=False)
+
+    assert result.returncode == 3
+    assert "pnpm exploded" in result.stdout
+    assert not (worktree / ".venv" / ".ocs-dependency-fingerprint").exists()
 
 
 def test_setup_copies_a_matching_template_instead_of_rebuilding(
@@ -854,10 +877,60 @@ def test_setup_copies_a_matching_template_instead_of_rebuilding(
 
     command_output = command_log.read_text()
     assert f'CREATE DATABASE "second_worktree" TEMPLATE "{template_name}"' in _created_databases(command_log)
-    # Migrated even though the template matched exactly: the stamp says nothing about
-    # migrations shipped by the packages in `uv.lock`.
-    assert "uv:run python manage.py migrate" in command_output
+    assert "uv:run python manage.py migrate" not in command_output
     assert "bootstrap_data" not in command_output
+
+
+@pytest.mark.parametrize(
+    "changed_input",
+    [
+        pytest.param("uv.lock", id="dependency-migrations"),
+        pytest.param("config/settings.py", id="periodic-tasks"),
+        pytest.param("apps/teams/backends.py", id="groups"),
+    ],
+)
+def test_setup_migrates_a_template_copy_when_migrate_inputs_changed(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    changed_input: str,
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    template_name = _template_name(worktree, env)
+    (worktree / changed_input).parent.mkdir(parents=True, exist_ok=True)
+    (worktree / changed_input).write_text("# changed\n")
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert f'CREATE DATABASE "second_worktree" TEMPLATE "{template_name}"' in _created_databases(command_log)
+    assert "uv:run python manage.py migrate" in command_log.read_text()
+    # The migrated copy becomes the template, so a third worktree skips migrate.
+    assert f'CREATE DATABASE "{template_name}" TEMPLATE "second_worktree"' in _created_databases(command_log)
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "third_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert "uv:run python manage.py migrate" not in command_log.read_text()
+
+
+def test_setup_migrates_a_copy_of_a_template_with_no_recorded_inputs(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    template_name = _template_name(worktree, env)
+    inputs_path = _run_worktree_helper(worktree, "ocs_template_inputs_path", worktree, template_name, env=env)
+    Path(inputs_path.stdout.strip()).unlink()
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert "uv:run python manage.py migrate" in command_log.read_text()
 
 
 def test_setup_migrates_forward_from_an_ancestor_template(
@@ -997,6 +1070,7 @@ def test_pruning_keeps_the_retained_template_and_the_newest_few(
     database_registry.write_text("".join(f"{template}\n" for template in templates))
     for template in templates:
         (stamp_directory / f"{template}.stamp").write_text("apps/example/migrations/0001_initial.py:1 2\n")
+        (stamp_directory / f"{template}.inputs").write_text("1:2\n")
     env["OCS_TEMPLATE_RETENTION"] = "1"
 
     _run_worktree_helper(
@@ -1014,7 +1088,9 @@ def test_pruning_keeps_the_retained_template_and_the_newest_few(
     assert f'DROP DATABASE IF EXISTS "{templates[1]}"' in command_output
     assert f'DROP DATABASE IF EXISTS "{templates[2]}"' in command_output
     assert not (stamp_directory / f"{templates[1]}.stamp").exists()
+    assert not (stamp_directory / f"{templates[1]}.inputs").exists()
     assert (stamp_directory / f"{templates[0]}.stamp").exists()
+    assert (stamp_directory / f"{templates[0]}.inputs").exists()
 
 
 def test_pruning_does_not_spend_a_retention_slot_on_the_retained_template(
@@ -1290,3 +1366,39 @@ def test_codex_hook_runs_when_a_session_resumes() -> None:
 
     assert "startup" in matcher.split("|")
     assert "resume" in matcher.split("|")
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="the WorktreeCreate hook parses its input with jq")
+def test_worktree_create_hook_skips_a_recent_fetch(tmp_path: Path) -> None:
+    origin = tmp_path / "origin.git"
+    clone = tmp_path / "clone"
+    fake_bin = tmp_path / "bin"
+    command_log = tmp_path / "commands.log"
+    _run("git", "init", "--bare", "--initial-branch=main", origin, cwd=tmp_path)
+    _run("git", "clone", origin, clone, cwd=tmp_path)
+    _run("git", "-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "--allow-empty", "-m", "x", cwd=clone)
+    _run("git", "push", "origin", "main", cwd=clone)
+    _write_executable(
+        fake_bin / "git",
+        f'#!/usr/bin/env bash\n[[ " $* " == *" fetch "* ]] && echo fetch >> "{command_log}"\n'
+        f'exec {shutil.which("git")} "$@"\n',
+    )
+
+    def create_worktree(name: str) -> None:
+        subprocess.run(
+            [CREATE_WORKTREE_HOOK],
+            input=json.dumps({"cwd": str(clone), "name": name}),
+            env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "TMPDIR": str(tmp_path)},
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    create_worktree("first")
+    create_worktree("second")
+    fetch_head = clone / ".git" / "FETCH_HEAD"
+    os.utime(fetch_head, (fetch_head.stat().st_atime, fetch_head.stat().st_mtime - 600))
+    create_worktree("third")
+
+    # The second worktree reuses the first one's fetch; the third finds it stale.
+    assert command_log.read_text().splitlines() == ["fetch", "fetch"]

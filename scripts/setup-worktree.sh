@@ -34,16 +34,35 @@ if [[ -f "$python_version_file" ]]; then
     UV_PYTHON=$(<"$python_version_file")
 fi
 
-"$CURRENT_PATH/scripts/bootstrap.sh" --force --yes
+# Nothing below needs the Node dependencies, so they install while the database is set up.
+node_install_log=$(mktemp)
+"$CURRENT_PATH/scripts/bootstrap.sh" --force --yes --skip-checks --only node \
+    < /dev/null > "$node_install_log" 2>&1 &
+node_install_pid=$!
+
+# Prints the install's output once, and fails if the install did.
+finish_node_install() {
+    local status=0
+
+    [[ -n "$node_install_pid" ]] || return 0
+    wait "$node_install_pid" || status=$?
+    node_install_pid=""
+    cat "$node_install_log"
+    return "$status"
+}
 
 # Hashing the migrations is the slowest bookkeeping step here, so it happens once and
 # the result is handed to every step that needs it: the template name, the ancestor
 # search and the dependency fingerprint.
 migration_stamp_file=$(mktemp)
-trap 'rm -f "$migration_stamp_file"' EXIT
+trap 'finish_node_install || true; rm -f "$migration_stamp_file" "$node_install_log"' EXIT
+
+"$CURRENT_PATH/scripts/bootstrap.sh" --force --yes --skip-checks --only python
+
 ocs_migration_stamp_lines "$CURRENT_PATH" > "$migration_stamp_file"
 
 if ocs_is_root_worktree "$CURRENT_PATH" "$ROOT_WORKTREE_PATH"; then
+    finish_node_install
     ocs_record_dependency_fingerprint "$CURRENT_PATH" "$migration_stamp_file"
     echo "[ocs] Setup complete for root checkout."
     exit 0
@@ -114,12 +133,17 @@ ocs_set_env_value \
     "$redis_url"
 export REDIS_URL="$redis_url"
 
-# Always migrated, even on an exact template match: the stamp a template is named for
-# covers this repository's migrations, not those of the packages in `uv.lock`. A
-# dependency bump that ships a migration leaves the stamp -- and so the template --
-# byte-identical, and only an unconditional migrate keeps that schema from going stale.
-# It costs a second or two against a database that is already up to date.
-uv run python manage.py migrate
+# The stamp a template is named for covers this repository's migrations only, so an exact
+# match still needs migrating unless the other inputs to `migrate` match as well. When
+# they do not, the migrated copy replaces the template, so the next copy can skip it.
+if [[ "$provisioning" == copy ]] && ocs_template_inputs_match "$CURRENT_PATH" "$template_source"; then
+    echo "[ocs] $template_source is current; skipping migrate."
+else
+    if [[ "$provisioning" == copy ]]; then
+        provisioning=copy_and_migrate
+    fi
+    uv run python manage.py migrate
+fi
 
 if [[ "$provisioning" == build ]] || ! ocs_database_is_seeded "$resource_name"; then
     # Seeding is not idempotent -- sample sessions, messages, traces and usage records
@@ -142,5 +166,6 @@ fi
 
 ocs_prune_template_databases "$CURRENT_PATH" "$template_name"
 
+finish_node_install
 ocs_record_dependency_fingerprint "$CURRENT_PATH" "$migration_stamp_file"
 echo "[ocs] Setup complete for $resource_name."
