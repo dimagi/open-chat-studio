@@ -94,10 +94,10 @@ class TestHandleConnectMessageTask:
         with patch("apps.channels.connect_channel.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
             handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
-            assert client_mock.send_message_to_user.call_count == 1
-            call_kwargs = client_mock.send_message_to_user.call_args[1]
+            assert client_mock.create_message.call_count == 1
+            call_kwargs = client_mock.create_message.call_args.kwargs
             assert call_kwargs["channel_id"] == commcare_connect_channel_id
-            assert call_kwargs["message"] == "Hi human"
+            assert call_kwargs["text"] == "Hi human"
             assert call_kwargs["encryption_key"] == encryption_key
 
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -115,7 +115,7 @@ class TestHandleConnectMessageTask:
             handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
             handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
 
-            assert client_mock.send_message_to_user.call_count == 1
+            assert client_mock.create_message.call_count == 1
 
         assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
 

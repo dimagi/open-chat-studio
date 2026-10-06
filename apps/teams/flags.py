@@ -39,6 +39,11 @@ class Flags(FlagInfo, Enum):
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
+    COMMCARE_CONNECT_SEND_FCM_FALLBACK = (
+        "flag_commcare_connect_send_fcm_fallback",
+        "Sends CommCare Connect messages through the legacy send_fcm endpoint; files are sent as links",
+    )
+
     EVALS = ("flag_evaluations", "Chatbot Evaluations (beta)", "evals", [], True)
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")

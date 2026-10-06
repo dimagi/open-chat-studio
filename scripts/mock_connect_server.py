@@ -21,8 +21,10 @@ Key flow:
   2. This server immediately calls OCS's /api/commcare_connect/generate_key endpoint
      to negotiate the encryption key (OCS calls back to /o/userinfo/ to validate
      the bearer token, then returns the base64-encoded AES-256 key).
-  3. OCS sends bot replies via POST /messaging/send_fcm/ — this server decrypts and
-     prints them.
+  3. OCS sends bot replies via POST /messaging/create_message/ — this server decrypts and
+     prints the text and saves decrypted attachments to a temporary directory. With the
+     flag_commcare_connect_send_fcm_fallback flag on, replies come to POST /messaging/send_fcm/
+     instead, text only.
   4. Use the interactive prompt to send an encrypted user message to OCS's
      /channels/commcare_connect/incoming_message endpoint.
 
@@ -50,9 +52,11 @@ import hmac as hmac_lib
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import uuid
+from pathlib import Path
 
 import httpx
 from Crypto.Cipher import AES
@@ -73,6 +77,9 @@ _channels: dict[str, dict] = {}
 # Ephemeral bearer token -> connect_id, used during key negotiation callbacks
 _tokens: dict[str, str] = {}
 
+# create_message refuses a message_id it has already stored, as PersonalID does
+_message_ids: set[str] = set()
+
 _config: dict = {}
 
 
@@ -90,6 +97,12 @@ def _encrypt(key: bytes, message: str) -> tuple[str, str, str]:
 def _decrypt(key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
     cipher = AES.new(key, AES.MODE_GCM, nonce=base64.b64decode(nonce))
     return cipher.decrypt_and_verify(base64.b64decode(ciphertext), base64.b64decode(tag)).decode()
+
+
+def _decrypt_attachment(key: bytes, blob: bytes) -> bytes:
+    """An attachment is a 12-byte nonce, the ciphertext, then a 16-byte tag."""
+    cipher = AES.new(key, AES.MODE_GCM, nonce=blob[:12])
+    return cipher.decrypt_and_verify(blob[12:-16], blob[-16:])
 
 
 def _hmac_digest(secret: str, body: bytes) -> bytes:
@@ -177,6 +190,89 @@ def send_fcm():
         print(f"\n[send_fcm] Decryption error: {exc}")
 
     return jsonify({"message_id": message_id})
+
+
+@app.post("/messaging/create_message/")
+def create_message():
+    """
+    OCS calls this to deliver an encrypted bot reply, with or without attachments. The request
+    is multipart: a "message" form field holding JSON, and one file part per attachment named
+    attachment_0, attachment_1, ... We check it the way PersonalID does, print the decrypted
+    text and save the decrypted attachments.
+    """
+    _verify_basic_auth()
+    try:
+        body = json.loads(request.form["message"])
+    except (KeyError, ValueError):
+        return _create_message_error("INVALID_MESSAGE", "missing or invalid JSON part")
+
+    channel_id = body.get("channel", "")
+    channel = _channels.get(channel_id)
+    if not channel:
+        return _create_message_error("CHANNEL_DOES_NOT_EXIST", channel_id)
+    key = channel.get("encryption_key")
+    if not key:
+        print(f"\n[create_message] No encryption key yet for channel {channel_id}")
+        return jsonify({"detail": "Key not yet negotiated"}), 503
+    if refusal := _create_message_refusal(body):
+        return _create_message_error(*refusal)
+
+    attachments = body.get("attachments", [])
+    blobs = [request.files[f"attachment_{index}"].read() for index in range(len(attachments))]
+    for attachment, blob in zip(attachments, blobs, strict=True):
+        if len(blob) != attachment["size"]:
+            return _create_message_error("ATTACHMENT_SIZE_MISMATCH", attachment["name"])
+
+    _message_ids.add(body.get("message_id", ""))
+    _print_message(key, body)
+    for attachment, blob in zip(attachments, blobs, strict=True):
+        _save_attachment(key, body.get("message_id", ""), attachment, blob)
+
+    return jsonify({"message_id": body.get("message_id", "")})
+
+
+def _create_message_refusal(body: dict) -> tuple[str, str] | None:
+    """The error code and detail PersonalID would refuse this message with, if any."""
+    attachments = body.get("attachments", [])
+    if "content" not in body:
+        if not attachments:
+            return "INVALID_MESSAGE_CONTENT", "no content and no attachments"
+        if "content_legacy_msg" not in body:
+            return "CONTENT_LEGACY_MSG_REQUIRED", "attachments without content"
+    if body.get("message_id", "") in _message_ids:
+        return "MESSAGE_ID_ALREADY_EXISTS", body.get("message_id", "")
+    if set(request.files) != {f"attachment_{index}" for index in range(len(attachments))}:
+        return "ATTACHMENT_PARTS_MISMATCH", f"parts {sorted(request.files)}"
+    return None
+
+
+def _create_message_error(code: str, detail: str):
+    print(f"\n[create_message] Refused with {code}: {detail}")
+    return jsonify({"errors": code}), 400
+
+
+def _print_message(key: bytes, body: dict) -> None:
+    print(f"\n[create_message] message_id={body.get('message_id', '')}")
+    for field_name, label in (("content", "[BOT -> USER]"), ("content_legacy_msg", "  legacy text:")):
+        if encrypted := body.get(field_name):
+            try:
+                text = _decrypt(key, encrypted["ciphertext"], encrypted["tag"], encrypted["nonce"])
+            except Exception as exc:
+                text = f"<decryption error: {exc}>"
+            print(f"{label} {text}")
+    if expires_at := body.get("expires_at"):
+        print(f"  expires_at: {expires_at}")
+
+
+def _save_attachment(key: bytes, message_id: str, attachment: dict, blob: bytes) -> None:
+    try:
+        content = _decrypt_attachment(key, blob)
+    except Exception as exc:
+        print(f"  [attachment] {attachment['name']}: decryption error: {exc}")
+        return
+    path = _config["attachment_dir"] / f"{message_id}-{Path(attachment['name']).name}"
+    path.write_bytes(content)
+    print(f"  [attachment] {attachment['name']} ({attachment['type']}, {len(content)} bytes) -> {path}")
 
 
 @app.post("/messaging/callback/")
@@ -392,10 +488,12 @@ def main() -> None:
     _config["ocs_url"] = args.ocs_url.rstrip("/")
     _config["secret"] = args.secret
     _config["server_id"] = args.server_id
+    _config["attachment_dir"] = Path(tempfile.mkdtemp(prefix="mock-connect-attachments-"))
 
     print(f"Mock CommCare Connect server on http://localhost:{args.port}")
-    print(f"  OCS URL   : {_config['ocs_url']}")
-    print(f"  Server ID : {_config['server_id']}")
+    print(f"  OCS URL     : {_config['ocs_url']}")
+    print(f"  Server ID   : {_config['server_id']}")
+    print(f"  Attachments : {_config['attachment_dir']}")
     print()
     print("OCS .env settings:")
     print(f"  COMMCARE_CONNECT_SERVER_URL=http://localhost:{args.port}")
