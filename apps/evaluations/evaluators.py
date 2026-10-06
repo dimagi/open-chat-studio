@@ -18,7 +18,7 @@ from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.main import LlmService
 from apps.service_providers.llm_service.prompt_context import SafeAccessWrapper
-from apps.service_providers.llm_service.retry import RATE_LIMIT_EXCEPTIONS
+from apps.service_providers.llm_service.retry import rate_limit_exceptions
 from apps.service_providers.llm_service.structured_output import structured_output_runnable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
@@ -125,7 +125,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
 
         llm_with_retry = llm.with_retry(
             stop_after_attempt=3,
-            retry_if_exception_type=(ValueError, *RATE_LIMIT_EXCEPTIONS),
+            retry_if_exception_type=(ValueError, *rate_limit_exceptions()),
         )
 
         try:

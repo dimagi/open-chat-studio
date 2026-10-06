@@ -275,6 +275,8 @@ banned-module-level-imports = [
     "voyageai",
     # Imports transformers on the way in; 2s cumulative.
     "langchain_text_splitters",
+    # Reads every installed package's metadata on import; 0.8s.
+    "google.api_core",
 ]
 
 [dependency-groups]
