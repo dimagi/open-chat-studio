@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {EditorView} from "@codemirror/view";
 import {apiClient} from "../api/api";
 import {CodeDiffEditor} from "../components/CodeDiffEditor";
@@ -25,9 +25,17 @@ export default function ImprovePromptSection(
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Bumped when a request starts and when the user discards the proposal, so a response to a
-  // request that is no longer current is ignored.
+  // Bumped when a request starts, when the user discards the proposal and when the prompt changes,
+  // so a response to a request that is no longer current is ignored.
   const requestRevisionRef = useRef(0);
+
+  // A proposal, or a pending request, was made from the prompt as it was then. Once the prompt
+  // is edited, accepting it would overwrite the edit.
+  useEffect(() => {
+    requestRevisionRef.current += 1;
+    setBusy(false);
+    setProposal(null);
+  }, [currentPrompt]);
 
   const diffExtensions = useMemo(
     () => [EditorView.lineWrapping, highlightAutoCompleteVars(autocompleteVars), autocompleteVarTheme()],
@@ -65,7 +73,8 @@ export default function ImprovePromptSection(
     setProposal(null);
   };
   const handleAccept = () => {
-    onAccept((proposal as Proposal).prompt);
+    if (!proposal) return;
+    onAccept(proposal.prompt);
     discard();
     setInstruction("");
     setError("");

@@ -1263,12 +1263,19 @@ export function TextEditorWidget(props: WidgetParams) {
     () => getAutoCompleteList(getSelectOptions(props.schema)),
     [props.schema]
   );
-  // Serialised so the editor is only reconfigured when the tool list changes, not on every edit
-  // to the node's params.
-  const toolsKey = JSON.stringify(
-    props.nodeSchema.properties.tools ? getEnabledToolNames(props.nodeParams, getCachedData().parameterValues) : []
+  // Keyed on the tool params rather than the whole params object, which changes on every edit to
+  // the prompt and would reconfigure the editor on each keystroke.
+  const hasTools = !!props.nodeSchema.properties.tools;
+  const {tools, custom_actions, mcp_tools, collection_id, collection_index_ids} = props.nodeParams;
+  const toolCompletions: ToolCompletion[] = useMemo(
+    () => hasTools
+      ? getEnabledToolNames(
+        {name: "", tools, custom_actions, mcp_tools, collection_id, collection_index_ids},
+        getCachedData().parameterValues,
+      )
+      : [],
+    [hasTools, tools, custom_actions, mcp_tools, collection_id, collection_index_ids]
   );
-  const toolCompletions: ToolCompletion[] = useMemo(() => JSON.parse(toolsKey), [toolsKey]);
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 

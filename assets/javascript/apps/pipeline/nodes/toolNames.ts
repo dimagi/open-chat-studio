@@ -15,9 +15,10 @@ function findOption(options: Option[] | undefined, value: string): Option | unde
   return (options ?? []).find((option) => String(option.value) === value);
 }
 
-/** The part of a "<id>:<name>" param value after the id. */
+/** The part of a "<id>:<name>" param value after the id, or the whole value if it has no id. */
 function afterId(value: string): string {
-  return value.slice(value.indexOf(":") + 1);
+  const separator = value.indexOf(":");
+  return separator === -1 ? value : value.slice(separator + 1);
 }
 
 /** The tools this node gives the LLM, under the names the LLM sees them by. */

@@ -35,6 +35,7 @@ describe("getEnabledToolNames", () => {
     ["a custom action", {custom_actions: ["7:weather_get"]}, [{name: "weather_get", label: "Weather: Get the weather"}]],
     ["a custom action with no option", {custom_actions: ["9:lookup"]}, [{name: "lookup", label: "lookup"}]],
     ["an MCP tool", {mcp_tools: ["3:search:docs"]}, [{name: "search:docs", label: "Docs server: search:docs"}]],
+    ["a value with no id", {custom_actions: ["lookup"]}, [{name: "lookup", label: "lookup"}]],
     ["a media collection", {collection_id: 5}, [{name: "attach-media", label: "Attach Media"}]],
     ["one local index", {collection_index_ids: [1]}, [{name: "file-search", label: "File Search"}]],
     ["several local indexes", {collection_index_ids: [1, "2"]}, [{name: "file-search-by-index", label: "File Search"}]],

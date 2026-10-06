@@ -32,7 +32,13 @@ export default function FindPanel({isOpen, setIsOpen}: FindPanelParams) {
     const {nodeSchemas, flagsEnabled} = getCachedData();
     return searchNodes(nodes, nodeSchemas, query, flagsEnabled);
   }, [nodes, query]);
-  const rows = results.flatMap((result) => result.matches.map((match) => ({nodeId: result.nodeId, field: match.field})));
+  // Every match in display order, and where each node's matches start in that list.
+  const rows: {nodeId: string; field: string}[] = [];
+  const firstRow = results.map((result) => {
+    const first = rows.length;
+    rows.push(...result.matches.map((match) => ({nodeId: result.nodeId, field: match.field})));
+    return first;
+  });
 
   function updateQuery(value: string) {
     setQuery(value);
@@ -65,6 +71,7 @@ export default function FindPanel({isOpen, setIsOpen}: FindPanelParams) {
       event.preventDefault();
       activate(activeIndex);
     } else if (event.key === "Escape") {
+      // OverlayPanel's Escape hotkey does not fire while focus is in a form field.
       setIsOpen(false);
     }
   }
@@ -74,7 +81,6 @@ export default function FindPanel({isOpen, setIsOpen}: FindPanelParams) {
     ? "No matches"
     : `${rows.length} ${rows.length === 1 ? "match" : "matches"} in ${nodeCount} ${nodeCount === 1 ? "node" : "nodes"}`;
 
-  let rowIndex = 0;
   return (
     <div className="relative">
       <button
@@ -107,14 +113,14 @@ export default function FindPanel({isOpen, setIsOpen}: FindPanelParams) {
             />
             {query.trim() && <p className="text-xs text-base-content/70 mt-2">{summary}</p>}
             <div ref={listRef} role="listbox" aria-label="Search results">
-              {results.map((result) => (
+              {results.map((result, resultIndex) => (
                 <div key={result.nodeId} className="mt-3">
                   <div className="text-sm font-bold">
                     {result.nodeName}
                     <span className="ml-2 font-normal text-base-content/70">{result.nodeLabel}</span>
                   </div>
-                  {result.matches.map((match) => {
-                    const index = rowIndex++;
+                  {result.matches.map((match, matchIndex) => {
+                    const index = firstRow[resultIndex] + matchIndex;
                     return (
                       <div
                         key={index}

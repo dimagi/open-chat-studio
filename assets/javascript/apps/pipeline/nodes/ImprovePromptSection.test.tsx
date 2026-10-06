@@ -14,17 +14,21 @@ vi.mock("../components/CodeDiffEditor", () => ({
 const CURRENT = "Help people. {participant_data}";
 const REWRITE = "You are a support assistant. {participant_data}";
 
-function renderSection(onAccept = vi.fn()) {
-  render(
+function section(onAccept: (value: string) => void, currentPrompt = CURRENT) {
+  return (
     <ImprovePromptSection
       show={true}
-      currentPrompt={CURRENT}
+      currentPrompt={currentPrompt}
       nodeType="llm"
       toolNames={["one-off-reminder"]}
       autocompleteVars={["participant_data"]}
       onAccept={onAccept}
-    />,
+    />
   );
+}
+
+function renderSection(onAccept = vi.fn()) {
+  render(section(onAccept));
   return onAccept;
 }
 
@@ -118,6 +122,34 @@ describe("ImprovePromptSection", () => {
 
     await waitFor(() => expect(screen.getByText("Improve")).not.toBeDisabled());
     expect(screen.queryByTestId("prompt-diff")).toBeNull();
+  });
+
+  it("drops the proposal when the prompt is edited while it is showing", async () => {
+    vi.spyOn(apiClient, "improvePrompt").mockResolvedValue({response: {prompt: REWRITE, notes: ["Stated the role."]}});
+    const onAccept = vi.fn();
+    const {rerender} = render(section(onAccept));
+    await improve();
+
+    rerender(section(onAccept, CURRENT + " Edited."));
+
+    expect(screen.queryByTestId("prompt-diff")).toBeNull();
+    expect(screen.queryByText("Accept")).toBeNull();
+    expect(onAccept).not.toHaveBeenCalled();
+  });
+
+  it("ignores a response to a prompt that was edited while the request ran", async () => {
+    let resolve: (value: {response: {prompt: string; notes: string[]}}) => void = () => {};
+    vi.spyOn(apiClient, "improvePrompt").mockReturnValue(new Promise((r) => { resolve = r; }));
+    const onAccept = vi.fn();
+    const {rerender} = render(section(onAccept));
+
+    fireEvent.click(screen.getByText("Improve"));
+    rerender(section(onAccept, CURRENT + " Edited."));
+    resolve({response: {prompt: REWRITE, notes: ["Stated the role."]}});
+
+    await waitFor(() => expect(screen.getByText("Improve")).not.toBeDisabled());
+    expect(screen.queryByTestId("prompt-diff")).toBeNull();
+    expect(screen.queryByText("Stated the role.")).toBeNull();
   });
 
   it("does not send a second request while one is running", () => {

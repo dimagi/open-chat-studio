@@ -2,11 +2,11 @@ import json
 from unittest import mock
 
 import pytest
-from django.test import RequestFactory
+from django.urls import reverse
 
 from apps.help.agents.prompt_improve import PromptImproveAgent, PromptImproveInput, PromptImproveOutput
 from apps.help.registry import AGENT_REGISTRY
-from apps.help.views import run_agent
+from apps.utils.factories.team import TeamWithUsersFactory
 
 ORIGINAL = "You help people. Data: {participant_data}"
 REWRITE = "You are a support assistant. Answer briefly.\n\nParticipant data: {participant_data}"
@@ -122,11 +122,22 @@ def test_nested_variables_count_as_their_root(llm):
     assert _run(prompt="Hi {participant_data.name}") == output
 
 
+@pytest.mark.django_db()
 class TestPromptImproveView:
-    def _post(self, body):
-        request = RequestFactory().post("/help/prompt_improve/", data=json.dumps(body), content_type="application/json")
-        request.team = mock.Mock(id=1)
-        return run_agent.__wrapped__.__wrapped__(request, team_slug="test-team", agent_name="prompt_improve")
+    @pytest.fixture()
+    def team(self, team_with_users):
+        return team_with_users
+
+    @pytest.fixture()
+    def member_client(self, client, team):
+        client.force_login(team.members.first())
+        return client
+
+    def _url(self, team):
+        return reverse("help:run_agent", args=[team.slug, "prompt_improve"])
+
+    def _post(self, client, team, body):
+        return client.post(self._url(team), data=json.dumps(body), content_type="application/json")
 
     @pytest.mark.parametrize(
         "body",
@@ -135,13 +146,32 @@ class TestPromptImproveView:
             pytest.param({"prompt": "x", "node_type": "email"}, id="unknown-node-type"),
         ],
     )
-    def test_invalid_input_returns_400(self, body):
-        assert self._post(body).status_code == 400
+    def test_invalid_input_returns_400(self, member_client, team, body):
+        assert self._post(member_client, team, body).status_code == 400
 
-    def test_returns_the_rewrite_and_notes(self, llm):
+    def test_returns_the_rewrite_and_notes(self, member_client, team, llm):
         llm.invoke.side_effect = _responses(PromptImproveOutput(prompt=REWRITE, notes=["Stated the role."]))
 
-        response = self._post({"prompt": ORIGINAL, "tool_names": [], "instruction": ""})
+        response = self._post(member_client, team, {"prompt": ORIGINAL, "tool_names": [], "instruction": ""})
 
         assert response.status_code == 200
-        assert json.loads(response.content) == {"response": {"prompt": REWRITE, "notes": ["Stated the role."]}}
+        assert response.json() == {"response": {"prompt": REWRITE, "notes": ["Stated the role."]}}
+
+    def test_rejects_a_get(self, member_client, team):
+        assert member_client.get(self._url(team)).status_code == 405
+
+    @pytest.mark.parametrize(
+        ("login", "status"),
+        [
+            pytest.param(False, 302, id="anonymous-is-sent-to-login"),
+            pytest.param(True, 404, id="non-member-gets-not-found"),
+        ],
+    )
+    def test_requires_a_team_member(self, client, team, llm, login, status):
+        if login:
+            client.force_login(TeamWithUsersFactory.create().members.first())
+
+        response = self._post(client, team, {"prompt": ORIGINAL})
+
+        assert response.status_code == status
+        llm.invoke.assert_not_called()
