@@ -1628,7 +1628,10 @@ def export_evaluation_run_results_task(self, evaluation_run_id: int, team_id: in
         with current_team(run.team):
             results = run.export_results
             total = results.values("message_id").distinct().count()
-            rows = iter_evaluation_table_rows(annotate_export_fields(results).order_by("message_id"))
+            # The results upload matches each row back to its message on the id column.
+            rows = iter_evaluation_table_rows(
+                queryset=annotate_export_fields(results).order_by("message_id"), include_ids=True
+            )
             rows = _report_row_progress(rows, total, ProgressRecorder(self))
 
             filename = f"{run.config.name}_results_{run.id}.csv"

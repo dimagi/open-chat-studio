@@ -82,6 +82,22 @@ def test_export_evaluation_run_results_task_creates_csv_file():
 
 
 @pytest.mark.django_db()
+def test_export_evaluation_run_results_task_includes_the_message_id_the_upload_matches_on():
+    config = EvaluationConfigFactory.create()
+    team = config.team
+    evaluator = EvaluatorFactory.create(team=team)
+    run = _completed_run(team, config)
+    result = EvaluationResultFactory.create(
+        team=team, run=run, evaluator=evaluator, output=_evaluator_output({"score": 8.5}, "Generated response")
+    )
+
+    export = export_evaluation_run_results_task(run.id, team.id)
+
+    _, rows = _read_csv_rows(export["file_id"])
+    assert rows[0]["id"] == str(result.message_id)
+
+
+@pytest.mark.django_db()
 def test_export_evaluation_run_results_task_excludes_other_runs_of_the_same_config():
     config = EvaluationConfigFactory.create()
     team = config.team
