@@ -55,6 +55,16 @@ class TestTrailingWindow:
 
 @pytest.mark.django_db()
 class TestWeeklyActivityByMonth:
+    def test_many_messages_in_one_week_count_as_a_single_week(self, team, experiment, participant):
+        session = _create_session(experiment, participant, team)
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        for hour in (9, 11, 14, 16):
+            _create_message(session, timezone.datetime(2026, 3, 3, hour, 0, tzinfo=ZoneInfo("UTC")))
+
+        activity = weekly_activity_by_month(team, filters={}, now=now)
+
+        assert activity[date(2026, 3, 1)] == {participant.id: 1}
+
     def test_buckets_distinct_weeks_per_participant_per_month(self, team, experiment, participant):
         other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
         session = _create_session(experiment, participant, team)

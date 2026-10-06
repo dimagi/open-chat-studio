@@ -58,7 +58,8 @@ def weekly_activity_by_month(team: Team, *, filters: dict, now: datetime | None 
     start, end, months = trailing_window(now)
     messages = _human_messages(team, start=start, end=end, filters=filters)
     rows = (
-        messages.annotate(week=TruncWeek("created_at", tzinfo=TZ))
+        messages.order_by()
+        .annotate(week=TruncWeek("created_at", tzinfo=TZ))
         .values("chat__experiment_session__participant_id", "week")
         .distinct()
     )
@@ -145,7 +146,8 @@ class EngagementDashboardService:
         start, end, _months = trailing_window(now)
         messages = _human_messages(self.team, start=start, end=end, filters=filters)
         rows = (
-            messages.annotate(week=TruncWeek("created_at", tzinfo=TZ))
+            messages.order_by()
+            .annotate(week=TruncWeek("created_at", tzinfo=TZ))
             .values("chat__experiment_session__participant_id", "week")
             .distinct()
         )
