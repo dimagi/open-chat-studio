@@ -24,6 +24,37 @@ export function textEditorVarCompletions(autocompleteVars) {
   };
 }
 
+// Tool names go into the prompt as plain text: braces are reserved for prompt variables.
+export function toolNameCompletions(tools) {
+  return (context) => {
+    const word = context.matchBefore(/[A-Za-z0-9_-]*$/);
+    if (!word) return null;
+    if (word.to - word.from < 2 && !context.explicit) return null;
+    if (context.state.doc.sliceString(word.from - 1, word.from) === "{") return null;
+
+    // Offered only when the typed word starts the name or one of its parts, not on CodeMirror's
+    // fuzzy match, which pops a tool up for ordinary words ("the" in "weather_get") and lets Enter
+    // replace the word.
+    const typed = word.text.toLowerCase();
+    const matches = tools.filter((tool) =>
+      [tool.name, ...tool.name.split(/[-_]/)].some((part) => part.toLowerCase().startsWith(typed))
+    );
+    if (matches.length === 0) return null;
+
+    return {
+      from: word.from,
+      filter: false,
+      options: matches.map((tool) => ({
+        label: tool.name,
+        type: "function",
+        detail: tool.label,
+        // No `section`: CodeMirror ranks every sectioned option below every unsectioned one.
+        info: tool.note ?? "Tool enabled on this node. Inserted as plain text.",
+      })),
+    };
+  };
+}
+
 // highlight auto complete words. valid - blue, invalid - red
 export function highlightAutoCompleteVars(autocompleteVars) {
   return ViewPlugin.fromClass(

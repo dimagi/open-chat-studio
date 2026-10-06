@@ -2,6 +2,8 @@
       value: string;
       label: string;
       edit_url?: string | undefined;
+      type?: string | undefined;
+      tool_name?: string | undefined;
     }
 
     export type TypedOption = {

@@ -5,6 +5,7 @@ from apps.utils.prompt import (
     PROMPT_VAR_DESCRIPTIONS,
     PROMPT_VARS_REQUIRING_RESOURCES,
     PromptVars,
+    get_prompt_variables,
     validate_prompt_variables,
 )
 
@@ -57,3 +58,28 @@ def test_every_offered_prompt_var_has_a_description():
         }
     )
     assert not missing, f"Add these to PROMPT_VAR_DESCRIPTIONS in apps/utils/prompt.py: {missing}"
+
+
+@pytest.mark.parametrize(
+    ("prompt", "variables"),
+    [
+        pytest.param("No variables here", set(), id="none"),
+        pytest.param("{participant_data} and {source_material}", {"participant_data", "source_material"}, id="plain"),
+        pytest.param("{participant_data.name} {temp_state[key]}", {"participant_data", "temp_state"}, id="nested"),
+        pytest.param('JSON like {{"ok": true}}', set(), id="escaped-braces"),
+    ],
+)
+def test_get_prompt_variables(prompt, variables):
+    assert get_prompt_variables(prompt) == variables
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param("Unclosed {participant_data", id="unbalanced"),
+        pytest.param("{participant_data!r}", id="conversion"),
+    ],
+)
+def test_get_prompt_variables_rejects_a_prompt_that_does_not_parse(prompt):
+    with pytest.raises(ValidationError):
+        get_prompt_variables(prompt)

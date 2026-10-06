@@ -131,6 +131,11 @@ def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
     return prompt_variables, prompt_text
 
 
+def get_prompt_variables(prompt: str) -> set[str]:
+    """The root variables `prompt` references. Raises `ValidationError` if the prompt does not parse."""
+    return _inspect_prompt({"prompt": prompt}, "prompt")[0]
+
+
 def validate_prompt_variables(context, prompt_key: str, known_vars: set):
     """Ensures that the variables expected by the prompt has values and that only those in `known_vars` are allowed
     to be used, otherwise a `ValidationError` is thrown.

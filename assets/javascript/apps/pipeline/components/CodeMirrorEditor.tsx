@@ -5,7 +5,8 @@ import CodeMirror, {EditorState} from "@uiw/react-codemirror";
 import {autocompletion, CompletionContext, snippetCompletion as snip} from "@codemirror/autocomplete";
 import {python} from "@codemirror/lang-python";
 import {EditorView} from "@codemirror/view";
-import {textEditorVarCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
+import {textEditorVarCompletions, toolNameCompletions, highlightAutoCompleteVars, autocompleteVarTheme} from "../../../utils/codemirror-extensions.js";
+import {ToolCompletion} from "../nodes/toolNames";
 import {jinja} from "@codemirror/lang-jinja";
 import {linter, Diagnostic} from "@codemirror/lint";
 
@@ -239,29 +240,30 @@ export function CodeNodeEditor(
 
 
 export function PromptEditor(
-  {value, onChange, readOnly, autocompleteVars}: {
+  {value, onChange, readOnly, autocompleteVars, toolCompletions}: {
     value: string;
     onChange: (value: string) => void;
     readOnly: boolean;
     autocompleteVars: string[];
+    toolCompletions?: ToolCompletion[];
   }
 ) {
-  let extensions = [
-    autocompletion({
-      override: [textEditorVarCompletions(autocompleteVars)],
-      activateOnTyping: true,
-    }),
-    highlightAutoCompleteVars(autocompleteVars),
-    autocompleteVarTheme(),
-    EditorView.lineWrapping,
-  ];
-  if (readOnly) {
-    extensions = [
-      ...extensions,
-      EditorView.editable.of(false),
-      EditorState.readOnly.of(true),
-    ]
-  }
+  const extensions = useMemo(() => {
+    const completionSources = [textEditorVarCompletions(autocompleteVars)];
+    if (toolCompletions?.length) {
+      completionSources.push(toolNameCompletions(toolCompletions));
+    }
+    const exts = [
+      autocompletion({override: completionSources, activateOnTyping: true}),
+      highlightAutoCompleteVars(autocompleteVars),
+      autocompleteVarTheme(),
+      EditorView.lineWrapping,
+    ];
+    if (readOnly) {
+      exts.push(EditorView.editable.of(false), EditorState.readOnly.of(true));
+    }
+    return exts;
+  }, [autocompleteVars, toolCompletions, readOnly]);
   return <CodeMirrorEditor value={value} onChange={onChange} extensions={extensions}/>;
 }
 

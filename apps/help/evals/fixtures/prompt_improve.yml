@@ -1,0 +1,83 @@
+- id: vague_prompt_with_reminder_tools
+  input:
+    prompt: |
+      you are a helpful bot. help the user with there appointments and be nice. dont be rude.
+      Remind them of stuff if they ask.
+      {participant_data}
+      {current_datetime}
+    tool_names: ["one-off-reminder", "recurring-reminder"]
+  checks:
+    - type: prompt_vars
+      expected: ["participant_data", "current_datetime"]
+    - type: llm_judge
+      criteria: >
+        The output has a `prompt` and `notes`. The prompt is a clearer version of a system prompt for
+        an appointment assistant: it states the assistant's role and says when to use the
+        one-off-reminder and recurring-reminder tools, referring to them by those exact names. It
+        does not mention any other tool. It labels what {participant_data} and {current_datetime}
+        hold. The notes are at most five short sentences describing the changes.
+
+- id: already_good_prompt
+  input:
+    prompt: |
+      You are a support assistant for a community health clinic. You answer questions from
+      patients about opening hours, locations and how to book an appointment.
+
+      Reply in the language the patient writes in. Keep replies under 80 words and use plain
+      language. If you do not know the answer, say so and give the clinic's front desk as the
+      place to ask. Never give medical advice; tell the patient to speak to a clinician.
+
+      What we know about the patient:
+      {participant_data}
+  checks:
+    - type: prompt_vars
+      expected: ["participant_data"]
+    - type: llm_judge
+      criteria: >
+        The `prompt` in the output is the same as, or differs only trivially from, a prompt for a
+        community health clinic support assistant that replies in the patient's language, keeps
+        replies under 80 words, admits when it does not know and never gives medical advice. It has
+        not been restructured or lengthened. The notes say that little or nothing needed changing.
+
+- id: router_prompt
+  input:
+    node_type: router
+    prompt: |
+      Decide where the message goes. billing is for money stuff, support for problems.
+      {participant_data}
+  checks:
+    - type: prompt_vars
+      expected: ["participant_data"]
+    - type: llm_judge
+      criteria: >
+        The `prompt` tells a classifier when to choose a billing route and when to choose a support
+        route, and what to do when a message fits neither. It does not instruct the model on how to
+        write a reply to the user.
+
+- id: instruction_driven_edit
+  input:
+    prompt: |
+      You are a friendly assistant for a bakery. Tell customers about our bread and cakes.
+      Customer details: {participant_data}
+    instruction: Make the assistant reply only in Spanish.
+  checks:
+    - type: prompt_vars
+      expected: ["participant_data"]
+    - type: llm_judge
+      criteria: >
+        The `prompt` instructs the assistant to reply only in Spanish. It is still a prompt for a
+        bakery assistant that tells customers about bread and cakes. At least one note mentions
+        the Spanish-only change.
+
+- id: literal_json_braces
+  input:
+    prompt: |
+      Extract the order from the message and answer with JSON like {{"item": "bread", "quantity": 2}}.
+      Customer: {participant_data}
+  checks:
+    - type: prompt_vars
+      expected: ["participant_data"]
+    - type: llm_judge
+      criteria: >
+        The `prompt` still contains a JSON example with doubled braces, i.e. the text `{{` and `}}`
+        around the example object.

@@ -9,6 +9,18 @@ type AiHelpResponse = {
 }
 
 
+export type PromptImproveRequest = {
+  prompt: string;
+  node_type: "llm" | "router";
+  tool_names: string[];
+  instruction: string;
+}
+
+export type PromptImproveResponse = {
+  response?: { prompt: string; notes: string[] };
+  error?: string;
+}
+
 class ApiClient {
   private team: string | null;
   constructor() {
@@ -103,6 +115,10 @@ class ApiClient {
 
   public async generateCode(prompt: string, currentCode: string): Promise<AiHelpResponse> {
     return this.makeRequest<AiHelpResponse>("post", `/help/code_generate/`, {query: prompt, context: currentCode});
+  }
+
+  public async improvePrompt(request: PromptImproveRequest): Promise<PromptImproveResponse> {
+    return this.makeRequest<PromptImproveResponse>("post", `/help/prompt_improve/`, request);
   }
 
   public async validateJinja(

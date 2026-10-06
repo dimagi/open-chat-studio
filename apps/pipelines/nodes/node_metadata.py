@@ -23,7 +23,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel, VoicePr
 from apps.teams.models import Team
 from apps.utils.fields import as_int
 from apps.utils.prompt import PromptVars
-from apps.utils.schema_utils import collapse_optional_types, resolve_references
+from apps.utils.schema_utils import collapse_optional_types, resolve_references, sanitize_property_name
 
 
 def get_node_parameter_values(
@@ -169,6 +169,7 @@ def _team_resource_options(team: Team, include_versions: bool) -> dict:
             _option(
                 value=index["id"],
                 label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
+                type_="remote" if index["is_remote_index"] else "local",
                 edit_url=_collection_url(index["id"]),
             )
             for index in collection_indexes
@@ -190,7 +191,10 @@ def _tool_options(team: Team) -> dict:
     return {
         OptionsSource.tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
-        OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
+        OptionsSource.custom_actions: [
+            _option(val, display_val) | {"tool_name": sanitize_property_name(val.split(":", 1)[1])}
+            for val, display_val in custom_action_operations
+        ],
     }
 
 
