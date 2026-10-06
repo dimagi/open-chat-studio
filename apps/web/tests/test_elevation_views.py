@@ -9,6 +9,7 @@ from time_machine import travel
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS, STASH_MAX_AGE, TOO_MANY_ELEVATIONS_MESSAGE
+from apps.web.models import SuperuserElevation
 
 REAUTH_URL = str(reverse_lazy("account_reauthenticate"))
 
@@ -100,6 +101,17 @@ def test_escalation_does_not_render_when_for_non_superuser(superuser, authed_cli
     assert response.status_code == 404
     elevate_url = reverse("web:elevate_team", args=[other_team.slug])
     assert elevate_url not in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_elevation_without_proof_is_recorded(superuser, authed_client, settings):
+    settings.ELEVATION_WITHOUT_PROOF = True
+    other_team = TeamFactory.create()
+
+    response = authed_client.get(reverse("web_team:home", args=[other_team.slug]))
+
+    assert response.status_code == 302
+    assert SuperuserElevation.objects.get().grant == f"team:{other_team.slug}"
 
 
 @pytest.mark.django_db()
@@ -198,6 +210,7 @@ def test_acquire_with_invalid_password_does_not_elevate(superuser, authed_client
 
     assert response.status_code == 200
     assert authed_client.get(admin_url).status_code == 302
+    assert not SuperuserElevation.objects.exists()
 
 
 @pytest.mark.django_db()
@@ -225,6 +238,7 @@ def test_a_stale_stash_is_not_completed(superuser, authed_client):
 
     assertRedirects(response, "/", target_status_code=302)
     assert authed_client.get(admin_url).status_code == 302
+    assert not SuperuserElevation.objects.exists()
 
 
 @pytest.mark.django_db()
@@ -256,6 +270,35 @@ def test_release_drops_the_grant(superuser, authed_client):
 def test_release_of_an_unknown_grant_is_a_404(superuser, authed_client):
     response = authed_client.get(reverse("web:release_elevation", args=["admin_site"]))
     assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+def test_elevation_is_recorded(superuser, authed_client):
+    authed_client.defaults["HTTP_USER_AGENT"] = "test-agent"
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    record = SuperuserElevation.objects.get()
+    assert record.user == superuser
+    assert record.grant == "django_admin"
+    assert abs(record.expires_at - record.granted_at - datetime.timedelta(minutes=30)) < datetime.timedelta(seconds=1)
+    assert record.released_at is None
+    assert record.ip == "127.0.0.1"
+    assert record.user_agent == "test-agent"
+
+
+@pytest.mark.django_db()
+def test_release_stamps_only_the_current_record(superuser, authed_client):
+    acquire_url = reverse("web:elevate_django_admin")
+    with travel(datetime.datetime.now(), tick=False) as freezer:
+        elevate(authed_client, acquire_url)
+        freezer.shift(datetime.timedelta(minutes=31))
+        elevate(authed_client, acquire_url)
+
+        authed_client.get(reverse("web:release_elevation", args=["django_admin"]))
+
+    expired, released = SuperuserElevation.objects.order_by("granted_at")
+    assert expired.released_at is None
+    assert released.released_at is not None
 
 
 @pytest.mark.django_db()

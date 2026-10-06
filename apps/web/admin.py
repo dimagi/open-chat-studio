@@ -6,7 +6,9 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
+from apps.utils.admin import ReadonlyAdminMixin
 from apps.web.elevation import Grant, elevation_redirect
+from apps.web.models import SuperuserElevation
 
 
 class OcsAdminSite(admin.AdminSite):
@@ -48,3 +50,18 @@ class OcsAdminSite(admin.AdminSite):
         if not getattr(view, "csrf_exempt", False):
             inner = csrf_protect(inner)
         return update_wrapper(inner, view)
+
+
+@admin.register(SuperuserElevation)
+class SuperuserElevationAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
+    list_display = ("user", "grant", "granted_at", "expires_at", "released_at", "ip")
+    list_filter = ("granted_at",)
+    search_fields = ("user__email", "grant")
+    raw_id_fields = ("user",)
+    ordering = ("-granted_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
