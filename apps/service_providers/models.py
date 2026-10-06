@@ -230,7 +230,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
 
     @property
     def verification_error(self) -> str:
-        """What the provider said when it last rejected these credentials, if anything.
+        """What the provider said when the last check of these credentials failed, if anything.
 
         Kept beside the flag rather than flashed through the session: it explains the
         credentials that are still saved here, so it has to be there when the user comes
@@ -278,13 +278,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         # Prefer the provider type's registered default model (get_default_model, the same
         # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
         # model most likely to actually work; fall back to any other model the team has
-        # configured for this type if they don't have that one. A team-configured model
-        # wins over a global one, same priority as pricing-rule resolution elsewhere in
-        # this app.
+        # configured for this type if they don't have that one. A deprecated model is tried
+        # last, since providers withdraw them. Otherwise a team-configured model wins over a
+        # global one, same priority as pricing-rule resolution elsewhere in this app.
         team_models = (
             LlmProviderModel.objects.for_team(self.team)
             .filter(type=self.type)
-            .order_by(models.F("team_id").desc(nulls_last=True))
+            .order_by("deprecated", models.F("team_id").desc(nulls_last=True))
         )
         default_model = get_default_model(self.type)
         model = team_models.filter(name=default_model.name).first() if default_model else None

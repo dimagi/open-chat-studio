@@ -318,7 +318,7 @@ class TestSavingVerifiesCredentials:
         assert "sk-p***lt" not in warnings[0]
 
         content = response.content.decode()
-        assert "The provider rejected these credentials" in content
+        assert "These credentials could not be verified" in content
         assert "Incorrect API key provided: sk-p***lt" in content
 
     def test_the_raw_error_survives_a_reload(self, team_with_users, authed_client):
@@ -357,7 +357,7 @@ class TestSavingVerifiesCredentials:
 
         response = authed_client.post(url, data={"name": provider.name, "openai_api_key": "a-new-key"}, follow=True)
 
-        assert "The provider rejected these credentials" not in response.content.decode()
+        assert "These credentials could not be verified" not in response.content.decode()
 
     def test_no_configured_model_also_lands_on_the_edit_page(self, team_with_users, authed_client):
         """Nothing is wrong with the credentials - there is just nothing to verify against,
@@ -455,7 +455,7 @@ class TestSavingVerifiesCredentials:
         response = authed_client.get(self._edit_url(team_with_users, provider))
 
         content = response.content.decode()
-        assert "The provider rejected these credentials" in content
+        assert "These credentials could not be verified" in content
         assert "have not been checked yet" not in content
 
     def test_an_untestable_provider_type_says_nothing_about_verification(self, team_with_users, authed_client):

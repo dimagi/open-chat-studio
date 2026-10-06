@@ -176,6 +176,22 @@ def test_test_connection_prefers_default_named_model_when_team_has_multiple():
 
 
 @pytest.mark.django_db()
+def test_test_connection_fallback_skips_deprecated_models():
+    """Providers withdraw deprecated models (Google returns 404 for gemini-2.5-flash on new
+    projects), so testing against one reports a failure the credentials did not cause."""
+    provider = LlmProviderFactory()
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    LlmProviderModelFactory(team=provider.team, type=provider.type, name="withdrawn", deprecated=True)
+    current_model = LlmProviderModelFactory(team=None, type=provider.type, name="current")
+
+    mock_service = mock.Mock()
+    with mock.patch.object(LlmProvider, "get_llm_service", return_value=mock_service):
+        provider.test_connection()
+
+    mock_service.get_chat_model.assert_called_once_with(current_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+
+
+@pytest.mark.django_db()
 def test_test_connection_raises_for_voyage_regardless_of_configured_models():
     """Voyage AI can't do chat completions at all, so it should fail the same way whether or
     not a model happens to be configured, not flip between error messages depending on that."""
