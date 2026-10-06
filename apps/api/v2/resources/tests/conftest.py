@@ -1,4 +1,4 @@
-"""Fixtures for the content resource endpoints (#4145)."""
+"""Fixtures for the resource endpoints (#4145)."""
 
 from dataclasses import dataclass
 from typing import Any

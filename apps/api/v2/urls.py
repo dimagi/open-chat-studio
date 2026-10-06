@@ -3,7 +3,6 @@ from rest_framework import routers
 
 from apps.api.v2 import views
 from apps.api.v2.channels import TriggerBotMessageView
-from apps.api.v2.content.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.discovery import (
     ChatbotOptionsView,
     PipelineNodeOptionsView,
@@ -12,6 +11,7 @@ from apps.api.v2.discovery import (
     PipelineOptionsView,
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
+from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.versions.views import (
     ChatbotVersionCreateView,

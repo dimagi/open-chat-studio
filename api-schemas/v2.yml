@@ -1023,7 +1023,7 @@ paths:
     get:
       operationId: consent_form_retrieve
       description: List, retrieve, create, patch and archive one team-scoped, versioned
-        content model.
+        resource model.
       summary: Retrieve Consent Form
       parameters:
       - in: path
@@ -1109,7 +1109,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ContentArchived'
+                $ref: '#/components/schemas/ResourceArchived'
           description: ''
         '404':
           description: No such resource, or it is archived already.
@@ -1445,7 +1445,7 @@ paths:
     get:
       operationId: source_material_retrieve
       description: List, retrieve, create, patch and archive one team-scoped, versioned
-        content model.
+        resource model.
       summary: Retrieve Source Material
       parameters:
       - in: path
@@ -1530,7 +1530,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ContentArchived'
+                $ref: '#/components/schemas/ResourceArchived'
           description: ''
         '404':
           description: No such resource, or it is archived already.
@@ -2466,15 +2466,6 @@ components:
       - is_default
       - name
       additionalProperties: false
-    ContentArchived:
-      type: object
-      description: The archive response.
-      properties:
-        archived:
-          type: boolean
-          description: Always true; the failure cases are status codes.
-      required:
-      - archived
     Cost:
       type: object
       properties:
@@ -4084,6 +4075,15 @@ components:
         template_string:
           type: string
           description: Jinja2 template rendered against the node input.
+    ResourceArchived:
+      type: object
+      description: The archive response.
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - archived
     ResourceOption:
       type: object
       description: |-

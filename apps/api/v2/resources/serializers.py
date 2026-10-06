@@ -1,4 +1,4 @@
-"""Request and response serializers for the team's content resources: source material and consent forms."""
+"""Request and response serializers for the team's resources: source material and consent forms."""
 
 from rest_framework import serializers
 
@@ -49,7 +49,7 @@ class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSeriali
         return ConsentForm.objects.create(team=self.context["request"].team, **validated_data)
 
 
-class ContentArchivedSerializer(serializers.Serializer):
+class ResourceArchivedSerializer(serializers.Serializer):
     """The archive response."""
 
     archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")

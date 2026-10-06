@@ -10,7 +10,7 @@ from .conftest import RESOURCES
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("resource", RESOURCES)
-class TestContentResources:
+class TestResources:
     def test_create(self, client, team, resource):
         response = client.post(resource.list_url, resource.create_body, format="json")
 

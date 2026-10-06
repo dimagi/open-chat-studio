@@ -1,19 +1,19 @@
-"""OpenAPI descriptions for the content endpoints."""
+"""OpenAPI descriptions for the resource endpoints."""
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 
-from apps.api.v2.content.serializers import (
+from apps.api.v2.resources.serializers import (
     ArchiveRefusedSerializer,
-    ContentArchivedSerializer,
+    ResourceArchivedSerializer,
     SourceMaterialInUseSerializer,
 )
 
 
-def content_schema(
+def resource_schema(
     *, noun: str, plural: str, archive_refusal: str, archive_refused_serializer=ArchiveRefusedSerializer
 ):
-    """The OpenAPI descriptions shared by both content viewsets."""
+    """The OpenAPI descriptions shared by both resource viewsets."""
     operation_prefix = noun.lower().replace(" ", "_")
     tag = plural
     machine_tokens = " A client-credentials token can read but not write; its writes answer `403`."
@@ -62,7 +62,7 @@ def content_schema(
             tags=[tag],
             request=None,
             responses={
-                200: ContentArchivedSerializer,
+                200: ResourceArchivedSerializer,
                 404: OpenApiResponse(description="No such resource, or it is archived already."),
                 409: archive_refused_serializer,
             },
@@ -70,7 +70,7 @@ def content_schema(
     )
 
 
-source_material_schema = content_schema(
+source_material_schema = resource_schema(
     noun="Source Material",
     plural="Source Material",
     archive_refusal=(
@@ -80,7 +80,7 @@ source_material_schema = content_schema(
     archive_refused_serializer=SourceMaterialInUseSerializer,
 )
 
-consent_form_schema = content_schema(
+consent_form_schema = resource_schema(
     noun="Consent Form",
     plural="Consent Forms",
     archive_refusal=(

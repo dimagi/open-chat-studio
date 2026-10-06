@@ -1,4 +1,4 @@
-"""What stands in the way of archiving each content resource, and what archiving changes (#4145)."""
+"""What stands in the way of archiving each resource, and what archiving changes (#4145)."""
 
 import pytest
 

@@ -16,7 +16,6 @@ from apps.api.permissions import (
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
 )
-from apps.api.v2.content.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
     PipelineNodeOptionsView,
@@ -24,6 +23,7 @@ from apps.api.v2.discovery.views import (
     PipelineNodeView,
     PipelineOptionsView,
 )
+from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.views import ChatbotViewSet, MeView
 from apps.api.views.channels import TriggerBotMessageView

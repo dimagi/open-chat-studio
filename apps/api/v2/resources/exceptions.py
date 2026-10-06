@@ -1,4 +1,4 @@
-"""What the content endpoints refuse a request with, and why."""
+"""What the resource endpoints refuse a request with, and why."""
 
 from rest_framework import status
 from rest_framework.exceptions import APIException

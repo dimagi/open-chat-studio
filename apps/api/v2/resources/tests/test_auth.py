@@ -1,4 +1,4 @@
-"""Authorization for the content resource endpoints (#4145): role permissions and OAuth scopes."""
+"""Authorization for the resource endpoints (#4145): role permissions and OAuth scopes."""
 
 import pytest
 from django.urls import get_resolver
@@ -40,7 +40,7 @@ class TestRoles:
 @pytest.mark.django_db()
 @pytest.mark.parametrize("resource", RESOURCES)
 class TestOAuthScopes:
-    """Writes need `chatbots:write`, reads `chatbots:read`: the content is part of a chatbot's composition."""
+    """Writes need `chatbots:write`, reads `chatbots:read`: these resources are part of a chatbot's composition."""
 
     def _client(self, team, scopes):
         return ApiTestClient(team.members.first(), team, auth_method="oauth", scopes=scopes)
@@ -76,7 +76,7 @@ def test_there_is_no_provider_endpoint():
 @pytest.mark.django_db()
 @pytest.mark.parametrize("resource", RESOURCES)
 class TestMachineTokens:
-    """A machine token may read content but not write it: content is shared by chatbots outside its allowlist."""
+    """A machine token may read resources but not write them: they are shared by chatbots outside its allowlist."""
 
     def _client(self, team):
         return ApiTestClient(

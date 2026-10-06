@@ -1,4 +1,4 @@
-"""The team's content resources: source material and consent forms (#4145).
+"""The team's resources: source material and consent forms (#4145).
 
 Only working versions are reachable. Published chatbots hold their own snapshot of each resource, so
 an edit here reaches them only once the chatbot is published again. Deleting archives rather than
@@ -13,12 +13,12 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
-from apps.api.v2.content.exceptions import ArchiveRefused, SourceMaterialInUse
-from apps.api.v2.content.permissions import ReadOnlyForMachineTokens
-from apps.api.v2.content.schema import consent_form_schema, source_material_schema
-from apps.api.v2.content.serializers import (
+from apps.api.v2.resources.exceptions import ArchiveRefused, SourceMaterialInUse
+from apps.api.v2.resources.permissions import ReadOnlyForMachineTokens
+from apps.api.v2.resources.schema import consent_form_schema, source_material_schema
+from apps.api.v2.resources.serializers import (
     ConsentFormResourceSerializer,
-    ContentArchivedSerializer,
+    ResourceArchivedSerializer,
     SourceMaterialResourceSerializer,
 )
 from apps.api.v2.write.base import DescribesPatch
@@ -60,7 +60,7 @@ def _source_material_references(material: SourceMaterial) -> dict:
     }
 
 
-class BaseContentViewSet(
+class BaseResourceViewSet(
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
@@ -68,7 +68,7 @@ class BaseContentViewSet(
     mixins.DestroyModelMixin,
     GenericViewSet,
 ):
-    """List, retrieve, create, patch and archive one team-scoped, versioned content model."""
+    """List, retrieve, create, patch and archive one team-scoped, versioned resource model."""
 
     permission_classes = [
         *BASE_PERMISSION_CLASSES,
@@ -98,7 +98,7 @@ class BaseContentViewSet(
     def destroy(self, request, *args, **kwargs) -> Response:
         with transaction.atomic():
             self.archive(self.get_object())
-        return Response(ContentArchivedSerializer({"archived": True}).data)
+        return Response(ResourceArchivedSerializer({"archived": True}).data)
 
     def archive(self, instance) -> None:
         """Archive ``instance``, or raise ``ArchiveRefused``."""
@@ -106,7 +106,7 @@ class BaseContentViewSet(
 
 
 @source_material_schema
-class SourceMaterialViewSet(BaseContentViewSet):
+class SourceMaterialViewSet(BaseResourceViewSet):
     serializer_class = SourceMaterialResourceSerializer
     model = SourceMaterial
 
@@ -116,7 +116,7 @@ class SourceMaterialViewSet(BaseContentViewSet):
 
 
 @consent_form_schema
-class ConsentFormViewSet(BaseContentViewSet):
+class ConsentFormViewSet(BaseResourceViewSet):
     serializer_class = ConsentFormResourceSerializer
     model = ConsentForm
 
