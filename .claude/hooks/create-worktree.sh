@@ -24,7 +24,12 @@ if [[ -z "$source_ref" ]]; then
 fi
 
 mkdir -p "$(dirname "$worktree_path")"
-git -C "$repo_root" worktree add --quiet -b "$branch" "$worktree_path" "$source_ref" >&2
+# remove-worktree.sh keeps the branch, so reusing a name checks out the existing branch.
+if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$repo_root" worktree add --quiet "$worktree_path" "$branch" >&2
+else
+    git -C "$repo_root" worktree add --quiet -b "$branch" "$worktree_path" "$source_ref" >&2
+fi
 
 log_file="${TMPDIR:-/tmp}/ocs-worktree-setup-$name.log"
 if ! (cd "$worktree_path" && ./scripts/setup-worktree.sh) >"$log_file" 2>&1; then
