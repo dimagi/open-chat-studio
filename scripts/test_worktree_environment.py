@@ -205,7 +205,7 @@ for argument in "$@"; do
     fi
     if [[ -n "$operation" && -z "$resource_name" ]]; then
         resource_name=$argument
-    elif [[ "$operation" == "release" && -n "$resource_name" ]]; then
+    elif [[ "$operation" =~ ^(allocate|release)$ && -n "$resource_name" ]]; then
         database=$argument
     fi
 done
@@ -227,8 +227,12 @@ if [[ "$operation" == "lookup" ]]; then
 fi
 
 if [[ "$operation" == "allocate" ]]; then
-    if [[ -n "$existing" ]]; then printf "%s\n" "$existing"; exit 0; fi
+    if [[ -n "$existing" && "$existing" != "$database" ]]; then printf "%s\n" "$existing"; exit 0; fi
+    awk -v resource="$resource_name" '$1 != resource' "$OCS_TEST_REDIS_REGISTRY" \
+        > "$OCS_TEST_REDIS_REGISTRY.tmp"
+    mv "$OCS_TEST_REDIS_REGISTRY.tmp" "$OCS_TEST_REDIS_REGISTRY"
     for candidate in $(seq 1 14); do
+        [[ "$candidate" != "$database" ]] || continue
         if ! awk -v database="$candidate" \
             '$2 == database { found = 1 } END { exit !found }' \
             "$OCS_TEST_REDIS_REGISTRY"; then
@@ -499,6 +503,36 @@ def test_redis_registry_allocates_distinct_databases_and_reuses_assignments(
 
     assert first_database != second_database
     assert repeated_database == first_database
+
+
+@pytest.mark.parametrize(
+    ("root_redis_url", "expected_database"),
+    [
+        pytest.param("redis://localhost:6379/0", 1, id="root_on_database_0"),
+        pytest.param("redis://172.17.0.1:6379/1", 2, id="root_on_database_1"),
+        pytest.param("redis://localhost:6379", 1, id="root_without_a_database"),
+    ],
+)
+def test_redis_registry_skips_the_root_checkout_database(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    root_redis_url: str,
+    expected_database: int,
+) -> None:
+    root, worktree, env, _ = worktree_fixture
+    (root / ".env").write_text(f"REDIS_URL={root_redis_url}\n")
+
+    assert _allocate_redis_database(worktree, env, "feature_6") == expected_database
+
+
+def test_redis_registry_moves_an_allocation_off_the_root_checkout_database(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    root, worktree, env, _ = worktree_fixture
+    assert _allocate_redis_database(worktree, env, "feature_6") == 1
+
+    (root / ".env").write_text("REDIS_URL=redis://localhost:6379/1\n")
+
+    assert _allocate_redis_database(worktree, env, "feature_6") == 2
 
 
 # Every place `ocs_psql` can be told which container to use, and what should come of it.
