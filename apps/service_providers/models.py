@@ -1,12 +1,14 @@
 import dataclasses
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.functional import classproperty
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
@@ -189,6 +191,7 @@ CONNECTION_TEST_TIMEOUT_SECONDS = 10
 CONNECTION_ERROR_DETAIL_LIMIT = 2000
 VERIFIED_CREDENTIALS_KEY = "verified_credentials"
 VERIFICATION_ERROR_KEY = "verification_error"
+CREDENTIALS_CHECKED_AT_KEY = "credentials_checked_at"
 
 
 def _error_detail(exc: Exception, limit: int = CONNECTION_ERROR_DETAIL_LIMIT) -> str:
@@ -237,6 +240,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         back to the page rather than only on the redirect after the save.
         """
         return (self.extra_data or {}).get(VERIFICATION_ERROR_KEY, "")
+
+    @property
+    def credentials_checked_at(self) -> datetime | None:
+        """When the stored verification result was produced, or None for results stored before
+        this was recorded."""
+        checked_at = (self.extra_data or {}).get(CREDENTIALS_CHECKED_AT_KEY)
+        return datetime.fromisoformat(checked_at) if checked_at else None
 
     def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
@@ -355,7 +365,11 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         with transaction.atomic():
             provider = LlmProvider.objects.select_for_update().get(pk=self.pk)
-            extra_data = {**(provider.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
+            extra_data = {
+                **(provider.extra_data or {}),
+                VERIFIED_CREDENTIALS_KEY: verified,
+                CREDENTIALS_CHECKED_AT_KEY: timezone.now().isoformat(),
+            }
             if detail:
                 extra_data[VERIFICATION_ERROR_KEY] = detail
             else:

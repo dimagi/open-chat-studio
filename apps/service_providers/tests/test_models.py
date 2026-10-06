@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
 from unittest import mock
 
 import pytest
+import time_machine
 from django.core.exceptions import ValidationError
 from field_audit.models import AuditAction
 
@@ -20,6 +22,8 @@ from apps.service_providers.models import (
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+
+CHECKED_AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 
 
 @pytest.fixture()
@@ -239,6 +243,21 @@ class TestRunConnectionTestHook:
         assert "Incorrect API key provided: sk-p***lt" in detail
         assert "Exception" in detail
 
+    @pytest.mark.parametrize(
+        "side_effect",
+        [pytest.param(None, id="pass"), pytest.param(Exception("kaboom"), id="failure")],
+    )
+    def test_records_when_the_check_ran(self, side_effect):
+        provider = LlmProviderFactory()
+        with (
+            time_machine.travel(CHECKED_AT, tick=False),
+            mock.patch.object(LlmProvider, "test_connection", side_effect=side_effect),
+        ):
+            provider.run_connection_test_hook()
+
+        provider.refresh_from_db()
+        assert provider.credentials_checked_at == CHECKED_AT
+
     def test_a_long_provider_error_is_truncated(self):
         """A provider can return a response of any size, and this is rendered on the page."""
         provider = LlmProviderFactory()
@@ -304,6 +323,7 @@ class TestCredentialsVerifiedFlag:
         """
         assert LlmProviderFactory(extra_data=extra_data).credentials_verified is expected
 
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_a_null_column_takes_a_recorded_result(self):
         """The row the previous release inserted has to survive its first check."""
         provider = LlmProviderFactory(extra_data=None)
@@ -311,7 +331,7 @@ class TestCredentialsVerifiedFlag:
             provider.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"verified_credentials": True}
+        assert provider.extra_data == {"verified_credentials": True, "credentials_checked_at": CHECKED_AT.isoformat()}
         assert provider.verification_error == ""
 
     def test_a_pass_records_the_credentials_as_verified(self):
@@ -387,6 +407,7 @@ class TestCredentialsVerifiedFlag:
         provider.refresh_from_db()
         assert provider.verification_error == ""
 
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_a_write_that_landed_during_the_check_is_not_clobbered(self):
         """The check makes a multi-second external call, so extra_data can change under it.
         The outcome has to merge into the row as it stands, not the copy loaded before."""
@@ -400,8 +421,13 @@ class TestCredentialsVerifiedFlag:
             stale.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"something_else": "written meanwhile", "verified_credentials": True}
+        assert provider.extra_data == {
+            "something_else": "written meanwhile",
+            "verified_credentials": True,
+            "credentials_checked_at": CHECKED_AT.isoformat(),
+        }
 
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_recording_the_flag_leaves_other_extra_data_alone(self):
         """extra_data is a general bag; a retest must not drop what is stored beside it."""
         provider = LlmProviderFactory(extra_data={"something_else": "keep me"})
@@ -409,7 +435,11 @@ class TestCredentialsVerifiedFlag:
             provider.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"something_else": "keep me", "verified_credentials": True}
+        assert provider.extra_data == {
+            "something_else": "keep me",
+            "verified_credentials": True,
+            "credentials_checked_at": CHECKED_AT.isoformat(),
+        }
 
     @pytest.mark.parametrize(
         ("provider_type", "expected"),

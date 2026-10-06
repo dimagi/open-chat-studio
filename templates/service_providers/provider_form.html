@@ -11,6 +11,9 @@
         <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
         <div>
           <div class="font-semibold">These credentials could not be verified</div>
+          {% if credentials_checked_at %}
+            <div class="text-xs opacity-70" title="{{ credentials_checked_at }}">Checked {{ credentials_checked_at|timesince }} ago</div>
+          {% endif %}
           <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
         </div>
       </div>
@@ -21,6 +24,9 @@
         {% if credentials_verified %}
           <i class="fa-solid fa-circle-check"></i>
           <span>Credentials verified</span>
+          {% if credentials_checked_at %}
+            <span class="opacity-70" title="{{ credentials_checked_at }}">· Checked {{ credentials_checked_at|timesince }} ago</span>
+          {% endif %}
         {% else %}
           <i class="fa-regular fa-circle-question"></i>
           <span>These credentials have not been checked yet - saving will check them</span>

@@ -402,6 +402,7 @@ class CreateServiceProvider(
             if instance:
                 ctx["verification_error"] = instance.verification_error
                 ctx["credentials_verified"] = instance.credentials_verified
+                ctx["credentials_checked_at"] = instance.credentials_checked_at
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
 
