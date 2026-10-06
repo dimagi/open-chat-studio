@@ -38,6 +38,8 @@ version section when a release is cut.
   operator or team sets one. (#4371)
 - `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
+- New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
+  client IP and user agent). Additive only; nothing is backfilled. (#4693)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
   operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
   stripped from stored pipeline node params. Any `Banner` pinned to the removed
