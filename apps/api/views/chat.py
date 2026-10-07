@@ -59,8 +59,9 @@ from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionR
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.content_type import detect_content_type_from_file
+from apps.files.content_type import detect_content_type_from_file, read_sample
 from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.llm_service.image_types import (
     ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES,
     DENIED_IMAGE_EXTENSIONS,
@@ -116,6 +117,10 @@ def validate_file_upload(file):
             f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
         )
     mime_type = file.content_type or ""
+    # No content_type_mismatch check: browsers report some types inconsistently
+    # (Windows reports .csv as application/vnd.ms-excel).
+    if reason := blocked_file_reason(filename=file.name, claimed_type=mime_type, content=read_sample(file)):
+        return False, f"File '{file.name}' was rejected: {reason}"
     content_type = mime_type.split("/")[0]
     # All text files are allowed
     if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
