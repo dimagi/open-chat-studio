@@ -323,6 +323,35 @@ class TestCredentialsVerifiedFlag:
         """
         assert LlmProviderFactory(extra_data=extra_data).credentials_verified is expected
 
+    @pytest.mark.parametrize(
+        ("extra_data", "expected"),
+        [
+            pytest.param({}, "unchecked", id="never-checked"),
+            pytest.param(
+                {"verified_credentials": True, "credentials_checked_at": CHECKED_AT.isoformat()},
+                "verified",
+                id="verified",
+            ),
+            pytest.param({"verified_credentials": True}, "verified", id="verified-before-check-times-were-stored"),
+            pytest.param(
+                {
+                    "verified_credentials": False,
+                    "verification_error": "NotFound: 404",
+                    "credentials_checked_at": CHECKED_AT.isoformat(),
+                },
+                "failed",
+                id="failed",
+            ),
+            pytest.param(
+                {"verified_credentials": False, "credentials_checked_at": CHECKED_AT.isoformat()},
+                "no_model",
+                id="checked-without-a-model",
+            ),
+        ],
+    )
+    def test_verification_state(self, extra_data, expected):
+        assert LlmProviderFactory(extra_data=extra_data).verification_state == expected
+
     @time_machine.travel(CHECKED_AT, tick=False)
     def test_a_null_column_takes_a_recorded_result(self):
         """The row the previous release inserted has to survive its first check."""

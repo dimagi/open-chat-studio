@@ -3,7 +3,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
@@ -247,6 +247,18 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         this was recorded."""
         checked_at = (self.extra_data or {}).get(CREDENTIALS_CHECKED_AT_KEY)
         return datetime.fromisoformat(checked_at) if checked_at else None
+
+    @property
+    def verification_state(self) -> Literal["verified", "failed", "no_model", "unchecked"]:
+        """Where the saved credentials stand after the last check."""
+        if self.credentials_verified:
+            return "verified"
+        if self.verification_error:
+            return "failed"
+        if self.credentials_checked_at:
+            # A check that ran without reaching the provider: there was no model to send it to.
+            return "no_model"
+        return "unchecked"
 
     def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}

@@ -1,7 +1,5 @@
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Literal
 
 from django.urls import reverse
 from django_tables2 import SingleTableView
@@ -27,29 +25,9 @@ _CATEGORY_ICONS = {
 }
 
 
-@dataclass
-class IntegrationVerification:
-    state: Literal["verified", "failed", "no_model", "unchecked"]
-    checked_at: datetime | None
-    error: str
-
-
-def get_integration_verification(provider) -> IntegrationVerification | None:
-    """The stored result of the provider's last credential check, or None for types with no check."""
-    if not isinstance(provider, LlmProvider) or not provider.supports_connection_test:
-        return None
-    checked_at = provider.credentials_checked_at
-    error = provider.verification_error
-    if provider.credentials_verified:
-        state = "verified"
-    elif error:
-        state = "failed"
-    elif checked_at:
-        # A check that ran without reaching the provider: there was no model to send it to.
-        state = "no_model"
-    else:
-        state = "unchecked"
-    return IntegrationVerification(state=state, checked_at=checked_at, error=error)
+def _verifiable(provider) -> LlmProvider | None:
+    """The provider, if its credentials can be checked; None for types with no check."""
+    return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
 
 
 def get_integration_rows(request, team) -> list[dict]:
@@ -71,7 +49,7 @@ def get_integration_rows(request, team) -> list[dict]:
                 "category": provider.category,
                 "icon_class": _CATEGORY_ICONS[provider.category],
                 "provider": obj.type_enum.label,
-                "verification": get_integration_verification(obj),
+                "verifiable_provider": _verifiable(obj),
                 "edit_perm": provider.get_permission("change"),
                 "delete_perm": provider.get_permission("delete"),
             }
@@ -87,7 +65,7 @@ def get_integration_rows(request, team) -> list[dict]:
                 "category": MCP_CATEGORY,
                 "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
                 "provider": "MCP Server",
-                "verification": None,
+                "verifiable_provider": None,
                 "edit_perm": "mcp_integrations.change_mcpserver",
                 "delete_perm": "mcp_integrations.delete_mcpserver",
             }

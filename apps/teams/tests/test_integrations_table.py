@@ -14,8 +14,6 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory, 
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
-CHECKED_AT = "2026-10-01T12:00:00+00:00"
-
 
 @pytest.fixture()
 def team():
@@ -177,34 +175,12 @@ def test_integrations_table_edit_action_hidden_without_permission(client, team):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("extra_data", "expected_state"),
-    [
-        pytest.param({}, "unchecked", id="never-checked"),
-        pytest.param({"verified_credentials": True, "credentials_checked_at": CHECKED_AT}, "verified", id="verified"),
-        pytest.param(
-            {
-                "verified_credentials": False,
-                "verification_error": "NotFound: 404",
-                "credentials_checked_at": CHECKED_AT,
-            },
-            "failed",
-            id="failed",
-        ),
-        pytest.param(
-            {"verified_credentials": False, "credentials_checked_at": CHECKED_AT},
-            "no_model",
-            id="checked-without-a-model",
-        ),
-        pytest.param({"verified_credentials": True}, "verified", id="verified-before-check-times-were-stored"),
-    ],
-)
-def test_llm_rows_carry_the_stored_verification_result(team, request_for, extra_data, expected_state):
-    LlmProviderFactory(team=team, extra_data=extra_data)
+def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_for):
+    provider = LlmProviderFactory(team=team)
 
     (row,) = get_integration_rows(request_for(UserFactory()), team)
 
-    assert row["verification"].state == expected_state
+    assert row["verifiable_provider"] == provider
 
 
 @pytest.mark.django_db()
@@ -220,7 +196,7 @@ def test_rows_for_providers_without_a_check_carry_no_verification(team, request_
 
     (row,) = get_integration_rows(request_for(UserFactory()), team)
 
-    assert row["verification"] is None
+    assert row["verifiable_provider"] is None
 
 
 @pytest.mark.django_db()
