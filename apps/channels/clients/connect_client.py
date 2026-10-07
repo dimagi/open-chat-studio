@@ -31,7 +31,10 @@ MAX_ATTACHMENTS_PER_MESSAGE = 10
 MAX_MESSAGE_ATTACHMENT_BYTES = 15 * 1024 * 1024
 
 # What app versions that cannot show attachments display instead of a message that has them
-LEGACY_APP_MESSAGE = "Your version of the app is too old to see this message. Please update your Android app."
+LEGACY_APP_MESSAGE = (
+    "This message contains attachments but your version of the app is too old to see them."
+    " Please update your Android app."
+)
 ATTACHMENT_EXPIRY = timedelta(days=90)
 
 _CLIENT_TIMEOUT = 10
