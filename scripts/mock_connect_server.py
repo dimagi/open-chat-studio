@@ -21,10 +21,10 @@ Key flow:
   2. This server immediately calls OCS's /api/commcare_connect/generate_key endpoint
      to negotiate the encryption key (OCS calls back to /o/userinfo/ to validate
      the bearer token, then returns the base64-encoded AES-256 key).
-  3. OCS sends bot replies via POST /messaging/create_message/ — this server decrypts and
-     prints the text and saves decrypted attachments to a temporary directory. With the
-     flag_commcare_connect_send_fcm_fallback flag on, replies come to POST /messaging/send_fcm/
-     instead, text only.
+  3. OCS sends bot replies via POST /messaging/send_fcm/, text only. With the
+     flag_commcare_connect_create_message flag on, replies come to POST /messaging/create_message/
+     instead — this server decrypts and prints the text and saves decrypted attachments to a
+     temporary directory.
   4. Use the interactive prompt to send an encrypted user message to OCS's
      /channels/commcare_connect/incoming_message endpoint.
 

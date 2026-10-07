@@ -110,6 +110,12 @@ def client_class():
         yield client_class
 
 
+@pytest.fixture()
+def create_message_flag():
+    with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=True):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Attachment naming and type helpers
 # ---------------------------------------------------------------------------
@@ -390,33 +396,34 @@ class TestCommCareConnectSenderFallback:
 
 
 @pytest.mark.django_db()
-class TestCommCareConnectChannelFallbackFlag:
+class TestCommCareConnectChannelCreateMessageFlag:
     def _channel(self, experiment):
         experiment_channel = ExperimentChannelFactory.create(
             team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
         )
         return CommCareConnectChannel(experiment, experiment_channel)
 
-    @pytest.mark.parametrize("fallback", [pytest.param(False, id="flag-off"), pytest.param(True, id="flag-on")])
-    def test_capabilities_follow_the_flag(self, experiment, fallback):
-        with override_flag(Flags.COMMCARE_CONNECT_SEND_FCM_FALLBACK.slug, active=fallback):
+    @pytest.mark.parametrize("create_message", [pytest.param(False, id="flag-off"), pytest.param(True, id="flag-on")])
+    def test_capabilities_follow_the_flag(self, experiment, create_message):
+        with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=create_message):
             capabilities = self._channel(experiment)._get_capabilities()
 
-        assert capabilities.supports_files is not fallback
+        assert capabilities.supports_files is create_message
 
     def test_flag_is_read_once_for_the_sender_and_capabilities(self, experiment):
         channel = self._channel(experiment)
 
-        with patch("apps.channels.connect_channel.flag_is_active_for_team", return_value=True) as flag_check:
+        with patch("apps.channels.connect_channel.flag_is_active_for_team", return_value=False) as flag_check:
             capabilities = channel._get_capabilities()
             sender = channel._get_sender()
 
-        flag_check.assert_called_once_with(experiment.team, Flags.COMMCARE_CONNECT_SEND_FCM_FALLBACK.slug)
+        flag_check.assert_called_once_with(experiment.team, Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug)
         assert capabilities.supports_files is False
         assert sender.send_fcm_fallback is True
 
 
 @pytest.mark.django_db()
+@pytest.mark.usefixtures("create_message_flag")
 class TestCommCareConnectChannelAdHocFiles:
     """Ad hoc sends (reminders, trigger-bot) run the formatting and sending stages too."""
 
@@ -441,10 +448,10 @@ class TestCommCareConnectChannelAdHocFiles:
             attachments=[OutgoingAttachment(name="document.pdf", content_type="application/pdf", content=b"filedata")],
         )
 
-    def test_flag_on_sends_file_as_link_through_send_fcm(self, experiment, client_class):
+    def test_flag_off_sends_file_as_link_through_send_fcm(self, experiment, client_class):
         channel, _channel_id, _encryption_key = self._channel_with_session(experiment)
 
-        with override_flag(Flags.COMMCARE_CONNECT_SEND_FCM_FALLBACK.slug, active=True):
+        with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=False):
             channel.send_message_to_user("Here's your file", files=[_file("document.pdf")])
 
         client_class.return_value.create_message.assert_not_called()
@@ -469,6 +476,7 @@ class TestCommCareConnectChannelAdHocFiles:
 
 
 @pytest.mark.django_db()
+@pytest.mark.usefixtures("create_message_flag")
 class TestCommCareConnectChannelIntegration:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
     def test_bot_generates_and_sends_encrypted_message(self, experiment):

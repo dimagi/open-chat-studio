@@ -131,7 +131,7 @@ class CommCareConnectSender(ChannelSender):
     def _reason_to_link_unread_file(self) -> str | None:
         """Why the next file cannot be attached whatever its size, so it need not be read."""
         if self.send_fcm_fallback:
-            return "the send_fcm fallback is on"
+            return "the create_message flag is off"
         if len(self._attachments) >= MAX_ATTACHMENTS_PER_MESSAGE:
             return f"the message already has {MAX_ATTACHMENTS_PER_MESSAGE} attachments"
         return None
@@ -203,7 +203,7 @@ class CommCareConnectChannel(ChannelBase):
     @cached_property
     def _send_fcm_fallback(self) -> bool:
         """Read once, so the capabilities and the sender of one message always agree."""
-        return flag_is_active_for_team(self.experiment.team, Flags.COMMCARE_CONNECT_SEND_FCM_FALLBACK.slug)
+        return not flag_is_active_for_team(self.experiment.team, Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug)
 
     def _get_callbacks(self) -> ChannelCallbacks:
         return ChannelCallbacks()
