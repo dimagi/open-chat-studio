@@ -233,3 +233,21 @@ def test_integrations_table_explains_the_dash_for_providers_without_a_check(clie
     response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
 
     assert "does not support credential verification" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_integrations_table_says_when_there_was_no_model_to_check_against(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    checked_at = timezone.now() - timedelta(days=3)
+    LlmProviderFactory(
+        team=team, extra_data={"verified_credentials": False, "credentials_checked_at": checked_at.isoformat()}
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+
+    content = response.content.decode()
+    assert "No models" in content
+    assert "Not checked" not in content
+    assert "Checked 3\xa0days ago" in content
