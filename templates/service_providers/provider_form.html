@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n %}
+{% load form_tags humanize i18n %}
 
 {% block app %}
   <div class="app-card max-w-5xl mx-auto"
@@ -12,7 +12,7 @@
         <div>
           <div class="font-semibold">These credentials could not be verified</div>
           {% if credentials_checked_at %}
-            <div class="text-xs opacity-70" title="{{ credentials_checked_at }}">Checked {{ credentials_checked_at|timesince }} ago</div>
+            <div class="text-xs opacity-70" title="{{ credentials_checked_at }}">Checked {{ credentials_checked_at|naturaltime }}</div>
           {% endif %}
           <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
         </div>
@@ -25,7 +25,7 @@
           <i class="fa-solid fa-circle-check"></i>
           <span>Credentials verified</span>
           {% if credentials_checked_at %}
-            <span class="opacity-70" title="{{ credentials_checked_at }}">· Checked {{ credentials_checked_at|timesince }} ago</span>
+            <span class="opacity-70" title="{{ credentials_checked_at }}">· Checked {{ credentials_checked_at|naturaltime }}</span>
           {% endif %}
         {% else %}
           <i class="fa-regular fa-circle-question"></i>
