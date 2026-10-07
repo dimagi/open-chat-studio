@@ -147,6 +147,10 @@ TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _normalize(content_type: str) -> str:
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
 def _category(content_type: str) -> str:
     """Top-level category for mismatch comparison.
     Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
@@ -159,8 +163,9 @@ def _category(content_type: str) -> str:
 
 def is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
     """Returns a rejection reason if the extension or either content type is on the blocklist, else None."""
-    if extension in BLOCKED_EXTENSIONS:
-        return f"file extension '.{extension}' not allowed"
+    claimed_type, detected_type = _normalize(claimed_type), _normalize(detected_type)
+    if extension.lower() in BLOCKED_EXTENSIONS:
+        return f"file extension '.{extension.lower()}' not allowed"
     if detected_type in BLOCKED_CONTENT_TYPES:
         return f"file type not allowed (detected: {detected_type})"
     if claimed_type in BLOCKED_CONTENT_TYPES:
@@ -170,6 +175,7 @@ def is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | N
 
 def content_type_mismatch(claimed_type: str, detected_type: str) -> str | None:
     """Returns a rejection reason if the claimed and detected types are in different categories, else None."""
+    claimed_type, detected_type = _normalize(claimed_type), _normalize(detected_type)
     if (
         claimed_type
         and claimed_type != "application/octet-stream"

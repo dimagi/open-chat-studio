@@ -229,6 +229,7 @@ class TestIsBlocked:
         ("extension", "claimed", "detected", "expected"),
         [
             pytest.param("exe", "text/plain", "text/plain", "file extension '.exe' not allowed", id="exe"),
+            pytest.param("EXE", "text/plain", "text/plain", "file extension '.exe' not allowed", id="extension-case"),
             pytest.param("dmg", "", "application/octet-stream", "file extension '.dmg' not allowed", id="dmg"),
             pytest.param(
                 "txt",
@@ -239,10 +240,10 @@ class TestIsBlocked:
             ),
             pytest.param(
                 "txt",
-                "application/x-msdownload",
+                "Application/X-MSDownload; name=setup.txt",
                 "text/plain",
                 "file type not allowed (claimed: application/x-msdownload)",
-                id="blocked-claimed-type",
+                id="blocked-claimed-type-with-params",
             ),
             pytest.param("pdf", "application/pdf", "application/pdf", None, id="allowed-pdf"),
             pytest.param("png", "image/png", "image/png", None, id="allowed-image"),
@@ -266,6 +267,7 @@ class TestContentTypeMismatch:
             pytest.param("application/json", "text/plain", False, id="text-like-json"),
             pytest.param("application/xml", "text/plain", False, id="text-like-xml"),
             pytest.param("text/csv", "text/plain", False, id="same-category"),
+            pytest.param("Application/PDF; name=x.pdf", "application/pdf", False, id="normalized"),
         ],
     )
     def test_mismatch(self, claimed, detected, should_block):
