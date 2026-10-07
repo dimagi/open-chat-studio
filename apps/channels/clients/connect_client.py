@@ -177,8 +177,8 @@ class CommCareConnectClient:
     ) -> None:
         """Send a message, with or without attachments, through PersonalID's create_message.
 
-        A message with attachments also carries LEGACY_APP_MESSAGE for apps that cannot show
-        them, and expires after ATTACHMENT_EXPIRY.
+        A message with attachments also carries its text followed by LEGACY_APP_MESSAGE for apps
+        that cannot show them, and expires after ATTACHMENT_EXPIRY.
         """
         message: dict = {"channel": channel_id, "message_id": str(uuid4())}
         if text:
@@ -187,7 +187,8 @@ class CommCareConnectClient:
         # Encrypted once, outside the retried request, so a retry sends the same bytes
         attachment_parts = []
         if attachments:
-            message["content_legacy_msg"] = self._encrypted_content(encryption_key, LEGACY_APP_MESSAGE)
+            legacy_text = f"{text}\n\n{LEGACY_APP_MESSAGE}" if text else LEGACY_APP_MESSAGE
+            message["content_legacy_msg"] = self._encrypted_content(encryption_key, legacy_text)
             message["expires_at"] = (timezone.now() + ATTACHMENT_EXPIRY).isoformat()
             message["attachments"] = []
             for index, attachment in enumerate(attachments):

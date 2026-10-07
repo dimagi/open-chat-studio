@@ -298,7 +298,7 @@ class TestCreateMessage:
         message = json.loads(data["message"])
         assert set(message) == {"channel", "message_id", "content", "content_legacy_msg", "expires_at", "attachments"}
         assert _decrypt_text(encryption_key, message["content"]) == "See attached"
-        assert _decrypt_text(encryption_key, message["content_legacy_msg"]) == LEGACY_APP_MESSAGE
+        assert _decrypt_text(encryption_key, message["content_legacy_msg"]) == f"See attached\n\n{LEGACY_APP_MESSAGE}"
         assert message["attachments"] == [
             {"name": "site-map.jpg", "type": "image/jpeg", "size": len(_SITE_MAP.content) + 28},
             {"name": "instructions.mp3", "type": "audio/mpeg", "size": len(_INSTRUCTIONS.content) + 28},
