@@ -10,6 +10,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.stages.terminal import MessageDeliveryFailure
 from apps.channels.telegram_channel import TelegramChannel, handle_telegram_block
 from apps.channels.tests.channels.conftest import make_context
+from apps.channels.tests.message_examples import telegram_messages
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -204,3 +205,19 @@ class TestReplayedDelivery:
 
         assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 2
         assert _patched_telebot.return_value.send_message.call_count == 2
+
+
+@pytest.mark.django_db()
+@patch("apps.chat.bots.PipelineBot.process_input")
+@patch("apps.channels.stages.core.EventBot")
+def test_document_is_rejected_before_the_bot_sees_it(event_bot, process_input, _patched_telebot):
+    event_bot.return_value.get_user_message.return_value = "Sorry, I can only read text and voice messages."
+    experiment_channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "x"})
+    channel = TelegramChannel(experiment=experiment_channel.experiment, experiment_channel=experiment_channel)
+
+    channel.new_user_message(telegram_messages.document_message(filename="setup.exe"))
+
+    process_input.assert_not_called()
+    _patched_telebot.return_value.send_message.assert_called_once_with(
+        "123", text="Sorry, I can only read text and voice messages."
+    )
