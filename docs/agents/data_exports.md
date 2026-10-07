@@ -50,7 +50,7 @@ def export_task(self, object_id: int, team_id: int) -> dict:
 
 ## Progress UI
 
-Polls the task status, shows progress, and on completion links to the stored file. A failure re-enables the start control.
+Polls the task status, shows progress, and on completion links to the stored file. Every terminal state, success or failure, hides the start control and the bar; a failure shows the error message instead of the link.
 
 The page that hosts the progress partial loads `{% static 'celery_progress/celery_progress.js' %}` in `{% block page_head %}`. The partial is swapped in later, so it cannot load the script itself.
 
@@ -58,11 +58,11 @@ The page that hosts the progress partial loads `{% static 'celery_progress/celer
 CeleryProgressBar.initProgressBar("{% url 'celery_progress:task_status' task_id %}", {
   onProgress: (_bar, _msg, progress) => { /* update bar with progress.percent */ },
   onSuccess: (_bar, _msg, result) => {
-    if (!result?.file_id) { /* show result.error, re-enable start */ return; }
+    if (!result?.file_id) { /* hide start control, show result.error */ return; }
     // link to {% url 'files:base' team.slug 0 %} with 0 replaced by result.file_id, plus "?allow_s3"
   },
-  onTaskError: () => { /* task crashed in the worker: show error, re-enable start */ },
-  onError: () => { /* network or HTTP error: show error, re-enable start */ },
+  onTaskError: () => { /* task crashed in the worker: hide start control, show error */ },
+  onError: () => { /* network or HTTP error: hide start control, show error */ },
 });
 ```
 
