@@ -1,10 +1,9 @@
 from django.contrib import messages
-from django.http import HttpResponseRedirect
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.http import require_POST
 
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import TeamMetadataForm
-from apps.teams.utils import section_url
 from apps.teams.views.team_settings import render_team_settings
 from apps.web.elevation import Grant, requires_elevation
 
@@ -13,11 +12,9 @@ SECTION = "internal-metadata"
 
 @login_and_team_required
 @requires_elevation(Grant.OCS_ADMIN)
+@require_POST
 def internal_metadata(request, team_slug):
     """Staff-only endpoint for saving a team's internal metadata."""
-    if request.method != "POST":
-        return HttpResponseRedirect(section_url(team_slug=team_slug, section_key=SECTION))
-
     form = TeamMetadataForm(request.POST, team=request.team)
     if form.is_valid():
         form.save()
