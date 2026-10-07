@@ -2,7 +2,7 @@ import dataclasses
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -189,9 +189,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
 CONNECTION_TEST_TIMEOUT_SECONDS = 10
 # A provider is free to return a response of any size, and this is rendered on the page.
 CONNECTION_ERROR_DETAIL_LIMIT = 2000
-VERIFIED_CREDENTIALS_KEY = "verified_credentials"
-VERIFICATION_ERROR_KEY = "verification_error"
-CREDENTIALS_CHECKED_AT_KEY = "credentials_checked_at"
+
+
+class LlmProviderExtraDataKeys(StrEnum):
+    VERIFIED_CREDENTIALS = "verified_credentials"
+    VERIFICATION_ERROR = "verification_error"
+    CREDENTIALS_CHECKED_AT = "credentials_checked_at"
 
 
 def _error_detail(exc: Exception, limit: int = CONNECTION_ERROR_DETAIL_LIMIT) -> str:
@@ -229,7 +232,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         A missing key and a stored False both mean no - never checked, and checked-and-rejected
         both need the next save to check again.
         """
-        return (self.extra_data or {}).get(VERIFIED_CREDENTIALS_KEY) is True
+        return (self.extra_data or {}).get(LlmProviderExtraDataKeys.VERIFIED_CREDENTIALS) is True
 
     @property
     def verification_error(self) -> str:
@@ -239,13 +242,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         credentials that are still saved here, so it has to be there when the user comes
         back to the page rather than only on the redirect after the save.
         """
-        return (self.extra_data or {}).get(VERIFICATION_ERROR_KEY, "")
+        return (self.extra_data or {}).get(LlmProviderExtraDataKeys.VERIFICATION_ERROR, "")
 
     @property
     def credentials_checked_at(self) -> datetime | None:
         """When the stored verification result was produced, or None for results stored before
         this was recorded."""
-        checked_at = (self.extra_data or {}).get(CREDENTIALS_CHECKED_AT_KEY)
+        checked_at = (self.extra_data or {}).get(LlmProviderExtraDataKeys.CREDENTIALS_CHECKED_AT)
         return datetime.fromisoformat(checked_at) if checked_at else None
 
     @property
@@ -379,13 +382,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
             provider = LlmProvider.objects.select_for_update().get(pk=self.pk)
             extra_data = {
                 **(provider.extra_data or {}),
-                VERIFIED_CREDENTIALS_KEY: verified,
-                CREDENTIALS_CHECKED_AT_KEY: timezone.now().isoformat(),
+                LlmProviderExtraDataKeys.VERIFIED_CREDENTIALS: verified,
+                LlmProviderExtraDataKeys.CREDENTIALS_CHECKED_AT: timezone.now().isoformat(),
             }
             if detail:
-                extra_data[VERIFICATION_ERROR_KEY] = detail
+                extra_data[LlmProviderExtraDataKeys.VERIFICATION_ERROR] = detail
             else:
-                extra_data.pop(VERIFICATION_ERROR_KEY, None)
+                extra_data.pop(LlmProviderExtraDataKeys.VERIFICATION_ERROR, None)
             provider.extra_data = extra_data
             provider.save(update_fields=["extra_data"])
         self.extra_data = extra_data
