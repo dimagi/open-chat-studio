@@ -390,6 +390,51 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("filename", "content", "reason"),
+    [
+        pytest.param("setup.exe", b"MZ\x90\x00", "file extension '.exe' not allowed", id="extension"),
+        pytest.param(
+            "notes.txt",
+            b"\x7fELF\x02\x01\x01\x00" + bytes(8) + b"\x02\x00\x3e\x00\x01\x00\x00\x00" + bytes(40),
+            "detected: application/x-executable",
+            id="detected-type",
+        ),
+    ],
+)
+@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
+def test_experiment_session_message_view_rejects_blocked_file(
+    delay_mock, experiment, client, filename, content, reason
+):
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
+    )
+    url = reverse(
+        "experiments:experiment_session_message",
+        kwargs={
+            "team_slug": experiment.team.slug,
+            "experiment_id": experiment.public_id,
+            "session_id": session.external_id,
+            "version_number": Experiment.DEFAULT_VERSION_NUMBER,
+        },
+    )
+    client.force_login(experiment.owner)
+    allowed_file = BytesIO(b"some content")
+    allowed_file.name = "notes.md"
+    blocked_file = BytesIO(content)
+    blocked_file.name = filename
+
+    response = client.post(url, data={"message": "Hi", "ocs_attachments": [allowed_file, blocked_file]})
+
+    assert response.status_code == 400
+    assert f"File '{filename}' was rejected" in response.content.decode()
+    assert reason in response.content.decode()
+    assert not session.chat.attachments.exists()
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
 @mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
 @mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
 def test_experiment_session_message_view_missing_message(delay_mock, experiment, client):

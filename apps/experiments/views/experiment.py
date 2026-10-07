@@ -82,7 +82,9 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
+from apps.files.content_type import read_sample
 from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -111,6 +113,19 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
     return _experiment_session_message(request, version_number)
+
+
+def _blocked_upload_error(request) -> str | None:
+    """Returns an error naming the first uploaded file with a blocked extension or content type."""
+    for _key, uploaded_files in request.FILES.lists():
+        for uploaded_file in uploaded_files:
+            if reason := blocked_file_reason(
+                filename=uploaded_file.name,
+                claimed_type=uploaded_file.content_type,
+                content=read_sample(uploaded_file),
+            ):
+                return f"File '{uploaded_file.name}' was rejected: {reason}"
+    return None
 
 
 def _process_uploaded_files(request, session):
@@ -153,6 +168,8 @@ def _experiment_session_message(request, version_number: int):
         raise Http404() from None
 
     message_text = request.POST.get("message", "")
+    if error := _blocked_upload_error(request):
+        return HttpResponseBadRequest(error)
     attachments, created_files = _process_uploaded_files(request, session)
 
     if not message_text and not attachments:
