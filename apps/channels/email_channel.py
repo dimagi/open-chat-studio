@@ -21,16 +21,16 @@ from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.deduplication import is_duplicate_delivery
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.sender import ChannelSender
+from apps.channels.text_utils import append_skipped_attachment_notes
 from apps.channels.utils import is_email_domain_allowed
 from apps.experiments.models import ExperimentSession
 from apps.files.content_type import detect_content_type
 from apps.files.models import File, FilePurpose
 from apps.service_providers.file_limits import (
-    EMAIL_BLOCKED_CONTENT_TYPES,
-    EMAIL_BLOCKED_EXTENSIONS,
     EMAIL_MAX_ATTACHMENT_BYTES,
-    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
     can_send_on_email,
+    content_type_mismatch,
+    is_blocked,
 )
 from apps.teams.utils import set_current_team
 
@@ -170,34 +170,6 @@ def _domain_from_address(email_address: str) -> str:
     return email_address
 
 
-def _category(content_type: str) -> str:
-    """Top-level category for mismatch comparison.
-    Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
-    since magic typically returns text/plain for them.
-    """
-    if content_type in EMAIL_TEXT_LIKE_APPLICATION_TYPES:
-        return "text"
-    return content_type.split("/", 1)[0]
-
-
-def _is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
-    """Returns a rejection reason if blocked, else None."""
-    if extension in EMAIL_BLOCKED_EXTENSIONS:
-        return f"file extension '.{extension}' not allowed"
-    if detected_type in EMAIL_BLOCKED_CONTENT_TYPES:
-        return f"file type not allowed (detected: {detected_type})"
-    if claimed_type in EMAIL_BLOCKED_CONTENT_TYPES:
-        return f"file type not allowed (claimed: {claimed_type})"
-    if (
-        claimed_type
-        and claimed_type != "application/octet-stream"
-        and detected_type != "application/octet-stream"
-        and _category(claimed_type) != _category(detected_type)
-    ):
-        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
-    return None
-
-
 def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tuple[list[int], list[dict]]:
     """Filter and save inbound email attachments, returning accepted File IDs
     and skipped-attachment metadata for surfacing to the LLM."""
@@ -208,7 +180,9 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
         ext = pathlib.Path(att.filename or "").suffix.lstrip(".").lower()
         detected = detect_content_type(att.content_bytes, fallback=att.content_type)
 
-        if reason := _is_blocked(ext, att.content_type, detected):
+        if reason := is_blocked(
+            extension=ext, claimed_type=att.content_type, detected_type=detected
+        ) or content_type_mismatch(claimed_type=att.content_type, detected_type=detected):
             skipped.append({"name": att.filename, "reason": reason, "size": size})
             continue
         if size > EMAIL_MAX_ATTACHMENT_BYTES:
@@ -467,31 +441,10 @@ def email_inbound_handler(sender, event, **kwargs):
     email_msg.attachment_file_ids = accepted_ids
     email_msg.skipped_attachments = [SkippedAttachment(**s) for s in skipped]
     if skipped:
-        email_msg.message_text = _augment_with_skip_notes(email_msg.message_text, skipped)
+        email_msg.message_text = append_skipped_attachment_notes(message_text=email_msg.message_text, skipped=skipped)
 
     handle_email_message.delay(
         email_data=email_msg.model_dump(mode="json"),
         channel_id=channel.id,
         session_id=session.id if session else None,
     )
-
-
-def _augment_with_skip_notes(message_text: str, skipped: list[dict]) -> str:
-    """Append one bracketed line per skipped attachment to message_text so
-    the LLM can surface the skip reasons to the user."""
-    if not skipped:
-        return message_text
-    lines = [f"[Attachment {s['name']!r} ({_human_size(s['size'])}) skipped — {s['reason']}]" for s in skipped]
-    suffix = "\n\n" + "\n".join(lines)
-    return (message_text or "").rstrip() + suffix
-
-
-def _human_size(num_bytes: int) -> str:
-    if num_bytes <= 0:
-        return "size unknown"
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"

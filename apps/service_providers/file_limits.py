@@ -84,7 +84,7 @@ FILE_SENDABILITY_CHECKERS: dict[str, Callable[[str, int], SendabilityResult]] = 
 
 EMAIL_MAX_ATTACHMENT_BYTES = 20 * MB
 
-EMAIL_BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
+BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
     {
         "exe",
         "bat",
@@ -107,7 +107,7 @@ EMAIL_BLOCKED_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
-EMAIL_BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset(
+BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset(
     {
         "application/x-msdownload",
         "application/x-msdos-program",
@@ -130,7 +130,7 @@ EMAIL_BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset(
 # as a mismatch when the claimed type is one of these. Deliberately excludes
 # script types (application/javascript, application/x-sh, ...) — those are
 # textual but executable.
-EMAIL_TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
+TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
     {
         "application/json",
         "application/ld+json",
@@ -147,12 +147,45 @@ EMAIL_TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
 )
 
 
+def _category(content_type: str) -> str:
+    """Top-level category for mismatch comparison.
+    Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
+    since magic typically returns text/plain for them.
+    """
+    if content_type in TEXT_LIKE_APPLICATION_TYPES:
+        return "text"
+    return content_type.split("/", 1)[0]
+
+
+def is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | None:
+    """Returns a rejection reason if the extension or either content type is on the blocklist, else None."""
+    if extension in BLOCKED_EXTENSIONS:
+        return f"file extension '.{extension}' not allowed"
+    if detected_type in BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (detected: {detected_type})"
+    if claimed_type in BLOCKED_CONTENT_TYPES:
+        return f"file type not allowed (claimed: {claimed_type})"
+    return None
+
+
+def content_type_mismatch(claimed_type: str, detected_type: str) -> str | None:
+    """Returns a rejection reason if the claimed and detected types are in different categories, else None."""
+    if (
+        claimed_type
+        and claimed_type != "application/octet-stream"
+        and detected_type != "application/octet-stream"
+        and _category(claimed_type) != _category(detected_type)
+    ):
+        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
+    return None
+
+
 def can_send_on_email(content_type: str, content_size: int) -> SendabilityResult:
     """Email: 20 MB cap, executable/installer denylist applies."""
     content_type = (content_type or "").split(";", 1)[0].strip().lower()
     if not content_type or not content_size or content_size <= 0:
         return SendabilityResult(False, "File type or size unknown")
-    if content_type in EMAIL_BLOCKED_CONTENT_TYPES:
+    if content_type in BLOCKED_CONTENT_TYPES:
         return SendabilityResult(False, f"File type '{content_type}' not allowed for email")
     if content_size > EMAIL_MAX_ATTACHMENT_BYTES:
         return SendabilityResult(False, "Exceeds 20MB email attachment limit")

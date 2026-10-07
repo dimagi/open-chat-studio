@@ -18,3 +18,22 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     text = url_pattern.sub("", text)
 
     return text, urls
+
+
+def append_skipped_attachment_notes(message_text: str, skipped: list[dict]) -> str:
+    """Append one bracketed line per skipped attachment to message_text so
+    the LLM can surface the skip reasons to the user."""
+    lines = [f"[Attachment {s['name']!r} ({_human_size(s['size'])}) skipped — {s['reason']}]" for s in skipped]
+    suffix = "\n\n" + "\n".join(lines)
+    return (message_text or "").rstrip() + suffix
+
+
+def _human_size(num_bytes: int) -> str:
+    if num_bytes <= 0:
+        return "size unknown"
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
