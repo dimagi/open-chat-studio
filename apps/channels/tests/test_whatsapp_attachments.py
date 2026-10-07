@@ -594,6 +594,31 @@ class TestMetaCloudApiInboundDocumentTask:
 
 
 class TestTurnioInboundDocumentCheck:
+    @pytest.fixture()
+    def bot_process_input(self, turnio_whatsapp_channel):
+        with (
+            patch("apps.service_providers.messaging_service.TurnIOService.send_text_message"),
+            patch("apps.chat.bots.PipelineBot.process_input") as bot_process_input,
+        ):
+            bot_process_input.return_value = setup_inbound_bot_response(turnio_whatsapp_channel.experiment)
+            yield bot_process_input
+
+    @pytest.fixture()
+    def send_document(self, turnio_whatsapp_channel):
+        """Returns a function that delivers an inbound Turn.io document message with the given media."""
+        with patch("apps.service_providers.messaging_service.TurnIOService.download_message_media") as download_media:
+
+            def send(caption, filename, content, mime_type):
+                download_media.return_value = (content, mime_type)
+                handle_turn_message(
+                    experiment_id=turnio_whatsapp_channel.experiment.public_id,
+                    message_data=turnio_messages.document_message(
+                        caption=caption, filename=filename, mime_type=mime_type
+                    ),
+                )
+
+            yield send
+
     @pytest.mark.django_db()
     @pytest.mark.parametrize(
         ("filename", "content", "mime_type", "reason"),
@@ -602,27 +627,10 @@ class TestTurnioInboundDocumentCheck:
             pytest.param("notes.txt", b"hello", "application/x-msdownload", "claimed: application/x-ms", id="claimed"),
         ],
     )
-    @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
-    @patch("apps.chat.bots.PipelineBot.process_input")
-    @patch("apps.service_providers.messaging_service.TurnIOService.download_message_media")
     def test_blocked_document_is_removed_before_the_bot_sees_it(
-        self,
-        download_media_mock,
-        bot_process_input,
-        send_text_message,
-        turnio_whatsapp_channel,
-        filename,
-        content,
-        mime_type,
-        reason,
+        self, send_document, bot_process_input, filename, content, mime_type, reason
     ):
-        download_media_mock.return_value = (content, mime_type)
-        bot_process_input.return_value = setup_inbound_bot_response(turnio_whatsapp_channel.experiment)
-
-        handle_turn_message(
-            experiment_id=turnio_whatsapp_channel.experiment.public_id,
-            message_data=turnio_messages.document_message(caption="Run this", filename=filename, mime_type=mime_type),
-        )
+        send_document(caption="Run this", filename=filename, content=content, mime_type=mime_type)
 
         assert not File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).exists()
         user_query = bot_process_input.call_args.args[0]
@@ -638,26 +646,8 @@ class TestTurnioInboundDocumentCheck:
             pytest.param("data.csv", b"name,age\nbob,3\n", "application/vnd.ms-excel", id="csv-with-excel-claim"),
         ],
     )
-    @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
-    @patch("apps.chat.bots.PipelineBot.process_input")
-    @patch("apps.service_providers.messaging_service.TurnIOService.download_message_media")
-    def test_allowed_document_reaches_the_bot(
-        self,
-        download_media_mock,
-        bot_process_input,
-        send_text_message,
-        turnio_whatsapp_channel,
-        filename,
-        content,
-        mime_type,
-    ):
-        download_media_mock.return_value = (content, mime_type)
-        bot_process_input.return_value = setup_inbound_bot_response(turnio_whatsapp_channel.experiment)
-
-        handle_turn_message(
-            experiment_id=turnio_whatsapp_channel.experiment.public_id,
-            message_data=turnio_messages.document_message(caption="Read this", filename=filename, mime_type=mime_type),
-        )
+    def test_allowed_document_reaches_the_bot(self, send_document, bot_process_input, filename, content, mime_type):
+        send_document(caption="Read this", filename=filename, content=content, mime_type=mime_type)
 
         file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
         assert bot_process_input.call_args.args[0] == "Read this"
