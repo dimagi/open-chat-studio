@@ -179,8 +179,9 @@ def blocked_file_reason(filename: str, claimed_type: str, content: bytes) -> str
 
     `content` only needs to hold the start of the file.
     """
+    # Windows drops trailing dots and spaces, so "run.bat." saves as "run.bat".
     return is_blocked(
-        extension=pathlib.Path(filename or "").suffix.lstrip("."),
+        extension=pathlib.Path((filename or "").rstrip(". ")).suffix.lstrip("."),
         claimed_type=claimed_type,
         detected_type=detect_content_type(content, fallback=claimed_type),
     )

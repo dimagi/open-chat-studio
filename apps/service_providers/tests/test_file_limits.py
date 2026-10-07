@@ -297,6 +297,12 @@ class TestBlockedFileReason:
                 "file type not allowed (detected: text/x-shellscript)",
                 id="shell-script-sniffed",
             ),
+            pytest.param(
+                "run.bat.", "text/plain", b"@echo off", "file extension '.bat' not allowed", id="trailing-dot"
+            ),
+            pytest.param(
+                "run.bat ", "text/plain", b"@echo off", "file extension '.bat' not allowed", id="trailing-space"
+            ),
             pytest.param("report.pdf", "application/pdf", b"%PDF-1.4 fake", None, id="allowed"),
             pytest.param("", "", b"", None, id="no-name-or-type"),
         ],
