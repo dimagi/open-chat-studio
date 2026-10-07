@@ -14,6 +14,8 @@ from apps.custom_actions.schema_utils import (
     _resolve_schema_type,
     get_operations_from_spec,
     get_operations_from_spec_dict,
+    get_standalone_spec,
+    trim_spec,
 )
 from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import sanitize_property_name
@@ -658,3 +660,59 @@ def test_function_def_names_are_sanitized_operation_ids():
 
     space_operation = next(op for op in operations if op.path == "/space")
     assert space_operation.operation_id == "Get Something Cool"
+
+
+def _path_level_parameters_spec():
+    case_id = {"in": "path", "name": "case_id", "required": True, "schema": {"type": "string"}}
+    return {
+        "openapi": "3.0.3",
+        "info": {"title": "Cases", "version": "1.0.0"},
+        "paths": {
+            "/case/{case_id}/": {
+                "parameters": [case_id],
+                "get": {"operationId": "get_case", "responses": {"200": {"description": "The case."}}},
+                "put": {
+                    "operationId": "update_case",
+                    "parameters": [{**case_id, "description": "Overridden"}],
+                    "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {}}}}},
+                },
+            }
+        },
+    }
+
+
+def test_trim_spec_keeps_path_level_parameters():
+    trimmed = trim_spec(_path_level_parameters_spec())
+    path_item = trimmed["paths"]["/case/{case_id}/"]
+    assert path_item["parameters"][0]["name"] == "case_id"
+    assert path_item["get"] == {"operationId": "get_case"}
+
+
+def test_trim_spec_drops_non_operation_path_fields():
+    spec = _path_level_parameters_spec()
+    spec["paths"]["/case/{case_id}/"]["summary"] = "Cases"
+    spec["paths"]["/case/{case_id}/"]["servers"] = [{"url": "https://other.com"}]
+    path_item = trim_spec(spec)["paths"]["/case/{case_id}/"]
+    assert set(path_item) == {"parameters", "get", "put"}
+
+
+def test_get_standalone_spec_includes_path_level_parameters():
+    standalone = get_standalone_spec("https://example.com", _path_level_parameters_spec(), "/case/{case_id}/", "get")
+    assert standalone["paths"] == {
+        "/case/{case_id}/": {
+            "get": {"operationId": "get_case"},
+            "parameters": [{"in": "path", "name": "case_id", "required": True, "schema": {"type": "string"}}],
+        }
+    }
+    spec = OpenAPISpec.from_spec_dict(standalone)
+    function_def = openapi_spec_op_to_function_def(spec, "/case/{case_id}/", "get")
+    assert "case_id" in json.dumps(function_def.args_schema.model_json_schema())
+
+
+def test_get_operations_inherits_path_level_parameters():
+    operations = {op.operation_id: op for op in get_operations_from_spec_dict(_path_level_parameters_spec())}
+    assert [(p.name, p.param_in, p.required) for p in operations["get_case"].path_parameters] == [
+        ("case_id", "path", True)
+    ]
+    put_params = operations["update_case"].path_parameters
+    assert [(p.name, p.description) for p in put_params] == [("case_id", "Overridden")]
