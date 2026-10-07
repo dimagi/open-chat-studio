@@ -346,10 +346,7 @@ class TestTeamApplicationViews:
 
         assert response.status_code == 302
         # Registration is initiated from the team admin page, so it returns to that section.
-        assert (
-            response.url
-            == f"{reverse('single_team:manage_team_section', args=[team.slug, 'developer'])}#oauth-applications"
-        )
+        assert response.url == manage_applications_url(team.slug)
         application = OAuth2Application.objects.get(name="New App")
         assert application.team == team
         assert application.user == admin_user
@@ -494,10 +491,7 @@ class TestTeamApplicationViews:
         )
 
         assert response.status_code == 302
-        assert (
-            response.url
-            == f"{reverse('single_team:manage_team_section', args=[team.slug, 'developer'])}#oauth-applications"
-        )
+        assert response.url == manage_applications_url(team.slug)
         application.refresh_from_db()
         assert application.name == "Renamed"
         assert application.team == team

@@ -7,7 +7,7 @@ from waffle.testutils import override_flag
 from apps.teams.flags import FlagInfo, Flags, get_all_flag_info
 from apps.teams.forms import RENDERED_FLAG_STATE_FIELD, FeatureFlagForm
 from apps.teams.models import Flag
-from apps.teams.utils import flag_is_active_for_team
+from apps.teams.utils import flag_is_active_for_team, section_url
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -198,7 +198,7 @@ class TestFeatureFlagsSection:
         flag.teams.add(team_with_users)
         flag.flush()
         client.force_login(self._admin(team_with_users))
-        response = client.get(reverse("single_team:manage_team_section", args=[team_with_users.slug, "flags"]))
+        response = client.get(section_url(team_slug=team_with_users.slug, section_key="flags"))
         rendered_state = re.search(rf'name="{RENDERED_FLAG_STATE_FIELD}" value="([^"]*)"', response.content.decode())
         assert rendered_state is not None
         assert MANAGEABLE_FLAG in rendered_state.group(1).split(",")
@@ -207,7 +207,7 @@ class TestFeatureFlagsSection:
         client.force_login(self._admin(team_with_users))
         response = client.get(reverse("single_team:feature_flags", args=[team_with_users.slug]))
         assert response.status_code == 302
-        assert response.url == reverse("single_team:manage_team_section", args=[team_with_users.slug, "flags"])
+        assert response.url == section_url(team_slug=team_with_users.slug, section_key="flags")
 
 
 @pytest.mark.django_db()

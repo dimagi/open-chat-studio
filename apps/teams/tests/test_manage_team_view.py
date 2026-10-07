@@ -4,13 +4,10 @@ from waffle.testutils import override_flag
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.flags import Flags
+from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
-
-
-def _section_url(team, section):
-    return reverse("single_team:manage_team_section", args=[team.slug, section])
 
 
 @pytest.fixture()
@@ -59,7 +56,7 @@ def test_data_nav_link_hidden_for_non_admin(client, team, member):
     client.force_login(member)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
 
-    assert _section_url(team, "data").encode() not in response.content
+    assert section_url(team_slug=team.slug, section_key="data").encode() not in response.content
 
 
 @pytest.mark.django_db()
@@ -67,7 +64,7 @@ def test_data_nav_link_shown_for_admin(client, team, admin):
     client.force_login(admin)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
 
-    assert _section_url(team, "data").encode() in response.content
+    assert section_url(team_slug=team.slug, section_key="data").encode() in response.content
 
 
 @pytest.mark.django_db()
@@ -75,8 +72,8 @@ def test_notifications_section_hidden_when_flag_off(client, team, admin):
     client.force_login(admin)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
 
-    assert _section_url(team, "notifications").encode() not in response.content
-    assert client.get(_section_url(team, "notifications")).status_code == 404
+    assert section_url(team_slug=team.slug, section_key="notifications").encode() not in response.content
+    assert client.get(section_url(team_slug=team.slug, section_key="notifications")).status_code == 404
 
 
 @pytest.mark.django_db()
@@ -84,9 +81,9 @@ def test_notifications_section_hidden_when_flag_off(client, team, admin):
 def test_notifications_section_shown_when_flag_on(client, team, admin):
     client.force_login(admin)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
-    assert _section_url(team, "notifications").encode() in response.content
+    assert section_url(team_slug=team.slug, section_key="notifications").encode() in response.content
 
-    section = client.get(_section_url(team, "notifications"))
+    section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
     assert section.status_code == 200
     assert b"btn-add-notification-channel" in section.content
 
@@ -94,17 +91,17 @@ def test_notifications_section_shown_when_flag_on(client, team, admin):
 @pytest.mark.django_db()
 def test_internal_metadata_section_is_staff_only(client, team, admin):
     client.force_login(admin)
-    assert client.get(_section_url(team, "internal-metadata")).status_code == 404
+    assert client.get(section_url(team_slug=team.slug, section_key="internal-metadata")).status_code == 404
 
     admin.is_staff = True
     admin.save()
-    assert client.get(_section_url(team, "internal-metadata")).status_code == 200
+    assert client.get(section_url(team_slug=team.slug, section_key="internal-metadata")).status_code == 200
 
 
 @pytest.mark.django_db()
 def test_renaming_the_team_keeps_the_current_section(client, team, admin):
     client.force_login(admin)
-    response = client.post(_section_url(team, "members"), {"name": "Renamed"})
+    response = client.post(section_url(team_slug=team.slug, section_key="members"), {"name": "Renamed"})
 
     team.refresh_from_db()
     assert team.name == "Renamed"
