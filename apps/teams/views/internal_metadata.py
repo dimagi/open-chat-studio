@@ -4,7 +4,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import TeamMetadataForm
-from apps.teams.views.team_settings import render_team_settings, section_url
+from apps.teams.utils import section_url
+from apps.teams.views.team_settings import render_team_settings
 from apps.web.elevation import Grant, requires_elevation
 
 SECTION = "internal-metadata"
@@ -15,7 +16,7 @@ SECTION = "internal-metadata"
 def internal_metadata(request, team_slug):
     """Staff-only endpoint for saving a team's internal metadata."""
     if request.method != "POST":
-        return HttpResponseRedirect(section_url(team_slug, SECTION))
+        return HttpResponseRedirect(section_url(team_slug=team_slug, section_key=SECTION))
 
     form = TeamMetadataForm(request.POST, team=request.team)
     if form.is_valid():

@@ -24,13 +24,12 @@ from apps.teams.forms import (
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
+from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
 from apps.web.forms import set_form_fields_disabled
 
 _ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
-
-DEFAULT_SECTION = "integrations"
 
 
 def _team_files_export_context(team):
@@ -186,12 +185,8 @@ SETTINGS_SECTIONS = [
 _SECTIONS_BY_KEY = {section.key: section for section in SETTINGS_SECTIONS}
 
 
-def section_url(team_slug: str, section_key: str | None = None) -> str:
-    return reverse("single_team:manage_team_section", args=[team_slug, section_key or DEFAULT_SECTION])
-
-
 def get_section(request, section_key: str | None) -> SettingsSection:
-    section = _SECTIONS_BY_KEY.get(section_key or DEFAULT_SECTION)
+    section = _SECTIONS_BY_KEY.get(section_key or DEFAULT_SETTINGS_SECTION)
     if section is None or not section.is_visible(request):
         raise Http404(f"No team settings section named '{section_key}'")
     return section
@@ -203,7 +198,7 @@ def _nav_items(request, active: SettingsSection, stats: dict) -> list[dict]:
             "key": section.key,
             "label": section.label,
             "icon": section.icon,
-            "url": section_url(request.team.slug, section.key),
+            "url": section_url(team_slug=request.team.slug, section_key=section.key),
             "count": stats.get(section.count_key) if section.count_key else None,
             "is_active": section.key == active.key,
         }
@@ -261,5 +256,5 @@ def manage_team(request, team_slug, section=None):
     team_form.save()
     messages.success(request, _("Team details saved!"))
     if request.team.slug != team_slug:
-        return HttpResponseRedirect(section_url(request.team.slug, section))
+        return HttpResponseRedirect(section_url(team_slug=request.team.slug, section_key=section))
     return render_team_settings(request, section, team_form=team_form)

@@ -43,6 +43,7 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
+from apps.teams.utils import section_url
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -357,10 +358,7 @@ class CreateServiceProvider(
     def _breadcrumbs(self, instance):
         return [
             (_("Team Settings"), reverse("single_team:manage_team", args=[self.request.team.slug])),
-            (
-                self.provider_type.label,
-                reverse("single_team:manage_team_section", args=[self.request.team.slug, "integrations"]),
-            ),
+            (self.provider_type.label, section_url(team_slug=self.request.team.slug, section_key="integrations")),
             (_("Edit") if instance else _("Create"), None),
         ]
 

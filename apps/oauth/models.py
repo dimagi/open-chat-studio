@@ -19,7 +19,7 @@ from oauth2_provider.models import (
 
 from apps.generics.chips import Chip
 from apps.teams.models import Team
-from apps.teams.utils import get_slug_for_team
+from apps.teams.utils import get_slug_for_team, section_url
 
 
 def manage_applications_url(team_slug: str) -> str:
@@ -30,7 +30,7 @@ def manage_applications_url(team_slug: str) -> str:
     including the channel form, on the other side of the two-person setup -- can import it
     without importing the views.
     """
-    return f"{reverse('single_team:manage_team_section', args=[team_slug, 'developer'])}#oauth-applications"
+    return section_url(team_slug=team_slug, section_key="developer", fragment="oauth-applications")
 
 
 @audit_fields("allowed_chatbots")

@@ -4,7 +4,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import FeatureFlagForm
-from apps.teams.views.team_settings import render_team_settings, section_url
+from apps.teams.utils import section_url
+from apps.teams.views.team_settings import render_team_settings
 
 SECTION = "flags"
 
@@ -13,7 +14,7 @@ SECTION = "flags"
 def feature_flags(request, team_slug):
     """Save the team's feature flags and re-render the settings section."""
     if request.method != "POST":
-        return HttpResponseRedirect(section_url(team_slug, SECTION))
+        return HttpResponseRedirect(section_url(team_slug=team_slug, section_key=SECTION))
 
     team = request.team
     if not request.team_membership.is_team_admin():
