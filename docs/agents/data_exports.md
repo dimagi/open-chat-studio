@@ -54,6 +54,8 @@ Polls the task status, shows progress, and on completion links to the stored fil
 
 The page that hosts the progress partial loads `{% static 'celery_progress/celery_progress.js' %}` in `{% block page_head %}`. The partial is swapped in later, so it cannot load the script itself.
 
+The download link goes to `files:base`, which requires `files.view_file`. The permission that starts the export does not grant it, so every group allowed to start the export must also have `files.view_file`, or its users get a 403 on the link.
+
 ```javascript
 CeleryProgressBar.initProgressBar("{% url 'celery_progress:task_status' task_id %}", {
   onProgress: (_bar, _msg, progress) => { /* update bar with progress.percent */ },
