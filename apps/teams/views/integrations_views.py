@@ -26,7 +26,7 @@ _CATEGORY_ICONS = {
 
 
 def _verifiable(provider) -> LlmProvider | None:
-    """The provider, if its credentials can be checked; None for types with no check."""
+    """The provider if it is an LLM provider whose credentials can be checked, otherwise None."""
     return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
 
 
