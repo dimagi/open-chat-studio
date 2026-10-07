@@ -20,7 +20,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
-from apps.files.models import FilePurpose
+from apps.files.models import File, FilePurpose
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
@@ -431,6 +431,7 @@ def test_experiment_session_message_view_rejects_blocked_file(
     assert f"File '{filename}' was rejected" in response.content.decode()
     assert reason in response.content.decode()
     assert not session.chat.attachments.exists()
+    assert not File.objects.exists()
     delay_mock.assert_not_called()
 
 
