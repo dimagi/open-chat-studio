@@ -172,10 +172,9 @@ def _experiment_session_message(request, version_number: int):
         return HttpResponseBadRequest(error)
     attachments, created_files = _process_uploaded_files(request, session)
 
-    if not message_text and not attachments:
-        return HttpResponseBadRequest("A message or attachment is required.")
-
-    if attachments and not message_text:
+    if not message_text:
+        if not attachments:
+            return HttpResponseBadRequest("A message or attachment is required.")
         message_text = "Please look at the attachments and respond appropriately"
 
     result = get_response_for_webchat_task.delay(
