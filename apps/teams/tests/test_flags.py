@@ -203,11 +203,9 @@ class TestFeatureFlagsSection:
         assert rendered_state is not None
         assert MANAGEABLE_FLAG in rendered_state.group(1).split(",")
 
-    def test_get_redirects_to_the_section(self, client, team_with_users):
+    def test_rejects_get(self, client, team_with_users):
         client.force_login(self._admin(team_with_users))
-        response = client.get(reverse("single_team:feature_flags", args=[team_with_users.slug]))
-        assert response.status_code == 302
-        assert response.url == section_url(team_slug=team_with_users.slug, section_key="flags")
+        assert client.get(reverse("single_team:feature_flags", args=[team_with_users.slug])).status_code == 405
 
 
 @pytest.mark.django_db()

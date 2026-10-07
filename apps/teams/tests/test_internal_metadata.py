@@ -53,11 +53,9 @@ def test_staff_can_view(team, staff_client, settings):
 
 
 @pytest.mark.django_db()
-def test_get_on_the_save_endpoint_redirects_to_the_section(team, staff_client, settings):
+def test_save_endpoint_rejects_get(team, staff_client, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
-    response = staff_client.get(_url(team))
-    assert response.status_code == 302
-    assert response.url == section_url(team_slug=team.slug, section_key="internal-metadata")
+    assert staff_client.get(_url(team)).status_code == 405
 
 
 @pytest.mark.django_db()
