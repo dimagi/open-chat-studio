@@ -15,7 +15,7 @@ class DeniedParticipantSource(models.TextChoices):
 
 @audit_fields(*model_audit_fields.DENIED_PARTICIPANT_FIELDS, audit_special_queryset_writes=True)
 class DeniedParticipant(BaseTeamModel):
-    """A participant on the team's denylist, one row per team and participant."""
+    """A participant on the team's denylist, one row per team and participant. Create with `block_participant`."""
 
     objects = AuditingManager()
     participant = models.ForeignKey("experiments.Participant", on_delete=models.CASCADE, related_name="denials")
