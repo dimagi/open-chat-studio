@@ -46,7 +46,7 @@ def export_task(self, object_id: int, team_id: int) -> dict:
         return {"error": EXPORT_FAILED_MESSAGE}
 ```
 
-`write_rows_to_tempfile` is a placeholder. It opens a binary `tempfile.SpooledTemporaryFile`, writes the CSV through an `io.TextIOWrapper`, then calls `flush()` and `detach()` on the wrapper (closing it would close the temp file) and `seek(0)` on the temp file before returning it.
+`write_rows_to_tempfile` is a placeholder. It opens a binary `tempfile.SpooledTemporaryFile` with a positive `max_size` (the existing exports use 10 MB; the default of 0 never rolls over to disk), writes the CSV through an `io.TextIOWrapper`, then calls `flush()` and `detach()` on the wrapper (closing it would close the temp file) and `seek(0)` on the temp file before returning it.
 
 ## Progress UI
 
