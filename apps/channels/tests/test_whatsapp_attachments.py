@@ -604,8 +604,8 @@ class TestTurnioInboundDocumentCheck:
             yield bot_process_input
 
     @pytest.fixture()
-    def send_document(self, turnio_whatsapp_channel):
-        """Returns a function that delivers an inbound Turn.io document message with the given media."""
+    def send_document(self, turnio_whatsapp_channel, bot_process_input):
+        """Returns a function that delivers an inbound Turn.io document message and returns the bot's input mock."""
         with patch("apps.service_providers.messaging_service.TurnIOService.download_message_media") as download_media:
 
             def send(caption, filename, content, mime_type):
@@ -616,6 +616,7 @@ class TestTurnioInboundDocumentCheck:
                         caption=caption, filename=filename, mime_type=mime_type
                     ),
                 )
+                return bot_process_input
 
             yield send
 
@@ -628,9 +629,9 @@ class TestTurnioInboundDocumentCheck:
         ],
     )
     def test_blocked_document_is_removed_before_the_bot_sees_it(
-        self, send_document, bot_process_input, filename, content, mime_type, reason
+        self, send_document, filename, content, mime_type, reason
     ):
-        send_document(caption="Run this", filename=filename, content=content, mime_type=mime_type)
+        bot_process_input = send_document(caption="Run this", filename=filename, content=content, mime_type=mime_type)
 
         assert not File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).exists()
         user_query = bot_process_input.call_args.args[0]
@@ -646,8 +647,8 @@ class TestTurnioInboundDocumentCheck:
             pytest.param("data.csv", b"name,age\nbob,3\n", "application/vnd.ms-excel", id="csv-with-excel-claim"),
         ],
     )
-    def test_allowed_document_reaches_the_bot(self, send_document, bot_process_input, filename, content, mime_type):
-        send_document(caption="Read this", filename=filename, content=content, mime_type=mime_type)
+    def test_allowed_document_reaches_the_bot(self, send_document, filename, content, mime_type):
+        bot_process_input = send_document(caption="Read this", filename=filename, content=content, mime_type=mime_type)
 
         file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
         assert bot_process_input.call_args.args[0] == "Read this"
