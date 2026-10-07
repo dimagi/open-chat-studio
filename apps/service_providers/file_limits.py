@@ -114,6 +114,8 @@ BLOCKED_CONTENT_TYPES: frozenset[str] = frozenset(
     {
         "application/x-msdownload",
         "application/x-msdos-program",
+        "application/x-dosexec",
+        "application/vnd.microsoft.portable-executable",
         "application/x-bat",
         "application/x-sh",
         "application/x-executable",

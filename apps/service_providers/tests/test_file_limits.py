@@ -276,6 +276,13 @@ class TestBlockedFileReason:
                 "file type not allowed (detected: application/x-msdownload)",
                 id="claimed-type-when-sniffing-finds-nothing",
             ),
+            pytest.param(
+                "report.pdf",
+                "application/pdf",
+                b"MZ\x90\x00" + bytes(60),
+                "file type not allowed (detected: application/x-dosexec)",
+                id="windows-executable-renamed-to-pdf",
+            ),
             pytest.param("report.pdf", "application/pdf", b"%PDF-1.4 fake", None, id="allowed"),
             pytest.param("", "", b"", None, id="no-name-or-type"),
         ],
