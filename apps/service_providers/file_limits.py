@@ -12,69 +12,66 @@ class SendabilityResult(NamedTuple):
     reason: str
 
 
+def _normalize(content_type: str) -> str:
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def _unknown_type_or_size(content_type: str, content_size: int) -> bool:
+    return not content_type or not content_size or content_size <= 0
+
+
+def _check_size(content_size: int, limit: int, limit_name: str) -> SendabilityResult:
+    """Returns a supported result if `content_size` is within `limit`, else one naming the exceeded limit."""
+    if content_size <= limit:
+        return SendabilityResult(True, "")
+    return SendabilityResult(False, f"Exceeds {limit // MB}MB {limit_name}")
+
+
 def can_send_on_whatsapp(content_type: str, content_size: int) -> SendabilityResult:
     """Meta Cloud API limits: 5MB images, 16MB audio/video, 100MB documents (application/*)."""
-    content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if not content_type or not content_size or content_size <= 0:
+    content_type = _normalize(content_type)
+    if _unknown_type_or_size(content_type=content_type, content_size=content_size):
         return SendabilityResult(False, "File type or size unknown")
 
     if content_type.startswith("image/"):
-        limit = 5 * MB
-        if content_size <= limit:
-            return SendabilityResult(True, "")
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB image limit for WhatsApp")
+        return _check_size(content_size=content_size, limit=5 * MB, limit_name="image limit for WhatsApp")
 
     if content_type.startswith(("video/", "audio/")):
-        limit = 16 * MB
-        if content_size <= limit:
-            return SendabilityResult(True, "")
         media_type = "video" if content_type.startswith("video/") else "audio"
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB {media_type} limit for WhatsApp")
+        return _check_size(content_size=content_size, limit=16 * MB, limit_name=f"{media_type} limit for WhatsApp")
 
     if content_type.startswith("application/"):
-        limit = 100 * MB
-        if content_size <= limit:
-            return SendabilityResult(True, "")
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB document limit for WhatsApp")
+        return _check_size(content_size=content_size, limit=100 * MB, limit_name="document limit for WhatsApp")
 
     return SendabilityResult(False, f"Unsupported file type '{content_type}' for WhatsApp")
 
 
 def can_send_on_telegram(content_type: str, content_size: int) -> SendabilityResult:
     """Telegram limits: 10MB images, 50MB audio/video/documents."""
-    content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if not content_type or not content_size or content_size <= 0:
+    content_type = _normalize(content_type)
+    if _unknown_type_or_size(content_type=content_type, content_size=content_size):
         return SendabilityResult(False, "File type or size unknown")
 
     if content_type.startswith("image/"):
-        limit = 10 * MB
-        if content_size <= limit:
-            return SendabilityResult(True, "")
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB image limit for Telegram")
+        return _check_size(content_size=content_size, limit=10 * MB, limit_name="image limit for Telegram")
 
     if content_type.startswith(("video/", "audio/", "application/")):
-        limit = 50 * MB
-        if content_size <= limit:
-            return SendabilityResult(True, "")
         media_type = content_type.split("/")[0]
         if media_type == "application":
             media_type = "document"
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB {media_type} limit for Telegram")
+        return _check_size(content_size=content_size, limit=50 * MB, limit_name=f"{media_type} limit for Telegram")
 
     return SendabilityResult(False, f"Unsupported file type '{content_type}' for Telegram")
 
 
 def can_send_on_slack(content_type: str, content_size: int) -> SendabilityResult:
     """Slack limit: 50MB for all supported types (image/*, video/*, audio/*, application/*)."""
-    content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if not content_type or not content_size or content_size <= 0:
+    content_type = _normalize(content_type)
+    if _unknown_type_or_size(content_type=content_type, content_size=content_size):
         return SendabilityResult(False, "File type or size unknown")
 
-    limit = 50 * MB
     if content_type.startswith(("image/", "video/", "audio/", "application/")):
-        if content_size <= limit:
-            return SendabilityResult(True, "")
-        return SendabilityResult(False, f"Exceeds {limit // MB}MB file size limit for Slack")
+        return _check_size(content_size=content_size, limit=50 * MB, limit_name="file size limit for Slack")
 
     return SendabilityResult(False, f"Unsupported file type '{content_type}' for Slack")
 
@@ -152,10 +149,6 @@ TEXT_LIKE_APPLICATION_TYPES: frozenset[str] = frozenset(
 )
 
 
-def _normalize(content_type: str) -> str:
-    return (content_type or "").split(";", 1)[0].strip().lower()
-
-
 def _category(content_type: str) -> str:
     """Top-level category for mismatch comparison.
     Maps known textual application/* types (JSON, XML, YAML, ...) to 'text'
@@ -193,20 +186,17 @@ def blocked_file_reason(filename: str, claimed_type: str, content: bytes) -> str
 def content_type_mismatch(claimed_type: str, detected_type: str) -> str | None:
     """Returns a rejection reason if the claimed and detected types are in different categories, else None."""
     claimed_type, detected_type = _normalize(claimed_type), _normalize(detected_type)
-    if (
-        claimed_type
-        and claimed_type != "application/octet-stream"
-        and detected_type != "application/octet-stream"
-        and _category(claimed_type) != _category(detected_type)
-    ):
-        return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
-    return None
+    if not claimed_type or "application/octet-stream" in (claimed_type, detected_type):
+        return None
+    if _category(claimed_type) == _category(detected_type):
+        return None
+    return f"content type mismatch (claimed: {claimed_type}, detected: {detected_type})"
 
 
 def can_send_on_email(content_type: str, content_size: int) -> SendabilityResult:
     """Email: 20 MB cap, executable/installer denylist applies."""
-    content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if not content_type or not content_size or content_size <= 0:
+    content_type = _normalize(content_type)
+    if _unknown_type_or_size(content_type=content_type, content_size=content_size):
         return SendabilityResult(False, "File type or size unknown")
     if content_type in BLOCKED_CONTENT_TYPES:
         return SendabilityResult(False, f"File type '{content_type}' not allowed for email")
