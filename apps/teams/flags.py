@@ -93,6 +93,11 @@ class Flags(FlagInfo, Enum):
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
     )
 
+    ABUSE_DETECTION = (
+        "flag_abuse_detection",
+        "Abuse detection - message moderation, strikes and participant blocking (issue #4269)",
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
