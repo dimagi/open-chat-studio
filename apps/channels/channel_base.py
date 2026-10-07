@@ -103,6 +103,8 @@ class ChannelBase(ABC):
                     response = ChatMessage(content=ctx.early_exit_response, message_type=ChatMessageType.AI)
                 elif ctx.bot_response:
                     response = ctx.bot_response
+                elif ctx.abort_response is not None:
+                    response = ChatMessage(content=ctx.abort_response, message_type=ChatMessageType.AI)
                 else:
                     response = ChatMessage(content="", message_type=ChatMessageType.AI)
 

@@ -89,6 +89,10 @@ class MessageProcessingContext:
     # refused model turn. Set alongside early_exit_response; read by PersistenceStage.
     early_exit_metadata: dict = field(default_factory=dict)
 
+    # Set by the pipeline orchestrator from an EarlyAbort that carries a response. Returned
+    # to the caller only; nothing is sent or persisted.
+    abort_response: str | None = None
+
     # Set by QueryExtractionStage when a voice note yielded no query -- no speech in it,
     # nothing able to transcribe it, or transcription failed outright. It defers the error
     # rather than raising so ChatMessageCreationStage still records the turn; ErrorGuardStage
@@ -229,9 +233,10 @@ class MessageProcessingPipeline:
         """
         try:
             unexpected_exception = self._run_core_stages(ctx)
-        except EarlyAbort:
+        except EarlyAbort as e:
             # Silent halt -- skip terminal stages entirely. The pipeline
             # has decided it cannot or should not respond to this message.
+            ctx.abort_response = e.response
             return ctx
 
         # Terminal stages always run -- regardless of early exit or error
