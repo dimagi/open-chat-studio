@@ -783,6 +783,11 @@ class EvaluationRun(BaseTeamModel):
             self.save(update_fields=["finished_at", "status"])
 
     @property
+    def is_running(self) -> bool:
+        """The run has not reached a terminal state yet."""
+        return self.status in NON_TERMINAL_RUN_STATUSES
+
+    @property
     def is_finalizing(self) -> bool:
         """The run is complete but its aggregates have not landed yet.
 
@@ -811,13 +816,21 @@ class EvaluationRun(BaseTeamModel):
     def error_summary(self) -> RunErrorSummary:
         return summarize_errors(self.results.all())
 
-    def table_results(self) -> models.QuerySet[EvaluationResult]:
-        """The results the table and the CSV download are built from."""
-        results_qs = annotate_export_fields(self.results.all()).order_by("created_at")
+    @property
+    def export_results(self) -> models.QuerySet[EvaluationResult]:
+        """The results this run contributes to an export, before the export annotations.
+
+        Unannotated so a caller can count the rows without the annotations landing in the
+        GROUP BY.
+        """
+        results = self.results.all()
         if self.type == EvaluationRunType.DELTA and self.scoped_messages.exists():
-            scoped_ids = self.scoped_messages.values_list("id", flat=True)
-            results_qs = results_qs.filter(message_id__in=scoped_ids)
-        return results_qs
+            results = results.filter(message_id__in=self.scoped_messages.values_list("id", flat=True))
+        return results
+
+    def table_results(self) -> models.QuerySet[EvaluationResult]:
+        """The results the results table is built from."""
+        return annotate_export_fields(self.export_results).order_by("created_at")
 
     def get_table_data(self, include_ids: bool = False):
         return build_evaluation_table_data(self.table_results(), include_ids=include_ids)
