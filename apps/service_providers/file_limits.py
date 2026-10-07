@@ -1,5 +1,8 @@
+import pathlib
 from collections.abc import Callable
 from typing import NamedTuple
+
+from apps.files.content_type import detect_content_type
 
 MB = 1024 * 1024
 
@@ -171,6 +174,18 @@ def is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | N
     if claimed_type in BLOCKED_CONTENT_TYPES:
         return f"file type not allowed (claimed: {claimed_type})"
     return None
+
+
+def blocked_file_reason(filename: str, claimed_type: str, content: bytes) -> str | None:
+    """Returns a rejection reason if an inbound file's extension, claimed type or sniffed type is blocked, else None.
+
+    `content` only needs to hold the start of the file.
+    """
+    return is_blocked(
+        extension=pathlib.Path(filename or "").suffix.lstrip("."),
+        claimed_type=claimed_type,
+        detected_type=detect_content_type(content, fallback=claimed_type),
+    )
 
 
 def content_type_mismatch(claimed_type: str, detected_type: str) -> str | None:

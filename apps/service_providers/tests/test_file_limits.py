@@ -7,6 +7,7 @@ from apps.service_providers.file_limits import (
     FILE_SENDABILITY_CHECKERS,
     TEXT_LIKE_APPLICATION_TYPES,
     SendabilityResult,
+    blocked_file_reason,
     can_send_on_email,
     can_send_on_slack,
     can_send_on_telegram,
@@ -252,6 +253,35 @@ class TestIsBlocked:
     )
     def test_extension_and_content_type(self, extension, claimed, detected, expected):
         assert is_blocked(extension=extension, claimed_type=claimed, detected_type=detected) == expected
+
+
+class TestBlockedFileReason:
+    ELF_BYTES = b"\x7fELF\x02\x01\x01\x00" + bytes(8) + b"\x02\x00\x3e\x00\x01\x00\x00\x00" + bytes(40)
+
+    @pytest.mark.parametrize(
+        ("filename", "claimed", "content", "expected"),
+        [
+            pytest.param("Setup.EXE", "text/plain", b"MZ", "file extension '.exe' not allowed", id="extension"),
+            pytest.param(
+                "notes.txt",
+                "text/plain",
+                ELF_BYTES,
+                "file type not allowed (detected: application/x-executable)",
+                id="sniffed-type",
+            ),
+            pytest.param(
+                "notes.txt",
+                "application/x-msdownload",
+                b"",
+                "file type not allowed (detected: application/x-msdownload)",
+                id="claimed-type-when-sniffing-finds-nothing",
+            ),
+            pytest.param("report.pdf", "application/pdf", b"%PDF-1.4 fake", None, id="allowed"),
+            pytest.param("", "", b"", None, id="no-name-or-type"),
+        ],
+    )
+    def test_reason(self, filename, claimed, content, expected):
+        assert blocked_file_reason(filename=filename, claimed_type=claimed, content=content) == expected
 
 
 class TestContentTypeMismatch:
