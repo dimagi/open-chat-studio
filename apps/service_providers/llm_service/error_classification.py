@@ -12,13 +12,14 @@ the rest.
 """
 
 import contextlib
+import functools
 from collections.abc import Iterator
+from dataclasses import dataclass
 from enum import StrEnum
 
 import anthropic
 import httpx
 import openai
-from google.api_core import exceptions as google_exceptions
 from langchain_core.exceptions import ContextOverflowError
 
 from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
@@ -42,53 +43,71 @@ GOOGLE_BAD_KEY_PHRASES = (
     "invalid api key",
 )
 
-AUTHENTICATION_ERRORS: tuple[type[Exception], ...] = (
-    openai.AuthenticationError,
-    openai.PermissionDeniedError,
-    anthropic.AuthenticationError,
-    anthropic.PermissionDeniedError,
-    google_exceptions.Unauthenticated,
-    google_exceptions.PermissionDenied,
-)
-
-NOT_FOUND_ERRORS: tuple[type[Exception], ...] = (
-    openai.NotFoundError,
-    anthropic.NotFoundError,
-    google_exceptions.NotFound,
-)
+ErrorTypes = tuple[type[Exception], ...]
 
 # LangChain's provider-agnostic base, raised by langchain-openai for both its variants.
-CONTEXT_OVERFLOW_ERRORS: tuple[type[Exception], ...] = (ContextOverflowError,)
+CONTEXT_OVERFLOW_ERRORS: ErrorTypes = (ContextOverflowError,)
 
-TIMEOUT_ERRORS: tuple[type[Exception], ...] = (
-    openai.APITimeoutError,
-    anthropic.APITimeoutError,
-    google_exceptions.DeadlineExceeded,
-    httpx.TimeoutException,
-)
 
-RATE_LIMIT_ERRORS: tuple[type[Exception], ...] = (
-    openai.RateLimitError,
-    anthropic.RateLimitError,
-    google_exceptions.TooManyRequests,
-    google_exceptions.ResourceExhausted,
-)
+@dataclass(frozen=True)
+class ProviderErrorTypes:
+    authentication: ErrorTypes
+    not_found: ErrorTypes
+    timeout: ErrorTypes
+    rate_limit: ErrorTypes
+    unavailable: ErrorTypes
+    invalid_request: ErrorTypes
+    google_invalid_argument: type[Exception]
 
-UNAVAILABLE_ERRORS: tuple[type[Exception], ...] = (
-    openai.InternalServerError,
-    openai.APIConnectionError,
-    anthropic.InternalServerError,
-    anthropic.OverloadedError,
-    anthropic.APIConnectionError,
-    google_exceptions.ServiceUnavailable,
-    google_exceptions.InternalServerError,
-)
 
-INVALID_REQUEST_ERRORS: tuple[type[Exception], ...] = (
-    openai.BadRequestError,
-    anthropic.BadRequestError,
-    google_exceptions.InvalidArgument,
-)
+@functools.cache
+def provider_error_types() -> ProviderErrorTypes:
+    """The provider SDK exception types, grouped by how a failure is classified."""
+    # Importing google.api_core reads the metadata of every installed package.
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
+    return ProviderErrorTypes(
+        authentication=(
+            openai.AuthenticationError,
+            openai.PermissionDeniedError,
+            anthropic.AuthenticationError,
+            anthropic.PermissionDeniedError,
+            google_exceptions.Unauthenticated,
+            google_exceptions.PermissionDenied,
+        ),
+        not_found=(
+            openai.NotFoundError,
+            anthropic.NotFoundError,
+            google_exceptions.NotFound,
+        ),
+        timeout=(
+            openai.APITimeoutError,
+            anthropic.APITimeoutError,
+            google_exceptions.DeadlineExceeded,
+            httpx.TimeoutException,
+        ),
+        rate_limit=(
+            openai.RateLimitError,
+            anthropic.RateLimitError,
+            google_exceptions.TooManyRequests,
+            google_exceptions.ResourceExhausted,
+        ),
+        unavailable=(
+            openai.InternalServerError,
+            openai.APIConnectionError,
+            anthropic.InternalServerError,
+            anthropic.OverloadedError,
+            anthropic.APIConnectionError,
+            google_exceptions.ServiceUnavailable,
+            google_exceptions.InternalServerError,
+        ),
+        invalid_request=(
+            openai.BadRequestError,
+            anthropic.BadRequestError,
+            google_exceptions.InvalidArgument,
+        ),
+        google_invalid_argument=google_exceptions.InvalidArgument,
+    )
 
 
 class ProviderErrorKind(StrEnum):
@@ -170,13 +189,14 @@ def _team_actionable_kind(error: BaseException) -> ProviderErrorKind | None:
 
 
 def _transient_kind(error: BaseException) -> ProviderErrorKind | None:
-    if isinstance(error, TIMEOUT_ERRORS):
+    types = provider_error_types()
+    if isinstance(error, types.timeout):
         return ProviderErrorKind.TIMEOUT
-    if isinstance(error, RATE_LIMIT_ERRORS):
+    if isinstance(error, types.rate_limit):
         return ProviderErrorKind.RATE_LIMIT
-    if isinstance(error, UNAVAILABLE_ERRORS):
+    if isinstance(error, types.unavailable):
         return ProviderErrorKind.UNAVAILABLE
-    if isinstance(error, INVALID_REQUEST_ERRORS):
+    if isinstance(error, types.invalid_request):
         return ProviderErrorKind.INVALID_REQUEST
     return None
 
@@ -210,22 +230,23 @@ def translate_provider_errors():
 def _is_billing(error: BaseException) -> bool:
     # Google reports an exhausted balance and a per-minute rate limit alike as
     # ResourceExhausted, with nothing but prose to tell them apart, so it stays in
-    # RATE_LIMIT_EXCEPTIONS: over-retrying is the cheaper mistake of the two.
+    # rate_limit_exceptions(): over-retrying is the cheaper mistake of the two.
     if isinstance(error, openai.RateLimitError) and _openai_codes(error) & OPENAI_QUOTA_CODES:
         return True
     return isinstance(error, anthropic.BadRequestError) and _mentions(error, ANTHROPIC_QUOTA_PHRASES)
 
 
 def _is_authentication(error: BaseException) -> bool:
-    if isinstance(error, AUTHENTICATION_ERRORS):
+    types = provider_error_types()
+    if isinstance(error, types.authentication):
         return True
     # Not every InvalidArgument is a bad key; a malformed request is one too, and that is
     # not the team's to fix, so it stays unclassified.
-    return isinstance(error, google_exceptions.InvalidArgument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES)
+    return isinstance(error, types.google_invalid_argument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES)
 
 
 def _is_not_found(error: BaseException) -> bool:
-    return isinstance(error, NOT_FOUND_ERRORS)
+    return isinstance(error, provider_error_types().not_found)
 
 
 def _is_context_overflow(error: BaseException) -> bool:

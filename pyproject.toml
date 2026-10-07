@@ -272,6 +272,10 @@ banned-module-level-imports = [
     "pandas",
     # Imports transformers (already banned above) on the way in; 1.2s cumulative.
     "voyageai",
+    # Imports transformers on the way in; 2s cumulative.
+    "langchain_text_splitters",
+    # Reads every installed package's metadata on import; 0.8s.
+    "google.api_core",
 ]
 
 [dependency-groups]

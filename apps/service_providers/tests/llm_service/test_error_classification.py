@@ -4,7 +4,7 @@ import anthropic
 import httpx
 import openai
 import pytest
-from google.api_core import exceptions as google_exceptions
+from google.api_core import exceptions as google_exceptions  # noqa: TID253
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.runnables import RunnableLambda
 
