@@ -1,0 +1,24 @@
+{% load humanize %}
+{% with verification=record.verification %}
+  {% if verification %}
+    <div>
+      {% if verification.state == "verified" %}
+        <span class="badge badge-success badge-sm whitespace-nowrap"><i class="fa-solid fa-check mr-1"></i>Verified</span>
+      {% elif verification.state == "failed" %}
+        <a href="{% url 'service_providers:edit' request.team.slug record.provider_type record.pk %}"
+           class="badge badge-error badge-sm whitespace-nowrap"
+           title="{{ verification.error|truncatechars:200 }}"><i class="fa-solid fa-xmark mr-1"></i>Check failed</a>
+      {% else %}
+        <span class="badge badge-soft badge-sm whitespace-nowrap">Not checked</span>
+      {% endif %}
+      {% if verification.state == "no_model" %}
+        <span class="block text-neutral-500 text-xs mt-1">No models to test against</span>
+      {% elif verification.checked_at %}
+        <span class="block text-neutral-500 text-xs mt-1"
+              title="{{ verification.checked_at }}">Checked {{ verification.checked_at|naturaltime }}</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <span class="text-neutral-400">—</span>
+  {% endif %}
+{% endwith %}
