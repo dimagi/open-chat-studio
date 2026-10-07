@@ -23,6 +23,8 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
 def append_skipped_attachment_notes(message_text: str, skipped: list[dict]) -> str:
     """Append one bracketed line per skipped attachment to message_text so
     the LLM can surface the skip reasons to the user."""
+    if not skipped:
+        return message_text
     lines = [f"[Attachment {s['name']!r} ({_human_size(s['size'])}) skipped — {s['reason']}]" for s in skipped]
     suffix = "\n\n" + "\n".join(lines)
     return (message_text or "").rstrip() + suffix
