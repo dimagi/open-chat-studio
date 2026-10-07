@@ -135,6 +135,38 @@ def validate_file_upload(file):
     return True, None
 
 
+def _validate_uploaded_files(files):
+    """Return a 400 Response if the upload is empty, has an invalid file, or is too large; else None."""
+    if not files:
+        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    for file in files:
+        is_valid, error_msg = validate_file_upload(file)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_size_mb = sum(f.size for f in files) / (1024 * 1024)
+    if total_size_mb > MAX_TOTAL_SIZE_MB:
+        return Response(
+            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    return None
+
+
+def _resolve_uploader(request, session, participant_remote_id):
+    """Identify the uploader: participant, authenticated user's email, remote id, then "unknown"."""
+    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
+
+    if not uploaded_by and request.user.is_authenticated:
+        uploaded_by = request.user.email
+
+    # Default to the remote_id if we still don't have an identifier
+    if not uploaded_by:
+        uploaded_by = participant_remote_id or "unknown"
+
+    return uploaded_by
+
+
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @extend_schema(
     operation_id="chat_upload_file",
@@ -184,7 +216,7 @@ def validate_file_upload(file):
 def chat_upload_file(request, session_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
@@ -196,32 +228,15 @@ def chat_upload_file(request, session_id):
     if refusal := consent_refusal(request, session):
         return refusal
     files = request.FILES.getlist("files")
-    if not files:
-        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+    if refusal := _validate_uploaded_files(files):
+        return refusal
 
-    for file in files:
-        is_valid, error_msg = validate_file_upload(file)
-        if not is_valid:
-            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-    total_size_mb = sum(f.size for f in files) / (1024 * 1024)
-    if total_size_mb > MAX_TOTAL_SIZE_MB:
-        return Response(
-            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
-        )
     expiry_date = timezone.now() + timezone.timedelta(hours=24)
     uploaded_files = []
 
     participant_remote_id = request.POST.get("participant_remote_id", "")
     participant_name = request.POST.get("participant_name", "")
-    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
-
-    if not uploaded_by and request.user.is_authenticated:
-        uploaded_by = request.user.email
-
-    # Default to the remote_id if we still don't have an identifier
-    if not uploaded_by:
-        uploaded_by = participant_remote_id or "unknown"
+    uploaded_by = _resolve_uploader(request, session, participant_remote_id)
 
     for file in files:
         file_obj = File.objects.create(
@@ -785,7 +800,7 @@ def chat_send_message(request, session_id):
 
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     # Verify session is active
     if session.is_complete:
@@ -968,7 +983,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
