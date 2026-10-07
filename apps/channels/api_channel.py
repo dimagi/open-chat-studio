@@ -9,6 +9,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import (
+    BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
@@ -94,6 +95,7 @@ class ApiChannel(ChannelBase):
             core_stages=[
                 ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
+                BlockedParticipantStage(reply_with_message=True),
                 ConsentCheckStage(),
                 ChannelDisabledStage(),
                 SessionResolutionStage(),

@@ -8,6 +8,7 @@ from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.stages.core import (
     AttachmentHydrationStage,
+    BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
@@ -139,6 +140,7 @@ class ChannelBase(ABC):
                 DuplicateDeliveryStage(),
                 ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
+                BlockedParticipantStage(),
                 ConsentCheckStage(),
                 # After the participant stages so the static reply is addressable and
                 # consent-gated; before session/bot work so a disabled channel does none.
