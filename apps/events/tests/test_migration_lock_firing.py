@@ -114,11 +114,11 @@ def test_enqueue_timed_out_events_skips_migrating_team(session):
         frozen_time.shift(delta=timedelta(minutes=15))
 
         _arm_migration_lock(session.team)
-        with mock.patch("apps.events.tasks.fire_trigger.delay") as mock_fire:
+        with mock.patch("apps.events.tasks.fire_trigger.apply_async") as mock_fire:
             enqueue_timed_out_events()
         mock_fire.assert_not_called()
 
         _arm_migration_lock(session.team, armed=False)
-        with mock.patch("apps.events.tasks.fire_trigger.delay") as mock_fire:
+        with mock.patch("apps.events.tasks.fire_trigger.apply_async") as mock_fire:
             enqueue_timed_out_events()
         mock_fire.assert_called_once()

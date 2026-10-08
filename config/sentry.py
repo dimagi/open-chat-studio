@@ -108,11 +108,11 @@ def get_disabled_integrations() -> list[Integration]:
 # Load balancer health checks and WhiteNoise static files run through Django on every request.
 UNSAMPLED_PATH_PREFIXES = ("/status/", "/static/")
 
-# Beat tasks that run every minute or more often; each would be a transaction per run.
+# Frequent beat tasks that only find due work and enqueue a task per item. Each enqueues with
+# ``NEW_SENTRY_TRACE_HEADERS`` so that work is still sampled.
 UNSAMPLED_TASKS = frozenset(
     {
         "apps.events.tasks.enqueue_timed_out_events",
-        "apps.events.tasks.poll_scheduled_messages",
         "apps.events.tasks.poll_due_scheduled_triggers",
         "apps.evaluations.tasks.coordinate_evaluation_runs",
     }

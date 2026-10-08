@@ -1,5 +1,9 @@
 from enum import StrEnum
 
+#: Pass as ``apply_async(headers=...)`` from a task that Sentry never samples, so the task it
+#: enqueues starts its own trace instead of inheriting the unsampled decision.
+NEW_SENTRY_TRACE_HEADERS = {"sentry-propagate-traces": False}
+
 
 class Queues(StrEnum):
     """The Celery queues tasks are routed to.
