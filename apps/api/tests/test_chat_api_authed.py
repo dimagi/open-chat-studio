@@ -72,12 +72,24 @@ def session(experiment):
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_auth(authed_user, authed_client, experiment):
+    """An authenticated start identifies the participant by the caller's email."""
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
     response = authed_client.post(url, data=data, format="json")
     assert response.status_code == 201
     response_json = response.json()
     assert response_json["participant"]["identifier"] == authed_user.email
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_with_auth_stores_no_remote_id_on_the_participant(authed_user, authed_client, experiment):
+    """The participant of an authenticated caller is identified by email, so its remote ID stays empty."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant.remote_id == ""
 
 
 @pytest.mark.django_db()
@@ -98,6 +110,7 @@ def test_start_chat_session_with_auth_requires_remote_id_to_match_user(authed_cl
 
 @pytest.mark.django_db()
 def test_start_chat_session_with_session_state(authed_user, authed_client, experiment):
+    """An authenticated start stores session_data as the session's state."""
     url = reverse("api:chat:start-session")
     data = {
         "chatbot_id": experiment.public_id,
@@ -108,6 +121,24 @@ def test_start_chat_session_with_session_state(authed_user, authed_client, exper
     assert response.status_code == 201
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
     assert session.state == {"ref": "123"}
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_links_the_authenticated_user_to_an_existing_participant(
+    authed_user, authed_client, experiment, auth_route
+):
+    """A stored participant with the caller's email but no user is reused and linked to the caller on session start."""
+    platform = ChannelPlatform.EMBEDDED_WIDGET if auth_route == "embed_key" else ChannelPlatform.API
+    participant = Participant.objects.create(
+        identifier=authed_user.email, team=experiment.team, platform=platform, user=None
+    )
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": authed_user.email}
+    response = authed_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant_id == participant.id
+    assert session.participant.user_id == authed_user.id
 
 
 @pytest.mark.django_db()

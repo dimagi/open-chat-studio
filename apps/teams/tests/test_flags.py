@@ -1,10 +1,13 @@
+import re
+
 import pytest
+from django.urls import reverse
 from waffle.testutils import override_flag
 
-from apps.teams.flags import Flags
+from apps.teams.flags import FlagInfo, Flags, get_all_flag_info
+from apps.teams.forms import RENDERED_FLAG_STATE_FIELD, FeatureFlagForm
 from apps.teams.models import Flag
-from apps.teams.utils import flag_is_active_for_team
-from apps.teams.views.feature_flags import FeatureFlagForm
+from apps.teams.utils import flag_is_active_for_team, section_url
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -120,6 +123,89 @@ class TestFeatureFlagFormSave:
         assert form.is_valid()
         form.save()
         assert not flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_ticking_a_flag_the_rollout_switched_on_mid_edit_still_enrols_the_team(self, request, team_with_users):
+        """`everyone` turning `True` after the page was rendered must not swallow the tick:
+        the team belongs in the M2M so that it keeps the feature when the rollout ends."""
+        flag = self._flag(request, everyone=True)
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on", RENDERED_FLAG_STATE_FIELD: ""}, team=team_with_users)
+        assert form.is_valid()
+        form.save()
+        assert flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_saving_a_stale_page_does_not_revert_another_admins_change(self, request, team_with_users):
+        """The submitted page showed the flag off, so leaving it off changed nothing; the
+        enrolment another admin made in the meantime stands."""
+        flag = self._flag(request)
+        flag.teams.add(team_with_users)
+        flag.flush()
+        form = FeatureFlagForm({RENDERED_FLAG_STATE_FIELD: ""}, team=team_with_users)
+        assert form.is_valid()
+        form.save()
+        assert flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_unticking_a_flag_that_was_rendered_on_removes_the_team(self, request, team_with_users):
+        flag = self._flag(request)
+        flag.teams.add(team_with_users)
+        flag.flush()
+        form = FeatureFlagForm({RENDERED_FLAG_STATE_FIELD: MANAGEABLE_FLAG}, team=team_with_users)
+        assert form.is_valid()
+        form.save()
+        assert not flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_checking_a_flag_enables_its_required_flags(self, request, monkeypatch, team_with_users):
+        """The required flag's cached team list must be cleared, or checks keep returning the old state."""
+        self._flag(request)
+        required = Flag.objects.create(name="flag_required_by_manageable")
+        request.addfinalizer(required.flush)
+        assert required.is_active_for_team(team_with_users) is False
+
+        flag_infos: dict[str, FlagInfo] = dict(get_all_flag_info())
+        flag_infos[MANAGEABLE_FLAG] = FlagInfo(
+            slug=MANAGEABLE_FLAG, description="", requires=[required.name], teams_can_manage=True
+        )
+        monkeypatch.setattr("apps.teams.forms.get_all_flag_info", lambda: flag_infos)
+
+        form = FeatureFlagForm({MANAGEABLE_FLAG: "on"}, team=team_with_users)
+        assert form.is_valid()
+        form.save()
+        assert Flag.objects.get(name=required.name).is_active_for_team(team_with_users) is True
+
+
+@pytest.mark.django_db()
+class TestFeatureFlagsSection:
+    def _admin(self, team):
+        return next(m.user for m in team.membership_set.all() if m.is_team_admin())
+
+    def _member(self, team):
+        return next(m.user for m in team.membership_set.all() if not m.is_team_admin())
+
+    def test_admin_can_save_from_the_section(self, request, client, team_with_users):
+        client.force_login(self._admin(team_with_users))
+        client.post(reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"})
+        flag = Flag.objects.get(name=MANAGEABLE_FLAG)
+        request.addfinalizer(flag.flush)
+        assert flag.teams.filter(pk=team_with_users.pk).exists()
+
+    def test_non_admin_cannot_save(self, client, team_with_users):
+        client.force_login(self._member(team_with_users))
+        client.post(reverse("single_team:feature_flags", args=[team_with_users.slug]), {MANAGEABLE_FLAG: "on"})
+        assert not Flag.objects.filter(name=MANAGEABLE_FLAG, teams=team_with_users).exists()
+
+    def test_section_carries_the_state_the_checkboxes_were_rendered_with(self, request, client, team_with_users):
+        flag = Flag.objects.create(name=MANAGEABLE_FLAG)
+        request.addfinalizer(flag.flush)
+        flag.teams.add(team_with_users)
+        flag.flush()
+        client.force_login(self._admin(team_with_users))
+        response = client.get(section_url(team_slug=team_with_users.slug, section_key="flags"))
+        rendered_state = re.search(rf'name="{RENDERED_FLAG_STATE_FIELD}" value="([^"]*)"', response.content.decode())
+        assert rendered_state is not None
+        assert MANAGEABLE_FLAG in rendered_state.group(1).split(",")
+
+    def test_rejects_get(self, client, team_with_users):
+        client.force_login(self._admin(team_with_users))
+        assert client.get(reverse("single_team:feature_flags", args=[team_with_users.slug])).status_code == 405
 
 
 @pytest.mark.django_db()

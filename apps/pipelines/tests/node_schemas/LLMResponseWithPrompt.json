@@ -160,6 +160,35 @@
       },
       "ui:widget": "toggle"
     },
+    "metadata_filters": {
+      "description": "Only search rows whose metadata has every one of these values. Values match exactly, including case. Not applied to remote indexes.",
+      "items": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "MetadataFilter",
+        "type": "object"
+      },
+      "title": "Metadata Filters",
+      "type": "array",
+      "ui:visibleWhen": {
+        "field": "collection_index_ids",
+        "operator": "is_not_empty",
+        "value": null
+      },
+      "ui:widget": "key_value_pairs"
+    },
     "tools": {
       "description": "The tools to enable for the bot",
       "items": {

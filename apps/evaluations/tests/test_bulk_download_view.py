@@ -27,8 +27,8 @@ def test_start_bulk_download_renders_a_progress_bar(client, team_with_users, con
     """Starting the export swaps in the bar the task's progress feeds."""
     content = _start_export(client, team_with_users, config, task_id=str(uuid.uuid4()))
 
-    assert 'id="eval-export-progress-bar"' in content
-    assert 'id="eval-export-progress-message"' in content
+    assert "data-export-bar" in content
+    assert "data-export-message" in content
 
 
 @pytest.mark.django_db()
@@ -43,7 +43,7 @@ def test_progress_bar_polls_the_reversed_celery_progress_url(client, team_with_u
 
 @pytest.mark.django_db()
 def test_runs_home_loads_the_progress_library(client, team_with_users, config):
-    """The partial's inline script calls CeleryProgressBar, so the page must load it."""
+    """The progress fragment's inline script calls CeleryProgressBar, so the page must load it."""
     client.force_login(team_with_users.members.first())
     url = reverse("evaluations:evaluation_runs_home", args=[team_with_users.slug, config.id])
 
@@ -53,10 +53,17 @@ def test_runs_home_loads_the_progress_library(client, team_with_users, config):
 
 
 @pytest.mark.django_db()
-def test_start_button_id_matches_the_one_the_script_clears(client, team_with_users, config):
-    """Every terminal state hides the button by id. Renaming one side only would leave a
-    disabled "Generating" button sitting next to the download link."""
-    content = _start_export(client, team_with_users, config, task_id=str(uuid.uuid4()))
+def test_progress_fragment_finds_the_button_the_button_partial_renders(client, team_with_users, config):
+    """The two partials are coupled through these hooks: the progress script walks up to
+    `[data-export]` to disable and then hide `[data-export-start]`. Renaming one side only
+    would leave a disabled "Generating" button sitting next to the download link."""
+    client.force_login(team_with_users.members.first())
+    runs_home = reverse("evaluations:evaluation_runs_home", args=[team_with_users.slug, config.id])
 
-    assert 'id="eval-bulk-download-button"' in content
-    assert 'getElementById("eval-bulk-download-button")' in content
+    button = client.get(runs_home).content.decode()
+    progress = _start_export(client, team_with_users, config, task_id=str(uuid.uuid4()))
+
+    assert "data-export-start" in button
+    assert "data-export" in button
+    assert 'closest("[data-export]")' in progress
+    assert 'querySelector("[data-export-start]")' in progress

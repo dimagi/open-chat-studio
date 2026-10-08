@@ -43,6 +43,7 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
+from apps.teams.utils import section_url
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -355,10 +356,9 @@ class CreateServiceProvider(
         return f"{verb} and Verify"
 
     def _breadcrumbs(self, instance):
-        manage_team_url = reverse("single_team:manage_team", args=[self.request.team.slug])
         return [
-            (_("Team Settings"), manage_team_url),
-            (self.provider_type.label, f"{manage_team_url}#integrations"),
+            (_("Team Settings"), reverse("single_team:manage_team", args=[self.request.team.slug])),
+            (self.provider_type.label, section_url(team_slug=self.request.team.slug, section_key="integrations")),
             (_("Edit") if instance else _("Create"), None),
         ]
 
@@ -402,6 +402,7 @@ class CreateServiceProvider(
             if instance:
                 ctx["verification_error"] = instance.verification_error
                 ctx["credentials_verified"] = instance.credentials_verified
+                ctx["credentials_checked_at"] = instance.credentials_checked_at
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
 

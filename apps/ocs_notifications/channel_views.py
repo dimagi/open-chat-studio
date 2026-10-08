@@ -14,6 +14,7 @@ from apps.ocs_notifications.models import NotificationChannel
 from apps.ocs_notifications.tables import NotificationChannelTable
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.utils import section_url
 
 
 @method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
@@ -63,7 +64,7 @@ class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMix
         }
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return section_url(team_slug=self.request.team.slug, section_key="notifications")
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -92,7 +93,7 @@ class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return NotificationChannel.objects.filter(team=self.request.team)
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return section_url(team_slug=self.request.team.slug, section_key="notifications")
 
 
 @method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")

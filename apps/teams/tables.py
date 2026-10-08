@@ -21,6 +21,9 @@ class IntegrationsTable(Table):
     name = TemplateColumn(template_name="teams/components/integration_row_name.html", verbose_name="Name")
     category = Column(verbose_name="Category")
     provider = Column(verbose_name="Provider")
+    verification = TemplateColumn(
+        template_name="teams/components/integration_verification.html", verbose_name="Verification"
+    )
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(
