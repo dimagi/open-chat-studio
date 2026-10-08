@@ -2,7 +2,7 @@ import textwrap
 from zoneinfo import available_timezones
 
 from django.db import transaction
-from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema_field
+from drf_spectacular.utils import OpenApiResponse, PolymorphicProxySerializer, extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from taggit.serializers import TaggitSerializer, TagListSerializerField
@@ -490,6 +490,14 @@ FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = PolymorphicProxySerializer(
     component_name="ForbiddenOrParticipantBlocked",
     serializers=[PermissionDeniedResponse, ParticipantBlockedResponse],
     resource_type_field_name=None,
+)
+
+OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = OpenApiResponse(
+    response=FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    description=(
+        "The OAuth application is not authorized for this chatbot, or the participant is blocked"
+        " (`code` is `participant_blocked`)"
+    ),
 )
 
 

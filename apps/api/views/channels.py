@@ -8,7 +8,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView, Request
@@ -21,7 +21,7 @@ from apps.api.permissions import (
     verify_hmac,
 )
 from apps.api.serializers import (
-    FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
     TriggerBotMessageRequest,
     TriggerBotMessageResponse,
 )
@@ -148,15 +148,6 @@ def handle_trigger_bot_message(request, response_serializer_class):
     return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
-TRIGGER_BOT_FORBIDDEN_RESPONSE = OpenApiResponse(
-    response=FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
-    description=(
-        "The OAuth application is not authorized for this chatbot, or the participant is blocked"
-        " (`code` is `participant_blocked`)"
-    ),
-)
-
-
 class TriggerBotMessageView(APIView):
     # Spelled out rather than inherited from DEFAULT_PERMISSION_CLASSES so the role check is explicit:
     # the default stack gates on team membership and the OAuth scope only, which for API-key callers
@@ -177,7 +168,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
-            403: TRIGGER_BOT_FORBIDDEN_RESPONSE,
+            403: OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
             404: {"description": "Not Found"},
         },
         examples=[
