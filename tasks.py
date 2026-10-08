@@ -13,6 +13,7 @@ from packaging.version import Version
 from termcolor import cprint
 
 MIN_NODE_VERSION = "24.15"
+NODE_VERSION_RANGE = f">={MIN_NODE_VERSION} <25 or >=26"
 DEV_PORT = 8000
 
 
@@ -122,9 +123,9 @@ def setup_dev_env(c: Context, step=False):
 
     _run_with_confirm(c, "Run DB migrations", "python manage.py migrate", step)
 
-    cprint(f"\nChecking node version (>={MIN_NODE_VERSION} required)", "green")
+    cprint(f"\nChecking node version ({NODE_VERSION_RANGE} required)", "green")
     if not _check_node_version(c):
-        cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
+        cprint(f"Node version should be {NODE_VERSION_RANGE}", "red")
         cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
     else:
         cprint("\nInstalling pnpm packages and building front end resources", "green")
@@ -150,7 +151,7 @@ def _check_node_version(c: Context):
     if version.startswith("v"):
         version = version[1:]
     ver = Version(version)
-    return ver >= Version(MIN_NODE_VERSION)
+    return Version(MIN_NODE_VERSION) <= ver < Version("25") or ver >= Version("26")
 
 
 @task
