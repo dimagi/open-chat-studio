@@ -118,21 +118,26 @@ def global_search(request):
 
     for candidate in get_searchable_models(model):
         if result := candidate.search(query):
-            team = result.team
-            if not is_member(request.user, team):
-                try:
-                    check_superuser_team_access(request, team.slug)
-                except TeamAccessDenied:
-                    if not request.user.is_superuser:
-                        raise
-                    return acquire_redirect(request, Grant.team(team.slug))
-
-            if not request.user.has_perm(candidate.permission):
-                raise Http404
-
-            return HttpResponseRedirect(result.get_absolute_url())
+            return _search_result_redirect(request, candidate, result)
 
     raise Http404
+
+
+def _search_result_redirect(request, candidate, result):
+    """Redirect to `result`, or to team elevation first for a superuser who is not a member."""
+    team = result.team
+    if not is_member(request.user, team):
+        try:
+            check_superuser_team_access(request, team.slug)
+        except TeamAccessDenied:
+            if not request.user.is_superuser:
+                raise
+            return acquire_redirect(request, Grant.team(team.slug))
+
+    if not request.user.has_perm(candidate.permission):
+        raise Http404
+
+    return HttpResponseRedirect(result.get_absolute_url())
 
 
 @never_cache
