@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from celery import shared_task
 from celery_progress.backend import ProgressRecorder
-from django.core.files import File as DjangoFile
 from django.utils import timezone
 
+from apps.files.exports import EXPORT_FAILED_MESSAGE, save_data_export
 from apps.files.models import File, FilePurpose
 from apps.teams.invitations import send_invitation_accepted
 from apps.teams.models import Invitation, Membership, Team
@@ -75,14 +75,13 @@ def _export_arcname(file: File) -> str:
 
 
 @shared_task(bind=True, ignore_result=False, queue=Queues.BACKGROUND)
-def create_team_files_zip_task(self, team_id: int) -> int:
+def create_team_files_zip_task(self, team_id: int) -> dict:
     """Build a zip of the team's current files and store it as a DATA_EXPORT file.
 
-    Returns the id of the created File so the caller can serve it later (via a
-    pre-signed URL). Files with no stored content, missing from storage, or that
-    fail to read are skipped rather than aborting the whole export. Regardless of
-    outcome, clears the in-progress export marker (see
-    Team.mark_files_export_finished) so a new export can be started.
+    Returns ``{"file_id": ...}`` on success or ``{"error": ...}`` on failure. Files with no
+    stored content, missing from storage, or that fail to read are skipped rather than
+    aborting the whole export. Regardless of outcome, clears the in-progress export marker
+    (see Team.mark_files_export_finished) so a new export can be started.
     """
     progress_recorder = ProgressRecorder(self)
     team = Team.objects.get(id=team_id)
@@ -116,19 +115,17 @@ def create_team_files_zip_task(self, team_id: int) -> int:
 
             tmp.seek(0)
             filename = f"team-{team.slug}-files-{timezone.now().date().isoformat()}.zip"
-            export = File.objects.create(
-                team=team,
-                name=filename,
-                file=DjangoFile(tmp, name=filename),
-                content_type="application/zip",
-                expiry_date=timezone.now() + timedelta(hours=24),
-                purpose=FilePurpose.DATA_EXPORT,
+            export = save_data_export(
+                team=team, name=filename, file=tmp, content_type="application/zip", expires_in=timedelta(hours=24)
             )
             export_id = export.id
+    except Exception:
+        logger.exception("Team files export failed for team %s", team_id)
+        return {"error": EXPORT_FAILED_MESSAGE}
     finally:
         team.mark_files_export_finished(export_id)
 
-    return export_id
+    return {"file_id": export_id}
 
 
 def start_team_files_export(team: Team) -> str:

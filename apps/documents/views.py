@@ -622,14 +622,8 @@ def download_collection_files(request, team_slug: str, pk: int):
     # Start the task
     task = tasks.create_collection_zip_task.delay(collection.id, request.team.id)
 
-    context = {
-        "task_id": task.task_id,
-        "collection": collection,
-        "team": request.team,
-        "manually_uploaded_files_count": manually_uploaded_count,
-    }
-
-    return render(request, "documents/partials/download_progress.html", context)
+    context = {"task_id": task.task_id, "title": _("Creating ZIP file..."), "link_label": _("Download ZIP")}
+    return render(request, "files/partials/export_progress.html", context)
 
 
 class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]

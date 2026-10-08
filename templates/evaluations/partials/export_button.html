@@ -1,7 +1,7 @@
 {% load i18n %}
 {% comment %}
-Starts an async CSV export. Posting to `start_url` swaps `export_progress.html` into the
-status slot, which drives a progress bar and finally the download link. `export_id` only
+Starts an async CSV export. Posting to `start_url` swaps `files/partials/export_progress.html`
+into the status slot, which drives a progress bar and finally the download link. `export_id` only
 has to be unique within the page. `label` is omitted for an icon-only button.
 {% endcomment %}
 <div class="flex items-center gap-2" data-export>

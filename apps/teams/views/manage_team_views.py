@@ -274,6 +274,6 @@ def download_team_files(request, team_slug):
     task_id = start_team_files_export(team)
     return render(
         request,
-        "teams/partials/download_files_progress.html",
-        {"task_id": task_id, "team": team},
+        "files/partials/export_progress.html",
+        {"task_id": task_id, "title": _("Creating ZIP file..."), "link_label": _("Download ZIP")},
     )

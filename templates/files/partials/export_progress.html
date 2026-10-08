@@ -1,0 +1,45 @@
+{% load i18n %}
+{% translate "Starting..." as msg_starting %}
+{% translate "Retrying..." as msg_retrying %}
+{% translate "The export could not be completed." as msg_failed %}
+{% translate "Network error — check your connection." as msg_network_error %}
+{% translate "Server error — please try again." as msg_server_error %}
+<div id="export-progress-{{ task_id }}"
+     class="{% if title %}flex flex-col gap-2 w-full{% else %}contents{% endif %}"
+     data-progress-url="{% url 'celery_progress:task_status' task_id %}"
+     data-download-url="{% url 'files:base' request.team.slug 0 %}"
+     data-msg-starting="{{ msg_starting }}"
+     data-msg-retrying="{{ msg_retrying }}"
+     data-msg-failed="{{ msg_failed }}"
+     data-msg-network-error="{{ msg_network_error }}"
+     data-msg-server-error="{{ msg_server_error }}">
+  <div data-export-bar-panel class="{% if title %}flex flex-col gap-2 p-4 bg-base-200 rounded-lg{% else %}w-48{% endif %}">
+    {% if title %}
+      <div class="flex items-center gap-2">
+        <span class="loading loading-spinner loading-sm"></span>
+        <h3 class="font-semibold">{{ title }}</h3>
+      </div>
+    {% endif %}
+    <div class="{% if title %}h-4{% else %}h-1.5{% endif %} w-full bg-base-300 rounded-full overflow-hidden">
+      <div data-export-bar class="h-full bg-primary transition-all duration-300 ease-out" style="width: 0%"></div>
+    </div>
+    <div data-export-message class="mt-1 text-xs text-center text-base-content/70">
+      {% translate "Waiting for the export to start..." %}
+    </div>
+  </div>
+
+  <a data-export-link class="btn btn-sm btn-success self-start" style="display: none;" href="#">
+    <i class="fa-solid fa-download"></i>
+    {{ link_label|default:_("Download") }}
+  </a>
+
+  <span data-export-error class="text-error text-sm items-center gap-1" style="display: none;">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span data-export-error-message></span>
+    <button type="button" class="btn btn-ghost btn-xs" onclick="location.reload()">{% translate "Try again" %}</button>
+  </span>
+
+  <script>
+    SiteJS.app.trackExportProgress(document.getElementById("export-progress-{{ task_id }}"));
+  </script>
+</div>

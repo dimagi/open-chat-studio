@@ -1071,6 +1071,10 @@ def generate_evaluation_results_column_suggestions(result_columns, evaluation_ru
     return suggestions
 
 
+def _csv_export_progress_context(task_id: str) -> dict:
+    return {"task_id": task_id, "link_label": _("Download CSV")}
+
+
 @login_and_team_required
 @permission_required("evaluations.view_evaluationrun")
 @require_POST
@@ -1078,7 +1082,7 @@ def start_bulk_download(request, team_slug: str, evaluation_pk: int):
     """Start an async bulk export of the most recent results per dataset item."""
     config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
     task = export_evaluation_bulk_results_task.delay(config.id, request.team.id)
-    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})
+    return TemplateResponse(request, "files/partials/export_progress.html", _csv_export_progress_context(task.id))
 
 
 @login_and_team_required
@@ -1088,4 +1092,4 @@ def start_run_download(request, team_slug: str, evaluation_pk: int, evaluation_r
     """Start an async export of one evaluation run's results."""
     run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     task = export_evaluation_run_results_task.delay(run.id, request.team.id)
-    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})
+    return TemplateResponse(request, "files/partials/export_progress.html", _csv_export_progress_context(task.id))

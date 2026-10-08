@@ -1,7 +1,7 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n static team_tags waffle_tags %}
+{% load form_tags i18n team_tags waffle_tags %}
 {% block page_head %}
-  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
+  {{ block.super }}
   <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
@@ -288,7 +288,9 @@
                   </div>
                   <div id="team-files-download-wrapper">
                     {% if files_export_task_id %}
-                      {% include "teams/partials/download_files_progress.html" with task_id=files_export_task_id %}
+                      {% translate "Creating ZIP file..." as zip_title %}
+                      {% translate "Download ZIP" as zip_link_label %}
+                      {% include "files/partials/export_progress.html" with task_id=files_export_task_id title=zip_title link_label=zip_link_label %}
                     {% else %}
                       {% if files_export_file %}
                         <p class="my-2 text-muted text-sm">

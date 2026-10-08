@@ -1,10 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags static team_tags waffle_tags %}
-
-{% block page_head %}
-  {{ block.super }}
-  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-{% endblock page_head %}
+{% load django_tables2 form_tags team_tags waffle_tags %}
 
 {% block app %}
   <div class="app-card">

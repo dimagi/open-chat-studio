@@ -8,10 +8,10 @@ from django.urls import reverse
 from apps.evaluations.evaluators import EvaluatorResult
 from apps.evaluations.models import EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
-    EXPORT_FAILED_MESSAGE,
     export_evaluation_bulk_results_task,
     export_evaluation_run_results_task,
 )
+from apps.files.exports import EXPORT_FAILED_MESSAGE
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -263,15 +263,15 @@ def test_evaluation_runs_table_disables_the_button_for_a_running_run(logged_in_c
 
 
 @pytest.mark.django_db()
-def test_results_page_renders_the_download_button_and_progress_library(logged_in_client, team_with_users):
+def test_results_page_renders_the_download_button_and_progress_script(logged_in_client, team_with_users):
     run = _completed_run(team_with_users)
     url = reverse("evaluations:evaluation_results_home", args=[team_with_users.slug, run.config_id, run.id])
 
     content = logged_in_client.get(url).content.decode()
 
     assert _start_url(run) in content
-    # The swapped-in progress fragment calls CeleryProgressBar, so the page has to load it.
-    assert "celery_progress/celery_progress.js" in content
+    # The swapped-in progress fragment calls SiteJS.app.trackExportProgress from the app bundle.
+    assert "js/app-bundle.js" in content
 
 
 @pytest.mark.django_db()
