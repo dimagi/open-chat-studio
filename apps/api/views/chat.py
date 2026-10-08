@@ -2,6 +2,7 @@ import pathlib
 
 from django.conf import settings
 from django.core.cache import cache
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -33,6 +34,7 @@ from apps.api.progress_messages import get_progress_message
 from apps.api.serializers import (
     ChatConsentRequest,
     ChatConsentSerializer,
+    ChatMessageSerializer,
     ChatPollResponse,
     ChatSendMessageRequest,
     ChatSendMessageResponse,
@@ -870,7 +872,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
         200: inline_serializer(
             "ChatTaskPoll",
             {
-                "message": MessageSerializer(required=False),
+                "message": ChatMessageSerializer(required=False),
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
@@ -934,7 +936,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if message := task_details["message"]:
         data = {
-            "message": MessageSerializer(message, context={"request": request}).data,
+            "message": ChatMessageSerializer(message, context={"request": request, "session_id": session_id}).data,
             "status": "complete",
         }
         return Response(data, status=status.HTTP_200_OK)
@@ -1008,7 +1010,50 @@ def chat_poll_response(request, session_id):
         "session_status": session_status,
         "consent": session_consent_block(session),
     }
-    return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
+    serializer = ChatPollResponse(response_data, context={"request": request, "session_id": session_id})
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    operation_id="chat_file_content",
+    summary="Download a file attached to a message in a chat session",
+    tags=["Chat"],
+    responses={(200, "application/octet-stream"): OpenApiTypes.BINARY},
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+        OpenApiParameter(
+            name="file_id",
+            type=OpenApiTypes.INT,
+            location=OpenApiParameter.PATH,
+            description="File ID",
+        ),
+    ],
+)
+@api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes(SESSION_PERMISSION_CLASSES)
+def chat_file_content(request, session_id, file_id):
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        raise NotFound()
+
+    # A file outside this session's chat is a 404, not a 403, so file IDs cannot be probed.
+    files = File.objects.filter(team_id=session.team_id, chatattachment__chat_id=session.chat_id).distinct()
+    file = get_object_or_404(files, id=file_id)
+    if not file.file:
+        raise NotFound()
+    try:
+        return FileResponse(
+            file.file.open(), as_attachment=True, filename=file.name, content_type=file.content_type or None
+        )
+    except (FileNotFoundError, ValueError):
+        raise NotFound() from None
 
 
 @extend_schema(

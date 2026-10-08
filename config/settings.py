@@ -514,6 +514,7 @@ SPECTACULAR_SETTINGS = {
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
         "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
+        "MessageRoleEnum": "apps.api.serializers.MESSAGE_ROLES",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,

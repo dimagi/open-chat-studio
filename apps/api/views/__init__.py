@@ -1,5 +1,6 @@
 from .channels import TriggerBotMessageView, callback, consent, generate_key
 from .chat import (
+    chat_file_content,
     chat_poll_response,
     chat_poll_task_response,
     chat_record_consent,
@@ -22,6 +23,7 @@ __all__ = [
     "ParticipantView",
     "TriggerBotMessageView",
     "callback",
+    "chat_file_content",
     "chat_poll_response",
     "chat_poll_task_response",
     "chat_record_consent",
