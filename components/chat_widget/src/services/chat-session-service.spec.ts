@@ -483,6 +483,20 @@ describe('ChatSessionService consent', () => {
     await expect(service.sendMessage('s1', { message: 'hi' })).rejects.toBeInstanceOf(SessionAccessError);
   });
 
+  it('raises a plain Error that does not mention the block on 403 participant_blocked', async () => {
+    const service = makeService();
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        jsonResponse({ code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
+      );
+
+    const error = await service.sendMessage('s1', { message: 'hi' }).catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(SessionAccessError);
+    expect(error.message).not.toMatch(/blocked/i);
+  });
+
   it('posts the accepted form version and resolves on 204', async () => {
     const service = makeService();
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
