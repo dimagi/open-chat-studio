@@ -132,7 +132,9 @@ class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         label=_("Model"),
         choices=[
             ("eleven_multilingual_v2", "Multilingual v2 (default)"),
-            ("eleven_v3", "v3 (latest)"),
+            ("eleven_v4", "v4 (latest)"),
+            ("eleven_v4_turbo", "v4 Turbo (low latency)"),
+            ("eleven_v3", "v3"),
             ("eleven_flash_v2_5", "Flash v2.5 (low latency)"),
         ],
         initial="eleven_multilingual_v2",
