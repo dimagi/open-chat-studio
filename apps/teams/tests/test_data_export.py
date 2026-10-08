@@ -8,6 +8,7 @@ from field_audit.models import AuditEvent
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.forms import TeamPublicKeyForm
 from apps.teams.models import Team
+from apps.teams.utils import section_url
 from apps.users.models import CustomUser
 
 PUBLIC_KEY = """\
@@ -45,53 +46,51 @@ def _set_public_key_url(team):
     return reverse("single_team:set_public_key", args=[team.slug])
 
 
-def _manage_team_url(team):
-    return reverse("single_team:manage_team", args=[team.slug])
-
-
 @pytest.mark.django_db()
 class TestSetPublicKey:
     def test_form_accepts_public_key(self):
-        form = TeamPublicKeyForm(data={"public_key": PUBLIC_KEY})
+        form = TeamPublicKeyForm(data={"export_scope": "all", "public_key": PUBLIC_KEY})
         assert form.is_valid(), form.errors
 
     def test_form_rejects_invalid_public_key(self):
-        form = TeamPublicKeyForm(data={"public_key": "not-a-real-key"})
+        form = TeamPublicKeyForm(data={"export_scope": "all", "public_key": "not-a-real-key"})
         assert not form.is_valid()
         assert "public_key" in form.errors
 
     def test_admin_can_set_public_key(self, client, team, admin):
         client.force_login(admin)
-        response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
+        response = client.post(_set_public_key_url(team), {"export_scope": "all", "public_key": PUBLIC_KEY})
         assert response.status_code == 200
         team.refresh_from_db()
         assert team.public_key == PUBLIC_KEY
 
     def test_member_cannot_set_public_key(self, client, team, member):
         client.force_login(member)
-        response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
+        response = client.post(_set_public_key_url(team), {"export_scope": "all", "public_key": PUBLIC_KEY})
         assert response.status_code == 403
         team.refresh_from_db()
         assert team.public_key == ""
 
     def test_saving_public_key_also_saves_migration_mode(self, client, team, admin):
-        """The mockup shows one "Save key" button for the whole Migration public key
+        """The mockup shows one "Save" button for the whole Migration
         card, so set_public_key must save is_migrating too, not just the key."""
         client.force_login(admin)
-        response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY, "is_migrating": "on"})
+        response = client.post(
+            _set_public_key_url(team), {"export_scope": "all", "public_key": PUBLIC_KEY, "is_migrating": "on"}
+        )
         assert response.status_code == 200
         team.refresh_from_db()
         assert team.public_key == PUBLIC_KEY
         assert team.is_migrating is True
 
         # unchecking the box (i.e. omitting it from POST) and re-saving clears it
-        client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
+        client.post(_set_public_key_url(team), {"export_scope": "all", "public_key": PUBLIC_KEY})
         team.refresh_from_db()
         assert team.is_migrating is False
 
     def test_setting_invalid_public_key_shows_form_error(self, client, team, admin):
         client.force_login(admin)
-        response = client.post(_set_public_key_url(team), {"public_key": "not-a-real-key"})
+        response = client.post(_set_public_key_url(team), {"export_scope": "all", "public_key": "not-a-real-key"})
         assert response.status_code == 200
         form = response.context["public_key_form"]
         assert "public_key" in form.errors
@@ -104,7 +103,9 @@ class TestSetPublicKey:
         confirm outbound messages are frozen would otherwise be misled."""
         assert team.is_migrating is False
         client.force_login(admin)
-        response = client.post(_set_public_key_url(team), {"public_key": "not-a-real-key", "is_migrating": "on"})
+        response = client.post(
+            _set_public_key_url(team), {"export_scope": "all", "public_key": "not-a-real-key", "is_migrating": "on"}
+        )
         assert response.status_code == 200
         team.refresh_from_db()
         assert team.is_migrating is False
@@ -117,19 +118,17 @@ class TestSetPublicKey:
 
     def test_data_export_section_visible_to_admin(self, client, team, admin):
         client.force_login(admin)
-        response = client.get(_manage_team_url(team))
+        response = client.get(section_url(team_slug=team.slug, section_key="data"))
         assert response.status_code == 200
-        assert "Migration public key" in response.content.decode()
+        assert "What may be exported" in response.content.decode()
 
     def test_data_export_section_hidden_from_member(self, client, team, member):
         client.force_login(member)
-        response = client.get(_manage_team_url(team))
-        assert response.status_code == 200
-        assert "Migration public key" not in response.content.decode()
+        assert client.get(section_url(team_slug=team.slug, section_key="data")).status_code == 404
 
     def test_setting_public_key_is_audited(self, client, team, admin):
         client.force_login(admin)
         with enable_audit():
-            client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
+            client.post(_set_public_key_url(team), {"export_scope": "all", "public_key": PUBLIC_KEY})
         events = AuditEvent.objects.by_model(Team).filter(object_pk=team.id)
         assert any("public_key" in (event.delta or {}) for event in events)

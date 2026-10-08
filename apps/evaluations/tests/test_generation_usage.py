@@ -95,9 +95,10 @@ def test_generation_spend_is_evaluation_spend(get_llm_service, llm_experiment, t
     get_llm_service.return_value = _generation_service()
     message = EvaluationMessageFactory.create(input={"content": "Hello", "role": "human"})
 
-    session_id, response = run_bot_generation(team, message, llm_experiment, evaluation_run=evaluation_run)
+    generation = run_bot_generation(team, message, llm_experiment, evaluation_run=evaluation_run)
+    session_id = generation.session_id
 
-    assert response == "Bot response"
+    assert generation.response == "Bot response"
     rows = {row.service_kind: row for row in UsageRecord.objects.filter(team=team)}
     assert set(rows) == {ServiceKind.LLM_INPUT, ServiceKind.LLM_OUTPUT}
     assert {row.source for row in rows.values()} == {UsageSource.EVALUATION}

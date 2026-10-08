@@ -1,52 +1,19 @@
-from functools import update_wrapper
-
 from django.contrib import admin
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_protect
 
-from apps.web.elevation import Elevation, Grant
+from apps.utils.admin import ReadonlyAdminMixin
+from apps.web.models import SuperuserElevation
 
 
-class OcsAdminSite(admin.AdminSite):
-    site_title = "OCS site admin"
-    site_header = "OCS Administration"
-    index_title = "OCS site admin"
+@admin.register(SuperuserElevation)
+class SuperuserElevationAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
+    list_display = ("user", "grant", "granted_at", "expires_at", "released_at", "ip")
+    list_filter = ("granted_at",)
+    search_fields = ("user__email", "grant")
+    raw_id_fields = ("user",)
+    ordering = ("-granted_at",)
 
-    def admin_view(self, view, cacheable=False):
-        """Override the admin_view method to check for temporary superuser access."""
+    def has_add_permission(self, request):
+        return False
 
-        def inner(request, *args, **kwargs):
-            if not self.has_permission(request):
-                if request.path == reverse("admin:logout", current_app=self.name):
-                    index_path = reverse("admin:index", current_app=self.name)
-                    return HttpResponseRedirect(index_path)
-
-                # Inner import to prevent django.contrib.admin (app) from
-                # importing django.contrib.auth.models.User (unrelated model).
-                from django.contrib.auth.views import redirect_to_login  # noqa: PLC0415 - lazy: avoid auth import
-
-                return redirect_to_login(
-                    request.get_full_path(),
-                    reverse("admin:login", current_app=self.name),
-                )
-
-            # this is the custom functionality to check for temporary superuser access
-            if request.user.is_superuser and not Elevation(request).has(Grant.DJANGO_ADMIN):
-                url = reverse("web:elevate_django_admin")
-                next_url = request.get_full_path()
-                if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
-                    next_url = reverse("admin:index", current_app=self.name)
-                return HttpResponseRedirect(f"{url}?next={next_url}")
-
-            return view(request, *args, **kwargs)
-
-        if not cacheable:
-            inner = never_cache(inner)
-        # We add csrf_protect here so this function can be used as a utility
-        # function for any view, without having to repeat 'csrf_protect'.
-        if not getattr(view, "csrf_exempt", False):
-            inner = csrf_protect(inner)
-        return update_wrapper(inner, view)
+    def has_delete_permission(self, request, obj=None):
+        return False

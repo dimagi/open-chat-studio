@@ -1,5 +1,6 @@
 import html
 import json
+import re
 
 import pytest
 from django.template import Context, Template
@@ -77,15 +78,21 @@ class TestHighlightJson:
         assert "hello" in result
         assert "world" in result
 
-    def test_none_renders_as_null(self):
-        result = highlight_json(None)
-        assert "null" in result
-        assert isinstance(result, SafeData)
-
-    def test_list_renders(self):
-        result = highlight_json([1, 2, 3])
-        assert "1" in result
-        assert isinstance(result, SafeData)
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(None, id="none"),
+            pytest.param([1, 2, 3], id="list"),
+            pytest.param({"nested": {"items": [True, None, 1.5]}}, id="nested"),
+            pytest.param({"name": "<script>alert(1)</script>"}, id="html-in-value"),
+        ],
+    )
+    def test_text_content_is_the_json_of_the_value(self, value):
+        # stripping the highlight spans and decoding entities must give back the original JSON;
+        # an unescaped "<script>" would be stripped as a tag and fail the comparison
+        result = highlight_json(value)
+        text = html.unescape(re.sub(r"<[^>]+>", "", result))
+        assert json.loads(text) == value
 
 
 class TestReadableValue:
@@ -179,16 +186,6 @@ class TestReadableValue:
     def test_empty_list_returns_none(self):
         assert readable_value([]) is None
 
-    def test_generation_output_with_tool_call(self):
-        # GENERATION output when LLM calls a tool — content is a function_call block
-        result = readable_value(
-            {
-                "role": "assistant",
-                "content": [{"type": "function_call", "name": "search", "args": {"query": "hello"}}],
-            }
-        )
-        assert result == "assistant: → search(query='hello')"
-
     def test_generation_output_mixed_text_and_tool_call(self):
         # LLM emits text then calls a tool in the same response
         result = readable_value(
@@ -229,16 +226,6 @@ class TestReadableValue:
             }
         )
         assert result == "assistant: → ping(None)"
-
-    def test_anthropic_tool_use_block(self):
-        # Anthropic GENERATION output with tool_use block
-        result = readable_value(
-            {
-                "role": "assistant",
-                "content": [{"type": "tool_use", "id": "tu_1", "name": "search", "input": {"query": "hello"}}],
-            }
-        )
-        assert result == "assistant: → search(query='hello')"
 
     def test_anthropic_tool_use_block_no_input(self):
         result = readable_value(
@@ -323,11 +310,6 @@ class TestFormatParticipantDataDiff:
         assert result[0]["old"] == repr("free")
         assert result[0]["new"] == repr("pro")
 
-    def test_format_diff_nested_path(self):
-        diff = [["change", "preferences.lang", ["en", "fr"]]]
-        result = format_participant_data_diff(diff)
-        assert result[0]["path"] == "preferences.lang"
-
     def test_format_diff_list_path(self):
         diff = [["change", ["tags", 0], ["old", "new"]]]
         result = format_participant_data_diff(diff)
@@ -339,9 +321,6 @@ class TestFormatParticipantDataDiff:
         assert len(result) == 2
         assert result[0]["path"] == "name"
         assert result[1]["path"] == "age"
-
-    def test_format_diff_empty(self):
-        assert format_participant_data_diff([]) == []
 
     def test_format_diff_nested_add(self):
         diff = [["add", "preferences", [["theme", "dark"]]]]

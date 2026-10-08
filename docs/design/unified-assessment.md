@@ -192,7 +192,7 @@ Results are the core shared artifact. Both automated and human scoring produce r
 **Existing code:**
 - `EvaluationResult`: [`apps/evaluations/models.py`](../../apps/evaluations/models.py)
 - `Annotation`: [`apps/human_annotations/models.py`](../../apps/human_annotations/models.py)
-- CSV export (evals): [`apps/evaluations/views/evaluation_config_views.py:download_evaluation_run_csv`](../../apps/evaluations/views/evaluation_config_views.py)
+- CSV export (evals): [`apps/evaluations/tasks.py:export_evaluation_run_results_task`](../../apps/evaluations/tasks.py)
 - CSV export (annotations): [`apps/human_annotations/views/queue_views.py:ExportAnnotations`](../../apps/human_annotations/views/queue_views.py)
 - **Global session ID in eval exports** (FR-5.5, backlog #7): `session` and `source_session` columns (= `ExperimentSession.external_id`) in [`apps/evaluations/const.py:EVALUATION_RUN_FIXED_HEADERS`](../../apps/evaluations/const.py), populated in `EvaluationRun.get_table_data`.
 

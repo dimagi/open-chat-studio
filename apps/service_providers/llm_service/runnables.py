@@ -3,18 +3,9 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from langchain_classic.agents.output_parsers import tools as lc_tools_parser
 from langchain_core.load import Serializable
 
-from apps.service_providers.llm_service.parsers import custom_parse_ai_message
-
-lc_tools_parser.parse_ai_message_to_tool_action = custom_parse_ai_message  # ty: ignore[invalid-assignment]
-
 logger = logging.getLogger("ocs.runnables")
-
-
-class GenerationError(Exception):
-    pass
 
 
 class GenerationCancelled(Exception):

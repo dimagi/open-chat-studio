@@ -77,7 +77,7 @@ class PipelineNodeBuildError(Exception):
 
 
 class PipelineNodeRunError(Exception):
-    pass
+    """Raised when a pipeline node fails at runtime for a reason the user cannot fix; reported to Sentry."""
 
 
 class CodeNodeRunError(Exception):

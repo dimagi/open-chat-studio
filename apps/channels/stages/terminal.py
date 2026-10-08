@@ -162,7 +162,7 @@ class ResponseSendingStage(ProcessingStage):
         except Exception as e:
             raise MessageDeliveryFailure(
                 e,
-                context="flush",
+                context="message",
             ) from e
 
     def _send_file(self, ctx: MessageProcessingContext, file, recipient: str) -> None:
@@ -312,7 +312,7 @@ class PersistenceStage(ProcessingStage):
             chat=ctx.experiment_session.chat,
             message_type=ChatMessageType.AI,
             content=ctx.early_exit_response,
-            metadata=trace_metadata,
+            metadata={**trace_metadata, **ctx.early_exit_metadata},
         )
         if ctx.trace_service:
             ctx.trace_service.set_output_message_id(ai_message.id)

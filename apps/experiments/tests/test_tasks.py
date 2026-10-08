@@ -49,6 +49,20 @@ def test_async_export_chat_applies_query_string_filters(mock_recorder_cls):
     assert "message from bob" not in csv_content
 
 
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_exports_only_selected_columns(mock_recorder_cls):
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+
+    result = async_export_chat.run(
+        experiment_id=session.experiment_id, query_params="", time_zone="UTC", columns=["message_content"]
+    )
+
+    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).read_bytes()).decode()
+    assert csv_content.lstrip("\ufeff").splitlines()[0] == "Message ID,Message Type,Message Content"
+
+
 class _ReadTracker:
     """Wraps the export temp file and records the size argument of every ``read()`` call."""
 

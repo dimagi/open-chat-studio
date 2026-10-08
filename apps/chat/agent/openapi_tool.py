@@ -11,8 +11,6 @@ from urllib.parse import urljoin
 import httpx
 from django.conf import settings
 from langchain_classic.chains.openai_functions.openapi import _format_url
-from langchain_community.tools import APIOperation
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field
@@ -22,6 +20,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -235,20 +234,19 @@ def openapi_spec_op_to_function_def(spec: OpenAPISpec, path: str, method: str) -
             raise ValueError("Only application/json request bodies are supported")
 
     # Assemble final model
-    api_op = APIOperation.from_openapi_spec(spec, path, method)
     # Sanitized so it's a valid Anthropic tool name -- operation IDs are usually already safe, but
     # a hand-written OpenAPI spec can give one that isn't (spaces, punctuation, non-ASCII, ...).
-    function_name = sanitize_property_name(api_op.operation_id)
+    function_name = sanitize_property_name(spec.get_cleaned_operation_id(op, path, method))
+    description = spec.get_operation_description(path, op)
     args_schema = _create_model(
-        function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=api_op.description
+        function_name, {name: (type_, Field(...)) for name, type_ in request_args.items()}, __doc__=description
     )
 
-    url = urljoin(api_op.base_url, api_op.path)
     return FunctionDef(
         name=function_name,
-        description=api_op.description,
+        description=description,
         method=method,
-        url=url,
+        url=urljoin(spec.base_url, path),
         args_schema=args_schema,
     )
 
@@ -268,11 +266,7 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
     properties = {}
     required = []
     for p in params:
-        if p.param_schema:
-            schema = spec.get_schema(p.param_schema)
-        else:
-            media_type_schema = next(iter(p.content.values())).media_type_schema
-            schema = spec.get_schema(media_type_schema)
+        schema = _parameter_schema(spec, p)
         if p.name and not schema.title:
             schema.title = p.name
         if p.description and not schema.description:
@@ -281,6 +275,15 @@ def _openapi_params_to_pydantic_model(name, params: list[Parameter], spec: OpenA
             required.append(p.name)
         properties[p.name] = _schema_to_pydantic(spec, schema)
     return _create_model(name, properties)
+
+
+def _parameter_schema(spec: OpenAPISpec, p: Parameter) -> Schema:
+    """The resolved schema of `p`, from its `schema` or else from its first `content` media type."""
+    if p.param_schema:
+        return spec.get_schema(p.param_schema)
+    if not p.content:
+        raise ValueError(f"Parameter {p.name} has no schema")
+    return spec.get_schema(next(iter(p.content.values())).media_type_schema)
 
 
 def _schema_to_pydantic(spec: OpenAPISpec, schema: Schema | Reference) -> tuple[type, Field]:

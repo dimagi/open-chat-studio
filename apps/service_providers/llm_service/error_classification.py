@@ -6,17 +6,23 @@ genuine rate limits, Anthropic as a 400 alongside malformed requests. Status alo
 therefore cannot tell "wait and retry" apart from "nothing will work until someone
 adds credit", which is why the checks below reach into provider-specific error codes
 and, where Anthropic offers nothing else, the message text. See ADR-0067.
+A filtered prompt is the one case here the participant, not the team, can act on; it is
+translated to a participant-actionable error so the node boundary handles it alongside
+the rest.
 """
 
 import contextlib
+import functools
 from collections.abc import Iterator
+from dataclasses import dataclass
+from enum import StrEnum
 
 import anthropic
+import httpx
 import openai
-from google.api_core import exceptions as google_exceptions
 from langchain_core.exceptions import ContextOverflowError
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 
 # OpenAI reports an exhausted balance as a 429, the same status as a genuine rate limit,
 # distinguished only by these codes.
@@ -37,47 +43,161 @@ GOOGLE_BAD_KEY_PHRASES = (
     "invalid api key",
 )
 
-AUTHENTICATION_ERRORS: tuple[type[Exception], ...] = (
-    openai.AuthenticationError,
-    openai.PermissionDeniedError,
-    anthropic.AuthenticationError,
-    anthropic.PermissionDeniedError,
-    google_exceptions.Unauthenticated,
-    google_exceptions.PermissionDenied,
-)
-
-NOT_FOUND_ERRORS: tuple[type[Exception], ...] = (
-    openai.NotFoundError,
-    anthropic.NotFoundError,
-    google_exceptions.NotFound,
-)
+ErrorTypes = tuple[type[Exception], ...]
 
 # LangChain's provider-agnostic base, raised by langchain-openai for both its variants.
-CONTEXT_OVERFLOW_ERRORS: tuple[type[Exception], ...] = (ContextOverflowError,)
+CONTEXT_OVERFLOW_ERRORS: ErrorTypes = (ContextOverflowError,)
+
+
+@dataclass(frozen=True)
+class ProviderErrorTypes:
+    authentication: ErrorTypes
+    not_found: ErrorTypes
+    timeout: ErrorTypes
+    rate_limit: ErrorTypes
+    unavailable: ErrorTypes
+    invalid_request: ErrorTypes
+    google_invalid_argument: type[Exception]
+
+
+@functools.cache
+def provider_error_types() -> ProviderErrorTypes:
+    """The provider SDK exception types, grouped by how a failure is classified."""
+    # Importing google.api_core reads the metadata of every installed package.
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
+    return ProviderErrorTypes(
+        authentication=(
+            openai.AuthenticationError,
+            openai.PermissionDeniedError,
+            anthropic.AuthenticationError,
+            anthropic.PermissionDeniedError,
+            google_exceptions.Unauthenticated,
+            google_exceptions.PermissionDenied,
+        ),
+        not_found=(
+            openai.NotFoundError,
+            anthropic.NotFoundError,
+            google_exceptions.NotFound,
+        ),
+        timeout=(
+            openai.APITimeoutError,
+            anthropic.APITimeoutError,
+            google_exceptions.DeadlineExceeded,
+            httpx.TimeoutException,
+        ),
+        rate_limit=(
+            openai.RateLimitError,
+            anthropic.RateLimitError,
+            google_exceptions.TooManyRequests,
+            google_exceptions.ResourceExhausted,
+        ),
+        unavailable=(
+            openai.InternalServerError,
+            openai.APIConnectionError,
+            anthropic.InternalServerError,
+            anthropic.OverloadedError,
+            anthropic.APIConnectionError,
+            google_exceptions.ServiceUnavailable,
+            google_exceptions.InternalServerError,
+        ),
+        invalid_request=(
+            openai.BadRequestError,
+            anthropic.BadRequestError,
+            google_exceptions.InvalidArgument,
+        ),
+        google_invalid_argument=google_exceptions.InvalidArgument,
+    )
+
+
+class ProviderErrorKind(StrEnum):
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    AUTHENTICATION = "authentication"
+    MODEL_NOT_FOUND = "model_not_found"
+    CONTEXT_OVERFLOW = "context_overflow"
+    RATE_LIMIT = "rate_limit"
+    TIMEOUT = "timeout"
+    UNAVAILABLE = "provider_unavailable"
+    INVALID_REQUEST = "invalid_request"
+
 
 BILLING_MESSAGE = "The LLM provider account has no credit or quota remaining:"
 AUTHENTICATION_MESSAGE = "The LLM provider rejected the credentials configured for this chatbot:"
 NOT_FOUND_MESSAGE = "The LLM provider could not find the model this chatbot is configured to use:"
 CONTEXT_OVERFLOW_MESSAGE = "The conversation exceeds the model's context window:"
+TOKEN_LIMIT_MESSAGE = (
+    "The model ran out of output tokens before it produced a reply. Shorten the prompt or history, "
+    "choose a different model, or raise the Max Output Tokens setting where the model has one."
+)
+
+TEAM_ACTIONABLE_MESSAGES = {
+    ProviderErrorKind.QUOTA_EXHAUSTED: BILLING_MESSAGE,
+    ProviderErrorKind.AUTHENTICATION: AUTHENTICATION_MESSAGE,
+    ProviderErrorKind.MODEL_NOT_FOUND: NOT_FOUND_MESSAGE,
+    ProviderErrorKind.CONTEXT_OVERFLOW: CONTEXT_OVERFLOW_MESSAGE,
+}
 
 
-def translate_provider_error(error: BaseException) -> ProviderConfigurationError | None:
-    """Return the team-actionable error this provider exception represents, or None.
+def translate_provider_error(
+    error: BaseException | None,
+) -> ProviderConfigurationError | ModelRefusedTurnError | None:
+    """Return the actionable error this provider exception represents, or None.
 
-    None covers both "transient, so leave the native type alone for the retry policy"
-    and "not a provider error at all".
+    None covers "transient, so leave the native type alone for the retry policy", "not a
+    provider error at all", and no error at all.
 
     The whole ``__cause__`` chain is examined because LangChain's provider adapters
     re-raise the SDK exception wrapped in one of their own -- langchain-google-genai
     turns every ``InvalidArgument``, a bad API key among them, into a
     ``ChatGoogleGenerativeAIError`` -- and the outer type says nothing useful.
     """
-    if isinstance(error, ProviderConfigurationError):
+    if isinstance(error, ProviderConfigurationError | ModelRefusedTurnError):
         return None
     for cause in _causes(error):
-        for classify in (_billing, _authentication, _not_found, _context_overflow):
-            if message := classify(cause):
-                return ProviderConfigurationError(f"{message} {_detail(cause)}".strip())
+        if filtered := _content_filter(cause):
+            return filtered
+        if kind := _team_actionable_kind(cause):
+            return ProviderConfigurationError(f"{TEAM_ACTIONABLE_MESSAGES[kind]} {_detail(cause)}".strip())
+    return None
+
+
+def classify_provider_error(error: BaseException) -> ProviderErrorKind | None:
+    """What kind of provider failure this is, or None when it is not one.
+
+    Unlike ``translate_provider_error`` this also names the transient kinds, and it reads
+    through an error that has already been translated, since its cause is the SDK error.
+    The team-actionable kinds are checked first because an OpenAI exhausted balance is a
+    ``RateLimitError`` too.
+    """
+    for kind_of in (_team_actionable_kind, _transient_kind):
+        for cause in _causes(error):
+            if kind := kind_of(cause):
+                return kind
+    return None
+
+
+def _team_actionable_kind(error: BaseException) -> ProviderErrorKind | None:
+    for kind, matches in (
+        (ProviderErrorKind.QUOTA_EXHAUSTED, _is_billing),
+        (ProviderErrorKind.AUTHENTICATION, _is_authentication),
+        (ProviderErrorKind.MODEL_NOT_FOUND, _is_not_found),
+        (ProviderErrorKind.CONTEXT_OVERFLOW, _is_context_overflow),
+    ):
+        if matches(error):
+            return kind
+    return None
+
+
+def _transient_kind(error: BaseException) -> ProviderErrorKind | None:
+    types = provider_error_types()
+    if isinstance(error, types.timeout):
+        return ProviderErrorKind.TIMEOUT
+    if isinstance(error, types.rate_limit):
+        return ProviderErrorKind.RATE_LIMIT
+    if isinstance(error, types.unavailable):
+        return ProviderErrorKind.UNAVAILABLE
+    if isinstance(error, types.invalid_request):
+        return ProviderErrorKind.INVALID_REQUEST
     return None
 
 
@@ -107,39 +227,49 @@ def translate_provider_errors():
         raise
 
 
-def _billing(error: BaseException) -> str | None:
+def _is_billing(error: BaseException) -> bool:
     # Google reports an exhausted balance and a per-minute rate limit alike as
     # ResourceExhausted, with nothing but prose to tell them apart, so it stays in
-    # RATE_LIMIT_EXCEPTIONS: over-retrying is the cheaper mistake of the two.
+    # rate_limit_exceptions(): over-retrying is the cheaper mistake of the two.
     if isinstance(error, openai.RateLimitError) and _openai_codes(error) & OPENAI_QUOTA_CODES:
-        return BILLING_MESSAGE
-    if isinstance(error, anthropic.BadRequestError) and _mentions(error, ANTHROPIC_QUOTA_PHRASES):
-        return BILLING_MESSAGE
-    return None
+        return True
+    return isinstance(error, anthropic.BadRequestError) and _mentions(error, ANTHROPIC_QUOTA_PHRASES)
 
 
-def _authentication(error: BaseException) -> str | None:
-    if isinstance(error, AUTHENTICATION_ERRORS):
-        return AUTHENTICATION_MESSAGE
+def _is_authentication(error: BaseException) -> bool:
+    types = provider_error_types()
+    if isinstance(error, types.authentication):
+        return True
     # Not every InvalidArgument is a bad key; a malformed request is one too, and that is
     # not the team's to fix, so it stays unclassified.
-    if isinstance(error, google_exceptions.InvalidArgument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES):
-        return AUTHENTICATION_MESSAGE
-    return None
+    return isinstance(error, types.google_invalid_argument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES)
 
 
-def _not_found(error: BaseException) -> str | None:
-    if isinstance(error, NOT_FOUND_ERRORS):
-        return NOT_FOUND_MESSAGE
-    return None
+def _is_not_found(error: BaseException) -> bool:
+    return isinstance(error, provider_error_types().not_found)
 
 
-def _context_overflow(error: BaseException) -> str | None:
+def _is_context_overflow(error: BaseException) -> bool:
     if isinstance(error, CONTEXT_OVERFLOW_ERRORS):
-        return CONTEXT_OVERFLOW_MESSAGE
-    if isinstance(error, openai.BadRequestError) and "context_length_exceeded" in _openai_codes(error):
-        return CONTEXT_OVERFLOW_MESSAGE
+        return True
+    return isinstance(error, openai.BadRequestError) and "context_length_exceeded" in _openai_codes(error)
+
+
+def _content_filter(error: BaseException) -> ModelRefusedTurnError | None:
+    # Azure reports a filtered prompt as a 400 whose ``code`` is content_filter and whose ``type`` is null.
+    if isinstance(error, openai.BadRequestError) and "content_filter" in _openai_codes(error):
+        return ModelRefusedTurnError("content_filter", "content_filter", detail=_content_filter_detail(error))
     return None
+
+
+def _content_filter_detail(error: openai.BadRequestError) -> dict:
+    # The SDK strips the outer ``error`` envelope, so ``innererror`` sits at the top of ``body``;
+    # ``body`` is a string for a non-JSON response and None when the response was closed unread.
+    body = error.body if isinstance(error.body, dict) else {}
+    inner = body.get("innererror")
+    inner = inner if isinstance(inner, dict) else {}
+    result = inner.get("content_filter_result")
+    return result if isinstance(result, dict) else {}
 
 
 def _openai_codes(error: BaseException) -> set[str]:

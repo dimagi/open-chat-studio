@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import Any, ClassVar, Union
@@ -12,7 +12,6 @@ from xml.sax.saxutils import escape
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
@@ -34,6 +33,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
@@ -47,7 +47,7 @@ IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})
 CHUNK_TEMPLATE = """
 <file>
   <file_id>{file_id}</file_id>
-  <filename>{file_name}</filename>{metadata}
+  <filename>{file_name}</filename>{metadata}{row}
   <context>
     <![CDATA[{chunk}]]>
   </context>
@@ -104,6 +104,31 @@ def _format_metadata_block(metadata: dict | None) -> str:
         return ""
     inner = "\n".join(lines)
     return f"\n  <metadata>\n{inner}\n  </metadata>"
+
+
+def _format_row_block(embedding: FileChunkEmbedding) -> str:
+    """Build a `<row>` XML block for a chunk that came from a sheet row.
+
+    Kept apart from the file `<metadata>` block so `METADATA_BLOCKLIST`, which names
+    loader-internal file keys, cannot drop a sheet column that happens to share a name.
+    """
+    if embedding.metadata is None:
+        return ""
+    lines = [f"    <row_number>{embedding.page_number}</row_number>"]
+    used_tags: set[str] = set()
+    columns = []
+    for key, value in embedding.metadata.items():
+        if value in (None, ""):
+            continue
+        tag = _sanitize_tag(key)
+        if tag in used_tags:
+            continue
+        used_tags.add(tag)
+        columns.append(f"      <{tag}>{_format_metadata_value(value)}</{tag}>")
+    if columns:
+        lines.append("    <columns>\n" + "\n".join(columns) + "\n    </columns>")
+    inner = "\n".join(lines)
+    return f"\n  <row>\n{inner}\n  </row>"
 
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -173,6 +198,7 @@ def _perform_collection_search(
     generate_citations: bool = True,
     include_collection_info: bool = False,
     graph_state: dict | None = None,
+    metadata_filters: dict[str, str] | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -184,6 +210,7 @@ def _perform_collection_search(
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
         graph_state: The LangGraph state containing the conversation already loaded for the LLM.
+        metadata_filters: Metadata values every returned chunk must hold.
 
     Returns:
         Formatted search results string
@@ -193,15 +220,17 @@ def _perform_collection_search(
         query=query,
         top_k=max_results,
         context=_recent_conversation_context(collection, graph_state or {}),
+        metadata_filters=metadata_filters,
     )
 
     if not embeddings:
+        no_results = "\nThe semantic search did not return any results"
         if include_collection_info:
-            return (
-                f"\nThe semantic search did not return any results from "
-                f"collection '{collection.name}' (ID: {collection.id})."
-            )
-        return "\nThe semantic search did not return any results."
+            no_results += f" from collection '{collection.name}' (ID: {collection.id})"
+        if metadata_filters:
+            applied = ", ".join(f"{key} = {value}" for key, value in metadata_filters.items())
+            no_results += f" among rows matching {applied}"
+        return no_results + "."
 
     # Format results
     if include_collection_info:
@@ -215,6 +244,7 @@ def _perform_collection_search(
                     file_name=escape(embedding.file.name),
                     file_id=embedding.file_id,
                     metadata=_format_metadata_block(embedding.file.metadata),
+                    row=_format_row_block(embedding),
                     chunk=embedding.text,
                 ).strip()
                 for embedding in embeddings
@@ -245,7 +275,7 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
   <file_id>{embedding.file_id}</file_id>
   <filename>{escape(embedding.file.name)}</filename>
   <collection_id>{collection.id}</collection_id>
-  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}
+  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}{_format_row_block(embedding)}
   <context>
     <![CDATA[{embedding.text}]]>
   </context>
@@ -258,6 +288,7 @@ class SearchToolConfig:
     index_id: int
     max_results: int = 5
     generate_citations: bool = True
+    metadata_filters: dict[str, str] = field(default_factory=dict)
 
     def get_index(self):
         return Collection.objects.get(id=self.index_id)
@@ -477,6 +508,7 @@ class AttachMediaTool(CustomBaseTool):
     description: str = "Use this to attach or share media files with users."
     requires_session: bool = True
     args_schema: type[schemas.AttachMediaSchema] = schemas.AttachMediaSchema
+    collection_id: int
 
     @cached_property
     def chat_attachment(self) -> ChatAttachment:
@@ -484,6 +516,19 @@ class AttachMediaTool(CustomBaseTool):
             chat=self.experiment_session.chat, tool_type="ocs_attachments"
         )
         return chat_attachment
+
+    def _get_attachable_files(self, file_ids: list[int]) -> dict[int, File]:
+        """Map each requested id that is a file in the node's media collection to that file.
+
+        `file_ids` is a tool argument, so the model -- and through it the participant -- picks what
+        to look up. The scoping belongs here: attaching is what makes
+        `ChatMessage.get_attached_files()` return the file, so that read's `chatattachment__chat`
+        filter confirms the association rather than checking it.
+        """
+        return File.objects.filter(
+            team_id=self.experiment_session.team_id,
+            collections__id=self.collection_id,
+        ).in_bulk(file_ids)
 
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
@@ -497,13 +542,17 @@ class AttachMediaTool(CustomBaseTool):
         # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
         # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
+        attachable_files = self._get_attachable_files(file_ids)
         for file_id in file_ids:
+            file = attachable_files.get(file_id)
+            if file is None:
+                response.append(f"* {file_id}: File not found.")
+                continue
             try:
                 # One transaction per file, so a failed attachment rolls back on its own and the
                 # loop can keep going. Catching a DB error without leaving the block would abort
                 # the transaction and break every remaining iteration.
                 with transaction.atomic():
-                    file = File.objects.get(id=file_id)
                     chat_attachment.files.add(file_id)
                     self.tool_callbacks.attach_file(file_id)
                     file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
@@ -525,8 +574,6 @@ class AttachMediaTool(CustomBaseTool):
                             )
                         file_response = f"{file_response} {link_text}"
                     response.append(file_response)
-            except File.DoesNotExist:
-                response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
                 response.append(f"* {file_id}: Error fetching file.")
 
@@ -561,6 +608,7 @@ class SearchIndexTool(CustomBaseTool):
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
             graph_state=graph_state,
+            metadata_filters=self.search_config.metadata_filters,
         )
 
 
@@ -577,6 +625,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     max_results: int = 5
     generate_citations: bool = True
     allowed_collection_ids: list[int]
+    metadata_filters: dict[str, str] = {}
 
     def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
@@ -599,6 +648,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             generate_citations=self.generate_citations,
             include_collection_info=True,
             graph_state=graph_state,
+            metadata_filters=self.metadata_filters,
         )
 
 
@@ -798,10 +848,15 @@ TOOL_CLASS_MAP = {
 def get_node_tools(
     node: Node, experiment_session: ExperimentSession | None = None, tool_callbacks: ToolCallbacks | None = None
 ) -> list[BaseTool]:
-    tool_names = node.tool_names
+    # attach-media is not user-selectable (see AgentTools.user_tool_choices); it is added here so
+    # that it can be given the node's media collection. Drop any copy carried in the node's own tool
+    # list so it cannot be built unscoped.
+    tool_names = [name for name in node.tool_names if name != AgentTools.ATTACH_MEDIA]
+    tool_kwargs = {}
     if node.requires_attachment_tool():
         tool_names.append(AgentTools.ATTACH_MEDIA)
-    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks)
+        tool_kwargs[AgentTools.ATTACH_MEDIA] = {"collection_id": node.collection_id}
+    tools = get_tool_instances(tool_names, experiment_session, tool_callbacks, tool_kwargs)
     tools.extend(get_custom_action_tools(node))
     tools.extend(get_mcp_tool_instances(node, experiment_session.team))
     return tools
@@ -829,14 +884,22 @@ def get_mcp_tool_instances(node: Node, team: Team):
 
 
 def get_tool_instances(
-    tools_list, experiment_session: ExperimentSession | None = None, tool_callbacks=None
+    tools_list,
+    experiment_session: ExperimentSession | None = None,
+    tool_callbacks=None,
+    tool_kwargs: dict[str, dict] | None = None,
 ) -> list[BaseTool]:
+    tool_kwargs = tool_kwargs or {}
     tools = []
     for tool_name in tools_list:
         tool_cls = TOOL_CLASS_MAP[tool_name]
         if tool_cls.requires_callbacks and not tool_callbacks:
             raise ValueError(f"Tool {tool_name} requires callbacks but none were provided")
-        tools.append(tool_cls(experiment_session=experiment_session, tool_callbacks=tool_callbacks))
+        tools.append(
+            tool_cls(
+                experiment_session=experiment_session, tool_callbacks=tool_callbacks, **tool_kwargs.get(tool_name, {})
+            )
+        )
     return tools
 
 

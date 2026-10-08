@@ -18,6 +18,7 @@ from apps.events.forms import (
 from apps.events.models import (
     ScheduledTrigger,
     StaticTrigger,
+    StaticTriggerType,
     TimeoutTrigger,
 )
 from apps.experiments.models import Experiment
@@ -132,6 +133,7 @@ def _event_form_context(
         "action_type": action_type,
         "event_type": trigger_form_class._meta.model._meta.model_name,
         "experiment_id": experiment_id,
+        "end_trigger_types": StaticTriggerType.end_conversation_types(),
         "action_params_url": reverse(
             f"{namespace}:action_params_form",
             args=[request.team.slug, experiment_id],

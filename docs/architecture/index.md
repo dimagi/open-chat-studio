@@ -42,7 +42,7 @@ For the precise domain language used in code (and by AI coding agents) see **[CO
 
 The project is organized into several Django apps, each responsible for specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. See the **[package map](package-map.md)** for what each app does and how dependencies flow between them.
 
-Not everything lives under `apps/` — for example, the chat widget (`components/chat_widget`) is a standalone StencilJS component with its own build. For the full, up-to-date inventory of key files and folders (settings, webpack config, package management, shared test fixtures/factories, etc.), see **[AGENTS.md → Key Paths](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#key-paths)**.
+Not everything lives under `apps/` — for example, the chat widget (`components/chat_widget`) is a standalone StencilJS component with its own build.
 
 A couple of conventions worth knowing:
 

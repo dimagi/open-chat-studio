@@ -1,9 +1,13 @@
+from datetime import timedelta
+
 import pytest
 from django.test import RequestFactory
 from django.urls import reverse
+from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
+from apps.service_providers.models import LlmProviderTypes
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.views.integrations_views import build_integration_filter_pills, get_integration_rows
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
@@ -168,3 +172,82 @@ def test_integrations_table_edit_action_hidden_without_permission(client, team):
     assert b"Restricted Provider" in response.content
     # No add/edit/delete permission on service_providers for a plain member, so no edit link renders.
     assert b"service_providers/llm/" not in response.content
+
+
+@pytest.mark.django_db()
+def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_for):
+    provider = LlmProviderFactory(team=team)
+
+    (row,) = get_integration_rows(request_for(UserFactory()), team)
+
+    assert row["verifiable_provider"] == provider
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "make_provider",
+    [
+        pytest.param(lambda team: VoiceProviderFactory(team=team), id="voice"),
+        pytest.param(lambda team: LlmProviderFactory(team=team, type=str(LlmProviderTypes.voyage)), id="voyage"),
+    ],
+)
+def test_rows_for_providers_without_a_check_carry_no_verification(team, request_for, make_provider):
+    make_provider(team)
+
+    (row,) = get_integration_rows(request_for(UserFactory()), team)
+
+    assert row["verifiable_provider"] is None
+
+
+@pytest.mark.django_db()
+def test_integrations_table_shows_verification(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    checked_at = timezone.now() - timedelta(days=3)
+    failed = LlmProviderFactory(
+        team=team,
+        extra_data={
+            "verified_credentials": False,
+            "verification_error": "NotFound: 404 model withdrawn",
+            "credentials_checked_at": checked_at.isoformat(),
+        },
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+
+    content = response.content.decode()
+    assert "Verification" in content
+    assert "Check failed" in content
+    assert "Checked 3\xa0days ago" in content
+    assert reverse("service_providers:edit", args=[team.slug, "llm", failed.pk]) in content
+
+
+@pytest.mark.django_db()
+def test_integrations_table_explains_the_dash_for_providers_without_a_check(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    VoiceProviderFactory(team=team)
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+
+    assert "does not support credential verification" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_integrations_table_says_when_there_was_no_model_to_check_against(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    checked_at = timezone.now() - timedelta(days=3)
+    LlmProviderFactory(
+        team=team, extra_data={"verified_credentials": False, "credentials_checked_at": checked_at.isoformat()}
+    )
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+
+    content = response.content.decode()
+    assert "No models" in content
+    assert "Not checked" not in content
+    assert "Checked 3\xa0days ago" in content

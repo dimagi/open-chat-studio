@@ -1,14 +1,21 @@
+import ipaddress
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
+from functools import wraps
 from typing import ClassVar
+from urllib.parse import urlencode
 
 from allauth.account.internal import flows
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+
+from apps.utils.rate_limit import forwarded_client_ip
+from apps.web.models import SuperuserElevation
 
 logger = logging.getLogger("ocs.audit")
 
@@ -18,7 +25,15 @@ EXPIRY = 60 * 30  # 30 minutes
 
 MAX_CONCURRENT_ELEVATIONS = 5
 
+USER_AGENT_MAX_LENGTH = SuperuserElevation._meta.get_field("user_agent").max_length
+
 REAUTH_CALLBACK = "apps.web.elevation.complete_elevation"
+
+# Marker attribute stamped on views wrapped by `requires_elevation`. Nothing reads it yet;
+# it is what the architecture guard over the admin surfaces will key off, the way
+# `apps/teams/tests/test_view_auth_guard.py` keys off `ENFORCES_TEAM_AUTH_ATTR`.
+# `functools.wraps` hides the decorator identity, so the attribute is the only signal.
+ENFORCES_ELEVATION_ATTR = "enforces_elevation"
 
 #: How long a stashed elevation request stays valid. allauth keeps the stash in the session
 #: until *some* re-authentication consumes it, so without this an abandoned elevation could be
@@ -99,6 +114,11 @@ class Grant:
             return user.is_superuser
         return user.is_staff
 
+    def acquire_url(self) -> str:
+        if self.kind is GrantKind.TEAM:
+            return reverse("web:elevate_team", args=[self.team_slug])
+        return reverse(_ACQUIRE_URL_NAMES[self.kind])
+
 
 Grant.DJANGO_ADMIN = Grant(GrantKind.DJANGO_ADMIN)
 Grant.OCS_ADMIN = Grant(GrantKind.OCS_ADMIN)
@@ -106,6 +126,11 @@ Grant.OCS_ADMIN = Grant(GrantKind.OCS_ADMIN)
 _LABELS = {
     GrantKind.DJANGO_ADMIN: "Django admin",
     GrantKind.OCS_ADMIN: "OCS admin",
+}
+
+_ACQUIRE_URL_NAMES = {
+    GrantKind.DJANGO_ADMIN: "web:elevate_django_admin",
+    GrantKind.OCS_ADMIN: "web:elevate_ocs_admin",
 }
 
 
@@ -127,32 +152,33 @@ class Elevation:
     def is_full(self) -> bool:
         return len(self._held()) >= MAX_CONCURRENT_ELEVATIONS
 
-    def add(self, grant: Grant) -> None:
+    def add(self, grant: Grant) -> int | None:
+        """Hold `grant`, returning its expiry, or None when it was already held."""
         held = self._held()
         if str(grant) in held:
-            return
+            return None
 
         if len(held) >= MAX_CONCURRENT_ELEVATIONS:
             logger.warning(
-                f"Denied elevation of '{self.request.user.email}' to '{grant}': "
-                f"already holding {len(held)} (max {MAX_CONCURRENT_ELEVATIONS})"
+                "elevation.denied",
+                extra={"user_id": self.request.user.pk, "grant": str(grant), "reason": "too_many"},
             )
             raise TooManyElevations(
                 f"Cannot grant '{grant}': maximum of {MAX_CONCURRENT_ELEVATIONS} concurrent elevations already held"
             )
 
-        logger.info(f"Elevating '{self.request.user.email}' to '{grant}'")
-        self._store(held | {str(grant): _now() + EXPIRY})
+        expires = _now() + EXPIRY
+        self._store(held | {str(grant): expires})
+        return expires
 
-    def drop(self, grant: Grant) -> bool:
-        """Release `grant`, returning whether it was held."""
+    def drop(self, grant: Grant) -> int | None:
+        """Stop holding `grant`, returning the expiry it had, or None when it was not held."""
         held = self._held()
         if str(grant) not in held:
-            return False
+            return None
 
-        logger.info(f"Releasing elevation of '{self.request.user.email}' to '{grant}'")
         self._store({wire_form: expires for wire_form, expires in held.items() if wire_form != str(grant)})
-        return True
+        return held[str(grant)]
 
     def active(self) -> dict[str, ActiveElevation]:
         return {
@@ -166,8 +192,10 @@ class Elevation:
         now = _now()
         retained = {wire_form: expires for wire_form, expires in stored.items() if expires > now and _parses(wire_form)}
         if len(retained) != len(stored):
-            dropped = sorted(set(stored) - set(retained))
-            logger.info(f"Dropped elevations for '{self.request.user.email}': {','.join(dropped)}")
+            logger.info(
+                "elevation.expired",
+                extra={"user_id": self.request.user.pk, "grants": sorted(set(stored) - set(retained))},
+            )
             self._store(retained)
         return retained
 
@@ -175,6 +203,48 @@ class Elevation:
         # Only ever called with contents that differ from what is stored: this runs from
         # `project_meta` on every rendered page, and assigning marks the session modified.
         self.request.session[SESSION_KEY] = held
+
+
+def elevate(request, grant: Grant) -> None:
+    """Grant `grant` to the request's session and record it. Raises `TooManyElevations` at the cap."""
+    expires = Elevation(request).add(grant)
+    if expires is None:
+        return
+
+    SuperuserElevation.objects.create(
+        user=request.user,
+        grant=str(grant),
+        granted_at=timezone.now(),
+        expires_at=_as_datetime(expires),
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent", "")[:USER_AGENT_MAX_LENGTH],
+    )
+    logger.info("elevation.granted", extra={"user_id": request.user.pk, "grant": str(grant), "expires_at": expires})
+
+
+def release(request, grant: Grant) -> bool:
+    """Release `grant` before it expires, returning whether it was held."""
+    expires = Elevation(request).drop(grant)
+    if expires is None:
+        return False
+
+    # The session keeps only the expiry, so that is what identifies the row.
+    SuperuserElevation.objects.filter(
+        user=request.user, grant=str(grant), expires_at=_as_datetime(expires), released_at__isnull=True
+    ).update(released_at=timezone.now())
+    logger.info("elevation.released", extra={"user_id": request.user.pk, "grant": str(grant)})
+    return True
+
+
+def _as_datetime(timestamp: int) -> datetime:
+    return datetime.fromtimestamp(timestamp, tz=UTC)
+
+
+def _client_ip(request) -> str | None:
+    try:
+        return str(ipaddress.ip_address(forwarded_client_ip(request)))
+    except ValueError:
+        return None
 
 
 def active_elevations(request) -> dict[str, ActiveElevation]:
@@ -204,6 +274,46 @@ def safe_redirect_url(url: str) -> str:
     if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
         return "/"
     return url
+
+
+def requires_elevation(grant, superuser_only: bool = False):
+    """Gate a view on holding `grant`, sending anyone who does not hold it off to acquire it.
+
+    `grant` is a `Grant`, or a callable taking the view's own arguments and returning one for
+    grants that depend on the URL. `superuser_only` raises the bar above the grant's minimum
+    role, for admin views that were superuser-only before elevation covered them.
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def _inner(request, *args, **kwargs):
+            resolved = grant(request, *args, **kwargs) if callable(grant) else grant
+            redirect = elevation_redirect(request, resolved, superuser_only=superuser_only)
+            return redirect or view_func(request, *args, **kwargs)
+
+        setattr(_inner, ENFORCES_ELEVATION_ATTR, True)
+        return _inner
+
+    return decorator
+
+
+def elevation_redirect(request, grant: Grant, superuser_only: bool = False) -> HttpResponseRedirect | None:
+    """Where to send a request that does not hold `grant`, or None when it does.
+
+    Everyone lacking the role gets the same `Http404`, so the elevated surfaces are not
+    discoverable by probing for a login redirect.
+    """
+    user = request.user
+    if not grant.may_be_held_by(user):
+        raise Http404
+    if superuser_only and not user.is_superuser:
+        raise Http404
+
+    if Elevation(request).has(grant):
+        return None
+
+    next_url = safe_redirect_url(request.get_full_path())
+    return HttpResponseRedirect(f"{grant.acquire_url()}?{urlencode({'next': next_url})}")
 
 
 def start_elevation(request, grant: Grant, next_url: str):
@@ -240,21 +350,24 @@ def complete_elevation(request, state: dict):
     try:
         grant = Grant.parse(state.get("grant", ""))
     except InvalidGrant:
-        logger.warning(f"Discarding elevation of '{request.user.email}': unknown grant {state.get('grant')!r}")
+        logger.warning(
+            "elevation.denied",
+            extra={"user_id": request.user.pk, "grant": state.get("grant"), "reason": "unknown_grant"},
+        )
         return HttpResponseRedirect("/")
 
     if _is_stale(state):
-        logger.warning(f"Discarding stale elevation request of '{request.user.email}' to '{grant}'")
+        logger.warning("elevation.denied", extra={"user_id": request.user.pk, "grant": str(grant), "reason": "stale"})
         messages.error(request, "That request for elevated access expired. Please try again.")
         return HttpResponseRedirect("/")
 
     if not grant.may_be_held_by(request.user):
-        logger.warning(f"Denied elevation of '{request.user.email}' to '{grant}': insufficient role")
+        logger.warning("elevation.denied", extra={"user_id": request.user.pk, "grant": str(grant), "reason": "role"})
         messages.error(request, "You are not allowed to hold that elevated access.")
         return HttpResponseRedirect("/")
 
     try:
-        Elevation(request).add(grant)
+        elevate(request, grant)
     except TooManyElevations:
         messages.error(request, TOO_MANY_ELEVATIONS_MESSAGE)
         return HttpResponseRedirect("/")

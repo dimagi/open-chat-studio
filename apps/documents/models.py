@@ -13,7 +13,7 @@ from django_pydantic_field import SchemaField
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
-from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
+from apps.documents.datamodels import ChunkingMode, ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.documents.rerankers import Reranker
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
@@ -148,6 +148,10 @@ class CollectionFile(models.Model):
         if self.metadata:
             return self.metadata.chunking_strategy
         return None
+
+    @property
+    def is_row_import(self) -> bool:
+        return bool(self.metadata) and self.metadata.chunking_mode == ChunkingMode.ROW
 
     @property
     def status_enum(self):

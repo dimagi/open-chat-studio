@@ -25,24 +25,47 @@
       <template x-if="locked">
         <div class="alert alert-warning mb-3">
           <i class="fa fa-lock"></i>
-          <span>{% translate "Schema structure is locked after annotations have started. You can still change whether fields are required." %}</span>
+          <span>{% translate "Schema structure is locked after annotations have started. You can still re-order fields and change whether they are required." %}</span>
         </div>
       </template>
 
       <div class="space-y-4">
         <template x-for="(field, index) in fields" :key="field._id">
-          <div class="card bg-base-200 p-4">
+          <div class="card bg-base-200 p-4"
+               @dragover="onDragOver(index, $event)"
+               @dragleave="$el.contains($event.relatedTarget) || (dragOverIndex = null)"
+               @drop.prevent="onDrop(index)"
+               :class="dragIndex !== null && dragIndex !== index && dragOverIndex === index && 'ring ring-primary/40'">
             <div class="mb-2">
-              <label class="label text-sm">
-                <span>{% translate "Field Name" %}</span>
-              </label>
-              <div class="flex gap-2 items-center">
-                <input type="text"
-                       x-model="field.name"
-                       placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
-                       class="input input-bordered w-full input-sm"
-                       :disabled="locked"
-                       required>
+              <div class="flex gap-2 items-center mb-1"
+                   :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
+                <span class="cursor-grab text-base-content/50 px-1"
+                      draggable="true"
+                      @dragstart="onDragStart(index, $event)"
+                      @dragend="endDrag()"
+                      title="{% translate "Drag to re-order" %}">
+                  <i class="fa fa-grip-vertical"></i>
+                </span>
+                <span class="label-text text-sm flex-1" :class="locked && 'font-semibold'">
+                  <span x-show="!locked">{% translate "Field Name" %}</span>
+                  <span x-show="locked">{% translate "Field order" %}</span>
+                </span>
+                <button type="button"
+                        @click="moveField(index, -1)"
+                        :disabled="index === 0"
+                        class="btn btn-outline btn-xs"
+                        title="{% translate "Move up" %}"
+                        aria-label="{% translate "Move up" %}">
+                  <i class="fa fa-arrow-up"></i>
+                </button>
+                <button type="button"
+                        @click="moveField(index, 1)"
+                        :disabled="index === fields.length - 1"
+                        class="btn btn-outline btn-xs"
+                        title="{% translate "Move down" %}"
+                        aria-label="{% translate "Move down" %}">
+                  <i class="fa fa-arrow-down"></i>
+                </button>
                 <button type="button"
                         @click="removeField(index)"
                         x-show="!locked"
@@ -50,6 +73,12 @@
                   <i class="fa fa-trash"></i>
                 </button>
               </div>
+              <input type="text"
+                     x-model="field.name"
+                     placeholder="{% translate "e.g., 'accuracy', 'score'" %}"
+                     class="input input-bordered w-full input-sm"
+                     :disabled="locked"
+                     required>
             </div>
 
             <div class="mb-2">
@@ -205,6 +234,7 @@
 
     <!-- Hidden field for Django form -->
     <input type="hidden" name="schema" :value="schemaJson">
+    <input type="hidden" name="field_order" :value="fieldOrderJson">
   </div>
 {% endblock form %}
 
@@ -251,6 +281,8 @@
       Alpine.data('schemaFieldBuilder', () => ({
         locked: {{ schema_locked|yesno:"true,false" }},
         fields: [],
+        dragIndex: null,
+        dragOverIndex: null,
 
         init() {
           const el = document.getElementById('existing-schema');
@@ -293,6 +325,43 @@
 
         removeField(index) {
           this.fields.splice(index, 1);
+        },
+
+        moveField(index, delta) {
+          const target = index + delta;
+          if (target < 0 || target >= this.fields.length) {
+            return;
+          }
+          const [moved] = this.fields.splice(index, 1);
+          this.fields.splice(target, 0, moved);
+        },
+
+        onDragStart(index, event) {
+          this.dragIndex = index;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(index));
+        },
+
+        onDragOver(index, event) {
+          event.preventDefault();
+          if (this.dragIndex !== null) {
+            this.dragOverIndex = index;
+          }
+        },
+
+        onDrop(index) {
+          if (this.dragIndex === null || this.dragIndex === index) {
+            this.endDrag();
+            return;
+          }
+          const [moved] = this.fields.splice(this.dragIndex, 1);
+          this.fields.splice(index, 0, moved);
+          this.endDrag();
+        },
+
+        endDrag() {
+          this.dragIndex = null;
+          this.dragOverIndex = null;
         },
 
         onTypeChange(field) {
@@ -343,6 +412,14 @@
             }
           });
           return JSON.stringify(obj);
+        },
+
+        get fieldOrderJson() {
+          return JSON.stringify(
+            this.fields
+              .filter(field => field.name && field.name.trim())
+              .map(field => field.name.trim())
+          );
         },
       }));
     });

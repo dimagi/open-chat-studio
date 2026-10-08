@@ -1,14 +1,17 @@
 """Tests for the evaluations export/table helpers (apps/evaluations/export.py)."""
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 
 from apps.evaluations.export import (
     CategoricalColumn,
     CategoricalValue,
     categorical_columns_for_evaluators,
     evaluator_output_columns,
+    order_evaluation_headers,
 )
-from apps.utils.factories.evaluations import EvaluatorFactory
+from apps.utils.factories.evaluations import EvaluationRunFactory, EvaluatorFactory
 
 
 @pytest.mark.django_db()
@@ -136,3 +139,25 @@ def test_evaluator_output_columns_covers_every_field_type_with_bare_labels():
         ("suspected_ai (Acceptability Judge)", "Suspected AI"),
         ("notes (Acceptability Judge)", "Notes"),
     ]
+
+
+def test_generation_error_is_ordered_with_the_other_error_columns():
+    headers = order_evaluation_headers(["Dataset Input", "score (Judge)", "generation_error", "error (Judge)"])
+
+    assert headers == ["Dataset Input", "score (Judge)", "error (Judge)", "generation_error"]
+
+
+@pytest.mark.django_db()
+def test_results_upload_does_not_offer_error_columns_for_editing(client, team_with_users):
+    run = EvaluationRunFactory.create(team=team_with_users)
+    client.force_login(team_with_users.members.first())
+    csv_file = SimpleUploadedFile(
+        "results.csv", b"id,score (Judge),error (Judge),generation_error\n1,1,,quota\n", content_type="text/csv"
+    )
+
+    response = client.post(
+        reverse("evaluations:parse_evaluation_results_csv_columns", args=[team_with_users.slug, run.config_id, run.id]),
+        {"csv_file": csv_file},
+    )
+
+    assert response.json()["result_columns"] == ["score (Judge)"]

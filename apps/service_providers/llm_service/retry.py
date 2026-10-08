@@ -12,31 +12,39 @@ Important: `with_llm_retry()` returns a RunnableRetry which loses chat-specific 
 like `bind_tools()`. For nodes using `create_agent()`, use `get_retry_policy()` instead.
 """
 
+import functools
+
 import anthropic
 import openai
-from google.api_core import exceptions as google_exceptions
 from langchain.agents.middleware import ModelRetryMiddleware
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import RunnableBinding
 from langgraph.types import RetryPolicy
 
 from apps.service_providers.llm_service.error_classification import (
+    ErrorTypes,
     translate_provider_error,
     translate_provider_errors,
 )
 
-# Tuple of exception types that indicate rate limiting
-RATE_LIMIT_EXCEPTIONS: tuple[type[Exception], ...] = (
-    openai.RateLimitError,
-    openai.InternalServerError,
-    anthropic.RateLimitError,
-    anthropic.InternalServerError,
-    anthropic.OverloadedError,
-    anthropic.APIConnectionError,
-    anthropic.APITimeoutError,
-    google_exceptions.TooManyRequests,
-    google_exceptions.ResourceExhausted,
-)
+
+@functools.cache
+def rate_limit_exceptions() -> ErrorTypes:
+    """Exception types that indicate rate limiting."""
+    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
+    return (
+        openai.RateLimitError,
+        openai.InternalServerError,
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,
+        anthropic.OverloadedError,
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        google_exceptions.TooManyRequests,
+        google_exceptions.ResourceExhausted,
+    )
+
 
 # The single place retry timing is tuned; no caller overrides these.
 DEFAULT_MAX_ATTEMPTS = 3
@@ -56,7 +64,7 @@ def should_retry_exception(exc: Exception) -> bool:
     if translate_provider_error(exc):
         return False
 
-    if isinstance(exc, RATE_LIMIT_EXCEPTIONS):
+    if isinstance(exc, rate_limit_exceptions()):
         return True
 
     if hasattr(exc, "status_code"):
@@ -170,7 +178,7 @@ def with_llm_retry(
         Runnable wrapped with retry logic
     """
     return _TranslateProviderErrors(bound=runnable).with_retry(
-        retry_if_exception_type=RATE_LIMIT_EXCEPTIONS,
+        retry_if_exception_type=rate_limit_exceptions(),
         wait_exponential_jitter=True,
         stop_after_attempt=max_attempts,
     )

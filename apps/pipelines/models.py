@@ -843,6 +843,10 @@ class PipelineChatHistory(BaseModel):
             models.UniqueConstraint(fields=("session", "type", "name"), name="unique_session_type_name"),
         ]
         ordering = ["-created_at"]
+        indexes = [
+            # The export API pages every resource by (updated_at, id).
+            models.Index(fields=["updated_at", "id"], name="pipechathist_updated_at_id_idx"),
+        ]
 
     def message_iterator(self) -> Iterator["PipelineChatMessages"]:
         yield from self.messages.order_by("-created_at").iterator(100)

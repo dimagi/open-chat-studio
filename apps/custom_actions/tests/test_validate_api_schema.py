@@ -35,6 +35,16 @@ class TestValidateApiSchema:
                 URLValidator(schemes=["https"]),
             )
 
+    def test_unresolvable_reference(self):
+        operation = {"parameters": [{"$ref": "#/components/parameters/Missing"}]}
+        with pytest.raises(ValidationError, match="Invalid OpenAPI schema: Unresolvable reference"):
+            validate_api_schema_full(
+                ["test_get"],
+                _make_openapi_schema({"/test": {"get": operation}}),
+                "https://example.com",
+                URLValidator(schemes=["https"]),
+            )
+
 
 def _make_openapi_schema(paths: dict):
     return {
