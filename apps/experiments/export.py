@@ -21,8 +21,6 @@ from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EXPORT_CHUNK_SIZE = 1000
-PROGRESS_UPDATE_INTERVAL = 100
-
 # Ceiling on the per-session value cache. At roughly 2.4 KB per entry this caps the cache
 # at a few MB regardless of how many sessions the export spans.
 SESSION_CACHE_MAX_ENTRIES = 2000
@@ -242,9 +240,7 @@ def _yield_row_for_message(
     return row
 
 
-def generate_export_rows(
-    experiment, sessions_queryset, translation_language=None, progress_callback=None, columns=None
-) -> Generator[list]:
+def generate_export_rows(experiment, sessions_queryset, translation_language=None, columns=None) -> Generator[list]:
     """Yield the header row, then one data row per message across all matching sessions.
 
     Messages are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
@@ -262,11 +258,6 @@ def generate_export_rows(
     base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)
     last_pk = 0
     session_cache = _SessionCache(columns=export_columns)
-    processed = 0
-
-    def report(count):
-        if progress_callback:
-            progress_callback(count)
 
     while True:
         chunk = list(base_qs.filter(pk__gt=last_pk)[:EXPORT_CHUNK_SIZE])
@@ -281,9 +272,6 @@ def generate_export_rows(
                 columns=export_columns,
                 translation_language=translation_language,
             )
-            processed += 1
-            if processed % PROGRESS_UPDATE_INTERVAL == 0:
-                report(processed)
 
         last_pk = chunk[-1].pk
         done = len(chunk) < EXPORT_CHUNK_SIZE
@@ -296,11 +284,6 @@ def generate_export_rows(
         gc.collect()
         if done:
             break
-
-    # Report the final tally so the last partial interval (and exports smaller than one
-    # interval) still reach 100%. processed == 0 is a no-op since 0 % INTERVAL == 0.
-    if processed % PROGRESS_UPDATE_INTERVAL != 0:
-        report(processed)
 
 
 def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
@@ -321,9 +304,9 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
 
 
 def export_to_tempfile(
-    experiment, sessions_queryset, translation_language=None, compress=False, progress_callback=None, columns=None
+    rows: Iterable[list], compress: bool = False
 ) -> io.BufferedRandom | tempfile.SpooledTemporaryFile[bytes]:
-    """Write the CSV export to a temporary file and return it, seeked to 0.
+    """Write *rows* (from ``generate_export_rows``) as CSV to a temporary file and return it, seeked to 0.
 
     Use as a context manager (``with export_to_tempfile(...) as tmp:``) so that
     the file is closed and any on-disk data is cleaned up automatically.
@@ -340,13 +323,6 @@ def export_to_tempfile(
     download time for large exports.  The gzip stream is finalised (trailer written)
     before returning so the file is a valid, complete .gz archive.
     """
-    rows = generate_export_rows(
-        experiment=experiment,
-        sessions_queryset=sessions_queryset,
-        translation_language=translation_language,
-        progress_callback=progress_callback,
-        columns=columns,
-    )
     if compress:
         # Use a plain TemporaryFile rather than SpooledTemporaryFile.  The
         # SpooledTemporaryFile + GzipFile combination has known edge cases around

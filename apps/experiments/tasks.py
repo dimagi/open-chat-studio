@@ -1,5 +1,6 @@
 import time
 from datetime import timedelta
+from itertools import chain
 from uuid import uuid4
 
 from celery.app import shared_task
@@ -13,9 +14,14 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.web_channel import WebChannel
 from apps.chat.bots import create_conversation
-from apps.experiments.export import count_export_messages, export_to_tempfile, get_filtered_sessions
+from apps.experiments.export import (
+    count_export_messages,
+    export_to_tempfile,
+    generate_export_rows,
+    get_filtered_sessions,
+)
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
-from apps.files.exports import EXPORT_FAILED_MESSAGE, save_data_export
+from apps.files.exports import EXPORT_FAILED_MESSAGE, report_progress, save_data_export
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
@@ -37,22 +43,16 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone, co
         filtered_sessions = get_filtered_sessions(experiment, query_dict, time_zone)
         filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv.gz"
 
-        progress_recorder = ProgressRecorder(self)
         total = count_export_messages(filtered_sessions)
-
-        def report_progress(current):
-            progress_recorder.set_progress(current, total, description=f"Processing {current} of {total} messages")
-            logger.info("Chat export '%s': processed %s/%s messages", experiment.name, current, total)
+        rows = generate_export_rows(experiment=experiment, sessions_queryset=filtered_sessions, columns=columns)
+        header = next(rows)
+        rows = chain(
+            [header], report_progress(items=rows, total=total, recorder=ProgressRecorder(self), noun="messages")
+        )
 
         # compress=True writes a gzip stream, reducing file size by ~80–90% for typical
         # chat exports and dramatically cutting S3 storage and download time.
-        with export_to_tempfile(
-            experiment=experiment,
-            sessions_queryset=filtered_sessions,
-            compress=True,
-            progress_callback=report_progress,
-            columns=columns,
-        ) as tmp:
+        with export_to_tempfile(rows=rows, compress=True) as tmp:
             file_obj = save_data_export(
                 team=experiment.team,
                 name=filename,

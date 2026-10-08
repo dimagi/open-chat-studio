@@ -1,5 +1,4 @@
 import gzip
-import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -128,19 +127,16 @@ def test_async_export_chat_streams_temp_file_to_storage(mock_recorder_cls):
 
 @pytest.mark.django_db()
 @patch("apps.experiments.tasks.ProgressRecorder")
-def test_async_export_chat_reports_progress(mock_recorder_cls, caplog):
+def test_async_export_chat_reports_progress(mock_recorder_cls):
     recorder = mock_recorder_cls.return_value
     session = ExperimentSessionFactory.create()
     for i in range(2):
         ChatMessage.objects.create(chat=session.chat, content=f"m{i}", message_type=ChatMessageType.HUMAN)
 
-    with caplog.at_level(logging.INFO, logger="ocs.experiments"):
-        async_export_chat.run(session.experiment_id, "", "UTC")
+    async_export_chat.run(session.experiment_id, "", "UTC")
 
-    # Final progress update reports all messages processed against the total.
-    recorder.set_progress.assert_called_with(2, 2, description="Processing 2 of 2 messages")
-    # Progress is also logged (with the experiment name) so it can be tracked in the shell.
-    assert f"Chat export '{session.experiment.name}': processed 2/2 messages" in caplog.text
+    # The header row is not counted: the final update reports every message against the total.
+    recorder.set_progress.assert_called_with(2, 2, description="Processed 2 of 2 messages")
 
 
 @pytest.mark.django_db()
