@@ -108,6 +108,6 @@ describe('ocs-chat attachment download', () => {
     await component['downloadAttachment']({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
 
     expect(downloadAttachment).toHaveBeenCalledTimes(1);
-    expect(downloadButton(page)?.disabled).toBe(true);
+    expect(downloadButton(page)?.hasAttribute('disabled')).toBe(true);
   });
 });
