@@ -1,12 +1,4 @@
 {% load i18n %}
-{% comment %}
-Progress UI for an export task that returns {"file_id": ...} or {"error": ...}. Polled by
-assets/javascript/export-progress.js. To have a start control disabled while the task runs
-and hidden when it ends, put this inside a [data-export] element that holds a
-[data-export-start] control; add data-export-restart to that control to re-enable it instead.
-
-Parameters: task_id (required), link_label, title (renders a full-width panel with a heading).
-{% endcomment %}
 {% translate "Starting..." as msg_starting %}
 {% translate "Retrying..." as msg_retrying %}
 {% translate "The export could not be completed." as msg_failed %}
