@@ -332,6 +332,11 @@ def elevation_redirect(request, grant: Grant, superuser_only: bool = False) -> H
     if Elevation(request).has(grant):
         return None
 
+    return acquire_redirect(request, grant)
+
+
+def acquire_redirect(request, grant: Grant) -> HttpResponseRedirect:
+    """Send the request off to acquire `grant`, returning to the current page once it is held."""
     next_url = safe_redirect_url(request.get_full_path())
     return HttpResponseRedirect(f"{grant.acquire_url()}?{urlencode({'next': next_url})}")
 
