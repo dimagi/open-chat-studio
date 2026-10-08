@@ -35,6 +35,18 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+      {% for error in errors %}
+        <div role="alert" class="alert alert-error alert-soft items-start" data-testid="result-detail-error">
+          <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+          <div class="min-w-0">
+            <div class="font-semibold">
+              {{ error.source.label }}{% if error.evaluator_name %} ({{ error.evaluator_name }}){% endif %}: {{ error.category.label }}
+            </div>
+            <div class="text-sm">{{ error.category.hint }}</div>
+            <div class="text-xs font-mono mt-1 break-words whitespace-pre-wrap">{{ error.message }}</div>
+          </div>
+        </div>
+      {% endfor %}
       <div class="flex flex-wrap gap-2">
         {% for badge in badges %}
           {% if badge.polarity == "positive" %}

@@ -1,7 +1,7 @@
 """Shared helpers for building and writing evaluation result export data.
 
-Both the per-run results table/CSV (``EvaluationRun.get_table_data`` /
-``download_evaluation_run_csv``) and the async bulk export
+Both the per-run export (``EvaluationRun.get_table_data`` /
+``export_evaluation_run_results_task``) and the async bulk export
 (``export_evaluation_bulk_results_task``) build the same per-message row shape and
 share the same CSV column ordering, so the logic lives here to avoid two diverging
 code paths.
@@ -22,6 +22,7 @@ from django.contrib.postgres.expressions import ArraySubquery
 from django.db.models import F, OuterRef, QuerySet
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.errors import ERROR_KEY, GENERATION_ERROR_KEY
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationResult, Evaluator
@@ -86,8 +87,12 @@ def _accumulate_result(row_data: OrderedDict, tags: set, result, include_ids: bo
         if key != "current_datetime":
             row_data[key] = value
 
-    if result.output.get("error"):
-        row_data[f"error ({result.evaluator_name})"] = result.output["error"]
+    if result.output.get(ERROR_KEY):
+        row_data[f"error ({result.evaluator_name})"] = result.output[ERROR_KEY]
+
+    # The same on every result for the message, since the message was generated once.
+    if result.output.get(GENERATION_ERROR_KEY):
+        row_data[GENERATION_ERROR_KEY] = result.output[GENERATION_ERROR_KEY]
 
     tags.update(result.applied_tag_names)
 
@@ -208,10 +213,14 @@ def evaluator_output_columns(evaluators: "list[Evaluator]") -> list[tuple[str, s
     return columns
 
 
+def is_error_header(header: str) -> bool:
+    return header in (ERROR_KEY, GENERATION_ERROR_KEY) or header.startswith(f"{ERROR_KEY} (")
+
+
 def order_evaluation_headers(all_headers: Iterable[str]) -> list[str]:
     """Fixed headers first, then dynamic columns alphabetically, then error columns last."""
     all_headers = set(all_headers)
-    error_headers = sorted(h for h in all_headers if h == "error" or h.startswith("error ("))
+    error_headers = sorted(h for h in all_headers if is_error_header(h))
     other_headers = sorted(h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h not in error_headers)
     return [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + error_headers
 

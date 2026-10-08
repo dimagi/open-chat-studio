@@ -56,7 +56,7 @@ These apply whether the connection comes from `DATABASE_URL` or the variables ab
 | `CRYPTOGRAPHY_SALT` | — | Additional salt for field encryption. |
 | `CSRF_TRUSTED_ORIGINS` | `[]` | Comma-separated list of trusted origins for CSRF, e.g. `https://yourdomain.com`. Required when behind a reverse proxy. |
 | `DJANGO_SECURE_SSL_REDIRECT` | `True` | Redirect HTTP to HTTPS. Set to `False` if TLS is terminated upstream and you want to disable the redirect in Django. |
-| `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required to register an OAuth2 application at all: the registration form signs every application with `RS256`, which django-oauth-toolkit rejects when this is unset. Setting it also enables OIDC, signs ID tokens, and adds the `openid`/`profile` scopes. |
+| `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required to register an OAuth2 application at all: the registration form signs every application with `RS256`, which django-oauth-toolkit rejects when this is unset. Setting it also enables OIDC, signs ID tokens, and adds the `openid`/`profile`/`teams` scopes. |
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS` | `36000` | Lifetime of OAuth2 access tokens issued at `/o/token/`. |
 | `OAUTH_CHAT_START_TOKEN_EXPIRE_SECONDS` | `60` | Lifetime of a client-credentials access token requested with the `chat:start` scope alone. Such a token is meant to be handed to the chat widget in a browser, so it is kept short. Authorization-code tokens, and tokens that carry other scopes, get `OAUTH_ACCESS_TOKEN_EXPIRE_SECONDS`. |

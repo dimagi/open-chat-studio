@@ -1,13 +1,13 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import ToolMessage
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.tests.test_openapi_tool import _make_openapi_schema
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
+from apps.utils.openapi import OpenAPISpec
 
 
 def test_openapi_tool_query_params(httpx_mock):

@@ -78,6 +78,7 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 * In API packages, define exception classes in an `exceptions.py` and permission classes in a `permissions.py` next to the views that use them, not in the views module
+* Build any user-triggered export whose size grows with team data as an async Celery task that saves a `FilePurpose.DATA_EXPORT` `File` and returns its id for a polled download link. Follow `docs/agents/data_exports.md`
 * A `DeprecationWarning` reported against `apps.*` fails the test that raises it (`filterwarnings` in `pyproject.toml`). Fix the call site. Add an `ignore` line only when the deprecated thing is inside a dependency and we cannot move off it, scoped to the message so the same library raising something new still surfaces
 
 ## Ask first
@@ -98,6 +99,7 @@ Confirm with a human before these — they are hard to reverse or change a share
 ## Additional notes
 
 Consult these guides when working in the relevant area:
+* `docs/agents/data_exports.md` — when adding or modifying a data export (CSV, zip, or other download)
 * `docs/agents/django_model_auditing.md` — when adding or modifying audit logging on models
 * `docs/agents/django_model_versioning.md` — when modifying versioned models (Experiment, Assistant, Pipeline)
 * `docs/agents/django_performance.md` — when optimizing queries or addressing N+1 issues

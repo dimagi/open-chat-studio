@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import pytest
 from django.db import connection
 from django.db.models import ProtectedError
-from django.urls import reverse
 
 from apps.evaluations.models import EvaluationRunStatus, Evaluator, InFlightRunsError
+from apps.evaluations.tasks import export_evaluation_run_results_task
+from apps.files.models import File
 from apps.teams.models import Team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.evaluations import (
@@ -115,7 +118,7 @@ def test_is_archived_keeps_a_database_level_default():
 
 
 @pytest.mark.django_db()
-def test_csv_export_still_contains_an_archived_evaluators_column(client, team_with_users):
+def test_csv_export_still_contains_an_archived_evaluators_column(team_with_users):
     """#3861's acceptance criterion: archiving preserves a past run's exported history."""
     evaluator = EvaluatorFactory.create(team=team_with_users, name="Retired Judge")
     config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
@@ -131,12 +134,16 @@ def test_csv_export_still_contains_an_archived_evaluators_column(client, team_wi
         evaluator=evaluator,
         output={"result": {"score": 8.5}},
     )
-    client.force_login(team_with_users.members.first())
-    url = reverse("evaluations:evaluation_run_download", args=[team_with_users.slug, config.id, run.id])
-    before = client.get(url).content.decode()
+
+    def export_csv() -> str:
+        with patch("apps.evaluations.tasks.ProgressRecorder"):
+            result = export_evaluation_run_results_task(evaluation_run_id=run.id, team_id=team_with_users.id)
+        return File.objects.get(id=result["file_id"]).file.read().decode("utf-8")
+
+    before = export_csv()
 
     evaluator.archive()
-    after = client.get(url).content.decode()
+    after = export_csv()
 
     assert "score (Retired Judge)" in after
     assert after == before

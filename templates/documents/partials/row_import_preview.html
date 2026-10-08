@@ -1,0 +1,35 @@
+{% load i18n %}
+{% if error %}
+  <div role="alert" class="alert alert-error">{{ error }}</div>
+{% else %}
+  {% if oversized_rows %}
+    <div role="alert" class="alert alert-error">
+      {% blocktranslate count counter=oversized_rows|length with rows=oversized_rows|join:", " %}Row {{ rows }} is too long to embed (limit {{ max_row_tokens }} tokens). Shorten it and choose the file again.{% plural %}Rows {{ rows }} are too long to embed (limit {{ max_row_tokens }} tokens). Shorten them and choose the file again.{% endblocktranslate %}
+    </div>
+  {% endif %}
+  <div class="text-sm">
+    {% blocktranslate count counter=row_count %}{{ row_count }} row found.{% plural %}{{ row_count }} rows found.{% endblocktranslate %}
+  </div>
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">{% translate "Store as metadata" %} ({% translate "up to" %} {{ max_metadata_columns }})</legend>
+    <div class="flex flex-wrap gap-3">
+      {% for header in headers %}
+        <label class="label cursor-pointer gap-2">
+          <input type="checkbox" class="checkbox checkbox-sm" name="metadata_columns" value="{{ header }}" />
+          <span>{{ header }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div>
+    <div class="font-medium text-sm mb-2">{% translate "Each row will be indexed as:" %}</div>
+    <div class="flex flex-col gap-2">
+      {% for sample in sample_rows %}
+        <pre class="bg-base-200 rounded p-2 text-xs whitespace-pre-wrap">{{ sample }}</pre>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="modal-action">
+    <button type="submit" class="btn btn-primary" {% if oversized_rows %}disabled{% endif %}>{% translate "Import" %}</button>
+  </div>
+{% endif %}

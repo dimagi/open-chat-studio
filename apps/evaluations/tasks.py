@@ -26,6 +26,7 @@ from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
+from apps.evaluations.errors import evaluator_error_output, generation_error_fields, is_failed_output
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import (
     annotate_export_fields,
@@ -46,6 +47,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
@@ -72,6 +74,7 @@ MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
 BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
 TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
 RUN_CHUNK_SIZE = 500  # active run ids fetched per round trip when fanning out ticks
+EXPORT_FAILED_MESSAGE = "The export could not be completed."
 
 logger = get_task_logger("ocs.evaluations")
 
@@ -141,37 +144,46 @@ def _create_evaluation_result(
     return evaluation_result
 
 
+@dataclass(frozen=True)
+class BotGeneration:
+    session_id: int | None
+    response: str = ""
+    error: Exception | None = None
+
+
 def _run_evaluator_on_message(
     evaluation_run: EvaluationRun,
     evaluator: Evaluator,
     message: EvaluationMessage,
-    bot_response: str | None,
-    session_id: int | None,
+    generation: BotGeneration,
 ) -> None:
     """Run a single evaluator over a single message and persist the outcome.
 
     On evaluator failure an error result is stored (matching the no-retry behaviour);
-    on success the result is written and its Score rows are derived.
+    on success the result is written and its Score rows are derived. A failed generation
+    is still evaluated, and every result for the message records why it failed.
     """
+    session_id = generation.session_id
+    generation_fields = generation_error_fields(generation.error) if generation.error else {}
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
-        output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
-    except NoStructuredOutputError as e:
-        logger.warning(
-            "Evaluator %s returned no structured output for message %s (stop reason: %s)",
-            evaluator.id,
-            message.id,
-            e.reason or "none",
-        )
-        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
-        return
+        output = evaluator.run(message, generation.response, usage_context=usage_context).model_dump()
     except Exception as e:
-        logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        if isinstance(e, NoStructuredOutputError):
+            logger.warning(
+                "Evaluator %s returned no structured output for message %s (stop reason: %s)",
+                evaluator.id,
+                message.id,
+                e.reason or "none",
+            )
+        else:
+            logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+        output = evaluator_error_output(e) | generation_fields
+        _create_evaluation_result(evaluation_run, evaluator, message, output, session_id, apply_tags=False)
         return
 
     evaluation_result = _create_evaluation_result(
-        evaluation_run, evaluator, message, output, session_id, apply_tags=True
+        evaluation_run, evaluator, message, output | generation_fields, session_id, apply_tags=True
     )
     if evaluation_result is None:
         return
@@ -240,9 +252,9 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
 
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
-        session_id, bot_response = None, ""
+        generation = BotGeneration(session_id=None)
         if generation_experiment is not None:
-            session_id, bot_response = run_bot_generation(
+            generation = run_bot_generation(
                 evaluation_run.team, message, generation_experiment, evaluation_run=evaluation_run
             )
 
@@ -255,7 +267,7 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
             if evaluator is None:
                 logger.warning(f"Evaluator {evaluator_id} not found, skipping")
                 continue
-            _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id)
+            _run_evaluator_on_message(evaluation_run, evaluator, message, generation)
 
 
 @shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT, queue=Queues.EVALUATIONS)
@@ -486,6 +498,8 @@ def _drive_run(run_id: int) -> None:
         for batch in result.batches:
             evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
         _publish_tick(run, result)
+        if result.terminal == "error":
+            evaluation_run_outcome_notification(run)
         # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
         # this block — a broker error here would otherwise cost the run its completion
         # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
@@ -516,6 +530,7 @@ def finalize_evaluation_run(run_id: int) -> None:
     with current_team(run.team):
         compute_aggregates_for_run(run)
         reverse_stale_tags(run)
+        evaluation_run_outcome_notification(run)
     # Stamped last: until it is set, the results page treats missing aggregates as "still
     # coming" rather than as this run having none (see `EvaluationRun.is_finalizing`).
     run.finalized_at = timezone.now()
@@ -662,17 +677,17 @@ def _maybe_apply_tag_rules(
     evaluation_result: EvaluationResult,
     message: EvaluationMessage,
 ) -> None:
-    """Skip tagging on preview runs or results with errors; otherwise apply rules."""
+    """Skip tagging on preview runs or failed results; otherwise apply rules."""
     if evaluation_run.type == EvaluationRunType.PREVIEW:
         return
-    if (evaluation_result.output or {}).get("error"):
+    if is_failed_output(evaluation_result.output):
         return
     apply_rules_to_result(evaluation_result, evaluator, message)
 
 
 def run_bot_generation(
     team: Team, message: EvaluationMessage, experiment: Experiment, *, evaluation_run: EvaluationRun
-) -> tuple[int | None, str | None]:
+) -> BotGeneration:
     """
     Run the evaluation message through the bot to generate a response.
 
@@ -706,7 +721,7 @@ def run_bot_generation(
     except Exception as e:
         logger.exception(f"Error populating eval data {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        return None, None
+        return BotGeneration(session_id=None, error=e)
 
     try:
         # Extract the input message content
@@ -716,7 +731,7 @@ def run_bot_generation(
         participant_data = session.participant.global_data | participant_data
 
         # Call the bot with the evaluation message and session
-        bot_response = handle_evaluation_message(
+        reply = handle_evaluation_message(
             experiment_version=experiment,
             experiment_channel=evaluation_channel,
             message_text=input_content,
@@ -724,15 +739,15 @@ def run_bot_generation(
             participant_data=participant_data,
             usage_tracer=generation_usage_tracer(experiment, evaluation_run, message_id=message.id),
         )
-        response_content = bot_response.content
+        response_content = reply.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return session.id, response_content
+        return BotGeneration(session_id=session.id, response=response_content, error=reply.error)
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
-        return session.id, None
+        return BotGeneration(session_id=session.id, error=e)
 
 
 def _create_message_history(chat: Chat, history: list[dict]) -> None:
@@ -1514,8 +1529,8 @@ def create_dataset_from_sessions_task(
         return {"success": False, "error": message}
 
 
-def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[dict]:
-    """Yield *rows*, calling ``report(current, total)`` in steps of roughly one percent.
+def _report_row_progress(rows: Iterable[dict], total: int, recorder: ProgressRecorder) -> Iterator[dict]:
+    """Yield *rows*, reporting progress to *recorder* in steps of roughly one percent.
 
     Reporting per row would be one backend write per row, which on a large export is more
     traffic than the export itself.
@@ -1523,8 +1538,21 @@ def _report_row_progress(rows: Iterable[dict], total: int, report) -> Iterator[d
     step = max(1, math.ceil(total / 100))
     for current, row in enumerate(rows, start=1):
         if current % step == 0 or current == total:
-            report(current, total)
+            recorder.set_progress(current, total, description=f"Processed {current} of {total} messages")
         yield row
+
+
+def _create_export_file(rows: Iterable[dict], team: Team, filename: str) -> File:
+    """Write *rows* out as a CSV in team storage, expiring in a week."""
+    with export_evaluation_csv_to_tempfile(rows) as csv_file:
+        return File.objects.create(
+            name=filename,
+            team=team,
+            content_type="text/csv",
+            file=DjangoFile(csv_file, name=filename),
+            purpose=FilePurpose.DATA_EXPORT,
+            expiry_date=timezone.now() + timedelta(days=7),
+        )
 
 
 def _bulk_export_results(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
@@ -1574,30 +1602,41 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
         team = config.team
 
         with current_team(team):
-            recorder = ProgressRecorder(self)
             # Counting up front costs a query the streaming read would not otherwise make, but
             # it is what lets the UI show a percentage rather than an unbounded spinner.
             total = _count_bulk_export_rows(config, team)
+            rows = iter_evaluation_table_rows(_get_bulk_results_queryset(config, team))
+            rows = _report_row_progress(rows, total, ProgressRecorder(self))
 
-            def report(current: int, row_total: int) -> None:
-                recorder.set_progress(current, row_total, description=f"Processed {current} of {row_total} messages")
-
-            results = _get_bulk_results_queryset(config, team)
-            rows = _report_row_progress(iter_evaluation_table_rows(results), total, report)
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
-
-            with export_evaluation_csv_to_tempfile(rows) as csv_file:
-                file_obj = File.objects.create(
-                    name=filename,
-                    team=team,
-                    content_type="text/csv",
-                    file=DjangoFile(csv_file, name=filename),
-                    purpose=FilePurpose.DATA_EXPORT,
-                    expiry_date=timezone.now() + timedelta(days=7),
-                )
-
-            return {"file_id": file_obj.id}
+            return {"file_id": _create_export_file(rows, team, filename).id}
 
     except Exception as e:
         logger.exception(f"Error exporting bulk evaluation results for config {evaluation_config_id}: {e}")
-        return {"error": str(e)}
+        return {"error": EXPORT_FAILED_MESSAGE}
+
+
+@shared_task(bind=True, queue=Queues.BACKGROUND)
+def export_evaluation_run_results_task(self, evaluation_run_id: int, team_id: int) -> dict:
+    """Async export of a single evaluation run's results.
+
+    Peak memory is flat in the number of results. Returns {"file_id": <id>} on success.
+    """
+    try:
+        run = EvaluationRun.objects.select_related("team", "config").get(id=evaluation_run_id, team_id=team_id)
+
+        with current_team(run.team):
+            results = run.export_results
+            total = results.values("message_id").distinct().count()
+            # The results upload matches each row back to its message on the id column.
+            rows = iter_evaluation_table_rows(
+                queryset=annotate_export_fields(results).order_by("message_id"), include_ids=True
+            )
+            rows = _report_row_progress(rows, total, ProgressRecorder(self))
+
+            filename = f"{run.config.name}_results_{run.id}.csv"
+            return {"file_id": _create_export_file(rows, run.team, filename).id}
+
+    except Exception as e:
+        logger.exception(f"Error exporting results for evaluation run {evaluation_run_id}: {e}")
+        return {"error": EXPORT_FAILED_MESSAGE}

@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from apps.evaluations.aggregators import aggregate_binary_field, aggregate_field, get_aggregators_for_value
+from apps.evaluations.errors import is_failed_output
 from apps.evaluations.models import EvaluationRun, EvaluationRunAggregate, Evaluator
 
 RESULT_CHUNK_SIZE = 500  # results fetched per round trip when streaming a run's results
@@ -21,7 +22,7 @@ def compute_aggregates_for_run(run: EvaluationRun) -> list[EvaluationRunAggregat
     rows = run.results.values_list("evaluator_id", "output")
     for evaluator_id, output in rows.iterator(chunk_size=RESULT_CHUNK_SIZE):
         result_data = (output or {}).get("result")
-        if result_data:  # Skip results with errors
+        if result_data and not is_failed_output(output):
             _collect_aggregatable_values(result_data, field_values_by_evaluator[evaluator_id])
 
     # One bulk fetch for the schemas.

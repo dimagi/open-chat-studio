@@ -411,6 +411,11 @@ class AzureLlmService(LlmService):
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_openai.chat_models import AzureChatOpenAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
+        # Model parameters store reasoning effort as `effort`; Chat Completions expects `reasoning_effort`.
+        # Passing `effort` through unmapped ends up as an unexpected kwarg to `Completions.create()`.
+        if effort := kwargs.pop("effort", None):
+            kwargs["reasoning_effort"] = effort
+
         return AzureChatOpenAI(
             azure_endpoint=self.openai_api_base,
             openai_api_version=self.openai_api_version,

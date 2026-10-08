@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import Any, ClassVar, Union
@@ -12,7 +12,6 @@ from xml.sax.saxutils import escape
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
@@ -34,6 +33,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
@@ -47,7 +47,7 @@ IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})
 CHUNK_TEMPLATE = """
 <file>
   <file_id>{file_id}</file_id>
-  <filename>{file_name}</filename>{metadata}
+  <filename>{file_name}</filename>{metadata}{row}
   <context>
     <![CDATA[{chunk}]]>
   </context>
@@ -104,6 +104,31 @@ def _format_metadata_block(metadata: dict | None) -> str:
         return ""
     inner = "\n".join(lines)
     return f"\n  <metadata>\n{inner}\n  </metadata>"
+
+
+def _format_row_block(embedding: FileChunkEmbedding) -> str:
+    """Build a `<row>` XML block for a chunk that came from a sheet row.
+
+    Kept apart from the file `<metadata>` block so `METADATA_BLOCKLIST`, which names
+    loader-internal file keys, cannot drop a sheet column that happens to share a name.
+    """
+    if embedding.metadata is None:
+        return ""
+    lines = [f"    <row_number>{embedding.page_number}</row_number>"]
+    used_tags: set[str] = set()
+    columns = []
+    for key, value in embedding.metadata.items():
+        if value in (None, ""):
+            continue
+        tag = _sanitize_tag(key)
+        if tag in used_tags:
+            continue
+        used_tags.add(tag)
+        columns.append(f"      <{tag}>{_format_metadata_value(value)}</{tag}>")
+    if columns:
+        lines.append("    <columns>\n" + "\n".join(columns) + "\n    </columns>")
+    inner = "\n".join(lines)
+    return f"\n  <row>\n{inner}\n  </row>"
 
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
@@ -173,6 +198,7 @@ def _perform_collection_search(
     generate_citations: bool = True,
     include_collection_info: bool = False,
     graph_state: dict | None = None,
+    metadata_filters: dict[str, str] | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -184,6 +210,7 @@ def _perform_collection_search(
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
         graph_state: The LangGraph state containing the conversation already loaded for the LLM.
+        metadata_filters: Metadata values every returned chunk must hold.
 
     Returns:
         Formatted search results string
@@ -193,15 +220,17 @@ def _perform_collection_search(
         query=query,
         top_k=max_results,
         context=_recent_conversation_context(collection, graph_state or {}),
+        metadata_filters=metadata_filters,
     )
 
     if not embeddings:
+        no_results = "\nThe semantic search did not return any results"
         if include_collection_info:
-            return (
-                f"\nThe semantic search did not return any results from "
-                f"collection '{collection.name}' (ID: {collection.id})."
-            )
-        return "\nThe semantic search did not return any results."
+            no_results += f" from collection '{collection.name}' (ID: {collection.id})"
+        if metadata_filters:
+            applied = ", ".join(f"{key} = {value}" for key, value in metadata_filters.items())
+            no_results += f" among rows matching {applied}"
+        return no_results + "."
 
     # Format results
     if include_collection_info:
@@ -215,6 +244,7 @@ def _perform_collection_search(
                     file_name=escape(embedding.file.name),
                     file_id=embedding.file_id,
                     metadata=_format_metadata_block(embedding.file.metadata),
+                    row=_format_row_block(embedding),
                     chunk=embedding.text,
                 ).strip()
                 for embedding in embeddings
@@ -245,7 +275,7 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
   <file_id>{embedding.file_id}</file_id>
   <filename>{escape(embedding.file.name)}</filename>
   <collection_id>{collection.id}</collection_id>
-  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}
+  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}{_format_row_block(embedding)}
   <context>
     <![CDATA[{embedding.text}]]>
   </context>
@@ -258,6 +288,7 @@ class SearchToolConfig:
     index_id: int
     max_results: int = 5
     generate_citations: bool = True
+    metadata_filters: dict[str, str] = field(default_factory=dict)
 
     def get_index(self):
         return Collection.objects.get(id=self.index_id)
@@ -577,6 +608,7 @@ class SearchIndexTool(CustomBaseTool):
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
             graph_state=graph_state,
+            metadata_filters=self.search_config.metadata_filters,
         )
 
 
@@ -593,6 +625,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     max_results: int = 5
     generate_citations: bool = True
     allowed_collection_ids: list[int]
+    metadata_filters: dict[str, str] = {}
 
     def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
@@ -615,6 +648,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             generate_citations=self.generate_citations,
             include_collection_info=True,
             graph_state=graph_state,
+            metadata_filters=self.metadata_filters,
         )
 
 

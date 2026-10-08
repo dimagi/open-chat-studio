@@ -44,22 +44,28 @@
             {% endblock post_form %}
         </div>
     </div>
+    {{ end_trigger_types|json_script:"end-trigger-types" }}
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.data('formData', () => ({
                 triggerType: '{{ trigger_form.initial.type }}',
+                endTriggerTypes: JSON.parse(document.getElementById('end-trigger-types').textContent),
 
                 isActionDisabled(action) {
-                    return this.triggerType === 'new_bot_message' &&
-                    ['send_message_to_bot', 'schedule_trigger'].includes(action);
+                    if (this.triggerType === 'new_bot_message') {
+                        return ['send_message_to_bot', 'schedule_trigger'].includes(action);
+                    }
+                    if (this.endTriggerTypes.includes(this.triggerType)) {
+                        return action === 'end_conversation';
+                    }
+                    return false;
                 },
 
                 watchTriggerType() {
                     this.$watch('triggerType', value => {
                         const actionSelect = document.getElementById('{{ action_primary_form.action_type.id_for_label }}');
                         if (!actionSelect) return;
-                        if (value === 'new_bot_message' &&
-                            ['send_message_to_bot', 'schedule_trigger'].includes(actionSelect.value)) {
+                        if (this.isActionDisabled(actionSelect.value)) {
                                 actionSelect.value = 'log';
                                 actionSelect.dispatchEvent(new Event('change'));
                             }

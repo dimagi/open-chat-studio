@@ -749,7 +749,7 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
-    from config.sentry import get_event_scrubber
+    from config.sentry import get_disabled_integrations, get_event_scrubber
 
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
@@ -775,6 +775,7 @@ if SENTRY_DSN:
             DjangoIntegration(),
             CeleryIntegration(),
         ],
+        disabled_integrations=get_disabled_integrations(),
     )
 
 # Taskbadger setup
@@ -1026,10 +1027,17 @@ OCS_LANGFUSE_SAMPLE_RATE = env.float("OCS_LANGFUSE_SAMPLE_RATE", default=None)
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+COLLECTION_FILE_MAX_METADATA_COLUMNS = 16
 
 # How long a chat session token remains usable from issuance. Activity does not extend it.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Row import into local indexes: one chunk per CSV/TSV row.
+COLLECTION_ROW_IMPORT_MAX_ROWS = 10000
+# Counted with tiktoken cl100k_base. Sized to the smallest input limit among the supported
+# embedding providers so a row that passes preview embeds on any of them.
+COLLECTION_ROW_IMPORT_MAX_ROW_TOKENS = 2000
 
 # Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
 # Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
@@ -1158,6 +1166,7 @@ OAUTH2_PROVIDER = {
 OIDC_ONLY_SCOPES = {
     "openid": "OpenID Connect scope",
     "profile": "User Profile",
+    "teams": "List your teams",
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
     OAUTH2_PROVIDER.update(
@@ -1168,7 +1177,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
     )
     OAUTH2_PROVIDER["SCOPES"].update(OIDC_ONLY_SCOPES)
 # Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
-# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
+# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile/teams) are excluded because a
 # machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.
 OAUTH_CLIENT_CREDENTIALS_SCOPES = [
     "chatbots:read",

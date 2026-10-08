@@ -79,7 +79,7 @@ jobs:
           echo "ECR_REPOSITORY=$APP_NAME-prod-ecr-repo" >> "$GITHUB_ENV"
 
       - name: configure aws credentials
-        uses: aws-actions/configure-aws-credentials@v6.2.3
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)['prod'] }}:role/github_deploy"
           role-session-name: GithubBuild
@@ -124,7 +124,7 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6.0.10
+      - uses: pnpm/action-setup@v6.1.0
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
@@ -154,7 +154,7 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: pnpm/action-setup@v6.0.10
+      - uses: pnpm/action-setup@v6.1.0
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -357,6 +357,8 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+          files: junit.xml

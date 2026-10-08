@@ -1,6 +1,8 @@
+from enum import StrEnum
 from typing import Any, Literal
 
 import pydantic
+from django.conf import settings
 from pydantic import HttpUrl, field_validator
 
 # Audio/video types markitdown cannot extract useful text from.
@@ -12,8 +14,24 @@ class ChunkingStrategy(pydantic.BaseModel):
     chunk_overlap: int = pydantic.Field(description="Number of overlapping tokens between chunks")
 
 
+class ChunkingMode(StrEnum):
+    TEXT = "text"
+    ROW = "row"
+
+
 class CollectionFileMetadata(pydantic.BaseModel):
-    chunking_strategy: ChunkingStrategy = pydantic.Field(description="Chunking strategy used for the file")
+    chunking_strategy: ChunkingStrategy | None = pydantic.Field(
+        default=None, description="Chunking strategy used for the file"
+    )
+    chunking_mode: ChunkingMode = pydantic.Field(
+        default=ChunkingMode.TEXT,
+        description="Whether the file is split into text chunks or indexed one chunk per row",
+    )
+    metadata_columns: list[str] = pydantic.Field(
+        default_factory=list,
+        max_length=settings.COLLECTION_FILE_MAX_METADATA_COLUMNS,
+        description="Columns stored as metadata on each chunk",
+    )
 
 
 class GitHubSourceConfig(pydantic.BaseModel):
@@ -60,7 +78,7 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
     page_ids: str = pydantic.Field(default="", description="Comma-separated list of page IDs")
 
     # Additional options
-    max_pages: int = pydantic.Field(default=1000, description="Maximum number of pages to load")
+    max_pages: int = pydantic.Field(default=1000, ge=1, description="Maximum number of pages to load")
 
     @pydantic.model_validator(mode="after")
     def validate_loading_options(self):
@@ -75,7 +93,7 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
         return self
 
     def get_loader_kwargs(self) -> dict[str, Any]:
-        """Get the appropriate kwargs for ConfluenceLoader based on the specified option"""
+        """Get the Confluence query options for the configured loading option."""
         kwargs: dict[str, Any] = {
             "url": self.base_url,
             "max_pages": self.max_pages,

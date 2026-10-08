@@ -61,6 +61,7 @@ from apps.experiments.decorators import (
     verify_session_access_cookie,
 )
 from apps.experiments.email import send_chat_link_email
+from apps.experiments.export import EXPORT_COLUMNS
 from apps.experiments.forms import (
     ConsentForm,
     TranslateMessagesForm,
@@ -448,9 +449,15 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     parsed_url = urlparse(request.htmx.current_url)
-    task_id = async_export_chat.delay(experiment_id, parsed_url.query, timezone)
+    # Empty only for a page loaded before column selection existed; the modal always sends required columns.
+    columns = request.POST.getlist("columns") or None
+    task_id = async_export_chat.delay(
+        experiment_id=experiment_id, query_params=parsed_url.query, time_zone=timezone, columns=columns
+    )
     return TemplateResponse(
-        request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
+        request,
+        "experiments/components/exports.html",
+        {"experiment": experiment, "task_id": task_id, "export_columns": EXPORT_COLUMNS},
     )
 
 
