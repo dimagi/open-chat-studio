@@ -114,7 +114,7 @@ def test_drop_removes_only_that_grant(request_with_session):
     elevation.add(Grant.team("team1"))
     elevation.add(Grant.team("team2"))
 
-    assert elevation.drop(Grant.team("team1")) is True
+    assert elevation.drop(Grant.team("team1")) is not None
 
     assert not elevation.has(Grant.team("team1"))
     assert elevation.has(Grant.team("team2"))
@@ -123,9 +123,9 @@ def test_drop_removes_only_that_grant(request_with_session):
 def test_drop_reports_whether_the_grant_was_held(request_with_session):
     elevation = Elevation(request_with_session)
     elevation.add(Grant.team("team1"))
-    assert elevation.drop(Grant.team("team1")) is True
-    assert elevation.drop(Grant.team("team1")) is False
-    assert elevation.drop(Grant.team("never-held")) is False
+    assert elevation.drop(Grant.team("team1")) is not None
+    assert elevation.drop(Grant.team("team1")) is None
+    assert elevation.drop(Grant.team("never-held")) is None
 
 
 def test_expiry_prunes_only_the_expired_grant(request_with_session):

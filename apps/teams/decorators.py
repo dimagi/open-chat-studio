@@ -5,7 +5,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from apps.web.elevation import Elevation, Grant, TooManyElevations
+from apps.web.elevation import Elevation, Grant, TooManyElevations, elevate
 
 
 class TeamAccessDenied(Http404):
@@ -72,7 +72,7 @@ def check_superuser_team_access(request, team_slug):
         if settings.ELEVATION_WITHOUT_PROOF:
             # Development convenience: elevate on first access instead of prompting.
             try:
-                elevation.add(grant)
+                elevate(request, grant)
             except TooManyElevations:
                 pass
             else:
