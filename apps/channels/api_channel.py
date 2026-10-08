@@ -95,7 +95,7 @@ class ApiChannel(ChannelBase):
             core_stages=[
                 ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
-                BlockedParticipantStage(reply_with_message=True),
+                BlockedParticipantStage(),
                 ConsentCheckStage(),
                 ChannelDisabledStage(),
                 SessionResolutionStage(),

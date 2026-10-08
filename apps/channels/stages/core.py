@@ -28,7 +28,7 @@ from apps.experiments.models import (
 )
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
-from apps.moderation.enforcement import BLOCKED_MESSAGE, abuse_detection_enabled, is_on_denylist
+from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
@@ -214,16 +214,9 @@ class ParticipantResolverStage(ProcessingStage):
 
 
 class BlockedParticipantStage(ProcessingStage):
-    """Stops processing for a participant on the team's denylist, without saving or sending anything.
-
-    Channels that return the response to the caller (web, API) pass ``reply_with_message=True``
-    so the caller gets a fixed blocked message. Messaging channels get no reply.
-    """
+    """Stops processing for a participant on the team's denylist, without saving or sending anything."""
 
     span_input_fields = ("participant.id", "experiment_session.participant_id")
-
-    def __init__(self, reply_with_message: bool = False) -> None:
-        self.reply_with_message = reply_with_message
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return abuse_detection_enabled(ctx.experiment.team)
@@ -235,7 +228,7 @@ class BlockedParticipantStage(ProcessingStage):
             return
 
         logger.info("Ignoring message from blocked participant %s", participant_id)
-        raise EarlyAbort(BLOCKED_MESSAGE if self.reply_with_message else None)
+        raise EarlyAbort()
 
 
 # ---------------------------------------------------------------------------

@@ -46,11 +46,4 @@ class EarlyAbort(Exception):
     stop but reporting anything back to the user (or attempting to)
     would be wrong -- e.g. the participant has revoked platform-level
     consent, or the channel can no longer reach them.
-
-    ``response``, if given, is returned to a caller that reads the reply directly
-    (web, API). It is not sent through the channel or saved.
     """
-
-    def __init__(self, response: str | None = None):
-        self.response = response
-        super().__init__(response)

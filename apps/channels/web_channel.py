@@ -77,7 +77,7 @@ class WebChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantIdentifierStage(),
-                BlockedParticipantStage(reply_with_message=True),
+                BlockedParticipantStage(),
                 # Embedded-widget sessions are served here, not by ApiChannel, so the
                 # admin's channel toggle has to be enforced on this pipeline too.
                 ChannelDisabledStage(),

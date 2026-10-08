@@ -14,7 +14,6 @@ from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.moderation.enforcement import BLOCKED_MESSAGE
 from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -50,29 +49,16 @@ class TestBlockedParticipantStage:
         session = ExperimentSessionFactory.create()
         ctx = make_context(experiment=session.experiment, participant=session.participant)
 
-        BlockedParticipantStage(reply_with_message=True)(ctx)
+        BlockedParticipantStage()(ctx)
 
     @override_flag(FLAG, active=True)
-    def test_blocked_participant_aborts_silently_by_default(self):
+    def test_blocked_participant_aborts(self):
         session = ExperimentSessionFactory.create()
         _block(session)
         ctx = make_context(experiment=session.experiment, participant=session.participant)
 
-        with pytest.raises(EarlyAbort) as exc_info:
+        with pytest.raises(EarlyAbort):
             BlockedParticipantStage()(ctx)
-
-        assert exc_info.value.response is None
-
-    @override_flag(FLAG, active=True)
-    def test_blocked_participant_gets_blocked_message_when_replying(self):
-        session = ExperimentSessionFactory.create()
-        _block(session)
-        ctx = make_context(experiment=session.experiment, participant=session.participant)
-
-        with pytest.raises(EarlyAbort) as exc_info:
-            BlockedParticipantStage(reply_with_message=True)(ctx)
-
-        assert exc_info.value.response == BLOCKED_MESSAGE
 
     @override_flag(FLAG, active=True)
     def test_falls_back_to_the_session_participant(self):
@@ -82,7 +68,7 @@ class TestBlockedParticipantStage:
         ctx = make_context(experiment=session.experiment, experiment_session=session)
 
         with pytest.raises(EarlyAbort):
-            BlockedParticipantStage(reply_with_message=True)(ctx)
+            BlockedParticipantStage()(ctx)
 
 
 @pytest.mark.django_db()
@@ -118,7 +104,7 @@ class TestBlockedParticipantPerChannel:
         assert channel.text_sent == ["Hello"]
 
     @override_flag(FLAG, active=True)
-    def test_web_widget_gets_blocked_message(self):
+    def test_web_widget_gets_no_reply(self):
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "tok"}
         )
@@ -133,14 +119,14 @@ class TestBlockedParticipantPerChannel:
                 experiment_session_id=session.id, experiment_id=session.experiment.id, message_text="hello"
             )
 
-        assert result["response"] == BLOCKED_MESSAGE
+        assert result["response"] == ""
         process_input.assert_not_called()
         assert not ChatMessage.objects.filter(chat=session.chat).exists()
         session.refresh_from_db()
         assert session.last_activity_at == last_activity_at
 
     @override_flag(FLAG, active=True)
-    def test_api_channel_gets_blocked_message(self):
+    def test_api_channel_gets_no_reply(self):
         session = ExperimentSessionFactory.create()
         session.experiment_channel = ExperimentChannel.objects.get_team_api_channel(session.team)
         session.save()
@@ -155,7 +141,7 @@ class TestBlockedParticipantPerChannel:
                 base_messages.text_message(participant_id=session.participant.identifier)
             )
 
-        assert response.content == BLOCKED_MESSAGE
+        assert response.content == ""
         get_bot.assert_not_called()
         assert not ChatMessage.objects.filter(chat=session.chat).exists()
         session.refresh_from_db()
@@ -168,18 +154,17 @@ class TestBlockedParticipantStageIsWired:
         return channel_cls._build_pipeline(stub_self).core_stages
 
     @pytest.mark.parametrize(
-        ("channel_cls", "reply_with_message"),
+        "channel_cls",
         [
-            pytest.param(ChannelBase, False, id="messaging"),
-            pytest.param(ApiChannel, True, id="api"),
-            pytest.param(WebChannel, True, id="web"),
+            pytest.param(ChannelBase, id="messaging"),
+            pytest.param(ApiChannel, id="api"),
+            pytest.param(WebChannel, id="web"),
         ],
     )
-    def test_stage_is_in_pipeline(self, channel_cls, reply_with_message):
+    def test_stage_is_in_pipeline(self, channel_cls):
         stages = [stage for stage in self._core_stages(channel_cls) if isinstance(stage, BlockedParticipantStage)]
 
         assert len(stages) == 1
-        assert stages[0].reply_with_message is reply_with_message
 
     @pytest.mark.parametrize(
         "channel_cls", [pytest.param(ChannelBase, id="messaging"), pytest.param(ApiChannel, id="api")]
