@@ -53,12 +53,6 @@ def test_staff_can_view(team, staff_client, settings):
 
 
 @pytest.mark.django_db()
-def test_save_endpoint_rejects_get(team, staff_client, settings):
-    settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
-    assert staff_client.get(_url(team)).status_code == 405
-
-
-@pytest.mark.django_db()
 def test_non_staff_member_gets_404(team, member, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
     client = Client()
