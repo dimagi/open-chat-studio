@@ -1,7 +1,7 @@
 import csv
 import io
 from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from django.db import connection
@@ -18,7 +18,6 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tasks import (
     _count_bulk_export_rows,
-    _report_row_progress,
     export_evaluation_bulk_results_task,
 )
 from apps.files.models import File, FilePurpose
@@ -237,18 +236,6 @@ def test_count_bulk_export_rows_counts_messages_not_results():
                 )
 
     assert _count_bulk_export_rows(config, team) == 3
-
-
-def test_report_row_progress_yields_every_row_but_reports_in_steps():
-    """Reporting once per row would be one backend write per row on a large export."""
-    rows = [{"#": index} for index in range(250)]
-    recorder = Mock()
-
-    yielded = list(_report_row_progress(rows, len(rows), recorder))
-
-    assert yielded == rows
-    assert recorder.set_progress.call_args.args == (250, 250)
-    assert recorder.set_progress.call_count <= 101
 
 
 @pytest.mark.django_db()

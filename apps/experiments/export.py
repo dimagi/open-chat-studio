@@ -16,10 +16,9 @@ from apps.annotations.models import Tag, UserComment
 from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.files.exports import csv_to_tempfile
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.web.dynamic_filters.datastructures import FilterParams
-
-_SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
 PROGRESS_UPDATE_INTERVAL = 100
@@ -362,20 +361,9 @@ def export_to_tempfile(
             writer = csv.writer(gz, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
             for row in rows:
                 writer.writerow(row)
-    else:
-        # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
-        # detach() releases the wrapper without closing the underlying SpooledTemporaryFile,
-        # preserving the caller's ability to seek/read.
-        tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")  # noqa: SIM115
-        text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
-        writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in rows:
-            writer.writerow(row)
-        text_wrapper.flush()
-        text_wrapper.detach()
-
-    tmp.seek(0)
-    return tmp
+        tmp.seek(0)
+        return tmp
+    return csv_to_tempfile(lambda writer: writer.writerows(rows))
 
 
 def _get_trace_id_for_export(message):

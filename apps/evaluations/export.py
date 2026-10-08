@@ -7,8 +7,6 @@ share the same CSV column ordering, so the logic lives here to avoid two divergi
 code paths.
 """
 
-import csv
-import io
 import json
 import tempfile
 from collections import OrderedDict
@@ -23,6 +21,7 @@ from django.db.models import F, OuterRef, QuerySet
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.errors import ERROR_KEY, GENERATION_ERROR_KEY
+from apps.files.exports import csv_to_tempfile
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationResult, Evaluator
@@ -253,15 +252,6 @@ def write_evaluation_csv(writer, rows: Iterable[dict]) -> None:
 def export_evaluation_csv_to_tempfile(rows: Iterable[dict]) -> "tempfile.SpooledTemporaryFile[bytes]":
     """Write the evaluation CSV for *rows* to a binary temp file and return it, seeked to 0.
 
-    Use as a context manager. Binary so it can go straight to storage, which streams it in
-    chunks. Mirrors ``apps.experiments.export.export_to_tempfile``.
+    Use as a context manager.
     """
-    # write_evaluation_csv spools the rows to learn the header; the finished CSV lands here.
-    tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_BYTES, mode="wb+")  # noqa: SIM115
-    text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
-    write_evaluation_csv(csv.writer(text_wrapper), rows)
-    text_wrapper.flush()
-    # Release the wrapper without closing tmp; the caller still has to read it.
-    text_wrapper.detach()
-    tmp.seek(0)
-    return tmp
+    return csv_to_tempfile(lambda writer: write_evaluation_csv(writer, rows))

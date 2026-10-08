@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 
+from apps.files.exports import EXPORT_FAILED_MESSAGE
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
 from apps.teams.tasks import create_team_files_zip_task
@@ -29,7 +30,7 @@ def member(team):
 
 def _run_task(team):
     with patch("apps.teams.tasks.ProgressRecorder"):
-        return create_team_files_zip_task(team.id)
+        return create_team_files_zip_task(team.id)["file_id"]
 
 
 def _zip_from_task(team):
@@ -113,6 +114,18 @@ class TestCreateTeamFilesZipTask:
         export_id = _run_task(team)
         team.refresh_from_db()
         assert team.files_export_id == export_id
+        assert team.files_export_task_id == ""
+
+    def test_failure_returns_error_and_clears_task_id(self, team):
+        team.mark_files_export_started("task-1")
+        FileFactory(team=team, file__data=b"hello", file__filename="a.txt")
+        with (
+            patch("apps.teams.tasks.ProgressRecorder"),
+            patch("apps.teams.tasks.save_data_export", side_effect=RuntimeError("storage down")),
+        ):
+            result = create_team_files_zip_task(team.id)
+        team.refresh_from_db()
+        assert result == {"error": EXPORT_FAILED_MESSAGE}
         assert team.files_export_task_id == ""
 
 

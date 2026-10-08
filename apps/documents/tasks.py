@@ -1,17 +1,16 @@
 import contextlib
 import logging
 import math
+import tempfile
 import uuid
 import zipfile
 from datetime import timedelta
-from io import BytesIO
 from itertools import batched, groupby
 
 import openai
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
-from django.core.files.base import ContentFile
 from django.db import DatabaseError, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
@@ -31,7 +30,7 @@ from apps.documents.models import (
     format_failure_reason,
 )
 from apps.documents.utils import bulk_delete_collection_files
-from apps.files.models import File, FilePurpose
+from apps.files.exports import EXPORT_FAILED_MESSAGE, save_data_export
 from apps.service_providers.models import LlmProvider
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues, TaskbadgerTaskWrapper
@@ -393,6 +392,7 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
 
 
 _ZIP_MAX_RETRIES = 3
+NO_FILES_TO_EXPORT_MESSAGE = "There are no manually uploaded files to download."
 
 
 @shared_task(
@@ -405,17 +405,20 @@ _ZIP_MAX_RETRIES = 3
     retry_kwargs={"max_retries": _ZIP_MAX_RETRIES, "countdown": 60},
     queue=Queues.BACKGROUND,
 )
-def create_collection_zip_task(self, collection_id: int, team_id: int):
+def create_collection_zip_task(self, collection_id: int, team_id: int) -> dict:
     """
     Create a ZIP file containing all manually uploaded files from a collection.
+
+    Returns ``{"file_id": ...}``, or ``{"error": ...}`` when there is nothing to export. Storage
+    errors raise so that Celery retries.
     """
     progress_recorder = ProgressRecorder(self)
 
     try:
-        collection = Collection.objects.get(id=collection_id)
+        collection = Collection.objects.get(id=collection_id, team_id=team_id)
     except Collection.DoesNotExist:
         logger.error(f"Collection {collection_id} not found")
-        return None
+        return {"error": EXPORT_FAILED_MESSAGE}
 
     collection_files = CollectionFile.objects.filter(
         collection=collection, document_source__isnull=True
@@ -425,35 +428,33 @@ def create_collection_zip_task(self, collection_id: int, team_id: int):
 
     if total_files == 0:
         logger.warning(f"No manually uploaded files found in collection {collection_id}")
-        return None
+        return {"error": NO_FILES_TO_EXPORT_MESSAGE}
 
     retry_count = self.request.retries
     log_level = logging.ERROR if retry_count >= self.max_retries else logging.WARNING
-    zip_buffer = BytesIO()
 
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        used_filenames: dict[str, int] = {}
+    with tempfile.TemporaryFile() as tmp:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            used_filenames: dict[str, int] = {}
 
-        for idx, collection_file in enumerate(collection_files, start=1):
-            file = collection_file.file
-            filename = _resolve_filename(file.name, used_filenames)
-            content = _read_file_content(file, collection_id, log_level, retry_count)
-            zip_file.writestr(filename, content)
-            progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
+            for idx, collection_file in enumerate(collection_files, start=1):
+                file = collection_file.file
+                filename = _resolve_filename(file.name, used_filenames)
+                content = _read_file_content(file, collection_id, log_level, retry_count)
+                zip_file.writestr(filename, content)
+                progress_recorder.set_progress(idx, total_files, description=f"Adding {filename}")
 
-    zip_buffer.seek(0)
-    timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
-    zip_filename = f"{slugify(collection.name)}_files_{timestamp}.zip"
-
-    zip_file_obj = File.objects.create(
-        team_id=team_id,
-        name=zip_filename,
-        file=ContentFile(zip_buffer.getvalue(), name=zip_filename),
-        content_type="application/zip",
-        expiry_date=timezone.now() + timedelta(hours=24),
-        purpose=FilePurpose.DATA_EXPORT,
-    )
+        tmp.seek(0)
+        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        zip_filename = f"{slugify(collection.name)}_files_{timestamp}.zip"
+        zip_file_obj = save_data_export(
+            team=collection.team,
+            name=zip_filename,
+            file=tmp,
+            content_type="application/zip",
+            expires_in=timedelta(hours=24),
+        )
 
     logger.info(f"Created ZIP file {zip_file_obj.id} for collection {collection_id}")
 
-    return zip_file_obj.id
+    return {"file_id": zip_file_obj.id}

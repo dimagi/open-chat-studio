@@ -8,6 +8,7 @@ from django.test import override_settings
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments import tasks
 from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
+from apps.files.exports import EXPORT_FAILED_MESSAGE
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
@@ -19,6 +20,15 @@ def test_async_export_chat_returns_file_id():
     file = File.objects.get(id=result["file_id"])
     assert file.purpose == FilePurpose.DATA_EXPORT
     assert file.expiry_date is not None
+
+
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_returns_error_on_failure(mock_recorder_cls):
+    session = ExperimentSessionFactory.create()
+    with patch.object(tasks, "save_data_export", side_effect=RuntimeError("storage down")):
+        result = async_export_chat.run(session.experiment_id, "", "UTC")
+    assert result == {"error": EXPORT_FAILED_MESSAGE}
 
 
 @pytest.mark.django_db()

@@ -8,10 +8,10 @@ from django.urls import reverse
 from apps.evaluations.evaluators import EvaluatorResult
 from apps.evaluations.models import EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
-    EXPORT_FAILED_MESSAGE,
     export_evaluation_bulk_results_task,
     export_evaluation_run_results_task,
 )
+from apps.files.exports import EXPORT_FAILED_MESSAGE
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,

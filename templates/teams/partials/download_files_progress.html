@@ -95,7 +95,7 @@
       },
 
       onSuccess: function (_bar, _msg, result) {
-        var fileId = (result != null && typeof result === "object" && result.result) ? result.result : result;
+        var fileId = result && result.file_id;
 
         if (fileId) {
           var link = document.getElementById("ocs-download-link");

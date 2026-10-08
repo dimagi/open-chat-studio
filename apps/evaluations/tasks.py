@@ -1,8 +1,7 @@
 import contextlib
 import csv
-import math
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from io import StringIO
@@ -11,7 +10,6 @@ import taskbadger
 from celery import current_app, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import PROGRESS_STATE, ProgressRecorder
-from django.core.files import File as DjangoFile
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
@@ -57,7 +55,8 @@ from apps.evaluations.utils import (
     parse_history_text,
 )
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.files.models import File, FilePurpose
+from apps.files.exports import EXPORT_FAILED_MESSAGE, report_progress, save_data_export
+from apps.files.models import File
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
@@ -74,7 +73,6 @@ MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
 BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
 TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
 RUN_CHUNK_SIZE = 500  # active run ids fetched per round trip when fanning out ticks
-EXPORT_FAILED_MESSAGE = "The export could not be completed."
 
 logger = get_task_logger("ocs.evaluations")
 
@@ -1529,29 +1527,11 @@ def create_dataset_from_sessions_task(
         return {"success": False, "error": message}
 
 
-def _report_row_progress(rows: Iterable[dict], total: int, recorder: ProgressRecorder) -> Iterator[dict]:
-    """Yield *rows*, reporting progress to *recorder* in steps of roughly one percent.
-
-    Reporting per row would be one backend write per row, which on a large export is more
-    traffic than the export itself.
-    """
-    step = max(1, math.ceil(total / 100))
-    for current, row in enumerate(rows, start=1):
-        if current % step == 0 or current == total:
-            recorder.set_progress(current, total, description=f"Processed {current} of {total} messages")
-        yield row
-
-
 def _create_export_file(rows: Iterable[dict], team: Team, filename: str) -> File:
     """Write *rows* out as a CSV in team storage, expiring in a week."""
     with export_evaluation_csv_to_tempfile(rows) as csv_file:
-        return File.objects.create(
-            name=filename,
-            team=team,
-            content_type="text/csv",
-            file=DjangoFile(csv_file, name=filename),
-            purpose=FilePurpose.DATA_EXPORT,
-            expiry_date=timezone.now() + timedelta(days=7),
+        return save_data_export(
+            team=team, name=filename, file=csv_file, content_type="text/csv", expires_in=timedelta(days=7)
         )
 
 
@@ -1606,7 +1586,7 @@ def export_evaluation_bulk_results_task(self, evaluation_config_id: int, team_id
             # it is what lets the UI show a percentage rather than an unbounded spinner.
             total = _count_bulk_export_rows(config, team)
             rows = iter_evaluation_table_rows(_get_bulk_results_queryset(config, team))
-            rows = _report_row_progress(rows, total, ProgressRecorder(self))
+            rows = report_progress(items=rows, total=total, recorder=ProgressRecorder(self), noun="messages")
 
             filename = f"{config.name}_latest_results_{timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
             return {"file_id": _create_export_file(rows, team, filename).id}
@@ -1632,7 +1612,7 @@ def export_evaluation_run_results_task(self, evaluation_run_id: int, team_id: in
             rows = iter_evaluation_table_rows(
                 queryset=annotate_export_fields(results).order_by("message_id"), include_ids=True
             )
-            rows = _report_row_progress(rows, total, ProgressRecorder(self))
+            rows = report_progress(items=rows, total=total, recorder=ProgressRecorder(self), noun="messages")
 
             filename = f"{run.config.name}_results_{run.id}.csv"
             return {"file_id": _create_export_file(rows, run.team, filename).id}

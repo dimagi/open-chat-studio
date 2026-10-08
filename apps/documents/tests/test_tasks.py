@@ -15,6 +15,7 @@ from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, Z
 from apps.documents.models import SYNC_LOCK_TIMEOUT, CollectionFile, DocumentSource, FileStatus
 from apps.documents.tasks import (
     DELETE_BATCH_SIZE,
+    NO_FILES_TO_EXPORT_MESSAGE,
     async_create_collection_version,
     create_collection_zip_task,
     delete_collection_task,
@@ -191,8 +192,7 @@ def test_create_collection_zip_task_creates_zip_with_all_files(progress_recorder
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
+    zip_file_obj = File.objects.get(id=result["file_id"])
     assert zip_file_obj.team_id == team.id
     assert zip_file_obj.content_type == "application/zip"
     assert "test-collection" in zip_file_obj.name
@@ -212,7 +212,7 @@ def test_create_collection_zip_task_creates_zip_with_all_files(progress_recorder
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
 @patch("apps.documents.tasks.logger")
-def test_create_collection_zip_task_no_files_returns_none(logger_mock, progress_recorder_mock):
+def test_create_collection_zip_task_no_files_returns_error(logger_mock, progress_recorder_mock):
     collection = CollectionFactory.create(name="empty-collection")
     team = collection.team
 
@@ -223,7 +223,7 @@ def test_create_collection_zip_task_no_files_returns_none(logger_mock, progress_
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is None
+    assert result == {"error": NO_FILES_TO_EXPORT_MESSAGE}
     logger_mock.warning.assert_called_once()
     assert f"No manually uploaded files found in collection {collection.id}" in str(logger_mock.warning.call_args)
 
@@ -248,8 +248,7 @@ def test_create_collection_zip_task_handles_duplicate_filenames(progress_recorde
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
+    zip_file_obj = File.objects.get(id=result["file_id"])
 
     # Verify zip contents with renamed duplicates
     with zip_file_obj.file.open("rb") as f:
@@ -279,8 +278,7 @@ def test_create_collection_zip_task_no_collision_between_duplicate_and_real_file
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
+    zip_file_obj = File.objects.get(id=result["file_id"])
     with zip_file_obj.file.open("rb") as f:
         with zipfile.ZipFile(BytesIO(f.read()), "r") as zf:
             namelist = zf.namelist()
@@ -290,7 +288,7 @@ def test_create_collection_zip_task_no_collision_between_duplicate_and_real_file
 
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.ProgressRecorder")
-@patch("apps.documents.tasks.timezone")
+@patch("apps.files.exports.timezone")
 def test_create_collection_zip_task_sets_expiry_date(timezone_mock, progress_recorder_mock):
     collection = CollectionFactory.create(name="expiry-test-collection")
     team = collection.team
@@ -304,8 +302,7 @@ def test_create_collection_zip_task_sets_expiry_date(timezone_mock, progress_rec
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
+    zip_file_obj = File.objects.get(id=result["file_id"])
     expected_expiry = mock_now + timedelta(hours=24)
     assert zip_file_obj.expiry_date == expected_expiry
 
@@ -415,8 +412,7 @@ def test_create_collection_zip_task_no_content_size_skips_size_check(progress_re
 
     result = create_collection_zip_task(collection.id, team.id)
 
-    assert result is not None
-    zip_file_obj = File.objects.get(id=result)
+    zip_file_obj = File.objects.get(id=result["file_id"])
     with zip_file_obj.file.open("rb") as f:
         zip_data = BytesIO(f.read())
         with zipfile.ZipFile(zip_data, "r") as zf:
