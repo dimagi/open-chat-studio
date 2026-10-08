@@ -55,10 +55,6 @@ def prepare_trigger_bot_message(
     start_new_session: bool = False,
     session_data: dict | None = None,
     incoming_participant_data: dict | None = None,
-    # Checked before anything is created so an unsupported request leaves no participant behind.
-    if platform in UNSUPPORTED_TRIGGER_BOT_PLATFORMS:
-        raise TriggerBotMessageError(f"Chatbot cannot initiate messages on the {platform} channel.")
-
 ) -> tuple[ExperimentSession, ParticipantData]:
     """Resolve everything ``trigger_bot_message_task`` needs and return the session to send in.
 
@@ -70,6 +66,10 @@ def prepare_trigger_bot_message(
     cannot be triggered at all: no channel for the platform, a channel an admin has switched off,
     a CommCare Connect channel that could not be created, or a participant who has not consented.
     """
+    # Checked before anything is created so an unsupported request leaves no participant behind.
+    if platform in UNSUPPORTED_TRIGGER_BOT_PLATFORMS:
+        raise TriggerBotMessageError(f"Chatbot cannot initiate messages on the {platform} channel.")
+
     identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     channel = get_trigger_bot_channel(experiment, platform)
     participant_data = get_or_create_participant_data(
