@@ -2352,6 +2352,37 @@ export class OcsChat {
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
   }
 
+  private renderMessageAttachments(message: ChatMessage) {
+    if (!message.attachments?.length) {
+      return null;
+    }
+    return (
+      <div class="message-attachments">
+        {message.attachments.map((attachment, attachmentIndex) => (
+          <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
+            <span class="message-attachment-icon">
+              <PaperClipIcon />
+            </span>
+            {attachment.download_url ? (
+              <button
+                type="button"
+                class="message-attachment-link"
+                title={this.translationManager.get('attach.download')}
+                aria-label={`${this.translationManager.get('attach.download')}: ${attachment.name}`}
+                disabled={this.downloadingAttachmentUrls.includes(attachment.download_url)}
+                onClick={() => this.downloadAttachment(attachment)}
+              >
+                {attachment.name}
+              </button>
+            ) : (
+              <span class="message-attachment-name">{attachment.name}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -2467,31 +2498,7 @@ export class OcsChat {
                         }`}
                       >
                         {this.renderMessageContent(message)}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div class="message-attachments">
-                            {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
-                                <span class="message-attachment-icon">
-                                  <PaperClipIcon />
-                                </span>
-                                {attachment.download_url ? (
-                                  <button
-                                    type="button"
-                                    class="message-attachment-link"
-                                    title={this.translationManager.get('attach.download')}
-                                    aria-label={`${this.translationManager.get('attach.download')}: ${attachment.name}`}
-                                    disabled={this.downloadingAttachmentUrls.includes(attachment.download_url)}
-                                    onClick={() => this.downloadAttachment(attachment)}
-                                  >
-                                    {attachment.name}
-                                  </button>
-                                ) : (
-                                  <span class="message-attachment-name">{attachment.name}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {this.renderMessageAttachments(message)}
                         <div class="message-timestamp">{this.formatTime(message.created_at)}</div>
                       </div>
                     </div>
