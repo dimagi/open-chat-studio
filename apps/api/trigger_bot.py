@@ -27,6 +27,17 @@ from apps.teams.models import Team
 from apps.teams.utils import current_team
 
 
+# Platforms served by ApiChannel: replies go back to the caller of an inbound request, so there is
+# no way to push a bot-initiated message out, and the channel cannot be built without a session.
+UNSUPPORTED_TRIGGER_BOT_PLATFORMS = frozenset(
+    {
+        ChannelPlatform.API,
+        ChannelPlatform.EMBEDDED_WIDGET,
+        ChannelPlatform.PUBLIC,
+    }
+)
+
+
 class TriggerBotMessageError(Exception):
     """A bot message cannot be triggered. ``detail`` is safe to show the caller."""
 
@@ -44,6 +55,10 @@ def prepare_trigger_bot_message(
     start_new_session: bool = False,
     session_data: dict | None = None,
     incoming_participant_data: dict | None = None,
+    # Checked before anything is created so an unsupported request leaves no participant behind.
+    if platform in UNSUPPORTED_TRIGGER_BOT_PLATFORMS:
+        raise TriggerBotMessageError(f"Chatbot cannot initiate messages on the {platform} channel.")
+
 ) -> tuple[ExperimentSession, ParticipantData]:
     """Resolve everything ``trigger_bot_message_task`` needs and return the session to send in.
 
