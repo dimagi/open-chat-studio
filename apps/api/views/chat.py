@@ -770,7 +770,14 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     summary="Send a message to a chat session",
     tags=["Chat"],
     request=ChatSendMessageRequestWithAttachments,
-    responses={202: ChatSendMessageResponse, 403: CONSENT_REQUIRED_RESPONSE},
+    responses={
+        202: ChatSendMessageResponse,
+        403: PolymorphicProxySerializer(
+            component_name="ChatSendMessageForbidden",
+            serializers=[CONSENT_REQUIRED_RESPONSE, ParticipantBlockedResponse],
+            resource_type_field_name=None,
+        ),
+    },
     parameters=[
         OpenApiParameter(
             name="session_id",
@@ -824,6 +831,9 @@ def chat_send_message(request, session_id):
 
     if refusal := consent_refusal(request, session):
         return refusal
+
+    if is_participant_blocked(team=session.team, participant=session.participant):
+        raise ParticipantBlocked()
 
     attachment_data = []
     if attachment_ids:

@@ -28,7 +28,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.exceptions import ParticipantBlocked
 from apps.api.permissions import verify_hmac
+from apps.api.serializers import OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE
 from apps.channels import meta_webhook, tasks, turn_webhook
 from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
 from apps.channels.deduplication import unseen_connect_messages
@@ -49,6 +51,7 @@ from apps.chatbots.version_resolver import (
 )
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
+from apps.moderation.enforcement import is_identifier_blocked
 from apps.oauth.permissions import enforce_application_chatbot_access
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
@@ -246,7 +249,7 @@ def new_api_message_schema(versioned: bool):
         request=ApiMessageSerializer(),
         responses={
             200: ApiResponseMessageSerializer(),
-            403: {"description": "The OAuth application is not authorized for this chatbot"},
+            403: OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
         },
         parameters=parameters,
     )
@@ -299,6 +302,8 @@ def _new_api_message(request, experiment_id: uuid, version=None):
     enforce_application_chatbot_access(request, experiment)
 
     participant_id = session.participant.identifier if session else request.user.email
+    if is_identifier_blocked(team=request.team, identifier=participant_id, platform=ChannelPlatform.API):
+        raise ParticipantBlocked()
     if version:
         experiment_version = resolve_chatbot_version(experiment, VersionSelectionRule.SPECIFIC, version_number=version)
     else:
