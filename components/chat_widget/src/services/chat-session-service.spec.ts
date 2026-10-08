@@ -480,6 +480,19 @@ describe('ChatSessionService.downloadAttachment', () => {
 
     await expect(service.downloadAttachment('s1', downloadUrl)).rejects.toThrow('Failed to download file: Not Found');
   });
+
+  it.each([
+    ['another origin', 'https://attacker.example/api/chat/s1/files/7/content/'],
+    ['another scheme', 'http://example.com/api/chat/s1/files/7/content/'],
+    ['a relative URL', '/api/chat/s1/files/7/content/'],
+  ])('refuses a URL on %s without sending the session headers', async (_name, url) => {
+    const service = makeService();
+    service.setSessionToken('tok-123');
+    const fetchMock = jest.spyOn(global, 'fetch');
+
+    await expect(service.downloadAttachment('s1', url)).rejects.toThrow('Failed to download file: URL is not on the API origin');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('ChatSessionService consent', () => {
