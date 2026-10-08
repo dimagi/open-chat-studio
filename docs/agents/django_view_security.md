@@ -24,3 +24,5 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 class MyView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "my_app.view_mymodel"
 ```
+
+Views for staff or superusers (anything under `/admin/` or on the Django admin site) must be gated with `requires_elevation` from `apps/web/elevation.py`, not a bare `is_staff` / `is_superuser` check. `apps/web/tests/test_elevation_guard.py` fails on an ungated admin view. See `docs/developer_guides/code_systems/privilege_elevation.md`.
