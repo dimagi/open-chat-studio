@@ -12,7 +12,7 @@ from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
 
-MIN_NODE_VERSION = "24"
+MIN_NODE_VERSION = "24.15"
 DEV_PORT = 8000
 
 
