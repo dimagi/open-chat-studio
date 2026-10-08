@@ -5,6 +5,7 @@ from field_audit import enable_audit
 from field_audit.models import AuditEvent
 
 from apps.teams.models import Team
+from apps.teams.utils import section_url
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
 
@@ -62,7 +63,7 @@ def test_require_mfa_toggle_rendered_for_admins_only(client, is_admin, should_re
     user = admin if is_admin else next(m.user for m in team.membership_set.all() if not m.is_team_admin())
     client.force_login(user)
 
-    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
+    response = client.get(section_url(team_slug=team.slug, section_key="members"))
 
     assert (b'name="require_mfa"' in response.content) is should_render
 
