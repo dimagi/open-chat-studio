@@ -502,16 +502,30 @@ export class OcsChat {
   }
 
   private addErrorMessage(errorText: string): void {
-    const errorMessage: ChatMessage = {
+    this.addNotice(`**Error:** ${errorText}\nPlease try again.`);
+  }
+
+  /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
+  private addNotice(content: string): void {
+    const notice: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
-      content: `**Error:** ${errorText}\nPlease try again.`,
+      content,
       attachments: [],
+      local: true,
     };
-
-    this.messages = [...this.messages, errorMessage];
+    this.messages = [...this.messages, notice];
     this.saveSessionToStorage();
     this.scrollToBottom();
+  }
+
+  private lastServerMessageTimestamp(): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (!this.messages[i].local) {
+        return this.messages[i].created_at;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -567,15 +581,7 @@ export class OcsChat {
     if (last?.role === 'system' && last.content === content) {
       return;
     }
-    const notice: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content,
-      attachments: [],
-    };
-    this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
-    this.scrollToBottom();
+    this.addNotice(content);
   }
 
   /**
@@ -1288,15 +1294,7 @@ export class OcsChat {
         this.typingProgressMessage = message;
       }),
       onTimeout: this.forCurrentSession(() => {
-        const timeoutMessage: ChatMessage = {
-          created_at: new Date().toISOString(),
-          role: 'system',
-          content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-          attachments: [],
-        };
-        this.messages = [...this.messages, timeoutMessage];
-        this.saveSessionToStorage();
-        this.scrollToBottom();
+        this.addNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
         this.isTyping = false;
         this.typingProgressMessage = '';
         this.currentPollTaskId = '';
@@ -1327,7 +1325,7 @@ export class OcsChat {
     }
 
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
-      getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
+      getSince: () => this.lastServerMessageTimestamp(),
       onMessages: this.forCurrentSession(messages => {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];

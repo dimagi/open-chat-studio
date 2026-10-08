@@ -97,6 +97,31 @@ describe('ocs-chat attachment download', () => {
     expect(component.downloadingAttachmentUrls).toEqual([]);
   });
 
+  it('keeps the error notice out of the message polling cursor', async () => {
+    const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
+    const component = page.rootInstance as OcsChat;
+    const serverMessageAt = '2026-01-01T00:00:00.000Z';
+    component.messages = [{ ...component.messages[0], created_at: serverMessageAt }];
+    let getSince: (() => string | undefined) | undefined;
+    stubChatService(page, {
+      downloadAttachment: jest.fn().mockRejectedValue(new Error('Failed to download file: Not Found')),
+      startMessagePolling: jest.fn((_sessionId, callbacks) => {
+        getSince = callbacks.getSince;
+        return { stop: jest.fn() };
+      }),
+    });
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    downloadButton(page)?.click();
+    await page.waitForChanges();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    component['messagePollingHandle'] = undefined;
+    component['startMessagePolling']();
+
+    expect(component.messages.at(-1)?.local).toBe(true);
+    expect(getSince?.()).toBe(serverMessageAt);
+  });
+
   it('ignores a second click while the file is downloading', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
     const downloadAttachment = jest.fn(() => new Promise<Blob>(() => undefined));
