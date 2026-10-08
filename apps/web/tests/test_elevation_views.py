@@ -122,13 +122,14 @@ def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
 
 
 @pytest.mark.django_db()
-def test_the_prompt_names_the_grant_being_requested(team, superuser, authed_client):
+def test_the_prompt_names_the_grant_being_requested(superuser, authed_client):
     """The prompt has to name the grant, so the user can see what they are confirming."""
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     authed_client.get(reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(REAUTH_URL).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
 
 
 @pytest.mark.django_db()
@@ -358,13 +359,14 @@ def test_acquire_beyond_the_concurrency_cap_reports_an_error(superuser, authed_c
 
 
 @pytest.mark.django_db()
-def test_banner_shows_the_grant_label_and_a_release_link(team, superuser, authed_client):
+def test_banner_names_the_team_and_links_to_release(superuser, authed_client):
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     team_home = reverse("web_team:home", args=[team.slug])
     elevate(authed_client, reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(team_home, follow=True).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
     assert reverse("web:release_elevation", args=[f"team:{team.slug}"]) in content
 
 

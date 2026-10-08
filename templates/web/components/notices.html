@@ -4,7 +4,7 @@
     <div>
       {% for wire_form, elevation in elevations.items %}
         <a href="{% url 'web:release_elevation' wire_form %}" class="btn btn-warning btn-sm">
-          {{ elevation.grant.label }}
+          {{ elevation.label }}
           <span class="font-light">(expires in {{ elevation.expires_at|timeuntil }})</span>
         </a>
       {% endfor %}

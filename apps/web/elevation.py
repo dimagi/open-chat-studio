@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -14,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.teams.models import Team
 from apps.utils.rate_limit import forwarded_client_ip
 from apps.web.models import SuperuserElevation
 
@@ -137,6 +139,13 @@ _ACQUIRE_URL_NAMES = {
 class ActiveElevation:
     grant: Grant
     expires_at: datetime
+    label: str
+
+
+@dataclass(frozen=True)
+class PendingElevation:
+    grant: Grant
+    label: str
 
 
 class Elevation:
@@ -179,11 +188,9 @@ class Elevation:
         self._store({wire_form: expires for wire_form, expires in held.items() if wire_form != str(grant)})
         return held[str(grant)]
 
-    def active(self) -> dict[str, ActiveElevation]:
-        return {
-            wire_form: ActiveElevation(Grant.parse(wire_form), datetime.fromtimestamp(expires))
-            for wire_form, expires in self._held().items()
-        }
+    def active(self) -> dict[str, datetime]:
+        """The expiry of each held grant, keyed by wire form."""
+        return {wire_form: datetime.fromtimestamp(expires) for wire_form, expires in self._held().items()}
 
     def _held(self) -> dict[str, int]:
         """The unexpired entries, pruning the session of anything else."""
@@ -249,7 +256,21 @@ def _client_ip(request) -> str | None:
 def active_elevations(request) -> dict[str, ActiveElevation]:
     if not hasattr(request, "user") or request.user.is_anonymous:
         return {}
-    return Elevation(request).active()
+    active = Elevation(request).active()
+    grants = {wire_form: Grant.parse(wire_form) for wire_form in active}
+    labels = grant_labels(grants.values())
+    return {wire_form: ActiveElevation(grant, active[wire_form], labels[grant]) for wire_form, grant in grants.items()}
+
+
+def grant_labels(grants: Iterable[Grant]) -> dict[Grant, str]:
+    """Labels for `grants`, naming each team alongside its slug, which is what tells same-named teams apart."""
+    grants = list(grants)
+    slugs = {grant.team_slug for grant in grants if grant.kind is GrantKind.TEAM}
+    names = dict(Team.objects.filter(slug__in=slugs).values_list("slug", "name")) if slugs else {}
+    return {
+        grant: f'Team "{names[grant.team_slug]}" ({grant.team_slug})' if grant.team_slug in names else grant.label
+        for grant in grants
+    }
 
 
 def _parses(wire_form: str) -> bool:
@@ -327,7 +348,7 @@ def start_elevation(request, grant: Grant, next_url: str):
     return flows.reauthentication.stash_and_reauthenticate(request, state, REAUTH_CALLBACK)
 
 
-def pending_elevation(request) -> Grant | None:
+def pending_elevation(request) -> PendingElevation | None:
     """The grant waiting on an identity proof, so the re-authentication prompt can name it."""
     if not hasattr(request, "session"):
         return None
@@ -341,7 +362,9 @@ def pending_elevation(request) -> Grant | None:
     except (InvalidGrant, KeyError, TypeError):
         return None
 
-    return None if _is_stale(state) else grant
+    if _is_stale(state):
+        return None
+    return PendingElevation(grant, grant_labels([grant])[grant])
 
 
 def complete_elevation(request, state: dict):
