@@ -33,6 +33,7 @@ from apps.service_providers.forms import (
     WhatsappTestMessageForm,
     whatsapp_number_label,
 )
+from apps.service_providers.exceptions import VoiceSyncError
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
     EmbeddingProviderModel,
@@ -702,6 +703,9 @@ def sync_voices(request, team_slug: str, provider_type: str, pk: int):
         provider.sync_voices()
         count = provider.syntheticvoice_set.count()
         messages.success(request, f"Voices synced successfully. {count} voice(s) available.")
+    except VoiceSyncError as e:
+        log.warning("Failed to sync voices for provider %s: %s", pk, e)
+        messages.error(request, f"Voice sync failed: {e}")
     except Exception:
         log.exception("Failed to sync voices for provider %s", pk)
         messages.error(request, "Voice sync failed. Please check your API key and try again.")
