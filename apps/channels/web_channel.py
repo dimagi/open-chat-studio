@@ -12,6 +12,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ExperimentChannel
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.core import (
+    BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
@@ -76,6 +77,7 @@ class WebChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantIdentifierStage(),
+                BlockedParticipantStage(),
                 # Embedded-widget sessions are served here, not by ApiChannel, so the
                 # admin's channel toggle has to be enforced on this pipeline too.
                 ChannelDisabledStage(),

@@ -13,16 +13,23 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView, Request
 
+from apps.api.exceptions import ParticipantBlocked
 from apps.api.permissions import (
     CanTriggerBotMessage,
     IsAuthenticatedOrMachineToken,
     ReadOnlyAPIKeyPermission,
     verify_hmac,
 )
-from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
+from apps.api.serializers import (
+    OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    TriggerBotMessageRequest,
+    TriggerBotMessageResponse,
+)
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, ParticipantData
+from apps.moderation.enforcement import is_identifier_blocked
 from apps.oauth.permissions import TokenHasOAuthScope, enforce_application_chatbot_access
 from apps.utils.rate_limit import rate_limited
 
@@ -103,7 +110,8 @@ def handle_trigger_bot_message(request, response_serializer_class):
     differs per API version).
 
     Returns the final response to hand back from the view: a 200 ``Response`` on success, or an error
-    response (bad or disabled channel, failed enrollment, missing consent) to return as-is.
+    response (bad or disabled channel, failed enrollment, missing consent) to return as-is. Raises
+    ``ParticipantBlocked`` (403) for a participant on the team's denylist, before anything is created.
     """
     serializer = TriggerBotMessageRequest(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -112,13 +120,16 @@ def handle_trigger_bot_message(request, response_serializer_class):
     experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
     # Before prepare_trigger_bot_message below, which creates participant data as a side effect.
     enforce_application_chatbot_access(request, experiment)
+    identifier = ChannelPlatform(data["platform"]).normalize_identifier(data["identifier"])
+    if is_identifier_blocked(team=experiment.team, identifier=identifier, platform=data["platform"]):
+        raise ParticipantBlocked()
 
     # Returning (rather than raising) keeps the atomic block committing what got as far as being
     # created -- the Connect auto-consent flow relies on the participant data surviving the error.
     try:
         session, participant_data = prepare_trigger_bot_message(
             experiment,
-            data["identifier"],
+            identifier,
             data["platform"],
             start_new_session=data["start_new_session"],
             session_data=data.get("session_data"),
@@ -157,7 +168,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
-            403: {"description": "The OAuth application is not authorized for this chatbot"},
+            403: OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
             404: {"description": "Not Found"},
         },
         examples=[

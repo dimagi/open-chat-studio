@@ -2,16 +2,18 @@ import textwrap
 from zoneinfo import available_timezones
 
 from django.db import transaction
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import OpenApiResponse, PolymorphicProxySerializer, extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from taggit.serializers import TaggitSerializer, TagListSerializerField
 
+from apps.api.exceptions import ParticipantBlocked
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.cost_tracking.services.reporting import session_usage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+from apps.moderation.enforcement import is_participant_blocked
 from apps.teams.models import Team
 from apps.trace.models import participant_data_from_trace
 
@@ -308,6 +310,8 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             platform=ChannelPlatform.API,
             defaults={"user": acting_user},
         )
+        if is_participant_blocked(team=request.team, participant=participant):
+            raise ParticipantBlocked()
         validated_data["participant"] = participant
         channel = ExperimentChannel.objects.get_team_api_channel(request.team)
         validated_data["experiment_channel"] = channel
@@ -471,6 +475,30 @@ class ChatPollResponse(serializers.Serializer):
         choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
     )
     consent = ChatConsentSerializer(read_only=True)
+
+
+class ParticipantBlockedResponse(serializers.Serializer):
+    code = serializers.CharField(help_text="Always `participant_blocked`.")
+    detail = serializers.CharField(help_text="A message that can be shown to the participant.")
+
+
+class PermissionDeniedResponse(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = PolymorphicProxySerializer(
+    component_name="ForbiddenOrParticipantBlocked",
+    serializers=[PermissionDeniedResponse, ParticipantBlockedResponse],
+    resource_type_field_name=None,
+)
+
+OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = OpenApiResponse(
+    response=FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    description=(
+        "The OAuth application is not authorized for this chatbot, or the participant is blocked"
+        " (`code` is `participant_blocked`)"
+    ),
+)
 
 
 class TriggerBotMessageRequest(serializers.Serializer):
