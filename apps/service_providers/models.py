@@ -28,7 +28,13 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import ConnectionTestNotSupportedError, NoTestableModelError, ServiceProviderConfigError
+from .exceptions import (
+    ConnectionTestNotSupportedError,
+    NoTestableModelError,
+    ServiceProviderConfigError,
+    VoiceSyncError,
+    elevenlabs_auth_errors_as_voice_sync_error,
+)
 from .whatsapp import WhatsAppProviderMixin
 
 if TYPE_CHECKING:
@@ -629,6 +635,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             try:
                 with transaction.atomic(savepoint=True):
                     self.sync_voices()
+            except VoiceSyncError as e:
+                log.warning("Failed to sync voices for ElevenLabs provider %s: %s", self.pk, e)
+                warnings.append(f"Provider saved, but voice sync failed: {e}")
             except Exception:
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
@@ -661,11 +670,12 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         client = self._get_elevenlabs_client()
 
         all_voices = []
-        response = client.voices.search(page_size=100)
-        all_voices.extend(response.voices)
-        while response.has_more:
-            response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+        with elevenlabs_auth_errors_as_voice_sync_error():
+            response = client.voices.search(page_size=100)
             all_voices.extend(response.voices)
+            while response.has_more:
+                response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+                all_voices.extend(response.voices)
 
         api_voice_ids = set()
 
