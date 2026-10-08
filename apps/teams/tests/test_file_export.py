@@ -155,8 +155,7 @@ class TestDownloadTeamFilesView:
         team.refresh_from_db()
         assert team.files_export_task_id
         content = response.content.decode()
-        assert "ocs-download-progress-root" in content
-        assert team.files_export_task_id in content
+        assert f'id="export-progress-{team.files_export_task_id}"' in content
 
     @patch("apps.teams.tasks.create_team_files_zip_task.apply_async")
     def test_member_forbidden(self, apply_async, client, team, member):

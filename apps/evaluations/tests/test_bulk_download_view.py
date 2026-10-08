@@ -42,21 +42,21 @@ def test_progress_bar_polls_the_reversed_celery_progress_url(client, team_with_u
 
 
 @pytest.mark.django_db()
-def test_runs_home_loads_the_progress_library(client, team_with_users, config):
-    """The progress fragment's inline script calls CeleryProgressBar, so the page must load it."""
+def test_runs_home_loads_the_progress_script(client, team_with_users, config):
+    """The progress fragment's inline script calls SiteJS.app.trackExportProgress from the app bundle."""
     client.force_login(team_with_users.members.first())
     url = reverse("evaluations:evaluation_runs_home", args=[team_with_users.slug, config.id])
 
     content = client.get(url).content.decode()
 
-    assert "celery_progress/celery_progress.js" in content
+    assert "js/app-bundle.js" in content
 
 
 @pytest.mark.django_db()
 def test_progress_fragment_finds_the_button_the_button_partial_renders(client, team_with_users, config):
-    """The two partials are coupled through these hooks: the progress script walks up to
-    `[data-export]` to disable and then hide `[data-export-start]`. Renaming one side only
-    would leave a disabled "Generating" button sitting next to the download link."""
+    """The button partial and export-progress.js are coupled through these hooks: the script
+    walks up to `[data-export]` to disable and then hide `[data-export-start]`. Renaming one
+    side only would leave a disabled button sitting next to the download link."""
     client.force_login(team_with_users.members.first())
     runs_home = reverse("evaluations:evaluation_runs_home", args=[team_with_users.slug, config.id])
 
@@ -65,5 +65,4 @@ def test_progress_fragment_finds_the_button_the_button_partial_renders(client, t
 
     assert "data-export-start" in button
     assert "data-export" in button
-    assert 'closest("[data-export]")' in progress
-    assert 'querySelector("[data-export-start]")' in progress
+    assert "SiteJS.app.trackExportProgress" in progress

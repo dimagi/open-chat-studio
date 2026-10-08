@@ -17,6 +17,9 @@ export {
   replaceFilterParams,
 } from "./filters/wireFormat.js";
 
+// Polls an export task for templates/files/partials/export_progress.html.
+export {trackExportProgress} from "./export-progress.js";
+
 export async function copyToClipboard (callee, elementId) {
   const element = document.getElementById(elementId)
   if (!element) return;
