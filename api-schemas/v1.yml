@@ -134,7 +134,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChatConsentRequired'
+                $ref: '#/components/schemas/ChatSendMessageForbidden'
           description: ''
   /api/chat/{session_id}/poll/:
     get:
@@ -326,6 +326,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatAccessDenied'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStartSessionForbidden'
           description: ''
         '409':
           content:
@@ -794,6 +800,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSession'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: ''
   /api/sessions/{id}/:
     get:
       operationId: session_retrieve
@@ -1041,8 +1053,9 @@ paths:
           content:
             application/json:
               schema:
-                description: The OAuth application is not authorized for this chatbot
-          description: ''
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: The OAuth application is not authorized for this chatbot, or
+            the participant is blocked (`code` is `participant_blocked`)
         '404':
           content:
             application/json:
@@ -1084,8 +1097,9 @@ paths:
           content:
             application/json:
               schema:
-                description: The OAuth application is not authorized for this chatbot
-          description: ''
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: The OAuth application is not authorized for this chatbot, or
+            the participant is blocked (`code` is `participant_blocked`)
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
       operationId: new_api_message_versioned
@@ -1131,8 +1145,9 @@ paths:
           content:
             application/json:
               schema:
-                description: The OAuth application is not authorized for this chatbot
-          description: ''
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: The OAuth application is not authorized for this chatbot, or
+            the participant is blocked (`code` is `participant_blocked`)
 components:
   schemas:
     ApiMessage:
@@ -1304,6 +1319,10 @@ components:
       - has_more
       - messages
       - session_status
+    ChatSendMessageForbidden:
+      oneOf:
+      - $ref: '#/components/schemas/ChatConsentRequired'
+      - $ref: '#/components/schemas/ParticipantBlockedResponse'
     ChatSendMessageRequestWithAttachments:
       type: object
       properties:
@@ -1372,6 +1391,10 @@ components:
       - expires_at
       - session_id
       - session_token
+    ChatStartSessionForbidden:
+      oneOf:
+      - $ref: '#/components/schemas/ChatAccessDenied'
+      - $ref: '#/components/schemas/ParticipantBlockedResponse'
     ChatStartSessionRefused:
       type: object
       properties:
@@ -1791,6 +1814,10 @@ components:
       - content_url
       - name
       - size
+    ForbiddenOrParticipantBlocked:
+      oneOf:
+      - $ref: '#/components/schemas/PermissionDeniedResponse'
+      - $ref: '#/components/schemas/ParticipantBlockedResponse'
     Message:
       type: object
       properties:
@@ -1921,6 +1948,18 @@ components:
         remote_id:
           type: string
           maxLength: 255
+    ParticipantBlockedResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Always `participant_blocked`.
+        detail:
+          type: string
+          description: A message that can be shown to the participant.
+      required:
+      - code
+      - detail
     ParticipantDataEntry:
       type: object
       properties:
@@ -2033,6 +2072,13 @@ components:
       type: object
       properties:
         state: {}
+    PermissionDeniedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     PlatformEnum:
       enum:
       - telegram
