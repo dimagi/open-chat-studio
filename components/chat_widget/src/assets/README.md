@@ -24,6 +24,7 @@ This directory contains locale bundles for the `open-chat-studio-widget`. Each f
 - `attach.add` — Button text for adding file attachments.
 - `attach.remove` — Removes a pending attachment.
 - `attach.success` — Snackbar/toast message when a file upload is queued successfully.
+- `attach.download` — Tooltip and aria-label for a message attachment's download link.
 
 ### status
 - `status.starting` — Displayed while the chat session initializes.
@@ -44,6 +45,7 @@ This directory contains locale bundles for the `open-chat-studio-widget`. Each f
 - `error.fileTooLarge` — Error shown when a single file exceeds the size limit.
 - `error.totalTooLarge` — Error when combined attachment size exceeds the limit.
 - `error.unsupportedType` — Error for unsupported file formats.
+- `error.download` — Error shown when a message attachment fails to download.
 - `error.connection` — Generic network or API error message.
 - `error.sessionExpired` — Prompt shown when the chat session expires.
 

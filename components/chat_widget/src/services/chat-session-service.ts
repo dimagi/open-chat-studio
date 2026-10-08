@@ -65,6 +65,8 @@ export interface ChatAttachment {
   name: string;
   content_type: string;
   size: number;
+  /** Session-scoped download endpoint. Absent on messages from older backends and on the optimistic user message. */
+  download_url?: string;
 }
 
 export interface ChatMessage {
@@ -365,6 +367,12 @@ export class ChatSessionService {
     );
 
     return response.json() as Promise<ChatTaskPollResponse>;
+  }
+
+  /** Fetch an attachment from its `download_url` with the session's credentials, which a plain link cannot send. */
+  async downloadAttachment(sessionId: string, downloadUrl: string): Promise<Blob> {
+    const response = await this.sessionRequest(sessionId, downloadUrl, () => ({ headers: this.getCommonHeaders() }), 'Failed to download file');
+    return response.blob();
   }
 
   pollTask(sessionId: string, taskId: string, callbacks: TaskPollingCallbacks): TaskPollingHandle {

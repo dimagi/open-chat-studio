@@ -17,6 +17,7 @@ import { TranslationStrings, TranslationManager, defaultTranslations } from '../
 import {
   ChatSessionService,
   ChatMessage,
+  ChatAttachment,
   MessagePollingHandle,
   TaskPollingHandle,
   SessionAccessError,
@@ -315,6 +316,7 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  @State() downloadingAttachmentUrls: string[] = [];
   /** Latest consent block from start, poll or a refusal. */
   @State() consent?: ChatConsent;
   /** The message held while the consent panel is up; released by acceptConsent(). */
@@ -574,6 +576,42 @@ export class OcsChat {
     this.messages = [...this.messages, notice];
     this.saveSessionToStorage();
     this.scrollToBottom();
+  }
+
+  /**
+   * The download endpoint needs the session's headers, so the file is fetched and
+   * saved from a blob URL rather than linked directly. A failure is reported in the
+   * chat but leaves the session alone.
+   */
+  private async downloadAttachment(attachment: ChatAttachment): Promise<void> {
+    const url = attachment.download_url;
+    if (!url || this.downloadingAttachmentUrls.includes(url)) {
+      return;
+    }
+    if (!this.activeSessionId) {
+      this.addErrorMessage(this.translationManager.get('error.download'));
+      return;
+    }
+
+    this.downloadingAttachmentUrls = [...this.downloadingAttachmentUrls, url];
+    try {
+      const blob = await this.getChatService().downloadAttachment(this.activeSessionId, url);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = attachment.name;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Revoking in the same task can cancel the download in some browsers.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      console.error('[open-chat-studio-widget] attachment download failed', error);
+      this.addErrorMessage(this.translationManager.get('error.download'));
+    } finally {
+      this.downloadingAttachmentUrls = this.downloadingAttachmentUrls.filter(pending => pending !== url);
+    }
   }
 
   private handleError(errorText: string): void {
@@ -2436,7 +2474,20 @@ export class OcsChat {
                                 <span class="message-attachment-icon">
                                   <PaperClipIcon />
                                 </span>
-                                <span class="message-attachment-name">{attachment.name}</span>
+                                {attachment.download_url ? (
+                                  <button
+                                    type="button"
+                                    class="message-attachment-link"
+                                    title={this.translationManager.get('attach.download')}
+                                    aria-label={`${this.translationManager.get('attach.download')}: ${attachment.name}`}
+                                    disabled={this.downloadingAttachmentUrls.includes(attachment.download_url)}
+                                    onClick={() => this.downloadAttachment(attachment)}
+                                  >
+                                    {attachment.name}
+                                  </button>
+                                ) : (
+                                  <span class="message-attachment-name">{attachment.name}</span>
+                                )}
                               </div>
                             ))}
                           </div>
