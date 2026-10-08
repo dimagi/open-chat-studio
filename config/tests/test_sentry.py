@@ -8,11 +8,12 @@ config/sentry.py).
 
 import pytest
 import sentry_sdk
+from django.conf import settings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.outputs import ChatResult
 from sentry_sdk.transport import Transport
 
-from config.sentry import get_disabled_integrations, get_event_scrubber
+from config.sentry import UNSAMPLED_TASKS, get_disabled_integrations, get_event_scrubber, make_traces_sampler
 
 
 def _frame_vars_event(local_vars: dict) -> dict:
@@ -155,3 +156,39 @@ def test_llm_call_errors_are_not_captured_by_ai_integrations(sentry_events):
 
     sentry_sdk.capture_exception(exc_info.value)
     assert len(sentry_events) == 1
+
+
+@pytest.mark.parametrize(
+    ("sampling_context", "expected"),
+    [
+        pytest.param(
+            {"parent_sampled": True, "wsgi_environ": {"PATH_INFO": "/a/team/"}}, 0.25, id="request-ignores-header"
+        ),
+        pytest.param(
+            {"parent_sampled": True, "wsgi_environ": {"PATH_INFO": "/status/"}}, 0.0, id="health-check-ignores-header"
+        ),
+        pytest.param(
+            {"parent_sampled": True, "celery_job": {"task": "apps.chat.tasks.some_task"}}, 1.0, id="task-parent-sampled"
+        ),
+        pytest.param(
+            {"parent_sampled": False, "celery_job": {"task": "apps.chat.tasks.some_task"}},
+            0.0,
+            id="task-parent-unsampled",
+        ),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/status/"}}, 0.0, id="health-check"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/status/db/"}}, 0.0, id="health-check-subset"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/static/js/site-bundle.js"}}, 0.0, id="static-file"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/channels/telegram/abc"}}, 0.25, id="webhook"),
+        pytest.param({"celery_job": {"task": "apps.events.tasks.enqueue_timed_out_events"}}, 0.0, id="polling-task"),
+        pytest.param({"celery_job": {"task": "apps.chat.tasks.some_task"}}, 0.25, id="other-task"),
+        pytest.param({}, 0.25, id="manual-transaction"),
+    ],
+)
+def test_traces_sampler(sampling_context, expected):
+    assert make_traces_sampler(0.25)({"parent_sampled": None, **sampling_context}) == expected
+
+
+@pytest.mark.parametrize("task_name", sorted(UNSAMPLED_TASKS))
+def test_unsampled_tasks_are_scheduled(task_name):
+    scheduled = {entry["task"] for entry in settings.SCHEDULED_TASKS.values()}
+    assert task_name in scheduled

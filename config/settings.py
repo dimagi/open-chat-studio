@@ -749,7 +749,7 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
-    from config.sentry import get_disabled_integrations, get_event_scrubber
+    from config.sentry import get_disabled_integrations, get_event_scrubber, make_traces_sampler
 
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
@@ -776,6 +776,10 @@ if SENTRY_DSN:
             CeleryIntegration(),
         ],
         disabled_integrations=get_disabled_integrations(),
+        traces_sampler=make_traces_sampler(env.float("SENTRY_TRACES_SAMPLE_RATE", default=0.0)),
+        # Outbound requests go to LLM providers, messaging platforms and customer custom action
+        # endpoints; none of them belong to us, so no trace headers are added to any of them.
+        trace_propagation_targets=[],
     )
 
 # Taskbadger setup

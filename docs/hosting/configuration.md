@@ -192,6 +192,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 |----------|-------------|
 | `SENTRY_DSN` | Sentry DSN for error tracking. |
 | `SENTRY_ENVIRONMENT` | Sentry environment tag, e.g. `production`. |
+| `SENTRY_TRACES_SAMPLE_RATE` | Fraction (0.0-1.0) of requests and Celery tasks sent to Sentry as performance traces. Defaults to `0` (no tracing). Health checks, static files and the high-frequency polling tasks are never traced. |
 | `ENABLE_JSON_LOGGING` | Set to `True` for structured JSON log output (recommended for log aggregation). |
 
 ## Task Badger (optional)
