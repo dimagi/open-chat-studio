@@ -29,9 +29,7 @@ class VoiceSyncError(Exception):
     The message is safe to show to the user.
     """
 
-    DEFAULT_MESSAGE = (
-        "The ElevenLabs API key was rejected. Check that it is valid and has the voices_read permission."
-    )
+    DEFAULT_MESSAGE = "The ElevenLabs API key was rejected. Check that it is valid and has the voices_read permission."
 
     @classmethod
     def from_elevenlabs_auth_error(cls, exc: Exception) -> "VoiceSyncError":
