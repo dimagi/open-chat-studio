@@ -29,9 +29,8 @@ USER_AGENT_MAX_LENGTH = SuperuserElevation._meta.get_field("user_agent").max_len
 
 REAUTH_CALLBACK = "apps.web.elevation.complete_elevation"
 
-# Marker attribute stamped on views wrapped by `requires_elevation`. Nothing reads it yet;
-# it is what the architecture guard over the admin surfaces will key off, the way
-# `apps/teams/tests/test_view_auth_guard.py` keys off `ENFORCES_TEAM_AUTH_ATTR`.
+# Marker attribute stamped on views wrapped by `requires_elevation` or `OcsAdminSite.admin_view`.
+# `apps/web/tests/test_elevation_guard.py` reads it to confirm every admin view is gated.
 # `functools.wraps` hides the decorator identity, so the attribute is the only signal.
 ENFORCES_ELEVATION_ATTR = "enforces_elevation"
 
