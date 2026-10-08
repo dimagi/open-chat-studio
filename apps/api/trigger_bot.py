@@ -26,7 +26,6 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 
-
 # Platforms served by ApiChannel: replies go back to the caller of an inbound request, so there is
 # no way to push a bot-initiated message out, and the channel cannot be built without a session.
 UNSUPPORTED_TRIGGER_BOT_PLATFORMS = frozenset(
