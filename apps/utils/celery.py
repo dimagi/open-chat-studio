@@ -1,8 +1,7 @@
 from enum import StrEnum
 
-#: Pass as ``apply_async(headers=...)`` from a task that Sentry never samples, so the task it
-#: enqueues starts its own trace instead of inheriting the unsampled decision.
-NEW_SENTRY_TRACE_HEADERS = {"sentry-propagate-traces": False}
+import sentry_sdk
+from celery import Task
 
 
 class Queues(StrEnum):
@@ -53,3 +52,15 @@ class TaskbadgerTaskWrapper:
             if total:
                 kwargs["value_max"] = total
             self.task.safe_update(**kwargs)
+
+
+def delay_in_new_trace(task: Task, *args):
+    """Enqueue ``task`` under a new Sentry trace, so it makes its own sampling decision.
+
+    For tasks enqueued by a task that Sentry never samples; with ``delay`` they would inherit
+    that decision.
+    """
+    # With no active span, Sentry's Celery integration sends no trace headers.
+    with sentry_sdk.isolation_scope() as isolation_scope, sentry_sdk.new_scope() as scope:
+        isolation_scope.span = scope.span = None
+        return task.delay(*args)

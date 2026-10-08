@@ -109,7 +109,7 @@ def get_disabled_integrations() -> list[Integration]:
 UNSAMPLED_PATH_PREFIXES = ("/status/", "/static/")
 
 # Frequent beat tasks that only find due work and enqueue a task per item. Each enqueues with
-# ``NEW_SENTRY_TRACE_HEADERS`` so that work is still sampled.
+# ``delay_in_new_trace`` so that work is still sampled.
 UNSAMPLED_TASKS = frozenset(
     {
         "apps.events.tasks.enqueue_timed_out_events",

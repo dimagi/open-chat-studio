@@ -374,8 +374,8 @@ def test_completion_survives_a_failing_finalization(dispatch_mock, _publish):
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.drive_evaluation_run.apply_async")
-def test_beat_fans_out_one_tick_per_active_run(apply_async_mock):
+@patch("apps.evaluations.tasks.drive_evaluation_run.delay")
+def test_beat_fans_out_one_tick_per_active_run(delay_mock):
     """One task per run, so a tick killed mid-flight cannot starve the runs behind it."""
     active = [_make_run(message_count=1, status=EvaluationRunStatus.PENDING)[0] for _ in range(3)]
     done, _evaluators, _messages = _make_run(message_count=1, status=EvaluationRunStatus.PROCESSING)
@@ -383,7 +383,7 @@ def test_beat_fans_out_one_tick_per_active_run(apply_async_mock):
 
     coordinate_evaluation_runs()
 
-    assert {call.args[0][0] for call in apply_async_mock.call_args_list} == {run.id for run in active}
+    assert {call.args[0] for call in delay_mock.call_args_list} == {run.id for run in active}
 
 
 @pytest.mark.django_db()

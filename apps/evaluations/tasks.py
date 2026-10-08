@@ -61,7 +61,7 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
-from apps.utils.celery import NEW_SENTRY_TRACE_HEADERS, Queues
+from apps.utils.celery import Queues, delay_in_new_trace
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
@@ -566,7 +566,7 @@ def coordinate_evaluation_runs() -> None:
     """
     run_ids = EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES).order_by("created_at")
     for run_id in run_ids.values_list("id", flat=True).iterator(chunk_size=RUN_CHUNK_SIZE):
-        drive_evaluation_run.apply_async((run_id,), headers=NEW_SENTRY_TRACE_HEADERS)
+        delay_in_new_trace(drive_evaluation_run, run_id)
 
 
 def _publish_progress(job_id: str, current: int, total: int, *, stop: bool = False) -> None:
