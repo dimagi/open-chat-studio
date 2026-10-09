@@ -232,7 +232,9 @@ class TestTheResponseEnvelope:
 #: of nodes -- without them each node would read the table itself.
 #: One is ``deprecated_models``, a single statement for the whole graph that does not move with the
 #: number of nodes.
-QUERIES_UNDER_THE_LOCK = 30
+#: One is the single ``LlmProviderModel`` bulk read that ``build_runnable`` makes for the whole graph
+#: (``prefetch_llm_provider_models``), in place of one read per LLM node.
+QUERIES_UNDER_THE_LOCK = 31
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
@@ -246,14 +248,14 @@ QUERIES_UNDER_THE_LOCK = 30
 #: 17 is that revert. Every extra node on the fixture graph costs 2 (``pipeline_state`` validates each
 #: one), so a failure at 12 is someone having changed the fixture. Raising it deliberately is a
 #: decision about how long the row is held: say in the commit what the extra statements buy.
-WIRE_QUERIES_UNDER_THE_LOCK = 11
+WIRE_QUERIES_UNDER_THE_LOCK = 10
 
 
 @pytest.mark.django_db()
 def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
     """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with
     it the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for.
-    The absolute count is what pins that: reverting the skip takes it from 11 to 18, while a
+    The absolute count is what pins that: reverting the skip takes it from 10 to 18, while a
     comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)
@@ -312,6 +314,7 @@ def test_a_reference_check_reads_only_the_ids_it_was_sent(client, chatbot, llm, 
         )
         for index in range(12)
     ]
+    patch_cost({"collection_index_ids": [indexes[0].id]})  # discarded: this write still carries the LLM params
     one_id = patch_cost({"collection_index_ids": [indexes[0].id]})
 
     assert patch_cost({"collection_index_ids": [index.id for index in indexes]}) == one_id

@@ -26,9 +26,9 @@ class RepositoryLookupError(Exception):
 
 
 # ContextVar holding a {id: LlmProviderModel} dict pre-fetched during pipeline graph
-# construction.  Only populated within a `prefetch_llm_provider_models` block; empty
+# construction.  Only set within a `prefetch_llm_provider_models` block; None
 # outside one so the fallback DB path is always safe.
-_llm_model_prefetch: ContextVar[dict[int, LlmProviderModel]] = ContextVar("_llm_model_prefetch", default={})
+_llm_model_prefetch: ContextVar[dict[int, LlmProviderModel] | None] = ContextVar("_llm_model_prefetch", default=None)
 
 
 @contextmanager
@@ -57,7 +57,7 @@ def get_prefetched_llm_provider_model(model_id: int) -> LlmProviderModel | None:
     Validators should call this before falling back to a DB query so that a surrounding
     `prefetch_llm_provider_models` block eliminates per-node round-trips.
     """
-    return _llm_model_prefetch.get().get(model_id)
+    return (_llm_model_prefetch.get() or {}).get(model_id)
 
 
 class CollectionFileInfo(NamedTuple):
