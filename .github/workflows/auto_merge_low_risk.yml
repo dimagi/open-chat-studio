@@ -14,7 +14,8 @@
 # - `main` requires an approving review, so the merge is made by the `ocs-automerge`
 #   GitHub App, which sits in that branch protection's
 #   `bypass_pull_request_allowances`. Humans still need an approval; only this one
-#   identity does not
+#   identity does not. A pull request that is `blocked` only because that review is
+#   missing (`reviewDecision` is `REVIEW_REQUIRED`) is therefore still eligible
 # - **`ocs-automerge` is deliberately not `ocs-agent`.** `update-generated-files.yml`
 #   hands `ocs-agent`'s token to a job that runs code from the pull request branch
 #   (`uv sync`, ruff, `makemigrations`), so a hostile PR can reach that token. An
