@@ -21,9 +21,9 @@ REPO = "dimagi/open-chat-studio"
 LOW = "risk:low"
 
 
-def find_blockers(pull, check_runs, reviews, repo=REPO, *, risk=LOW, decision=None, status="success"):
-    """The gate's own verdict defaults to low here so each test varies one thing."""
-    signals = auto_merge_low_risk.Signals(risk, decision, status)
+def find_blockers(pull, check_runs, reviews, repo=REPO, **signal_overrides):
+    """The gate's own verdict defaults to low and the commit status to green, so each test varies one thing."""
+    signals = auto_merge_low_risk.Signals(**{"risk": LOW, "status_state": "success", **signal_overrides})
     return auto_merge_low_risk.find_blockers(pull, check_runs, reviews, repo, signals)
 
 
@@ -88,7 +88,7 @@ def test_blocked_for_any_other_reason_still_blocks(decision):
 @pytest.mark.parametrize("status", ["pending", "failure", "error", None])
 def test_review_required_does_not_excuse_a_legacy_commit_status(status):
     blockers = find_blockers(
-        pull(mergeable_state="blocked"), passing_checks(), [], decision="REVIEW_REQUIRED", status=status
+        pull(mergeable_state="blocked"), passing_checks(), [], decision="REVIEW_REQUIRED", status_state=status
     )
     assert f"the combined commit status is {status}" in blockers
 
