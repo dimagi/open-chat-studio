@@ -25,6 +25,15 @@ uv run pytest -m bench apps/benchmarks --benchmark-compare=before
 
 Compare results from the same machine only. Check the IQR before trusting a small delta: a spread that is large relative to the median means the run is too noisy.
 
+Timing benchmarks share the settings in `apps.benchmarks.runner.TIMING` (warm-up, at least 5 seconds per benchmark, GC off during measured rounds). The marker takes precedence over the equivalent `--benchmark-*` command-line options.
+
+To compare two commits, run both on the same machine in one session. `apps/benchmarks/ab.py` alternates runs of two checkouts and reports the B/A ratio of the medians per benchmark:
+
+```shell
+git worktree add ../ocs-base main
+uv run python apps/benchmarks/ab.py --a ../ocs-base --b . --pairs 2
+```
+
 DB query-count ceilings (`apps/benchmarks/test_query_counts.py`) are ordinary tests and run with the normal suite. They do not depend on hardware, so any increase fails. Raise a ceiling in the same PR that legitimately adds queries.
 
 ## Adding a scenario
