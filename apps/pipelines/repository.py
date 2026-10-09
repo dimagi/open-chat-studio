@@ -28,9 +28,7 @@ class RepositoryLookupError(Exception):
 # ContextVar holding a {id: LlmProviderModel} dict pre-fetched during pipeline graph
 # construction.  Only populated within a `prefetch_llm_provider_models` block; empty
 # outside one so the fallback DB path is always safe.
-_llm_model_prefetch: ContextVar[dict[int, LlmProviderModel]] = ContextVar(
-    "_llm_model_prefetch", default={}
-)
+_llm_model_prefetch: ContextVar[dict[int, LlmProviderModel]] = ContextVar("_llm_model_prefetch", default={})
 
 
 @contextmanager

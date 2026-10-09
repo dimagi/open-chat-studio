@@ -246,9 +246,7 @@ class PipelineGraph(pydantic.BaseModel):
         # Pre-fetch all LlmProviderModel rows needed by nodes in a single bulk query so that the
         # Pydantic validators in LLMResponseMixin don't issue one query per node (N+1).
         llm_model_ids = [
-            node.params.get("llm_provider_model_id")
-            for node in self.nodes
-            if node.params.get("llm_provider_model_id")
+            node.params.get("llm_provider_model_id") for node in self.nodes if node.params.get("llm_provider_model_id")
         ]
         with prefetch_llm_provider_models(llm_model_ids):
             if errors := self.build_errors:
