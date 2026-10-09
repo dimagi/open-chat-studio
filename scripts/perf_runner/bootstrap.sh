@@ -83,7 +83,7 @@ COMPOSE
 docker compose -f /opt/perf-runner/docker-compose.yml up -d
 
 # The first start runs initdb; rebooting before it finishes can leave a partial data directory.
-until docker compose -f /opt/perf-runner/docker-compose.yml exec -T postgres pg_isready -U postgres; do
+until docker compose -f /opt/perf-runner/docker-compose.yml exec -T postgres pg_isready -U postgres -h 127.0.0.1; do
     sleep 2
 done
 
