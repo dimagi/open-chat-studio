@@ -8,6 +8,9 @@ set -euxo pipefail
 ISOLATED_CPUS="2,3"
 SERVICE_CPUS="0,1"
 RUNNER_USER="runner"
+# pgvector/pgvector:pg16 and redis:7 as of 2026-10-09. Changing either starts a new baseline.
+PG_IMAGE="pgvector/pgvector@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a"
+REDIS_IMAGE="redis@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -58,7 +61,7 @@ mkdir -p /opt/perf-runner
 cat > /opt/perf-runner/docker-compose.yml <<COMPOSE
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ${PG_IMAGE}
     restart: unless-stopped
     cpuset: "${SERVICE_CPUS}"
     environment:
@@ -69,7 +72,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
   redis:
-    image: redis:7
+    image: ${REDIS_IMAGE}
     restart: unless-stopped
     cpuset: "${SERVICE_CPUS}"
     ports:
@@ -84,9 +87,8 @@ TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-m
 {
     echo "instance_type=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
     echo "ami_id=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/ami-id)"
-    for image in pgvector/pgvector:pg16 redis:7; do
-        echo "image_${image%%[/:]*}=$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}unknown{{end}}' "$image")"
-    done
+    echo "postgres_image=${PG_IMAGE}"
+    echo "redis_image=${REDIS_IMAGE}"
 } > /opt/perf-runner/hardware.env
 
 # The runner itself is installed and registered by hand (needs a short-lived token).

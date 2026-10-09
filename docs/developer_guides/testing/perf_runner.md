@@ -8,7 +8,7 @@ Benchmarks that track regressions or support hill-climbing run on a dedicated, p
 |---|---|
 | Region | `us-east-1` |
 | Instance type | `c7i.xlarge` (4 vCPU, fixed performance; not a burstable T type) |
-| AMI | A specific Ubuntu 24.04 AMI ID, passed explicitly and never "latest" |
+| AMI | `ami-0fa5967347d08d2df` (`ubuntu-noble-24.04-amd64-server-20261004`) |
 | Runner labels | `self-hosted`, `ocs-perf` |
 
 CPU layout:
@@ -18,15 +18,28 @@ CPU layout:
 
 Postgres and Redis run on the same machine so network latency to managed services does not add noise.
 
-The instance type, AMI and the resolved digests of the Postgres and Redis images are recorded in `/opt/perf-runner/hardware.env` and must be stored with every result. The compose file uses mutable tags (`pgvector/pgvector:pg16`, `redis:7`); to freeze them, replace the tags in `/opt/perf-runner/docker-compose.yml` with the recorded `repo@sha256:...` digests after the first boot. Changing either starts a new baseline.
+The instance type, AMI and the Postgres and Redis image digests (pinned in `bootstrap.sh`) are recorded in `/opt/perf-runner/hardware.env` and must be stored with every result. Changing either starts a new baseline.
 
 After the first reboot, confirm the isolation took effect: `cat /proc/cmdline` must contain `isolcpus=2,3`.
 
-Turbo boost is disabled at boot only if the guest can control it (`/sys/devices/system/cpu/intel_pstate/no_turbo` is writable). Virtualized `c7i` sizes may not expose it. Check after the first boot; if it is missing, measure run-to-run variance anyway (target under 3% on medians) and consider a larger size or a `.metal` instance if variance is too high.
+Turbo boost and the CPU governor are set at boot only if the guest can control them. `c7i.xlarge` exposes neither (no `intel_pstate` or `cpufreq` in sysfs), so the tune service does nothing there. Measured on an idle instance with a CPU-bound Python workload (15 rounds, three runs each), medians varied by 0.2% between runs on an isolated core and 0.9% on a shared core, within the 3% target.
 
 ## Provision
 
-Find a current Ubuntu 24.04 AMI once and record the ID:
+One-time setup in the account: an egress-only security group and an instance profile for Session Manager.
+
+```shell
+aws ec2 create-security-group --group-name ocs-perf-runner \
+    --description "OCS perf benchmark runner (egress only)" --vpc-id <vpc-id>
+aws iam create-role --role-name ocs-perf-runner --assume-role-policy-document \
+    '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+aws iam attach-role-policy --role-name ocs-perf-runner \
+    --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam create-instance-profile --instance-profile-name ocs-perf-runner
+aws iam add-role-to-instance-profile --instance-profile-name ocs-perf-runner --role-name ocs-perf-runner
+```
+
+To move to a newer AMI (this starts a new baseline), look up the current Ubuntu 24.04 image:
 
 ```shell
 aws ssm get-parameter --region us-east-1 \
@@ -34,11 +47,11 @@ aws ssm get-parameter --region us-east-1 \
     --query Parameter.Value --output text
 ```
 
-Launch the instance. The security group needs outbound access only. To reach the instance without opening SSH, pass `INSTANCE_PROFILE=<name>` for an instance profile with the `AmazonSSMManagedInstanceCore` policy and connect with `aws ssm start-session --target <instance-id>`. The instance needs outbound HTTPS to the SSM endpoints. Alternatively, add an inbound SSH rule restricted to your IP to the security group and use `KEY_NAME`.
+Launch the instance in a subnet with outbound internet access. Connect with `aws ssm start-session --target <instance-id>`. `KEY_NAME` is optional and only needed for SSH, which also requires an inbound rule.
 
 ```shell
-AMI_ID=ami-... SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... KEY_NAME=... \
-    scripts/perf_runner/provision.sh
+AMI_ID=ami-0fa5967347d08d2df SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... \
+    INSTANCE_PROFILE=ocs-perf-runner scripts/perf_runner/provision.sh
 ```
 
 `scripts/perf_runner/bootstrap.sh` runs as user data on first boot, configures the host and reboots once so the CPU isolation takes effect.
