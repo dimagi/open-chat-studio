@@ -1,12 +1,14 @@
 import dataclasses
 import logging
 from collections.abc import Callable
-from enum import Enum
-from typing import TYPE_CHECKING
+from datetime import datetime
+from enum import Enum, StrEnum
+from typing import TYPE_CHECKING, Literal
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, models, transaction
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.functional import classproperty
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
@@ -26,7 +28,13 @@ from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
 from ..teams.utils import get_slug_for_team
-from .exceptions import ConnectionTestNotSupportedError, NoTestableModelError, ServiceProviderConfigError
+from .exceptions import (
+    ConnectionTestNotSupportedError,
+    NoTestableModelError,
+    ServiceProviderConfigError,
+    VoiceSyncError,
+    elevenlabs_auth_errors_as_voice_sync_error,
+)
 from .whatsapp import WhatsAppProviderMixin
 
 if TYPE_CHECKING:
@@ -187,8 +195,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
 CONNECTION_TEST_TIMEOUT_SECONDS = 10
 # A provider is free to return a response of any size, and this is rendered on the page.
 CONNECTION_ERROR_DETAIL_LIMIT = 2000
-VERIFIED_CREDENTIALS_KEY = "verified_credentials"
-VERIFICATION_ERROR_KEY = "verification_error"
+
+
+class LlmProviderExtraDataKeys(StrEnum):
+    VERIFIED_CREDENTIALS = "verified_credentials"
+    VERIFICATION_ERROR = "verification_error"
+    CREDENTIALS_CHECKED_AT = "credentials_checked_at"
 
 
 def _error_detail(exc: Exception, limit: int = CONNECTION_ERROR_DETAIL_LIMIT) -> str:
@@ -226,17 +238,36 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         A missing key and a stored False both mean no - never checked, and checked-and-rejected
         both need the next save to check again.
         """
-        return (self.extra_data or {}).get(VERIFIED_CREDENTIALS_KEY) is True
+        return (self.extra_data or {}).get(LlmProviderExtraDataKeys.VERIFIED_CREDENTIALS) is True
 
     @property
     def verification_error(self) -> str:
-        """What the provider said when it last rejected these credentials, if anything.
+        """What the provider said when the last check of these credentials failed, if anything.
 
         Kept beside the flag rather than flashed through the session: it explains the
         credentials that are still saved here, so it has to be there when the user comes
         back to the page rather than only on the redirect after the save.
         """
-        return (self.extra_data or {}).get(VERIFICATION_ERROR_KEY, "")
+        return (self.extra_data or {}).get(LlmProviderExtraDataKeys.VERIFICATION_ERROR, "")
+
+    @property
+    def credentials_checked_at(self) -> datetime | None:
+        """When the stored verification result was produced, or None for results stored before
+        this was recorded."""
+        checked_at = (self.extra_data or {}).get(LlmProviderExtraDataKeys.CREDENTIALS_CHECKED_AT)
+        return datetime.fromisoformat(checked_at) if checked_at else None
+
+    @property
+    def verification_state(self) -> Literal["verified", "failed", "no_model", "unchecked"]:
+        """Where the saved credentials stand after the last check."""
+        if self.credentials_verified:
+            return "verified"
+        if self.verification_error:
+            return "failed"
+        if self.credentials_checked_at:
+            # A check that ran without reaching the provider: there was no model to send it to.
+            return "no_model"
+        return "unchecked"
 
     def get_llm_service(self) -> "llm_service.LlmService":
         config = {k: v for k, v in self.config.items() if v}
@@ -278,13 +309,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         # Prefer the provider type's registered default model (get_default_model, the same
         # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
         # model most likely to actually work; fall back to any other model the team has
-        # configured for this type if they don't have that one. A team-configured model
-        # wins over a global one, same priority as pricing-rule resolution elsewhere in
-        # this app.
+        # configured for this type if they don't have that one. A deprecated model is tried
+        # last, since providers withdraw them. Otherwise a team-configured model wins over a
+        # global one, same priority as pricing-rule resolution elsewhere in this app.
         team_models = (
             LlmProviderModel.objects.for_team(self.team)
             .filter(type=self.type)
-            .order_by(models.F("team_id").desc(nulls_last=True))
+            .order_by("deprecated", models.F("team_id").desc(nulls_last=True))
         )
         default_model = get_default_model(self.type)
         model = team_models.filter(name=default_model.name).first() if default_model else None
@@ -355,11 +386,15 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         with transaction.atomic():
             provider = LlmProvider.objects.select_for_update().get(pk=self.pk)
-            extra_data = {**(provider.extra_data or {}), VERIFIED_CREDENTIALS_KEY: verified}
+            extra_data = {
+                **(provider.extra_data or {}),
+                LlmProviderExtraDataKeys.VERIFIED_CREDENTIALS: verified,
+                LlmProviderExtraDataKeys.CREDENTIALS_CHECKED_AT: timezone.now().isoformat(),
+            }
             if detail:
-                extra_data[VERIFICATION_ERROR_KEY] = detail
+                extra_data[LlmProviderExtraDataKeys.VERIFICATION_ERROR] = detail
             else:
-                extra_data.pop(VERIFICATION_ERROR_KEY, None)
+                extra_data.pop(LlmProviderExtraDataKeys.VERIFICATION_ERROR, None)
             provider.extra_data = extra_data
             provider.save(update_fields=["extra_data"])
         self.extra_data = extra_data
@@ -600,6 +635,9 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
             try:
                 with transaction.atomic(savepoint=True):
                     self.sync_voices()
+            except VoiceSyncError as e:
+                log.warning("Failed to sync voices for ElevenLabs provider %s: %s", self.pk, e)
+                warnings.append(f"Provider saved, but voice sync failed: {e}")
             except Exception:
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
@@ -632,11 +670,12 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         client = self._get_elevenlabs_client()
 
         all_voices = []
-        response = client.voices.search(page_size=100)
-        all_voices.extend(response.voices)
-        while response.has_more:
-            response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+        with elevenlabs_auth_errors_as_voice_sync_error():
+            response = client.voices.search(page_size=100)
             all_voices.extend(response.voices)
+            while response.has_more:
+                response = client.voices.search(page_size=100, next_page_token=response.next_page_token)
+                all_voices.extend(response.voices)
 
         api_voice_ids = set()
 

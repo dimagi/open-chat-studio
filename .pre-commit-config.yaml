@@ -28,7 +28,7 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.4
+    rev: v0.16.8
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
@@ -39,19 +39,19 @@ repos:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.9.1'
+    rev: 'v10.11.0'
     hooks:
       - id: eslint
         # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
-          - eslint@10.9.1
+          - eslint@10.11.0
           - '@eslint/js@10.0.1'
           - typescript-eslint@8.70.1
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.9.6'
+    rev: 'v3.9.9'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$

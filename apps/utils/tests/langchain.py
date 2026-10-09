@@ -4,9 +4,9 @@ from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
-from langchain_community.chat_models import FakeListChatModel
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, BaseMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -18,6 +18,7 @@ from apps.service_providers.llm_service import LlmService, OpenAIGenericService
 class FakeLlm(FakeListChatModel):
     """Extension of the FakeListChatModel that allows mocking of the token counts."""
 
+    responses: list
     calls: list = []
 
     def _generate(

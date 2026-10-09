@@ -5,11 +5,20 @@ from functools import lru_cache
 
 import sentry_sdk
 from django.core.cache import cache
+from django.urls import reverse
 from django.utils.functional import LazyObject, empty
 
 from apps.teams.models import Flag, Team
 
 log = logging.getLogger("ocs.teams")
+
+DEFAULT_SETTINGS_SECTION = "integrations"
+
+
+def section_url(team_slug: str, section_key: str | None = None, fragment: str | None = None) -> str:
+    """URL of a section of the team settings page, optionally with a `#fragment`."""
+    url = reverse("single_team:manage_team_section", args=[team_slug, section_key or DEFAULT_SETTINGS_SECTION])
+    return f"{url}#{fragment}" if fragment else url
 
 
 def flag_is_active_for_team(team, flag_name):

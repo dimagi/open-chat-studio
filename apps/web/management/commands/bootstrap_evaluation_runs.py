@@ -104,7 +104,7 @@ class _ModelPricing:
 
 
 _JUDGE_MODEL = _ModelPricing("openai", "gpt-4o-mini", Decimal("0.00015"), Decimal("0.00060"))
-_SECOND_JUDGE_MODEL = _ModelPricing("anthropic", "claude-sonnet-4-5-20250929", Decimal("0.003"), Decimal("0.015"))
+_SECOND_JUDGE_MODEL = _ModelPricing("anthropic", "claude-sonnet-4-6", Decimal("0.00300"), Decimal("0.01500"))
 _GENERATION_MODEL = _ModelPricing("openai", "gpt-4o", Decimal("0.00250"), Decimal("0.01000"))
 # No pricing rule for this one, so the run's cost card shows the "unpriced" coverage gap.
 _UNPRICED_MODEL = _ModelPricing("openai", "gpt-5-judge-preview")

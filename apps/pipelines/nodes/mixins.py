@@ -8,7 +8,6 @@ from langchain_core.messages import BaseMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
@@ -452,6 +451,10 @@ class ExtractStructuredDataNodeMixin:
         except KeyError:
             # The same encoder we use for llm.get_num_tokens_from_messages
             encoding_name = "gpt2"
+
+        from langchain_text_splitters import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+            RecursiveCharacterTextSplitter,
+        )
 
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
             encoding_name=encoding_name,

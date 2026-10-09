@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from unittest import mock
 
 import pytest
@@ -40,8 +40,8 @@ def patched_tracer(mock_langfuse_client):
     """A real LangFuseTracer with the ClientManager boundary mocked."""
     tracer = LangFuseTracer("langfuse", {"public_key": "pk", "secret_key": "sk"})
     with mock.patch(
-        "apps.service_providers.tracing.langfuse.client_manager.get",
-        return_value=mock_langfuse_client,
+        "apps.service_providers.tracing.langfuse.client_manager.checkout",
+        return_value=nullcontext(mock_langfuse_client),
     ):
         yield tracer
 

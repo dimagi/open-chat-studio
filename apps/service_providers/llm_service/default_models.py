@@ -71,6 +71,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "anthropic": [
         Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-sonnet-5-5", 1000000, parameters=ClaudeOpus47Parameters),
+        Model("claude-haiku-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
@@ -79,7 +80,13 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-opus-4-7", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-6", k(200), is_translation_default=True, parameters=ClaudeOpus46Parameters),
         Model("claude-sonnet-4-6", 1000000, is_default=True, parameters=ClaudeSonnet46Parameters),
-        Model("claude-sonnet-4-5-20250929", k(200), parameters=AnthropicReasoningParameters),
+        Model(
+            "claude-sonnet-4-5-20250929",
+            k(200),
+            deprecated=True,
+            replacement="claude-sonnet-4-6",
+            parameters=AnthropicReasoningParameters,
+        ),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
     ],

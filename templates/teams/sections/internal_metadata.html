@@ -1,0 +1,22 @@
+{% load form_tags i18n %}
+<section class="app-card" id="internal-metadata">
+  <h2 class="pg-subtitle font-bold">{% translate "Internal Metadata" %}</h2>
+  <span class="text-neutral-500 section-subtitle">{% translate "Staff-only internal information about this team." %}</span>
+  <hr class="my-2">
+
+  <form method="post" action="{% url 'single_team:internal_metadata' request.team.slug %}"
+        hx-post="{% url 'single_team:internal_metadata' request.team.slug %}"
+        hx-target="#team-settings-body" hx-swap="innerHTML" class="my-2">
+    {% csrf_token %}
+    {{ metadata_form.non_field_errors }}
+
+    {% if metadata_form.fields %}
+      {% render_form_fields metadata_form %}
+      <div class="mt-6 flex gap-2">
+        <input type="submit" class="btn btn-primary" value="{% translate "Save Changes" %}">
+      </div>
+    {% else %}
+      <p class="text-base-content/70">{% translate "No internal metadata fields are configured." %}</p>
+    {% endif %}
+  </form>
+</section>

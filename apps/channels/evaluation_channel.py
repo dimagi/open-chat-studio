@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from apps.channels.api_channel import NoOpSender
@@ -24,8 +25,17 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.channels.sender import ChannelSender
+    from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.service_providers.tracing.base import Tracer
+
+
+@dataclass(frozen=True)
+class EvaluationReply:
+    message: ChatMessage
+    # Set when the pipeline answered with its canned error reply: `message` is then that
+    # reply, not a response the bot generated.
+    error: Exception | None = None
 
 
 class EvaluationChannel(ChannelBase):
@@ -53,6 +63,11 @@ class EvaluationChannel(ChannelBase):
         if not self.experiment_session:
             raise ChannelException("EvaluationChannel requires an existing session")
         self._participant_data = participant_data
+
+    def generate_reply(self, message: BaseMessage) -> EvaluationReply:
+        """Run `message` through the pipeline and return the reply."""
+        response, ctx = self._process_message(message)
+        return EvaluationReply(message=response, error=ctx.configuration_error)
 
     def _create_trace_service(self):
         """No tracing for eval runs beyond billing.

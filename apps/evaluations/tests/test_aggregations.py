@@ -98,6 +98,23 @@ class TestComputeAggregatesForRun:
         aggregates = compute_aggregates_for_run(run)
         assert aggregates[0].aggregates["score"]["count"] == 1
 
+    def test_skips_results_whose_generation_failed(self):
+        """The evaluator scored a response the bot never produced, which says nothing about the bot."""
+        run = EvaluationRunFactory.create(status=EvaluationRunStatus.COMPLETED)
+        evaluator = EvaluatorFactory.create(team=run.team)
+
+        EvaluationResultFactory.create(run=run, evaluator=evaluator, team=run.team, output={"result": {"score": 0.5}})
+        EvaluationResultFactory.create(
+            run=run,
+            evaluator=evaluator,
+            team=run.team,
+            output={"result": {"score": 0.0}, "generation_error": "quota"},
+        )
+
+        aggregates = compute_aggregates_for_run(run)
+        assert aggregates[0].aggregates["score"]["count"] == 1
+        assert aggregates[0].aggregates["score"]["mean"] == 0.5
+
 
 @pytest.mark.django_db()
 class TestBuildTrendData:

@@ -1,6 +1,8 @@
 from unittest import mock
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -24,6 +26,7 @@ def session(experiment):
 
 @pytest.mark.django_db()
 def test_start_chat_session(team_with_users, api_client, experiment):
+    """An anonymous start returns a token, an anon participant and consent, and ignores session_data."""
     url = reverse("api:chat:start-session")
     session_state = {"page_url": "https://example.com"}
     data = {
@@ -56,6 +59,17 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
     session = ExperimentSession.objects.get(external_id=response_json["session_id"])
     assert session.state == {}  # ignored for anonymous request
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_stores_the_remote_id_on_the_anonymous_participant(api_client, experiment):
+    """An anonymous caller's participant_remote_id is kept as the participant's remote ID."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "participant_remote_id": "remote-123"}
+    response = api_client.post(url, data=data, format="json")
+    assert response.status_code == 201
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.participant.remote_id == "remote-123"
 
 
 @pytest.mark.django_db()
@@ -142,10 +156,19 @@ def test_send_message_rejects_attachment_not_uploaded_for_session(api_client, se
 @pytest.mark.django_db()
 def test_task_poll(api_client, session):
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "123"})
-    with mock.patch("apps.api.views.chat.get_progress_message", return_value=None):
+    with (
+        mock.patch("apps.api.progress_messages.ProgressMessagesAgent") as agent,
+        mock.patch("apps.api.tasks.generate_progress_messages_task") as task,
+    ):
         response = api_client.get(url)
     response_json = response.json()
     assert response_json == {"message": None, "status": "processing"}
+    agent.assert_not_called()
+    task.delay.assert_called_once_with(
+        session_id=str(session.external_id),
+        chatbot_name=session.experiment.name,
+        chatbot_description=session.experiment.description,
+    )
 
 
 @pytest.mark.django_db()
@@ -256,8 +279,23 @@ def test_start_chat_session_ignores_unknown_timezone(api_client, experiment, tim
 
 @pytest.mark.django_db()
 def test_start_chat_session_without_timezone_records_none(api_client, experiment):
+    """A start without a timezone stores no participant data for the chatbot."""
     url = reverse("api:chat:start-session")
     response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json")
     assert response.status_code == 201
     session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
     assert not ParticipantData.objects.filter(participant=session.participant, experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+def test_start_chat_session_loads_the_team_with_the_chatbot(api_client, experiment):
+    """Starting a session reads the chatbot's team in the same query as the chatbot."""
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id}
+
+    with CaptureQueriesContext(connection) as ctx:
+        response = api_client.post(url, data=data, format="json")
+
+    assert response.status_code == 201
+    team_queries = [q["sql"] for q in ctx.captured_queries if 'FROM "teams_team"' in q["sql"]]
+    assert team_queries == []

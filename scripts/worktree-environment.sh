@@ -261,6 +261,7 @@ ocs_redis_registry_command() {
     registry_script='local operation = ARGV[1]
 local resource = ARGV[2]
 local expected_database = ARGV[3]
+local reserved_database = ARGV[3]
 local resource_field = "resource:" .. resource
 
 local function database_field(database)
@@ -282,13 +283,16 @@ end
 if operation == "allocate" then
     local database = redis.call("HGET", KEYS[1], resource_field)
     if database and redis.call("HGET", KEYS[1], database_field(database)) == resource then
-        return database
+        if database ~= reserved_database then
+            return database
+        end
+        redis.call("HDEL", KEYS[1], database_field(database))
     end
     redis.call("HDEL", KEYS[1], resource_field)
 
     for candidate = 1, 14 do
         local field = database_field(candidate)
-        if not redis.call("HGET", KEYS[1], field) then
+        if tostring(candidate) ~= reserved_database and not redis.call("HGET", KEYS[1], field) then
             redis.call("HSET", KEYS[1], field, resource)
             redis.call("HSET", KEYS[1], resource_field, candidate)
             return candidate
@@ -321,11 +325,24 @@ return redis.error_reply("Unknown worktree Redis registry operation")'
         "$operation" "$resource_name" "$expected_database"
 }
 
+# The root checkout's Redis database, which no worktree may share: the root's Celery
+# workers would consume the worktree's tasks. A URL without a database path means 0.
+ocs_root_redis_database() {
+    local redis_url
+
+    redis_url=$(ocs_env_file_value "$(ocs_root_worktree_path)/.env" "REDIS_URL") || redis_url=""
+    if [[ "$redis_url" =~ ^rediss?://[^/]*/([0-9]+) ]]; then
+        printf '%s\n' "$((10#${BASH_REMATCH[1]}))"
+    else
+        printf '0\n'
+    fi
+}
+
 ocs_allocate_redis_database() {
     local resource_name="$1"
     local database
 
-    database=$(ocs_redis_registry_command allocate "$resource_name")
+    database=$(ocs_redis_registry_command allocate "$resource_name" "$(ocs_root_redis_database)")
     if [[ ! "$database" =~ ^([1-9]|1[0-4])$ ]]; then
         echo "Unable to allocate a Redis database for $resource_name: ${database:-no response}" >&2
         return 1
@@ -622,6 +639,46 @@ ocs_template_stamp_path() {
     printf '%s/%s.stamp\n' "$(ocs_template_stamp_directory "$1")" "$2"
 }
 
+# What `migrate` writes besides the schema: migrations shipped by the packages in
+# `uv.lock`, and the groups and periodic tasks the project's `migrate` command syncs
+# from code. A copy of a template whose stamp and inputs both match needs no migrate.
+OCS_MIGRATE_INPUT_FILES=(
+    uv.lock
+    config/settings.py
+    apps/teams/backends.py
+    apps/teams/signals.py
+    apps/web/management/commands/migrate.py
+    apps/web/management/commands/setup_periodic_tasks.py
+)
+
+ocs_migrate_inputs_fingerprint() {
+    local worktree_path="$1"
+    local input_file
+
+    for input_file in "${OCS_MIGRATE_INPUT_FILES[@]}"; do
+        printf '%s:' "$input_file"
+        if [[ -f "$worktree_path/$input_file" ]]; then
+            cksum < "$worktree_path/$input_file"
+        else
+            printf 'missing\n'
+        fi
+    done | cksum | awk '{print $1 ":" $2}'
+}
+
+ocs_template_inputs_path() {
+    printf '%s/%s.inputs\n' "$(ocs_template_stamp_directory "$1")" "$2"
+}
+
+ocs_template_inputs_match() {
+    local worktree_path="$1"
+    local template_name="$2"
+    local inputs_path
+
+    inputs_path=$(ocs_template_inputs_path "$worktree_path" "$template_name")
+    [[ -f "$inputs_path" ]] \
+        && [[ "$(<"$inputs_path")" == "$(ocs_migrate_inputs_fingerprint "$worktree_path")" ]]
+}
+
 ocs_list_template_databases() {
     local prefix
     prefix=$(ocs_template_prefix "$1")
@@ -699,6 +756,11 @@ ocs_snapshot_template() {
     stamp_path=$(ocs_template_stamp_path "$worktree_path" "$template_name")
     if ! { mkdir -p "$(dirname "$stamp_path")" && cp "$stamp_lines_file" "$stamp_path"; }; then
         echo "[ocs] Could not record the stamp for $template_name; it will be pruned rather than reused." >&2
+        return 0
+    fi
+    if ! ocs_migrate_inputs_fingerprint "$worktree_path" \
+        > "$(ocs_template_inputs_path "$worktree_path" "$template_name")"; then
+        echo "[ocs] Could not record the migrate inputs for $template_name; copies of it will still be migrated." >&2
     fi
 }
 
@@ -730,7 +792,7 @@ ocs_prune_template_databases() {
         fi
         echo "[ocs] Dropping the stale template database $template."
         ocs_drop_database "$template"
-        rm -f "$stamp_path"
+        rm -f "$stamp_path" "$stamp_directory/$template.inputs"
     done < <(ocs_list_template_databases "$worktree_path")
 }
 

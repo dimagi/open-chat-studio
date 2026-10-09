@@ -1,5 +1,7 @@
+import json
 import logging
 from collections import defaultdict
+from datetime import timedelta
 
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db.models import Prefetch
@@ -115,8 +117,7 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
 
         try:
             api_client = get_langfuse_api_client(trace_provider.config)
-            langfuse_trace = api_client.trace.get(langfuse_trace_id)
-            observations = langfuse_trace.observations or []
+            observations = self._fetch_observations(api_client, langfuse_trace_id, trace)
             context["langfuse_available"] = True
             context["langfuse_error"] = False
             root_observations = self._sort_by_start_time([o for o in observations if not o.parent_observation_id])
@@ -143,6 +144,32 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
                 if info.get("trace_provider") == "langfuse":
                     return info.get("trace_id"), info.get("trace_url")
         return None, None
+
+    def _fetch_observations(self, api_client, langfuse_trace_id: str, trace: Trace) -> list:
+        # The v2 observations API requires a start time window; the margin allows for clock skew between OCS and
+        # Langfuse.
+        margin = timedelta(days=1)
+        observations = []
+        cursor = None
+        while True:
+            response = api_client.observations.get_many(
+                trace_id=langfuse_trace_id,
+                fields="core,basic,io,metrics",
+                from_start_time=trace.timestamp - margin,
+                to_start_time=trace.timestamp + timedelta(milliseconds=trace.duration) + margin,
+                limit=1000,
+                cursor=cursor,
+            )
+            observations.extend(
+                obs.model_copy(update={"input": _parse_json(obs.input), "output": _parse_json(obs.output)})
+                for obs in response.data
+            )
+            next_cursor = response.meta.cursor
+            if not next_cursor:
+                return observations
+            if next_cursor == cursor:
+                raise ValueError(f"Langfuse returned a repeated pagination cursor for trace {langfuse_trace_id}")
+            cursor = next_cursor
 
     def _build_child_map(self, observations) -> dict:
         child_map: dict = defaultdict(list)
@@ -174,3 +201,13 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
             if item["observation"].level == "ERROR":
                 return item["observation"].id
         return flattened_observations[0]["observation"].id if flattened_observations else None
+
+
+def _parse_json(value):
+    """Decode a v2 observation input/output, which the API returns as a raw JSON string."""
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except ValueError:
+        return value

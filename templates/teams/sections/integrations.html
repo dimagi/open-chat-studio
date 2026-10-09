@@ -1,0 +1,33 @@
+{% load i18n %}
+<section class="app-card" id="integrations">
+  <div class="flex justify-between items-start">
+    <div>
+      <h2 class="pg-subtitle font-bold">{% translate "Integrations" %}</h2>
+      <span class="text-neutral-500 section-subtitle">{% translate "Every external service this team connects to: models, speech, messaging, auth, and tracing." %}</span>
+    </div>
+    {% if integration_new_choices %}
+      <details class="dropdown dropdown-end" data-cy="btn-new-integration-dropdown">
+        <summary data-cy="btn-new-integration" class="btn btn-sm btn-primary whitespace-nowrap">
+          <i class="fa-solid fa-plus mr-1"></i>{% translate "Add integration" %}
+          <i class="fa-solid fa-caret-down ml-1"></i>
+        </summary>
+        <ul class="menu dropdown-content rounded-box bg-base-100 z-1 w-64 p-2 shadow-sm">
+          {% for group in integration_new_choices %}
+            <li>
+              <details {% if forloop.first %}open{% endif %}>
+                <summary><i class="fa-solid {{ group.icon_class }} w-4"></i>{{ group.category }}</summary>
+                <ul>
+                  {% for label, url in group.options %}
+                    <li><a href="{{ url }}">{{ label }}</a></li>
+                  {% endfor %}
+                </ul>
+              </details>
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+  </div>
+  <hr class="my-2">
+  <div id="integrations-table-container" hx-get="{{ integrations_table_url }}" hx-trigger="load"></div>
+</section>

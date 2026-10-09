@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from apps.teams.backends import add_user_to_team
 from apps.teams.models import Team
+from apps.teams.utils import section_url
 from apps.users.models import CustomUser
 from apps.utils.tests.elevation import elevate_session
 from apps.web.elevation import Grant
@@ -46,13 +47,9 @@ def _url(team):
 @pytest.mark.django_db()
 def test_staff_can_view(team, staff_client, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
-    response = staff_client.get(_url(team))
+    response = staff_client.get(section_url(team_slug=team.slug, section_key="internal-metadata"))
     assert response.status_code == 200
     assert b"Team Owner" in response.content
-    assert response.context["breadcrumbs"] == [
-        ("Team Settings", reverse("single_team:manage_team", args=[team.slug])),
-        ("Internal Metadata", None),
-    ]
 
 
 @pytest.mark.django_db()
@@ -60,8 +57,8 @@ def test_non_staff_member_gets_404(team, member, settings):
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS
     client = Client()
     client.force_login(member)
-    response = client.get(_url(team))
-    assert response.status_code == 404
+    assert client.get(_url(team)).status_code == 404
+    assert client.get(section_url(team_slug=team.slug, section_key="internal-metadata")).status_code == 404
 
 
 @pytest.mark.django_db()

@@ -1,11 +1,9 @@
 {% load i18n %}
 <div class="flex flex-row gap-2 items-center" id="chat-exports">
     <button id="chat-export-generate-btn"
+            type="button"
             class="btn btn-sm btn-outline btn-primary no-animation"
-            hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
-            hx-trigger="click"
-            hx-swap="outerHTML"
-            hx-target="#chat-exports"
+            onclick="document.getElementById('chat-export-columns-modal').showModal()"
             {% if task_id %}disabled{% endif %}>
         {% if task_id %}
             <span class="loading loading-bars loading-xs"></span> {% translate "Generating" %}
@@ -13,6 +11,46 @@
             <i class="fa-solid fa-file-export"></i> {% translate "Generate Chat Export" %}
         {% endif %}
     </button>
+
+    <dialog id="chat-export-columns-modal" class="modal">
+        <form class="modal-box"
+              hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
+              hx-swap="outerHTML"
+              hx-target="#chat-exports"
+              hx-disabled-elt="find button[type=submit]">
+            <h3 class="font-bold text-lg">{% translate "Select export columns" %}</h3>
+            <div class="flex gap-2 mt-2">
+                <button type="button" class="btn btn-xs btn-outline"
+                        onclick="this.closest('form').querySelectorAll('input[name=columns][type=checkbox]').forEach(c => c.checked = true)">
+                    {% translate "Select all" %}
+                </button>
+                <button type="button" class="btn btn-xs btn-outline"
+                        onclick="this.closest('form').querySelectorAll('input[name=columns][type=checkbox]').forEach(c => c.checked = false)">
+                    {% translate "Clear all" %}
+                </button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-3">
+                {% for column in export_columns %}
+                    <label class="label cursor-pointer justify-start gap-2">
+                        {% if column.required %}
+                            <input type="hidden" name="columns" value="{{ column.key }}">
+                            <input type="checkbox" class="checkbox checkbox-sm" checked disabled title="{% translate "Always included" %}">
+                        {% else %}
+                            <input type="checkbox" class="checkbox checkbox-sm" name="columns" value="{{ column.key }}" checked>
+                        {% endif %}
+                        <span class="label-text">{{ column.label }}</span>
+                    </label>
+                {% endfor %}
+            </div>
+            <div class="modal-action">
+                <button type="button" class="btn btn-sm" onclick="this.closest('dialog').close()">{% translate "Cancel" %}</button>
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fa-solid fa-file-export"></i> {% translate "Generate" %}
+                </button>
+            </div>
+        </form>
+        <form method="dialog" class="modal-backdrop"><button>{% translate "close" %}</button></form>
+    </dialog>
 
     {% if task_id %}
         <div id="chat-export-progress" class="flex items-center gap-2">

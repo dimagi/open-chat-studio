@@ -313,6 +313,7 @@ class TestLLMResponseWithPrompt(FullPayload):
             "collection_index_ids": [support_kb.id, billing_kb.id],
             "max_results": 5,
             "generate_citations": False,
+            "metadata_filters": [{"key": "district", "value": "Khayelitsha"}],
             "tools": ["update-user-data", "one-off-reminder", "calculator"],
             "custom_actions": [f"{llm_node_resources.custom_action.id}:weather_get"],
             "built_in_tools": ["web-search", "code-execution"],
