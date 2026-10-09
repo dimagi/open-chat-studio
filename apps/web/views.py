@@ -11,7 +11,7 @@ from django.shortcuts import redirect
 from django.views.decorators.cache import never_cache
 from health_check.views import HealthCheckView
 
-from apps.teams.decorators import check_superuser_team_access, login_and_team_required
+from apps.teams.decorators import TeamAccessDenied, check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
 from apps.web.elevation import (
@@ -20,6 +20,7 @@ from apps.web.elevation import (
     Grant,
     GrantKind,
     InvalidGrant,
+    acquire_redirect,
     release,
     safe_redirect_url,
     start_elevation,
@@ -117,16 +118,26 @@ def global_search(request):
 
     for candidate in get_searchable_models(model):
         if result := candidate.search(query):
-            team = result.team
-            if not is_member(request.user, team):
-                check_superuser_team_access(request, team.slug)
-
-            if not request.user.has_perm(candidate.permission):
-                raise Http404
-
-            return HttpResponseRedirect(result.get_absolute_url())
+            return _search_result_redirect(request, candidate, result)
 
     raise Http404
+
+
+def _search_result_redirect(request, candidate, result):
+    """Redirect to `result`, or to team elevation first for a superuser who is not a member."""
+    team = result.team
+    if not is_member(request.user, team):
+        try:
+            check_superuser_team_access(request, team.slug)
+        except TeamAccessDenied:
+            if not request.user.is_superuser:
+                raise
+            return acquire_redirect(request, Grant.team(team.slug))
+
+    if not request.user.has_perm(candidate.permission):
+        raise Http404
+
+    return HttpResponseRedirect(result.get_absolute_url())
 
 
 @never_cache

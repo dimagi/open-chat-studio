@@ -6,6 +6,7 @@ from django.contrib.sessions.backends.signed_cookies import SessionStore
 from django.http import Http404
 from django.utils import timezone
 
+from apps.utils.factories.team import TeamFactory
 from apps.web.elevation import (
     ENFORCES_ELEVATION_ATTR,
     MAX_CONCURRENT_ELEVATIONS,
@@ -15,6 +16,7 @@ from apps.web.elevation import (
     InvalidGrant,
     TooManyElevations,
     active_elevations,
+    grant_labels,
     requires_elevation,
 )
 
@@ -137,6 +139,7 @@ def test_expiry_prunes_only_the_expired_grant(request_with_session):
     assert set(elevation.active()) == {"team:team2"}
 
 
+@pytest.mark.django_db()
 def test_active_returns_the_grant_and_its_expiry(request_with_session):
     Elevation(request_with_session).add(Grant.team("team1"))
 
@@ -145,6 +148,22 @@ def test_active_returns_the_grant_and_its_expiry(request_with_session):
     assert set(active) == {"team:team1"}
     assert active["team:team1"].grant == Grant.team("team1")
     assert active["team:team1"].expires_at > datetime.now()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("grant", "expected"),
+    [
+        pytest.param(Grant.team("acme"), 'Team "Acme Health" (acme)', id="team"),
+        pytest.param(Grant.team("deleted"), 'Team "deleted"', id="deleted-team"),
+        pytest.param(Grant.DJANGO_ADMIN, "Django admin", id="django-admin"),
+    ],
+)
+def test_grant_labels_name_the_team_and_its_slug(grant, expected):
+    TeamFactory.create(name="Acme Health", slug="acme")
+    TeamFactory.create(name="Acme Health", slug="acme-test")
+
+    assert grant_labels([grant]) == {grant: expected}
 
 
 def test_max_number_of_concurrent_elevations(request_with_session):
@@ -168,6 +187,7 @@ def test_active_elevations_handles_missing_user_attribute():
         pytest.param(lambda expire: {"team:team1": expire}, id="unexpired-entry"),
     ],
 )
+@pytest.mark.django_db()
 def test_reading_access_leaves_an_unchanged_session_alone(request_with_real_session, build_stored):
     """`project_meta` runs this on every rendered page, so a write here is a write per request."""
     request = request_with_real_session
@@ -181,6 +201,7 @@ def test_reading_access_leaves_an_unchanged_session_alone(request_with_real_sess
     assert request.session.modified is False
 
 
+@pytest.mark.django_db()
 def test_reading_access_writes_once_when_pruning(request_with_real_session):
     request = request_with_real_session
     elevation = Elevation(request)

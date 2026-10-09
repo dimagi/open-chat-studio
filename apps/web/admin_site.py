@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
-from apps.web.elevation import Grant, elevation_redirect
+from apps.web.elevation import ENFORCES_ELEVATION_ATTR, Grant, elevation_redirect
 
 
 class OcsAdminSite(admin.AdminSite):
@@ -47,4 +47,6 @@ class OcsAdminSite(admin.AdminSite):
         # function for any view, without having to repeat 'csrf_protect'.
         if not getattr(view, "csrf_exempt", False):
             inner = csrf_protect(inner)
-        return update_wrapper(inner, view)
+        wrapped = update_wrapper(inner, view)
+        setattr(wrapped, ENFORCES_ELEVATION_ATTR, True)
+        return wrapped
