@@ -27,6 +27,10 @@ Compare results from the same machine only. Check the IQR before trusting a smal
 
 DB query-count ceilings (`apps/benchmarks/test_query_counts.py`) are ordinary tests and run with the normal suite. They do not depend on hardware, so any increase fails. Raise a ceiling in the same PR that legitimately adds queries.
 
+## Nightly runs
+
+The benchmarks run nightly against `main` on a dedicated EC2 runner, and can be run on demand against any branch. The runner, workflow and result history live in the private repository [`dimagi-internal/ocs-benchmarks`](https://github.com/dimagi-internal/ocs-benchmarks), so pull requests from forks cannot run code on the runner. Timings from the runner are only comparable with other runs on the runner.
+
 ## Adding a scenario
 
 Build data in `apps/benchmarks/scenarios.py` (seeded, so every run sees the same rows), then add a timing test under `-m bench` and, if it is a pipeline scenario, a query-count ceiling.
@@ -35,4 +39,4 @@ Build data in `apps/benchmarks/scenarios.py` (seeded, so every run sees the same
 
 H3 never compresses its history, so every round sees the same 300 messages; compression is H4.
 
-The scenario IDs implemented so far are N1, N5, N6, P1, P2, P5 and H1 to H3. The remaining scenarios, the channel and Locust layer, the dedicated runner and nightly tracking from the benchmark plan are still to do.
+The scenario IDs implemented so far are N1, N5, N6, P1, P2, P5 and H1 to H3. The remaining scenarios and the channel and Locust layer from the benchmark plan are still to do.
