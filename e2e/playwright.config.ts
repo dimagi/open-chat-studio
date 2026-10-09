@@ -6,6 +6,13 @@ import { E2E_BASE_URL, E2E_SERVER_PORT, E2E_START_SERVER } from "./config";
 
 const repoRoot = path.resolve(__dirname, "..");
 
+// Headed runs are for people watching, so they run in slow motion. Playwright applies `--headed`
+// after loading this file, so record it in the environment, which the test workers inherit.
+if (process.argv.includes("--headed")) {
+  process.env.E2E_HEADED = "1";
+}
+const slowMo = Number(process.env.E2E_SLOW_MO ?? (process.env.E2E_HEADED ? 500 : 0));
+
 export default defineConfig({
   testDir: "tests",
   globalSetup: "./global-setup.ts",
@@ -19,6 +26,7 @@ export default defineConfig({
     baseURL: E2E_BASE_URL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    launchOptions: { slowMo },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: E2E_START_SERVER
