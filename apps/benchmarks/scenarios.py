@@ -25,6 +25,10 @@ HISTORY_NEW = 0
 HISTORY_TYPICAL = 20
 HISTORY_LONG = 300
 
+# Node params that load the session history without ever compressing it. Compression writes a summary
+# onto the chat, which shortens the history seen by every later invocation of the same session.
+GLOBAL_HISTORY = {"history_type": "global", "user_max_token_limit": 1_000_000}
+
 _WORDS = ["lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do"]
 
 
@@ -93,6 +97,11 @@ def deep_chain_nodes(bench: Bench, length: int = 25) -> list[dict]:
         for i in range(length)
     ]
     return [start_node(), *middle, end_node()]
+
+
+def summaries_written(bench: Bench) -> int:
+    """Messages that carry a compression summary. Non-zero means the history is no longer the seeded size."""
+    return bench.session.chat.messages.filter(summary__isnull=False).exclude(summary="").count()
 
 
 def build_runnable(bench: Bench, nodes: list[dict]):

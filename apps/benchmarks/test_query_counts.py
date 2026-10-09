@@ -13,16 +13,16 @@ pytestmark = pytest.mark.django_db()
 
 
 @pytest.mark.parametrize(
-    ("history_size", "history_type", "ceiling"),
+    ("history_size", "node_params", "ceiling"),
     [
-        pytest.param(scenarios.HISTORY_NEW, None, 4, id="P1-H1-new-session"),
-        pytest.param(scenarios.HISTORY_TYPICAL, "global", 4, id="P1-H2-typical-session"),
-        pytest.param(scenarios.HISTORY_LONG, "global", 6, id="P1-H3-long-session"),
+        pytest.param(scenarios.HISTORY_NEW, {}, 4, id="P1-H1-new-session"),
+        pytest.param(scenarios.HISTORY_TYPICAL, scenarios.GLOBAL_HISTORY, 4, id="P1-H2-typical-session"),
+        pytest.param(scenarios.HISTORY_LONG, scenarios.GLOBAL_HISTORY, 4, id="P1-H3-long-session"),
     ],
 )
-def test_floor_query_count(zero_latency_llm, history_size, history_type, ceiling):
+def test_floor_query_count(zero_latency_llm, history_size, node_params, ceiling):
     bench = scenarios.make_bench(history_size)
-    runnable = scenarios.build_runnable(bench, scenarios.single_llm_nodes(bench, history_type=history_type))
+    runnable = scenarios.build_runnable(bench, scenarios.single_llm_nodes(bench, **node_params))
     assert count_queries(runnable, bench) <= ceiling
 
 

@@ -33,4 +33,6 @@ Build data in `apps/benchmarks/scenarios.py` (seeded, so every run sees the same
 
 ## Not yet built
 
+H3 never compresses its history, so every round sees the same 300 messages; compression is H4.
+
 The scenario IDs implemented so far are N1, N5, N6, P1, P2, P5 and H1 to H3. The remaining scenarios, the channel and Locust layer, the dedicated runner and nightly tracking from the benchmark plan are still to do.

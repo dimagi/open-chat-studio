@@ -12,17 +12,18 @@ pytestmark = [pytest.mark.bench, pytest.mark.django_db()]
 
 
 @pytest.mark.parametrize(
-    ("history_size", "history_type"),
+    ("history_size", "node_params"),
     [
-        pytest.param(scenarios.HISTORY_NEW, None, id="P1-H1-new-session"),
-        pytest.param(scenarios.HISTORY_TYPICAL, "global", id="P1-H2-typical-session"),
-        pytest.param(scenarios.HISTORY_LONG, "global", id="P1-H3-long-session"),
+        pytest.param(scenarios.HISTORY_NEW, {}, id="P1-H1-new-session"),
+        pytest.param(scenarios.HISTORY_TYPICAL, scenarios.GLOBAL_HISTORY, id="P1-H2-typical-session"),
+        pytest.param(scenarios.HISTORY_LONG, scenarios.GLOBAL_HISTORY, id="P1-H3-long-session"),
     ],
 )
-def test_floor_by_history(benchmark, zero_latency_llm, history_size, history_type):
+def test_floor_by_history(benchmark, zero_latency_llm, history_size, node_params):
     bench = scenarios.make_bench(history_size)
-    runnable = scenarios.build_runnable(bench, scenarios.single_llm_nodes(bench, history_type=history_type))
+    runnable = scenarios.build_runnable(bench, scenarios.single_llm_nodes(bench, **node_params))
     benchmark(invoke_once, runnable, bench)
+    assert scenarios.summaries_written(bench) == 0, "history was compressed, so later rounds measured less history"
 
 
 def test_p2_linear_chain(benchmark, zero_latency_llm):
