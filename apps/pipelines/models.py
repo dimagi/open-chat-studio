@@ -746,7 +746,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archiving a node also archives the versioned resources its params reference. The node's
         versions will be archived when the pipeline they belong to is archived.
@@ -754,9 +754,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         super().archive()
         if not self.is_a_version:
             # We don't want to archive related objects for working versions, since they can be used in other pipelines
-            return
+            return True
 
         self._archive_related_params()
+        return True
 
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name

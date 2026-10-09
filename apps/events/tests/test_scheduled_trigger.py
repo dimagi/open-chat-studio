@@ -185,7 +185,7 @@ class TestScheduledTriggerCelery:
         past_date = (timezone.now() + timedelta(days=1)).date()
         past_time = dt_time(0, 0)
         archived = _trigger(experiment=published, trigger_date=past_date, trigger_time=past_time, timezone="UTC")
-        archived.archive()
+        assert archived.archive() is True
 
         with travel(timezone.now() + timedelta(days=1, hours=2), tick=False):
             poll_due_scheduled_triggers()

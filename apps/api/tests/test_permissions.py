@@ -23,6 +23,7 @@ from apps.api.v2.discovery.views import (
     PipelineNodeView,
     PipelineOptionsView,
 )
+from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.views import ChatbotViewSet, MeView
 from apps.api.views.channels import TriggerBotMessageView
@@ -40,6 +41,7 @@ API_KEY_VIEWS = [
     ChatbotOptionsView,
     ChatbotViewSet,
     ChatCompletionsView,
+    ConsentFormViewSet,
     ExperimentSessionViewSet,
     ExperimentViewSet,
     FileContentView,
@@ -49,6 +51,7 @@ API_KEY_VIEWS = [
     PipelineNodesView,
     PipelineNodeView,
     PipelineOptionsView,
+    SourceMaterialViewSet,
     TriggerBotMessageView,
     UsageView,
 ]

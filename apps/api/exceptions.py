@@ -1,4 +1,4 @@
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import APIException, NotAuthenticated
 
 
 class EmbeddedWidgetAuthError(Exception):
@@ -24,3 +24,11 @@ class ChatApiAccessDenied(NotAuthenticated):
     """
 
     default_detail = {"error": "Authentication required to chat with this chatbot", "code": "chat_access_denied"}
+
+
+class ChannelCreationError(APIException):
+    """Channel-creation failure carrying the status code mapped from the upstream error."""
+
+    def __init__(self, detail, status_code):
+        self.status_code = status_code
+        super().__init__(detail)

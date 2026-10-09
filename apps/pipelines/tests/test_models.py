@@ -194,10 +194,10 @@ class TestArchivingNodes:
         node = NodeFactory.create(pipeline=pipeline)
         node_version = NodeFactory.create(pipeline=pipeline, working_version=node)
 
-        node.archive()
+        assert node.archive() is True
         archive_related_params.assert_not_called()
 
-        node_version.archive()
+        assert node_version.archive() is True
         archive_related_params.assert_called()
 
     def test_archive_related_objects(self):

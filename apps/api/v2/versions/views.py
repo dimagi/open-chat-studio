@@ -16,7 +16,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
+from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.lookups import get_working_chatbot
 from apps.api.v2.write.base import ChatbotCompositionPermission
 from apps.experiments.models import Experiment
@@ -25,6 +25,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_applicati
 from apps.pipelines.build_state import pipeline_build_state
 
 from .exceptions import NothingToPublish, PipelineIsNotValid, VersionIsDefault, VersionOperationInProgress
+from .permissions import ChatbotVersionDeletePermission
 from .serializers import (
     PublishVersionSerializer,
     VersionArchivedSerializer,
@@ -216,17 +217,6 @@ class ChatbotVersionStatusView(APIView):
         # has no publish of its own to follow.
         enforce_application_chatbot_write(request, chatbot)
         return Response(_version_status(chatbot))
-
-
-class ChatbotVersionDeletePermission(RequiresTeamPermission):
-    """Archiving a version really is a delete, so this one asks for ``delete_experiment``.
-
-    The other routes under ``/chatbots/{id}/`` deliberately do not: removing a pipeline node is a
-    change to the chatbot rather than a deletion of one. A version is an ``Experiment`` row of its
-    own, and this hides it.
-    """
-
-    required_permissions = ["experiments.delete_experiment"]
 
 
 class ChatbotVersionView(APIView):
