@@ -179,16 +179,6 @@ class TestCollection:
         assert collection.is_archived
         delete_collection_task.assert_called_once()
 
-    @mock.patch("apps.documents.tasks.delete_document_source_task.delay")
-    def test_archive_document_source(self, delete_document_source_task):
-        document_source = DocumentSourceFactory.create()
-
-        assert document_source.archive() is True
-
-        document_source.refresh_from_db()
-        assert document_source.is_archived
-        delete_document_source_task.assert_called_once_with(document_source.id)
-
     def test_remove_remote_index(self, remote_index_manager_mock):
         """Test that the index can be removed"""
         collection = CollectionFactory.create(
@@ -237,6 +227,19 @@ class TestCollection:
         else:
             create_remote_index.assert_not_called()
             assert collection.openai_vector_store_id == openai_id
+
+
+@pytest.mark.django_db()
+class TestDocumentSource:
+    @mock.patch("apps.documents.tasks.delete_document_source_task.delay")
+    def test_archive_document_source(self, delete_document_source_task):
+        document_source = DocumentSourceFactory.create()
+
+        assert document_source.archive() is True
+
+        document_source.refresh_from_db()
+        assert document_source.is_archived
+        delete_document_source_task.assert_called_once_with(document_source.id)
 
 
 class TestJSONCollectionSourceConfig:
