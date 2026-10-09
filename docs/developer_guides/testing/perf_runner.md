@@ -20,6 +20,8 @@ Postgres and Redis run on the same machine so network latency to managed service
 
 The instance type, AMI and the resolved digests of the Postgres and Redis images are recorded in `/opt/perf-runner/hardware.env` and must be stored with every result. The compose file uses mutable tags (`pgvector/pgvector:pg16`, `redis:7`); to freeze them, replace the tags in `/opt/perf-runner/docker-compose.yml` with the recorded `repo@sha256:...` digests after the first boot. Changing either starts a new baseline.
 
+After the first reboot, confirm the isolation took effect: `cat /proc/cmdline` must contain `isolcpus=2,3`.
+
 Turbo boost is disabled at boot only if the guest can control it (`/sys/devices/system/cpu/intel_pstate/no_turbo` is writable). Virtualized `c7i` sizes may not expose it. Check after the first boot; if it is missing, measure run-to-run variance anyway (target under 3% on medians) and consider a larger size or a `.metal` instance if variance is too high.
 
 ## Provision

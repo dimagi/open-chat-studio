@@ -36,7 +36,7 @@ instance_id="$(aws ec2 run-instances \
     --subnet-id "$SUBNET_ID" \
     --security-group-ids "$SECURITY_GROUP_ID" \
     --key-name "$KEY_NAME" \
-    "${profile_args[@]}" \
+    ${profile_args[@]+"${profile_args[@]}"} \
     --instance-initiated-shutdown-behavior stop \
     --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=${VOLUME_GB},VolumeType=gp3,DeleteOnTermination=true}" \
     --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \

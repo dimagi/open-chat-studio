@@ -18,8 +18,12 @@ systemctl enable --now docker
 useradd --create-home --shell /bin/bash "$RUNNER_USER" || true
 usermod -aG docker "$RUNNER_USER"
 
-# Reserve the benchmark cores from the scheduler and timer ticks.
-sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 isolcpus=${ISOLATED_CPUS} nohz_full=${ISOLATED_CPUS} rcu_nocbs=${ISOLATED_CPUS}\"/" /etc/default/grub
+# Reserve the benchmark cores from the scheduler and timer ticks. A drop-in is
+# used because cloud images reassign GRUB_CMDLINE_LINUX_DEFAULT in
+# /etc/default/grub.d/50-cloudimg-settings.cfg, which runs after /etc/default/grub.
+cat > /etc/default/grub.d/99-perf-runner.cfg <<GRUBCFG
+GRUB_CMDLINE_LINUX_DEFAULT="\$GRUB_CMDLINE_LINUX_DEFAULT isolcpus=${ISOLATED_CPUS} nohz_full=${ISOLATED_CPUS} rcu_nocbs=${ISOLATED_CPUS}"
+GRUBCFG
 update-grub
 
 # Fixed CPU frequency behaviour at every boot. The turbo and governor files are
