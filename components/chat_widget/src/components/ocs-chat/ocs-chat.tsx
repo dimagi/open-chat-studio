@@ -17,6 +17,7 @@ import { TranslationStrings, TranslationManager, defaultTranslations } from '../
 import {
   ChatSessionService,
   ChatMessage,
+  ChatAttachment,
   MessagePollingHandle,
   TaskPollingHandle,
   SessionAccessError,
@@ -315,6 +316,7 @@ export class OcsChat {
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  @State() downloadingAttachmentUrls: string[] = [];
   /** Latest consent block from start, poll or a refusal. */
   @State() consent?: ChatConsent;
   /** The message held while the consent panel is up; released by acceptConsent(). */
@@ -500,16 +502,30 @@ export class OcsChat {
   }
 
   private addErrorMessage(errorText: string): void {
-    const errorMessage: ChatMessage = {
+    this.addNotice(`**Error:** ${errorText}\nPlease try again.`);
+  }
+
+  /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
+  private addNotice(content: string): void {
+    const notice: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
-      content: `**Error:** ${errorText}\nPlease try again.`,
+      content,
       attachments: [],
+      local: true,
     };
-
-    this.messages = [...this.messages, errorMessage];
+    this.messages = [...this.messages, notice];
     this.saveSessionToStorage();
     this.scrollToBottom();
+  }
+
+  private lastServerMessageTimestamp(): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (!this.messages[i].local) {
+        return this.messages[i].created_at;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -565,15 +581,43 @@ export class OcsChat {
     if (last?.role === 'system' && last.content === content) {
       return;
     }
-    const notice: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content,
-      attachments: [],
-    };
-    this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
-    this.scrollToBottom();
+    this.addNotice(content);
+  }
+
+  /**
+   * The download endpoint needs the session's headers, so the file is fetched and
+   * saved from a blob URL rather than linked directly. A failure is reported in the
+   * chat but leaves the session alone.
+   */
+  private async downloadAttachment(attachment: ChatAttachment): Promise<void> {
+    const url = attachment.download_url;
+    if (!url || this.downloadingAttachmentUrls.includes(url)) {
+      return;
+    }
+    if (!this.activeSessionId) {
+      this.addErrorMessage(this.translationManager.get('error.download'));
+      return;
+    }
+
+    this.downloadingAttachmentUrls = [...this.downloadingAttachmentUrls, url];
+    try {
+      const blob = await this.getChatService().downloadAttachment(this.activeSessionId, url);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = attachment.name;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Revoking in the same task can cancel the download in some browsers.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      console.error('[open-chat-studio-widget] attachment download failed', error);
+      this.addErrorMessage(this.translationManager.get('error.download'));
+    } finally {
+      this.downloadingAttachmentUrls = this.downloadingAttachmentUrls.filter(pending => pending !== url);
+    }
   }
 
   private handleError(errorText: string): void {
@@ -1250,15 +1294,7 @@ export class OcsChat {
         this.typingProgressMessage = message;
       }),
       onTimeout: this.forCurrentSession(() => {
-        const timeoutMessage: ChatMessage = {
-          created_at: new Date().toISOString(),
-          role: 'system',
-          content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-          attachments: [],
-        };
-        this.messages = [...this.messages, timeoutMessage];
-        this.saveSessionToStorage();
-        this.scrollToBottom();
+        this.addNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
         this.isTyping = false;
         this.typingProgressMessage = '';
         this.currentPollTaskId = '';
@@ -1289,7 +1325,7 @@ export class OcsChat {
     }
 
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
-      getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
+      getSince: () => this.lastServerMessageTimestamp(),
       onMessages: this.forCurrentSession(messages => {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
@@ -2314,6 +2350,37 @@ export class OcsChat {
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
   }
 
+  private renderMessageAttachments(message: ChatMessage) {
+    if (!message.attachments?.length) {
+      return null;
+    }
+    return (
+      <div class="message-attachments">
+        {message.attachments.map((attachment, attachmentIndex) => (
+          <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
+            <span class="message-attachment-icon">
+              <PaperClipIcon />
+            </span>
+            {attachment.download_url ? (
+              <button
+                type="button"
+                class="message-attachment-link"
+                title={this.translationManager.get('attach.download')}
+                aria-label={`${this.translationManager.get('attach.download')}: ${attachment.name}`}
+                disabled={this.downloadingAttachmentUrls.includes(attachment.download_url)}
+                onClick={() => this.downloadAttachment(attachment)}
+              >
+                {attachment.name}
+              </button>
+            ) : (
+              <span class="message-attachment-name">{attachment.name}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -2429,18 +2496,7 @@ export class OcsChat {
                         }`}
                       >
                         {this.renderMessageContent(message)}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div class="message-attachments">
-                            {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
-                                <span class="message-attachment-icon">
-                                  <PaperClipIcon />
-                                </span>
-                                <span class="message-attachment-name">{attachment.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {this.renderMessageAttachments(message)}
                         <div class="message-timestamp">{this.formatTime(message.created_at)}</div>
                       </div>
                     </div>

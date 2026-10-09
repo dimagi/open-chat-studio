@@ -442,6 +442,59 @@ describe('ChatSessionService session tokens', () => {
   });
 });
 
+describe('ChatSessionService.downloadAttachment', () => {
+  const downloadUrl = 'https://example.com/api/chat/s1/files/7/content/';
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function makeService() {
+    return new ChatSessionService({ apiBaseUrl: 'https://example.com', embedKey: 'embed-1', widgetVersion: '1.0.0' });
+  }
+
+  it('fetches the download URL with the session headers and returns the body', async () => {
+    const service = makeService();
+    service.setSessionToken('tok-123');
+    const blob = { size: 3 } as Blob;
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(blob) } as unknown as Response);
+
+    await expect(service.downloadAttachment('s1', downloadUrl)).resolves.toBe(blob);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(downloadUrl);
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers['X-Session-Token']).toBe('tok-123');
+    expect(headers['X-Embed-Key']).toBe('embed-1');
+  });
+
+  it('rejects when the server refuses the file', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: () => Promise.resolve({ detail: 'Not found.' }),
+    } as unknown as Response);
+
+    await expect(service.downloadAttachment('s1', downloadUrl)).rejects.toThrow('Failed to download file: Not Found');
+  });
+
+  it.each([
+    ['another origin', 'https://attacker.example/api/chat/s1/files/7/content/'],
+    ['another scheme', 'http://example.com/api/chat/s1/files/7/content/'],
+    ['a relative URL', '/api/chat/s1/files/7/content/'],
+  ])('refuses a URL on %s without sending the session headers', async (_name, url) => {
+    const service = makeService();
+    service.setSessionToken('tok-123');
+    const fetchMock = jest.spyOn(global, 'fetch');
+
+    await expect(service.downloadAttachment('s1', url)).rejects.toThrow('Failed to download file: URL is not on the API origin');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('ChatSessionService consent', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -856,6 +909,7 @@ describe('ChatSessionService session token renewal', () => {
       statusText: String(status),
       headers: { get: () => null },
       json: () => Promise.resolve(body),
+      blob: () => Promise.resolve(body),
     } as unknown as Response;
   }
 
@@ -953,6 +1007,11 @@ describe('ChatSessionService session token renewal', () => {
     ['recordConsent', (svc: ChatSessionService) => svc.recordConsent('s-1', 3), 'https://example.com/api/chat/s-1/consent/'],
     ['pollTaskOnce', (svc: ChatSessionService) => svc.pollTaskOnce('s-1', 't-1'), 'https://example.com/api/chat/s-1/t-1/poll/'],
     ['fetchMessages', (svc: ChatSessionService) => svc.fetchMessages('s-1'), 'https://example.com/api/chat/s-1/poll/'],
+    [
+      'downloadAttachment',
+      (svc: ChatSessionService) => svc.downloadAttachment('s-1', 'https://example.com/api/chat/s-1/files/7/content/'),
+      'https://example.com/api/chat/s-1/files/7/content/',
+    ],
   ])('%s renews and retries once when the server reports session_expired', async (_name, call, url) => {
     expiredRefusals = 1;
 

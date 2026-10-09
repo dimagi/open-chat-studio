@@ -65,6 +65,8 @@ export interface ChatAttachment {
   name: string;
   content_type: string;
   size: number;
+  /** Session-scoped download endpoint. Absent on messages from older backends and on the optimistic user message. */
+  download_url?: string;
 }
 
 export interface ChatMessage {
@@ -73,6 +75,8 @@ export interface ChatMessage {
   content: string;
   metadata?: unknown;
   attachments?: ChatAttachment[];
+  /** Set on notices the widget adds itself; the server never sends it. */
+  local?: boolean;
 }
 
 /**
@@ -367,6 +371,15 @@ export class ChatSessionService {
     return response.json() as Promise<ChatTaskPollResponse>;
   }
 
+  /** Fetch an attachment from its `download_url` with the session's credentials, which a plain link cannot send. */
+  async downloadAttachment(sessionId: string, downloadUrl: string): Promise<Blob> {
+    if (!this.isApiUrl(downloadUrl)) {
+      throw new Error('Failed to download file: URL is not on the API origin');
+    }
+    const response = await this.sessionRequest(sessionId, downloadUrl, () => ({ headers: this.getCommonHeaders() }), 'Failed to download file');
+    return response.blob();
+  }
+
   pollTask(sessionId: string, taskId: string, callbacks: TaskPollingCallbacks): TaskPollingHandle {
     let attempts = 0;
     let cancelled = false;
@@ -556,6 +569,15 @@ export class ChatSessionService {
     }
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  /** Session credentials must only go to the API's own origin. */
+  private isApiUrl(url: string): boolean {
+    try {
+      return new URL(url).origin === new URL(this.apiBaseUrl).origin;
+    } catch {
+      return false;
+    }
   }
 
   private parseSuccessorUrl(link: string | null): string | undefined {
