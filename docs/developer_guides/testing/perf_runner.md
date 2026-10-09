@@ -56,6 +56,15 @@ AMI_ID=ami-0fa5967347d08d2df SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... \
 
 `scripts/perf_runner/bootstrap.sh` runs as user data on first boot, configures the host and reboots once so the CPU isolation takes effect.
 
+After the first boot, read the whole volume once. A volume restored from a snapshot fetches each block on first read, which made medians fall by up to 27% over successive runs until it was done:
+
+```shell
+sudo apt-get install -y fio
+sudo fio --filename=/dev/nvme0n1 --rw=read --bs=1M --iodepth=32 --ioengine=libaio --direct=1 --name=volume-initialize
+```
+
+This takes about 14 minutes for 100 GB at the gp3 baseline throughput.
+
 ## Register the runner
 
 The runner is registered on the private repository `dimagi-internal/ocs-benchmarks`, not on `open-chat-studio`. On a public repository, a pull request from a fork can add a workflow that targets the self-hosted runner and run arbitrary code on it ([GitHub docs](https://docs.github.com/en/actions/concepts/runners/self-hosted-runners#self-hosted-runner-security-with-public-repositories)). Workflows in `ocs-benchmarks` check out `open-chat-studio` and run the benchmarks.
