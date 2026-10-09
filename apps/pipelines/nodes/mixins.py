@@ -419,14 +419,23 @@ class ExtractStructuredDataNodeMixin:
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         return new_data
 
+    def _get_tiktoken_encoding_name(self, model_name: str) -> str:
+        """Return a tiktoken encoding name for the given model, falling back to 'gpt2'."""
+        try:
+            return tiktoken.encoding_for_model(model_name).name
+        except KeyError:
+            return "gpt2"
+
     def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict) -> int:
-        llm = super().get_chat_model()
+        llm_provider_model = self.repo.get_llm_provider_model(self.llm_provider_model_id)
+        encoding_name = self._get_tiktoken_encoding_name(llm_provider_model.name)
+        encoding = tiktoken.get_encoding(encoding_name)
         prompt_chain = self._prompt_chain(reference_data)
         # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
         # is what we want.
         output = prompt_chain.invoke(input="")
-        json_schema_tokens = llm.get_num_tokens(json.dumps(json_schema))
-        return llm.get_num_tokens(output.text) + json_schema_tokens
+        json_schema_tokens = len(encoding.encode(json.dumps(json_schema)))
+        return len(encoding.encode(output.text)) + json_schema_tokens
 
     def chunk_messages(self, input: str, prompt_token_count: int) -> list[str]:
         """Chunk messages using a splitter that considers the token count.
@@ -445,12 +454,7 @@ class ExtractStructuredDataNodeMixin:
         # TODO: tracing
         # self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
-        try:
-            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
-            encoding_name = encoding.name
-        except KeyError:
-            # The same encoder we use for llm.get_num_tokens_from_messages
-            encoding_name = "gpt2"
+        encoding_name = self._get_tiktoken_encoding_name(llm_provider_model.name)
 
         from langchain_text_splitters import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             RecursiveCharacterTextSplitter,
