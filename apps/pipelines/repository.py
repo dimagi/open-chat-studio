@@ -12,6 +12,7 @@ from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.utils.fields import as_int
 
 if TYPE_CHECKING:
     from io import BytesIO
@@ -25,25 +26,20 @@ class RepositoryLookupError(Exception):
     """Raised when a repository lookup finds no matching record."""
 
 
-# ContextVar holding a {id: LlmProviderModel} dict pre-fetched during pipeline graph
-# construction.  Only populated within a `prefetch_llm_provider_models` block; empty
-# outside one so the fallback DB path is always safe.
+# {id: LlmProviderModel} rows fetched by an enclosing `prefetch_llm_provider_models` block.
 _llm_model_prefetch: ContextVar[dict[int, LlmProviderModel] | None] = ContextVar("_llm_model_prefetch", default=None)
 
 
 @contextmanager
-def prefetch_llm_provider_models(ids: list[int]):
-    """Bulk-fetch LlmProviderModel rows and expose them to validators via ContextVar.
+def prefetch_llm_provider_models(ids: list[int | str]):
+    """Fetch the given LlmProviderModel rows in one query and serve them to `get_prefetched_llm_provider_model`.
 
-    Use this as a context manager around pipeline graph construction to prevent the
-    N+1 query that would otherwise occur when each LLM-backed node fetches its own
-    model record during Pydantic validation.
+    Wrap pipeline validation or graph construction in this so each LLM node's validators don't query
+    for their model one at a time. Nested blocks only fetch the ids the outer block lacks.
     """
-    unique_ids = [i for i in set(ids) if i is not None]
-    if unique_ids:
-        models = LlmProviderModel.objects.in_bulk(unique_ids)
-    else:
-        models = {}
+    models = dict(_llm_model_prefetch.get() or {})
+    if missing_ids := {model_id for model_id in map(as_int, ids) if model_id is not None} - models.keys():
+        models.update(LlmProviderModel.objects.in_bulk(missing_ids))
     token = _llm_model_prefetch.set(models)
     try:
         yield
@@ -51,13 +47,9 @@ def prefetch_llm_provider_models(ids: list[int]):
         _llm_model_prefetch.reset(token)
 
 
-def get_prefetched_llm_provider_model(model_id: int) -> LlmProviderModel | None:
-    """Return the pre-fetched LlmProviderModel for *model_id*, or None if not cached.
-
-    Validators should call this before falling back to a DB query so that a surrounding
-    `prefetch_llm_provider_models` block eliminates per-node round-trips.
-    """
-    return (_llm_model_prefetch.get() or {}).get(model_id)
+def get_prefetched_llm_provider_model(model_id: int | str) -> LlmProviderModel | None:
+    """The LlmProviderModel fetched by an enclosing `prefetch_llm_provider_models` block, or None."""
+    return (_llm_model_prefetch.get() or {}).get(as_int(model_id))
 
 
 class CollectionFileInfo(NamedTuple):

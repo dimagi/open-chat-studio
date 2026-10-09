@@ -217,10 +217,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for truthiness — the report is always fully populated, so an error-free one is still a dict
         with three empty values.
         """
+        from apps.pipelines.repository import prefetch_llm_provider_models  # noqa: PLC0415 - circular
+
+        nodes = self.node_set.all()
+        llm_model_ids = [model_id for node in nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        with prefetch_llm_provider_models(llm_model_ids):
+            return self._validate(nodes, full)
+
+    def _validate(self, nodes, full: bool) -> ErrorReport:
         from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415 - circular: graph.py imports models
 
         errors = defaultdict(dict)
-        nodes = self.node_set.all()
         for node in nodes:
             if node_errors := self._node_validation_errors(node):
                 errors[node.flow_id].update(node_errors)
