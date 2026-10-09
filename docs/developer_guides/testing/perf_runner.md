@@ -58,7 +58,7 @@ AMI_ID=ami-0fa5967347d08d2df SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... \
 
 ## Register the runner
 
-Create a registration token (repository Settings → Actions → Runners → New self-hosted runner), then on the instance as the `runner` user follow the download and `./config.sh` steps GitHub shows, using the label `ocs-perf`. Install it as a service with `sudo ./svc.sh install runner && sudo ./svc.sh start`.
+Create a registration token (repository Settings → Actions → Runners → New self-hosted runner). On the instance, switch to the `runner` user (`sudo su - runner`) and follow the download and `./config.sh` steps GitHub shows, using the label `ocs-perf`. The `runner` user has no sudo rights, so exit back to your own session (which has them, for example `ssm-user`) and install the service from the runner directory with `sudo ./svc.sh install runner && sudo ./svc.sh start`.
 
 Workflows target it with `runs-on: [self-hosted, ocs-perf]`.
 
