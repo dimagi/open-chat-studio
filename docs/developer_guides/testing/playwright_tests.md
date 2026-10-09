@@ -23,7 +23,7 @@ Postgres and Redis must be running (`uv run inv up`), and the frontend assets mu
 pnpm install
 pnpm exec playwright install chromium
 pnpm e2e            # headless
-pnpm e2e --headed   # watch it run in a browser window
+pnpm e2e --headed   # watch it run in a browser window, in slow motion
 pnpm e2e --ui       # Playwright UI: pick the test and press play
 ```
 
@@ -39,5 +39,6 @@ The test adds an OpenAI provider whose API base URL points at the mock LLM that 
 | `E2E_EMAIL`      | `e2e@example.com`       | Login email for the test user           |
 | `E2E_PASSWORD`   | `e2epassword`           | Login password for the test user        |
 | `E2E_TEAM_SLUG`  | `e2e-core`              | Slug of the team the setup recreates    |
+| `E2E_SLOW_MO`    | `500` headed, `0` else  | Delay in ms between browser actions     |
 
 On failure, Playwright keeps a trace and screenshot in `test-results/`. Open the report with `pnpm exec playwright show-report`.
