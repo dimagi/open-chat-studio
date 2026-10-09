@@ -1,4 +1,4 @@
-import React, {ChangeEvent, useState} from "react";
+import React, {ChangeEvent, useEffect, useRef, useState} from "react";
 import useEditorStore from "../stores/editorStore";
 import OverlayPanel from "../components/OverlayPanel";
 import {classNames, getCachedData} from "../utils";
@@ -14,6 +14,22 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const [expanded, setExpanded] = useState(false);
+  const focusField = useEditorStore((state) => state.focusField);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!focusField) return;
+    const field = panelRef.current?.querySelector<HTMLElement>(`[name=${JSON.stringify(focusField.name)}]`);
+    if (!field) return;
+    const highlight = ["ring-2", "ring-primary"];
+    field.scrollIntoView?.({block: "center"});
+    field.classList.add(...highlight);
+    const timeoutId = setTimeout(() => field.classList.remove(...highlight), 1500);
+    return () => {
+      clearTimeout(timeoutId);
+      field.classList.remove(...highlight);
+    };
+  }, [focusField]);
 
   const {id, data} = getNode(nodeId)!;
 
@@ -42,7 +58,7 @@ export default function EditPanel({nodeId}: { nodeId: string }) {
 
   const width = expanded ? "w-full" : "w-2/5";
   return (
-    <div className="relative">
+    <div className="relative" ref={panelRef}>
       <OverlayPanel classes={classNames("top-0 right-0 h-[80vh] overflow-y-auto", width)} isOpen={true}
         onOpenChange={(value) => !value && closeEditor()}>
         <>

@@ -3,9 +3,11 @@ from __future__ import annotations
 import ast
 import json
 
+from django.forms import ValidationError as DjangoValidationError
 from pydantic import ValidationError
 
 from apps.pipelines.nodes.nodes import CodeNode
+from apps.utils.prompt import get_prompt_variables
 
 
 def check_syntax(code: str) -> str | None:
@@ -95,6 +97,19 @@ def check_max_words(messages: list[str], limit: int) -> str | None:
             violations.append(f"Message {i} has {word_count} words (limit {limit}): {msg!r}")
     if violations:
         return "\n".join(violations)
+    return None
+
+
+def check_prompt_vars(prompt: str, expected: list[str]) -> str | None:
+    """Check that the prompt references exactly the expected template variables.
+    Returns None on success, error message on failure.
+    """
+    try:
+        actual = get_prompt_variables(prompt)
+    except DjangoValidationError as e:
+        return f"Prompt does not parse: {'; '.join(e.messages)}"
+    if actual != set(expected):
+        return f"Expected variables {sorted(expected)}, got {sorted(actual)}"
     return None
 
 

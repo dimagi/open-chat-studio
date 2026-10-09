@@ -1,6 +1,6 @@
 import {beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, fireEvent, waitFor} from '@testing-library/react';
-import {getWidget as getWidgetUntyped, InputField, GenerateCodeSection, CHECK_FOR_BUGS_PROMPT} from './widgets';
+import {getWidget as getWidgetUntyped, InputField, GenerateCodeSection, CHECK_FOR_BUGS_PROMPT, TextEditorModal} from './widgets';
 import type {WidgetParams} from './widgets';
 import type {ComponentType} from 'react';
 import type {PropertySchema} from '../types/nodeParams';
@@ -411,5 +411,37 @@ describe('GenerateCodeSection', () => {
     expect(apiClient.generateCode).toHaveBeenCalledTimes(1);
     resolveFirst!({response: {code: 'code A'}});
     await waitFor(() => expect(apiClient.generateCode).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('TextEditorModal', () => {
+  const renderModal = (readOnly: boolean) => render(
+    <TextEditorModal
+      modalId="prompt-modal"
+      value="Help people."
+      onChange={() => {}}
+      label="Prompt"
+      autocomplete_vars_list={[]}
+      toolCompletions={[]}
+      nodeType="llm"
+      routes={[]}
+      defaultRoute=""
+      readOnly={readOnly}
+    />,
+  );
+
+  it('offers prompt help that opens the improve section', () => {
+    const {getByText, queryByText} = renderModal(false);
+
+    expect(queryByText('Improve')).not.toBeInTheDocument();
+    fireEvent.click(getByText('Help'));
+
+    expect(getByText('Improve')).toBeInTheDocument();
+  });
+
+  it('offers no prompt help in read-only mode', () => {
+    const {queryByText} = renderModal(true);
+
+    expect(queryByText('Help')).not.toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ from apps.help.evals.checks import (
     check_filter_params,
     check_has_main,
     check_max_words,
+    check_prompt_vars,
     check_syntax,
 )
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
@@ -92,6 +93,29 @@ class TestCheckMaxWords:
     def test_exceeds_limit(self):
         result = check_max_words(["this has way too many words in it"], 4)
         assert result is not None
+
+
+class TestCheckPromptVars:
+    def test_matching_variables(self):
+        assert (
+            check_prompt_vars(
+                "Hi {participant_data.name}, today is {current_datetime}",
+                [
+                    "participant_data",
+                    "current_datetime",
+                ],
+            )
+            is None
+        )
+
+    def test_missing_variable(self):
+        result = check_prompt_vars("Hi there", ["participant_data"])
+        assert result == "Expected variables ['participant_data'], got []"
+
+    def test_unparseable_prompt(self):
+        result = check_prompt_vars("Hi {participant_data", [])
+        assert result is not None
+        assert result.startswith("Prompt does not parse")
 
 
 class TestCheckFilterParams:

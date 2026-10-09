@@ -20,6 +20,16 @@ class PromptVars(models.TextChoices):
         return {"temp_state", "session_state"}
 
     @staticmethod
+    def llm_node_vars() -> set[str]:
+        """The variables an LLM node's prompt may use."""
+        return set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
+
+    @staticmethod
+    def router_node_vars() -> set[str]:
+        """The variables a router node's prompt may use."""
+        return {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
+
+    @staticmethod
     def get_all_prompt_vars() -> list[dict]:
         base_vars = [v.value for v in PromptVars]
         all_vars = base_vars + list(PromptVars.pipeline_extra_known_vars())
@@ -27,7 +37,7 @@ class PromptVars(models.TextChoices):
 
     @staticmethod
     def get_router_prompt_vars() -> list[dict]:
-        prompt_vars = {"participant_data"} | PromptVars.pipeline_extra_known_vars()
+        prompt_vars = PromptVars.router_node_vars()
         return [{"label": v, "value": v} for v in prompt_vars]
 
     @staticmethod
@@ -129,6 +139,11 @@ def _inspect_prompt(context: str, prompt_key) -> tuple[set, str]:
         raise ValidationError({prompt_key: f"Invalid format in prompt: {e}"}) from None
 
     return prompt_variables, prompt_text
+
+
+def get_prompt_variables(prompt: str) -> set[str]:
+    """The root variables `prompt` references. Raises `ValidationError` if the prompt does not parse."""
+    return _inspect_prompt({"prompt": prompt}, "prompt")[0]
 
 
 def validate_prompt_variables(context, prompt_key: str, known_vars: set):
