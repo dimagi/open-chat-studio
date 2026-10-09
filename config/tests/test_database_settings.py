@@ -55,6 +55,14 @@ def test_server_side_cursors_can_be_disabled(env):
     assert config["DISABLE_SERVER_SIDE_CURSORS"] is True
 
 
+def test_test_database_name_can_be_set(env):
+    env.ENVIRON["DJANGO_DATABASE_TEST_NAME"] = "test_bench"
+
+    config = get_database_config(env, debug=False)["default"]
+
+    assert config["TEST"] == {"NAME": "test_bench"}
+
+
 def test_pool_is_enabled_by_default(env):
     config = get_database_config(env, debug=False)["default"]
 

@@ -72,7 +72,13 @@ def _run_side(checkout: Path, side: str, result: Path, create_db: bool, extra: l
     command = ["uv", "run", "pytest", *PYTEST_ARGS, f"--benchmark-json={result.resolve()}", *extra]
     if create_db:
         command.append("--create-db")
-    env = {**os.environ, "DJANGO_DATABASE_NAME": f"ocs_bench_{side}"}
+    # DJANGO_DATABASE_NAME covers checkouts that predate DJANGO_DATABASE_TEST_NAME and use the discrete
+    # DJANGO_DATABASE_* variables.
+    env = {
+        **os.environ,
+        "DJANGO_DATABASE_TEST_NAME": f"test_ocs_bench_{side}",
+        "DJANGO_DATABASE_NAME": f"ocs_bench_{side}",
+    }
     print(f"[{side}] {checkout}: {' '.join(command)}", file=sys.stderr, flush=True)
     # pytest's output goes to stderr so stdout carries only the report.
     subprocess.run(command, cwd=checkout, env=env, check=True, stdout=sys.stderr)
