@@ -46,7 +46,10 @@ describe("ImprovePromptSection", () => {
 
   it("renders nothing while hidden", () => {
     render(
-      <ImprovePromptSection show={false} currentPrompt={CURRENT} nodeType="llm" toolNames={[]} autocompleteVars={[]} onAccept={vi.fn()} />,
+      <ImprovePromptSection
+        show={false} currentPrompt={CURRENT} nodeType="llm" toolNames={[]} routes={[]} defaultRoute=""
+        autocompleteVars={[]} onAccept={vi.fn()}
+      />,
     );
 
     expect(screen.queryByText("Improve")).toBeNull();
