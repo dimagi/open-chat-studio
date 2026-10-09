@@ -72,6 +72,7 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
+* When a change adds or alters a core user workflow, ask the user whether it should become a story in `docs/core_user_stories.md` with a covering Playwright test (see `docs/developer_guides/testing/playwright_tests.md`). Do not add one without their confirmation
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use `.github/pull_request_template.md` as the template for pull request descriptions
 * Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
@@ -109,6 +110,7 @@ Consult these guides when working in the relevant area:
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests
+* `docs/developer_guides/testing/playwright_tests.md` — when adding or modifying core user stories or Playwright E2E tests
 
 ## Agent skills
 
