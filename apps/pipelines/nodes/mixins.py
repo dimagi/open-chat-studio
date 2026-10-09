@@ -34,7 +34,7 @@ from apps.pipelines.nodes.history_middleware import (
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
-from apps.pipelines.repository import ORMRepository, RepositoryLookupError
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError, get_prefetched_llm_provider_model
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
@@ -100,7 +100,9 @@ class LLMResponseMixin(BaseModel):
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
             try:
-                model = ORMRepository().get_llm_provider_model(llm_provider_model_id)
+                model = get_prefetched_llm_provider_model(
+                    llm_provider_model_id
+                ) or ORMRepository().get_llm_provider_model(llm_provider_model_id)
             except RepositoryLookupError:
                 raise PipelineNodeBuildError(
                     f"LLM provider model with id {llm_provider_model_id} does not exist"
@@ -116,7 +118,9 @@ class LLMResponseMixin(BaseModel):
     @model_validator(mode="after")
     def validate_llm_model(self):
         try:
-            model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
+            model = get_prefetched_llm_provider_model(
+                self.llm_provider_model_id
+            ) or ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
         except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
