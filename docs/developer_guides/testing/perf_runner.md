@@ -9,12 +9,12 @@ Benchmarks that track regressions or support hill-climbing run on a dedicated, p
 | Region | `us-east-1` |
 | Instance type | `c7i.xlarge` (4 vCPU, fixed performance; not a burstable T type) |
 | AMI | `ami-0fa5967347d08d2df` (`ubuntu-noble-24.04-amd64-server-20261004`) |
-| Runner labels | `self-hosted`, `ocs-perf` |
+| Runner | `ocs-perf-runner` on `dimagi-internal/ocs-benchmarks`, labels `self-hosted`, `ocs-perf` |
 
 CPU layout:
 
 * Cores 0-1: OS, Postgres and Redis (containers with `cpuset`).
-* Cores 2-3: isolated with `isolcpus`, `nohz_full` and `rcu_nocbs`. Run benchmarks with `taskset -c 2,3`.
+* Cores 2-3: isolated with `isolcpus`, `nohz_full` and `rcu_nocbs`. The runner service and its job steps start on cores 0-1, so benchmark commands must run under `taskset -c 2,3`.
 
 Postgres and Redis run on the same machine so network latency to managed services does not add noise.
 
@@ -58,7 +58,21 @@ AMI_ID=ami-0fa5967347d08d2df SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... \
 
 ## Register the runner
 
-Create a registration token (repository Settings → Actions → Runners → New self-hosted runner), then on the instance as the `runner` user follow the download and `./config.sh` steps GitHub shows, using the label `ocs-perf`. Install it as a service with `sudo ./svc.sh install runner && sudo ./svc.sh start`.
+The runner is registered on the private repository `dimagi-internal/ocs-benchmarks`, not on `open-chat-studio`. On a public repository, a pull request from a fork can add a workflow that targets the self-hosted runner and run arbitrary code on it ([GitHub docs](https://docs.github.com/en/actions/concepts/runners/self-hosted-runners#self-hosted-runner-security-with-public-repositories)). Workflows in `ocs-benchmarks` check out `open-chat-studio` and run the benchmarks.
+
+Create a registration token (`ocs-benchmarks` Settings → Actions → Runners → New self-hosted runner; it expires after an hour). Connect with `aws ssm start-session --target <instance-id>`, then:
+
+```shell
+sudo -u runner -H bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+# Download, verify and extract the runner package as shown on the GitHub page, then:
+./config.sh --unattended --url https://github.com/dimagi-internal/ocs-benchmarks \
+    --token <token> --name ocs-perf-runner --labels ocs-perf --work _work
+exit
+cd /home/runner/actions-runner
+sudo ./bin/installdependencies.sh
+sudo ./svc.sh install runner && sudo ./svc.sh start
+```
 
 Workflows target it with `runs-on: [self-hosted, ocs-perf]`.
 
