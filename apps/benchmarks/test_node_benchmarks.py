@@ -3,10 +3,10 @@
 import pytest
 
 from apps.benchmarks import scenarios
-from apps.benchmarks.runner import invoke_once
+from apps.benchmarks.runner import TIMING, invoke_once
 from apps.pipelines.tests.utils import code_node, end_node, render_template_node, start_node
 
-pytestmark = [pytest.mark.bench, pytest.mark.django_db()]
+pytestmark = [pytest.mark.bench, pytest.mark.django_db(), TIMING]
 
 TEMPLATE = "{% for i in range(20) %}item {{ i }}: {{ input }}\n{% endfor %}"
 SCRIPT = """
