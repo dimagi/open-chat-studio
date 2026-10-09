@@ -440,6 +440,34 @@ def archive_chatbot(request, team_slug: str, pk: int):
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
 
 
+@require_POST
+@transaction.atomic
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def unarchive_chatbot(request, team_slug: str, pk: int):
+    """Restores an archived chatbot and its versions, and optionally its channels."""
+    chatbot = get_object_or_404(
+        Experiment.objects.get_all(),
+        id=pk,
+        team=request.team,
+        is_archived=True,
+        working_version__isnull=True,
+    )
+    chatbot.unarchive()
+    if request.POST.get("restore_channels"):
+        skipped = chatbot.restore_experiment_channels()
+        if skipped:
+            messages.warning(
+                request,
+                _("These channels have to be reconnected by hand: %(channels)s")
+                % {"channels": ", ".join(f"{channel.name} ({channel.platform_enum.label})" for channel in skipped)},
+            )
+    messages.success(request, _("Chatbot restored."))
+    return HttpResponseClientRedirect(
+        reverse("chatbots:single_chatbot_home", kwargs={"team_slug": team_slug, "experiment_id": pk})
+    )
+
+
 class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
     model = Experiment
     form_class = ExperimentVersionForm

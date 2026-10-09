@@ -1,10 +1,11 @@
+import logging
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Self, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import JSONField, Q
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +19,8 @@ from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import flag_is_active_for_team
 from apps.web.meta import absolute_url
+
+log = logging.getLogger("ocs.channels")
 
 if TYPE_CHECKING:
     from apps.channels.webhooks import WebhookManager
@@ -545,3 +548,19 @@ class ExperimentChannel(BaseTeamModel):
             self.end_live_sessions()
         self.deleted = True
         self.save()
+
+    def restore(self):
+        """Reverse of soft_delete(). Sessions ended with the channel stay ended."""
+        self.deleted = False
+        self.save(update_fields=["deleted"])
+        transaction.on_commit(self._set_remote_webhook)
+
+    def _set_remote_webhook(self):
+        """Best-effort re-registration of this channel's webhook at the upstream provider."""
+        try:
+            manager = self.get_webhook_manager()
+            if not manager or not manager.supports_webhook_management:
+                return
+            manager.set_incoming_webhook(self.extra_data or {}, self.webhook_url)
+        except Exception:
+            log.exception("Error restoring webhook for channel %s", self.id)
