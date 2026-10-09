@@ -3173,7 +3173,7 @@ dev = [
     { name = "mock" },
     { name = "prek", specifier = ">=0.4.11" },
     { name = "pytest" },
-    { name = "pytest-benchmark", specifier = ">=5.3.0" },
+    { name = "pytest-benchmark" },
     { name = "pytest-cov" },
     { name = "pytest-django" },
     { name = "pytest-httpx" },

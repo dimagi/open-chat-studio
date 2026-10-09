@@ -293,7 +293,7 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
-    "pytest-benchmark>=5.3.0",
+    "pytest-benchmark",
     "django-debug-toolbar>=7.0.0",
     "prek>=0.4.11",
     "django-types",
