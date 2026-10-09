@@ -1,5 +1,7 @@
-<!--
-Template: endpoint_tester.html
+{% extends "web/app/app_base.html" %}
+{% load static %}
+
+{% comment %}
 Purpose: Provides an interactive UI for testing custom action API endpoints.
 
 Expected Context Variables:
@@ -18,10 +20,7 @@ Expected Context Variables:
           - default (any): Default value for the parameter
   - operations_data (dict): Mapping of operation_id to initial parameter values
       Structure: {operation_id: {param_name: param_value, ...}, ...}
--->
-
-{% extends "web/app/app_base.html" %}
-{% load static %}
+{% endcomment %}
 
 {% block app %}
   {% csrf_token %}
