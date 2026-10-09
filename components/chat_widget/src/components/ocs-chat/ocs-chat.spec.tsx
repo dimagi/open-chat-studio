@@ -26,6 +26,63 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('theme', () => {
+    it('keeps the existing light appearance by default', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>`,
+      });
+
+      expect((page.rootInstance as OcsChat).theme).toBe('light');
+      expect(page.root?.getAttribute('theme')).toBe('light');
+    });
+
+    it('accepts an explicit light theme', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" theme="light"></open-chat-studio-widget>`,
+      });
+
+      expect((page.rootInstance as OcsChat).theme).toBe('light');
+      expect(page.root?.getAttribute('theme')).toBe('light');
+    });
+
+    it('accepts an explicit dark theme', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" theme="dark"></open-chat-studio-widget>`,
+      });
+
+      expect((page.rootInstance as OcsChat).theme).toBe('dark');
+      expect(page.root?.getAttribute('theme')).toBe('dark');
+    });
+
+    it('updates from light to dark and back when the host changes the attribute', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" theme="light"></open-chat-studio-widget>`,
+      });
+
+      page.root?.setAttribute('theme', 'dark');
+      await page.waitForChanges();
+      expect((page.rootInstance as OcsChat).theme).toBe('dark');
+
+      page.root?.setAttribute('theme', 'light');
+      await page.waitForChanges();
+      expect((page.rootInstance as OcsChat).theme).toBe('light');
+    });
+
+    it('preserves CSS custom-property overrides supplied by the embedder', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" theme="dark"></open-chat-studio-widget>`,
+      });
+      page.root?.style.setProperty('--chat-window-bg-color', 'rebeccapurple');
+
+      expect(page.root?.style.getPropertyValue('--chat-window-bg-color')).toBe('rebeccapurple');
+      expect((page.rootInstance as OcsChat).theme).toBe('dark');
+    });
+  });
   describe('Welcome Messages Display', () => {
     it('should display welcome messages when provided via translation files', async () => {
       const page = await newSpecPage({
