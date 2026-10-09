@@ -43,7 +43,6 @@ chmod +x /usr/local/bin/perf-runner-tune.sh
 cat > /etc/systemd/system/perf-runner-tune.service <<'UNIT'
 [Unit]
 Description=Fix CPU frequency settings for benchmarks
-After=multi-user.target
 
 [Service]
 Type=oneshot
