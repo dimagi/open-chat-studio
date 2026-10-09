@@ -11,7 +11,8 @@ RUNNER_USER="runner"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git docker.io docker-compose-v2 linux-tools-common "linux-tools-$(uname -r)" || true
+apt-get install -y ca-certificates curl git docker.io docker-compose-v2
+apt-get install -y linux-tools-common "linux-tools-$(uname -r)" || true
 systemctl enable --now docker
 
 useradd --create-home --shell /bin/bash "$RUNNER_USER" || true
@@ -80,6 +81,9 @@ TOKEN="$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-me
 {
     echo "instance_type=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
     echo "ami_id=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/ami-id)"
+    for image in pgvector/pgvector:pg16 redis:7; do
+        echo "image_${image%%[/:]*}=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")"
+    done
 } > /opt/perf-runner/hardware.env
 
 # The runner itself is installed and registered by hand (needs a short-lived token).

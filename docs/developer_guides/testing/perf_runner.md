@@ -18,7 +18,7 @@ CPU layout:
 
 Postgres and Redis run on the same machine so network latency to managed services does not add noise.
 
-The instance type and AMI are recorded in `/opt/perf-runner/hardware.env` and must be stored with every result. Changing either starts a new baseline.
+The instance type, AMI and the resolved digests of the Postgres and Redis images are recorded in `/opt/perf-runner/hardware.env` and must be stored with every result. The compose file uses mutable tags (`pgvector/pgvector:pg16`, `redis:7`); to freeze them, replace the tags in `/opt/perf-runner/docker-compose.yml` with the recorded `repo@sha256:...` digests after the first boot. Changing either starts a new baseline.
 
 Turbo boost is disabled at boot only if the guest can control it (`/sys/devices/system/cpu/intel_pstate/no_turbo` is writable). Virtualized `c7i` sizes may not expose it. Check after the first boot; if it is missing, measure run-to-run variance anyway (target under 3% on medians) and consider a larger size or a `.metal` instance if variance is too high.
 
@@ -32,7 +32,7 @@ aws ssm get-parameter --region us-east-1 \
     --query Parameter.Value --output text
 ```
 
-Launch the instance. The security group needs outbound access only; no inbound rules are required.
+Launch the instance. The security group needs outbound access only. To reach the instance without opening SSH, pass `INSTANCE_PROFILE=<name>` for an instance profile with the `AmazonSSMManagedInstanceCore` policy and connect with `aws ssm start-session --target <instance-id>`. The instance needs outbound HTTPS to the SSM endpoints. Alternatively, add an inbound SSH rule restricted to your IP to the security group and use `KEY_NAME`.
 
 ```shell
 AMI_ID=ami-... SUBNET_ID=subnet-... SECURITY_GROUP_ID=sg-... KEY_NAME=... \

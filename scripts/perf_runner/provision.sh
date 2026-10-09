@@ -20,6 +20,13 @@ NAME="${NAME:-ocs-perf-runner}"
 : "${SECURITY_GROUP_ID:?Set SECURITY_GROUP_ID (no inbound rules are required)}"
 : "${KEY_NAME:?Set KEY_NAME}"
 
+# Optional: instance profile with AmazonSSMManagedInstanceCore, used to connect
+# with Session Manager since the security group has no inbound rules.
+profile_args=()
+if [ -n "${INSTANCE_PROFILE:-}" ]; then
+    profile_args=(--iam-instance-profile "Name=${INSTANCE_PROFILE}")
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 instance_id="$(aws ec2 run-instances \
@@ -29,6 +36,7 @@ instance_id="$(aws ec2 run-instances \
     --subnet-id "$SUBNET_ID" \
     --security-group-ids "$SECURITY_GROUP_ID" \
     --key-name "$KEY_NAME" \
+    "${profile_args[@]}" \
     --instance-initiated-shutdown-behavior stop \
     --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=${VOLUME_GB},VolumeType=gp3,DeleteOnTermination=true}" \
     --metadata-options "HttpTokens=required,HttpEndpoint=enabled" \
