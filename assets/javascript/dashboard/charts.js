@@ -5,7 +5,7 @@
 import Chart from "chart.js/auto";
 import {formatCost, p95ChartSeries, providerTotals, serviceKindSeries} from "./costBreakdown.js";
 
-class ChartManager {
+export class ChartManager {
     constructor() {
         this.charts = {};
         this.colorPalette = {
@@ -102,6 +102,7 @@ class ChartManager {
                 ...this.defaultOptions.scales,
                 y: {
                     ...this.defaultOptions.scales.y,
+                    ticks: {...this.defaultOptions.scales.y.ticks, precision: 0},
                     title: {
                         display: true,
                         text: 'Number of Participants'
@@ -147,6 +148,7 @@ class ChartManager {
                 ...this.defaultOptions.scales,
                 y: {
                     ...this.defaultOptions.scales.y,
+                    ticks: {...this.defaultOptions.scales.y.ticks, precision: 0},
                     title: {
                         display: true,
                         text: 'Number of Sessions'
@@ -202,6 +204,7 @@ class ChartManager {
                 ...this.defaultOptions.scales,
                 y: {
                     ...this.defaultOptions.scales.y,
+                    ticks: {...this.defaultOptions.scales.y.ticks, precision: 0},
                     title: {
                         display: true,
                         text: 'Number of Messages'
@@ -380,6 +383,7 @@ class ChartManager {
                 },
                 y: {
                     ...this.defaultOptions.scales.y,
+                    ticks: {...this.defaultOptions.scales.y.ticks, precision: 0},
                     title: {
                         display: true,
                         text: 'Number of Sessions'
@@ -631,12 +635,17 @@ class ChartManager {
         });
     }
 
-    createChart(chartKey, canvas, config) {
+    destroyChart(chartKey, canvas) {
         // Two ways a stale chart survives: the cost panel swaps its HTML, leaving the old
         // chart on a detached canvas only the registry can still reach; and a re-executed
         // script loses the registry, leaving a live chart only the canvas can reach.
         this.charts[chartKey]?.destroy();
-        Chart.getChart(canvas)?.destroy();
+        if (canvas) Chart.getChart(canvas)?.destroy();
+        delete this.charts[chartKey];
+    }
+
+    createChart(chartKey, canvas, config) {
+        this.destroyChart(chartKey, canvas);
         this.charts[chartKey] = new Chart(canvas, config);
     }
 
