@@ -84,18 +84,18 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def mergeability_blockers(pull: dict, review_decision: str | None) -> list[str]:
+def mergeability_blockers(pull: dict, decision: str | None) -> list[str]:
     blockers = []
     if pull.get("mergeable") is not True:
         blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
     state = pull.get("mergeable_state")
-    waiting_on_review_only = state == "blocked" and review_decision == REVIEW_REQUIRED
+    waiting_on_review_only = state == "blocked" and decision == REVIEW_REQUIRED
     if state not in MERGEABLE_STATES and not waiting_on_review_only:
         blockers.append(f"its mergeable_state is {state}")
     return blockers
 
 
-def pull_blockers(pull: dict, repo: str, recomputed_risk: str, review_decision: str | None = None) -> list[str]:
+def pull_blockers(pull: dict, repo: str, recomputed_risk: str, decision: str | None = None) -> list[str]:
     """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -109,7 +109,7 @@ def pull_blockers(pull: dict, repo: str, recomputed_risk: str, review_decision: 
         blockers.append(f"it targets {pull['base']['ref']}, not {BASE_BRANCH}")
     if ((pull["head"].get("repo") or {}).get("full_name")) != repo:
         blockers.append("the head branch is on a fork")
-    blockers.extend(mergeability_blockers(pull, review_decision))
+    blockers.extend(mergeability_blockers(pull, decision))
     if recomputed_risk != pr_risk_gate.LOW:
         blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
     return blockers
@@ -149,11 +149,11 @@ def find_blockers(
     repo: str,
     *,
     recomputed_risk: str,
-    review_decision: str | None = None,
+    decision: str | None = None,
 ) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     return [
-        *pull_blockers(pull, repo, recomputed_risk, review_decision),
+        *pull_blockers(pull, repo, recomputed_risk, decision),
         *check_blockers(check_runs),
         *review_blockers(reviews),
     ]
@@ -213,7 +213,7 @@ def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     reviews = gh_paginated(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
     risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
     decision = review_decision(repo, number)
-    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk, review_decision=decision)
+    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision)
 
 
 def open_low_risk_pulls(repo: str) -> list[dict]:
