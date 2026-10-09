@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import functools
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from apps.chat.conversation import COMPRESSION_MARKER
@@ -21,6 +23,43 @@ if TYPE_CHECKING:
 
 class RepositoryLookupError(Exception):
     """Raised when a repository lookup finds no matching record."""
+
+
+# ContextVar holding a {id: LlmProviderModel} dict pre-fetched during pipeline graph
+# construction.  Only populated within a `prefetch_llm_provider_models` block; empty
+# outside one so the fallback DB path is always safe.
+_llm_model_prefetch: ContextVar[dict[int, LlmProviderModel]] = ContextVar(
+    "_llm_model_prefetch", default={}
+)
+
+
+@contextmanager
+def prefetch_llm_provider_models(ids: list[int]):
+    """Bulk-fetch LlmProviderModel rows and expose them to validators via ContextVar.
+
+    Use this as a context manager around pipeline graph construction to prevent the
+    N+1 query that would otherwise occur when each LLM-backed node fetches its own
+    model record during Pydantic validation.
+    """
+    unique_ids = [i for i in set(ids) if i is not None]
+    if unique_ids:
+        models = LlmProviderModel.objects.in_bulk(unique_ids)
+    else:
+        models = {}
+    token = _llm_model_prefetch.set(models)
+    try:
+        yield
+    finally:
+        _llm_model_prefetch.reset(token)
+
+
+def get_prefetched_llm_provider_model(model_id: int) -> LlmProviderModel | None:
+    """Return the pre-fetched LlmProviderModel for *model_id*, or None if not cached.
+
+    Validators should call this before falling back to a DB query so that a surrounding
+    `prefetch_llm_provider_models` block eliminates per-node round-trips.
+    """
+    return _llm_model_prefetch.get().get(model_id)
 
 
 class CollectionFileInfo(NamedTuple):
