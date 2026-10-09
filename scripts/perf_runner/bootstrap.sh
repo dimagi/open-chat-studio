@@ -82,6 +82,11 @@ volumes:
 COMPOSE
 docker compose -f /opt/perf-runner/docker-compose.yml up -d
 
+# The first start runs initdb; rebooting before it finishes can leave a partial data directory.
+until docker compose -f /opt/perf-runner/docker-compose.yml exec -T postgres pg_isready -U postgres; do
+    sleep 2
+done
+
 # Record the hardware identity so results can be tagged with it.
 TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
 {
