@@ -1,8 +1,8 @@
 """The team's resources: source material and consent forms (#4145).
 
 Only working versions are reachable. Published chatbots hold their own snapshot of each resource, so
-an edit here reaches them only once the chatbot is published again. Deleting archives rather than
-destroys.
+an edit here reaches them only once the chatbot is published again. A delete request archives the
+resource rather than destroying it.
 """
 
 from collections import defaultdict
