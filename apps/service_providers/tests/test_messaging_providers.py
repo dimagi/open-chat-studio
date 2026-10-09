@@ -662,6 +662,31 @@ class TestMetaCloudAPIServiceWindow:
                 platform=ChannelPlatform.WHATSAPP,
             )
 
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_voice_within_window_sends_normal(self, mock_post):
+        upload_response = httpx.Response(
+            200,
+            json={"id": "media_id_abc"},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/media"),
+        )
+        send_response = httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.xyz"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+        mock_post.side_effect = [upload_response, send_response]
+        service = self._make_service()
+        synthetic_voice = MagicMock(spec=SynthesizedAudio)
+        synthetic_voice.get_audio_bytes.return_value = b"fake-ogg-audio"
+        service.send_voice_message(
+            synthetic_voice=synthetic_voice,
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        assert mock_post.call_count == 2
+
     def test_send_voice_outside_window_raises_regardless_of_template(self):
         service = self._make_service()
         synthetic_voice = MagicMock(spec=SynthesizedAudio)
@@ -775,6 +800,20 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
             "text": {"body": "Hello"},
         }
         assert "to" not in sent
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_message_to_phone_keeps_to_field(self, mock_post):
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_text_message(
+            message="Hello",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["to"] == "+27826419977"
+        assert "recipient" not in sent
 
     @patch("apps.service_providers.messaging_service.httpx.post")
     def test_send_template_message_to_bsuid_uses_recipient_field(self, mock_post):
