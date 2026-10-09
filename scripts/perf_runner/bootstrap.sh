@@ -81,12 +81,12 @@ COMPOSE
 docker compose -f /opt/perf-runner/docker-compose.yml up -d
 
 # Record the hardware identity so results can be tagged with it.
-TOKEN="$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
+TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
 {
-    echo "instance_type=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
-    echo "ami_id=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/ami-id)"
+    echo "instance_type=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
+    echo "ami_id=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/ami-id)"
     for image in pgvector/pgvector:pg16 redis:7; do
-        echo "image_${image%%[/:]*}=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")"
+        echo "image_${image%%[/:]*}=$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}unknown{{end}}' "$image")"
     done
 } > /opt/perf-runner/hardware.env
 
