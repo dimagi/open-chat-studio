@@ -35,6 +35,7 @@ class Command(BaseCommand):
             raise CommandError("setup_e2e_team deletes teams, so it only runs with DEBUG or CI on.")
         email = options["email"]
         team_slug = options["team_slug"]
+        self._check_user_is_disposable(email=email, team_slug=team_slug)
 
         backends.create_default_groups()
         for team in Team.objects.filter(created_by__email=email):
@@ -47,6 +48,16 @@ class Command(BaseCommand):
             backends.make_user_team_owner(team=team, user=user)
 
         self.stdout.write(self.style.SUCCESS(f"Team '{team_slug}' ready with owner {email}"))
+
+    def _check_user_is_disposable(self, email: str, team_slug: str):
+        """Refuse to reset the password of a user who is a member of a team this command does not own."""
+        other_teams = (
+            Team.objects.filter(membership__user__username=email)
+            .exclude(created_by__email=email)
+            .exclude(slug=team_slug)
+        )
+        if other_teams.exists():
+            raise CommandError(f"{email} belongs to other teams, so setup_e2e_team will not reset its password.")
 
     def _create_user(self, email: str, password: str):
         user, _ = get_user_model().objects.get_or_create(username=email, defaults={"email": email})

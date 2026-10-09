@@ -100,3 +100,17 @@ def test_refuses_to_run_outside_debug_and_ci(settings):
         _run_command()
 
     assert Team.objects.filter(id=team.id).exists()
+
+
+@pytest.mark.django_db()
+def test_refuses_to_reuse_a_user_from_another_team():
+    other_team = TeamFactory.create()
+    user = get_user_model().objects.create_user(username="e2e@example.com", email="e2e@example.com", password="real")
+    Membership.objects.create(team=other_team, user=user)
+
+    with pytest.raises(CommandError, match="belongs to other teams"):
+        _run_command()
+
+    user.refresh_from_db()
+    assert user.check_password("real")
+    assert not Team.objects.filter(slug="e2e-core").exists()
