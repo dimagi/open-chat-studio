@@ -58,6 +58,8 @@ MERGEABLE_STATES = frozenset({"clean"})
 # `main` requires an approving review, which GitHub reports as `blocked` until one is
 # given. The merging app bypasses that rule, so a pull request waiting on a review and
 # nothing else is mergeable; the merge API still refuses anything else the app cannot bypass.
+# `blocked` is reported ahead of `unstable`, so a red or pending legacy commit status is
+# checked separately before `blocked` is accepted.
 REVIEW_REQUIRED = "REVIEW_REQUIRED"
 
 
@@ -84,18 +86,22 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def mergeability_blockers(pull: dict, decision: str | None) -> list[str]:
+def mergeability_blockers(pull: dict, decision: str | None, status_state: str | None) -> list[str]:
     blockers = []
     if pull.get("mergeable") is not True:
         blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
     state = pull.get("mergeable_state")
-    waiting_on_review_only = state == "blocked" and decision == REVIEW_REQUIRED
-    if state not in MERGEABLE_STATES and not waiting_on_review_only:
+    waiting_on_review = state == "blocked" and decision == REVIEW_REQUIRED
+    if waiting_on_review and status_state != "success":
+        blockers.append(f"the combined commit status is {status_state}")
+    elif state not in MERGEABLE_STATES and not waiting_on_review:
         blockers.append(f"its mergeable_state is {state}")
     return blockers
 
 
-def pull_blockers(pull: dict, repo: str, recomputed_risk: str, decision: str | None = None) -> list[str]:
+def pull_blockers(
+    pull: dict, repo: str, recomputed_risk: str, decision: str | None = None, status_state: str | None = None
+) -> list[str]:
     """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -109,7 +115,7 @@ def pull_blockers(pull: dict, repo: str, recomputed_risk: str, decision: str | N
         blockers.append(f"it targets {pull['base']['ref']}, not {BASE_BRANCH}")
     if ((pull["head"].get("repo") or {}).get("full_name")) != repo:
         blockers.append("the head branch is on a fork")
-    blockers.extend(mergeability_blockers(pull, decision))
+    blockers.extend(mergeability_blockers(pull, decision, status_state))
     if recomputed_risk != pr_risk_gate.LOW:
         blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
     return blockers
@@ -150,10 +156,11 @@ def find_blockers(
     *,
     recomputed_risk: str,
     decision: str | None = None,
+    status_state: str | None = None,
 ) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     return [
-        *pull_blockers(pull, repo, recomputed_risk, decision),
+        *pull_blockers(pull, repo, recomputed_risk, decision, status_state),
         *check_blockers(check_runs),
         *review_blockers(reviews),
     ]
@@ -205,7 +212,16 @@ def review_decision(repo: str, number: int) -> str | None:
     try:
         return data["data"]["repository"]["pullRequest"]["reviewDecision"]
     except (KeyError, TypeError) as exc:
-        raise RuntimeError(f"unexpected GraphQL response: {data.get('errors') or data}") from exc
+        raise RuntimeError(f"unexpected GraphQL response: {data}") from exc
+
+
+def commit_status_state(repo: str, sha: str) -> str:
+    """The combined legacy commit status, which the Check Runs API cannot see.
+
+    A commit with no statuses reports `pending`; that is read as `success` here.
+    """
+    combined = gh_api(f"repos/{repo}/commits/{sha}/status")
+    return "success" if combined["total_count"] == 0 else combined["state"]
 
 
 def judge(repo: str, number: int) -> tuple[dict, list[str]]:
@@ -216,7 +232,11 @@ def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     reviews = gh_paginated(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
     risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
     decision = review_decision(repo, number)
-    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision)
+    status_state = commit_status_state(repo, pull["head"]["sha"])
+    blockers = find_blockers(
+        pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision, status_state=status_state
+    )
+    return pull, blockers
 
 
 def open_low_risk_pulls(repo: str) -> list[dict]:

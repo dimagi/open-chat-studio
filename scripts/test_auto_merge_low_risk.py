@@ -21,9 +21,11 @@ REPO = "dimagi/open-chat-studio"
 LOW = "risk:low"
 
 
-def find_blockers(pull, check_runs, reviews, repo=REPO, *, risk=LOW, decision=None):
+def find_blockers(pull, check_runs, reviews, repo=REPO, *, risk=LOW, decision=None, status="success"):
     """The gate's own verdict defaults to low here so each test varies one thing."""
-    return auto_merge_low_risk.find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision)
+    return auto_merge_low_risk.find_blockers(
+        pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision, status_state=status
+    )
 
 
 def pull(**overrides):
@@ -82,6 +84,28 @@ def test_a_pull_request_waiting_only_on_review_is_mergeable():
 def test_blocked_for_any_other_reason_still_blocks(decision):
     blockers = find_blockers(pull(mergeable_state="blocked"), passing_checks(), [], decision=decision)
     assert any("mergeable_state is blocked" in blocker for blocker in blockers)
+
+
+@pytest.mark.parametrize("status", ["pending", "failure", "error", None])
+def test_review_required_does_not_excuse_a_legacy_commit_status(status):
+    blockers = find_blockers(
+        pull(mergeable_state="blocked"), passing_checks(), [], decision="REVIEW_REQUIRED", status=status
+    )
+    assert f"the combined commit status is {status}" in blockers
+
+
+@pytest.mark.parametrize(
+    ("combined", "expected"),
+    [
+        pytest.param({"total_count": 0, "state": "pending"}, "success", id="no-statuses"),
+        pytest.param({"total_count": 2, "state": "pending"}, "pending", id="pending"),
+        pytest.param({"total_count": 1, "state": "failure"}, "failure", id="failure"),
+        pytest.param({"total_count": 1, "state": "success"}, "success", id="success"),
+    ],
+)
+def test_commit_status_state(monkeypatch, combined, expected):
+    monkeypatch.setattr(auto_merge_low_risk, "gh_api", lambda *args: combined)
+    assert auto_merge_low_risk.commit_status_state(REPO, "abc123") == expected
 
 
 def test_review_required_does_not_excuse_other_states():
@@ -279,6 +303,7 @@ def one_mergeable_candidate(monkeypatch):
     monkeypatch.setattr(auto_merge_low_risk, "gh_paginated", lambda path: [])
     monkeypatch.setattr(auto_merge_low_risk, "recompute_risk", lambda *args: LOW)
     monkeypatch.setattr(auto_merge_low_risk, "review_decision", lambda *args: "APPROVED")
+    monkeypatch.setattr(auto_merge_low_risk, "commit_status_state", lambda *args: "success")
     merges = []
     monkeypatch.setattr(auto_merge_low_risk, "merge", lambda *args: merges.append(args))
     return merges
