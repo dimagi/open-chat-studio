@@ -202,7 +202,10 @@ def review_decision(repo: str, number: int) -> str | None:
     data = gh_api(
         "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"number={number}"
     )
-    return data["data"]["repository"]["pullRequest"]["reviewDecision"]
+    try:
+        return data["data"]["repository"]["pullRequest"]["reviewDecision"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"unexpected GraphQL response: {data.get('errors') or data}") from exc
 
 
 def judge(repo: str, number: int) -> tuple[dict, list[str]]:

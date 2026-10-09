@@ -97,6 +97,19 @@ def test_review_decision_reads_graphql(monkeypatch):
     assert "number=7" in calls[0]
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        pytest.param({"data": None, "errors": [{"message": "rate limited"}]}, id="null-data"),
+        pytest.param({"data": {"repository": {"pullRequest": None}}}, id="missing-pull-request"),
+    ],
+)
+def test_review_decision_raises_runtime_error_on_a_graphql_error(monkeypatch, response):
+    monkeypatch.setattr(auto_merge_low_risk, "gh_api", lambda *args: response)
+    with pytest.raises(RuntimeError, match="unexpected GraphQL response"):
+        auto_merge_low_risk.review_decision(REPO, 7)
+
+
 def test_a_fork_head_blocks():
     forked = pull(head={"sha": "abc123", "repo": {"full_name": "someone/open-chat-studio"}})
     assert "the head branch is on a fork" in find_blockers(forked, passing_checks(), [], REPO)
