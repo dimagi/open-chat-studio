@@ -64,19 +64,29 @@ def _forced_tool(tools, tool_choice) -> dict | None:
     Only a forced choice produces a call. Under "auto" the mock answers with text, which
     is what a model that saw no reason to use a tool would do.
     """
-    if not isinstance(tools, list) or not tools:
-        return None
-    flattened = [_flatten_tool(tool) for tool in tools if isinstance(tool, dict)]
-    flattened = [tool for tool in flattened if tool.get("name")]
-    if not flattened:
+    named = _named_tools(tools)
+    if not named:
         return None
 
     if tool_choice == "required":
-        return flattened[0]
+        return named[0]
     if isinstance(tool_choice, dict):
-        wanted = tool_choice.get("name") or (tool_choice.get("function") or {}).get("name")
-        return next((tool for tool in flattened if tool["name"] == wanted), flattened[0])
+        wanted = _chosen_tool_name(tool_choice)
+        return next((tool for tool in named if tool["name"] == wanted), named[0])
     return None
+
+
+def _named_tools(tools) -> list[dict]:
+    """The request's tools, flattened, leaving out any without a name."""
+    if not isinstance(tools, list):
+        return []
+    flattened = [_flatten_tool(tool) for tool in tools if isinstance(tool, dict)]
+    return [tool for tool in flattened if tool["name"]]
+
+
+def _chosen_tool_name(tool_choice: dict) -> str | None:
+    """Both `{type, function: {name}}` and the flat Responses API `{type, name}`."""
+    return tool_choice.get("name") or (tool_choice.get("function") or {}).get("name")
 
 
 def _flatten_tool(tool: dict) -> dict:

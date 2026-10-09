@@ -10,6 +10,8 @@ shortest allowed array. A router schema is a `Literal` of the configured keyword
 the first-enum-member rule sends every message down the first branch.
 """
 
+from functools import reduce
+
 from . import lorem
 
 MAX_DEPTH = 6
@@ -30,33 +32,34 @@ def _sample(schema: dict, root: dict, index: int, depth: int) -> object:
         return schema["const"]
     if enum := schema.get("enum"):
         return enum[0]
-    for combinator in ("anyOf", "oneOf"):
-        if options := schema.get(combinator):
-            return _sample(options[0], root, index, depth + 1)
-    if all_of := schema.get("allOf"):
-        merged: dict = {}
-        for option in all_of:
-            merged = _merge(merged, _resolve(option, root))
-        return _sample(merged, root, index, depth + 1)
+    if (branch := _combinator_branch(schema, root)) is not None:
+        return _sample(branch, root, index, depth + 1)
 
     return _by_type(_type_of(schema), schema, root, index, depth)
 
 
+def _combinator_branch(schema: dict, root: dict) -> dict | None:
+    """The first `anyOf`/`oneOf` option, or the `allOf` options merged into one schema."""
+    if options := schema.get("anyOf") or schema.get("oneOf"):
+        return options[0]
+    if all_of := schema.get("allOf"):
+        return reduce(lambda merged, option: _merge(merged, _resolve(option, root)), all_of, {})
+    return None
+
+
+_TYPE_CONSTANTS = {"boolean": False, "null": None}
+
+
 def _by_type(type_name: str, schema: dict, root: dict, index: int, depth: int) -> object:
+    if type_name in _TYPE_CONSTANTS:
+        return _TYPE_CONSTANTS[type_name]
     if type_name == "object":
         return _object(schema, root, index, depth)
     if type_name == "array":
         return _array(schema, root, index, depth)
-    if type_name == "string":
-        return _string(schema, index)
-    if type_name == "integer":
-        return int(_number(schema))
-    if type_name == "number":
-        return _number(schema)
-    if type_name == "boolean":
-        return False
-    if type_name == "null":
-        return None
+    if type_name in ("integer", "number"):
+        number = _number(schema)
+        return int(number) if type_name == "integer" else number
     return _string(schema, index)
 
 
@@ -139,11 +142,12 @@ def _string(schema: dict, index: int) -> str:
     return text
 
 
+# Each bound with the offset that turns it into an allowed value, lower bounds first.
+_NUMBER_BOUNDS = (("minimum", 0), ("exclusiveMinimum", 1), ("maximum", 0), ("exclusiveMaximum", -1))
+
+
 def _number(schema: dict) -> float:
-    for key in ("minimum", "exclusiveMinimum"):
+    for key, offset in _NUMBER_BOUNDS:
         if (value := schema.get(key)) is not None:
-            return float(value) + (1 if key == "exclusiveMinimum" else 0)
-    for key in ("maximum", "exclusiveMaximum"):
-        if (value := schema.get(key)) is not None:
-            return float(value) - (1 if key == "exclusiveMaximum" else 0)
+            return float(value) + offset
     return 0.0
