@@ -388,6 +388,7 @@ class EventBot:
             node = (
                 self.experiment.pipeline.node_set.filter(llm_provider__isnull=False)
                 .select_related("llm_provider")
+                .order_by("created_at")
                 .first()
             )
             if node:
