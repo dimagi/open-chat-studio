@@ -55,6 +55,11 @@ ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 # would let an integration's red signal through the moment one is installed.
 MERGEABLE_STATES = frozenset({"clean"})
 
+# `main` requires an approving review, which GitHub reports as `blocked` until one is
+# given. The merging app bypasses that rule, so a pull request waiting on a review and
+# nothing else is mergeable; the merge API still refuses anything else the app cannot bypass.
+REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
 
 def latest_check_runs(check_runs: list[dict]) -> dict[str, dict]:
     """The most recent run per check name, since a re-run leaves the old one in place."""
@@ -79,7 +84,7 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def pull_blockers(pull: dict, repo: str, recomputed_risk: str) -> list[str]:
+def pull_blockers(pull: dict, repo: str, recomputed_risk: str, review_decision: str | None = None) -> list[str]:
     """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -95,7 +100,9 @@ def pull_blockers(pull: dict, repo: str, recomputed_risk: str) -> list[str]:
         blockers.append("the head branch is on a fork")
     if pull.get("mergeable") is not True:
         blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
-    if pull.get("mergeable_state") not in MERGEABLE_STATES:
+    state = pull.get("mergeable_state")
+    waiting_on_review_only = state == "blocked" and review_decision == REVIEW_REQUIRED
+    if state not in MERGEABLE_STATES and not waiting_on_review_only:
         blockers.append(f"its mergeable_state is {pull.get('mergeable_state')}")
     if recomputed_risk != pr_risk_gate.LOW:
         blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
@@ -130,11 +137,17 @@ def review_blockers(reviews: list[dict]) -> list[str]:
 
 
 def find_blockers(
-    pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, *, recomputed_risk: str
+    pull: dict,
+    check_runs: list[dict],
+    reviews: list[dict],
+    repo: str,
+    *,
+    recomputed_risk: str,
+    review_decision: str | None = None,
 ) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     return [
-        *pull_blockers(pull, repo, recomputed_risk),
+        *pull_blockers(pull, repo, recomputed_risk, review_decision),
         *check_blockers(check_runs),
         *review_blockers(reviews),
     ]
@@ -173,6 +186,19 @@ def recompute_risk(repo: str, number: int, head_repo: str | None) -> str:
     return pr_risk_gate.classify(files, untrusted=head_repo != repo).risk
 
 
+def review_decision(repo: str, number: int) -> str | None:
+    """GitHub's overall review verdict (`APPROVED`, `REVIEW_REQUIRED`, ...); the REST API does not expose it."""
+    owner, name = repo.split("/")
+    query = (
+        "query($owner: String!, $name: String!, $number: Int!) {"
+        " repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewDecision } } }"
+    )
+    data = gh_api(
+        "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"number={number}"
+    )
+    return data["data"]["repository"]["pullRequest"]["reviewDecision"]
+
+
 def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     """Read everything this pull request is judged on, and return it with its blockers."""
     # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
@@ -180,7 +206,8 @@ def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     check_runs = check_runs_for(repo, pull["head"]["sha"])
     reviews = gh_paginated(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
     risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
-    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk)
+    decision = review_decision(repo, number)
+    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk, review_decision=decision)
 
 
 def open_low_risk_pulls(repo: str) -> list[dict]:
