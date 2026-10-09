@@ -14,7 +14,7 @@ REDIS_IMAGE="redis@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git docker.io docker-compose-v2
+apt-get install -y ca-certificates curl git docker.io docker-compose-v2 build-essential pkg-config
 apt-get install -y linux-tools-common "linux-tools-$(uname -r)" || true
 systemctl enable --now docker
 
