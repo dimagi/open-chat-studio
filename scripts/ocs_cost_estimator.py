@@ -74,7 +74,7 @@ except ImportError:
 try:
     import anthropic
 except ImportError:
-    anthropic = None  # ty: ignore[invalid-assignment]
+    anthropic = None
 
 
 # ---------------------------------------------------------------------------

@@ -297,7 +297,7 @@ dev = [
     "django-debug-toolbar>=7.0.0",
     "prek>=0.4.11",
     "django-types",
-    "ty>=0.0.65",
+    "ty>=0.0.83",
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.

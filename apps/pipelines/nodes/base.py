@@ -620,7 +620,7 @@ class NodeSchema(BaseModel):
         if self.deprecated and self.deprecation_message:
             schema["ui:deprecation_message"] = self.deprecation_message
         if self.field_order:
-            schema["ui:order"] = self.field_order
+            schema["ui:order"] = self.field_order  # ty: ignore[invalid-assignment]
         if self.documentation_link:
             schema["ui:documentation_link"] = self.documentation_link
         if self.icon:
