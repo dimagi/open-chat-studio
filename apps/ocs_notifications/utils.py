@@ -245,6 +245,25 @@ def set_user_notification_cache(user_id: int, team_slug: str, count: int):
     cache.set(cache_key, count, 5 * 60)  # Cache for 5 minutes
 
 
+def set_user_notification_cache_many(user_id: int, counts_by_team_slug: dict[str, int]):
+    """
+    Set the unread notifications count cache for several of a user's teams in one cache round trip.
+
+    Args:
+        user_id (int): The ID of the user whose cache should be set.
+        counts_by_team_slug (dict[str, int]): Mapping of team slug to unread notifications count.
+    """
+    if not counts_by_team_slug:
+        return
+    cache.set_many(
+        {
+            CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug): count
+            for team_slug, count in counts_by_team_slug.items()
+        },
+        5 * 60,  # Cache for 5 minutes
+    )
+
+
 def bust_unread_notification_cache(user_id: int, team_slug: str):
     """
     Bust the unread notifications count cache for a specific user.

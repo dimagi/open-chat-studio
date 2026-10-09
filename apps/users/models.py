@@ -10,6 +10,7 @@ from apps.ocs_notifications.utils import (
     ALL_TEAMS_CACHE_KEY,
     get_user_notification_cache_value,
     set_user_notification_cache,
+    set_user_notification_cache_many,
 )
 from apps.teams.models import Team
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
@@ -94,8 +95,9 @@ class CustomUser(AbstractUser):
         """
         Get the count of unread notifications for the user across every team they belong to.
 
-        Sums the (individually cached) per-team counts and caches the aggregate, so repeat
-        calls are cheap regardless of how many teams the user belongs to.
+        On a cache miss, computes every team's count with a fixed number of queries (teams,
+        preferences, and one grouped unread count) rather than querying per team, then caches
+        both the per-team counts and the aggregate.
 
         Returns:
             int: The number of unread notifications for this user across all their teams.
@@ -104,7 +106,40 @@ class CustomUser(AbstractUser):
         if count is not None:
             return count
 
-        count = sum(self.unread_notifications_count(team) for team in self.teams.all())
+        team_slugs = dict(self.teams.values_list("id", "slug"))
+        if not team_slugs:
+            set_user_notification_cache(self.id, team_slug=ALL_TEAMS_CACHE_KEY, count=0)
+            return 0
+
+        # One query for every team's preferences. Ordered by id so the first row per team wins,
+        # matching `.first()` in `unread_notifications_count`.
+        thresholds = {}
+        preferences = (
+            UserNotificationPreferences.objects.filter(user=self, team_id__in=team_slugs)
+            .order_by("id")
+            .values_list("team_id", "in_app_enabled", "in_app_level")
+        )
+        for team_id, in_app_enabled, in_app_level in preferences:
+            thresholds.setdefault(team_id, in_app_level if in_app_enabled else None)
+
+        # One query for unread counts across all teams, grouped so per-team levels can be applied in Python.
+        unread_rows = (
+            EventUser.objects.filter(user_id=self.id, read=False, team_id__in=team_slugs)
+            .values("team_id", "event_type__level")
+            .annotate(unread=models.Count("id"))
+            .order_by()
+        )
+        counts_by_team_id = dict.fromkeys(team_slugs, 0)
+        for row in unread_rows:
+            team_id = row["team_id"]
+            threshold = thresholds.get(team_id, LevelChoices.INFO)
+            if threshold is not None and row["event_type__level"] >= threshold:
+                counts_by_team_id[team_id] += row["unread"]
+
+        set_user_notification_cache_many(
+            self.id, {team_slugs[team_id]: count for team_id, count in counts_by_team_id.items()}
+        )
+        count = sum(counts_by_team_id.values())
 
         set_user_notification_cache(self.id, team_slug=ALL_TEAMS_CACHE_KEY, count=count)
         return count
