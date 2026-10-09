@@ -100,14 +100,18 @@ def compare(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> l
     for name in names:
         a = [run[name] for run in a_runs if name in run]
         b = [run[name] for run in b_runs if name in run]
-        pair_ratios = [b_value / a_value for a_value, b_value in zip(a, b, strict=False)]
+        pair_ratios = [
+            b_run[name] / a_run[name]
+            for a_run, b_run in zip(a_runs, b_runs, strict=True)
+            if name in a_run and name in b_run
+        ]
         rows.append(
             {
                 "name": name,
                 "a_median": statistics.median(a),
                 "b_median": statistics.median(b),
                 "ratio": statistics.median(b) / statistics.median(a),
-                "pair_ratio_spread": max(pair_ratios) - min(pair_ratios),
+                "pair_ratio_spread": max(pair_ratios) - min(pair_ratios) if pair_ratios else None,
             }
         )
     return rows
@@ -122,9 +126,10 @@ def format_markdown(rows: list[dict], a: str, b: str) -> str:
     ]
     for row in rows:
         name = row["name"].split("::", 1)[-1]
+        spread = "n/a" if row["pair_ratio_spread"] is None else f"{row['pair_ratio_spread'] * 100:.1f}%"
         lines.append(
             f"| `{name}` | {row['a_median'] * 1000:.3f} | {row['b_median'] * 1000:.3f} "
-            f"| {row['ratio']:.3f} | {row['pair_ratio_spread'] * 100:.1f}% |"
+            f"| {row['ratio']:.3f} | {spread} |"
         )
     return "\n".join(lines)
 

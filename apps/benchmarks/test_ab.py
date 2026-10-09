@@ -44,6 +44,21 @@ def test_main_warms_up_each_side_then_alternates_order(tmp_path, capsys):
     assert "| `x` | 10.000 | 20.000 | 2.000 | 0.0% |" in capsys.readouterr().out
 
 
+def test_compare_spread_uses_only_pairs_with_both_results():
+    a_runs = [{"t::x": 0.010}, {"t::x": 0.010}, {}]
+    b_runs = [{}, {"t::x": 0.011}, {"t::x": 0.020}]
+
+    [row] = ab.compare(a_runs, b_runs)
+
+    assert row["pair_ratio_spread"] == pytest.approx(0.0)
+
+
+def test_compare_spread_is_none_without_a_complete_pair():
+    [row] = ab.compare([{"t::x": 0.010}, {}], [{}, {"t::x": 0.011}])
+
+    assert row["pair_ratio_spread"] is None
+
+
 def test_pairs_must_be_positive():
     with pytest.raises(SystemExit):
         ab.main(["--a", "base", "--b", ".", "--pairs", "0"])
