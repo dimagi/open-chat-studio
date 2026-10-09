@@ -19,7 +19,7 @@ def test_compare_reports_ratio_and_pair_spread():
     assert row["pair_ratio_spread"] == pytest.approx(0.1)
 
 
-def test_main_alternates_order_and_creates_each_database_once(tmp_path, capsys):
+def test_main_warms_up_each_side_then_alternates_order(tmp_path, capsys):
     calls = []
 
     def fake_run_side(checkout, side, result, create_db, extra):
@@ -37,7 +37,8 @@ def test_main_alternates_order_and_creates_each_database_once(tmp_path, capsys):
     with patch.object(ab, "_run_side", fake_run_side):
         ab.main(["--a", "base", "--b", ".", "--pairs", "3", "--out", str(tmp_path)])
 
-    assert calls == [("a", True), ("b", True), ("b", False), ("a", False), ("a", False), ("b", False)]
+    warmup = [("a", True), ("b", True)]
+    assert calls == [*warmup, ("a", False), ("b", False), ("b", False), ("a", False), ("a", False), ("b", False)]
     [row] = json.loads((tmp_path / "summary.json").read_text())
     assert row["ratio"] == pytest.approx(2.0)
     assert "| `x` | 10.000 | 20.000 | 2.000 | 0.0% |" in capsys.readouterr().out

@@ -29,12 +29,17 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     checkouts = {"a": Path(args.a).resolve(), "b": Path(args.b).resolve()}
 
+    # The first run on a new test database is several percent slower on some benchmarks, so each side
+    # runs once before the measured pairs and that result is discarded.
+    for side in ("a", "b"):
+        _run_side(checkouts[side], side, out / f"{side}-warmup.json", create_db=True, extra=args.pytest_args)
+
     runs: dict[str, list[Path]] = {"a": [], "b": []}
     for pair in range(args.pairs):
         order = ("a", "b") if pair % 2 == 0 else ("b", "a")
         for side in order:
             result = out / f"{side}-{len(runs[side]) + 1}.json"
-            _run_side(checkouts[side], side, result, create_db=not runs[side], extra=args.pytest_args)
+            _run_side(checkouts[side], side, result, create_db=False, extra=args.pytest_args)
             runs[side].append(result)
 
     summary = compare(
