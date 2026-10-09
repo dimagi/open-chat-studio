@@ -1,5 +1,6 @@
 import {beforeAll, beforeEach, describe, expect, it, vi} from "vitest";
-import {render} from "@testing-library/react";
+import {fireEvent, render, screen, waitFor} from "@testing-library/react";
+import {apiClient} from "../api/api";
 import {TextEditorWidget} from "./widgets";
 import type {WidgetParams} from "./widgets";
 import type {JsonSchema, NodeParams} from "../types/nodeParams";
@@ -87,5 +88,31 @@ describe("TextEditorWidget tool completions", () => {
     render(<TextEditorWidget {...props({name: "n", prompt: "Hi", tools}, routerSchema)} />);
 
     expect(receivedTools.at(-1)).toEqual([]);
+  });
+});
+
+describe("TextEditorWidget prompt help", () => {
+  async function requestImprovement(nodeParams: NodeParams, nodeSchema: JsonSchema) {
+    const improvePrompt = vi.spyOn(apiClient, "improvePrompt").mockResolvedValue({response: {prompt: "x", notes: []}});
+    render(<TextEditorWidget {...props(nodeParams, nodeSchema)} />);
+    fireEvent.click(screen.getByText("Help"));
+    fireEvent.click(screen.getByText("Improve"));
+    await waitFor(() => expect(improvePrompt).toHaveBeenCalled());
+    return improvePrompt.mock.calls[0][0];
+  }
+
+  it("sends a router's keywords as its routes, with the default", async () => {
+    const request = await requestImprovement(
+      {name: "n", prompt: "Route it", keywords: ["BILLING", "", "SUPPORT"], default_keyword_index: 2},
+      routerSchema,
+    );
+
+    expect(request).toMatchObject({node_type: "router", routes: ["BILLING", "SUPPORT"], default_route: "SUPPORT"});
+  });
+
+  it("sends no routes for an LLM node", async () => {
+    const request = await requestImprovement({name: "n", prompt: "Hi", tools: [], keywords: [""]}, llmSchema);
+
+    expect(request).toMatchObject({node_type: "llm", routes: [], default_route: ""});
   });
 });

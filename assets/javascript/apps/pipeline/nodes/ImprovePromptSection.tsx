@@ -14,12 +14,14 @@ type ImprovePromptSectionParams = {
   currentPrompt: string;
   nodeType: "llm" | "router";
   toolNames: string[];
+  routes: string[];
+  defaultRoute: string;
   autocompleteVars: string[];
   onAccept: (value: string) => void;
 }
 
 export default function ImprovePromptSection(
-  {show, currentPrompt, nodeType, toolNames, autocompleteVars, onAccept}: ImprovePromptSectionParams
+  {show, currentPrompt, nodeType, toolNames, routes, defaultRoute, autocompleteVars, onAccept}: ImprovePromptSectionParams
 ) {
   const [instruction, setInstruction] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
@@ -51,6 +53,8 @@ export default function ImprovePromptSection(
       prompt: currentPrompt,
       node_type: nodeType,
       tool_names: toolNames,
+      routes,
+      default_route: defaultRoute,
       instruction,
     }).then((result) => {
       if (revision !== requestRevisionRef.current) return;

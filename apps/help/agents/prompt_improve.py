@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
-from apps.utils.prompt import PromptVars, get_prompt_variables
+from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS, PromptVars, get_prompt_variables
 
 
 @functools.cache
@@ -22,6 +22,8 @@ class PromptImproveInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=50_000)
     node_type: Literal["llm", "router"] = "llm"
     tool_names: list[str] = []
+    routes: list[str] = Field(default=[], description="A router node's routes, in output order")
+    default_route: str = ""
     instruction: str = Field(default="", max_length=2_000)
     team_id: int | None = None
 
@@ -32,14 +34,20 @@ class PromptImproveOutput(BaseModel):
 
 
 def _known_variables(node_type: str) -> set[str]:
-    """The variables a prompt on this node type may use, matching the nodes' own prompt validation."""
-    if node_type == "router":
-        return {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
-    return set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
+    """The variables a prompt on this node type may use."""
+    return PromptVars.router_node_vars() if node_type == "router" else PromptVars.llm_node_vars()
 
 
 def _names(variables: set[str]) -> str:
     return ", ".join(sorted(variables))
+
+
+def _describe(variables: set[str]) -> str:
+    return "\n".join(f"- {name}: {PROMPT_VAR_DESCRIPTIONS[name]}" for name in sorted(variables))
+
+
+def _list_routes(routes: list[str], default_route: str) -> str:
+    return "\n".join(f"- {route} (default)" if route == default_route else f"- {route}" for route in routes)
 
 
 def _validation_error(original: str, rewrite: str, known_vars: set[str]) -> str | None:
@@ -85,9 +93,11 @@ class PromptImproveAgent(BaseHelpAgent[PromptImproveInput, PromptImproveOutput])
         sections = [
             f"<prompt>\n{input.prompt}\n</prompt>",
             f"<node_type>{input.node_type}</node_type>",
-            f"<allowed_variables>{_names(_known_variables(input.node_type))}</allowed_variables>",
+            f"<allowed_variables>\n{_describe(_known_variables(input.node_type))}\n</allowed_variables>",
             f"<enabled_tools>{', '.join(input.tool_names) or 'none'}</enabled_tools>",
         ]
+        if input.node_type == "router" and input.routes:
+            sections.append(f"<routes>\n{_list_routes(input.routes, input.default_route)}\n</routes>")
         if input.instruction:
             sections.append(f"<instruction>\n{input.instruction}\n</instruction>")
         if error:

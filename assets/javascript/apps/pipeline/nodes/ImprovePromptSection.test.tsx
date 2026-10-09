@@ -21,6 +21,8 @@ function section(onAccept: (value: string) => void, currentPrompt = CURRENT) {
       currentPrompt={currentPrompt}
       nodeType="llm"
       toolNames={["one-off-reminder"]}
+      routes={[]}
+      defaultRoute=""
       autocompleteVars={["participant_data"]}
       onAccept={onAccept}
     />
@@ -61,8 +63,26 @@ describe("ImprovePromptSection", () => {
       prompt: CURRENT,
       node_type: "llm",
       tool_names: ["one-off-reminder"],
+      routes: [],
+      default_route: "",
       instruction: "Make it formal",
     });
+  });
+
+  it("sends a router's routes and default route", async () => {
+    const improvePrompt = vi.spyOn(apiClient, "improvePrompt").mockResolvedValue({response: {prompt: REWRITE, notes: []}});
+    render(
+      <ImprovePromptSection
+        show={true} currentPrompt={CURRENT} nodeType="router" toolNames={[]} autocompleteVars={[]}
+        routes={["BILLING", "SUPPORT"]} defaultRoute="SUPPORT" onAccept={vi.fn()}
+      />,
+    );
+
+    await improve();
+
+    expect(improvePrompt).toHaveBeenCalledWith(expect.objectContaining({
+      node_type: "router", routes: ["BILLING", "SUPPORT"], default_route: "SUPPORT",
+    }));
   });
 
   it("shows the notes and a diff against the current prompt", async () => {

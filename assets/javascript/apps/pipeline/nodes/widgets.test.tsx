@@ -332,6 +332,8 @@ describe('TextEditorModal', () => {
       autocomplete_vars_list={[]}
       toolCompletions={[]}
       nodeType="llm"
+      routes={[]}
+      defaultRoute=""
       readOnly={readOnly}
     />,
   );

@@ -83,3 +83,14 @@ def test_get_prompt_variables(prompt, variables):
 def test_get_prompt_variables_rejects_a_prompt_that_does_not_parse(prompt):
     with pytest.raises(ValidationError):
         get_prompt_variables(prompt)
+
+
+@pytest.mark.parametrize(
+    ("offered", "accepted"),
+    [
+        pytest.param(PromptVars.get_all_prompt_vars, PromptVars.llm_node_vars, id="llm-node"),
+        pytest.param(PromptVars.get_router_prompt_vars, PromptVars.router_node_vars, id="router-node"),
+    ],
+)
+def test_the_builder_offers_exactly_the_variables_validation_accepts(offered, accepted):
+    assert {option["value"] for option in offered()} == accepted()

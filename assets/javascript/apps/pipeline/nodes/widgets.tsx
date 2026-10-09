@@ -1276,6 +1276,16 @@ export function TextEditorWidget(props: WidgetParams) {
       : [],
     [hasTools, tools, custom_actions, mcp_tools, collection_id, collection_index_ids]
   );
+  const isRouter = props.nodeSchema.title === "RouterNode";
+  const {keywords, default_keyword_index} = props.nodeParams;
+  const {routes, defaultRoute} = useMemo(() => {
+    if (!isRouter || !Array.isArray(keywords)) {
+      return {routes: [], defaultRoute: ""};
+    }
+    // The default is looked up by position before blank keywords (still being typed) are dropped.
+    const defaultRoute = String(keywords[Number(default_keyword_index ?? 0)] ?? "");
+    return {routes: keywords.filter(Boolean).map(String), defaultRoute};
+  }, [isRouter, keywords, default_keyword_index]);
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1336,7 +1346,9 @@ export function TextEditorWidget(props: WidgetParams) {
         inputError={props.inputError}
         autocomplete_vars_list={autocomplete_vars_list}
         toolCompletions={toolCompletions}
-        nodeType={props.nodeSchema.title === "RouterNode" ? "router" : "llm"}
+        nodeType={isRouter ? "router" : "llm"}
+        routes={routes}
+        defaultRoute={defaultRoute}
         readOnly={props.readOnly}
       />
     </>
@@ -1352,6 +1364,8 @@ export function TextEditorModal({
   autocomplete_vars_list,
   toolCompletions,
   nodeType,
+  routes,
+  defaultRoute,
   readOnly,
 }: {
   modalId: string;
@@ -1362,6 +1376,8 @@ export function TextEditorModal({
   autocomplete_vars_list: string[];
   toolCompletions: ToolCompletion[];
   nodeType: "llm" | "router";
+  routes: string[];
+  defaultRoute: string;
   readOnly: boolean;
 }) {
   const [showImprove, setShowImprove] = useState(false);
@@ -1392,6 +1408,8 @@ export function TextEditorModal({
             currentPrompt={value}
             nodeType={nodeType}
             toolNames={toolNames}
+            routes={routes}
+            defaultRoute={defaultRoute}
             autocompleteVars={autocomplete_vars_list}
             onAccept={onChange}
           />}

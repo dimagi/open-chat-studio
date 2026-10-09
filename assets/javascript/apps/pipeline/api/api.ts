@@ -13,6 +13,8 @@ export type PromptImproveRequest = {
   prompt: string;
   node_type: "llm" | "router";
   tool_names: string[];
+  routes: string[];
+  default_route: string;
   instruction: string;
 }
 

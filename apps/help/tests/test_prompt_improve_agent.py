@@ -7,6 +7,7 @@ from django.urls import reverse
 from apps.help.agents.prompt_improve import PromptImproveAgent, PromptImproveInput, PromptImproveOutput
 from apps.help.registry import AGENT_REGISTRY
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
 ORIGINAL = "You help people. Data: {participant_data}"
 REWRITE = "You are a support assistant. Answer briefly.\n\nParticipant data: {participant_data}"
@@ -54,6 +55,50 @@ def test_user_message_carries_the_node_context(llm):
     assert "one-off-reminder" in message
     assert "<instruction>\nMake it formal\n</instruction>" in message
     assert "source_material" in message
+
+
+def test_router_message_lists_the_routes_and_marks_the_default(llm):
+    llm.invoke.side_effect = _responses(PromptImproveOutput(prompt="Route. {participant_data}", notes=[]))
+
+    _run(prompt="Route. {participant_data}", node_type="router", routes=["BILLING", "SUPPORT"], default_route="SUPPORT")
+
+    [message] = _user_messages(llm)
+    assert "<routes>\n- BILLING\n- SUPPORT (default)\n</routes>" in message
+
+
+@pytest.mark.parametrize(
+    ("node_type", "routes"),
+    [
+        pytest.param("llm", ["BILLING"], id="llm-node"),
+        pytest.param("router", [], id="router-without-routes"),
+    ],
+)
+def test_no_routes_section_without_router_routes(llm, node_type, routes):
+    llm.invoke.side_effect = _responses(PromptImproveOutput(prompt="Route. {participant_data}", notes=[]))
+
+    _run(prompt="Route. {participant_data}", node_type=node_type, routes=routes)
+
+    assert "<routes>" not in _user_messages(llm)[0]
+
+
+@pytest.mark.parametrize(
+    ("node_type", "described", "not_described"),
+    [
+        pytest.param("llm", ["participant_data", "source_material", "temp_state"], [], id="llm"),
+        pytest.param("router", ["participant_data", "temp_state"], ["source_material"], id="router"),
+    ],
+)
+def test_user_message_describes_each_allowed_variable(llm, node_type, described, not_described):
+    llm.invoke.side_effect = _responses(PromptImproveOutput(prompt="Route. {participant_data}", notes=[]))
+
+    _run(prompt="Route. {participant_data}", node_type=node_type)
+
+    [message] = _user_messages(llm)
+    allowed = message.split("<allowed_variables>")[1].split("</allowed_variables>")[0]
+    for name in described:
+        assert f"- {name}: {PROMPT_VAR_DESCRIPTIONS[name]}" in allowed
+    for name in not_described:
+        assert name not in allowed
 
 
 @pytest.mark.parametrize(

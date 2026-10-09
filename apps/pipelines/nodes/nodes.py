@@ -373,8 +373,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
-            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.llm_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -689,8 +688,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(
