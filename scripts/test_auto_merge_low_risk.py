@@ -23,9 +23,8 @@ LOW = "risk:low"
 
 def find_blockers(pull, check_runs, reviews, repo=REPO, *, risk=LOW, decision=None, status="success"):
     """The gate's own verdict defaults to low here so each test varies one thing."""
-    return auto_merge_low_risk.find_blockers(
-        pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision, status_state=status
-    )
+    signals = auto_merge_low_risk.Signals(risk, decision, status)
+    return auto_merge_low_risk.find_blockers(pull, check_runs, reviews, repo, signals)
 
 
 def pull(**overrides):

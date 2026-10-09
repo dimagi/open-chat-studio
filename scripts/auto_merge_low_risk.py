@@ -31,6 +31,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from typing import Any
 
 import pr_risk_gate
@@ -86,22 +87,29 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def mergeability_blockers(pull: dict, decision: str | None, status_state: str | None) -> list[str]:
+@dataclass(frozen=True)
+class Signals:
+    """Facts the pull request payload omits: the recomputed risk, the review decision and the commit status."""
+
+    risk: str
+    decision: str | None = None
+    status_state: str | None = None
+
+
+def mergeability_blockers(pull: dict, signals: Signals) -> list[str]:
     blockers = []
     if pull.get("mergeable") is not True:
         blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
     state = pull.get("mergeable_state")
-    waiting_on_review = state == "blocked" and decision == REVIEW_REQUIRED
-    if waiting_on_review and status_state != "success":
-        blockers.append(f"the combined commit status is {status_state}")
+    waiting_on_review = state == "blocked" and signals.decision == REVIEW_REQUIRED
+    if waiting_on_review and signals.status_state != "success":
+        blockers.append(f"the combined commit status is {signals.status_state}")
     elif state not in MERGEABLE_STATES and not waiting_on_review:
         blockers.append(f"its mergeable_state is {state}")
     return blockers
 
 
-def pull_blockers(
-    pull: dict, repo: str, recomputed_risk: str, decision: str | None = None, status_state: str | None = None
-) -> list[str]:
+def pull_blockers(pull: dict, repo: str, signals: Signals) -> list[str]:
     """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -115,9 +123,9 @@ def pull_blockers(
         blockers.append(f"it targets {pull['base']['ref']}, not {BASE_BRANCH}")
     if ((pull["head"].get("repo") or {}).get("full_name")) != repo:
         blockers.append("the head branch is on a fork")
-    blockers.extend(mergeability_blockers(pull, decision, status_state))
-    if recomputed_risk != pr_risk_gate.LOW:
-        blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
+    blockers.extend(mergeability_blockers(pull, signals))
+    if signals.risk != pr_risk_gate.LOW:
+        blockers.append(f"the gate re-runs this as {signals.risk}, whatever the label says")
     return blockers
 
 
@@ -148,19 +156,10 @@ def review_blockers(reviews: list[dict]) -> list[str]:
     ]
 
 
-def find_blockers(
-    pull: dict,
-    check_runs: list[dict],
-    reviews: list[dict],
-    repo: str,
-    *,
-    recomputed_risk: str,
-    decision: str | None = None,
-    status_state: str | None = None,
-) -> list[str]:
+def find_blockers(pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, signals: Signals) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     return [
-        *pull_blockers(pull, repo, recomputed_risk, decision, status_state),
+        *pull_blockers(pull, repo, signals),
         *check_blockers(check_runs),
         *review_blockers(reviews),
     ]
@@ -233,10 +232,8 @@ def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
     decision = review_decision(repo, number)
     status_state = commit_status_state(repo, pull["head"]["sha"])
-    blockers = find_blockers(
-        pull, check_runs, reviews, repo, recomputed_risk=risk, decision=decision, status_state=status_state
-    )
-    return pull, blockers
+    signals = Signals(risk, decision, status_state)
+    return pull, find_blockers(pull, check_runs, reviews, repo, signals)
 
 
 def open_low_risk_pulls(repo: str) -> list[dict]:
