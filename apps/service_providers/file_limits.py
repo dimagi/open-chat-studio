@@ -174,14 +174,19 @@ def is_blocked(extension: str, claimed_type: str, detected_type: str) -> str | N
     return None
 
 
+def file_extension(filename: str | None) -> str:
+    """Returns the extension of `filename` without the leading dot, or "" if it has none."""
+    # Windows drops trailing dots and spaces, so "run.bat." saves as "run.bat".
+    return pathlib.Path((filename or "").rstrip(". ")).suffix.lstrip(".")
+
+
 def blocked_file_reason(filename: str, claimed_type: str, content: bytes) -> str | None:
     """Returns a rejection reason if an inbound file's extension, claimed type or sniffed type is blocked, else None.
 
     `content` only needs to hold the start of the file.
     """
-    # Windows drops trailing dots and spaces, so "run.bat." saves as "run.bat".
     return is_blocked(
-        extension=pathlib.Path((filename or "").rstrip(". ")).suffix.lstrip("."),
+        extension=file_extension(filename),
         claimed_type=claimed_type,
         detected_type=detect_content_type(content, fallback=claimed_type),
     )

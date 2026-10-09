@@ -1210,7 +1210,7 @@ class TestPersistInboundAttachments:
         # detection-based rejection branch without relying on real libmagic
         # signatures (which can vary by version/platform).
         with patch(
-            "apps.service_providers.file_limits.detect_content_type",
+            "apps.channels.email_channel.detect_content_type",
             return_value="application/x-msdownload",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)

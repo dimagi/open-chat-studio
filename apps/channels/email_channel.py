@@ -27,9 +27,10 @@ from apps.files.content_type import detect_content_type
 from apps.files.models import File, FilePurpose
 from apps.service_providers.file_limits import (
     EMAIL_MAX_ATTACHMENT_BYTES,
-    blocked_file_reason,
     can_send_on_email,
     content_type_mismatch,
+    file_extension,
+    is_blocked,
 )
 from apps.teams.utils import set_current_team
 
@@ -178,8 +179,8 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
         size = len(att.content_bytes)
         detected = detect_content_type(att.content_bytes, fallback=att.content_type)
 
-        if reason := blocked_file_reason(
-            filename=att.filename, claimed_type=att.content_type, content=att.content_bytes
+        if reason := is_blocked(
+            extension=file_extension(att.filename), claimed_type=att.content_type, detected_type=detected
         ) or content_type_mismatch(claimed_type=att.content_type, detected_type=detected):
             skipped.append({"name": att.filename, "reason": reason, "size": size})
             continue
