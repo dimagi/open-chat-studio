@@ -15,7 +15,8 @@
     "type-check": "tsc --noEmit && tsc --noEmit -p e2e",
     "type-check-watch": "tsc --noEmit --watch",
     "lint": "eslint --fix assets/javascript",
-    "e2e": "playwright test --config e2e/playwright.config.ts"
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:check-stories": "node e2e/check-user-stories.mts"
   },
   "author": "",
   "homepage": "http://example.com/",
