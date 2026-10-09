@@ -19,8 +19,12 @@ NAME="${NAME:-ocs-perf-runner}"
 : "${SUBNET_ID:?Set SUBNET_ID}"
 : "${SECURITY_GROUP_ID:?Set SECURITY_GROUP_ID (no inbound rules are required)}"
 
-# Optional: INSTANCE_PROFILE (with AmazonSSMManagedInstanceCore) to connect with
-# Session Manager, and/or KEY_NAME for SSH.
+# INSTANCE_PROFILE (with AmazonSSMManagedInstanceCore) connects with Session
+# Manager, KEY_NAME with SSH. At least one is needed to reach the instance.
+if [ -z "${INSTANCE_PROFILE:-}" ] && [ -z "${KEY_NAME:-}" ]; then
+    echo "Set INSTANCE_PROFILE or KEY_NAME, otherwise the instance cannot be reached" >&2
+    exit 1
+fi
 extra_args=()
 if [ -n "${INSTANCE_PROFILE:-}" ]; then
     extra_args+=(--iam-instance-profile "Name=${INSTANCE_PROFILE}")
