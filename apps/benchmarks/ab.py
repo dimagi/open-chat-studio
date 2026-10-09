@@ -55,10 +55,17 @@ def _parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--a", required=True, help="baseline checkout")
     parser.add_argument("--b", required=True, help="candidate checkout")
-    parser.add_argument("--pairs", type=int, default=2, help="number of A/B pairs (default 2)")
+    parser.add_argument("--pairs", type=_positive_int, default=2, help="number of A/B pairs (default 2)")
     parser.add_argument("--out", default="ab-results", help="directory for the per-run JSON and summary.json")
     parser.add_argument("pytest_args", nargs="*", help="extra pytest arguments, after --")
     return parser.parse_args(argv)
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
 
 
 def _run_side(checkout: Path, side: str, result: Path, create_db: bool, extra: list[str]) -> None:

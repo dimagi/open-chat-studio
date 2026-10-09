@@ -42,3 +42,8 @@ def test_main_warms_up_each_side_then_alternates_order(tmp_path, capsys):
     [row] = json.loads((tmp_path / "summary.json").read_text())
     assert row["ratio"] == pytest.approx(2.0)
     assert "| `x` | 10.000 | 20.000 | 2.000 | 0.0% |" in capsys.readouterr().out
+
+
+def test_pairs_must_be_positive():
+    with pytest.raises(SystemExit):
+        ab.main(["--a", "base", "--b", ".", "--pairs", "0"])
