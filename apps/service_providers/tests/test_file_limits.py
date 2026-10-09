@@ -1,16 +1,19 @@
 import pytest
 
 from apps.service_providers.file_limits import (
-    EMAIL_BLOCKED_CONTENT_TYPES,
-    EMAIL_BLOCKED_EXTENSIONS,
+    BLOCKED_CONTENT_TYPES,
+    BLOCKED_EXTENSIONS,
     EMAIL_MAX_ATTACHMENT_BYTES,
-    EMAIL_TEXT_LIKE_APPLICATION_TYPES,
     FILE_SENDABILITY_CHECKERS,
+    TEXT_LIKE_APPLICATION_TYPES,
     SendabilityResult,
+    blocked_file_reason,
     can_send_on_email,
     can_send_on_slack,
     can_send_on_telegram,
     can_send_on_whatsapp,
+    content_type_mismatch,
+    is_blocked,
 )
 
 MB = 1024 * 1024
@@ -202,12 +205,12 @@ class TestCanSendOnEmail:
 
     def test_constants_exposed(self):
         assert EMAIL_MAX_ATTACHMENT_BYTES == 20 * MB
-        assert "exe" in EMAIL_BLOCKED_EXTENSIONS
-        assert "application/x-msdownload" in EMAIL_BLOCKED_CONTENT_TYPES
-        assert "application/json" in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        assert "exe" in BLOCKED_EXTENSIONS
+        assert "application/x-msdownload" in BLOCKED_CONTENT_TYPES
+        assert "application/json" in TEXT_LIKE_APPLICATION_TYPES
         # Script types deliberately excluded from text-like allowlist
-        assert "application/javascript" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
-        assert "application/x-sh" not in EMAIL_TEXT_LIKE_APPLICATION_TYPES
+        assert "application/javascript" not in TEXT_LIKE_APPLICATION_TYPES
+        assert "application/x-sh" not in TEXT_LIKE_APPLICATION_TYPES
 
 
 class TestChannelChecksRegistry:
@@ -220,3 +223,110 @@ class TestChannelChecksRegistry:
         for name, func in FILE_SENDABILITY_CHECKERS.items():
             result = func("image/jpeg", 1 * MB)
             assert isinstance(result, SendabilityResult), f"{name} checker returned wrong type"
+
+
+class TestIsBlocked:
+    @pytest.mark.parametrize(
+        ("extension", "claimed", "detected", "expected"),
+        [
+            pytest.param("exe", "text/plain", "text/plain", "file extension '.exe' not allowed", id="exe"),
+            pytest.param("EXE", "text/plain", "text/plain", "file extension '.exe' not allowed", id="extension-case"),
+            pytest.param("dmg", "", "application/octet-stream", "file extension '.dmg' not allowed", id="dmg"),
+            pytest.param(
+                "txt",
+                "text/plain",
+                "application/x-executable",
+                "file type not allowed (detected: application/x-executable)",
+                id="blocked-detected-type",
+            ),
+            pytest.param(
+                "txt",
+                "Application/X-MSDownload; name=setup.txt",
+                "text/plain",
+                "file type not allowed (claimed: application/x-msdownload)",
+                id="blocked-claimed-type-with-params",
+            ),
+            pytest.param("pdf", "application/pdf", "application/pdf", None, id="allowed-pdf"),
+            pytest.param("png", "image/png", "image/png", None, id="allowed-image"),
+            pytest.param("csv", "application/vnd.ms-excel", "text/plain", None, id="mismatch-not-checked"),
+        ],
+    )
+    def test_extension_and_content_type(self, extension, claimed, detected, expected):
+        assert is_blocked(extension=extension, claimed_type=claimed, detected_type=detected) == expected
+
+
+class TestBlockedFileReason:
+    ELF_BYTES = b"\x7fELF\x02\x01\x01\x00" + bytes(8) + b"\x02\x00\x3e\x00\x01\x00\x00\x00" + bytes(40)
+
+    @pytest.mark.parametrize(
+        ("filename", "claimed", "content", "expected"),
+        [
+            pytest.param("Setup.EXE", "text/plain", b"MZ", "file extension '.exe' not allowed", id="extension"),
+            pytest.param(
+                "notes.txt",
+                "text/plain",
+                ELF_BYTES,
+                "file type not allowed (detected: application/x-executable)",
+                id="sniffed-type",
+            ),
+            pytest.param(
+                "notes.txt",
+                "application/x-msdownload",
+                b"",
+                "file type not allowed (detected: application/x-msdownload)",
+                id="claimed-type-when-sniffing-finds-nothing",
+            ),
+            pytest.param(
+                "report.pdf",
+                "application/pdf",
+                b"MZ\x90\x00" + bytes(60),
+                "file type not allowed (detected: application/x-dosexec)",
+                id="windows-executable-renamed-to-pdf",
+            ),
+            pytest.param(
+                "run.sh",
+                "text/plain",
+                b"echo hi",
+                "file extension '.sh' not allowed",
+                id="shell-script-extension",
+            ),
+            pytest.param(
+                "notes.txt",
+                "text/plain",
+                b"#!/bin/sh\necho hi\n",
+                "file type not allowed (detected: text/x-shellscript)",
+                id="shell-script-sniffed",
+            ),
+            pytest.param(
+                "run.bat.", "text/plain", b"@echo off", "file extension '.bat' not allowed", id="trailing-dot"
+            ),
+            pytest.param(
+                "run.bat ", "text/plain", b"@echo off", "file extension '.bat' not allowed", id="trailing-space"
+            ),
+            pytest.param("report.pdf", "application/pdf", b"%PDF-1.4 fake", None, id="allowed"),
+            pytest.param("", "", b"", None, id="no-name-or-type"),
+        ],
+    )
+    def test_reason(self, filename, claimed, content, expected):
+        assert blocked_file_reason(filename=filename, claimed_type=claimed, content=content) == expected
+
+
+class TestContentTypeMismatch:
+    @pytest.mark.parametrize(
+        ("claimed", "detected", "should_block"),
+        [
+            pytest.param("image/jpeg", "application/pdf", True, id="cross-category"),
+            pytest.param("application/vnd.ms-excel", "text/plain", True, id="excel-claim-for-text"),
+            pytest.param("text/csv", "application/javascript", True, id="script-not-text-like"),
+            pytest.param("application/octet-stream", "application/pdf", False, id="claimed-unknown"),
+            pytest.param("application/pdf", "application/octet-stream", False, id="detected-unknown"),
+            pytest.param("", "application/pdf", False, id="no-claim"),
+            pytest.param("application/json", "text/plain", False, id="text-like-json"),
+            pytest.param("application/xml", "text/plain", False, id="text-like-xml"),
+            pytest.param("text/csv", "text/plain", False, id="same-category"),
+            pytest.param("Application/PDF; name=x.pdf", "application/pdf", False, id="normalized"),
+        ],
+    )
+    def test_mismatch(self, claimed, detected, should_block):
+        result = content_type_mismatch(claimed_type=claimed, detected_type=detected)
+        assert (result is not None) == should_block

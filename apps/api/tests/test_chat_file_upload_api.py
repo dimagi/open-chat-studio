@@ -271,6 +271,35 @@ class TestFileValidationAPI:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["files"][0]["name"] == "workbook.xlsm"
 
+    ELF_BYTES = b"\x7fELF\x02\x01\x01\x00" + bytes(8) + b"\x02\x00\x3e\x00\x01\x00\x00\x00" + bytes(40)
+
+    @pytest.mark.parametrize(
+        ("filename", "content", "content_type"),
+        [
+            pytest.param("payload.exe", b"MZ\x90\x00", "text/plain", id="blocked-extension-with-text-claim"),
+            pytest.param("notes.txt", b"hello", "application/x-msdownload", id="blocked-claimed-type"),
+            pytest.param("notes.txt", ELF_BYTES, "text/plain", id="blocked-detected-type"),
+        ],
+    )
+    def test_blocked_file_rejected(self, api_client, session, filename, content, content_type):
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file(filename, content, content_type=content_type)
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert f"File '{filename}' was rejected" in response.json()["error"]
+        assert File.objects.count() == 0
+
+    def test_csv_with_windows_excel_content_type_accepted(self, api_client, session):
+        """A claimed type that disagrees with the sniffed one is not grounds for rejection on upload."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("data.csv", b"name,age\nbob,3\n", content_type="application/vnd.ms-excel")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
     def test_second_bad_file_rejects_whole_upload(self, api_client, session):
         """Validation covers every file; no File rows are created on rejection."""
         url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})

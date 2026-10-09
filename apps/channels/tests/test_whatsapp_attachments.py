@@ -591,3 +591,65 @@ class TestMetaCloudApiInboundDocumentTask:
         assert file.content_type == "application/pdf"
         assert ChatAttachment.objects.filter(files=file, tool_type="ocs_attachments").exists()
         assert_file_resolves_via_download_file_join(file, experiment.team.slug)
+
+
+class TestTurnioInboundDocumentCheck:
+    @pytest.fixture()
+    def bot_process_input(self, turnio_whatsapp_channel):
+        with (
+            patch("apps.service_providers.messaging_service.TurnIOService.send_text_message"),
+            patch("apps.chat.bots.PipelineBot.process_input") as bot_process_input,
+        ):
+            bot_process_input.return_value = setup_inbound_bot_response(turnio_whatsapp_channel.experiment)
+            yield bot_process_input
+
+    @pytest.fixture()
+    def send_document(self, turnio_whatsapp_channel, bot_process_input):
+        """Returns a function that delivers an inbound Turn.io document message and returns the bot's input mock."""
+        with patch("apps.service_providers.messaging_service.TurnIOService.download_message_media") as download_media:
+
+            def send(caption, filename, content, mime_type):
+                download_media.return_value = (content, mime_type)
+                handle_turn_message(
+                    experiment_id=turnio_whatsapp_channel.experiment.public_id,
+                    message_data=turnio_messages.document_message(
+                        caption=caption, filename=filename, mime_type=mime_type
+                    ),
+                )
+                return bot_process_input
+
+            yield send
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("filename", "content", "mime_type", "reason"),
+        [
+            pytest.param("setup.exe", b"MZ\x90\x00", "application/x-msdownload", "file extension '.exe'", id="ext"),
+            pytest.param("notes.txt", b"hello", "application/x-msdownload", "claimed: application/x-ms", id="claimed"),
+        ],
+    )
+    def test_blocked_document_is_removed_before_the_bot_sees_it(
+        self, send_document, filename, content, mime_type, reason
+    ):
+        bot_process_input = send_document(caption="Run this", filename=filename, content=content, mime_type=mime_type)
+
+        assert not File.objects.filter(purpose=FilePurpose.MESSAGE_MEDIA).exists()
+        user_query = bot_process_input.call_args.args[0]
+        assert user_query.startswith(f"Run this\n\n[Attachment '{filename}'")
+        assert reason in user_query
+        assert bot_process_input.call_args.kwargs["attachments"] == []
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("filename", "content", "mime_type"),
+        [
+            pytest.param("report.pdf", b"%PDF-1.4 fake", "application/pdf", id="pdf"),
+            pytest.param("data.csv", b"name,age\nbob,3\n", "application/vnd.ms-excel", id="csv-with-excel-claim"),
+        ],
+    )
+    def test_allowed_document_reaches_the_bot(self, send_document, filename, content, mime_type):
+        bot_process_input = send_document(caption="Read this", filename=filename, content=content, mime_type=mime_type)
+
+        file = File.objects.get(purpose=FilePurpose.MESSAGE_MEDIA)
+        assert bot_process_input.call_args.args[0] == "Read this"
+        assert [attachment.file_id for attachment in bot_process_input.call_args.kwargs["attachments"]] == [file.id]

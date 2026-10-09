@@ -20,7 +20,6 @@ from apps.channels.email_channel import (
     EmailChannel,
     EmailSender,
     EmailThreadContext,
-    _is_blocked,
     _persist_inbound_attachments,
     email_inbound_handler,
     get_email_experiment_channel,
@@ -1220,6 +1219,15 @@ class TestPersistInboundAttachments:
         assert "detected" in skipped[0]["reason"].lower()
         assert "application/x-msdownload" in skipped[0]["reason"]
 
+    def test_rejects_content_type_mismatch(self):
+        team = TeamFactory()
+        raw = [self._raw("report.pdf", "image/jpeg", b"%PDF-1.4 fake")]
+
+        accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
+
+        assert accepted == []
+        assert "mismatch" in skipped[0]["reason"]
+
     def test_canonical_content_type_is_magic_detected(self):
         team = TeamFactory()
         # PNG magic bytes; sender claims image/png — magic should agree
@@ -1255,26 +1263,6 @@ class TestPersistInboundAttachments:
         assert len(skipped) == 1
         assert skipped[0]["reason"] == "storage error"
         assert skipped[0]["name"] == "b.txt"
-
-    @pytest.mark.parametrize(
-        ("ext", "claimed", "detected", "should_block"),
-        [
-            ("pdf", "image/jpeg", "application/pdf", True),  # cross-category mismatch
-            ("pdf", "application/octet-stream", "application/pdf", False),  # claimed unknown
-            ("pdf", "application/pdf", "application/octet-stream", False),  # detected unknown
-            ("json", "application/json", "text/plain", False),  # text-like allowlist
-            ("xml", "application/xml", "text/plain", False),
-            ("csv", "text/csv", "application/javascript", True),  # script not allowlisted
-            ("csv", "text/csv", "text/plain", False),  # same text category
-        ],
-    )
-    def test_is_blocked_mismatch_matrix(self, ext, claimed, detected, should_block):
-        result = _is_blocked(ext, claimed, detected)
-        if should_block:
-            assert result is not None
-            assert "mismatch" in result.lower() or "not allowed" in result.lower()
-        else:
-            assert result is None
 
 
 @pytest.mark.django_db()
