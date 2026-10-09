@@ -62,6 +62,10 @@ PROVIDER_REPORTING_API_TOKEN = env("PROVIDER_REPORTING_API_TOKEN", default=None)
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
 USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
+# Set by GitHub Actions.
+IS_CI = env.bool("CI", default=False)
+# Serve the mock LLM provider (apps/service_providers/mock_llm), so the E2E tests can use it without DEBUG.
+MOCK_LLM_ENABLED = DEBUG or IS_CI
 if IS_TESTING:
     USE_DEBUG_TOOLBAR = False
     # Use a fast (insecure) hasher in tests; the default PBKDF2 hasher is deliberately slow.
