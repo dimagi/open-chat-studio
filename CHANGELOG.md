@@ -61,6 +61,10 @@ version section when a release is cut.
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
      State the default and whether it is required. -->
+- `SENTRY_TRACES_SAMPLE_RATE`: new, optional, defaults to `0` (no tracing).
+  Fraction of requests and Celery tasks sent to Sentry as performance traces;
+  only has an effect when `SENTRY_DSN` is set. Sentry no longer adds
+  `sentry-trace`/`baggage` headers to outbound HTTP requests.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)

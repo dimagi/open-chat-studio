@@ -4,6 +4,9 @@ Kept in a dedicated module (rather than inline in ``settings.py``) so the scrubb
 behaviour can be imported and unit tested without initialising the SDK.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from sentry_sdk.integrations import DidNotEnable, Integration
 from sentry_sdk.integrations.anthropic import AnthropicIntegration
 from sentry_sdk.integrations.langchain import LangchainIntegration
@@ -100,3 +103,40 @@ def get_disabled_integrations() -> list[Integration]:
         AnthropicIntegration(),
         *(integration() for integration in OPTIONAL_LLM_INTEGRATIONS),
     ]
+
+
+# Load balancer health checks and WhiteNoise static files run through Django on every request.
+UNSAMPLED_PATH_PREFIXES = ("/status/", "/static/")
+
+# Frequent beat tasks that only find due work and enqueue a task per item. Each enqueues with
+# ``delay_in_new_trace`` so that work is still sampled.
+UNSAMPLED_TASKS = frozenset(
+    {
+        "apps.events.tasks.enqueue_timed_out_events",
+        "apps.events.tasks.poll_due_scheduled_triggers",
+        "apps.evaluations.tasks.coordinate_evaluation_runs",
+    }
+)
+
+
+def make_traces_sampler(default_rate: float) -> Callable[[dict[str, Any]], float]:
+    """Build the ``traces_sampler`` used by ``sentry_sdk.init``.
+
+    A Celery task keeps the decision of the request or task that enqueued it, so a sampled webhook
+    and its chat task are recorded together. A web request ignores the ``sentry-trace`` header it
+    arrives with: any caller can set it, and honouring it would let them force sampling.
+    """
+
+    def traces_sampler(sampling_context: dict[str, Any]) -> float:
+        if environ := sampling_context.get("wsgi_environ"):
+            if environ.get("PATH_INFO", "").startswith(UNSAMPLED_PATH_PREFIXES):
+                return 0.0
+            return default_rate
+        if (parent_sampled := sampling_context.get("parent_sampled")) is not None:
+            return float(parent_sampled)
+        if celery_job := sampling_context.get("celery_job"):
+            if celery_job.get("task") in UNSAMPLED_TASKS:
+                return 0.0
+        return default_rate
+
+    return traces_sampler
