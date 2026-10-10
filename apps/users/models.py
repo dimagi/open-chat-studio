@@ -113,8 +113,7 @@ class CustomUser(AbstractUser):
 
             # One query: fetch all preferences for this user across all their teams.
             prefs_by_team = {
-                p.team_id: p
-                for p in UserNotificationPreferences.objects.filter(user=self, team_id__in=team_ids)
+                p.team_id: p for p in UserNotificationPreferences.objects.filter(user=self, team_id__in=team_ids)
             }
 
             # Build a combined Q that counts unread events for each team that has in-app
