@@ -2,6 +2,7 @@ import hashlib
 
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.db import models
+from django.db.models import Q
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
@@ -94,8 +95,8 @@ class CustomUser(AbstractUser):
         """
         Get the count of unread notifications for the user across every team they belong to.
 
-        Sums the (individually cached) per-team counts and caches the aggregate, so repeat
-        calls are cheap regardless of how many teams the user belongs to.
+        Uses a fixed number of queries when the cache is cold (teams, notification
+        preferences, and one aggregated EventUser count), regardless of team count.
 
         Returns:
             int: The number of unread notifications for this user across all their teams.
@@ -104,7 +105,33 @@ class CustomUser(AbstractUser):
         if count is not None:
             return count
 
-        count = sum(self.unread_notifications_count(team) for team in self.teams.all())
+        teams = list(self.teams.all())
+        if not teams:
+            count = 0
+        else:
+            team_ids = [team.id for team in teams]
+
+            # One query: fetch all preferences for this user across all their teams.
+            prefs_by_team = {
+                p.team_id: p
+                for p in UserNotificationPreferences.objects.filter(user=self, team_id__in=team_ids)
+            }
+
+            # Build a combined Q that counts unread events for each team that has in-app
+            # notifications enabled, respecting each team's configured minimum level.
+            combined_q = Q()
+            for team in teams:
+                pref = prefs_by_team.get(team.id)
+                in_app_enabled = pref.in_app_enabled if pref else True
+                level = pref.in_app_level if pref else LevelChoices.INFO
+                if in_app_enabled:
+                    combined_q |= Q(team_id=team.id, event_type__level__gte=level)
+
+            if combined_q:
+                # One query: count all matching unread EventUser rows across all teams.
+                count = EventUser.objects.filter(user_id=self.id, read=False).filter(combined_q).count()
+            else:
+                count = 0
 
         set_user_notification_cache(self.id, team_slug=ALL_TEAMS_CACHE_KEY, count=count)
         return count
