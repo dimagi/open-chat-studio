@@ -1601,6 +1601,11 @@
       "reasoning": true
     }
   },
+  "openai/gpt-rosalind-discovery": {
+    "first_seen": "2026-10-10",
+    "verdict": "rejected",
+    "reason": "Life-sciences model restricted to approved organizations, with no published context window."
+  },
   "openai/gpt-rosalind-research": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1711,6 +1716,11 @@
     "params": {
       "reasoning": true
     }
+  },
+  "perplexity/deepseek-v4-pro-0813": {
+    "first_seen": "2026-10-10",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window."
   },
   "perplexity/glm-5.2": {
     "first_seen": "2026-09-17",
