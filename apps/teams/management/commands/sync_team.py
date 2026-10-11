@@ -545,7 +545,7 @@ class Command(BaseCommand):
     def _stop_on_interrupt(self, stop: threading.Event, enabled: bool):
         """While enabled, turn the first Ctrl+C (or SIGTERM) into a request to stop after the current
         page, so the sync ends with every page it read committed and the report printed. A second
-        Ctrl+C aborts at once."""
+        Ctrl+C or SIGTERM aborts at once."""
         if not enabled:
             yield
             return
@@ -556,6 +556,7 @@ class Command(BaseCommand):
             )
             stop.set()
             signal.signal(signal.SIGINT, signal.default_int_handler)
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
         previous = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:

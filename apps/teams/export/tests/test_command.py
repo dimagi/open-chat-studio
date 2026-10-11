@@ -1001,6 +1001,20 @@ def test_ctrl_c_requests_a_stop_and_a_second_one_aborts(tmp_path, monkeypatch):
     assert signal.getsignal(signal.SIGINT) is previous
 
 
+def test_sigterm_requests_a_stop_and_a_second_one_terminates():
+    """The first SIGTERM requests a stop; the default handler is back for a second one."""
+    previous = signal.getsignal(signal.SIGTERM)
+    stop = threading.Event()
+    command = Command(stdout=io.StringIO())
+
+    with command._stop_on_interrupt(stop, enabled=True):
+        signal.raise_signal(signal.SIGTERM)
+        assert stop.is_set()
+        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+
+    assert signal.getsignal(signal.SIGTERM) is previous
+
+
 def _selecting(rows, *public_ids):
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": pid, "name": pid.upper()} for pid in public_ids]
     return rows
