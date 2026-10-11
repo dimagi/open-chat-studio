@@ -15,7 +15,12 @@ The automation handles **chat widget** changes (files under `components/`) diffe
 
 ## If the automation doesn't fire
 
-This can happen when your PR doesn't touch `apps/`, `components/`, `config/`, `assets/`, or `templates/` (e.g. tech docs-only changes) — the dispatch workflow only triggers on those paths. In that case, use one of:
+This can happen when:
+
+- Your PR doesn't touch `apps/`, `components/`, `config/`, `assets/`, or `templates/` (e.g. tech docs-only changes) — the dispatch workflow only triggers on those paths.
+- You ticked the checkbox after the PR was merged — the workflow reads the PR description as it was at merge time, so editing it afterwards has no effect.
+
+In either case, use one of:
 
 ### Manual trigger in docs repo
 The [update-changelog workflow](https://github.com/dimagi/open-chat-studio-docs/actions/workflows/update-changelog.yml) in the docs repo can also be triggered manually: go to **GitHub Actions → "Update Changelog and Docs from OCS PR"** and enter the OCS PR number.
