@@ -200,6 +200,26 @@ def _match_existing_score(model, row: dict, store: FKTranslationStore, target_te
     return None
 
 
+def _adopt_participant(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    return model._base_manager.filter(team=target_team, platform=row["platform"], identifier=row["identifier"]).first()
+
+
+def _adopt_participant_data(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    participant = store.get_target("experiments.participant", row["participant"])
+    experiment = store.get_target("experiments.experiment", row["experiment"])
+    if participant is None or experiment is None:
+        return None
+    return model._base_manager.filter(participant_id=participant, experiment_id=experiment).first()
+
+
+# Rows the target can create on its own once a channel is switched to it, while the source still
+# holds the same participant from before the switch. A source row that matches one by its unique
+# key is mapped onto it and the target's row is kept as it is, since it is the newer of the two.
+_ADOPT_EXISTING = {
+    "experiments.participant": _adopt_participant,
+    "experiments.participantdata": _adopt_participant_data,
+}
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
@@ -237,6 +257,8 @@ class Importer:
         self.target_team = None
         # Rows a rerun read again but didn't have to touch (source updated_at unchanged).
         self.skipped_rows = 0
+        # Per model, the source rows mapped onto a row the target created on its own.
+        self.adopted_rows: dict[str, int] = {}
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -320,6 +342,8 @@ class Importer:
     def _import_team_owned_row(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
     ) -> tuple[models.Model, bool]:
+        if (adopted := self._adopt_existing(model_label, model, source_pk, row)) is not None:
+            return adopted, False
         with transaction.atomic():
             field_values, m2m_values, timestamps, nulled_fk = self._build_values(model_label, model, row)
             instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
@@ -341,6 +365,21 @@ class Importer:
         if not nulled_fk and (source_updated_at := row.get("updated_at")) is not None:
             self.store.record(model_label, source_pk, instance.pk, source_updated_at=source_updated_at)
         return instance, created
+
+    def _adopt_existing(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict
+    ) -> models.Model | None:
+        """Map a source row onto a row the target created on its own (see ``_ADOPT_EXISTING``), leaving
+        the target's row untouched. Only a source row the sync has not imported yet is adopted."""
+        adopt = _ADOPT_EXISTING.get(model_label)
+        if adopt is None or self.store.get_target(model_label, source_pk) is not None:
+            return None
+        instance = adopt(model, row, self.store, self.target_team)
+        if instance is None:
+            return None
+        self.store.record(model_label, source_pk, instance.pk, source_updated_at=row.get("updated_at"))
+        self.adopted_rows[model_label] = self.adopted_rows.get(model_label, 0) + 1
+        return instance
 
     def _create_or_update(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict

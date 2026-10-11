@@ -457,6 +457,7 @@ class Command(BaseCommand):
                 notification_failures=importer.notification_failures,
                 chatbots=client.get_team().get("exportable_chatbots") or [],
                 skipped_rows=importer.skipped_rows,
+                adopted_rows=importer.adopted_rows,
             )
 
     def _run_force_delete(self, options, client):
@@ -480,6 +481,7 @@ class Command(BaseCommand):
         notification_failures: Sequence[tuple[str, str]] = (),
         chatbots: Sequence[dict] = (),
         skipped_rows: int = 0,
+        adopted_rows: dict[str, int] | None = None,
     ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
         which chatbots moved, which resources need manual setup, which files the source had no content
@@ -494,6 +496,8 @@ class Command(BaseCommand):
             self.stdout.write(f"Duration: {duration}")
         if skipped_rows:
             self.stdout.write(f"Rows already up to date and left untouched: {skipped_rows}")
+        if adopted_rows:
+            self._report_adopted_rows(adopted_rows)
 
         if chatbots:
             self._report_chatbots(chatbots)
@@ -537,6 +541,17 @@ class Command(BaseCommand):
                 "migrated for the whole team, and notifications can mention the other chatbots."
             )
         )
+
+    def _report_adopted_rows(self, adopted_rows: dict[str, int]) -> None:
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING(
+                "These rows already existed on this server, created after a channel was switched over. "
+                "The source rows were linked to them and the rows on this server were kept as they are:"
+            )
+        )
+        for model_label, count in adopted_rows.items():
+            self.stdout.write(f"  - {model_label}: {count}")
 
     def _report_missing_files(self, missing_files: Sequence[str]) -> None:
         self.stdout.write("")

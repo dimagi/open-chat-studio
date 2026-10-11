@@ -11,7 +11,7 @@ from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management.base import CommandError
 
 from apps.api.export.serializers import build_resource_serializer
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer, UnresolvedForeignKey
@@ -29,7 +29,7 @@ from apps.teams.management.commands.sync_team import (
 )
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ParticipantDataFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
@@ -752,6 +752,55 @@ def test_a_reference_to_a_later_resource_is_not_caught_up(make_store, tmp_path, 
         run_sync(client, store, private, on_user_created=None)
 
     assert [resource for resource, _cursor in client.iter_calls] == ["participant_data"]
+
+
+@pytest.mark.parametrize(
+    ("target_has_data", "expected_data", "expected_adopted"),
+    [
+        pytest.param(
+            False,
+            {"name": "late"},
+            {"experiments.participant": 1},
+            id="data-from-source",
+        ),
+        pytest.param(
+            True,
+            {"from": "target"},
+            {"experiments.participant": 1, "experiments.participantdata": 1},
+            id="data-kept-from-target",
+        ),
+    ],
+)
+def test_a_participant_the_target_created_during_cutover_is_adopted(
+    make_store, tmp_path, keypair, target_has_data, expected_data, expected_adopted
+):
+    """Once a channel is switched, a user who messaged the source just before the switch can message
+    the target before the sync has copied their participant. The source row is then mapped onto the
+    target's participant instead of colliding with it on (team, platform, identifier)."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    source_rows = {resource: rows[resource] for resource in ("participants", "participant_data")}
+    run_sync(FakeClient(manifest, {**rows, "participants": [], "participant_data": []}), store, private)
+
+    team = Team.objects.get(slug="imported-team-z")
+    on_target = ParticipantFactory(team=team, platform="web", identifier="user-1", name="Messaged the target")
+    if target_has_data:
+        experiment = Experiment.objects.get(pk=store.get_target("experiments.experiment", 700))
+        ParticipantDataFactory(team=team, participant=on_target, experiment=experiment, data={"from": "target"})
+
+    importer = run_sync(FakeClient(manifest, {**rows, **source_rows}), store, private, on_user_created=None)
+
+    assert store.get_target("experiments.participant", 1) == on_target.id
+    assert list(Participant.objects.filter(team=team)) == [on_target]
+    on_target.refresh_from_db()
+    assert on_target.name == "Messaged the target"
+    assert ParticipantData.objects.get(participant=on_target).data == expected_data
+    assert importer.adopted_rows == expected_adopted
+
+
+def test_report_lists_adopted_rows(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", adopted_rows={"experiments.participant": 2})
+    assert "experiments.participant: 2" in capsys.readouterr().out
 
 
 def _selecting(rows, *public_ids):
