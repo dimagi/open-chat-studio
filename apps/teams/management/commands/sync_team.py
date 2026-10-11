@@ -5,10 +5,12 @@
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits.
 
-It is meant for a one-off migration, not an ongoing sync: run it once, and optionally once more
-shortly afterwards to pick up rows created since the first run. ``--force-delete`` wipes the local
-team and its sync state so the import starts from scratch. After cutover, ``reregister_webhooks``
-points every channel in the team at this server.
+It is meant for a one-off migration, not an ongoing sync. For the cutover, run it with ``--follow``:
+after the first pass it keeps reading new rows from the source every ``--interval`` seconds until
+stopped with Ctrl+C. While it runs, ``reregister_webhooks`` in another shell points the team's
+channels at this server; once every channel is switched and the passes stop finding new rows, stop
+the sync. ``--force-delete`` wipes the local team and its sync state so the import starts from
+scratch.
 
 The source decides how much of the team moves: a team admin there can limit the export to selected
 chatbots. The command has no chatbot flag; it syncs whatever the source allows and reports it.
@@ -24,7 +26,10 @@ changes the recorded migrations without changing the schema). A mismatch means t
 different export code; deploy the latest code on both, or pass --skip-schema-check to override.
 """
 
+import contextlib
 import os
+import signal
+import threading
 import time
 from collections.abc import Sequence
 from datetime import timedelta
@@ -32,6 +37,7 @@ from pathlib import Path
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
 
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
@@ -265,7 +271,14 @@ def run_sync(
     enforce_schema=True,
     on_user_created=send_password_reset_email,
     style=None,
+    follow=False,
+    interval=10,
+    stop=None,
 ):
+    """Sync the team once, or with ``follow`` keep syncing every ``interval`` seconds until ``stop``
+    (a ``threading.Event``) is set. A stop takes effect between pages, so every page read is committed
+    with its cursor."""
+    stop = stop or threading.Event()
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
     cursor_key, chatbots = resolve_selection(client, store)
 
@@ -275,27 +288,36 @@ def run_sync(
         on_user_created=on_user_created,
         fetch_file_content=client.get_file_content,
     )
+    sync_pass = _SyncPass(importer, client, store, manifest["entries"], page_limit, cursor_key, bool(chatbots), write)
     try:
         with mute_signals():
             load_team(importer, client, store)
-            entries = manifest["entries"]
-
-            def sync_entry(entry, catch_up):
-                reread = bool(chatbots) and entry["reread_under_selection"]
-                return _sync_resource(
-                    importer, client, store, entry, page_limit, cursor_key, reread=reread, catch_up=catch_up
-                )
-
-            for position, entry in enumerate(entries):
-                catch_up = _catch_up_reader(entries[:position], sync_entry, write)
-                count = sync_entry(entry, catch_up)
+            counts = sync_pass.run(first=True, stop=stop)
+            for entry, count in zip(manifest["entries"], counts, strict=False):
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
+            if follow:
+                _follow(sync_pass, interval, stop, write, style)
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
         if friendly is None:
             raise
         raise CommandError(friendly) from exc
     return importer
+
+
+def _follow(sync_pass, interval, stop, write, style) -> None:
+    """Run a pass every ``interval`` seconds until ``stop`` is set, printing one line per pass."""
+    last_new_row_at = time.monotonic()
+    number = 1
+    while not stop.wait(interval):
+        close_old_connections()
+        number += 1
+        count = sum(sync_pass.run(first=False, stop=stop))
+        now = time.monotonic()
+        if count:
+            last_new_row_at = now
+        quiet_for = timedelta(seconds=round(now - last_new_row_at))
+        write(_style_synced_line(f"pass {number}: {count} rows synced, last new row {quiet_for} ago", count, style))
 
 
 def resolve_selection(client, store) -> tuple[str, list[dict]]:
@@ -320,59 +342,98 @@ def resolve_selection(client, store) -> tuple[str, list[dict]]:
     return key, chatbots
 
 
-def _catch_up_reader(earlier_entries, sync_entry, write):
-    """A ``catch_up(model_label)`` callable that re-reads one of ``earlier_entries`` from its cursor.
+class _SyncPass:
+    """One read of every manifest entry, with catch-up reads for parents the source created while the
+    pass was running.
 
     The source keeps writing while the sync runs, so a row can reference a parent created after the
-    parent's resource was read. Re-reading that resource from its cursor fetches the parent, because
-    the parent already exists on the source. Only earlier entries can be caught up, and a catch-up can
-    itself only reach entries before it, so the recursion ends after at most one level per entry.
-    Returns False when the model is not an earlier entry, so the caller raises the original error.
+    parent's resource was read. The parent already exists on the source, so re-reading its resource
+    from the cursor fetches it. Under a selection, a resource flagged ``reread_under_selection`` can
+    also gain an old row below its cursor; when the first catch-up does not find the parent, such a
+    resource is read again from the beginning. Only entries earlier than the one being read can be
+    caught up, so the recursion ends.
     """
 
-    def catch_up(model_label: str) -> bool:
-        for position, entry in enumerate(earlier_entries):
-            if entry["model"] == model_label:
-                count = sync_entry(entry, _catch_up_reader(earlier_entries[:position], sync_entry, write))
-                write(f"caught up {count} {entry['resource']} rows created during the sync")
-                return True
+    def __init__(self, importer, client, store, entries, page_limit, cursor_key, partial, write):
+        self.importer = importer
+        self.client = client
+        self.store = store
+        self.entries = entries
+        self.page_limit = page_limit
+        self.cursor_key = cursor_key
+        self.partial = partial
+        self.write = write
+
+    def run(self, first: bool, stop) -> list[int]:
+        """Read every entry and return the rows synced for each. The first pass of a run reads the
+        resources flagged ``reread_under_selection`` from the beginning; later passes rely on catch-up
+        for an old row that joins the selection. Stops early once ``stop`` is set."""
+        counts = []
+        for position, entry in enumerate(self.entries):
+            if stop.is_set():
+                break
+            counts.append(self._read(position, reread=first and self._rereadable(entry), stop=stop))
+        return counts
+
+    def _rereadable(self, entry) -> bool:
+        return self.partial and entry["reread_under_selection"]
+
+    def _read(self, position: int, reread: bool, stop=None) -> int:
+        """Import one entry page by page, recording the resume cursor once each page's rows are
+        committed. The cursor is stored rather than derived from the synced rows, because the row set
+        the source serves changes with the chatbot selection. ``reread`` starts from the beginning;
+        rows already imported at the same source revision are skipped by the importer."""
+        entry = self.entries[position]
+        model_label, cursor_type = entry["model"], entry["cursor"]
+        cursor = None if reread else self.store.get_cursor(self.cursor_key, model_label)
+        count = 0
+        pages = self.client.iter_pages(
+            entry["resource"], start_cursor=cursor, limit=self.page_limit, selection=self.cursor_key
+        )
+        for rows in pages:
+            for row in rows:
+                count += self._import_row(position, row)
+            next_cursor = page_cursor(cursor_type, rows)
+            if next_cursor is not None:
+                self.store.set_cursor(self.cursor_key, model_label, next_cursor)
+            if stop is not None and stop.is_set():
+                break
+        return count
+
+    def _import_row(self, position: int, row: dict) -> int:
+        """Import one row, catching up a parent the sync has not seen yet and retrying. A parent still
+        missing once every catch-up has run is outside the export (deleted, or not in the selection),
+        so the error is raised."""
+        attempts: dict[str, int] = {}
+        while True:
+            try:
+                return self.importer.import_rows(self.entries[position]["model"], [row])
+            except UnresolvedForeignKey as exc:
+                target = exc.target_label
+                attempt = attempts.get(target, 0)
+                if target is None or not self._catch_up(position, target, attempt):
+                    raise
+                attempts[target] = attempt + 1
+
+    def _catch_up(self, before: int, model_label: str, attempt: int) -> bool:
+        """Read ``model_label``'s entry again if it comes before ``before``: from its cursor on the
+        first attempt, then from the beginning when it is rereadable. Returns False when there is
+        nothing left to try. A catch-up ignores the stop request, since the row waiting on it would
+        otherwise fail."""
+        for position in range(before):
+            entry = self.entries[position]
+            if entry["model"] != model_label:
+                continue
+            if attempt == 0:
+                reread = False
+            elif attempt == 1 and self._rereadable(entry):
+                reread = True
+            else:
+                return False
+            count = self._read(position, reread=reread)
+            self.write(f"caught up {count} {entry['resource']} rows created during the sync")
+            return True
         return False
-
-    return catch_up
-
-
-def _import_row_with_catch_up(importer, model_label: str, row: dict, catch_up) -> int:
-    """Import one row, catching up each parent resource once when the row references a parent the
-    sync has not seen yet. A second miss on the same parent means it is outside the export (deleted,
-    or not in the chatbot selection), so the error is raised."""
-    caught_up = set()
-    while True:
-        try:
-            return importer.import_rows(model_label, [row])
-        except UnresolvedForeignKey as exc:
-            target = exc.target_label
-            if catch_up is None or target is None or target in caught_up or not catch_up(target):
-                raise
-            caught_up.add(target)
-
-
-def _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=False, catch_up=None) -> int:
-    """Import one resource page by page, recording the resume cursor once each page's rows are
-    committed. The cursor is stored rather than derived from the synced rows, because the row set the
-    source serves changes with the chatbot selection. ``reread`` starts from the beginning regardless;
-    rows already imported at the same source revision are skipped by the importer. ``catch_up`` is
-    called with a model label when a row references a parent not synced yet (see
-    ``_catch_up_reader``)."""
-    model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
-    cursor = None if reread else store.get_cursor(cursor_key, model_label)
-    count = 0
-    for rows in client.iter_pages(resource, start_cursor=cursor, limit=page_limit, selection=cursor_key):
-        for row in rows:
-            count += _import_row_with_catch_up(importer, model_label, row, catch_up)
-        next_cursor = page_cursor(cursor_type, rows)
-        if next_cursor is not None:
-            store.set_cursor(cursor_key, model_label, next_cursor)
-    return count
 
 
 def force_delete_team(team_slug, state_dir, write=lambda _m: None):
@@ -418,6 +479,20 @@ class Command(BaseCommand):
             help="Sync even if the source and target export schema checksums differ.",
         )
         parser.add_argument(
+            "--follow",
+            action="store_true",
+            help=(
+                "Keep syncing until stopped with Ctrl+C, for switching channels over while the source is "
+                "still receiving messages. The stop takes effect after the current page."
+            ),
+        )
+        parser.add_argument(
+            "--interval",
+            type=int,
+            default=10,
+            help="Seconds to wait between passes with --follow.",
+        )
+        parser.add_argument(
             "--force-delete",
             action="store_true",
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
@@ -438,15 +513,20 @@ class Command(BaseCommand):
                 client, private_key, enforce_schema=enforce_schema, store=store, write=self.stdout.write
             )
 
-            importer = run_sync(
-                client,
-                store,
-                private_key,
-                write=self.stdout.write,
-                page_limit=options["limit"],
-                enforce_schema=enforce_schema,
-                style=self.style,
-            )
+            stop = threading.Event()
+            with self._stop_on_interrupt(stop, enabled=options["follow"]):
+                importer = run_sync(
+                    client,
+                    store,
+                    private_key,
+                    write=self.stdout.write,
+                    page_limit=options["limit"],
+                    enforce_schema=enforce_schema,
+                    style=self.style,
+                    follow=options["follow"],
+                    interval=options["interval"],
+                    stop=stop,
+                )
 
             duration = timedelta(seconds=round(time.monotonic() - start_time))
             self._report(
@@ -459,6 +539,29 @@ class Command(BaseCommand):
                 skipped_rows=importer.skipped_rows,
                 adopted_rows=importer.adopted_rows,
             )
+
+    @contextlib.contextmanager
+    def _stop_on_interrupt(self, stop: threading.Event, enabled: bool):
+        """While enabled, turn the first Ctrl+C (or SIGTERM) into a request to stop after the current
+        page, so the sync ends with every page it read committed and the report printed. A second
+        Ctrl+C aborts at once."""
+        if not enabled:
+            yield
+            return
+
+        def request_stop(signum, frame):
+            self.stdout.write(
+                self.style.WARNING("Stopping after the current page. Press Ctrl+C again to abort immediately.")
+            )
+            stop.set()
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+
+        previous = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+        try:
+            yield
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
 
     def _run_force_delete(self, options, client):
         """Confirm and delete the local team plus its sync state."""

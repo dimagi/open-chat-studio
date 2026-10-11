@@ -1,6 +1,11 @@
+import base64
 import io
+import json
 import re
+import signal
+import threading
 import uuid
+from datetime import datetime
 
 import pytest
 import requests
@@ -547,6 +552,8 @@ def _sync_options(tmp_path, **overrides):
         "limit": 100,
         "skip_schema_check": False,
         "force_delete": False,
+        "follow": False,
+        "interval": 10,
     }
     options.update(overrides)
     return options
@@ -648,14 +655,14 @@ class _BusySourceClient(FakeClient):
             hook()
 
 
-def _participant_entries():
+def _participant_entries(reread_participants=False):
     return [
         {
             "model": model,
             "resource": resource,
             "cursor": "updated_at_id",
             "secret": secret,
-            "reread_under_selection": False,
+            "reread_under_selection": reread_participants and model == "experiments.participant",
         }
         for model, resource, secret in (
             ("experiments.participant", "participants", False),
@@ -801,6 +808,157 @@ def test_a_participant_the_target_created_during_cutover_is_adopted(
 def test_report_lists_adopted_rows(capsys):
     Command()._report(sync_complete=True, team_slug="acme", adopted_rows={"experiments.participant": 2})
     assert "experiments.participant: 2" in capsys.readouterr().out
+
+
+@pytest.fixture()
+def keep_test_connection(monkeypatch):
+    """A follow run recycles stale DB connections between passes, which would close the connection
+    the test's transaction is open on."""
+    monkeypatch.setattr(sync_team, "close_old_connections", lambda: None)
+
+
+class _StopAfterWaits(threading.Event):
+    """A stop event that is set by the ``waits``-th wait between passes, so a follow run ends without
+    sleeping. ``between_passes`` runs on every wait, to stand in for writes on the source."""
+
+    def __init__(self, waits, between_passes=lambda _number: None):
+        super().__init__()
+        self.waits = waits
+        self.between_passes = between_passes
+        self.intervals = []
+
+    def wait(self, timeout=None):
+        self.intervals.append(timeout)
+        if len(self.intervals) >= self.waits:
+            self.set()
+        else:
+            self.between_passes(len(self.intervals))
+        return self.is_set()
+
+
+class _CursorClient(FakeClient):
+    """Serves only the rows past the start cursor, as the source does."""
+
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
+        self.iter_calls.append((resource, start_cursor))
+        rows = [row for row in self.rows_by_resource.get(resource, []) if _past_cursor(row, start_cursor)]
+        return iter([rows]) if rows else iter([])
+
+
+def _past_cursor(row, cursor):
+    if cursor is None:
+        return True
+    if cursor.isdigit():
+        return row["id"] > int(cursor)
+    keyset = json.loads(base64.b64decode(cursor))
+    row_key = (datetime.fromisoformat(row["updated_at"]), row["id"])
+    return row_key > (datetime.fromisoformat(keyset["updated_at"]), keyset["id"])
+
+
+@pytest.mark.usefixtures("keep_test_connection")
+def test_follow_keeps_syncing_until_stopped(make_store, tmp_path, keypair):
+    """Rows the source creates between passes are synced by the next pass, which resumes from the
+    cursors instead of reading everything again."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+
+    def create_on_source(number):
+        rows["participants"].append(_participant_row(1 + number))
+        rows["participant_data"].append(_participant_data_row(10 + number, 1 + number, 700, public_key))
+
+    stop = _StopAfterWaits(3, between_passes=create_on_source)
+    client = _CursorClient(manifest, rows)
+    lines = []
+    run_sync(client, store, private, write=lines.append, on_user_created=None, follow=True, interval=5, stop=stop)
+
+    assert stop.intervals == [5, 5, 5]
+    assert ParticipantData.objects.filter(participant__identifier__in=["user-1", "user-2", "user-3"]).count() == 3
+    assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data"] * 3
+    assert lines[-2:] == [
+        "pass 2: 2 rows synced, last new row 0:00:00 ago",
+        "pass 3: 2 rows synced, last new row 0:00:00 ago",
+    ]
+
+
+@pytest.mark.usefixtures("keep_test_connection")
+def test_follow_reads_flagged_resources_from_the_beginning_only_on_the_first_pass(make_store, tmp_path, keypair):
+    """Re-reading every shared resource on every pass would rescan whole tables every few seconds."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    manifest["entries"] = _participant_entries(reread_participants=True)
+    client = _CursorClient(manifest, _selecting(rows, "a"))
+
+    run_sync(client, store, private, on_user_created=None, follow=True, stop=_StopAfterWaits(2))
+
+    participant_reads = [cursor for resource, cursor in client.iter_calls if resource == "participants"]
+    assert participant_reads == [None, page_cursor("updated_at_id", [_participant_row(1)])]
+
+
+@pytest.mark.usefixtures("keep_test_connection")
+def test_a_row_that_joins_the_selection_below_the_cursor_is_caught_up(make_store, tmp_path, keypair):
+    """Under a selection, an existing participant joins the exported set when they start talking to a
+    selected chatbot. Their row sits below the cursor, so after a catch-up from the cursor misses it,
+    participants are read again from the beginning."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    manifest["entries"] = _participant_entries(reread_participants=True)
+    rows["participants"].append(_participant_row(5))
+    client = _CursorClient(manifest, _selecting(rows, "a"))
+
+    def joins_the_selection(_number):
+        rows["participants"].insert(1, _participant_row(3))
+        rows["participant_data"].append(_participant_data_row(11, 3, 700, public_key))
+
+    run_sync(client, store, private, on_user_created=None, follow=True, stop=_StopAfterWaits(2, joins_the_selection))
+
+    assert ParticipantData.objects.filter(participant__identifier="user-3").exists()
+    cursor = page_cursor("updated_at_id", [_participant_row(5)])
+    assert client.iter_calls[2:] == [
+        ("participants", cursor),
+        ("participant_data", page_cursor("updated_at_id", [_participant_data_row(10, 1, 700, public_key)])),
+        ("participants", cursor),
+        ("participants", None),
+    ]
+
+
+def test_a_stop_takes_effect_after_the_current_page(make_store, tmp_path, keypair):
+    """The page being imported is finished and its cursor recorded, and nothing after it is read."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    stop = threading.Event()
+
+    class TwoPageClient(FakeClient):
+        def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
+            self.iter_calls.append((resource, start_cursor))
+            stop.set()
+            yield [_participant_row(1)]
+            yield [_participant_row(2)]
+
+    client = TwoPageClient(manifest, rows)
+    run_sync(client, store, private, on_user_created=None, follow=True, stop=stop)
+
+    assert client.iter_calls == [("participants", None)]
+    assert store.has_target("experiments.participant", 1)
+    assert not store.has_target("experiments.participant", 2)
+    assert store.get_cursor(ALL_CHATBOTS_KEY, "experiments.participant") == page_cursor(
+        "updated_at_id", [_participant_row(1)]
+    )
+
+
+def test_ctrl_c_requests_a_stop_and_a_second_one_aborts(tmp_path, monkeypatch):
+    """The first Ctrl+C lets the sync finish its page and print the report; the second interrupts at
+    once."""
+    previous = signal.getsignal(signal.SIGINT)
+    stop = threading.Event()
+    command = Command(stdout=io.StringIO())
+
+    with command._stop_on_interrupt(stop, enabled=True):
+        signal.raise_signal(signal.SIGINT)
+        assert stop.is_set()
+        with pytest.raises(KeyboardInterrupt):
+            signal.raise_signal(signal.SIGINT)
+
+    assert signal.getsignal(signal.SIGINT) is previous
 
 
 def _selecting(rows, *public_ids):
