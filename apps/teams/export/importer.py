@@ -220,6 +220,16 @@ _ADOPT_EXISTING = {
     "experiments.participantdata": _adopt_participant_data,
 }
 
+# Rows the target edits itself once a channel is switched to it. While the source still finishes work
+# it had queued for that conversation, a later source revision would overwrite the target's newer
+# edit, so a row edited on the target since the sync wrote it is kept as it is.
+_KEEP_TARGET_EDITS = {
+    "experiments.participant",
+    "experiments.participantdata",
+    "experiments.experimentsession",
+    "chat.chat",
+}
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
@@ -259,6 +269,9 @@ class Importer:
         self.skipped_rows = 0
         # Per model, the source rows mapped onto a row the target created on its own.
         self.adopted_rows: dict[str, int] = {}
+        # Per model, the source pks of rows edited on the target that a newer source revision was not
+        # applied to.
+        self.kept_target_edits: dict[str, set[int]] = {}
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -344,6 +357,8 @@ class Importer:
     ) -> tuple[models.Model, bool]:
         if (adopted := self._adopt_existing(model_label, model, source_pk, row)) is not None:
             return adopted, False
+        if (kept := self._keep_target_edit(model_label, model, source_pk, row)) is not None:
+            return kept, False
         with transaction.atomic():
             field_values, m2m_values, timestamps, nulled_fk = self._build_values(model_label, model, row)
             instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
@@ -379,6 +394,26 @@ class Importer:
             return None
         self.store.record(model_label, source_pk, instance.pk, source_updated_at=row.get("updated_at"))
         self.adopted_rows[model_label] = self.adopted_rows.get(model_label, 0) + 1
+        return instance
+
+    def _keep_target_edit(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict
+    ) -> models.Model | None:
+        """The target row, when it was edited on the target after the sync last wrote it (see
+        ``_KEEP_TARGET_EDITS``). The sync restores the source ``updated_at`` on every row it writes, so
+        a later ``updated_at`` on the target means the target changed it. The new source revision is
+        recorded so an unchanged source row is not reconsidered on the next pass."""
+        if model_label not in _KEEP_TARGET_EDITS:
+            return None
+        target_pk = self.store.get_target(model_label, source_pk)
+        synced_at = self.store.get_source_updated_at(model_label, source_pk)
+        if target_pk is None or synced_at is None:
+            return None
+        instance = model._base_manager.filter(pk=target_pk).first()
+        if instance is None or instance.updated_at <= parse_datetime(synced_at):
+            return None
+        self.store.record(model_label, source_pk, target_pk, source_updated_at=row.get("updated_at"))
+        self.kept_target_edits.setdefault(model_label, set()).add(source_pk)
         return instance
 
     def _create_or_update(

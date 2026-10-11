@@ -817,6 +817,46 @@ def keep_test_connection(monkeypatch):
     monkeypatch.setattr(sync_team, "close_old_connections", lambda: None)
 
 
+@pytest.mark.parametrize(
+    ("edited_on_target", "expected_data", "expected_kept"),
+    [
+        pytest.param(False, {"name": "from source"}, {}, id="source-revision-applied"),
+        pytest.param(True, {"name": "from target"}, {"experiments.participantdata": {10}}, id="target-edit-kept"),
+    ],
+)
+def test_a_row_edited_on_the_target_is_not_overwritten_by_the_source(
+    make_store, tmp_path, keypair, edited_on_target, expected_data, expected_kept
+):
+    """After a channel is switched, the source can still finish work it had queued for that
+    conversation. Its later revision of a row must not overwrite what the target has since written."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    data = ParticipantData.objects.get(pk=store.get_target("experiments.participantdata", 10))
+    if edited_on_target:
+        data.data = {"name": "from target"}
+        data.save()
+    rows["participant_data"] = [
+        {
+            **_participant_data_row(10, 1, 700, public_key),
+            "data": seal_mod.seal({"name": "from source"}, public_key),
+            "updated_at": "2021-01-01T00:00:00+00:00",
+        }
+    ]
+
+    importer = run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    data.refresh_from_db()
+    assert data.data == expected_data
+    assert importer.kept_target_edits == expected_kept
+
+
+def test_report_lists_rows_kept_from_the_target(capsys):
+    Command()._report(sync_complete=True, team_slug="acme", kept_target_edits={"chat.chat": 3})
+    assert "chat.chat: 3" in capsys.readouterr().out
+
+
 class _StopAfterWaits(threading.Event):
     """A stop event that is set by the ``waits``-th wait between passes, so a follow run ends without
     sleeping. ``between_passes`` runs on every wait, to stand in for writes on the source."""
