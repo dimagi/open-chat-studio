@@ -1,4 +1,6 @@
 import io
+import re
+import uuid
 
 import pytest
 import requests
@@ -9,12 +11,13 @@ from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management.base import CommandError
 
 from apps.api.export.serializers import build_resource_serializer
+from apps.experiments.models import Participant, ParticipantData
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.importer import Importer
+from apps.teams.export.importer import Importer, UnresolvedForeignKey
 from apps.teams.export.manifest import build_manifest, schema_checksum
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
-from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, page_cursor, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -26,6 +29,7 @@ from apps.teams.management.commands.sync_team import (
 )
 from apps.teams.models import Team
 from apps.users.models import CustomUser
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
@@ -628,6 +632,126 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
 
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
+
+
+class _BusySourceClient(FakeClient):
+    """Runs ``after_first_read[resource]`` once that resource has been read, to stand in for rows the
+    source creates while the sync is running."""
+
+    def __init__(self, manifest, rows_by_resource, after_first_read):
+        super().__init__(manifest, rows_by_resource)
+        self.after_first_read = dict(after_first_read)
+
+    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
+        yield from super().iter_pages(resource, start_cursor, limit, selection)
+        if hook := self.after_first_read.pop(resource, None):
+            hook()
+
+
+def _participant_entries():
+    return [
+        {
+            "model": model,
+            "resource": resource,
+            "cursor": "updated_at_id",
+            "secret": secret,
+            "reread_under_selection": False,
+        }
+        for model, resource, secret in (
+            ("experiments.participant", "participants", False),
+            ("experiments.participantdata", "participant_data", True),
+        )
+    ]
+
+
+def _participant_row(source_pk):
+    return {
+        "id": source_pk,
+        "name": "",
+        "identifier": f"user-{source_pk}",
+        "public_id": str(uuid.uuid4()),
+        "user": None,
+        "platform": "web",
+        "remote_id": "",
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def _participant_data_row(source_pk, participant_pk, experiment_pk, public_key):
+    return {
+        "id": source_pk,
+        "participant": participant_pk,
+        "experiment": experiment_pk,
+        "data": seal_mod.seal({"name": "late"}, public_key),
+        "encryption_key": seal_mod.seal("", public_key),
+        "system_metadata": {},
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def _participant_scenario(public_key, make_store, tmp_path):
+    """Participants and their data, with the chatbot they belong to already synced."""
+    experiment = ExperimentFactory()
+    store = make_store(tmp_path / "team.sqlite")
+    store.record("experiments.experiment", 700, experiment.id)
+    rows = {
+        "teams": _scenario(public_key)[1]["teams"],
+        "participants": [_participant_row(1)],
+        "participant_data": [_participant_data_row(10, 1, 700, public_key)],
+    }
+    return _manifest(_participant_entries()), rows, store
+
+
+def test_a_parent_created_after_its_resource_was_read_is_caught_up(make_store, tmp_path, keypair):
+    """On a busy source, a participant and its data can both be created after participants were read.
+    The data row then references a participant the sync hasn't seen, so participants are read again
+    from their cursor before the data row is imported."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+
+    def create_on_source():
+        rows["participants"].append(_participant_row(2))
+        rows["participant_data"].append(_participant_data_row(11, 2, 700, public_key))
+
+    client = _BusySourceClient(manifest, rows, after_first_read={"participants": create_on_source})
+    run_sync(client, store, private, on_user_created=None)
+
+    late = Participant.objects.get(pk=store.get_target("experiments.participant", 2))
+    assert ParticipantData.objects.get(participant=late).data == {"name": "late"}
+    assert client.iter_calls == [
+        ("participants", None),
+        ("participant_data", None),
+        ("participants", page_cursor("updated_at_id", [_participant_row(1)])),
+    ]
+
+
+def test_a_parent_the_source_never_serves_still_raises_after_one_catch_up(make_store, tmp_path, keypair):
+    """A parent that a catch-up doesn't bring in is outside the export, so the run stops instead of
+    re-reading forever."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    rows["participant_data"].append(_participant_data_row(11, 99, 700, public_key))
+    client = FakeClient(manifest, rows)
+
+    with pytest.raises(UnresolvedForeignKey, match=re.escape("experiments.participant:99")):
+        run_sync(client, store, private, on_user_created=None)
+
+    assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data", "participants"]
+
+
+def test_a_reference_to_a_later_resource_is_not_caught_up(make_store, tmp_path, keypair):
+    """Only resources already read can be caught up; a reference to anything else is an ordering bug."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    manifest["entries"].reverse()
+    client = FakeClient(manifest, rows)
+
+    with pytest.raises(UnresolvedForeignKey, match=re.escape("experiments.participant:1")):
+        run_sync(client, store, private, on_user_created=None)
+
+    assert [resource for resource, _cursor in client.iter_calls] == ["participant_data"]
 
 
 def _selecting(rows, *public_ids):

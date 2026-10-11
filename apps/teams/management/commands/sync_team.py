@@ -35,7 +35,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
-from apps.teams.export.importer import Importer, mute_signals
+from apps.teams.export.importer import Importer, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, schema_checksum
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
@@ -278,9 +278,17 @@ def run_sync(
     try:
         with mute_signals():
             load_team(importer, client, store)
-            for entry in manifest["entries"]:
+            entries = manifest["entries"]
+
+            def sync_entry(entry, catch_up):
                 reread = bool(chatbots) and entry["reread_under_selection"]
-                count = _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=reread)
+                return _sync_resource(
+                    importer, client, store, entry, page_limit, cursor_key, reread=reread, catch_up=catch_up
+                )
+
+            for position, entry in enumerate(entries):
+                catch_up = _catch_up_reader(entries[:position], sync_entry, write)
+                count = sync_entry(entry, catch_up)
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
@@ -312,16 +320,55 @@ def resolve_selection(client, store) -> tuple[str, list[dict]]:
     return key, chatbots
 
 
-def _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=False) -> int:
+def _catch_up_reader(earlier_entries, sync_entry, write):
+    """A ``catch_up(model_label)`` callable that re-reads one of ``earlier_entries`` from its cursor.
+
+    The source keeps writing while the sync runs, so a row can reference a parent created after the
+    parent's resource was read. Re-reading that resource from its cursor fetches the parent, because
+    the parent already exists on the source. Only earlier entries can be caught up, and a catch-up can
+    itself only reach entries before it, so the recursion ends after at most one level per entry.
+    Returns False when the model is not an earlier entry, so the caller raises the original error.
+    """
+
+    def catch_up(model_label: str) -> bool:
+        for position, entry in enumerate(earlier_entries):
+            if entry["model"] == model_label:
+                count = sync_entry(entry, _catch_up_reader(earlier_entries[:position], sync_entry, write))
+                write(f"caught up {count} {entry['resource']} rows created during the sync")
+                return True
+        return False
+
+    return catch_up
+
+
+def _import_row_with_catch_up(importer, model_label: str, row: dict, catch_up) -> int:
+    """Import one row, catching up each parent resource once when the row references a parent the
+    sync has not seen yet. A second miss on the same parent means it is outside the export (deleted,
+    or not in the chatbot selection), so the error is raised."""
+    caught_up = set()
+    while True:
+        try:
+            return importer.import_rows(model_label, [row])
+        except UnresolvedForeignKey as exc:
+            target = exc.target_label
+            if catch_up is None or target is None or target in caught_up or not catch_up(target):
+                raise
+            caught_up.add(target)
+
+
+def _sync_resource(importer, client, store, entry, page_limit, cursor_key, reread=False, catch_up=None) -> int:
     """Import one resource page by page, recording the resume cursor once each page's rows are
     committed. The cursor is stored rather than derived from the synced rows, because the row set the
     source serves changes with the chatbot selection. ``reread`` starts from the beginning regardless;
-    rows already imported at the same source revision are skipped by the importer."""
+    rows already imported at the same source revision are skipped by the importer. ``catch_up`` is
+    called with a model label when a row references a parent not synced yet (see
+    ``_catch_up_reader``)."""
     model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
     cursor = None if reread else store.get_cursor(cursor_key, model_label)
     count = 0
     for rows in client.iter_pages(resource, start_cursor=cursor, limit=page_limit, selection=cursor_key):
-        count += importer.import_rows(model_label, rows)
+        for row in rows:
+            count += _import_row_with_catch_up(importer, model_label, row, catch_up)
         next_cursor = page_cursor(cursor_type, rows)
         if next_cursor is not None:
             store.set_cursor(cursor_key, model_label, next_cursor)

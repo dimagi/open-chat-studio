@@ -62,7 +62,13 @@ def mute_signals():
 
 
 class UnresolvedForeignKey(Exception):
-    """A required FK points at a row that should have been synced but wasn't (an ordering bug)."""
+    """A required FK points at a row that has no translation yet: either the source created it after
+    its resource was read, or an ordering bug. ``target_label`` names the model it points at."""
+
+    def __init__(self, message: str, target_label: str | None = None, source_pk=None):
+        super().__init__(message)
+        self.target_label = target_label
+        self.source_pk = source_pk
 
 
 class MissingGlobalRow(Exception):
@@ -89,7 +95,11 @@ def resolve_fk(field: models.ForeignKey, source_pk: int | None, store: FKTransla
         return target
     if field.null:
         return None
-    raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} -> {target_label}:{source_pk}")
+    raise UnresolvedForeignKey(
+        f"{field.model._meta.label_lower}.{field.name} -> {target_label}:{source_pk}",
+        target_label=target_label,
+        source_pk=source_pk,
+    )
 
 
 @functools.cache
@@ -442,7 +452,11 @@ class Importer:
             source_pk = row[fk_field]
             target_pk = self.store.get_target(type_label, source_pk)
             if target_pk is None:
-                raise UnresolvedForeignKey(f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}")
+                raise UnresolvedForeignKey(
+                    f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}",
+                    target_label=type_label,
+                    source_pk=source_pk,
+                )
             field_values[fk_field] = target_pk
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
@@ -506,7 +520,11 @@ class Importer:
             return None  # target model deliberately not synced; leave the member out
         target = self.store.get_target(label, as_int(source_pk))
         if target is None:
-            raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}")
+            raise UnresolvedForeignKey(
+                f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}",
+                target_label=label,
+                source_pk=source_pk,
+            )
         return target
 
     def _match_global(self, model: type[models.Model], spec: GlobalSpec, row: dict) -> models.Model | None:
