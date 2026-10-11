@@ -1,28 +1,20 @@
-import base64
 import io
-import json
-import re
-import signal
-import threading
-import uuid
-from datetime import datetime
 
 import pytest
 import requests
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management.base import CommandError
 
 from apps.api.export.serializers import build_resource_serializer
-from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.importer import Importer, UnresolvedForeignKey
-from apps.teams.export.manifest import build_manifest, schema_checksum
+from apps.teams.export.importer import Importer
+from apps.teams.export.manifest import build_manifest
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
-from apps.teams.export.translation import ALL_CHATBOTS_KEY, page_cursor, selection_key
+from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots
+from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
     PRIVATE_KEY_ENV_VAR,
@@ -34,53 +26,9 @@ from apps.teams.management.commands.sync_team import (
 )
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.factories.experiment import ExperimentFactory, ParticipantDataFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
-
-PAST = "2020-01-02T03:04:05+00:00"
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
-
-
-class FakeClient:
-    def __init__(self, manifest, rows_by_resource):
-        self.manifest = manifest
-        self.rows_by_resource = rows_by_resource
-        self.iter_calls = []
-        self.selections = []
-        self.get_team_calls = 0
-
-    def get_manifest(self):
-        return self.manifest
-
-    def get_team(self):
-        # The team is fetched on its own from the dedicated ``team/`` endpoint, not the manifest loop.
-        self.get_team_calls += 1
-        return self.rows_by_resource["teams"][0]
-
-    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        self.iter_calls.append((resource, start_cursor))
-        if selection not in self.selections:
-            self.selections.append(selection)
-        rows = list(self.rows_by_resource.get(resource, []))
-        return iter([rows]) if rows else iter([])
-
-    def get_file_content(self, file_id):
-        return b""
-
-
-def _manifest(entries, checksum=None):
-    return {"schema_checksum": checksum if checksum is not None else schema_checksum(), "entries": entries}
 
 
 def _scenario(public_key, reread_under_selection=False):
@@ -123,7 +71,7 @@ def _scenario(public_key, reread_under_selection=False):
             }
         ],
     }
-    return _manifest(entries), rows
+    return make_manifest(entries), rows
 
 
 def _private_pem(private):
@@ -291,7 +239,7 @@ def test_new_users_receive_a_password_reset_email(make_store, tmp_path, keypair)
     store = make_store(tmp_path / "t.sqlite")
     mail.outbox.clear()
 
-    run_sync(FakeClient(_manifest(entries), rows), store, keypair[1])
+    run_sync(FakeClient(make_manifest(entries), rows), store, keypair[1])
 
     assert any("added@example.com" in message.to for message in mail.outbox)
 
@@ -308,7 +256,7 @@ def test_a_rejected_password_reset_email_is_reported_instead_of_aborting_the_syn
     report names them so the reset can be sent by hand."""
     entries, rows = _new_user_scenario()
     settings.EMAIL_BACKEND = f"{__name__}._RejectingEmailBackend"
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(_manifest(entries), rows))
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(make_manifest(entries), rows))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
     report = io.StringIO()
 
@@ -566,7 +514,7 @@ def _force_delete_options(tmp_path, **overrides):
 def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     """An interactive --force-delete that isn't confirmed must abort before deleting anything."""
     Team.objects.create(name="Keep", slug="imported-team-z")
-    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": []}]})
+    client = FakeClient(make_manifest([]), {"teams": [{"exportable_chatbots": []}]})
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
@@ -590,7 +538,7 @@ def test_force_delete_warns_about_files_only_for_whole_team_sync(
 ):
     """A partial sync backfills files from the source, so the warning only asks for a manual re-import
     when the whole team is synced."""
-    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
+    client = FakeClient(make_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
     out = io.StringIO()
@@ -641,391 +589,12 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
 
 
-class _BusySourceClient(FakeClient):
-    """Runs ``after_first_read[resource]`` once that resource has been read, to stand in for rows the
-    source creates while the sync is running."""
-
-    def __init__(self, manifest, rows_by_resource, after_first_read):
-        super().__init__(manifest, rows_by_resource)
-        self.after_first_read = dict(after_first_read)
-
-    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        yield from super().iter_pages(resource, start_cursor, limit, selection)
-        if hook := self.after_first_read.pop(resource, None):
-            hook()
-
-
-def _participant_entries(reread_participants=False):
-    return [
-        {
-            "model": model,
-            "resource": resource,
-            "cursor": "updated_at_id",
-            "secret": secret,
-            "reread_under_selection": reread_participants and model == "experiments.participant",
-        }
-        for model, resource, secret in (
-            ("experiments.participant", "participants", False),
-            ("experiments.participantdata", "participant_data", True),
-        )
-    ]
-
-
-def _participant_row(source_pk):
-    return {
-        "id": source_pk,
-        "name": "",
-        "identifier": f"user-{source_pk}",
-        "public_id": str(uuid.uuid4()),
-        "user": None,
-        "platform": "web",
-        "remote_id": "",
-        "created_at": PAST,
-        "updated_at": PAST,
-    }
-
-
-def _participant_data_row(source_pk, participant_pk, experiment_pk, public_key):
-    return {
-        "id": source_pk,
-        "participant": participant_pk,
-        "experiment": experiment_pk,
-        "data": seal_mod.seal({"name": "late"}, public_key),
-        "encryption_key": seal_mod.seal("", public_key),
-        "system_metadata": {},
-        "created_at": PAST,
-        "updated_at": PAST,
-    }
-
-
-def _participant_scenario(public_key, make_store, tmp_path):
-    """Participants and their data, with the chatbot they belong to already synced."""
-    experiment = ExperimentFactory()
-    store = make_store(tmp_path / "team.sqlite")
-    store.record("experiments.experiment", 700, experiment.id)
-    rows = {
-        "teams": _scenario(public_key)[1]["teams"],
-        "participants": [_participant_row(1)],
-        "participant_data": [_participant_data_row(10, 1, 700, public_key)],
-    }
-    return _manifest(_participant_entries()), rows, store
-
-
-def test_a_parent_created_after_its_resource_was_read_is_caught_up(make_store, tmp_path, keypair):
-    """On a busy source, a participant and its data can both be created after participants were read.
-    The data row then references a participant the sync hasn't seen, so participants are read again
-    from their cursor before the data row is imported."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-
-    def create_on_source():
-        rows["participants"].append(_participant_row(2))
-        rows["participant_data"].append(_participant_data_row(11, 2, 700, public_key))
-
-    client = _BusySourceClient(manifest, rows, after_first_read={"participants": create_on_source})
-    run_sync(client, store, private, on_user_created=None)
-
-    late = Participant.objects.get(pk=store.get_target("experiments.participant", 2))
-    assert ParticipantData.objects.get(participant=late).data == {"name": "late"}
-    assert client.iter_calls == [
-        ("participants", None),
-        ("participant_data", None),
-        ("participants", page_cursor("updated_at_id", [_participant_row(1)])),
-    ]
-
-
-def test_a_parent_the_source_never_serves_still_raises_after_one_catch_up(make_store, tmp_path, keypair):
-    """A parent that a catch-up doesn't bring in is outside the export, so the run stops instead of
-    re-reading forever."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    rows["participant_data"].append(_participant_data_row(11, 99, 700, public_key))
-    client = FakeClient(manifest, rows)
-
-    with pytest.raises(UnresolvedForeignKey, match=re.escape("experiments.participant:99")):
-        run_sync(client, store, private, on_user_created=None)
-
-    assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data", "participants"]
-
-
-def test_a_reference_to_a_later_resource_is_not_caught_up(make_store, tmp_path, keypair):
-    """Only resources already read can be caught up; a reference to anything else is an ordering bug."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    manifest["entries"].reverse()
-    client = FakeClient(manifest, rows)
-
-    with pytest.raises(UnresolvedForeignKey, match=re.escape("experiments.participant:1")):
-        run_sync(client, store, private, on_user_created=None)
-
-    assert [resource for resource, _cursor in client.iter_calls] == ["participant_data"]
-
-
-@pytest.mark.parametrize(
-    ("target_has_data", "expected_data", "expected_adopted"),
-    [
-        pytest.param(
-            False,
-            {"name": "late"},
-            {"experiments.participant": 1},
-            id="data-from-source",
-        ),
-        pytest.param(
-            True,
-            {"from": "target"},
-            {"experiments.participant": 1, "experiments.participantdata": 1},
-            id="data-kept-from-target",
-        ),
-    ],
-)
-def test_a_participant_the_target_created_during_cutover_is_adopted(
-    make_store, tmp_path, keypair, target_has_data, expected_data, expected_adopted
-):
-    """Once a channel is switched, a user who messaged the source just before the switch can message
-    the target before the sync has copied their participant. The source row is then mapped onto the
-    target's participant instead of colliding with it on (team, platform, identifier)."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    source_rows = {resource: rows[resource] for resource in ("participants", "participant_data")}
-    run_sync(FakeClient(manifest, {**rows, "participants": [], "participant_data": []}), store, private)
-
-    team = Team.objects.get(slug="imported-team-z")
-    on_target = ParticipantFactory(team=team, platform="web", identifier="user-1", name="Messaged the target")
-    if target_has_data:
-        experiment = Experiment.objects.get(pk=store.get_target("experiments.experiment", 700))
-        ParticipantDataFactory(team=team, participant=on_target, experiment=experiment, data={"from": "target"})
-
-    importer = run_sync(FakeClient(manifest, {**rows, **source_rows}), store, private, on_user_created=None)
-
-    assert store.get_target("experiments.participant", 1) == on_target.id
-    assert list(Participant.objects.filter(team=team)) == [on_target]
-    on_target.refresh_from_db()
-    assert on_target.name == "Messaged the target"
-    assert ParticipantData.objects.get(participant=on_target).data == expected_data
-    assert importer.adopted_rows == expected_adopted
-
-
-def test_report_lists_adopted_rows(capsys):
-    Command()._report(sync_complete=True, team_slug="acme", adopted_rows={"experiments.participant": 2})
-    assert "experiments.participant: 2" in capsys.readouterr().out
-
-
-@pytest.fixture()
-def keep_test_connection(monkeypatch):
-    """A follow run recycles stale DB connections between passes, which would close the connection
-    the test's transaction is open on."""
-    monkeypatch.setattr(sync_team, "close_old_connections", lambda: None)
-
-
-@pytest.mark.parametrize(
-    ("edited_on_target", "expected_data", "expected_kept"),
-    [
-        pytest.param(False, {"name": "from source"}, {}, id="source-revision-applied"),
-        pytest.param(True, {"name": "from target"}, {"experiments.participantdata": {10}}, id="target-edit-kept"),
-    ],
-)
-def test_a_row_edited_on_the_target_is_not_overwritten_by_the_source(
-    make_store, tmp_path, keypair, edited_on_target, expected_data, expected_kept
-):
-    """After a channel is switched, the source can still finish work it had queued for that
-    conversation. Its later revision of a row must not overwrite what the target has since written."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
-
-    data = ParticipantData.objects.get(pk=store.get_target("experiments.participantdata", 10))
-    if edited_on_target:
-        data.data = {"name": "from target"}
-        data.save()
-    rows["participant_data"] = [
-        {
-            **_participant_data_row(10, 1, 700, public_key),
-            "data": seal_mod.seal({"name": "from source"}, public_key),
-            "updated_at": "2021-01-01T00:00:00+00:00",
-        }
-    ]
-
-    importer = run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
-
-    data.refresh_from_db()
-    assert data.data == expected_data
-    assert importer.kept_target_edits == expected_kept
-
-
-def test_report_lists_rows_kept_from_the_target(capsys):
-    Command()._report(sync_complete=True, team_slug="acme", kept_target_edits={"chat.chat": 3})
-    assert "chat.chat: 3" in capsys.readouterr().out
-
-
-class _StopAfterWaits(threading.Event):
-    """A stop event that is set by the ``waits``-th wait between passes, so a follow run ends without
-    sleeping. ``between_passes`` runs on every wait, to stand in for writes on the source."""
-
-    def __init__(self, waits, between_passes=lambda _number: None):
-        super().__init__()
-        self.waits = waits
-        self.between_passes = between_passes
-        self.intervals = []
-
-    def wait(self, timeout=None):
-        self.intervals.append(timeout)
-        if len(self.intervals) >= self.waits:
-            self.set()
-        else:
-            self.between_passes(len(self.intervals))
-        return self.is_set()
-
-
-class _CursorClient(FakeClient):
-    """Serves only the rows past the start cursor, as the source does."""
-
-    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        self.iter_calls.append((resource, start_cursor))
-        rows = [row for row in self.rows_by_resource.get(resource, []) if _past_cursor(row, start_cursor)]
-        return iter([rows]) if rows else iter([])
-
-
-def _past_cursor(row, cursor):
-    if cursor is None:
-        return True
-    if cursor.isdigit():
-        return row["id"] > int(cursor)
-    keyset = json.loads(base64.b64decode(cursor))
-    row_key = (datetime.fromisoformat(row["updated_at"]), row["id"])
-    return row_key > (datetime.fromisoformat(keyset["updated_at"]), keyset["id"])
-
-
-@pytest.mark.usefixtures("keep_test_connection")
-def test_follow_keeps_syncing_until_stopped(make_store, tmp_path, keypair):
-    """Rows the source creates between passes are synced by the next pass, which resumes from the
-    cursors instead of reading everything again."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-
-    def create_on_source(number):
-        rows["participants"].append(_participant_row(1 + number))
-        rows["participant_data"].append(_participant_data_row(10 + number, 1 + number, 700, public_key))
-
-    stop = _StopAfterWaits(3, between_passes=create_on_source)
-    client = _CursorClient(manifest, rows)
-    lines = []
-    run_sync(client, store, private, write=lines.append, on_user_created=None, follow=True, interval=5, stop=stop)
-
-    assert stop.intervals == [5, 5, 5]
-    assert ParticipantData.objects.filter(participant__identifier__in=["user-1", "user-2", "user-3"]).count() == 3
-    assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data"] * 3
-    assert lines[-2:] == [
-        "pass 2: 2 rows synced, last new row 0:00:00 ago",
-        "pass 3: 2 rows synced, last new row 0:00:00 ago",
-    ]
-
-
-@pytest.mark.usefixtures("keep_test_connection")
-def test_follow_reads_flagged_resources_from_the_beginning_only_on_the_first_pass(make_store, tmp_path, keypair):
-    """Re-reading every shared resource on every pass would rescan whole tables every few seconds."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    manifest["entries"] = _participant_entries(reread_participants=True)
-    client = _CursorClient(manifest, _selecting(rows, "a"))
-
-    run_sync(client, store, private, on_user_created=None, follow=True, stop=_StopAfterWaits(2))
-
-    participant_reads = [cursor for resource, cursor in client.iter_calls if resource == "participants"]
-    assert participant_reads == [None, page_cursor("updated_at_id", [_participant_row(1)])]
-
-
-@pytest.mark.usefixtures("keep_test_connection")
-def test_a_row_that_joins_the_selection_below_the_cursor_is_caught_up(make_store, tmp_path, keypair):
-    """Under a selection, an existing participant joins the exported set when they start talking to a
-    selected chatbot. Their row sits below the cursor, so after a catch-up from the cursor misses it,
-    participants are read again from the beginning."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    manifest["entries"] = _participant_entries(reread_participants=True)
-    rows["participants"].append(_participant_row(5))
-    client = _CursorClient(manifest, _selecting(rows, "a"))
-
-    def joins_the_selection(_number):
-        rows["participants"].insert(1, _participant_row(3))
-        rows["participant_data"].append(_participant_data_row(11, 3, 700, public_key))
-
-    run_sync(client, store, private, on_user_created=None, follow=True, stop=_StopAfterWaits(2, joins_the_selection))
-
-    assert ParticipantData.objects.filter(participant__identifier="user-3").exists()
-    cursor = page_cursor("updated_at_id", [_participant_row(5)])
-    assert client.iter_calls[2:] == [
-        ("participants", cursor),
-        ("participant_data", page_cursor("updated_at_id", [_participant_data_row(10, 1, 700, public_key)])),
-        ("participants", cursor),
-        ("participants", None),
-    ]
-
-
-def test_a_stop_takes_effect_after_the_current_page(make_store, tmp_path, keypair):
-    """The page being imported is finished and its cursor recorded, and nothing after it is read."""
-    public_key, private = keypair
-    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    stop = threading.Event()
-
-    class TwoPageClient(FakeClient):
-        def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-            self.iter_calls.append((resource, start_cursor))
-            stop.set()
-            yield [_participant_row(1)]
-            yield [_participant_row(2)]
-
-    client = TwoPageClient(manifest, rows)
-    run_sync(client, store, private, on_user_created=None, follow=True, stop=stop)
-
-    assert client.iter_calls == [("participants", None)]
-    assert store.has_target("experiments.participant", 1)
-    assert not store.has_target("experiments.participant", 2)
-    assert store.get_cursor(ALL_CHATBOTS_KEY, "experiments.participant") == page_cursor(
-        "updated_at_id", [_participant_row(1)]
-    )
-
-
-def test_ctrl_c_requests_a_stop_and_a_second_one_aborts(tmp_path, monkeypatch):
-    """The first Ctrl+C lets the sync finish its page and print the report; the second interrupts at
-    once."""
-    previous = signal.getsignal(signal.SIGINT)
-    stop = threading.Event()
-    command = Command(stdout=io.StringIO())
-
-    with command._stop_on_interrupt(stop, enabled=True):
-        signal.raise_signal(signal.SIGINT)
-        assert stop.is_set()
-        with pytest.raises(KeyboardInterrupt):
-            signal.raise_signal(signal.SIGINT)
-
-    assert signal.getsignal(signal.SIGINT) is previous
-
-
-def test_sigterm_requests_a_stop_and_a_second_one_terminates():
-    """The first SIGTERM requests a stop; the default handler is back for a second one."""
-    previous = signal.getsignal(signal.SIGTERM)
-    stop = threading.Event()
-    command = Command(stdout=io.StringIO())
-
-    with command._stop_on_interrupt(stop, enabled=True):
-        signal.raise_signal(signal.SIGTERM)
-        assert stop.is_set()
-        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
-
-    assert signal.getsignal(signal.SIGTERM) is previous
-
-
-def _selecting(rows, *public_ids):
-    rows["teams"][0]["exportable_chatbots"] = [{"public_id": pid, "name": pid.upper()} for pid in public_ids]
-    return rows
-
-
 def test_every_manifest_resource_is_requested_under_a_selection(make_store, tmp_path, keypair):
     """The source decides which rows a selection covers, and serves an excluded resource empty, so the
     client requests every resource in the real manifest once, in manifest order, under the selection's
     key."""
     manifest = build_manifest()
-    rows = _selecting({"teams": _scenario(keypair[0])[1]["teams"]}, "a")
+    rows = select_chatbots({"teams": _scenario(keypair[0])[1]["teams"]}, "a")
     client = FakeClient(manifest, rows)
 
     run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
@@ -1047,7 +616,7 @@ def test_each_resource_starts_where_its_reread_flag_says(make_store, tmp_path, k
     and that row keeps its old pk, which can sit below the stored cursor.
     """
     manifest = build_manifest()
-    rows = _selecting({"teams": _scenario(keypair[0])[1]["teams"]}, *public_ids)
+    rows = select_chatbots({"teams": _scenario(keypair[0])[1]["teams"]}, *public_ids)
     store = make_store(tmp_path / "team.sqlite")
     key = selection_key(public_ids)
     for entry in manifest["entries"]:
@@ -1073,9 +642,9 @@ def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
     manifest, rows = _scenario(public_key, reread_under_selection=False)
     store = make_store(tmp_path / "team.sqlite")
 
-    run_sync(FakeClient(manifest, _selecting(rows, "a", "b")), store, private, on_user_created=None)
+    run_sync(FakeClient(manifest, select_chatbots(rows, "a", "b")), store, private, on_user_created=None)
 
-    client = FakeClient(manifest, _selecting(rows, "a"))
+    client = FakeClient(manifest, select_chatbots(rows, "a"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", "5") in client.iter_calls
@@ -1088,7 +657,7 @@ def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_pa
     store = make_store(tmp_path / "team.sqlite")
     store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
 
-    client = FakeClient(manifest, _selecting(rows, "a"))
+    client = FakeClient(manifest, select_chatbots(rows, "a"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", "5") in client.iter_calls
@@ -1100,10 +669,10 @@ def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, key
     manifest, rows = _scenario(public_key, reread_under_selection=False)
     store = make_store(tmp_path / "team.sqlite")
 
-    run_sync(FakeClient(manifest, _selecting(rows, "a")), store, private, on_user_created=None)
+    run_sync(FakeClient(manifest, select_chatbots(rows, "a")), store, private, on_user_created=None)
     assert store.get_cursor(selection_key(["a"]), "service_providers.llmprovider") == "5"
 
-    client = FakeClient(manifest, _selecting(rows, "a", "b"))
+    client = FakeClient(manifest, select_chatbots(rows, "a", "b"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", None) in client.iter_calls
