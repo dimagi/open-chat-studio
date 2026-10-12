@@ -71,6 +71,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "anthropic": [
         Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-sonnet-5-5", 1000000, parameters=ClaudeOpus47Parameters),
+        Model("claude-haiku-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),

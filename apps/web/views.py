@@ -20,6 +20,7 @@ from apps.web.elevation import (
     Grant,
     GrantKind,
     InvalidGrant,
+    release,
     safe_redirect_url,
     start_elevation,
 )
@@ -99,7 +100,7 @@ def release_elevation(request, grant):
     except InvalidGrant:
         raise Http404 from None
 
-    Elevation(request).drop(parsed)
+    release(request, parsed)
 
     return HttpResponseRedirect(safe_redirect_url(request.GET.get("next", "")))
 

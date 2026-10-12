@@ -25,16 +25,16 @@ from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.utils import section_url
 
 logger = logging.getLogger(__name__)
 
 
 def _custom_actions_crumbs(team_slug: str) -> list[Crumb]:
     """Custom actions are managed from the "Developers" section of the team settings page."""
-    manage_team_url = reverse("single_team:manage_team", args=[team_slug])
     return [
-        (_("Team Settings"), manage_team_url),
-        (_("Custom Actions"), f"{manage_team_url}#automation"),
+        (_("Team Settings"), reverse("single_team:manage_team", args=[team_slug])),
+        (_("Custom Actions"), section_url(team_slug=team_slug, section_key="developer")),
     ]
 
 
@@ -78,7 +78,7 @@ class CreateCustomAction(BreadcrumbsMixin, LoginAndTeamRequiredMixin, Permission
         return {**super().get_form_kwargs(), "request": self.request}
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return section_url(team_slug=self.request.team.slug, section_key="developer")
 
     def form_valid(self, form):
         form.instance.team = self.request.team
@@ -110,7 +110,7 @@ class EditCustomAction(BreadcrumbsMixin, LoginAndTeamRequiredMixin, PermissionRe
         return CustomAction.objects.filter(team=self.request.team)
 
     def get_success_url(self):
-        return reverse("single_team:manage_team", args=[self.request.team.slug])
+        return section_url(team_slug=self.request.team.slug, section_key="developer")
 
 
 def _find_live_custom_action_references(custom_action):

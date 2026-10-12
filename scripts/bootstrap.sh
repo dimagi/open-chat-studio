@@ -6,6 +6,7 @@
 #   ./bootstrap.sh --check      # Check system status without installing
 #   ./bootstrap.sh --force      # Force run with confirmation prompts
 #   ./bootstrap.sh --force -y   # Force run without prompts
+#   ./bootstrap.sh --force -y --skip-checks --only python   # Python dependencies alone
 
 set -e  # Exit on error
 
@@ -13,6 +14,8 @@ set -e  # Exit on error
 SKIP_PROMPTS=false
 FORCE_RUN=false
 CHECK_ONLY=false
+SKIP_CHECKS=false
+ONLY=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -93,6 +96,18 @@ parse_args() {
                 CHECK_ONLY=true
                 shift
                 ;;
+            --skip-checks)
+                SKIP_CHECKS=true
+                shift
+                ;;
+            --only)
+                ONLY="${2:-}"
+                if [[ "$ONLY" != python && "$ONLY" != node ]]; then
+                    error "--only takes 'python' or 'node'"
+                    exit 1
+                fi
+                shift 2
+                ;;
             -h|--help)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
@@ -107,6 +122,8 @@ parse_args() {
                 echo "  -c, --check  Check system status without installing anything"
                 echo "  -f, --force  Force the script to run (bypass environment check)"
                 echo "  -y, --yes    Skip confirmation prompts (auto-confirm)"
+                echo "  --skip-checks  Skip the prerequisite checks and the next steps"
+                echo "  --only TYPE  Install only the 'python' or the 'node' dependencies"
                 echo "  -h, --help   Show this help message"
                 echo ""
                 echo "Examples:"
@@ -347,14 +364,15 @@ check_node_deps() {
 }
 
 do_bootstrap() {
-    # Check prerequisites
-    check_python
-    check_node
-    check_docker
-    check_postgres
-    check_redis
+    if [ "$SKIP_CHECKS" != true ]; then
+        check_python
+        check_node
+        check_docker
+        check_postgres
+        check_redis
 
-    echo ""
+        echo ""
+    fi
 
     if [ "$CHECK_ONLY" = true ]; then
       check_uv
@@ -368,14 +386,14 @@ do_bootstrap() {
       echo ""
 
       # Install dependencies (prompt if not auto-confirm)
-      install_python_deps
-      install_node_deps
+      [ "$ONLY" = node ] || install_python_deps
+      [ "$ONLY" = python ] || install_node_deps
     fi
 
-    echo ""
-
-    # Check environment
-    check_env_file
+    if [ "$SKIP_CHECKS" != true ]; then
+        echo ""
+        check_env_file
+    fi
 }
 
 # Print next steps
@@ -448,8 +466,9 @@ main() {
 
     do_bootstrap
 
-    # Print next steps
-    print_next_steps
+    if [ "$SKIP_CHECKS" != true ]; then
+        print_next_steps
+    fi
 }
 
 # Run main function with all script arguments

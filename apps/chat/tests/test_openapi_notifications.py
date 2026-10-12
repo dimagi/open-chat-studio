@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 import pytest
-from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.tests.test_openapi_tool import _make_openapi_schema
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.openapi import OpenAPISpec
 
 
 def _test_tool_call_with_custom_action(spec_dict, call_args: dict, custom_action, path=None):

@@ -642,6 +642,11 @@
     "verdict": "rejected",
     "reason": "Served through Microsoft Foundry's third-party catalogue, not the Azure OpenAI endpoint OCS calls."
   },
+  "azure/model-router": {
+    "first_seen": "2026-10-07",
+    "verdict": "rejected",
+    "reason": "Foundry routing deployment that dispatches to other models; the listed rate is only the router fee, so usage is not costable as one model."
+  },
   "azure/o1": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -914,6 +919,11 @@
     "first_seen": "2026-09-17",
     "verdict": "rejected",
     "reason": "Retired experimental LearnLM build."
+  },
+  "google_vertex_ai/deep-research-pro-preview-12-2025": {
+    "first_seen": "2026-10-07",
+    "verdict": "rejected",
+    "reason": "Deep-research agent model, not a chat model."
   },
   "google_vertex_ai/gemini-2.5-computer-use-preview-10-2025": {
     "first_seen": "2026-09-17",

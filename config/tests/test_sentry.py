@@ -1,4 +1,4 @@
-"""Tests for Sentry event scrubbing.
+"""Tests for Sentry configuration.
 
 Guards against the regression in which the CommCare Connect per-participant encryption key was
 sent to Sentry as a stack-frame local, and against credential headers (API keys, chat session
@@ -7,8 +7,13 @@ config/sentry.py).
 """
 
 import pytest
+import sentry_sdk
+from django.conf import settings
+from langchain_core.language_models import BaseChatModel
+from langchain_core.outputs import ChatResult
+from sentry_sdk.transport import Transport
 
-from config.sentry import get_event_scrubber
+from config.sentry import UNSAMPLED_TASKS, get_disabled_integrations, get_event_scrubber, make_traces_sampler
 
 
 def _frame_vars_event(local_vars: dict) -> dict:
@@ -107,3 +112,83 @@ def test_non_sensitive_headers_are_preserved():
     scrubbed = _scrubbed_headers({"Content-Type": "application/json", "X-Ocs-Widget-Version": "2"})
     assert scrubbed["Content-Type"] == "application/json"
     assert scrubbed["X-Ocs-Widget-Version"] == "2"
+
+
+class _FailingChatModel(BaseChatModel):
+    @property
+    def _llm_type(self) -> str:
+        return "failing"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        raise ValueError("provider rejected the request")
+
+
+class _RecordingTransport(Transport):
+    def __init__(self, options=None):
+        super().__init__(options)
+        self.events = []
+
+    def capture_envelope(self, envelope):
+        if event := envelope.get_event():
+            self.events.append(event)
+
+
+@pytest.fixture()
+def sentry_events():
+    # The SDK installs integrations once per process and applies `disabled_integrations` only to
+    # ones it has not yet installed, so a client built with the SDK defaults cannot be compared
+    # against this one in the same process.
+    transport = _RecordingTransport()
+    sentry_sdk.init(
+        dsn="https://public@sentry.invalid/1",
+        transport=transport,
+        disabled_integrations=get_disabled_integrations(),
+    )
+    yield transport.events
+    sentry_sdk.get_client().close()
+    sentry_sdk.get_global_scope().set_client(None)
+
+
+def test_llm_call_errors_are_not_captured_by_ai_integrations(sentry_events):
+    with pytest.raises(ValueError, match="provider rejected") as exc_info:
+        _FailingChatModel().invoke("hello")
+    assert sentry_events == []
+
+    sentry_sdk.capture_exception(exc_info.value)
+    assert len(sentry_events) == 1
+
+
+@pytest.mark.parametrize(
+    ("sampling_context", "expected"),
+    [
+        pytest.param(
+            {"parent_sampled": True, "wsgi_environ": {"PATH_INFO": "/a/team/"}}, 0.25, id="request-ignores-header"
+        ),
+        pytest.param(
+            {"parent_sampled": True, "wsgi_environ": {"PATH_INFO": "/status/"}}, 0.0, id="health-check-ignores-header"
+        ),
+        pytest.param(
+            {"parent_sampled": True, "celery_job": {"task": "apps.chat.tasks.some_task"}}, 1.0, id="task-parent-sampled"
+        ),
+        pytest.param(
+            {"parent_sampled": False, "celery_job": {"task": "apps.chat.tasks.some_task"}},
+            0.0,
+            id="task-parent-unsampled",
+        ),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/status/"}}, 0.0, id="health-check"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/status/db/"}}, 0.0, id="health-check-subset"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/static/js/site-bundle.js"}}, 0.0, id="static-file"),
+        pytest.param({"wsgi_environ": {"PATH_INFO": "/channels/telegram/abc"}}, 0.25, id="webhook"),
+        pytest.param({"celery_job": {"task": "apps.events.tasks.enqueue_timed_out_events"}}, 0.0, id="polling-task"),
+        pytest.param({"celery_job": {"task": "apps.chat.tasks.some_task"}}, 0.25, id="other-task"),
+        pytest.param({}, 0.25, id="manual-transaction"),
+    ],
+)
+def test_traces_sampler(sampling_context, expected):
+    assert make_traces_sampler(0.25)({"parent_sampled": None, **sampling_context}) == expected
+
+
+@pytest.mark.parametrize("task_name", sorted(UNSAMPLED_TASKS))
+def test_unsampled_tasks_are_scheduled(task_name):
+    scheduled = {entry["task"] for entry in settings.SCHEDULED_TASKS.values()}
+    assert task_name in scheduled

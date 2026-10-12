@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load form_tags i18n %}
+{% load form_tags humanize i18n %}
 
 {% block app %}
   <div class="app-card max-w-5xl mx-auto"
@@ -10,7 +10,10 @@
       <div role="alert" class="alert alert-error alert-soft text-sm items-start mt-3">
         <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
         <div>
-          <div class="font-semibold">The provider rejected these credentials</div>
+          <div class="font-semibold">These credentials could not be verified</div>
+          {% if credentials_checked_at %}
+            <div class="text-xs opacity-70" title="{{ credentials_checked_at }}">Checked {{ credentials_checked_at|naturaltime }}</div>
+          {% endif %}
           <pre class="text-xs mt-1 whitespace-pre-wrap break-all opacity-80">{{ verification_error }}</pre>
         </div>
       </div>
@@ -21,6 +24,9 @@
         {% if credentials_verified %}
           <i class="fa-solid fa-circle-check"></i>
           <span>Credentials verified</span>
+          {% if credentials_checked_at %}
+            <span class="opacity-70" title="{{ credentials_checked_at }}">· Checked {{ credentials_checked_at|naturaltime }}</span>
+          {% endif %}
         {% else %}
           <i class="fa-regular fa-circle-question"></i>
           <span>These credentials have not been checked yet - saving will check them</span>

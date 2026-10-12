@@ -8,6 +8,7 @@ from django.urls import reverse
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
 from apps.teams.tasks import create_team_files_zip_task
+from apps.teams.utils import section_url
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -167,10 +168,6 @@ class TestDownloadTeamFilesView:
         assert "existing-task" in response.content.decode()
 
 
-def _manage_team_url(team):
-    return reverse("single_team:manage_team", args=[team.slug])
-
-
 @pytest.mark.django_db()
 class TestDownloadButtonVisibility:
     @pytest.mark.parametrize(
@@ -181,6 +178,10 @@ class TestDownloadButtonVisibility:
         ],
     )
     def test_button_visibility(self, request, client, team, user_fixture, should_see):
+        """Non-admins have no Data section at all, so the button is unreachable rather than hidden."""
         client.force_login(request.getfixturevalue(user_fixture))
-        response = client.get(_manage_team_url(team))
-        assert (_download_files_url(team) in response.content.decode()) is should_see
+        response = client.get(section_url(team_slug=team.slug, section_key="data"))
+        if not should_see:
+            assert response.status_code == 404
+            return
+        assert _download_files_url(team) in response.content.decode()

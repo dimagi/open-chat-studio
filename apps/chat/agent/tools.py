@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import Any, ClassVar, Union
@@ -12,7 +12,6 @@ from xml.sax.saxutils import escape
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import transaction, utils
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
@@ -34,6 +33,7 @@ from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
+from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import sanitize_property_name
 from apps.utils.time import pretty_date
 
@@ -198,6 +198,7 @@ def _perform_collection_search(
     generate_citations: bool = True,
     include_collection_info: bool = False,
     graph_state: dict | None = None,
+    metadata_filters: dict[str, str] | None = None,
 ) -> str:
     """
     Shared search logic for both SearchIndexTool and SearchCollectionByIdTool.
@@ -209,6 +210,7 @@ def _perform_collection_search(
         generate_citations: Whether to include citation prompt in response
         include_collection_info: Whether to include collection_id and collection_name in results
         graph_state: The LangGraph state containing the conversation already loaded for the LLM.
+        metadata_filters: Metadata values every returned chunk must hold.
 
     Returns:
         Formatted search results string
@@ -218,15 +220,17 @@ def _perform_collection_search(
         query=query,
         top_k=max_results,
         context=_recent_conversation_context(collection, graph_state or {}),
+        metadata_filters=metadata_filters,
     )
 
     if not embeddings:
+        no_results = "\nThe semantic search did not return any results"
         if include_collection_info:
-            return (
-                f"\nThe semantic search did not return any results from "
-                f"collection '{collection.name}' (ID: {collection.id})."
-            )
-        return "\nThe semantic search did not return any results."
+            no_results += f" from collection '{collection.name}' (ID: {collection.id})"
+        if metadata_filters:
+            applied = ", ".join(f"{key} = {value}" for key, value in metadata_filters.items())
+            no_results += f" among rows matching {applied}"
+        return no_results + "."
 
     # Format results
     if include_collection_info:
@@ -284,6 +288,7 @@ class SearchToolConfig:
     index_id: int
     max_results: int = 5
     generate_citations: bool = True
+    metadata_filters: dict[str, str] = field(default_factory=dict)
 
     def get_index(self):
         return Collection.objects.get(id=self.index_id)
@@ -603,6 +608,7 @@ class SearchIndexTool(CustomBaseTool):
             generate_citations=self.search_config.generate_citations,
             include_collection_info=False,
             graph_state=graph_state,
+            metadata_filters=self.search_config.metadata_filters,
         )
 
 
@@ -619,6 +625,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
     max_results: int = 5
     generate_citations: bool = True
     allowed_collection_ids: list[int]
+    metadata_filters: dict[str, str] = {}
 
     def action(self, collection_index_id: int, query: str, graph_state: dict | None = None) -> str:
         """
@@ -641,6 +648,7 @@ class SearchCollectionByIdTool(CustomBaseTool):
             generate_citations=self.generate_citations,
             include_collection_info=True,
             graph_state=graph_state,
+            metadata_filters=self.metadata_filters,
         )
 
 

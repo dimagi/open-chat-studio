@@ -639,6 +639,46 @@ ocs_template_stamp_path() {
     printf '%s/%s.stamp\n' "$(ocs_template_stamp_directory "$1")" "$2"
 }
 
+# What `migrate` writes besides the schema: migrations shipped by the packages in
+# `uv.lock`, and the groups and periodic tasks the project's `migrate` command syncs
+# from code. A copy of a template whose stamp and inputs both match needs no migrate.
+OCS_MIGRATE_INPUT_FILES=(
+    uv.lock
+    config/settings.py
+    apps/teams/backends.py
+    apps/teams/signals.py
+    apps/web/management/commands/migrate.py
+    apps/web/management/commands/setup_periodic_tasks.py
+)
+
+ocs_migrate_inputs_fingerprint() {
+    local worktree_path="$1"
+    local input_file
+
+    for input_file in "${OCS_MIGRATE_INPUT_FILES[@]}"; do
+        printf '%s:' "$input_file"
+        if [[ -f "$worktree_path/$input_file" ]]; then
+            cksum < "$worktree_path/$input_file"
+        else
+            printf 'missing\n'
+        fi
+    done | cksum | awk '{print $1 ":" $2}'
+}
+
+ocs_template_inputs_path() {
+    printf '%s/%s.inputs\n' "$(ocs_template_stamp_directory "$1")" "$2"
+}
+
+ocs_template_inputs_match() {
+    local worktree_path="$1"
+    local template_name="$2"
+    local inputs_path
+
+    inputs_path=$(ocs_template_inputs_path "$worktree_path" "$template_name")
+    [[ -f "$inputs_path" ]] \
+        && [[ "$(<"$inputs_path")" == "$(ocs_migrate_inputs_fingerprint "$worktree_path")" ]]
+}
+
 ocs_list_template_databases() {
     local prefix
     prefix=$(ocs_template_prefix "$1")
@@ -716,6 +756,11 @@ ocs_snapshot_template() {
     stamp_path=$(ocs_template_stamp_path "$worktree_path" "$template_name")
     if ! { mkdir -p "$(dirname "$stamp_path")" && cp "$stamp_lines_file" "$stamp_path"; }; then
         echo "[ocs] Could not record the stamp for $template_name; it will be pruned rather than reused." >&2
+        return 0
+    fi
+    if ! ocs_migrate_inputs_fingerprint "$worktree_path" \
+        > "$(ocs_template_inputs_path "$worktree_path" "$template_name")"; then
+        echo "[ocs] Could not record the migrate inputs for $template_name; copies of it will still be migrated." >&2
     fi
 }
 
@@ -747,7 +792,7 @@ ocs_prune_template_databases() {
         fi
         echo "[ocs] Dropping the stale template database $template."
         ocs_drop_database "$template"
-        rm -f "$stamp_path"
+        rm -f "$stamp_path" "$stamp_directory/$template.inputs"
     done < <(ocs_list_template_databases "$worktree_path")
 }
 

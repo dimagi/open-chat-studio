@@ -97,6 +97,7 @@ FULL_PARAMS: dict[str, dict] = {
         "collection_index_ids": [8, 9],
         "max_results": 5,
         "generate_citations": False,
+        "metadata_filters": [{"key": "district", "value": "Khayelitsha"}],
         "tools": ["update-user-data", "one-off-reminder", "calculator"],
         "custom_actions": ["5:weather_get"],
         "built_in_tools": ["web-search", "code-execution"],

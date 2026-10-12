@@ -244,6 +244,18 @@ class ToolConfigModel(BaseModel):
         return values if values else None
 
 
+class MetadataFilter(BaseModel):
+    key: str
+    value: str
+
+    @field_validator("key")
+    @classmethod
+    def key_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Metadata filter keys cannot be blank")
+        return value
+
+
 class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     """Uses an LLM to respond to the input."""
 
@@ -308,6 +320,17 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         description="Allow files from this collection to be referenced in LLM responses and downloaded by users",
         json_schema_extra=UiSchema(
             widget=Widgets.toggle,
+            visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
+        ),
+    )
+    metadata_filters: list[MetadataFilter] = Field(
+        default_factory=list,
+        description=(
+            "Only search rows whose metadata has every one of these values. Values match exactly, "
+            "including case. Not applied to remote indexes."
+        ),
+        json_schema_extra=UiSchema(
+            widget=Widgets.key_value_pairs,
             visible_when=VisibleWhen(field="collection_index_ids", operator="is_not_empty"),
         ),
     )
@@ -387,10 +410,20 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     def ensure_value(cls, value: str):
         return value or []
 
-    @field_validator("custom_actions", mode="before")
-    def validate_custom_actions(cls, value):
+    @field_validator("custom_actions", "metadata_filters", mode="before")
+    def none_as_empty_list(cls, value):
         if value is None:
             return []
+        return value
+
+    @field_validator("metadata_filters")
+    @classmethod
+    def metadata_filter_keys_unique(cls, value: list[MetadataFilter]) -> list[MetadataFilter]:
+        seen = set()
+        for metadata_filter in value:
+            if metadata_filter.key in seen:
+                raise ValueError(f"Duplicate metadata filter key: {metadata_filter.key}")
+            seen.add(metadata_filter.key)
         return value
 
     @field_validator("collection_index_ids", mode="before")

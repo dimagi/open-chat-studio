@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
 from unittest import mock
 
 import pytest
+import time_machine
 from django.core.exceptions import ValidationError
 from field_audit.models import AuditAction
 
@@ -20,6 +22,8 @@ from apps.service_providers.models import (
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+
+CHECKED_AT = datetime(2026, 10, 1, 12, tzinfo=UTC)
 
 
 @pytest.fixture()
@@ -176,6 +180,22 @@ def test_test_connection_prefers_default_named_model_when_team_has_multiple():
 
 
 @pytest.mark.django_db()
+def test_test_connection_fallback_skips_deprecated_models():
+    """Providers withdraw deprecated models (Google returns 404 for gemini-2.5-flash on new
+    projects), so testing against one reports a failure the credentials did not cause."""
+    provider = LlmProviderFactory()
+    LlmProviderModel.objects.filter(type=provider.type).delete()
+    LlmProviderModelFactory(team=provider.team, type=provider.type, name="withdrawn", deprecated=True)
+    current_model = LlmProviderModelFactory(team=None, type=provider.type, name="current")
+
+    mock_service = mock.Mock()
+    with mock.patch.object(LlmProvider, "get_llm_service", return_value=mock_service):
+        provider.test_connection()
+
+    mock_service.get_chat_model.assert_called_once_with(current_model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+
+
+@pytest.mark.django_db()
 def test_test_connection_raises_for_voyage_regardless_of_configured_models():
     """Voyage AI can't do chat completions at all, so it should fail the same way whether or
     not a model happens to be configured, not flip between error messages depending on that."""
@@ -222,6 +242,21 @@ class TestRunConnectionTestHook:
         assert "sk-p***lt" not in warnings[0]
         assert "Incorrect API key provided: sk-p***lt" in detail
         assert "Exception" in detail
+
+    @pytest.mark.parametrize(
+        "side_effect",
+        [pytest.param(None, id="pass"), pytest.param(Exception("kaboom"), id="failure")],
+    )
+    def test_records_when_the_check_ran(self, side_effect):
+        provider = LlmProviderFactory()
+        with (
+            time_machine.travel(CHECKED_AT, tick=False),
+            mock.patch.object(LlmProvider, "test_connection", side_effect=side_effect),
+        ):
+            provider.run_connection_test_hook()
+
+        provider.refresh_from_db()
+        assert provider.credentials_checked_at == CHECKED_AT
 
     def test_a_long_provider_error_is_truncated(self):
         """A provider can return a response of any size, and this is rendered on the page."""
@@ -288,6 +323,36 @@ class TestCredentialsVerifiedFlag:
         """
         assert LlmProviderFactory(extra_data=extra_data).credentials_verified is expected
 
+    @pytest.mark.parametrize(
+        ("extra_data", "expected"),
+        [
+            pytest.param({}, "unchecked", id="never-checked"),
+            pytest.param(
+                {"verified_credentials": True, "credentials_checked_at": CHECKED_AT.isoformat()},
+                "verified",
+                id="verified",
+            ),
+            pytest.param({"verified_credentials": True}, "verified", id="verified-before-check-times-were-stored"),
+            pytest.param(
+                {
+                    "verified_credentials": False,
+                    "verification_error": "NotFound: 404",
+                    "credentials_checked_at": CHECKED_AT.isoformat(),
+                },
+                "failed",
+                id="failed",
+            ),
+            pytest.param(
+                {"verified_credentials": False, "credentials_checked_at": CHECKED_AT.isoformat()},
+                "no_model",
+                id="checked-without-a-model",
+            ),
+        ],
+    )
+    def test_verification_state(self, extra_data, expected):
+        assert LlmProviderFactory(extra_data=extra_data).verification_state == expected
+
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_a_null_column_takes_a_recorded_result(self):
         """The row the previous release inserted has to survive its first check."""
         provider = LlmProviderFactory(extra_data=None)
@@ -295,7 +360,7 @@ class TestCredentialsVerifiedFlag:
             provider.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"verified_credentials": True}
+        assert provider.extra_data == {"verified_credentials": True, "credentials_checked_at": CHECKED_AT.isoformat()}
         assert provider.verification_error == ""
 
     def test_a_pass_records_the_credentials_as_verified(self):
@@ -371,6 +436,7 @@ class TestCredentialsVerifiedFlag:
         provider.refresh_from_db()
         assert provider.verification_error == ""
 
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_a_write_that_landed_during_the_check_is_not_clobbered(self):
         """The check makes a multi-second external call, so extra_data can change under it.
         The outcome has to merge into the row as it stands, not the copy loaded before."""
@@ -384,8 +450,13 @@ class TestCredentialsVerifiedFlag:
             stale.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"something_else": "written meanwhile", "verified_credentials": True}
+        assert provider.extra_data == {
+            "something_else": "written meanwhile",
+            "verified_credentials": True,
+            "credentials_checked_at": CHECKED_AT.isoformat(),
+        }
 
+    @time_machine.travel(CHECKED_AT, tick=False)
     def test_recording_the_flag_leaves_other_extra_data_alone(self):
         """extra_data is a general bag; a retest must not drop what is stored beside it."""
         provider = LlmProviderFactory(extra_data={"something_else": "keep me"})
@@ -393,7 +464,11 @@ class TestCredentialsVerifiedFlag:
             provider.run_connection_test_hook()
 
         provider.refresh_from_db()
-        assert provider.extra_data == {"something_else": "keep me", "verified_credentials": True}
+        assert provider.extra_data == {
+            "something_else": "keep me",
+            "verified_credentials": True,
+            "credentials_checked_at": CHECKED_AT.isoformat(),
+        }
 
     @pytest.mark.parametrize(
         ("provider_type", "expected"),

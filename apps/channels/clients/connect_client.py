@@ -1,11 +1,17 @@
 import base64
+import json
 import logging
+import os
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import TypedDict
 from uuid import UUID, uuid4
 
 import httpx
 from Crypto.Cipher import AES
 from django.conf import settings
+from django.utils import timezone
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("ocs.channels.connect")
@@ -14,6 +20,49 @@ logger = logging.getLogger("ocs.channels.connect")
 # received. Because we reuse the message_id across retries, this happens when a prior attempt
 # timed out client-side but actually arrived — the message is delivered, so it's not an error.
 MESSAGE_ID_ALREADY_EXISTS = "MESSAGE_ID_ALREADY_EXISTS"
+
+# PersonalID's attachment contract. Each attachment is sent as nonce + ciphertext + tag, and the
+# limits count those encrypted bytes.
+ATTACHMENT_NONCE_BYTES = 12
+GCM_TAG_BYTES = 16
+ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES = ATTACHMENT_NONCE_BYTES + GCM_TAG_BYTES
+MAX_ATTACHMENT_BYTES = 2_621_440  # 2.5 MiB
+MAX_ATTACHMENTS_PER_MESSAGE = 10
+MAX_MESSAGE_ATTACHMENT_BYTES = 15 * 1024 * 1024
+
+# What app versions that cannot show attachments display instead of a message that has them
+LEGACY_APP_MESSAGE = (
+    "This message contains attachments but your version of the app is too old to see them."
+    " Please update your Android app."
+)
+ATTACHMENT_EXPIRY = timedelta(days=90)
+
+_CLIENT_TIMEOUT = 10
+# PersonalID writes the attachments to storage before it replies
+_ATTACHMENT_UPLOAD_TIMEOUT = httpx.Timeout(_CLIENT_TIMEOUT, read=60)
+
+
+def fits_attachment_limit(content_size: int | None) -> bool:
+    """Whether a file of this many bytes is within PersonalID's per-attachment limit once encrypted."""
+    if not content_size or content_size <= 0:
+        return False
+    return content_size + ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES <= MAX_ATTACHMENT_BYTES
+
+
+def encrypt_attachment(encryption_key: bytes, content: bytes) -> bytes:
+    """Encrypt a file into the layout the app expects: 12-byte nonce, ciphertext, 16-byte tag."""
+    nonce = os.urandom(ATTACHMENT_NONCE_BYTES)
+    cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
+    ciphertext, tag = cipher.encrypt_and_digest(content)
+    return nonce + ciphertext + tag
+
+
+@dataclass(frozen=True)
+class OutgoingAttachment:
+    name: str
+    content_type: str
+    # Plaintext; kept out of the repr so it does not reach Sentry with the stack-frame locals
+    content: bytes = field(repr=False)
 
 
 def _raise_for_status(response: httpx.Response) -> None:
@@ -50,7 +99,7 @@ class CommCareConnectClient:
         self._base_url = settings.COMMCARE_CONNECT_SERVER_URL
         self.client = httpx.Client(
             auth=httpx.BasicAuth(settings.COMMCARE_CONNECT_SERVER_ID, settings.COMMCARE_CONNECT_SERVER_SECRET),
-            timeout=10,
+            timeout=_CLIENT_TIMEOUT,
         )
 
     @retry(
@@ -122,6 +171,59 @@ class CommCareConnectClient:
             return
         _raise_for_status(response)
 
+    def create_message(
+        self,
+        channel_id: str,
+        encryption_key: bytes,
+        text: str,
+        attachments: Sequence[OutgoingAttachment] = (),
+    ) -> None:
+        """Send a message, with or without attachments, through PersonalID's create_message.
+
+        A message with attachments also carries its text followed by LEGACY_APP_MESSAGE for apps
+        that cannot show them, and expires after ATTACHMENT_EXPIRY.
+        """
+        message: dict = {"channel": channel_id, "message_id": str(uuid4())}
+        if text:
+            message["content"] = self._encrypted_content(encryption_key, text)
+
+        # Encrypted once, outside the retried request, so a retry sends the same bytes
+        attachment_parts = []
+        if attachments:
+            legacy_text = f"{text}\n\n{LEGACY_APP_MESSAGE}" if text else LEGACY_APP_MESSAGE
+            message["content_legacy_msg"] = self._encrypted_content(encryption_key, legacy_text)
+            message["expires_at"] = (timezone.now() + ATTACHMENT_EXPIRY).isoformat()
+            message["attachments"] = []
+            for index, attachment in enumerate(attachments):
+                encrypted = encrypt_attachment(encryption_key, attachment.content)
+                message["attachments"].append(
+                    {"name": attachment.name, "type": attachment.content_type, "size": len(encrypted)}
+                )
+                # PersonalID takes the name from the JSON. The part only needs a filename to be
+                # parsed as a file, so it gets the ASCII part name
+                part_name = f"attachment_{index}"
+                attachment_parts.append((part_name, (part_name, encrypted, "application/octet-stream")))
+
+        timeout = _ATTACHMENT_UPLOAD_TIMEOUT if attachments else self.client.timeout
+        self._post_create_message(message, attachment_parts, timeout)
+
+    @retry(
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+        reraise=True,
+        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.INFO),
+    )
+    def _post_create_message(self, message: dict, attachment_parts: list, timeout: httpx.Timeout) -> None:
+        url = f"{self._base_url}/messaging/create_message/"
+        # No filename, so PersonalID's multipart parser reads it as a form field rather than a file
+        message_part = ("message", (None, json.dumps(message).encode(), "application/json"))
+        response = self.client.post(url, files=[message_part, *attachment_parts], timeout=timeout)
+        if response.status_code == 400 and self._is_message_already_exists(response):
+            logger.info("Message %s already delivered to Connect; treating as success", message["message_id"])
+            return
+        _raise_for_status(response)
+
     @staticmethod
     def _is_message_already_exists(response: httpx.Response) -> bool:
         try:
@@ -130,6 +232,10 @@ class CommCareConnectClient:
             # ValueError covers both a non-JSON body and an undecodable one (UnicodeDecodeError);
             # AttributeError covers valid JSON that isn't an object. All mean "not the dedupe error".
             return False
+
+    def _encrypted_content(self, encryption_key: bytes, text: str) -> dict[str, str]:
+        ciphertext, tag, nonce = self._encrypt_message(encryption_key=encryption_key, message=text)
+        return {"ciphertext": ciphertext, "tag": tag, "nonce": nonce}
 
     def _encrypt_message(self, encryption_key: bytes, message: str) -> tuple[str, str, str]:
         cipher = AES.new(encryption_key, AES.MODE_GCM)

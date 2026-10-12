@@ -19,7 +19,13 @@ worktree_path="$repo_root/.claude/worktrees/$name"
 branch="worktree-$name"
 
 if [[ -z "$source_ref" ]]; then
-    git -C "$repo_root" fetch --quiet origin >&2 || echo "[ocs] Fetch failed; using the last fetched ref." >&2
+    # Worktrees created in quick succession share one fetch.
+    fetch_max_age_minutes=${OCS_WORKTREE_FETCH_MAX_AGE_MINUTES:-5}
+    if [[ -n "$(find "$common_dir/FETCH_HEAD" -mmin "-$fetch_max_age_minutes" 2>/dev/null)" ]]; then
+        echo "[ocs] Fetched less than $fetch_max_age_minutes minutes ago; skipping fetch." >&2
+    else
+        git -C "$repo_root" fetch --quiet origin >&2 || echo "[ocs] Fetch failed; using the last fetched ref." >&2
+    fi
     source_ref=$(git -C "$repo_root" symbolic-ref --quiet --short refs/remotes/origin/HEAD || echo origin/main)
 fi
 

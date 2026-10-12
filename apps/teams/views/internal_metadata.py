@@ -1,36 +1,23 @@
 from django.contrib import messages
-from django.shortcuts import redirect, render
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.http import require_POST
 
-from apps.teams.breadcrumbs import team_settings_crumb
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import TeamMetadataForm
+from apps.teams.views.team_settings import render_team_settings
 from apps.web.elevation import Grant, requires_elevation
+
+SECTION = "internal-metadata"
 
 
 @login_and_team_required
 @requires_elevation(Grant.OCS_ADMIN)
+@require_POST
 def internal_metadata(request, team_slug):
-    """Staff-only page for viewing and editing a team's internal metadata."""
-    team = request.team
-    if request.method == "POST":
-        form = TeamMetadataForm(request.POST, team=team)
-        if form.is_valid():
-            form.save()
-            messages.success(request, _("Internal metadata updated successfully."))
-            return redirect("single_team:manage_team", team_slug=team.slug)
-    else:
-        form = TeamMetadataForm(team=team)
-
-    return render(
-        request,
-        "teams/internal_metadata.html",
-        {
-            "form": form,
-            "team": team,
-            "breadcrumbs": [
-                team_settings_crumb(team.slug),
-                (_("Internal Metadata"), None),
-            ],
-        },
-    )
+    """Staff-only endpoint for saving a team's internal metadata."""
+    form = TeamMetadataForm(request.POST, team=request.team)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _("Internal metadata updated successfully."))
+        return render_team_settings(request, SECTION)
+    return render_team_settings(request, SECTION, metadata_form=form)

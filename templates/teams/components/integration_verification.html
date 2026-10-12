@@ -1,0 +1,26 @@
+{% load humanize %}
+{% with provider=record.verifiable_provider %}
+  {% if provider %}
+    <div>
+      {% if provider.verification_state == "verified" %}
+        <span class="badge badge-success badge-sm whitespace-nowrap"><i class="fa-solid fa-check mr-1"></i>Verified</span>
+      {% elif provider.verification_state == "failed" %}
+        <a href="{% url 'service_providers:edit' request.team.slug record.provider_type record.pk %}"
+           class="badge badge-error badge-sm whitespace-nowrap"
+           title="{{ provider.verification_error|truncatechars:200 }}"><i class="fa-solid fa-xmark mr-1"></i>Check failed</a>
+      {% elif provider.verification_state == "no_model" %}
+        <span class="badge badge-soft badge-warning badge-sm whitespace-nowrap"
+              title="Add a model on the provider's Models tab to verify these credentials">No models</span>
+      {% else %}
+        <span class="badge badge-soft badge-sm whitespace-nowrap">Not checked</span>
+      {% endif %}
+      {% if provider.credentials_checked_at %}
+        <span class="block text-neutral-500 text-xs mt-1"
+              title="{{ provider.credentials_checked_at }}">Checked {{ provider.credentials_checked_at|naturaltime }}</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <span class="text-neutral-400 cursor-help"
+          title="This integration does not support credential verification">—</span>
+  {% endif %}
+{% endwith %}
