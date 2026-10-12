@@ -296,9 +296,15 @@ def run_sync(
     try:
         with mute_signals():
             load_team(importer, client, store)
-            sync_pass.run(first_pass=True)
+            first_pass = sync_pass.run(first_pass=True)
             if follow:
-                _follow(sync_pass, interval=interval, stop=stop, progress=progress)
+                _follow(
+                    sync_pass,
+                    first_pass_count=sum(count for _entry, count in first_pass),
+                    interval=interval,
+                    stop=stop,
+                    progress=progress,
+                )
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
         if friendly is None:
@@ -309,22 +315,29 @@ def run_sync(
 
 def _follow(
     sync_pass: "_SyncPass",
+    first_pass_count: int,
     interval: int,
     stop: threading.Event,
     progress: SyncProgress,
 ) -> None:
-    """Run a pass every ``interval`` seconds until ``stop`` is set, printing one line per pass."""
+    """After the first pass, run a pass every ``interval`` seconds until ``stop`` is set. A pass that
+    was stopped part-way gets no summary, since its entry already reported the stop."""
     last_new_row_at = time.monotonic()
-    for number in itertools.count(start=2):
-        if stop.wait(interval):
+    count = first_pass_count
+    for number in itertools.count(start=1):
+        if number > 1:
+            progress.pass_started(number)
+            close_old_connections()
+            count = sum(count for _entry, count in sync_pass.run(first_pass=False))
+        if stop.is_set():
             return
-        close_old_connections()
-        count = sum(count for _entry, count in sync_pass.run(first_pass=False))
         now = time.monotonic()
         if count:
             last_new_row_at = now
         quiet_for = timedelta(seconds=round(now - last_new_row_at))
-        progress.pass_finished(number=number, count=count, quiet_for=quiet_for)
+        progress.pass_finished(number=number, count=count, quiet_for=quiet_for, next_pass_in=interval)
+        if stop.wait(interval):
+            return
 
 
 def resolve_selection(client, store) -> tuple[str, list[dict]]:

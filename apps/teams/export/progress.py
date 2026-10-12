@@ -74,8 +74,13 @@ class SyncProgress:
         self.catch_ups_running -= 1
         self._line(position=parent_position, message=f"caught up {rows(count)}")
 
-    def pass_finished(self, number: int, count: int, quiet_for: timedelta) -> None:
-        message = f"pass {number}: {rows(count)} synced, last new row {quiet_for} ago"
+    def pass_started(self, number: int) -> None:
+        self.write(f"pass {number} started")
+
+    def pass_finished(self, number: int, count: int, quiet_for: timedelta, next_pass_in: int) -> None:
+        message = (
+            f"pass {number} done: {rows(count)} synced, last new row {quiet_for} ago; next pass in {next_pass_in}s"
+        )
         self.write(style_synced_line(message=message, count=count, style=self.style))
 
     def _label(self, position: int) -> str:
