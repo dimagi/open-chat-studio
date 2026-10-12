@@ -440,7 +440,7 @@ def test_a_stop_takes_effect_after_the_current_page(make_store, tmp_path, keypai
     assert lines == [
         "[1/2] participants: reading from the start",
         "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
-        "[1/2] participants: synced 1 row",
+        "[1/2] participants: stopped after 1 row; the next run resumes from the stored cursor",
     ]
     assert store.has_target("experiments.participant", 1)
     assert not store.has_target("experiments.participant", 2)

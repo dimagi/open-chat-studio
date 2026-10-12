@@ -396,7 +396,7 @@ class _SyncPass:
             cursor = self._start_cursor(position=position, reread=first_pass and self._rereadable(entry))
             self.progress.entry_started(position=position, from_start=cursor is None)
             count = self._read(position=position, cursor=cursor, stoppable=True)
-            self.progress.entry_finished(position=position, count=count)
+            self.progress.entry_finished(position=position, count=count, stopped=self.stop.is_set())
             synced.append((entry, count))
         return synced
 

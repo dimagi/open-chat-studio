@@ -59,8 +59,13 @@ class SyncProgress:
         if fetched or not self.quiet:
             self._line(position=position, message=f"page {number}, {fetched} fetched, {synced} synced ({total} so far)")
 
-    def entry_finished(self, position: int, count: int) -> None:
-        if not self.quiet:
+    def entry_finished(self, position: int, count: int, stopped: bool) -> None:
+        if stopped:
+            self._line(
+                position=position,
+                message=f"stopped after {rows(count)}; the next run resumes from the stored cursor",
+            )
+        elif not self.quiet:
             message = f"{self._label(position)}: synced {rows(count)}"
             self.write(style_synced_line(message=message, count=count, style=self.style))
 
