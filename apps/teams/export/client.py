@@ -38,9 +38,9 @@ class ResourceFetcher:
         self.api_key = api_key
         # Transport tuning -- fixed defaults that no caller overrides (only session/sleep are
         # injected, by tests). Promote one to an __init__ argument if a need to vary it shows up.
-        # (connect, read): an unreachable host fails fast and is retried, but a response is waited
-        # for however long the source takes, since a large export page can take minutes to build.
-        self.timeout = (30, None)
+        # (connect, read): the read limit is long because a large export page is slow to build, but
+        # finite so a dropped connection times out and is retried rather than hanging the sync.
+        self.timeout = (30, 90)
         self.max_retries = 5
         self.backoff = 1.0
         self._session = session or requests.Session()
