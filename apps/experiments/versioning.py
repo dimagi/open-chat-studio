@@ -177,14 +177,20 @@ class VersionField:
         which is expected to be present on each result.
         """
         previous_queryset_results = self.previous_field_version.queryset_results
-        previous_records = {result.raw_value.id: result.raw_value for result in previous_queryset_results}
+        # Group previous records by their version family (the working version id). Records in the same family
+        # share the same working version id, so this lets us match records without querying for each record's
+        # version family ids (which would cause an N+1 query).
+        previous_records_by_family: dict[int, list] = defaultdict(list)
+        for result in previous_queryset_results:
+            record = result.raw_value
+            previous_records_by_family[record.get_working_version_id()].append(record)
+
         for version_field in self.queryset_results:
             record = version_field.raw_value
             previous_record = None
-            for version_id in record.version_family_ids:
-                if version_id in previous_records:
-                    previous_record = previous_records.pop(version_id)
-                    break
+            family_records = previous_records_by_family.get(record.get_working_version_id())
+            if family_records:
+                previous_record = family_records.pop(0)
 
             if previous_record:
                 # A version of the current record exists in the previous queryset
@@ -198,12 +204,13 @@ class VersionField:
             if early_abort and self.changed:
                 return
 
+        previous_records = [record for records in previous_records_by_family.values() for record in records]
         if previous_records:
             self.changed = True
             if early_abort:
                 return
 
-        for record in previous_records.values():
+        for record in previous_records:
             # We need to add version fields for each removed record, but with the current value set to None
             prev_version_field = VersionField(raw_value=record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)
