@@ -51,5 +51,6 @@ def team_row():
 
 
 def select_chatbots(rows, *public_ids):
+    """Mark the given chatbots as the ones the source team exports."""
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": pid, "name": pid.upper()} for pid in public_ids]
     return rows
