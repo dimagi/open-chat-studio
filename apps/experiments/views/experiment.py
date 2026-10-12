@@ -632,6 +632,31 @@ def _mark_tag_context(messages, selected_tags, matched_ids):
         message.is_tag_context = message.id not in matched_ids
 
 
+def _session_messages_queryset(chat) -> QuerySet:
+    """A chat's messages in display order, with everything the message list template reads
+    per message (tags, participant data diffs, comments) prefetched to avoid N+1 queries.
+    """
+    return (
+        ChatMessage.objects.filter(chat=chat)
+        .order_by("created_at", "id")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+            Prefetch(
+                "output_message_trace",
+                queryset=Trace.objects.exclude(
+                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
+                ).only("id", "participant_data_diff", "output_message_id"),
+                to_attr="prefetched_output_traces_with_diff",
+            ),
+            Prefetch("comments", queryset=UserComment.objects.select_related("user")),
+        )
+    )
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -649,27 +674,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
 
     default_message = "(message generated after last translation)"
 
-    messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at", "id")
-        .prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            ),
-            Prefetch(
-                "output_message_trace",
-                queryset=Trace.objects.exclude(
-                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
-                ).only("id", "participant_data_diff", "output_message_id"),
-                to_attr="prefetched_output_traces_with_diff",
-            ),
-            # The template reads each message's comments (count + list); prefetch them once
-            # for the page rather than querying per message.
-            Prefetch("comments", queryset=UserComment.objects.select_related("user")),
-        )
-    )
+    messages_queryset = _session_messages_queryset(session.chat)
     messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
