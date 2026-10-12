@@ -163,11 +163,7 @@ class VersionField:
 
     @staticmethod
     def _group_records_by_family(version_fields: list["VersionField"]) -> dict[int, list]:
-        """
-        Groups the records of the given version fields by their version family (the working version id).
-        Records in the same family share the same working version id, so matching on it avoids querying for
-        each record's version family ids (which would cause an N+1 query).
-        """
+        """Group records by version family (records in the same family share a working version id)"""
         records_by_family: dict[int, list] = defaultdict(list)
         for version_field in version_fields:
             record = version_field.raw_value
