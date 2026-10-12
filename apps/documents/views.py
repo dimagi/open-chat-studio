@@ -644,7 +644,7 @@ class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Si
             queryset = similarity_search(queryset, search_phase=search, columns=["name"])
 
         return queryset.annotate(
-            file_count=Count("files"),
+            file_count=Count("files", filter=Q(files__is_archived=False)),
             total_bytes=Sum("files__content_size", filter=Q(files__is_archived=False)),
         )
 
