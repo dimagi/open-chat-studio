@@ -48,6 +48,7 @@ from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, schema_checksum
+from apps.teams.export.progress import style_synced_line
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
 from apps.teams.export.translation import (
@@ -201,20 +202,6 @@ def check_sync_preconditions(client, private_key, enforce_schema=True, store=Non
     return manifest
 
 
-def _style_synced_line(message: str, count: int, style) -> str:
-    """Colour a progress line by how much it moved: green when rows were synced, muted (ANSI faint)
-    when zero so the eye skips the no-op lines. Returns the message unchanged when no style is given
-    or colour is disabled (--no-color / non-tty, where the style funcs are the identity), so
-    redirected logs stay clean."""
-    if style is None:
-        return message
-    if count > 0:
-        return style.SUCCESS(message)
-    if style.SUCCESS("") == "":  # colour disabled -- leave it plain rather than emit raw escapes
-        return message
-    return f"\x1b[2m{message}\x1b[0m"
-
-
 def _committed_team(store) -> Team | None:
     """The target team a prior run already imported, or None on a first-time import. A recorded
     team that no longer exists locally means the team was deleted outside this sync, so abort with
@@ -309,7 +296,7 @@ def run_sync(
         with mute_signals():
             load_team(importer, client, store)
             for entry, count in sync_pass.run(reread_flagged=True):
-                write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
+                write(style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
             if follow:
                 _follow(sync_pass, interval=interval, stop=stop, write=write, style=style)
     except requests.HTTPError as exc:
@@ -338,7 +325,7 @@ def _follow(
         if count:
             last_new_row_at = now
         quiet_for = timedelta(seconds=round(now - last_new_row_at))
-        write(_style_synced_line(f"pass {number}: {count} rows synced, last new row {quiet_for} ago", count, style))
+        write(style_synced_line(f"pass {number}: {count} rows synced, last new row {quiet_for} ago", count, style))
 
 
 def resolve_selection(client, store) -> tuple[str, list[dict]]:
