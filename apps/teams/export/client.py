@@ -1,10 +1,15 @@
-"""HTTP client for the source server's read endpoints. Transient transport errors (timeouts, 5xx,
-connection resets) are retried with backoff so a single network blip doesn't kill a long migration;
-client errors (4xx) fail fast."""
+"""HTTP client for the source server's read endpoints. Transient transport errors (connect timeouts,
+5xx, connection resets) are retried with backoff so a single network blip doesn't kill a long migration.
+Rate-limited responses (429) are retried after the server's Retry-After wait. Other client errors
+(4xx) fail fast. Each retry is reported through ``on_retry``."""
 
+import logging
 import time
+from collections.abc import Callable
 
 import requests
+
+logger = logging.getLogger("ocs.teams")
 
 _API_KEY_HEADER = "X-Api-Key"
 
@@ -20,16 +25,27 @@ class FileContentNotFound(Exception):
 
 
 class ResourceFetcher:
-    def __init__(self, base_url, api_key, *, session=None, sleep=time.sleep):
+    def __init__(
+        self,
+        base_url,
+        api_key,
+        *,
+        session=None,
+        sleep=time.sleep,
+        on_retry: Callable[[str], None] = logger.warning,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         # Transport tuning -- fixed defaults that no caller overrides (only session/sleep are
         # injected, by tests). Promote one to an __init__ argument if a need to vary it shows up.
-        self.timeout = 30
+        # (connect, read): the read limit is long because a large export page is slow to build, but
+        # finite so a dropped connection times out and is retried rather than hanging the sync.
+        self.timeout = (30, 90)
         self.max_retries = 5
         self.backoff = 1.0
         self._session = session or requests.Session()
         self._sleep = sleep
+        self._on_retry = on_retry
         self._team = None
 
     def get_manifest(self) -> dict:
@@ -79,25 +95,48 @@ class ResourceFetcher:
         return self._request(path, params).json()
 
     def _request(self, path: str, params: dict | None = None) -> requests.Response:
-        """GET ``path`` with the API key header, retrying transient transport errors (timeouts, 5xx,
-        connection resets) with backoff and failing fast on 4xx. Returns the raw response."""
+        """GET ``path`` with the API key header, retrying transient transport errors (connect timeouts,
+        5xx, connection resets) with backoff, retrying 429s after their Retry-After wait, and failing fast
+        on other 4xx. Returns the raw response."""
         url = self.base_url + path
         headers = {_API_KEY_HEADER: self.api_key}
         for attempt in range(self.max_retries):
             last_attempt = attempt == self.max_retries - 1
+            backoff = self.backoff * (attempt + 1)
             try:
                 response = self._session.get(url, params=params, headers=headers, timeout=self.timeout)
-            except (requests.ConnectionError, requests.Timeout):
+            except (requests.ConnectionError, requests.Timeout) as exc:
                 if last_attempt:
                     raise
-                self._sleep(self.backoff * (attempt + 1))
+                self._wait_to_retry(
+                    reason=f"Could not reach the source server ({type(exc).__name__})", path=path, wait=backoff
+                )
                 continue
 
             if response.status_code >= 500 and not last_attempt:
                 response.close()  # return the socket to the pool before backing off
-                self._sleep(self.backoff * (attempt + 1))
+                self._wait_to_retry(reason=f"Source server returned {response.status_code}", path=path, wait=backoff)
+                continue
+
+            if response.status_code == 429 and not last_attempt:
+                wait = self._retry_after(response, default=backoff)
+                response.close()
+                self._wait_to_retry(reason="Source server rate limit reached", path=path, wait=wait)
                 continue
 
             response.raise_for_status()
             return response
         raise RuntimeError("request retries exhausted without a response")  # unreachable with max_retries >= 1
+
+    def _wait_to_retry(self, reason: str, path: str, wait: float) -> None:
+        self._on_retry(f"{reason}; retrying {path} in {wait:g}s")
+        self._sleep(wait)
+
+    @staticmethod
+    def _retry_after(response: requests.Response, default: float) -> float:
+        """The Retry-After header in seconds, or ``default`` when absent or not a number of seconds (the
+        source server only sends seconds, so the HTTP-date form isn't parsed)."""
+        try:
+            return max(int(response.headers["Retry-After"]), 0)
+        except (KeyError, ValueError):
+            return default
