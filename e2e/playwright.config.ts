@@ -16,9 +16,10 @@ const slowMo = Number(process.env.E2E_SLOW_MO ?? (process.env.E2E_HEADED ? 500 :
 export default defineConfig({
   testDir: "tests",
   globalSetup: "./global-setup.ts",
-  // The core flow waits on Celery tasks and live LLM calls.
+  // The tests wait on Celery tasks and LLM calls.
   timeout: 3 * 60 * 1000,
   expect: { timeout: 60 * 1000 },
+  // Each test creates its own data in the server and deletes all E2E data when it ends, so only one runs at a time.
   fullyParallel: false,
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],

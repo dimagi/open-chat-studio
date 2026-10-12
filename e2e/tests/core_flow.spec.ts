@@ -1,74 +1,71 @@
-import { expect, type Page, test } from "@playwright/test";
+import { E2E_BASE_URL } from "../config";
+import { expect, test } from "../fixtures";
 
-import { E2E_BASE_URL, E2E_EMAIL, E2E_PASSWORD, E2E_TEAM_SLUG } from "../config";
+// Each test creates its own user and team (see `apps/web/e2e_data.py`), so the tests run in any order.
 
+test("log in", { annotation: { type: "user-stories", description: "1" } }, async ({ page, createData }) => {
+  const data = await createData("team", { logIn: false });
+  await page.goto("/accounts/login/");
+  await page.locator("input[name=login]").fill(data.email);
+  // With the SSO login flag on, the password field appears after submitting the email.
+  const continueButton = page.locator("input[type=submit][value=Continue]");
+  if (await continueButton.isVisible()) {
+    await continueButton.click();
+  }
+  await page.locator("input[name=password]").fill(data.password);
+  await page.locator("input[type=submit][value='Sign In']").click();
+  await expect(page).toHaveURL(new RegExp(`/a/${data.team_slug}/dashboard/`));
+});
 
-// Each story builds on the one before it, so the tests share one logged-in page and stop at the first failure.
-test.describe.configure({ mode: "serial" });
-
-test.describe("core flow", () => {
+test("create a team", { annotation: { type: "user-stories", description: "2" } }, async ({ page, createData }) => {
+  await createData("team");
   const teamName = `E2E Team ${Date.now()}`;
-  const chatbotName = `Core flow bot ${Date.now()}`;
-  const userMessage = "Reply with a short greeting.";
-  let page: Page;
-  // The team created in US-2; every later story runs inside it.
-  let teamUrl: string;
-  let chatbotUrl: string;
-  let sessionUrl: string;
+  await page.goto("/teams/create/");
+  await page.locator("input[name=name]").fill(teamName);
+  await page.locator("input[type=submit][value=Save]").click();
+  await expect(page).toHaveURL(/\/a\/[^/]+\/team\/$/);
+  await expect(page.locator("h1[data-cy=title]")).toHaveText(teamName);
+});
 
-  test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-  });
-
-  test.afterAll(async () => {
-    await page.close();
-  });
-
-  test("log in", { annotation: { type: "user-stories", description: "1" } }, async () => {
-    await page.goto("/accounts/login/");
-    await page.locator("input[name=login]").fill(E2E_EMAIL);
-    // With the SSO login flag on, the password field appears after submitting the email.
-    const continueButton = page.locator("input[type=submit][value=Continue]");
-    if (await continueButton.isVisible()) {
-      await continueButton.click();
-    }
-    await page.locator("input[name=password]").fill(E2E_PASSWORD);
-    await page.locator("input[type=submit][value='Sign In']").click();
-    await expect(page).toHaveURL(new RegExp(`/a/${E2E_TEAM_SLUG}/dashboard/`));
-  });
-
-  test("create a team", { annotation: { type: "user-stories", description: "2" } }, async () => {
-    await page.goto("/teams/create/");
-    await page.locator("input[name=name]").fill(teamName);
-    await page.locator("input[type=submit][value=Save]").click();
-    await expect(page).toHaveURL(/\/a\/[^/]+\/team\/$/);
-    teamUrl = new URL(page.url()).pathname.replace(/team\/$/, "").replace(/\/$/, "");
-    await expect(page.locator("h1[data-cy=title]")).toHaveText(teamName);
-  });
-
-  test("add an OpenAI LLM provider", { annotation: { type: "user-stories", description: "3" } }, async () => {
-    await page.goto(`${teamUrl}/service_providers/llm/create/openai/`);
-    await page.locator("input[name=name]").fill("OpenAI");
+test(
+  "add an OpenAI LLM provider",
+  { annotation: { type: "user-stories", description: "3" } },
+  async ({ page, createData }) => {
+    const data = await createData("team");
+    const providerName = "My OpenAI";
+    await page.goto(`${data.team_url}/service_providers/llm/create/openai/`);
+    await page.locator("input[name=name]").fill(providerName);
     // The dev server's mock LLM answers in place of OpenAI, so no real key or network call is needed.
     await page.locator("input[name=openai_api_key]").fill("mock");
     await page.locator("input[name=openai_api_base]").fill(`${E2E_BASE_URL}/mock-llm/v1`);
     await page.getByRole("button", { name: "Create and Verify" }).click();
-    await expect(page).toHaveURL(new RegExp(`${teamUrl}/team/$`));
-  });
+    await expect(page).toHaveURL(new RegExp(`${data.team_url}/team/$`));
+  },
+);
 
-  test("create a chatbot", { annotation: { type: "user-stories", description: "4" } }, async () => {
-    await page.goto(`${teamUrl}/chatbots/`);
+test(
+  "create a chatbot",
+  { annotation: { type: "user-stories", description: "4" } },
+  async ({ page, createData }) => {
+    const data = await createData("llm_provider");
+    const chatbotName = "Created in E2E";
+    await page.goto(`${data.team_url}/chatbots/`);
     await page.getByText("Add New", { exact: true }).click();
     await page.locator("#new_chatbot_form input[name=name]").fill(chatbotName);
     await page.getByRole("button", { name: "Create Chatbot" }).click();
-    await expect(page).toHaveURL(new RegExp(`${teamUrl}/chatbots/\\d+/edit/`));
-    chatbotUrl = page.url().replace(/edit\/$/, "");
-    await page.goto(chatbotUrl);
+    await expect(page).toHaveURL(new RegExp(`${data.team_url}/chatbots/\\d+/edit/`));
+    await page.goto(page.url().replace(/edit\/$/, ""));
     await expect(page.locator("#chatbot-name")).toHaveText(chatbotName);
-  });
+  },
+);
 
-  test("chat with the chatbot", { annotation: { type: "user-stories", description: "5" } }, async () => {
-    await page.goto(chatbotUrl);
+test(
+  "chat with the chatbot",
+  { annotation: { type: "user-stories", description: "5" } },
+  async ({ page, createData }) => {
+    const data = await createData("chatbot");
+    const userMessage = "Reply with a short greeting.";
+    await page.goto(data.chatbot_url);
     await page.getByRole("button", { name: "Chat to the bot" }).hover();
     await page.getByRole("button", { name: "Unreleased version" }).click();
     const widget = page.locator("#chatbot-widget");
@@ -76,22 +73,27 @@ test.describe("core flow", () => {
     await widget.locator("button.send-button").click();
     await expect(widget.locator(".message-row-user")).toContainText(userMessage);
     await expect(widget.locator(".message-row-assistant .chat-markdown")).not.toBeEmpty();
-  });
+  },
+);
 
-  test("find the session in the sessions list", { annotation: { type: "user-stories", description: "6" } }, async () => {
-    await page.goto(chatbotUrl);
+test(
+  "find the session in the sessions list",
+  { annotation: { type: "user-stories", description: "6" } },
+  async ({ page, createData }) => {
+    const data = await createData("session");
+    await page.goto(data.chatbot_url);
     const sessionsTable = page.locator("#sessions-table");
-    await expect(sessionsTable).toContainText(E2E_EMAIL);
+    await expect(sessionsTable).toContainText(data.email);
     await sessionsTable.getByRole("link", { name: "Session Details" }).click();
-    await expect(page).toHaveURL(/\/s\/[^/]+\/view\//);
-    sessionUrl = page.url();
-  });
+    await expect(page).toHaveURL(new RegExp(`${data.session_url}$`));
+  },
+);
 
-  test("read the transcript", { annotation: { type: "user-stories", description: "7" } }, async () => {
-    await page.goto(sessionUrl);
-    const messages = page.locator("#messages-container");
-    await messages.scrollIntoViewIfNeeded();
-    await expect(messages.locator(".chat-message-user .message-contents")).toContainText(userMessage);
-    await expect(messages.locator(".chat-message-system .message-contents")).not.toBeEmpty();
-  });
+test("read the transcript", { annotation: { type: "user-stories", description: "7" } }, async ({ page, createData }) => {
+  const data = await createData("session");
+  await page.goto(data.session_url);
+  const messages = page.locator("#messages-container");
+  await messages.scrollIntoViewIfNeeded();
+  await expect(messages.locator(".chat-message-user .message-contents")).toContainText(data.user_message);
+  await expect(messages.locator(".chat-message-system .message-contents")).not.toBeEmpty();
 });

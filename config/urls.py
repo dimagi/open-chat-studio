@@ -130,6 +130,9 @@ if settings.MOCK_LLM_ENABLED:
     # sends only a bearer token, and that include sits behind the team-scoped login.
     urlpatterns.append(path("mock-llm/", include("apps.service_providers.mock_llm.urls")))
 
+if settings.DEBUG or settings.IS_CI:
+    urlpatterns.append(path("e2e-data/", include("apps.web.e2e_views")))
+
 if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls
 
