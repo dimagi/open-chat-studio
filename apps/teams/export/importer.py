@@ -6,6 +6,7 @@ import contextlib
 import functools
 from collections.abc import Callable, Iterable
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
@@ -15,8 +16,9 @@ from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
 from apps.events.versioning import get_event_action_param_specs
-from apps.teams.models import Flag, Membership
+from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import set_current_team
+from apps.users.models import CustomUser
 from apps.utils.fields import as_int
 
 from .client import FileContentNotFound
@@ -65,7 +67,7 @@ class UnresolvedForeignKey(Exception):
     """A required FK points at a row that has no translation yet: either the source created it after
     its resource was read, or an ordering bug. ``target_label`` names the model it points at."""
 
-    def __init__(self, message: str, target_label: str | None = None, source_pk=None):
+    def __init__(self, message: str, target_label: str | None = None, source_pk: int | str | None = None) -> None:
         super().__init__(message)
         self.target_label = target_label
         self.source_pk = source_pk
@@ -200,11 +202,15 @@ def _match_existing_score(model, row: dict, store: FKTranslationStore, target_te
     return None
 
 
-def _adopt_participant(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+def _adopt_participant(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
     return model._base_manager.filter(team=target_team, platform=row["platform"], identifier=row["identifier"]).first()
 
 
-def _adopt_participant_data(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+def _adopt_participant_data(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
     participant = store.get_target("experiments.participant", row["participant"])
     experiment = store.get_target("experiments.experiment", row["experiment"])
     if participant is None or experiment is None:
@@ -247,10 +253,10 @@ class Importer:
     def __init__(
         self,
         store: FKTranslationStore,
-        private_key=None,
-        on_user_created=None,
+        private_key: RSAPrivateKey | None = None,
+        on_user_created: Callable[[CustomUser], None] | None = None,
         fetch_file_content: Callable[[int], bytes] | None = None,
-    ):
+    ) -> None:
         """``private_key`` unseals secret fields when supplied; ``on_user_created`` is called once
         per newly created user (e.g. to send an invite); ``fetch_file_content`` is a ``(source_pk) ->
         bytes`` callable used to backfill a file whose blob is missing from this server's storage.
@@ -589,7 +595,7 @@ class Importer:
                 m2m_values[field.name] = [self._resolve_m2m_member(field, label, pk) for pk in row[field.name]]
         return m2m_values
 
-    def _resolve_m2m_member(self, field, label: str, source_pk) -> int | None:
+    def _resolve_m2m_member(self, field: models.ManyToManyField, label: str, source_pk: int | str) -> int | None:
         if label not in MANIFEST_LABELS:
             return None  # target model deliberately not synced; leave the member out
         target = self.store.get_target(label, as_int(source_pk))

@@ -31,12 +31,16 @@ import os
 import signal
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import timedelta
 from pathlib import Path
+from types import FrameType
+from typing import Any
 
 import requests
-from django.core.management.base import BaseCommand, CommandError
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.core.management.color import Style
 from django.db import close_old_connections
 
 from apps.teams.export.client import ResourceFetcher
@@ -53,6 +57,7 @@ from apps.teams.export.translation import (
 )
 from apps.teams.models import Team
 from apps.teams.utils import current_team
+from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 FILES_CONFIRMED_FLAG = "files_confirmed"
@@ -263,18 +268,18 @@ def _enable_target_migration_mode(team: Team) -> None:
 
 
 def run_sync(
-    client,
-    store,
-    private_key,
-    write=lambda _m: None,
-    page_limit=100,
-    enforce_schema=True,
-    on_user_created=send_password_reset_email,
-    style=None,
-    follow=False,
-    interval=10,
-    stop=None,
-):
+    client: ResourceFetcher,
+    store: FKTranslationStore,
+    private_key: RSAPrivateKey | None,
+    write: Callable[[str], None] = lambda _m: None,
+    page_limit: int = 100,
+    enforce_schema: bool = True,
+    on_user_created: Callable[[CustomUser], None] | None = send_password_reset_email,
+    style: Style | None = None,
+    follow: bool = False,
+    interval: int = 10,
+    stop: threading.Event | None = None,
+) -> Importer:
     """Sync the team once, or with ``follow`` keep syncing every ``interval`` seconds until ``stop``
     (a ``threading.Event``) is set. A stop takes effect between pages, so every page read is committed
     with its cursor."""
@@ -305,7 +310,13 @@ def run_sync(
     return importer
 
 
-def _follow(sync_pass, interval, stop, write, style) -> None:
+def _follow(
+    sync_pass: "_SyncPass",
+    interval: int,
+    stop: threading.Event,
+    write: Callable[[str], None],
+    style: Style | None,
+) -> None:
     """Run a pass every ``interval`` seconds until ``stop`` is set, printing one line per pass."""
     last_new_row_at = time.monotonic()
     number = 1
@@ -354,7 +365,17 @@ class _SyncPass:
     caught up, so the recursion ends.
     """
 
-    def __init__(self, importer, client, store, entries, page_limit, cursor_key, partial, write):
+    def __init__(
+        self,
+        importer: Importer,
+        client: ResourceFetcher,
+        store: FKTranslationStore,
+        entries: list[dict],
+        page_limit: int,
+        cursor_key: str,
+        partial: bool,
+        write: Callable[[str], None],
+    ) -> None:
         self.importer = importer
         self.client = client
         self.store = store
@@ -364,7 +385,7 @@ class _SyncPass:
         self.partial = partial
         self.write = write
 
-    def run(self, first: bool, stop) -> list[int]:
+    def run(self, first: bool, stop: threading.Event) -> list[int]:
         """Read every entry and return the rows synced for each. The first pass of a run reads the
         resources flagged ``reread_under_selection`` from the beginning; later passes rely on catch-up
         for an old row that joins the selection. Stops early once ``stop`` is set."""
@@ -375,10 +396,10 @@ class _SyncPass:
             counts.append(self._read(position, reread=first and self._rereadable(entry), stop=stop))
         return counts
 
-    def _rereadable(self, entry) -> bool:
+    def _rereadable(self, entry: dict) -> bool:
         return self.partial and entry["reread_under_selection"]
 
-    def _read(self, position: int, reread: bool, stop=None) -> int:
+    def _read(self, position: int, reread: bool, stop: threading.Event | None = None) -> int:
         """Import one entry page by page, recording the resume cursor once each page's rows are
         committed. The cursor is stored rather than derived from the synced rows, because the row set
         the source serves changes with the chatbot selection. ``reread`` starts from the beginning;
@@ -455,7 +476,7 @@ def force_delete_team(team_slug, state_dir, write=lambda _m: None):
 class Command(BaseCommand):
     help = "Sync a team's data from a source OCS server into this one."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--source-url", required=True)
         parser.add_argument("--api-key", required=True)
         parser.add_argument(
@@ -498,7 +519,7 @@ class Command(BaseCommand):
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         start_time = time.monotonic()
         private_key = _load_private_key(options["private_key_path"])
 
@@ -542,7 +563,7 @@ class Command(BaseCommand):
             )
 
     @contextlib.contextmanager
-    def _stop_on_interrupt(self, stop: threading.Event, enabled: bool):
+    def _stop_on_interrupt(self, stop: threading.Event, enabled: bool) -> Iterator[None]:
         """While enabled, turn the first Ctrl+C (or SIGTERM) into a request to stop after the current
         page, so the sync ends with every page it read committed and the report printed. A second
         Ctrl+C or SIGTERM aborts at once."""
@@ -550,7 +571,7 @@ class Command(BaseCommand):
             yield
             return
 
-        def request_stop(signum, frame):
+        def request_stop(signum: int, frame: FrameType | None) -> None:
             self.stdout.write(
                 self.style.WARNING("Stopping after the current page. Press Ctrl+C again to abort immediately.")
             )
