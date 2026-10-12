@@ -170,16 +170,20 @@ def test_a_participant_the_target_created_during_cutover_is_adopted(
     target's participant instead of colliding with it on (team, platform, identifier)."""
     public_key, private = keypair
     manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
-    source_rows = {resource: rows[resource] for resource in ("participants", "participant_data")}
-    run_sync(FakeClient(manifest, {**rows, "participants": [], "participant_data": []}), store, private)
 
+    # The first sync runs before the user has messaged the source.
+    before_user_messaged = {**rows, "participants": [], "participant_data": []}
+    run_sync(FakeClient(manifest, before_user_messaged), store, private, on_user_created=None)
+
+    # After the switch, the user messages the target, which creates its own participant.
     team = Team.objects.get(slug="imported-team-z")
     on_target = ParticipantFactory(team=team, platform="web", identifier="user-1", name="Messaged the target")
     if target_has_data:
         experiment = Experiment.objects.get(pk=store.get_target("experiments.experiment", 700))
         ParticipantDataFactory(team=team, participant=on_target, experiment=experiment, data={"from": "target"})
 
-    importer = run_sync(FakeClient(manifest, {**rows, **source_rows}), store, private, on_user_created=None)
+    # The next sync reads the source's participant for the same user.
+    importer = run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
 
     assert store.get_target("experiments.participant", 1) == on_target.id
     assert list(Participant.objects.filter(team=team)) == [on_target]
