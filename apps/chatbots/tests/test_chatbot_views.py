@@ -338,18 +338,26 @@ def test_versions_table_query_count_does_not_scale_with_versions(client, team_wi
     experiment.create_new_version()
     url = reverse("chatbots:versions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
 
-    client.get(url)  # warm any per-process caches
-    with CaptureQueriesContext(connection) as single_version:
-        assert client.get(url).status_code == 200
-
-    experiment.create_new_version()
-    experiment.create_new_version()
-    with CaptureQueriesContext(connection) as many_versions:
-        response = client.get(url)
+    def experiment_lookups_by_id(url):
+        client.get(url)  # warm caches that creating versions may have invalidated
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(url)
         assert response.status_code == 200
+        lookups = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if 'FROM "experiments_experiment" WHERE "experiments_experiment"."id" =' in q["sql"]
+        ]
+        return lookups, response
 
-    assert len(many_versions) == len(single_version)
-    assert response.content.decode().count("api-url-") >= 3
+    single_version_lookups, _ = experiment_lookups_by_id(url)
+
+    experiment.create_new_version()
+    experiment.create_new_version()
+    many_version_lookups, response = experiment_lookups_by_id(url)
+
+    assert response.content.decode().count('id="api-url-') == 3
+    assert len(many_version_lookups) == len(single_version_lookups)
 
 
 @pytest.mark.django_db()
