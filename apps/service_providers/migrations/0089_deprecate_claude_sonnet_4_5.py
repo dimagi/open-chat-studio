@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -11,6 +9,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
+        # remove_deprecated_models and notify_deprecated_models moved to
+        # 0091_deprecate_google_gemini_3_5_flash so they run only once per deploy.
     ]
