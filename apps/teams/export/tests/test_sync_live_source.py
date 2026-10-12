@@ -264,6 +264,32 @@ def test_a_row_edited_on_the_target_is_not_overwritten_by_the_source(
     assert importer.kept_target_edits == expected_kept
 
 
+@pytest.mark.parametrize("adopted", [pytest.param(False, id="edited-on-target"), pytest.param(True, id="adopted")])
+def test_a_kept_target_row_survives_later_source_revisions(make_store, tmp_path, keypair, adopted):
+    """The source can revise a row more than once after the target took it over, each time later
+    than the target's own write. None of those revisions overwrites the target's row."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    rows["participant_data"] = []
+    team_and_no_participants = {**rows, "participants": []}
+    run_sync(FakeClient(manifest, team_and_no_participants if adopted else rows), store, private, on_user_created=None)
+
+    team = Team.objects.get(slug="imported-team-z")
+    if adopted:
+        on_target = ParticipantFactory(team=team, platform="web", identifier="user-1", name="from target")
+    else:
+        on_target = Participant.objects.get(pk=store.get_target("experiments.participant", 1))
+        on_target.name = "from target"
+        on_target.save()
+
+    for revision in ["2099-01-01T00:00:00+00:00", "2099-01-02T00:00:00+00:00"]:
+        rows["participants"] = [{**_participant_row(1), "name": f"source {revision}", "updated_at": revision}]
+        run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    on_target.refresh_from_db()
+    assert on_target.name == "from target"
+
+
 @pytest.mark.parametrize(
     ("report_arg", "expected_line"),
     [

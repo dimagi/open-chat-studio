@@ -404,10 +404,12 @@ class Importer:
     def _keep_target_edit(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
     ) -> models.Model | None:
-        """The target row, when it was edited on the target after the sync last wrote it (see
-        ``_KEEP_TARGET_EDITS``). The sync restores the source ``updated_at`` on every row it writes, so
-        a later ``updated_at`` on the target means the target changed it. The new source revision is
-        recorded so an unchanged source row is not reconsidered on the next pass."""
+        """The target row, when the sync did not write its current state (see ``_KEEP_TARGET_EDITS``):
+        the target edited it, or it was adopted. The sync restores the source ``updated_at`` on every
+        row it writes, so a target ``updated_at`` other than the recorded source revision means the
+        sync's write is not the latest. The new source revision is recorded so an unchanged source row
+        is not reconsidered on the next pass; the target's ``updated_at`` still differs from it, so
+        the row stays kept through every later revision."""
         if model_label not in _KEEP_TARGET_EDITS:
             return None
         target_pk = self.store.get_target(model_label, source_pk)
@@ -415,7 +417,7 @@ class Importer:
         if target_pk is None or synced_at is None:
             return None
         instance = model._base_manager.filter(pk=target_pk).first()
-        if instance is None or instance.updated_at <= parse_datetime(synced_at):
+        if instance is None or instance.updated_at == parse_datetime(synced_at):
             return None
         self.store.record(model_label, source_pk, target_pk, source_updated_at=row.get("updated_at"))
         self.kept_target_edits[model_label].add(source_pk)
