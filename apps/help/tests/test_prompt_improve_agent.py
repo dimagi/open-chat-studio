@@ -202,6 +202,23 @@ class TestPromptImproveView:
         assert response.status_code == 200
         assert response.json() == {"response": {"prompt": REWRITE, "notes": ["Stated the role."]}}
 
+    def test_router_routes_reach_the_agent(self, member_client, team, llm):
+        llm.invoke.side_effect = _responses(PromptImproveOutput(prompt="Route. {participant_data}", notes=[]))
+
+        response = self._post(
+            member_client,
+            team,
+            {
+                "prompt": "Route. {participant_data}",
+                "node_type": "router",
+                "routes": ["BILLING", "SUPPORT"],
+                "default_route": "BILLING",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "<routes>\n- BILLING (default)\n- SUPPORT\n</routes>" in _user_messages(llm)[0]
+
     def test_rejects_a_get(self, member_client, team):
         assert member_client.get(self._url(team)).status_code == 405
 
