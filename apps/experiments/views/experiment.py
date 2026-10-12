@@ -103,7 +103,8 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
     def get_queryset(self):
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
-        return (experiment_row | other_versions).order_by("-version_number")
+        # select_related avoids a per-row query when the version cell renders `api_url`
+        return (experiment_row | other_versions).select_related("working_version").order_by("-version_number")
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
