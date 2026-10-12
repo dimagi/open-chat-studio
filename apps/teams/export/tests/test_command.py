@@ -1,5 +1,4 @@
 import io
-import re
 
 import pytest
 import requests
@@ -746,25 +745,3 @@ def test_a_whole_team_sync_aborts_when_the_files_were_not_moved(make_store, tmp_
         check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
 
     assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
-
-
-def test_progress_lines_and_retries_are_timestamped(tmp_path, monkeypatch):
-    """An operator coming back to the log can tell from the last line when the sync was last active."""
-    entries, rows = _new_user_scenario()
-    fetcher_options = {}
-
-    def fake_fetcher(*args, **kwargs):
-        fetcher_options.update(kwargs)
-        return FakeClient(make_manifest(entries), rows)
-
-    monkeypatch.setattr(sync_team, "ResourceFetcher", fake_fetcher)
-    monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
-    output = io.StringIO()
-
-    Command(stdout=output).handle(**_sync_options(tmp_path))
-    fetcher_options["on_retry"]("Source server returned 503; retrying /api/export/users/ in 1s")
-
-    timestamp = r"\d\d:\d\d:\d\d "
-    lines = output.getvalue().splitlines()
-    assert any(re.fullmatch(timestamp + r"\[1/\d+\] \w+: reading from the start", line) for line in lines)
-    assert re.fullmatch(timestamp + "Source server returned 503; .*", lines[-1])

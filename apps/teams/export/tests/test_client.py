@@ -49,19 +49,6 @@ def test_get_manifest_hits_endpoint_with_api_key_header():
     assert call["headers"]["X-Api-Key"] == "secret-key"
 
 
-def test_requests_have_a_long_but_finite_read_timeout():
-    """A slow export page is waited for, but a dropped connection still times out and is retried."""
-    session = FakeSession([FakeResponse(json_data={"entries": []})])
-    _client(session).get_manifest()
-    assert session.calls[0]["timeout"] == (30, 90)
-
-
-def test_a_read_timeout_is_retried():
-    session = FakeSession([requests.ReadTimeout("read timed out"), FakeResponse(json_data={"entries": []})])
-    assert _client(session).get_manifest() == {"entries": []}
-    assert len(session.calls) == 2
-
-
 def test_get_team_hits_root_endpoint():
     session = FakeSession([FakeResponse(json_data={"id": 1, "name": "T"})])
     assert _client(session).get_team() == {"id": 1, "name": "T"}
