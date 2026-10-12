@@ -53,3 +53,17 @@ class TestUnreadNotificationsCountAllTeams:
     def test_zero_when_user_belongs_to_no_teams(self):
         user = UserFactory.create()
         assert user.unread_notifications_count_all_teams() == 0
+
+    def test_uses_fixed_number_of_queries_regardless_of_team_count(self, django_assert_num_queries):
+        """Regression test: must not fire 2×N queries (N+1) when the cache is cold."""
+        user = UserFactory.create()
+        for _ in range(5):
+            team = TeamFactory.create()
+            MembershipFactory.create(user=user, team=team)
+            EventUserFactory.create(user=user, team=team, read=False)
+
+        # 3 queries: (1) fetch teams, (2) fetch preferences, (3) count EventUsers.
+        with django_assert_num_queries(3):
+            count = user.unread_notifications_count_all_teams()
+
+        assert count == 5
