@@ -201,6 +201,19 @@ def _match_existing_score(model, row: dict, store: FKTranslationStore, target_te
     return None
 
 
+def _match_existing_tagged_item(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the target row that already applies this tag to this object rather than inserting a
+    duplicate that violates the (content_type, object_id, tag) unique constraint. Deletions don't sync,
+    so a tag removed and re-added on the source arrives as a new row while the old one remains here."""
+    target_tag = store.get_target("annotations.tag", row["tag"])
+    target_object = store.get_target(row["content_type"], row["object_id"])
+    if target_tag is None or target_object is None:
+        return None
+    app_label, model_name = row["content_type"].split(".")
+    content_type = ContentType.objects.get_by_natural_key(app_label, model_name)
+    return model._base_manager.filter(content_type=content_type, object_id=target_object, tag_id=target_tag).first()
+
+
 def _adopt_participant(
     model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
 ) -> models.Model | None:
@@ -241,6 +254,7 @@ _MATCH_EXISTING = {
     "experiments.consentform": _match_default_consent_form,
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
     "assessments.score": _match_existing_score,
+    "annotations.customtaggeditem": _match_existing_tagged_item,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
