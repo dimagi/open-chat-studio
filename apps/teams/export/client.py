@@ -1,10 +1,14 @@
 """HTTP client for the source server's read endpoints. Transient transport errors (timeouts, 5xx,
-connection resets) are retried with backoff so a single network blip doesn't kill a long migration;
-client errors (4xx) fail fast."""
+connection resets) are retried with backoff so a single network blip doesn't kill a long migration.
+Rate-limited responses (429) are retried after the server's Retry-After wait. Other client errors
+(4xx) fail fast."""
 
+import logging
 import time
 
 import requests
+
+logger = logging.getLogger("ocs.teams")
 
 _API_KEY_HEADER = "X-Api-Key"
 
@@ -80,7 +84,8 @@ class ResourceFetcher:
 
     def _request(self, path: str, params: dict | None = None) -> requests.Response:
         """GET ``path`` with the API key header, retrying transient transport errors (timeouts, 5xx,
-        connection resets) with backoff and failing fast on 4xx. Returns the raw response."""
+        connection resets) with backoff, retrying 429s after their Retry-After wait, and failing fast
+        on other 4xx. Returns the raw response."""
         url = self.base_url + path
         headers = {_API_KEY_HEADER: self.api_key}
         for attempt in range(self.max_retries):
@@ -98,6 +103,23 @@ class ResourceFetcher:
                 self._sleep(self.backoff * (attempt + 1))
                 continue
 
+            if response.status_code == 429 and not last_attempt:
+                retry_after = self._retry_after(response)
+                wait = self.backoff * (attempt + 1) if retry_after is None else max(retry_after, 0)
+                response.close()
+                logger.warning("Source server rate limit reached; retrying %s in %s seconds", path, wait)
+                self._sleep(wait)
+                continue
+
             response.raise_for_status()
             return response
         raise RuntimeError("request retries exhausted without a response")  # unreachable with max_retries >= 1
+
+    @staticmethod
+    def _retry_after(response: requests.Response) -> int | None:
+        """The Retry-After header in seconds, or None when absent or not a number of seconds (the
+        source server only sends seconds, so the HTTP-date form isn't parsed)."""
+        try:
+            return int(response.headers["Retry-After"])
+        except (KeyError, ValueError):
+            return None
