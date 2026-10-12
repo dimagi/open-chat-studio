@@ -40,6 +40,9 @@ test(
     await page.locator("input[name=openai_api_base]").fill(`${E2E_BASE_URL}/mock-llm/v1`);
     await page.getByRole("button", { name: "Create and Verify" }).click();
     await expect(page).toHaveURL(new RegExp(`${data.team_url}/team/$`));
+    const providerRow = page.getByRole("row").filter({ hasText: providerName });
+    await expect(providerRow).toContainText("LLM & embedding");
+    await expect(providerRow).toContainText("Verified");
   },
 );
 
