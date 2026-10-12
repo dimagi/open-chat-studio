@@ -90,22 +90,22 @@ class ResourceFetcher:
         headers = {_API_KEY_HEADER: self.api_key}
         for attempt in range(self.max_retries):
             last_attempt = attempt == self.max_retries - 1
+            backoff = self.backoff * (attempt + 1)
             try:
                 response = self._session.get(url, params=params, headers=headers, timeout=self.timeout)
             except (requests.ConnectionError, requests.Timeout):
                 if last_attempt:
                     raise
-                self._sleep(self.backoff * (attempt + 1))
+                self._sleep(backoff)
                 continue
 
             if response.status_code >= 500 and not last_attempt:
                 response.close()  # return the socket to the pool before backing off
-                self._sleep(self.backoff * (attempt + 1))
+                self._sleep(backoff)
                 continue
 
             if response.status_code == 429 and not last_attempt:
-                retry_after = self._retry_after(response)
-                wait = self.backoff * (attempt + 1) if retry_after is None else max(retry_after, 0)
+                wait = self._retry_after(response, default=backoff)
                 response.close()
                 logger.warning("Source server rate limit reached; retrying %s in %s seconds", path, wait)
                 self._sleep(wait)
@@ -116,10 +116,10 @@ class ResourceFetcher:
         raise RuntimeError("request retries exhausted without a response")  # unreachable with max_retries >= 1
 
     @staticmethod
-    def _retry_after(response: requests.Response) -> int | None:
-        """The Retry-After header in seconds, or None when absent or not a number of seconds (the
+    def _retry_after(response: requests.Response, default: float) -> float:
+        """The Retry-After header in seconds, or ``default`` when absent or not a number of seconds (the
         source server only sends seconds, so the HTTP-date form isn't parsed)."""
         try:
-            return int(response.headers["Retry-After"])
+            return max(int(response.headers["Retry-After"]), 0)
         except (KeyError, ValueError):
-            return None
+            return default

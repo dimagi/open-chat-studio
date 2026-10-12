@@ -4,6 +4,7 @@ plain functions plus a thin loop so the transforms can be unit-tested without a 
 
 import contextlib
 import functools
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -67,10 +68,9 @@ class UnresolvedForeignKey(Exception):
     """A required FK points at a row that has no translation yet: either the source created it after
     its resource was read, or an ordering bug. ``target_label`` names the model it points at."""
 
-    def __init__(self, message: str, target_label: str | None = None, source_pk: int | str | None = None) -> None:
+    def __init__(self, message: str, target_label: str | None = None) -> None:
         super().__init__(message)
         self.target_label = target_label
-        self.source_pk = source_pk
 
 
 class MissingGlobalRow(Exception):
@@ -100,7 +100,6 @@ def resolve_fk(field: models.ForeignKey, source_pk: int | None, store: FKTransla
     raise UnresolvedForeignKey(
         f"{field.model._meta.label_lower}.{field.name} -> {target_label}:{source_pk}",
         target_label=target_label,
-        source_pk=source_pk,
     )
 
 
@@ -273,11 +272,11 @@ class Importer:
         self.target_team = None
         # Rows a rerun read again but didn't have to touch (source updated_at unchanged).
         self.skipped_rows = 0
-        # Per model, the source rows mapped onto a row the target created on its own.
-        self.adopted_rows: dict[str, int] = {}
+        # Per model, the source pks mapped onto a row the target created on its own.
+        self.adopted_rows: dict[str, set[int]] = defaultdict(set)
         # Per model, the source pks of rows edited on the target that a newer source revision was not
         # applied to.
-        self.kept_target_edits: dict[str, set[int]] = {}
+        self.kept_target_edits: dict[str, set[int]] = defaultdict(set)
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -399,7 +398,7 @@ class Importer:
         if instance is None:
             return None
         self.store.record(model_label, source_pk, instance.pk, source_updated_at=row.get("updated_at"))
-        self.adopted_rows[model_label] = self.adopted_rows.get(model_label, 0) + 1
+        self.adopted_rows[model_label].add(source_pk)
         return instance
 
     def _keep_target_edit(
@@ -419,7 +418,7 @@ class Importer:
         if instance is None or instance.updated_at <= parse_datetime(synced_at):
             return None
         self.store.record(model_label, source_pk, target_pk, source_updated_at=row.get("updated_at"))
-        self.kept_target_edits.setdefault(model_label, set()).add(source_pk)
+        self.kept_target_edits[model_label].add(source_pk)
         return instance
 
     def _create_or_update(
@@ -535,7 +534,6 @@ class Importer:
                 raise UnresolvedForeignKey(
                     f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}",
                     target_label=type_label,
-                    source_pk=source_pk,
                 )
             field_values[fk_field] = target_pk
 
@@ -603,7 +601,6 @@ class Importer:
             raise UnresolvedForeignKey(
                 f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}",
                 target_label=label,
-                source_pk=source_pk,
             )
         return target
 

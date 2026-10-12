@@ -1,9 +1,7 @@
 """Syncing from a source that keeps receiving messages while the sync runs, as it does during the
 cutover: parents created mid-run, rows the target creates or edits itself, and ``--follow``."""
 
-import base64
 import io
-import json
 import re
 import signal
 import threading
@@ -12,6 +10,7 @@ from datetime import datetime
 
 import pytest
 
+from apps.api.export.views import CursorHelper
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import UnresolvedForeignKey
@@ -151,13 +150,13 @@ def test_a_reference_to_a_later_resource_is_not_caught_up(make_store, tmp_path, 
         pytest.param(
             False,
             {"name": "late"},
-            {"experiments.participant": 1},
+            {"experiments.participant": {1}},
             id="data-from-source",
         ),
         pytest.param(
             True,
             {"from": "target"},
-            {"experiments.participant": 1, "experiments.participantdata": 1},
+            {"experiments.participant": {1}, "experiments.participantdata": {10}},
             id="data-kept-from-target",
         ),
     ],
@@ -191,11 +190,6 @@ def test_a_participant_the_target_created_during_cutover_is_adopted(
     assert on_target.name == "Messaged the target"
     assert ParticipantData.objects.get(participant=on_target).data == expected_data
     assert importer.adopted_rows == expected_adopted
-
-
-def test_report_lists_adopted_rows(capsys):
-    Command()._report(sync_complete=True, team_slug="acme", adopted_rows={"experiments.participant": 2})
-    assert "experiments.participant: 2" in capsys.readouterr().out
 
 
 @pytest.fixture()
@@ -240,9 +234,16 @@ def test_a_row_edited_on_the_target_is_not_overwritten_by_the_source(
     assert importer.kept_target_edits == expected_kept
 
 
-def test_report_lists_rows_kept_from_the_target(capsys):
-    Command()._report(sync_complete=True, team_slug="acme", kept_target_edits={"chat.chat": 3})
-    assert "chat.chat: 3" in capsys.readouterr().out
+@pytest.mark.parametrize(
+    ("report_arg", "expected_line"),
+    [
+        pytest.param("adopted_rows", "experiments.participant: 2", id="adopted"),
+        pytest.param("kept_target_edits", "experiments.participant: 2", id="kept-target-edits"),
+    ],
+)
+def test_report_lists_rows_per_model(capsys, report_arg, expected_line):
+    Command()._report(sync_complete=True, team_slug="acme", **{report_arg: {"experiments.participant": {1, 2}}})
+    assert expected_line in capsys.readouterr().out
 
 
 class _StopAfterWaits(threading.Event):
@@ -268,9 +269,9 @@ class _CursorClient(FakeClient):
     """Serves only the rows past the start cursor, as the source does."""
 
     def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        self.iter_calls.append((resource, start_cursor))
-        rows = [row for row in self.rows_by_resource.get(resource, []) if _past_cursor(row, start_cursor)]
-        return iter([rows]) if rows else iter([])
+        for rows in super().iter_pages(resource, start_cursor, limit, selection):
+            if rows := [row for row in rows if _past_cursor(row, start_cursor)]:
+                yield rows
 
 
 def _past_cursor(row, cursor):
@@ -278,9 +279,8 @@ def _past_cursor(row, cursor):
         return True
     if cursor.isdigit():
         return row["id"] > int(cursor)
-    keyset = json.loads(base64.b64decode(cursor))
-    row_key = (datetime.fromisoformat(row["updated_at"]), row["id"])
-    return row_key > (datetime.fromisoformat(keyset["updated_at"]), keyset["id"])
+    keyset = CursorHelper.decode(cursor)
+    return (datetime.fromisoformat(row["updated_at"]), row["id"]) > (keyset["updated_at"], keyset["id"])
 
 
 @pytest.mark.usefixtures("keep_test_connection")
@@ -373,31 +373,23 @@ def test_a_stop_takes_effect_after_the_current_page(make_store, tmp_path, keypai
     )
 
 
-def test_ctrl_c_requests_a_stop_and_a_second_one_aborts(tmp_path, monkeypatch):
-    """The first Ctrl+C lets the sync finish its page and print the report; the second interrupts at
-    once."""
-    previous = signal.getsignal(signal.SIGINT)
+@pytest.mark.parametrize(
+    ("signum", "second_signal_handler"),
+    [
+        pytest.param(signal.SIGINT, signal.default_int_handler, id="ctrl-c"),
+        pytest.param(signal.SIGTERM, signal.SIG_DFL, id="sigterm"),
+    ],
+)
+def test_first_signal_requests_a_stop_and_a_second_one_aborts(signum, second_signal_handler):
+    """The first Ctrl+C or SIGTERM lets the sync finish its page and print the report; the default
+    handler is back for a second one, which ends the process at once."""
+    previous = signal.getsignal(signum)
     stop = threading.Event()
     command = Command(stdout=io.StringIO())
 
-    with command._stop_on_interrupt(stop, enabled=True):
-        signal.raise_signal(signal.SIGINT)
+    with command._stop_on_interrupt(stop):
+        signal.raise_signal(signum)
         assert stop.is_set()
-        with pytest.raises(KeyboardInterrupt):
-            signal.raise_signal(signal.SIGINT)
+        assert signal.getsignal(signum) is second_signal_handler
 
-    assert signal.getsignal(signal.SIGINT) is previous
-
-
-def test_sigterm_requests_a_stop_and_a_second_one_terminates():
-    """The first SIGTERM requests a stop; the default handler is back for a second one."""
-    previous = signal.getsignal(signal.SIGTERM)
-    stop = threading.Event()
-    command = Command(stdout=io.StringIO())
-
-    with command._stop_on_interrupt(stop, enabled=True):
-        signal.raise_signal(signal.SIGTERM)
-        assert stop.is_set()
-        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
-
-    assert signal.getsignal(signal.SIGTERM) is previous
+    assert signal.getsignal(signum) is previous

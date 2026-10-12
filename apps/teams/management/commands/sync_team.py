@@ -27,11 +27,12 @@ different export code; deploy the latest code on both, or pass --skip-schema-che
 """
 
 import contextlib
+import itertools
 import os
 import signal
 import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
 from types import FrameType
@@ -293,15 +294,24 @@ def run_sync(
         on_user_created=on_user_created,
         fetch_file_content=client.get_file_content,
     )
-    sync_pass = _SyncPass(importer, client, store, manifest["entries"], page_limit, cursor_key, bool(chatbots), write)
+    sync_pass = _SyncPass(
+        importer=importer,
+        client=client,
+        store=store,
+        entries=manifest["entries"],
+        page_limit=page_limit,
+        cursor_key=cursor_key,
+        under_selection=bool(chatbots),
+        write=write,
+        stop=stop,
+    )
     try:
         with mute_signals():
             load_team(importer, client, store)
-            counts = sync_pass.run(first=True, stop=stop)
-            for entry, count in zip(manifest["entries"], counts, strict=False):
+            for entry, count in sync_pass.run(reread_flagged=True):
                 write(_style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
             if follow:
-                _follow(sync_pass, interval, stop, write, style)
+                _follow(sync_pass, interval=interval, stop=stop, write=write, style=style)
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
         if friendly is None:
@@ -319,11 +329,11 @@ def _follow(
 ) -> None:
     """Run a pass every ``interval`` seconds until ``stop`` is set, printing one line per pass."""
     last_new_row_at = time.monotonic()
-    number = 1
-    while not stop.wait(interval):
+    for number in itertools.count(start=2):
+        if stop.wait(interval):
+            return
         close_old_connections()
-        number += 1
-        count = sum(sync_pass.run(first=False, stop=stop))
+        count = sum(count for _entry, count in sync_pass.run(reread_flagged=False))
         now = time.monotonic()
         if count:
             last_new_row_at = now
@@ -373,8 +383,9 @@ class _SyncPass:
         entries: list[dict],
         page_limit: int,
         cursor_key: str,
-        partial: bool,
+        under_selection: bool,
         write: Callable[[str], None],
+        stop: threading.Event,
     ) -> None:
         self.importer = importer
         self.client = client
@@ -382,28 +393,32 @@ class _SyncPass:
         self.entries = entries
         self.page_limit = page_limit
         self.cursor_key = cursor_key
-        self.partial = partial
+        self.under_selection = under_selection
         self.write = write
+        self.stop = stop
 
-    def run(self, first: bool, stop: threading.Event) -> list[int]:
-        """Read every entry and return the rows synced for each. The first pass of a run reads the
-        resources flagged ``reread_under_selection`` from the beginning; later passes rely on catch-up
-        for an old row that joins the selection. Stops early once ``stop`` is set."""
-        counts = []
+    def run(self, reread_flagged: bool) -> list[tuple[dict, int]]:
+        """Read every entry and return each entry read with its synced row count. With
+        ``reread_flagged`` (the first pass of a run), the resources flagged ``reread_under_selection``
+        are read from the beginning; later passes rely on catch-up for an old row that joins the
+        selection. Stops early once ``stop`` is set, so the result can be shorter than the entries."""
+        synced = []
         for position, entry in enumerate(self.entries):
-            if stop.is_set():
+            if self.stop.is_set():
                 break
-            counts.append(self._read(position, reread=first and self._rereadable(entry), stop=stop))
-        return counts
+            reread = reread_flagged and self._rereadable(entry)
+            synced.append((entry, self._read(position, reread=reread, stoppable=True)))
+        return synced
 
     def _rereadable(self, entry: dict) -> bool:
-        return self.partial and entry["reread_under_selection"]
+        return self.under_selection and entry["reread_under_selection"]
 
-    def _read(self, position: int, reread: bool, stop: threading.Event | None = None) -> int:
+    def _read(self, position: int, reread: bool, stoppable: bool) -> int:
         """Import one entry page by page, recording the resume cursor once each page's rows are
         committed. The cursor is stored rather than derived from the synced rows, because the row set
         the source serves changes with the chatbot selection. ``reread`` starts from the beginning;
-        rows already imported at the same source revision are skipped by the importer."""
+        rows already imported at the same source revision are skipped by the importer. A
+        ``stoppable`` read ends after the current page once ``stop`` is set."""
         entry = self.entries[position]
         model_label, cursor_type = entry["model"], entry["cursor"]
         cursor = None if reread else self.store.get_cursor(self.cursor_key, model_label)
@@ -417,44 +432,38 @@ class _SyncPass:
             next_cursor = page_cursor(cursor_type, rows)
             if next_cursor is not None:
                 self.store.set_cursor(self.cursor_key, model_label, next_cursor)
-            if stop is not None and stop.is_set():
+            if stoppable and self.stop.is_set():
                 break
         return count
 
     def _import_row(self, position: int, row: dict) -> int:
-        """Import one row, catching up a parent the sync has not seen yet and retrying. A parent still
-        missing once every catch-up has run is outside the export (deleted, or not in the selection),
-        so the error is raised."""
-        attempts: dict[str, int] = {}
+        """Import one row. When it points at a parent the sync has not seen yet, run the next catch-up
+        read for that parent and retry. A parent still missing once every catch-up has run is outside
+        the export (deleted, or not in the selection), so the error is raised. A catch-up ignores the
+        stop request, since the row waiting on it would otherwise fail."""
+        catch_ups: dict[str | None, Iterator[tuple[int, bool]]] = {}
         while True:
             try:
                 return self.importer.import_rows(self.entries[position]["model"], [row])
             except UnresolvedForeignKey as exc:
-                target = exc.target_label
-                attempt = attempts.get(target, 0)
-                if target is None or not self._catch_up(position, target, attempt):
+                reads = catch_ups.setdefault(exc.target_label, self._catch_up_reads(position, exc.target_label))
+                if (read := next(reads, None)) is None:
                     raise
-                attempts[target] = attempt + 1
+                parent_position, reread = read
+                count = self._read(parent_position, reread=reread, stoppable=False)
+                resource = self.entries[parent_position]["resource"]
+                self.write(f"caught up {count} {resource} rows created during the sync")
 
-    def _catch_up(self, before: int, model_label: str, attempt: int) -> bool:
-        """Read ``model_label``'s entry again if it comes before ``before``: from its cursor on the
-        first attempt, then from the beginning when it is rereadable. Returns False when there is
-        nothing left to try. A catch-up ignores the stop request, since the row waiting on it would
-        otherwise fail."""
-        for position in range(before):
-            entry = self.entries[position]
-            if entry["model"] != model_label:
-                continue
-            if attempt == 0:
-                reread = False
-            elif attempt == 1 and self._rereadable(entry):
-                reread = True
-            else:
-                return False
-            count = self._read(position, reread=reread)
-            self.write(f"caught up {count} {entry['resource']} rows created during the sync")
-            return True
-        return False
+    def _catch_up_reads(self, before: int, model_label: str | None) -> Iterator[tuple[int, bool]]:
+        """The reads that can bring in a missing ``model_label`` row, in order, as (position, reread):
+        its entry from the cursor, then from the beginning when it is rereadable. Only an entry before
+        ``before`` qualifies."""
+        for position, entry in enumerate(self.entries[:before]):
+            if entry["model"] == model_label:
+                yield position, False
+                if self._rereadable(entry):
+                    yield position, True
+                return
 
 
 def force_delete_team(team_slug, state_dir, write=lambda _m: None):
@@ -535,7 +544,7 @@ class Command(BaseCommand):
             )
 
             stop = threading.Event()
-            with self._stop_on_interrupt(stop, enabled=options["follow"]):
+            with self._stop_on_interrupt(stop) if options["follow"] else contextlib.nullcontext():
                 importer = run_sync(
                     client,
                     store,
@@ -559,17 +568,14 @@ class Command(BaseCommand):
                 chatbots=client.get_team().get("exportable_chatbots") or [],
                 skipped_rows=importer.skipped_rows,
                 adopted_rows=importer.adopted_rows,
-                kept_target_edits={label: len(pks) for label, pks in importer.kept_target_edits.items()},
+                kept_target_edits=importer.kept_target_edits,
             )
 
     @contextlib.contextmanager
-    def _stop_on_interrupt(self, stop: threading.Event, enabled: bool) -> Iterator[None]:
-        """While enabled, turn the first Ctrl+C (or SIGTERM) into a request to stop after the current
-        page, so the sync ends with every page it read committed and the report printed. A second
-        Ctrl+C or SIGTERM aborts at once."""
-        if not enabled:
-            yield
-            return
+    def _stop_on_interrupt(self, stop: threading.Event) -> Iterator[None]:
+        """Turn the first Ctrl+C (or SIGTERM) into a request to stop after the current page, so the
+        sync ends with every page it read committed and the report printed. A second Ctrl+C or SIGTERM
+        aborts at once."""
 
         def request_stop(signum: int, frame: FrameType | None) -> None:
             self.stdout.write(
@@ -607,8 +613,8 @@ class Command(BaseCommand):
         notification_failures: Sequence[tuple[str, str]] = (),
         chatbots: Sequence[dict] = (),
         skipped_rows: int = 0,
-        adopted_rows: dict[str, int] | None = None,
-        kept_target_edits: dict[str, int] | None = None,
+        adopted_rows: Mapping[str, Collection[int]] | None = None,
+        kept_target_edits: Mapping[str, Collection[int]] | None = None,
     ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
         which chatbots moved, which resources need manual setup, which files the source had no content
@@ -624,9 +630,17 @@ class Command(BaseCommand):
         if skipped_rows:
             self.stdout.write(f"Rows already up to date and left untouched: {skipped_rows}")
         if adopted_rows:
-            self._report_adopted_rows(adopted_rows)
+            self._report_model_counts(
+                "These rows already existed on this server, created after a channel was switched over. "
+                "The source rows were linked to them and the rows on this server were kept as they are:",
+                adopted_rows,
+            )
         if kept_target_edits:
-            self._report_kept_target_edits(kept_target_edits)
+            self._report_model_counts(
+                "These rows were changed on this server after they were synced, so later changes to them "
+                "on the source were not applied:",
+                kept_target_edits,
+            )
 
         if chatbots:
             self._report_chatbots(chatbots)
@@ -671,27 +685,11 @@ class Command(BaseCommand):
             )
         )
 
-    def _report_adopted_rows(self, adopted_rows: dict[str, int]) -> None:
+    def _report_model_counts(self, heading: str, source_pks: Mapping[str, Collection[int]]) -> None:
         self.stdout.write("")
-        self.stdout.write(
-            self.style.WARNING(
-                "These rows already existed on this server, created after a channel was switched over. "
-                "The source rows were linked to them and the rows on this server were kept as they are:"
-            )
-        )
-        for model_label, count in adopted_rows.items():
-            self.stdout.write(f"  - {model_label}: {count}")
-
-    def _report_kept_target_edits(self, kept_target_edits: dict[str, int]) -> None:
-        self.stdout.write("")
-        self.stdout.write(
-            self.style.WARNING(
-                "These rows were changed on this server after they were synced, so later changes to them "
-                "on the source were not applied:"
-            )
-        )
-        for model_label, count in kept_target_edits.items():
-            self.stdout.write(f"  - {model_label}: {count}")
+        self.stdout.write(self.style.WARNING(heading))
+        for model_label, pks in source_pks.items():
+            self.stdout.write(f"  - {model_label}: {len(pks)}")
 
     def _report_missing_files(self, missing_files: Sequence[str]) -> None:
         self.stdout.write("")
