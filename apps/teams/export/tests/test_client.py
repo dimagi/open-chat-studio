@@ -143,6 +143,36 @@ def test_rate_limited_response_waits_then_retries(headers, expected_wait):
     assert limited.closed
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_message"),
+    [
+        pytest.param(
+            FakeResponse(429, headers={"Retry-After": "30"}),
+            "Source server rate limit reached; retrying /api/export/manifest/ in 30s",
+            id="rate-limited",
+        ),
+        pytest.param(
+            FakeResponse(503),
+            "Source server returned 503; retrying /api/export/manifest/ in 1s",
+            id="server-error",
+        ),
+        pytest.param(
+            requests.ConnectionError("boom"),
+            "Could not reach the source server (ConnectionError); retrying /api/export/manifest/ in 1s",
+            id="connection-error",
+        ),
+    ],
+)
+def test_each_retry_is_reported(failure, expected_message):
+    session = FakeSession([failure, FakeResponse(json_data={"ok": True})])
+    messages = []
+    client = ResourceFetcher(
+        "https://src.example/", "secret-key", session=session, sleep=lambda _s: None, on_retry=messages.append
+    )
+    client.get_manifest()
+    assert messages == [expected_message]
+
+
 def test_rate_limited_retries_are_exhausted_and_raise():
     session = FakeSession([FakeResponse(429, headers={"Retry-After": "1"})] * 10)
     with pytest.raises(requests.HTTPError):

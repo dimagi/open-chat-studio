@@ -1,10 +1,11 @@
 """HTTP client for the source server's read endpoints. Transient transport errors (connect timeouts,
 5xx, connection resets) are retried with backoff so a single network blip doesn't kill a long migration.
 Rate-limited responses (429) are retried after the server's Retry-After wait. Other client errors
-(4xx) fail fast."""
+(4xx) fail fast. Each retry is reported through ``on_retry``."""
 
 import logging
 import time
+from collections.abc import Callable
 
 import requests
 
@@ -24,7 +25,15 @@ class FileContentNotFound(Exception):
 
 
 class ResourceFetcher:
-    def __init__(self, base_url, api_key, *, session=None, sleep=time.sleep):
+    def __init__(
+        self,
+        base_url,
+        api_key,
+        *,
+        session=None,
+        sleep=time.sleep,
+        on_retry: Callable[[str], None] = logger.warning,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         # Transport tuning -- fixed defaults that no caller overrides (only session/sleep are
@@ -36,6 +45,7 @@ class ResourceFetcher:
         self.backoff = 1.0
         self._session = session or requests.Session()
         self._sleep = sleep
+        self._on_retry = on_retry
         self._team = None
 
     def get_manifest(self) -> dict:
@@ -95,27 +105,32 @@ class ResourceFetcher:
             backoff = self.backoff * (attempt + 1)
             try:
                 response = self._session.get(url, params=params, headers=headers, timeout=self.timeout)
-            except (requests.ConnectionError, requests.Timeout):
+            except (requests.ConnectionError, requests.Timeout) as exc:
                 if last_attempt:
                     raise
-                self._sleep(backoff)
+                self._wait_to_retry(
+                    reason=f"Could not reach the source server ({type(exc).__name__})", path=path, wait=backoff
+                )
                 continue
 
             if response.status_code >= 500 and not last_attempt:
                 response.close()  # return the socket to the pool before backing off
-                self._sleep(backoff)
+                self._wait_to_retry(reason=f"Source server returned {response.status_code}", path=path, wait=backoff)
                 continue
 
             if response.status_code == 429 and not last_attempt:
                 wait = self._retry_after(response, default=backoff)
                 response.close()
-                logger.warning("Source server rate limit reached; retrying %s in %s seconds", path, wait)
-                self._sleep(wait)
+                self._wait_to_retry(reason="Source server rate limit reached", path=path, wait=wait)
                 continue
 
             response.raise_for_status()
             return response
         raise RuntimeError("request retries exhausted without a response")  # unreachable with max_retries >= 1
+
+    def _wait_to_retry(self, reason: str, path: str, wait: float) -> None:
+        self._on_retry(f"{reason}; retrying {path} in {wait:g}s")
+        self._sleep(wait)
 
     @staticmethod
     def _retry_after(response: requests.Response, default: float) -> float:

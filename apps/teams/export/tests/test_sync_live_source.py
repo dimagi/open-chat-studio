@@ -1,7 +1,6 @@
 """Syncing from a source that keeps receiving messages while the sync runs, as it does during the
 cutover: parents created mid-run, rows the target creates or edits itself, and ``--follow``."""
 
-import io
 import re
 import signal
 import threading
@@ -106,7 +105,8 @@ def test_a_parent_created_after_its_resource_was_read_is_caught_up(make_store, t
         rows["participant_data"].append(_participant_data_row(11, 2, 700, public_key))
 
     client = _BusySourceClient(manifest, rows, after_first_read={"participants": create_on_source})
-    run_sync(client, store, private, on_user_created=None)
+    lines = []
+    run_sync(client, store, private, write=lines.append, on_user_created=None)
 
     late = Participant.objects.get(pk=store.get_target("experiments.participant", 2))
     assert ParticipantData.objects.get(participant=late).data == {"name": "late"}
@@ -114,6 +114,36 @@ def test_a_parent_created_after_its_resource_was_read_is_caught_up(make_store, t
         ("participants", None),
         ("participant_data", None),
         ("participants", page_cursor("updated_at_id", [_participant_row(1)])),
+    ]
+    assert lines == [
+        "[1/2] participants: reading from the start",
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[1/2] participants: synced 1 row",
+        "[2/2] participant_data: reading from the start",
+        "[2/2] participant_data: experiments.participantdata.participant -> experiments.participant:2 is not "
+        "synced yet; re-reading [1/2] participants from its cursor",
+        "[1/2] participants: caught up 1 row",
+        "[2/2] participant_data: page 1, 2 fetched, 2 synced (2 so far)",
+        "[2/2] participant_data: synced 2 rows",
+    ]
+
+
+def test_first_pass_reports_each_entry_and_page(make_store, tmp_path, keypair):
+    """A large resource can take minutes to read, so progress is reported after every page, with the
+    entry's position in the manifest."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    lines = []
+
+    run_sync(FakeClient(manifest, rows), store, private, write=lines.append, on_user_created=None)
+
+    assert lines == [
+        "[1/2] participants: reading from the start",
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[1/2] participants: synced 1 row",
+        "[2/2] participant_data: reading from the start",
+        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
+        "[2/2] participant_data: synced 1 row",
     ]
 
 
@@ -266,12 +296,12 @@ class _StopAfterWaits(threading.Event):
 
 
 class _CursorClient(FakeClient):
-    """Serves only the rows past the start cursor, as the source does."""
+    """Serves the rows past the start cursor as one page, or an empty page when there are none, as the
+    source does. ``limit`` is ignored."""
 
     def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        for rows in super().iter_pages(resource, start_cursor, limit, selection):
-            if rows := [row for row in rows if _past_cursor(row, start_cursor)]:
-                yield rows
+        rows = [row for page in super().iter_pages(resource, start_cursor, limit, selection) for row in page]
+        yield [row for row in rows if _past_cursor(row, start_cursor)]
 
 
 def _past_cursor(row, cursor):
@@ -302,10 +332,37 @@ def test_follow_keeps_syncing_until_stopped(make_store, tmp_path, keypair):
     assert stop.intervals == [5, 5, 5]
     assert ParticipantData.objects.filter(participant__identifier__in=["user-1", "user-2", "user-3"]).count() == 3
     assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data"] * 3
-    assert lines[-2:] == [
+    first_pass_end = lines.index("[2/2] participant_data: synced 1 row") + 1
+    assert lines[first_pass_end:] == [
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
         "pass 2: 2 rows synced, last new row 0:00:00 ago",
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
         "pass 3: 2 rows synced, last new row 0:00:00 ago",
     ]
+
+
+@pytest.mark.usefixtures("keep_test_connection")
+def test_an_idle_follow_pass_prints_only_its_summary(make_store, tmp_path, keypair):
+    """Between passes the source is usually quiet; reporting every empty page would print a line per
+    manifest entry every few seconds."""
+    public_key, private = keypair
+    manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
+    lines = []
+
+    run_sync(
+        _CursorClient(manifest, rows),
+        store,
+        private,
+        write=lines.append,
+        on_user_created=None,
+        follow=True,
+        stop=_StopAfterWaits(2),
+    )
+
+    assert lines[-1] == "pass 2: 0 rows synced, last new row 0:00:00 ago"
+    assert lines[-2] == "[2/2] participant_data: synced 1 row"
 
 
 @pytest.mark.usefixtures("keep_test_connection")
@@ -337,9 +394,22 @@ def test_a_row_that_joins_the_selection_below_the_cursor_is_caught_up(make_store
         rows["participants"].insert(1, _participant_row(3))
         rows["participant_data"].append(_participant_data_row(11, 3, 700, public_key))
 
-    run_sync(client, store, private, on_user_created=None, follow=True, stop=_StopAfterWaits(2, joins_the_selection))
+    lines = []
+    run_sync(
+        client,
+        store,
+        private,
+        write=lines.append,
+        on_user_created=None,
+        follow=True,
+        stop=_StopAfterWaits(2, joins_the_selection),
+    )
 
     assert ParticipantData.objects.filter(participant__identifier="user-3").exists()
+    assert (
+        "[2/2] participant_data: experiments.participantdata.participant -> experiments.participant:3 is not "
+        "synced yet; re-reading [1/2] participants from the start"
+    ) in lines
     cursor = page_cursor("updated_at_id", [_participant_row(5)])
     assert client.iter_calls[2:] == [
         ("participants", cursor),
@@ -363,9 +433,15 @@ def test_a_stop_takes_effect_after_the_current_page(make_store, tmp_path, keypai
             yield [_participant_row(2)]
 
     client = TwoPageClient(manifest, rows)
-    run_sync(client, store, private, on_user_created=None, follow=True, stop=stop)
+    lines = []
+    run_sync(client, store, private, write=lines.append, on_user_created=None, follow=True, stop=stop)
 
     assert client.iter_calls == [("participants", None)]
+    assert lines == [
+        "[1/2] participants: reading from the start",
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[1/2] participants: synced 1 row",
+    ]
     assert store.has_target("experiments.participant", 1)
     assert not store.has_target("experiments.participant", 2)
     assert store.get_cursor(ALL_CHATBOTS_KEY, "experiments.participant") == page_cursor(
@@ -385,11 +461,12 @@ def test_first_signal_requests_a_stop_and_a_second_one_aborts(signum, second_sig
     handler is back for a second one, which ends the process at once."""
     previous = signal.getsignal(signum)
     stop = threading.Event()
-    command = Command(stdout=io.StringIO())
+    lines = []
 
-    with command._stop_on_interrupt(stop):
+    with Command()._stop_on_interrupt(stop, write=lines.append):
         signal.raise_signal(signum)
         assert stop.is_set()
+        assert lines == ["Stopping after the current page. Press Ctrl+C again to abort immediately."]
         assert signal.getsignal(signum) is second_signal_handler
 
     assert signal.getsignal(signum) is previous

@@ -48,7 +48,7 @@ from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, schema_checksum
-from apps.teams.export.progress import style_synced_line
+from apps.teams.export.progress import SyncProgress, timestamped
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
 from apps.teams.export.translation import (
@@ -274,6 +274,7 @@ def run_sync(
     stop = stop or threading.Event()
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
     cursor_key, chatbots = resolve_selection(client, store)
+    progress = SyncProgress(write=write, entries=manifest["entries"], style=style)
 
     importer = Importer(
         store,
@@ -289,16 +290,15 @@ def run_sync(
         page_limit=page_limit,
         cursor_key=cursor_key,
         under_selection=bool(chatbots),
-        write=write,
+        progress=progress,
         stop=stop,
     )
     try:
         with mute_signals():
             load_team(importer, client, store)
-            for entry, count in sync_pass.run(reread_flagged=True):
-                write(style_synced_line(f"synced {count} {entry['resource']} rows", count, style))
+            sync_pass.run(first_pass=True)
             if follow:
-                _follow(sync_pass, interval=interval, stop=stop, write=write, style=style)
+                _follow(sync_pass, interval=interval, stop=stop, progress=progress)
     except requests.HTTPError as exc:
         friendly = _friendly_http_error_message(exc)
         if friendly is None:
@@ -311,8 +311,7 @@ def _follow(
     sync_pass: "_SyncPass",
     interval: int,
     stop: threading.Event,
-    write: Callable[[str], None],
-    style: Style | None,
+    progress: SyncProgress,
 ) -> None:
     """Run a pass every ``interval`` seconds until ``stop`` is set, printing one line per pass."""
     last_new_row_at = time.monotonic()
@@ -320,12 +319,12 @@ def _follow(
         if stop.wait(interval):
             return
         close_old_connections()
-        count = sum(count for _entry, count in sync_pass.run(reread_flagged=False))
+        count = sum(count for _entry, count in sync_pass.run(first_pass=False))
         now = time.monotonic()
         if count:
             last_new_row_at = now
         quiet_for = timedelta(seconds=round(now - last_new_row_at))
-        write(style_synced_line(f"pass {number}: {count} rows synced, last new row {quiet_for} ago", count, style))
+        progress.pass_finished(number=number, count=count, quiet_for=quiet_for)
 
 
 def resolve_selection(client, store) -> tuple[str, list[dict]]:
@@ -371,7 +370,7 @@ class _SyncPass:
         page_limit: int,
         cursor_key: str,
         under_selection: bool,
-        write: Callable[[str], None],
+        progress: SyncProgress,
         stop: threading.Event,
     ) -> None:
         self.importer = importer
@@ -381,41 +380,51 @@ class _SyncPass:
         self.page_limit = page_limit
         self.cursor_key = cursor_key
         self.under_selection = under_selection
-        self.write = write
+        self.progress = progress
         self.stop = stop
 
-    def run(self, reread_flagged: bool) -> list[tuple[dict, int]]:
-        """Read every entry and return each entry read with its synced row count. With
-        ``reread_flagged`` (the first pass of a run), the resources flagged ``reread_under_selection``
-        are read from the beginning; later passes rely on catch-up for an old row that joins the
-        selection. Stops early once ``stop`` is set, so the result can be shorter than the entries."""
+    def run(self, first_pass: bool) -> list[tuple[dict, int]]:
+        """Read every entry and return each entry read with its synced row count. Only the first pass of
+        a run reads the resources flagged ``reread_under_selection`` from the beginning; later passes
+        rely on catch-up for an old row that joins the selection. Stops early once ``stop`` is set, so
+        the result can be shorter than the entries."""
+        self.progress.pass_started(first=first_pass)
         synced = []
         for position, entry in enumerate(self.entries):
             if self.stop.is_set():
                 break
-            reread = reread_flagged and self._rereadable(entry)
-            synced.append((entry, self._read(position, reread=reread, stoppable=True)))
+            cursor = self._start_cursor(position=position, reread=first_pass and self._rereadable(entry))
+            self.progress.entry_started(position=position, from_start=cursor is None)
+            count = self._read(position=position, cursor=cursor, stoppable=True)
+            self.progress.entry_finished(position=position, count=count)
+            synced.append((entry, count))
         return synced
 
     def _rereadable(self, entry: dict) -> bool:
         return self.under_selection and entry["reread_under_selection"]
 
-    def _read(self, position: int, reread: bool, stoppable: bool) -> int:
-        """Import one entry page by page, recording the resume cursor once each page's rows are
-        committed. The cursor is stored rather than derived from the synced rows, because the row set
-        the source serves changes with the chatbot selection. ``reread`` starts from the beginning;
-        rows already imported at the same source revision are skipped by the importer. A
-        ``stoppable`` read ends after the current page once ``stop`` is set."""
+    def _start_cursor(self, position: int, reread: bool) -> str | None:
+        """Where a read of the entry starts: its stored cursor, or the beginning (None) for a reread."""
+        if reread:
+            return None
+        return self.store.get_cursor(self.cursor_key, self.entries[position]["model"])
+
+    def _read(self, position: int, cursor: str | None, stoppable: bool) -> int:
+        """Import one entry page by page from ``cursor``, recording the resume cursor once each page's
+        rows are committed. The cursor is stored rather than derived from the synced rows, because the
+        row set the source serves changes with the chatbot selection. Rows already imported at the same
+        source revision are skipped by the importer. A ``stoppable`` read ends after the current page
+        once ``stop`` is set."""
         entry = self.entries[position]
         model_label, cursor_type = entry["model"], entry["cursor"]
-        cursor = None if reread else self.store.get_cursor(self.cursor_key, model_label)
         count = 0
         pages = self.client.iter_pages(
             entry["resource"], start_cursor=cursor, limit=self.page_limit, selection=self.cursor_key
         )
-        for rows in pages:
-            for row in rows:
-                count += self._import_row(position, row)
+        for number, rows in enumerate(pages, start=1):
+            page_count = sum(self._import_row(position=position, row=row) for row in rows)
+            count += page_count
+            self.progress.page_read(position=position, number=number, fetched=len(rows), synced=page_count, total=count)
             next_cursor = page_cursor(cursor_type, rows)
             if next_cursor is not None:
                 self.store.set_cursor(self.cursor_key, model_label, next_cursor)
@@ -437,9 +446,12 @@ class _SyncPass:
                 if (read := next(reads, None)) is None:
                     raise
                 parent_position, reread = read
-                count = self._read(parent_position, reread=reread, stoppable=False)
-                resource = self.entries[parent_position]["resource"]
-                self.write(f"caught up {count} {resource} rows created during the sync")
+                self.progress.catching_up(
+                    position=position, error=exc, parent_position=parent_position, from_start=reread
+                )
+                cursor = self._start_cursor(position=parent_position, reread=reread)
+                count = self._read(position=parent_position, cursor=cursor, stoppable=False)
+                self.progress.caught_up(parent_position=parent_position, count=count)
 
     def _catch_up_reads(self, before: int, model_label: str | None) -> Iterator[tuple[int, bool]]:
         """The reads that can bring in a missing ``model_label`` row, in order, as (position, reread):
@@ -519,7 +531,12 @@ class Command(BaseCommand):
         start_time = time.monotonic()
         private_key = _load_private_key(options["private_key_path"])
 
-        client = ResourceFetcher(options["source_url"], options["api_key"])
+        progress = timestamped(self.stdout.write)
+        client = ResourceFetcher(
+            options["source_url"],
+            options["api_key"],
+            on_retry=lambda message: progress(self.style.WARNING(message)),
+        )
         enforce_schema = not options["skip_schema_check"]
 
         if options["force_delete"]:
@@ -531,12 +548,13 @@ class Command(BaseCommand):
             )
 
             stop = threading.Event()
-            with self._stop_on_interrupt(stop) if options["follow"] else contextlib.nullcontext():
+            interrupt = self._stop_on_interrupt(stop, write=progress) if options["follow"] else contextlib.nullcontext()
+            with interrupt:
                 importer = run_sync(
                     client,
                     store,
                     private_key,
-                    write=self.stdout.write,
+                    write=progress,
                     page_limit=options["limit"],
                     enforce_schema=enforce_schema,
                     style=self.style,
@@ -559,15 +577,13 @@ class Command(BaseCommand):
             )
 
     @contextlib.contextmanager
-    def _stop_on_interrupt(self, stop: threading.Event) -> Iterator[None]:
+    def _stop_on_interrupt(self, stop: threading.Event, write: Callable[[str], None]) -> Iterator[None]:
         """Turn the first Ctrl+C (or SIGTERM) into a request to stop after the current page, so the
         sync ends with every page it read committed and the report printed. A second Ctrl+C or SIGTERM
         aborts at once."""
 
         def request_stop(signum: int, frame: FrameType | None) -> None:
-            self.stdout.write(
-                self.style.WARNING("Stopping after the current page. Press Ctrl+C again to abort immediately.")
-            )
+            write(self.style.WARNING("Stopping after the current page. Press Ctrl+C again to abort immediately."))
             stop.set()
             signal.signal(signal.SIGINT, signal.default_int_handler)
             signal.signal(signal.SIGTERM, signal.SIG_DFL)
