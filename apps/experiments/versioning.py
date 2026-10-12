@@ -167,13 +167,20 @@ class VersionField:
         records_by_family: dict[int, list] = defaultdict(list)
         for version_field in version_fields:
             record = version_field.raw_value
-            records_by_family[record.get_working_version_id()].append(record)
+            records_by_family[VersionField._get_family_id(record)].append(record)
         return records_by_family
+
+    @staticmethod
+    def _get_family_id(record) -> int:
+        """Return the working version id for versioned records, or the record's own id for unversioned ones"""
+        if isinstance(record, VersionsMixin):
+            return record.get_working_version_id()
+        return record.id
 
     @staticmethod
     def _pop_family_record(records_by_family: dict[int, list], record):
         """Removes and returns a record from the same version family as `record`, or None if there is none."""
-        family_records = records_by_family.get(record.get_working_version_id())
+        family_records = records_by_family.get(VersionField._get_family_id(record))
         return family_records.pop(0) if family_records else None
 
     def _compare_querysets(self, early_abort=False):
