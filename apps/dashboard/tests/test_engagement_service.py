@@ -11,9 +11,10 @@ from ..engagement_service import (
     TRAILING_MONTHS,
     EngagementDashboardService,
     _add_months,
+    _breakdown_label,
     _cache_key,
+    monthly_activity,
     trailing_window,
-    weekly_activity_by_month,
 )
 from ..models import DashboardCache
 
@@ -53,15 +54,29 @@ class TestTrailingWindow:
         assert end == now
 
 
+@pytest.mark.parametrize(
+    ("dimension", "value", "expected"),
+    [
+        pytest.param("channel", "whatsapp", "WhatsApp", id="channel-maps-to-display-label"),
+        pytest.param("channel", "api", "API", id="channel-preserves-casing"),
+        pytest.param("channel", "", "Unknown", id="channel-missing"),
+        pytest.param("channel", "carrier-pigeon", "carrier-pigeon", id="channel-unrecognised-passes-through"),
+        pytest.param("chatbot", "Health Assistant", "Health Assistant", id="chatbot-name-unchanged"),
+    ],
+)
+def test_breakdown_label(dimension, value, expected):
+    assert _breakdown_label(dimension, value) == expected
+
+
 @pytest.mark.django_db()
-class TestWeeklyActivityByMonth:
+class TestMonthlyActivity:
     def test_many_messages_in_one_week_count_as_a_single_week(self, team, experiment, participant):
         session = _create_session(experiment, participant, team)
         now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
         for hour in (9, 11, 14, 16):
             _create_message(session, timezone.datetime(2026, 3, 3, hour, 0, tzinfo=ZoneInfo("UTC")))
 
-        activity = weekly_activity_by_month(team, filters={}, now=now)
+        activity = monthly_activity(team, filters={}, now=now)
 
         assert activity[date(2026, 3, 1)] == {participant.id: 1}
 
@@ -75,24 +90,36 @@ class TestWeeklyActivityByMonth:
         _create_message(session, timezone.datetime(2026, 3, 10, 9, 0, tzinfo=ZoneInfo("UTC")))
         _create_message(other_session, timezone.datetime(2026, 3, 3, 9, 0, tzinfo=ZoneInfo("UTC")))
 
-        activity = weekly_activity_by_month(team, filters={}, now=now)
+        activity = monthly_activity(team, filters={}, now=now)
 
         assert activity[date(2026, 3, 1)] == {participant.id: 2, other_participant.id: 1}
 
-    def test_week_spanning_month_boundary_assigned_to_the_weeks_starting_month(self, team, experiment, participant):
+    def test_message_is_attributed_to_its_calendar_month_not_its_weeks_month(self, team, experiment, participant):
         session = _create_session(experiment, participant, team)
         now = timezone.datetime(2026, 3, 5, 12, 0, tzinfo=ZoneInfo("UTC"))
+        # Sunday 1 March falls in the ISO week beginning Monday 23 February.
         _create_message(session, timezone.datetime(2026, 3, 1, 9, 0, tzinfo=ZoneInfo("UTC")))
 
-        activity = weekly_activity_by_month(team, filters={}, now=now)
+        activity = monthly_activity(team, filters={}, now=now)
+
+        assert activity[date(2026, 3, 1)] == {participant.id: 1}
+        assert participant.id not in activity[date(2026, 2, 1)]
+
+    def test_week_spanning_two_months_counts_as_a_week_in_each(self, team, experiment, participant):
+        session = _create_session(experiment, participant, team)
+        now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
+        _create_message(session, timezone.datetime(2026, 2, 25, 9, 0, tzinfo=ZoneInfo("UTC")))
+        _create_message(session, timezone.datetime(2026, 3, 1, 9, 0, tzinfo=ZoneInfo("UTC")))
+
+        activity = monthly_activity(team, filters={}, now=now)
 
         assert activity[date(2026, 2, 1)] == {participant.id: 1}
-        assert participant.id not in activity[date(2026, 3, 1)]
+        assert activity[date(2026, 3, 1)] == {participant.id: 1}
 
     def test_month_with_no_activity_is_present_but_empty(self, team, experiment, participant):
         now = timezone.datetime(2026, 3, 5, 12, 0, tzinfo=ZoneInfo("UTC"))
 
-        activity = weekly_activity_by_month(team, filters={}, now=now)
+        activity = monthly_activity(team, filters={}, now=now)
 
         assert activity[date(2026, 1, 1)] == {}
 
@@ -101,7 +128,7 @@ class TestWeeklyActivityByMonth:
         now = timezone.datetime(2026, 3, 5, 12, 0, tzinfo=ZoneInfo("UTC"))
         _create_message(session, timezone.datetime(2026, 3, 3, 9, 0, tzinfo=ZoneInfo("UTC")), ChatMessageType.AI)
 
-        activity = weekly_activity_by_month(team, filters={}, now=now)
+        activity = monthly_activity(team, filters={}, now=now)
 
         assert activity[date(2026, 3, 1)] == {}
 
@@ -290,7 +317,7 @@ class TestGetEngagementBreakdown:
         other_experiment = Experiment.objects.create(name="Other bot", description="Other", team=team, owner=user)
         other_participant = Participant.objects.create(team=team, platform="web", identifier="other@example.com")
         now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
-        earlier = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        earlier = timezone.datetime(2026, 2, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
 
         _create_message(_create_session(experiment, participant, team), earlier)
         _create_message(_create_session(experiment, other_participant, team), earlier)
@@ -304,7 +331,7 @@ class TestGetEngagementBreakdown:
 
     def test_counts_each_participant_once_per_chatbot(self, team, experiment, participant):
         now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
-        earlier = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        earlier = timezone.datetime(2026, 2, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
         session = _create_session(experiment, participant, team)
         _create_message(session, earlier)
         _create_message(session, earlier)
@@ -315,8 +342,8 @@ class TestGetEngagementBreakdown:
 
     def test_carries_previous_month_for_comparison(self, team, experiment, participant):
         now = timezone.datetime(2026, 3, 20, 12, 0, tzinfo=ZoneInfo("UTC"))
-        this_month = timezone.datetime(2026, 3, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
-        last_month = timezone.datetime(2026, 2, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        this_month = timezone.datetime(2026, 2, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
+        last_month = timezone.datetime(2026, 1, 8, 9, 0, tzinfo=ZoneInfo("UTC"))
         _create_message(_create_session(experiment, participant, team), this_month)
         _create_message(_create_session(experiment, participant, team), last_month)
 

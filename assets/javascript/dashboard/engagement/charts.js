@@ -55,7 +55,7 @@ function weekTooltipTitle(rows) {
     };
 }
 
-class EngagementChartManager extends ChartManager {
+export class EngagementChartManager extends ChartManager {
     stackedScales() {
         return {
             x: {
@@ -164,7 +164,3 @@ class EngagementChartManager extends ChartManager {
         });
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    window.engagementChartManager = new EngagementChartManager();
-});

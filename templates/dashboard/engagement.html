@@ -5,62 +5,6 @@
 
 {% block page_head %}
   {{ block.super }}
-  {% comment %}
-    Viz palette, checked for contrast and colourblind separation against this app's real
-    surfaces: light #ffffff and DaisyUI dark base-100 #1d232a. Re-check before changing.
-      series and rank accents reuse the product palette from ChartManager
-        (blue #3b82f6, amber #f59e0b, green #10b981) so this page does not introduce a
-        second colour system. Blue sits next to amber, never next to the palette's
-        violet #8b5cf6, which is indistinguishable from blue under deuteranopia.
-      week buckets: ordinal ramp (1 < 2 < 3 < 4+ weeks), one hue, light->dark. The
-        product palette has no ramp, and anchoring one on #3b82f6 puts adjacent steps
-        under the lightness-separation floor, so these steps stay bespoke.
-      grid, axis and delta text keep their own values: the product's #6b7280 is 3.28:1
-        on the dark surface, below the 4.5:1 that small text needs.
-  {% endcomment %}
-  <style>
-    .viz-root {
-      --viz-surface: #ffffff;
-      --viz-ordinal-1: #86b6ef;
-      --viz-ordinal-2: #5598e7;
-      --viz-ordinal-3: #2a78d6;
-      --viz-ordinal-4: #184f95;
-      --viz-series-new: #3b82f6;
-      --viz-series-returning: #f59e0b;
-      --viz-rank-1: #3b82f6;
-      --viz-rank-2: #f59e0b;
-      --viz-rank-3: #10b981;
-      --viz-rank-rest: #898781;
-      --viz-ink-muted: #898781;
-      --viz-grid: #e1e0d9;
-      --viz-axis: #c3c2b7;
-      --viz-spark: #c3c2b7;
-      --viz-spark-accent: #3b82f6;
-      --viz-up: #006300;
-      --viz-down: #d03b3b;
-    }
-    :root[data-theme="dark"] .viz-root {
-      --viz-surface: #1d232a;
-      --viz-ordinal-1: #b7d3f6;
-      --viz-ordinal-2: #6da7ec;
-      --viz-ordinal-3: #2a78d6;
-      --viz-ordinal-4: #1c5cab;
-      --viz-series-new: #3b82f6;
-      --viz-series-returning: #f59e0b;
-      --viz-rank-1: #3b82f6;
-      --viz-rank-2: #f59e0b;
-      --viz-rank-3: #10b981;
-      --viz-rank-rest: #898781;
-      --viz-ink-muted: #898781;
-      --viz-grid: #2c2c2a;
-      --viz-axis: #383835;
-      --viz-spark: #52514e;
-      --viz-spark-accent: #3b82f6;
-      --viz-up: #0ca30c;
-      --viz-down: #e66767;
-    }
-    .stat-delta { font-variant-numeric: tabular-nums; }
-  </style>
 {% endblock page_head %}
 
 {% block app %}
@@ -161,16 +105,17 @@
             <div class="min-w-0">
               <div class="stat-value" x-text="stat.value"></div>
               <div class="mt-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                <template x-if="stat.inProgress">
-                  <span :title="stat.partialRangeTitle" x-text="stat.partialRangeCaption"></span>
-                </template>
-                <template x-if="!stat.inProgress && stat.delta">
-                  <span class="stat-delta font-medium"
-                        :style="`color: ${stat.delta.up ? 'var(--viz-up)' : 'var(--viz-down)'}`">
+                <span x-text="stat.periodLabel"></span>
+                <template x-if="stat.delta">
+                  <span class="stat-delta font-medium ml-1"
+                        :class="stat.delta.up ? 'text-success' : 'text-error'">
                     <span aria-hidden="true" x-text="stat.delta.up ? '\u25B2' : '\u25BC'"></span>
                     <span x-text="stat.delta.label"></span>
                   </span>
                 </template>
+                <div class="mt-0.5 text-gray-500 dark:text-gray-400"
+                     :title="stat.secondaryTitle"
+                     x-text="stat.secondary"></div>
               </div>
             </div>
 
@@ -191,14 +136,16 @@
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
             <div class="card-title flex items-center gap-1 justify-between">
-              <div class="flex items-center gap-1">
+              <div class="flex items-baseline gap-2">
                 <span x-text="panel.title"></span>
+                <span class="text-xs font-normal text-gray-500 dark:text-gray-400"
+                      x-text="headlineMonth"></span>
               </div>
               <div class="loading loading-spinner loading-sm" x-show="loadingStates[panel.key]"></div>
             </div>
 
-            <template x-if="!panel.rows.length">
-              <p class="py-8 text-center text-sm text-gray-400">{% translate "No activity this month" %}</p>
+            <template x-if="!panel.rows.length && !loadingStates[panel.key]">
+              <p class="py-8 text-center text-sm text-gray-400">{% translate "No activity in this month" %}</p>
             </template>
 
             <table class="w-full text-sm" x-show="panel.rows.length">
@@ -215,14 +162,9 @@
                   <tr class="border-t border-base-200">
                     <td class="py-2 pr-3">
                       <div class="truncate max-w-[14rem]" x-text="row.label"></div>
-                      {# Inline bar: one series, so a single hue -- length repeats the share for scanning. #}
-                      {% comment %}
-                        Only the top three carry a hue: in a table every row is visible at once,
-                        and the validator clears just three colours for all-pairs separation on
-                        this surface. The fourth would be indistinguishable from the second.
-                      {% endcomment %}
+                      {# One series, so one hue: row order already carries the ranking. #}
                       <div class="mt-1 h-1 rounded-full"
-                           :style="`width: ${Math.max(row.share, 2)}%; background: var(${row.rankColor})`"></div>
+                           :style="`width: ${Math.max(row.share, 2)}%; background: var(--viz-rank)`"></div>
                     </td>
                     <td class="py-2 px-3 text-right tabular-nums" x-text="row.participants"></td>
                     <td class="py-2 px-3 text-right tabular-nums text-gray-500 dark:text-gray-400" x-text="`${row.share.toFixed(0)}%`"></td>
@@ -235,7 +177,7 @@
                         <span class="text-gray-400">—</span>
                       </template>
                       <template x-if="row.delta">
-                        <span :style="`color: ${row.delta.up ? 'var(--viz-up)' : 'var(--viz-down)'}`">
+                        <span :class="row.delta.up ? 'text-success' : 'text-error'">
                           <span aria-hidden="true" x-text="row.delta.up ? '\u25B2' : '\u25BC'"></span>
                           <span x-text="row.delta.short"></span>
                         </span>
@@ -287,7 +229,9 @@
               <span>{% translate "New vs. Returning Users" %}</span>
 
               {% blocktranslate asvar new_vs_returning_info %}
-                Each week's participants, split by whether that week was their first.
+                Each week's participants, split by whether that week was their first. "First" is
+                when the participant record was created, which is usually but not always the week
+                of their first message.
               {% endblocktranslate %}
 
               {% include "generic/help.html" with help_content=new_vs_returning_info %}

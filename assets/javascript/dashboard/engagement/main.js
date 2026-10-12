@@ -26,9 +26,11 @@ function engagementDashboard() {
     return {
         filters: {experiments: [], channels: [], participants: [], tags: []},
         summaryStats: [],
+        headlineMonth: '',
         hasFrequencyData: true,
         hasNewVsReturningData: true,
         breakdownPanels: [],
+        payloads: {summary: null, avgDuration: null, frequency: null, newVsReturning: null},
         loadingStates: {summary: false, frequency: false, newVsReturning: false, chatbot: false, channel: false},
         endpoints: {summary: '', frequency: '', newVsReturning: '', sessionDuration: '', breakdownChatbot: '', breakdownChannel: ''},
         links: {chatbots: '', sessions: ''},
@@ -36,6 +38,7 @@ function engagementDashboard() {
         init() {
             this.loadEndpoints();
             this.setupTomSelect();
+            this.watchTheme();
             this.refreshAll();
         },
 
@@ -98,6 +101,17 @@ function engagementDashboard() {
             ]);
         },
 
+        watchTheme() {
+            // Chart and sparkline colours are read from CSS custom properties at build time,
+            // so a theme change has to redraw them rather than just restyle the page.
+            const observer = new MutationObserver(() => {
+                this.renderSummary();
+                this.renderFrequency();
+                this.renderNewVsReturning();
+            });
+            observer.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+        },
+
         async loadSummary() {
             this.loadingStates.summary = true;
             try {
@@ -105,63 +119,9 @@ function engagementDashboard() {
                     this.apiRequest(this.endpoints.summary),
                     this.apiRequest(this.endpoints.sessionDuration)
                 ]);
-                const latest = summary[summary.length - 1] || {};
-                const inProgress = latest.in_progress || false;
-
-                // The badge names the span the number actually covers, so a partial month is
-                // never mistaken for a full one.
-                const monthStart = latest.month ? new Date(latest.month) : null;
-                const today = new Date();
-                const monthName = monthStart
-                    ? monthStart.toLocaleDateString(undefined, {month: 'long', year: 'numeric', timeZone: 'UTC'})
-                    : '';
-                const partialRange = monthStart
-                    ? `${monthStart.toLocaleDateString(undefined, {month: 'short', day: 'numeric', timeZone: 'UTC'})}\u2013${today.getUTCDate()}`
-                    : '';
-                const partialRangeTitle = `Data through ${today.getUTCDate()} ${monthName} \u2014 the month is not over, so this covers a partial month`;
-                const partialRangeCaption = partialRange;
-
-                const mauSeries = summary.map(row => row.mau || 0);
-                const coreSeries = summary.map(row => row.core_users_rate || 0);
-                const durationSeries = (avgDuration || []).map(row => row.minutes || 0);
-                const latestDuration = durationSeries[durationSeries.length - 1] || 0;
-
-                // A delta is only honest between two closed months, so it is withheld while the
-                // newest month is still filling; the tile shows the in-progress badge instead.
-                const deltaFor = (series, options) => (inProgress ? null : percentDelta(series, options));
-
-                this.summaryStats = [
-                    {
-                        label: 'Monthly Active Users',
-                        tooltip: 'Participants who sent at least one message this calendar month. The line shows the last 7 months.',
-                        value: latest.mau || 0,
-                        delta: deltaFor(mauSeries),
-                        sparkline: sparkline(mauSeries),
-                        sparklineLabel: 'Monthly active users over the last 7 months',
-                        partialRangeCaption, partialRangeTitle,
-                        inProgress
-                    },
-                    {
-                        label: 'Core Users Rate',
-                        tooltip: 'The share of participants this month who were active in two or more different weeks. The line shows the last 7 months.',
-                        value: `${(latest.core_users_rate || 0).toFixed(1)}%`,
-                        delta: deltaFor(coreSeries),
-                        sparkline: sparkline(coreSeries),
-                        sparklineLabel: 'Core users rate over the last 7 months',
-                        partialRangeCaption, partialRangeTitle,
-                        inProgress
-                    },
-                    {
-                        label: 'Average Session Duration',
-                        tooltip: 'Average length of a chat session this month, counting only sessions that have ended. The line shows the last 7 months.',
-                        value: `${latestDuration.toFixed(1)} min`,
-                        delta: deltaFor(durationSeries),
-                        sparkline: sparkline(durationSeries),
-                        sparklineLabel: 'Average session duration over the last 7 months',
-                        partialRangeCaption, partialRangeTitle,
-                        inProgress
-                    }
-                ];
+                this.payloads.summary = summary;
+                this.payloads.avgDuration = avgDuration;
+                this.renderSummary();
             } catch (error) {
                 console.error('Failed to load engagement summary:', error);
             } finally {
@@ -169,16 +129,80 @@ function engagementDashboard() {
             }
         },
 
+        renderSummary() {
+            const summary = this.payloads.summary;
+            if (!summary) return;
+            const avgDuration = this.payloads.avgDuration || [];
+
+            // The headline is the last complete month. A partial month cannot be compared with a
+            // whole one, and Core Users Rate reads near zero in a month's first week because
+            // nobody can yet have been active in two of its weeks.
+            const closed = summary.slice(0, -1);
+            const partial = summary[summary.length - 1] || {};
+            const headline = closed[closed.length - 1] || {};
+            const closedDuration = avgDuration.slice(0, -1);
+            const partialDuration = avgDuration[avgDuration.length - 1] || {};
+            const headlineDuration = closedDuration[closedDuration.length - 1] || {};
+
+            const monthName = iso => (iso
+                ? new Date(iso).toLocaleDateString(undefined, {month: 'long', year: 'numeric', timeZone: 'UTC'})
+                : '');
+            const periodLabel = monthName(headline.month);
+            this.headlineMonth = periodLabel;
+
+            const today = new Date();
+            const partialStart = partial.month ? new Date(partial.month) : null;
+            const partialRange = partialStart
+                ? `${partialStart.toLocaleDateString(undefined, {month: 'short', day: 'numeric', timeZone: 'UTC'})}\u2013${today.getUTCDate()}`
+                : '';
+            const secondaryTitle = `Month to date, ${monthName(partial.month)}. Not comparable with a complete month.`;
+
+            const mauSeries = closed.map(row => row.mau || 0);
+            const coreSeries = closed.map(row => row.core_users_rate || 0);
+            const durationSeries = closedDuration.map(row => row.minutes || 0);
+
+            this.summaryStats = [
+                {
+                    label: 'Monthly Active Users',
+                    tooltip: 'Participants who sent at least one message in the month. The headline is the last complete month; the line shows the 6 months before it.',
+                    value: headline.mau || 0,
+                    periodLabel,
+                    delta: percentDelta(mauSeries),
+                    secondary: `${partialRange}: ${partial.mau || 0}`,
+                    secondaryTitle,
+                    sparkline: sparkline(mauSeries),
+                    sparklineLabel: 'Monthly active users over the last 6 complete months'
+                },
+                {
+                    label: 'Core Users Rate',
+                    tooltip: 'The share of the month\u2019s participants who were active in two or more different weeks. The headline is the last complete month; the line shows the 6 months before it.',
+                    value: `${(headline.core_users_rate || 0).toFixed(1)}%`,
+                    periodLabel,
+                    delta: percentDelta(coreSeries),
+                    secondary: `${partialRange}: ${(partial.core_users_rate || 0).toFixed(1)}%`,
+                    secondaryTitle,
+                    sparkline: sparkline(coreSeries),
+                    sparklineLabel: 'Core users rate over the last 6 complete months'
+                },
+                {
+                    label: 'Average Session Duration',
+                    tooltip: 'Average length of a chat session, counting only sessions that have ended. The headline is the last complete month; the line shows the 6 months before it.',
+                    value: `${(headlineDuration.minutes || 0).toFixed(1)} min`,
+                    periodLabel,
+                    delta: percentDelta(durationSeries),
+                    secondary: `${partialRange}: ${(partialDuration.minutes || 0).toFixed(1)} min`,
+                    secondaryTitle,
+                    sparkline: sparkline(durationSeries),
+                    sparklineLabel: 'Average session duration over the last 6 complete months'
+                }
+            ];
+        },
+
         async loadFrequency() {
             this.loadingStates.frequency = true;
             try {
-                const data = await this.apiRequest(this.endpoints.frequency);
-                this.hasFrequencyData = data.some(row => WEEK_BUCKETS.some(bucket => row[bucket] > 0));
-                if (this.hasFrequencyData) {
-                    this.$nextTick(() => window.engagementChartManager.renderEngagementFrequencyChart(data));
-                } else {
-                    window.engagementChartManager.destroyChart('engagementFrequency');
-                }
+                this.payloads.frequency = await this.apiRequest(this.endpoints.frequency);
+                this.renderFrequency();
             } catch (error) {
                 console.error('Failed to load engagement frequency:', error);
             } finally {
@@ -186,20 +210,37 @@ function engagementDashboard() {
             }
         },
 
+        renderFrequency() {
+            const data = this.payloads.frequency;
+            if (!data) return;
+            this.hasFrequencyData = data.some(row => WEEK_BUCKETS.some(bucket => row[bucket] > 0));
+            if (this.hasFrequencyData) {
+                this.$nextTick(() => window.engagementChartManager.renderEngagementFrequencyChart(data));
+            } else {
+                window.engagementChartManager.destroyChart('engagementFrequency');
+            }
+        },
+
         async loadNewVsReturning() {
             this.loadingStates.newVsReturning = true;
             try {
-                const data = await this.apiRequest(this.endpoints.newVsReturning);
-                this.hasNewVsReturningData = data.some(row => row.new > 0 || row.returning > 0);
-                if (this.hasNewVsReturningData) {
-                    this.$nextTick(() => window.engagementChartManager.renderNewVsReturningChart(data));
-                } else {
-                    window.engagementChartManager.destroyChart('newVsReturning');
-                }
+                this.payloads.newVsReturning = await this.apiRequest(this.endpoints.newVsReturning);
+                this.renderNewVsReturning();
             } catch (error) {
                 console.error('Failed to load new-vs-returning data:', error);
             } finally {
                 this.loadingStates.newVsReturning = false;
+            }
+        },
+
+        renderNewVsReturning() {
+            const data = this.payloads.newVsReturning;
+            if (!data) return;
+            this.hasNewVsReturningData = data.some(row => row.new > 0 || row.returning > 0);
+            if (this.hasNewVsReturningData) {
+                this.$nextTick(() => window.engagementChartManager.renderNewVsReturningChart(data));
+            } else {
+                window.engagementChartManager.destroyChart('newVsReturning');
             }
         },
 
@@ -217,7 +258,9 @@ function engagementDashboard() {
                 }
             ];
 
-            this.breakdownPanels = panels.map(panel => ({...panel, rows: []}));
+            if (this.breakdownPanels.length !== panels.length) {
+                this.breakdownPanels = panels.map(panel => ({...panel, rows: []}));
+            }
 
             await Promise.all(panels.map(async (panel, index) => {
                 this.loadingStates[panel.key] = true;
@@ -225,9 +268,8 @@ function engagementDashboard() {
                     const rows = await this.apiRequest(panel.endpoint);
                     this.breakdownPanels[index] = {
                         ...panel,
-                        rows: rows.map((row, rank) => ({
+                        rows: rows.map(row => ({
                             ...row,
-                            rankColor: rank < 3 ? `--viz-rank-${rank + 1}` : '--viz-rank-rest',
                             delta: percentDelta([row.previous, row.participants])
                         }))
                     };

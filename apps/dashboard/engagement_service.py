@@ -9,6 +9,7 @@ from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Qu
 from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone as django_timezone
 
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
 from apps.teams.models import Team
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
@@ -27,6 +28,14 @@ BREAKDOWN_DIMENSIONS = {
     "channel": "chat__experiment_session__experiment_channel__platform",
 }
 BREAKDOWN_LIMIT = 8
+
+
+def _breakdown_label(dimension: str, value: str | None) -> str:
+    if not value:
+        return "Unknown"
+    if dimension == "channel" and value in ChannelPlatform.values:
+        return ChannelPlatform(value).label
+    return value
 
 
 def _add_months(d: date, delta: int) -> date:
@@ -54,21 +63,22 @@ def _human_messages(team: Team, *, start: datetime, end: datetime, filters: dict
     return filtered_querysets(team, start_date=start, end_date=end, **filters)["messages"].filter(HUMAN_AUTHORED)
 
 
-def weekly_activity_by_month(team: Team, *, filters: dict, now: datetime | None = None) -> dict[date, dict[int, int]]:
+def monthly_activity(team: Team, *, filters: dict, now: datetime | None = None) -> dict[date, dict[int, int]]:
+    # Grouping by (participant, month, week) keeps months calendar-accurate while still
+    # counting distinct weeks: a week spanning two months is counted once in each.
     start, end, months = trailing_window(now)
     messages = _human_messages(team, start=start, end=end, filters=filters)
     rows = (
         messages.order_by()
-        .annotate(week=TruncWeek("created_at", tzinfo=TZ))
-        .values("chat__experiment_session__participant_id", "week")
+        .annotate(month=TruncMonth("created_at", tzinfo=TZ), week=TruncWeek("created_at", tzinfo=TZ))
+        .values("chat__experiment_session__participant_id", "month", "week")
         .distinct()
     )
 
     month_set = set(months)
     result: dict[date, dict[int, int]] = {month: {} for month in months}
     for row in rows:
-        week_start = bucket_date(row["week"], TZ)
-        month_key = date(week_start.year, week_start.month, 1)
+        month_key = bucket_date(row["month"], TZ)
         if month_key not in month_set:
             continue
         participant_id = row["chat__experiment_session__participant_id"]
@@ -100,7 +110,7 @@ class EngagementDashboardService:
         if cached is not None:
             return cached
 
-        activity = weekly_activity_by_month(self.team, filters=filters, now=now)
+        activity = monthly_activity(self.team, filters=filters, now=now)
         current_month = max(activity)
         data = []
         for month in sorted(activity):
@@ -125,7 +135,7 @@ class EngagementDashboardService:
         if cached is not None:
             return cached
 
-        activity = weekly_activity_by_month(self.team, filters=filters, now=now)
+        activity = monthly_activity(self.team, filters=filters, now=now)
         current_month = max(activity)
         data = []
         for month in sorted(activity):
@@ -191,7 +201,7 @@ class EngagementDashboardService:
             return cached
 
         start, end, months = trailing_window(now)
-        current_month, previous_month = months[-1], months[-2]
+        current_month, previous_month = months[-2], months[-3]
         messages = _human_messages(self.team, start=start, end=end, filters=filters)
 
         rows = (
@@ -207,7 +217,7 @@ class EngagementDashboardService:
             bucket = current if month == current_month else previous if month == previous_month else None
             if bucket is None:
                 continue
-            label = row[field] or "Unknown"
+            label = _breakdown_label(dimension, row[field])
             bucket[label] = bucket.get(label, 0) + row["participants"]
 
         total = sum(current.values())

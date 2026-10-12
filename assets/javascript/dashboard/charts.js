@@ -696,23 +696,3 @@ export class ChartManager {
         });
     }
 }
-
-// Initialize chart manager when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.chartManager = new ChartManager();
-
-    // Listen for theme changes
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-                const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-                window.chartManager.updateChartTheme(isDarkMode);
-            }
-        });
-    });
-
-    observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['data-theme']
-    });
-});
