@@ -12,8 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Marks google/gemini-3.5-flash deprecated (replacement gemini-3.8-flash) and moves the
-        # provider default.
         llm_model_migration(),
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
         RunDataMigration("notify_deprecated_models", command_options={"force": True}),

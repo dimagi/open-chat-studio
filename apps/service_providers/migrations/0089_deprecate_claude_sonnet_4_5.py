@@ -9,6 +9,4 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # remove_deprecated_models and notify_deprecated_models moved to
-        # 0091_deprecate_google_gemini_3_5_flash so they run only once per deploy.
     ]
