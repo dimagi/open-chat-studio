@@ -2,8 +2,6 @@ from datetime import UTC, datetime
 
 import pytest
 import requests
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
@@ -25,6 +23,7 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
+from apps.teams.export.tests.sync_fakes import PAST
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
@@ -118,22 +117,10 @@ def _user_row(source_id, username, **extra):
 
 pytestmark = pytest.mark.django_db
 
-PAST = "2020-01-02T03:04:05+00:00"
-
 
 @pytest.fixture()
 def store(make_store, tmp_path):
     return make_store(tmp_path / "team.sqlite")
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
 
 
 def _team_row(source_id=9001, slug="imported-team-xyz"):

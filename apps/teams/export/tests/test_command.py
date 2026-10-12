@@ -13,7 +13,7 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import build_manifest
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
-from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots
+from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots, team_row
 from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
@@ -47,18 +47,7 @@ def _scenario(public_key, reread_under_selection=False):
         },
     ]
     rows = {
-        "teams": [
-            {
-                "id": 9001,
-                "name": "Imported",
-                "slug": "imported-team-z",
-                "feature_flags": [],
-                "is_migrating": True,
-                "has_public_key": True,
-                "created_at": PAST,
-                "updated_at": PAST,
-            }
-        ],
+        "teams": [team_row()],
         "llm_provider": [
             {
                 "id": 5,
@@ -204,18 +193,7 @@ def _new_user_scenario():
         },
     ]
     rows = {
-        "teams": [
-            {
-                "id": 9001,
-                "name": "T",
-                "slug": "imported-team-z",
-                "feature_flags": [],
-                "is_migrating": True,
-                "has_public_key": True,
-                "created_at": PAST,
-                "updated_at": PAST,
-            }
-        ],
+        "teams": [{**team_row(), "name": "T"}],
         "user": [
             {
                 "id": 50,
