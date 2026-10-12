@@ -388,7 +388,6 @@ class _SyncPass:
         a run reads the resources flagged ``reread_under_selection`` from the beginning; later passes
         rely on catch-up for an old row that joins the selection. Stops early once ``stop`` is set, so
         the result can be shorter than the entries."""
-        self.progress.pass_started(first=first_pass)
         synced = []
         for position, entry in enumerate(self.entries):
             if self.stop.is_set():

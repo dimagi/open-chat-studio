@@ -34,30 +34,23 @@ def rows(count: int) -> str:
 class SyncProgress:
     """Prints what the sync is doing, each line labelled with the entry's place in the manifest.
 
-    The first pass reports every entry and page. Later ``--follow`` passes report only the pages that
-    returned rows, since most passes find nothing new. A catch-up read reports only how many rows it
-    brought in, so its pages don't interleave with the entry being read.
+    Every pass reports every entry and page. A catch-up read reports only how many rows it brought in,
+    so its pages don't interleave with the entry being read.
     """
 
     def __init__(self, write: Callable[[str], None], entries: list[dict], style: Style | None = None) -> None:
         self.write = write
         self.entries = entries
         self.style = style
-        self.quiet = False
         self.catch_ups_running = 0
 
-    def pass_started(self, first: bool) -> None:
-        self.quiet = not first
-
     def entry_started(self, position: int, from_start: bool) -> None:
-        if not self.quiet:
-            self._line(position=position, message=f"reading from {'the start' if from_start else 'the stored cursor'}")
+        self._line(position=position, message=f"reading from {'the start' if from_start else 'the stored cursor'}")
 
     def page_read(self, position: int, number: int, fetched: int, synced: int, total: int) -> None:
         if self.catch_ups_running:
             return
-        if fetched or not self.quiet:
-            self._line(position=position, message=f"page {number}, {fetched} fetched, {synced} synced ({total} so far)")
+        self._line(position=position, message=f"page {number}, {fetched} fetched, {synced} synced ({total} so far)")
 
     def entry_finished(self, position: int, count: int, stopped: bool) -> None:
         if stopped:
@@ -65,7 +58,7 @@ class SyncProgress:
                 position=position,
                 message=f"stopped after {rows(count)}; the next run resumes from the stored cursor",
             )
-        elif not self.quiet:
+        else:
             message = f"{self._label(position)}: synced {rows(count)}"
             self.write(style_synced_line(message=message, count=count, style=self.style))
 

@@ -333,20 +333,25 @@ def test_follow_keeps_syncing_until_stopped(make_store, tmp_path, keypair):
     assert ParticipantData.objects.filter(participant__identifier__in=["user-1", "user-2", "user-3"]).count() == 3
     assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data"] * 3
     first_pass_end = lines.index("[2/2] participant_data: synced 1 row") + 1
+    later_pass = [
+        "[1/2] participants: reading from the stored cursor",
+        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
+        "[1/2] participants: synced 1 row",
+        "[2/2] participant_data: reading from the stored cursor",
+        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
+        "[2/2] participant_data: synced 1 row",
+    ]
     assert lines[first_pass_end:] == [
-        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
-        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
+        *later_pass,
         "pass 2: 2 rows synced, last new row 0:00:00 ago",
-        "[1/2] participants: page 1, 1 fetched, 1 synced (1 so far)",
-        "[2/2] participant_data: page 1, 1 fetched, 1 synced (1 so far)",
+        *later_pass,
         "pass 3: 2 rows synced, last new row 0:00:00 ago",
     ]
 
 
 @pytest.mark.usefixtures("keep_test_connection")
-def test_an_idle_follow_pass_prints_only_its_summary(make_store, tmp_path, keypair):
-    """Between passes the source is usually quiet; reporting every empty page would print a line per
-    manifest entry every few seconds."""
+def test_an_idle_follow_pass_reports_every_entry(make_store, tmp_path, keypair):
+    """A pass that finds nothing still shows each entry it checked, as the first pass does."""
     public_key, private = keypair
     manifest, rows, store = _participant_scenario(public_key, make_store, tmp_path)
     lines = []
@@ -361,8 +366,16 @@ def test_an_idle_follow_pass_prints_only_its_summary(make_store, tmp_path, keypa
         stop=_StopAfterWaits(2),
     )
 
-    assert lines[-1] == "pass 2: 0 rows synced, last new row 0:00:00 ago"
-    assert lines[-2] == "[2/2] participant_data: synced 1 row"
+    first_pass_end = lines.index("[2/2] participant_data: synced 1 row") + 1
+    assert lines[first_pass_end:] == [
+        "[1/2] participants: reading from the stored cursor",
+        "[1/2] participants: page 1, 0 fetched, 0 synced (0 so far)",
+        "[1/2] participants: synced 0 rows",
+        "[2/2] participant_data: reading from the stored cursor",
+        "[2/2] participant_data: page 1, 0 fetched, 0 synced (0 so far)",
+        "[2/2] participant_data: synced 0 rows",
+        "pass 2: 0 rows synced, last new row 0:00:00 ago",
+    ]
 
 
 @pytest.mark.usefixtures("keep_test_connection")
