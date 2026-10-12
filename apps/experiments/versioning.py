@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from functools import cached_property
+from itertools import chain
 from typing import Any, Self
 
 from django.core.exceptions import FieldDoesNotExist
@@ -160,6 +161,25 @@ class VersionField:
         else:
             return "primitive"
 
+    @staticmethod
+    def _group_records_by_family(version_fields: list["VersionField"]) -> dict[int, list]:
+        """
+        Groups the records of the given version fields by their version family (the working version id).
+        Records in the same family share the same working version id, so matching on it avoids querying for
+        each record's version family ids (which would cause an N+1 query).
+        """
+        records_by_family: dict[int, list] = defaultdict(list)
+        for version_field in version_fields:
+            record = version_field.raw_value
+            records_by_family[record.get_working_version_id()].append(record)
+        return records_by_family
+
+    @staticmethod
+    def _pop_family_record(records_by_family: dict[int, list], record):
+        """Removes and returns a record from the same version family as `record`, or None if there is none."""
+        family_records = records_by_family.get(record.get_working_version_id())
+        return family_records.pop(0) if family_records else None
+
     def _compare_querysets(self, early_abort=False):
         """
         Compares two querysets by checking the differences between their results.
@@ -176,22 +196,10 @@ class VersionField:
         same "version family". This relationship is identified through the `working_version_id` field of each record,
         which is expected to be present on each result.
         """
-        previous_queryset_results = self.previous_field_version.queryset_results
-        # Group previous records by their version family (the working version id). Records in the same family
-        # share the same working version id, so this lets us match records without querying for each record's
-        # version family ids (which would cause an N+1 query).
-        previous_records_by_family: dict[int, list] = defaultdict(list)
-        for result in previous_queryset_results:
-            record = result.raw_value
-            previous_records_by_family[record.get_working_version_id()].append(record)
+        previous_records_by_family = self._group_records_by_family(self.previous_field_version.queryset_results)
 
         for version_field in self.queryset_results:
-            record = version_field.raw_value
-            previous_record = None
-            family_records = previous_records_by_family.get(record.get_working_version_id())
-            if family_records:
-                previous_record = family_records.pop(0)
-
+            previous_record = self._pop_family_record(previous_records_by_family, version_field.raw_value)
             if previous_record:
                 # A version of the current record exists in the previous queryset
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
@@ -204,7 +212,7 @@ class VersionField:
             if early_abort and self.changed:
                 return
 
-        previous_records = [record for records in previous_records_by_family.values() for record in records]
+        previous_records = list(chain.from_iterable(previous_records_by_family.values()))
         if previous_records:
             self.changed = True
             if early_abort:
