@@ -549,6 +549,15 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
+def _attach_session_chat(messages, session):
+    """Reuse the already-loaded session chat so per-message access to `message.chat`
+    (e.g. in `get_attached_files`) doesn't trigger a query for each message.
+    """
+    for message in messages:
+        if message.chat_id == session.chat_id:
+            message.chat = session.chat
+
+
 def _add_time_gap_info(messages, gap_threshold_hours=4):
     """
     Add time gap information to messages for display in the template.
@@ -689,14 +698,10 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         page = min(page, paginator.num_pages) if paginator.num_pages > 0 else 1
         current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
-    # Reuse the already-loaded session chat so per-message access to `message.chat`
-    # (e.g. in `get_attached_files`) doesn't trigger a query for each message.
-    for message in current_page_messages:
-        if message.chat_id == session.chat_id:
-            message.chat = session.chat
-
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
+
+    _attach_session_chat(current_page_messages, session)
 
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
