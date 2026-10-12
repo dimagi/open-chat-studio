@@ -42,7 +42,7 @@ from field_audit.models import AuditAction
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import CustomTaggedItem, Tag, UserComment
 from apps.channels.datamodels import Attachment
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -656,6 +656,9 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
                 ).only("id", "participant_data_diff", "output_message_id"),
                 to_attr="prefetched_output_traces_with_diff",
             ),
+            # The template reads each message's comments (count + list); prefetch them once
+            # for the page rather than querying per message.
+            Prefetch("comments", queryset=UserComment.objects.select_related("user")),
         )
     )
     messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
@@ -686,6 +689,12 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         page = min(page, paginator.num_pages) if paginator.num_pages > 0 else 1
         current_page = paginator.page(page)
         current_page_messages = list(current_page.object_list)
+    # Reuse the already-loaded session chat so per-message access to `message.chat`
+    # (e.g. in `get_attached_files`) doesn't trigger a query for each message.
+    for message in current_page_messages:
+        if message.chat_id == session.chat_id:
+            message.chat = session.chat
+
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
 
