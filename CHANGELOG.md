@@ -61,6 +61,10 @@ version section when a release is cut.
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
      State the default and whether it is required. -->
+- `SENTRY_BROWSER_LOADER_KEY`: new, optional, defaults to empty (no browser-side
+  Sentry). Previously every non-debug deployment loaded the Open Chat Studio
+  project's Sentry browser script and reported browser errors and traces to it.
+  Set it to the key of your own Sentry Loader Script to report to your project.
 - `SENTRY_TRACES_SAMPLE_RATE`: new, optional, defaults to `0` (no tracing).
   Fraction of requests and Celery tasks sent to Sentry as performance traces;
   only has an effect when `SENTRY_DSN` is set. Sentry no longer adds
