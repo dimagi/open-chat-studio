@@ -6,6 +6,8 @@ response shaping -- lives in `apps/api/v2/tests/test_pipeline_discovery.py`.
 """
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
@@ -99,6 +101,24 @@ def test_a_zero_max_token_limit_is_served_rather_than_dropped(team):
 
     options = {option["value"]: option for option in values["llm_provider_model_id"]}
     assert options[model.id]["max_token_limit"] == 0
+
+
+@pytest.mark.django_db()
+def test_custom_model_labels_do_not_query_the_team_per_model(team, django_assert_max_num_queries):
+    """Each custom model's label names its team; that team must come from a join, not a query per row."""
+    LlmProviderFactory.create(team=team, type="openai")
+    LlmProviderModelFactory.create(team=team, type="openai")
+    get_node_parameter_values(team=team, synthetic_voices=[])
+
+    with CaptureQueriesContext(connection) as baseline:
+        get_node_parameter_values(team=team, synthetic_voices=[])
+
+    LlmProviderModelFactory.create_batch(5, team=team, type="openai")
+    with django_assert_max_num_queries(len(baseline)):
+        values = get_node_parameter_values(team=team, synthetic_voices=[])
+
+    labels = [option["label"] for option in values["llm_provider_model_id"]]
+    assert sum(f"custom for {team.name}" in label for label in labels) >= 6
 
 
 @pytest.mark.django_db()

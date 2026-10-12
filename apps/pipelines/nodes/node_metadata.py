@@ -135,7 +135,8 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
         ],
         OptionsSource.llm_provider_model_id: [
             _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
-            for model in llm_provider_models
+            # `str(model)` names the owning team for custom models; join it rather than query per row.
+            for model in llm_provider_models.select_related("team")
         ],
     }
 
