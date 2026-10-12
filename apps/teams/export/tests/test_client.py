@@ -29,7 +29,7 @@ class FakeSession:
         self.calls = []
 
     def get(self, url, params=None, headers=None, timeout=None):
-        self.calls.append({"url": url, "params": params, "headers": headers})
+        self.calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -47,6 +47,16 @@ def test_get_manifest_hits_endpoint_with_api_key_header():
     call = session.calls[0]
     assert call["url"] == "https://src.example/api/export/manifest/"
     assert call["headers"]["X-Api-Key"] == "secret-key"
+
+
+def test_requests_wait_for_a_slow_response():
+    """The source can take minutes to serve a large export page, so the client waits for the response.
+    Only connecting has a time limit."""
+    session = FakeSession([FakeResponse(json_data={"entries": []})])
+    _client(session).get_manifest()
+    connect_timeout, read_timeout = session.calls[0]["timeout"]
+    assert connect_timeout is not None
+    assert read_timeout is None
 
 
 def test_get_team_hits_root_endpoint():

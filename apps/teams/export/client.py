@@ -1,5 +1,5 @@
-"""HTTP client for the source server's read endpoints. Transient transport errors (timeouts, 5xx,
-connection resets) are retried with backoff so a single network blip doesn't kill a long migration.
+"""HTTP client for the source server's read endpoints. Transient transport errors (connect timeouts,
+5xx, connection resets) are retried with backoff so a single network blip doesn't kill a long migration.
 Rate-limited responses (429) are retried after the server's Retry-After wait. Other client errors
 (4xx) fail fast."""
 
@@ -29,7 +29,9 @@ class ResourceFetcher:
         self.api_key = api_key
         # Transport tuning -- fixed defaults that no caller overrides (only session/sleep are
         # injected, by tests). Promote one to an __init__ argument if a need to vary it shows up.
-        self.timeout = 30
+        # (connect, read): an unreachable host fails fast and is retried, but a response is waited
+        # for however long the source takes, since a large export page can take minutes to build.
+        self.timeout = (30, None)
         self.max_retries = 5
         self.backoff = 1.0
         self._session = session or requests.Session()
@@ -83,8 +85,8 @@ class ResourceFetcher:
         return self._request(path, params).json()
 
     def _request(self, path: str, params: dict | None = None) -> requests.Response:
-        """GET ``path`` with the API key header, retrying transient transport errors (timeouts, 5xx,
-        connection resets) with backoff, retrying 429s after their Retry-After wait, and failing fast
+        """GET ``path`` with the API key header, retrying transient transport errors (connect timeouts,
+        5xx, connection resets) with backoff, retrying 429s after their Retry-After wait, and failing fast
         on other 4xx. Returns the raw response."""
         url = self.base_url + path
         headers = {_API_KEY_HEADER: self.api_key}
