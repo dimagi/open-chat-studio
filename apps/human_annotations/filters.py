@@ -8,6 +8,7 @@ from apps.channels.models import ChannelPlatform
 from apps.experiments.filters import ChannelsFilter, ChatMessageTagsFilter, MessageTimestampFilter, VersionsFilter
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, ColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import (
+    AnnotationQueueFilter,
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
@@ -123,6 +124,7 @@ class AnnotationSessionFilter(MultiColumnFilter):
             description="Filter by message date",
         ),
         ChatMessageTagsFilter(),
+        AnnotationQueueFilter(),
         VersionsFilter(),
         ChannelsFilter(exclude_platforms=[ChannelPlatform.EVALUATIONS]),
         ExperimentFilter(),
