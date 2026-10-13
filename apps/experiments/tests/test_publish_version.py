@@ -31,6 +31,17 @@ def test_publish_version(chatbot, version_number, expected):
 
 
 @pytest.mark.django_db()
+def test_publish_version_with_stale_instance(chatbot):
+    """A version loaded before another request published a different one still ends up published."""
+    stale_v1 = chatbot.versions.get(version_number=1)
+    publish_version(chatbot.versions.get(version_number=2))
+
+    publish_version(stale_v1)
+
+    assert published_states(chatbot) == [(1, True), (2, False)]
+
+
+@pytest.mark.django_db()
 def test_set_default_experiment_view_publishes_version(client, chatbot):
     client.force_login(chatbot.team.members.first())
     url = reverse(
