@@ -106,6 +106,8 @@ def publish_version(version: Experiment) -> None:
     """
     with transaction.atomic():
         Experiment.objects.select_for_update().filter(id=version.working_version_id).first()
+        # The caller may have loaded ``version`` before taking the lock, so its flag can be stale.
+        version.refresh_from_db(fields=["is_default_version"])
         Experiment.objects.filter(working_version_id=version.working_version_id, is_default_version=True).exclude(
             id=version.id
         ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
