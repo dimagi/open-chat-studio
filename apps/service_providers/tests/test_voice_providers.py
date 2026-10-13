@@ -527,6 +527,31 @@ def test_run_post_save_hook_noop_for_non_elevenlabs(team_with_users):
     assert warnings == []
 
 
+@pytest.mark.django_db()
+def test_elevenlabs_provider_delete(team_with_users):
+    """Deleting ElevenLabs provider should delete local synced voice records"""
+    provider = VoiceProvider.objects.create(
+        team=team_with_users,
+        name="ElevenLabs Test",
+        type=VoiceProviderType.elevenlabs,
+        config={"elevenlabs_api_key": "test_key", "elevenlabs_model": "eleven_multilingual_v2"},
+    )
+    voice = SyntheticVoice.objects.create(
+        name="Rachel",
+        external_id="voice_id_1",
+        neural=True,
+        language="en",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.ElevenLabs,
+        voice_provider=provider,
+    )
+
+    provider.delete()
+
+    assert not SyntheticVoice.objects.filter(pk=voice.pk).exists()
+
+
 def test_intron_voice_provider(team_with_users):
     _test_voice_provider(
         team_with_users,
