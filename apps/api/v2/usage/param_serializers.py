@@ -151,7 +151,7 @@ class UsageQuerySerializer(serializers.Serializer):
         start = _localize(attrs.get("start"), tz)
         end = _localize(attrs.get("end"), tz)
         if start is None and end is None:
-            return _month_bounds(period or PERIOD_CURRENT_MONTH, tz)
+            return month_bounds(period or PERIOD_CURRENT_MONTH, tz)
         if period:
             raise serializers.ValidationError("Provide either 'period' or an explicit 'start'/'end' window, not both.")
         return _explicit_window(start, end)
@@ -169,7 +169,7 @@ class UsageQuerySerializer(serializers.Serializer):
             )
 
 
-def _month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
+def month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
     """Half-open ``[start, end)`` for a calendar month, computed in ``tz``. Returns tz-aware
     datetimes; Django converts them for the UTC-stored ``created_at`` column. ``relativedelta``
     keeps the same ``tz`` instance, and midnight-on-the-1st stays midnight across a DST transition.
