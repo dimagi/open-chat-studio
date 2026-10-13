@@ -4,7 +4,6 @@ import importlib
 import itertools
 import uuid
 from collections import defaultdict
-from copy import deepcopy
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -96,9 +95,6 @@ class EvaluationMode(models.TextChoices):
     SESSION = "session", "Session"
 
 
-COPY_NAME_SUFFIX = " (copy)"
-
-
 class Evaluator(BaseTeamModel):
     name = models.CharField(max_length=255)
     type = models.CharField(max_length=128)  # The evaluator type, should be one from evaluators.py
@@ -170,35 +166,6 @@ class Evaluator(BaseTeamModel):
         """Restore an archived evaluator so it can run again."""
         self.is_archived = False
         self.save(update_fields=["is_archived"])
-
-    @transaction.atomic
-    def copy(self) -> Evaluator:
-        """A new active evaluator with this one's configuration and tag rules, and none of its history."""
-        max_length = Evaluator._meta.get_field("name").max_length
-        base_name = self.name[: max_length - len(COPY_NAME_SUFFIX)]
-        duplicate = Evaluator.objects.create(
-            team_id=self.team_id,
-            name=f"{base_name}{COPY_NAME_SUFFIX}",
-            type=self.type,
-            params=deepcopy(self.params),
-            evaluation_mode=self.evaluation_mode,
-            llm_provider_id=self.llm_provider_id,
-            llm_provider_model_id=self.llm_provider_model_id,
-        )
-        EvaluatorTagRule.objects.bulk_create(
-            [
-                EvaluatorTagRule(
-                    team_id=self.team_id,
-                    evaluator=duplicate,
-                    tag_id=rule.tag_id,
-                    field_name=rule.field_name,
-                    condition_type=rule.condition_type,
-                    condition_value=deepcopy(rule.condition_value),
-                )
-                for rule in self.tag_rules.all()
-            ]
-        )
-        return duplicate
 
     @cached_property
     def evaluator(self):

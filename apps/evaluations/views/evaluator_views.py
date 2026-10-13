@@ -20,6 +20,7 @@ from apps.evaluations.const import (
     evaluator_prompt_variable_hints,
     evaluator_prompt_variable_names,
 )
+from apps.evaluations.evaluator_copy import copy_evaluator
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import EvaluationResult, EvaluationRunAggregate, Evaluator
@@ -252,7 +253,7 @@ class CopyEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request, team_slug: str, pk: int):
         """Duplicate the evaluator and send the client to the copy's edit page."""
         source = get_object_or_404(Evaluator, team=request.team, pk=pk)
-        duplicate = source.copy()
+        duplicate = copy_evaluator(source)
         response = HttpResponse(status=200)
         response["HX-Redirect"] = reverse("evaluations:evaluator_edit", args=[team_slug, duplicate.id])
         return response
