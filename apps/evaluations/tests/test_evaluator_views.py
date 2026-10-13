@@ -10,6 +10,7 @@ from django.urls import reverse
 from apps.evaluations import evaluators
 from apps.evaluations.models import ConditionType, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable
+from apps.evaluations.tests.conftest import INSUFFICIENT_COPY_PERMISSIONS
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
@@ -473,13 +474,7 @@ def test_every_evaluator_row_offers_a_copy_action(client, team_with_users, archi
     assert reverse("evaluations:evaluator_copy", args=[team_with_users.slug, evaluator.id]) in html
 
 
-@pytest.mark.parametrize(
-    "codenames",
-    [
-        pytest.param(("view_evaluator",), id="view-only"),
-        pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
-    ],
-)
+@pytest.mark.parametrize("codenames", INSUFFICIENT_COPY_PERMISSIONS)
 @pytest.mark.django_db()
 def test_copy_action_is_hidden_without_add_and_change_permissions(client, team_with_users, evaluator_member, codenames):
     """A user who could not complete the copy is not offered the button."""

@@ -6,12 +6,18 @@ from apps.evaluations.models import Evaluator
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import GroupFactory
 
+INSUFFICIENT_COPY_PERMISSIONS = [
+    pytest.param(("view_evaluator",), id="view-only"),
+    pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
+]
+
 
 @pytest.fixture()
 def evaluator_member(team_with_users):
     """Build a team member whose only evaluator permissions are the given codenames."""
 
     def _make(*codenames):
+        """Create a membership in a fresh group holding only these evaluator permissions."""
         content_type = ContentType.objects.get_for_model(Evaluator)
         group = GroupFactory.create(name="evaluator-" + "-".join(codenames))
         group.permissions.add(*Permission.objects.filter(content_type=content_type, codename__in=codenames))

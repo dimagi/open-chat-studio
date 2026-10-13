@@ -17,6 +17,7 @@ from apps.utils.factories.evaluations import (
 
 @pytest.mark.django_db()
 def test_copy_carries_the_configuration_and_provider_fks(team_with_users):
+    """The copy is a new row in the same team with the source's name suffixed, type, params, mode and provider FKs."""
     source = EvaluatorFactory.create(team=team_with_users, name="Sentiment scorer", evaluation_mode="session")
 
     duplicate = source.copy()
@@ -33,6 +34,7 @@ def test_copy_carries_the_configuration_and_provider_fks(team_with_users):
 
 @pytest.mark.django_db()
 def test_copy_clones_the_tag_rules_onto_the_duplicate(team_with_users):
+    """Every tag rule on the source is recreated on the copy, and the source keeps its own."""
     source = EvaluatorFactory.create(team=team_with_users)
     tag = EvaluationTagFactory.create(team=team_with_users, name="needs-review")
     EvaluatorTagRuleFactory.create(
@@ -68,6 +70,7 @@ def test_copy_clones_the_tag_rules_onto_the_duplicate(team_with_users):
 
 @pytest.mark.django_db()
 def test_copy_leaves_config_membership_and_history_behind(team_with_users):
+    """The copy belongs to no evaluation config and has no results."""
     source = EvaluatorFactory.create(team=team_with_users)
     config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[source])
     run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.COMPLETED)
@@ -82,6 +85,7 @@ def test_copy_leaves_config_membership_and_history_behind(team_with_users):
 
 @pytest.mark.django_db()
 def test_copy_of_an_archived_evaluator_is_active_and_the_source_stays_archived(team_with_users):
+    """Copying an archived evaluator yields an active copy without unarchiving the source."""
     source = EvaluatorFactory.create(team=team_with_users)
     source.archive()
 
@@ -94,6 +98,7 @@ def test_copy_of_an_archived_evaluator_is_active_and_the_source_stays_archived(t
 
 @pytest.mark.django_db()
 def test_copy_of_an_evaluator_without_a_provider_keeps_both_fks_null(team_with_users):
+    """An evaluator with no LLM provider copies with both provider FKs still null."""
     source = EvaluatorFactory.create(
         team=team_with_users, type="PythonEvaluator", llm_provider=None, llm_provider_model=None
     )
@@ -107,6 +112,7 @@ def test_copy_of_an_evaluator_without_a_provider_keeps_both_fks_null(team_with_u
 
 @pytest.mark.django_db()
 def test_copy_truncates_a_long_name_so_the_suffix_still_fits(team_with_users):
+    """A 255-character name is shortened so the copy suffix fits within the field."""
     source = EvaluatorFactory.create(team=team_with_users, name="x" * 255)
 
     duplicate = source.copy()
@@ -118,6 +124,7 @@ def test_copy_truncates_a_long_name_so_the_suffix_still_fits(team_with_users):
 
 @pytest.mark.django_db()
 def test_copy_leaves_nothing_behind_when_cloning_the_rules_fails(team_with_users):
+    """A failure while cloning the rules rolls back the new evaluator row too."""
     source = EvaluatorFactory.create(team=team_with_users)
     EvaluatorTagRuleFactory.create(team=team_with_users, evaluator=source)
 

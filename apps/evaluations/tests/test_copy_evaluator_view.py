@@ -4,12 +4,14 @@ import pytest
 from django.urls import reverse
 
 from apps.evaluations.models import Evaluator
+from apps.evaluations.tests.conftest import INSUFFICIENT_COPY_PERMISSIONS
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
 def test_copy_creates_the_duplicate_and_redirects_to_its_edit_page(client, team_with_users):
+    """POST creates the copy and answers with an HX-Redirect to its edit page."""
     source = EvaluatorFactory.create(team=team_with_users, name="Sentiment scorer")
 
     client.force_login(team_with_users.members.first())
@@ -24,6 +26,7 @@ def test_copy_creates_the_duplicate_and_redirects_to_its_edit_page(client, team_
 
 @pytest.mark.django_db()
 def test_copy_of_another_teams_evaluator_is_not_found(client, team_with_users):
+    """An evaluator from another team is a 404 and nothing is created."""
     other_team = TeamFactory.create()
     source = EvaluatorFactory.create(team=other_team)
 
@@ -34,13 +37,7 @@ def test_copy_of_another_teams_evaluator_is_not_found(client, team_with_users):
     assert Evaluator.objects.count() == 1
 
 
-@pytest.mark.parametrize(
-    "codenames",
-    [
-        pytest.param(("view_evaluator",), id="view-only"),
-        pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
-    ],
-)
+@pytest.mark.parametrize("codenames", INSUFFICIENT_COPY_PERMISSIONS)
 @pytest.mark.django_db()
 def test_copy_without_add_and_change_permissions_is_forbidden(client, team_with_users, evaluator_member, codenames):
     """A user who could not open the copy afterwards is not allowed to create it."""
@@ -56,6 +53,7 @@ def test_copy_without_add_and_change_permissions_is_forbidden(client, team_with_
 
 @pytest.mark.django_db()
 def test_copy_rejects_get(client, team_with_users):
+    """The copy endpoint only accepts POST."""
     source = EvaluatorFactory.create(team=team_with_users)
 
     client.force_login(team_with_users.members.first())
