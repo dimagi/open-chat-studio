@@ -90,6 +90,7 @@ def test_copy_of_an_evaluator_without_a_provider_keeps_both_fks_null(team_with_u
 
     assert duplicate.llm_provider_id is None
     assert duplicate.llm_provider_model_id is None
+    assert duplicate.type == "PythonEvaluator"
 
 
 @pytest.mark.django_db()

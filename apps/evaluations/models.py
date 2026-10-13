@@ -177,25 +177,25 @@ class Evaluator(BaseTeamModel):
         max_length = Evaluator._meta.get_field("name").max_length
         base_name = self.name[: max_length - len(COPY_NAME_SUFFIX)]
         duplicate = Evaluator.objects.create(
-            team=self.team,
+            team_id=self.team_id,
             name=f"{base_name}{COPY_NAME_SUFFIX}",
             type=self.type,
             params=deepcopy(self.params),
             evaluation_mode=self.evaluation_mode,
-            llm_provider=self.llm_provider,
-            llm_provider_model=self.llm_provider_model,
+            llm_provider_id=self.llm_provider_id,
+            llm_provider_model_id=self.llm_provider_model_id,
         )
         EvaluatorTagRule.objects.bulk_create(
             [
                 EvaluatorTagRule(
-                    team=self.team,
+                    team_id=self.team_id,
                     evaluator=duplicate,
-                    tag=rule.tag,
+                    tag_id=rule.tag_id,
                     field_name=rule.field_name,
                     condition_type=rule.condition_type,
                     condition_value=deepcopy(rule.condition_value),
                 )
-                for rule in self.tag_rules.select_related("tag")
+                for rule in self.tag_rules.all()
             ]
         )
         return duplicate
