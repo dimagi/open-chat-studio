@@ -62,6 +62,7 @@ from apps.generics import actions
 from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
+from apps.human_annotations.prefetch import attach_session_annotation_items
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
@@ -71,6 +72,7 @@ from apps.pipelines.nodes.node_metadata import (
 )
 from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.teams.decorators import login_and_team_required, team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
@@ -661,6 +663,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     table_class = ChatbotSessionsTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
+    show_annotation_queues = True
 
     def extra_filters(self) -> Q:
         """Extra constraints applied to the base queryset, on top of the dynamic filter widget."""
@@ -675,17 +678,24 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
-        """Configure the table, then attach the tag prefetch to the paginated page only.
+        """Configure the table, then attach per-page prefetches and hide columns this page does not show.
 
         Hooking after `RequestConfig.configure` ensures the underlying queryset is sliced
-        with LIMIT before we evaluate it — so both the page rows and the CustomTaggedItem
-        lookup are bounded to a single page, not the full filtered set.
+        with LIMIT before we evaluate it, so the page rows and the tag and queue lookups are
+        bounded to a single page, not the full filtered set.
         """
         table = super().get_table(**kwargs)
+        show_queues = self.show_annotation_queues and flag_is_active(self.request, Flags.HUMAN_ANNOTATIONS.slug)
         if getattr(table, "page", None) is not None:
             attach_chat_tagged_items(table.page.object_list)
+            if show_queues:
+                attach_session_annotation_items(table.page.object_list)
+        hidden = []
         if self.kwargs.get("experiment_id"):
-            table.exclude = ("chatbot",)
+            hidden.append("chatbot")
+        if not show_queues:
+            hidden.append("annotation_queues")
+        table.exclude = (*table.exclude, *hidden)
         return table
 
 
@@ -698,6 +708,7 @@ class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):
     """
 
     table_class = ParticipantSessionsTable
+    show_annotation_queues = False
 
     def extra_filters(self) -> Q:
         filters = Q(participant_id=self.kwargs.get("participant_id"))
