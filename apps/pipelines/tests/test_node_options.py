@@ -5,11 +5,16 @@ and the v2 `/pipeline/options/` endpoint. The endpoint's own contract -- auth, s
 response shaping -- lives in `apps/api/v2/tests/test_pipeline_discovery.py`.
 """
 
+from copy import deepcopy
+from unittest import mock
+
 import pytest
 from django.urls import reverse
 
+from apps.chat.agent.tools import get_tool_for_custom_action_operation
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
 from apps.service_providers.models import LlmProviderModel, VoiceProviderType
+from apps.utils.factories.custom_actions import ACTION_SCHEMA, CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import ExperimentFactory, SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -336,3 +341,73 @@ def test_options_never_expose_provider_config(team_with_resources):
 
     assert "openai_api_key" not in body
     assert "aws_secret_access_key" not in body
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("operation_id", "tool_name"),
+    [
+        pytest.param("weather_get", "weather_get", id="already-a-valid-tool-name"),
+        pytest.param("get weather/today", "get_weather_today", id="needs-sanitising"),
+    ],
+)
+def test_custom_action_options_carry_the_tool_name_the_llm_sees(team, operation_id, tool_name):
+    choices = [("Weather", [(f"7:{operation_id}", "Weather: Get the weather")])]
+    with mock.patch("apps.pipelines.nodes.node_metadata.get_custom_action_operation_choices", return_value=choices):
+        values = get_node_parameter_values(team=team, synthetic_voices=[])
+
+    assert values["custom_actions"] == [
+        {"value": f"7:{operation_id}", "label": "Weather: Get the weather", "tool_name": tool_name}
+    ]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "operation_id",
+    [
+        pytest.param(None, id="derived-from-path-and-method"),
+        pytest.param("Get weather/today!", id="declared-and-needing-sanitising"),
+    ],
+)
+def test_custom_action_tool_name_is_the_name_the_tool_runs_under(team, operation_id):
+    schema = deepcopy(ACTION_SCHEMA)
+    if operation_id:
+        schema["paths"]["/weather"]["get"]["operationId"] = operation_id
+    action = CustomActionFactory.create(team=team, api_schema=schema, allowed_operations=[])
+    [weather_get] = [op.operation_id for op in action.operations if op.path == "/weather" and op.method == "get"]
+    action.allowed_operations = [weather_get]
+    action.save()
+
+    [option] = get_node_parameter_values(team=team, synthetic_voices=[])["custom_actions"]
+    tool = get_tool_for_custom_action_operation(
+        CustomActionOperationFactory.create(custom_action=action, operation_id=weather_get), taken_names=set()
+    )
+
+    assert option["tool_name"] == tool.name
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("is_remote_index", "index_type"),
+    [pytest.param(True, "remote", id="remote"), pytest.param(False, "local", id="local")],
+)
+def test_collection_index_options_say_where_the_index_lives(team, is_remote_index, index_type):
+    CollectionFactory.create(
+        team=team, is_index=True, is_remote_index=is_remote_index, llm_provider=None, embedding_provider_model=None
+    )
+
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
+
+    assert [option["type"] for option in values["collection_index"]] == [index_type]
+
+
+@pytest.mark.django_db()
+def test_options_do_not_expose_the_builders_tool_and_index_hints(team):
+    """`tool_name` and the index `type` serve the builder's prompt editor; the API contract is value and label."""
+    CustomActionFactory.create(team=team)
+    CollectionFactory.create(team=team, is_index=True, llm_provider=None, embedding_provider_model=None)
+
+    options = ApiTestClient(team.members.first(), team).get(reverse("api:v2:pipeline-options")).json()
+
+    assert [set(option) for option in options["custom_actions"]] == [{"value", "label"}]
+    assert [set(option) for option in options["collection_index"]] == [{"value", "label"}]

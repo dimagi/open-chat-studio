@@ -24,6 +24,7 @@ import {useHotkeys} from "react-hotkeys-hook";
 import EditPanel from "./panel/EditPanel";
 import useEditorStore from "./stores/editorStore";
 import TestMessageBox from "./panel/TestMessageBox";
+import FindPanel from "./panel/FindPanel";
 import AnnotatedEdge from "./AnnotatedEdge";
 import { EndNode, StartNode } from "./BoundaryNode";
 import { NodeData } from "./types/nodeParams";
@@ -145,6 +146,8 @@ export default function Pipeline() {
     redoLastChange();
   }, {preventDefault: true});
 
+  useHotkeys(["ctrl+f", "meta+f"], () => setSelectedOverlay("find"), {preventDefault: true});
+
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
       setLastSelection(flow);
@@ -203,6 +206,10 @@ export default function Pipeline() {
             />
           </>
         )}
+        <FindPanel
+          isOpen={selectedOverlay == "find"}
+          setIsOpen={(open) => setSelectedOverlay(open ? "find" : null)}
+        />
         {editingNode && <EditPanel key={editingNode.id} nodeId={editingNode.id} />}
         <Controls showZoom showFitView showInteractive position="bottom-left">
           {!readOnly && (
