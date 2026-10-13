@@ -17,6 +17,7 @@ from apps.help.evals.checks import (
     check_filter_params,
     check_has_main,
     check_max_words,
+    check_prompt_vars,
     check_syntax,
 )
 
@@ -62,6 +63,7 @@ CHECK_DISPATCH: dict[str, Callable] = {
     "max_words": lambda output, params: check_max_words(output, params["per_message"]),
     "filter_params": lambda output, params: check_filter_params(output, params["expected"]),
     "exact_filters": lambda output, params: check_exact_filters(output, params["expected"]),
+    "prompt_vars": lambda output, params: check_prompt_vars(output.prompt, params["expected"]),
 }
 
 

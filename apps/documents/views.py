@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Sum, Value, When
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -643,7 +643,10 @@ class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Si
         if search := self.request.GET.get("search"):
             queryset = similarity_search(queryset, search_phase=search, columns=["name"])
 
-        return queryset.annotate(file_count=Count("files"))
+        return queryset.annotate(
+            file_count=Count("files", filter=Q(files__is_archived=False)),
+            total_bytes=Sum("files__content_size", filter=Q(files__is_archived=False)),
+        )
 
 
 class CollectionFormMixin:
