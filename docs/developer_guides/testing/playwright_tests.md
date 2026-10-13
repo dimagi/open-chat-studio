@@ -29,7 +29,7 @@ pnpm e2e --ui       # Playwright UI: pick the test and press play
 
 Playwright starts its own Django server on port 8010 and a Celery worker, then stops them when it exits. Both are needed: chat replies and chatbot version creation are Celery tasks. To run against an app you already started, set `E2E_BASE_URL` (e.g. `http://localhost:8000`) and Playwright will not start any servers. That app needs a Celery worker, `DEBUG` on or `CI=true` (for the mock LLM), and `USE_DEBUG_TOOLBAR=False`, because the toolbar covers buttons the test clicks.
 
-Each test starts by asking the server under test for its data, through the `createData` fixture in `e2e/fixtures.ts`. The fixture posts to `/e2e-data/create/` with a state. The server uses the factories in `apps/utils/factories/` (see `apps/web/e2e_data.py`) to create a new user who owns a new team, plus the data the test starts from, and returns the details as JSON:
+Each test starts from its own scenario: a user who owns a team, plus the data the test needs. The scenarios are listed in `e2e/scenarios.ts`, each with the state it starts from:
 
 | State          | Creates                                                                 |
 |----------------|-------------------------------------------------------------------------|
@@ -38,11 +38,13 @@ Each test starts by asking the server under test for its data, through the `crea
 | `chatbot`      | `llm_provider`, plus a chatbot whose pipeline uses that provider        |
 | `session`      | `chatbot`, plus a web session from the user with one message and reply  |
 
-The fixture also adds a logged-in session cookie to the browser, so only the login test fills in the login form. No test depends on another, so they run in any order, and any single test can run on its own.
+Before any test runs, the global setup (`e2e/global-setup.ts`) runs `manage.py e2e_seed` once, passing every scenario. The command first deletes the previous run's data: every `@e2e.test` user and every team whose members are all `@e2e.test` users. No other team or user is changed. It then uses the factories in `apps/utils/factories/` (see `apps/web/management/commands/e2e_data_service.py`) to create each scenario, and prints the details as JSON. The global setup stores that JSON in the `E2E_SCENARIOS` env var, which the test workers inherit.
 
-When a test ends, the fixture posts to `/e2e-data/cleanup/`, which deletes every `@e2e.test` user and every team whose members are all `@e2e.test` users. No other team or user is changed. The global setup calls it too, to remove data from a run that stopped early. Because cleanup deletes the data of every test, the tests run one at a time (`workers: 1` in `e2e/playwright.config.ts`).
+A test gets its data with the `scenario` fixture in `e2e/fixtures.ts`, e.g. `await scenario("createChatbot")`. The fixture also adds the scenario user's logged-in session cookie to the browser; the login test passes `{ logIn: false }` to fill in the login form instead. No two tests share a scenario, so they run in any order, and any single test can run on its own. To add a test, add its scenario to `e2e/scenarios.ts`.
 
-The `/e2e-data/` endpoints are mounted only when `DEBUG` is on or `CI=true`, and return 404 otherwise. They create logged-in users without authentication, so they must never be reachable on a real deployment. Sign-up is not tested.
+The data stays in the database after the run, so you can log in as a scenario's user to look at what a failed test left behind. The next run deletes it. Re-running a test in `--ui` mode reuses the same scenario, including whatever the previous attempt changed.
+
+The command runs on the machine running Playwright, with that machine's settings. With `E2E_BASE_URL`, that machine must use the same database as the app under test. The command refuses to run unless `DEBUG` is on or `CI=true`, because it creates users with a known password. Sign-up is not tested.
 
 The providers the tests use point at the mock LLM that the dev server serves under `/mock-llm/` (only when `DEBUG` is on or `CI=true`, which GitHub Actions sets). No API key is needed and no request leaves the machine; the mock answers with lorem ipsum.
 
