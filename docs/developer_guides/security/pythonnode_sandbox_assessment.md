@@ -326,7 +326,7 @@ once.
 ## Test coverage
 
 Before this PR there were **no** tests exercising sandbox escapes for
-`RestrictedPythonExecutionMixin` (only `apps/utils/tests/test_restricted_http.py` covered
+`RestrictedPythonExecutionMixin` (only `apps/pipelines/tests/test_restricted_http.py` covered
 the HTTP client). This PR adds `TestSandboxHardening` in
 `apps/pipelines/tests/test_code_node.py`, covering: module-poisoning is blocked, poisoning
 does not leak across executions, augmented assignment works, and reserved keys are enforced
