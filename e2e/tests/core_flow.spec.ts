@@ -1,10 +1,10 @@
 import { E2E_BASE_URL } from "../config";
 import { expect, test } from "../fixtures";
 
-// Each test creates its own user and team (see `apps/web/e2e_data.py`), so the tests run in any order.
+// Each test uses its own scenario (see `e2e/scenarios.ts`), so the tests run in any order.
 
-test("log in", { annotation: { type: "user-stories", description: "1" } }, async ({ page, createData }) => {
-  const data = await createData("team", { logIn: false });
+test("log in", { annotation: { type: "user-stories", description: "1" } }, async ({ page, scenario }) => {
+  const data = await scenario("login", { logIn: false });
   await page.goto("/accounts/login/");
   await page.locator("input[name=login]").fill(data.email);
   // With the SSO login flag on, the password field appears after submitting the email.
@@ -17,8 +17,8 @@ test("log in", { annotation: { type: "user-stories", description: "1" } }, async
   await expect(page).toHaveURL(new RegExp(`/a/${data.team_slug}/dashboard/`));
 });
 
-test("create a team", { annotation: { type: "user-stories", description: "2" } }, async ({ page, createData }) => {
-  await createData("team");
+test("create a team", { annotation: { type: "user-stories", description: "2" } }, async ({ page, scenario }) => {
+  await scenario("createTeam");
   const teamName = `E2E Team ${Date.now()}`;
   await page.goto("/teams/create/");
   await page.locator("input[name=name]").fill(teamName);
@@ -30,8 +30,8 @@ test("create a team", { annotation: { type: "user-stories", description: "2" } }
 test(
   "add an OpenAI LLM provider",
   { annotation: { type: "user-stories", description: "3" } },
-  async ({ page, createData }) => {
-    const data = await createData("team");
+  async ({ page, scenario }) => {
+    const data = await scenario("addLlmProvider");
     const providerName = "My OpenAI";
     await page.goto(`${data.team_url}/service_providers/llm/create/openai/`);
     await page.locator("input[name=name]").fill(providerName);
@@ -49,8 +49,8 @@ test(
 test(
   "create a chatbot",
   { annotation: { type: "user-stories", description: "4" } },
-  async ({ page, createData }) => {
-    const data = await createData("llm_provider");
+  async ({ page, scenario }) => {
+    const data = await scenario("createChatbot");
     const chatbotName = "Created in E2E";
     await page.goto(`${data.team_url}/chatbots/`);
     await page.getByText("Add New", { exact: true }).click();
@@ -65,8 +65,8 @@ test(
 test(
   "chat with the chatbot",
   { annotation: { type: "user-stories", description: "5" } },
-  async ({ page, createData }) => {
-    const data = await createData("chatbot");
+  async ({ page, scenario }) => {
+    const data = await scenario("chatWithChatbot");
     const userMessage = "Reply with a short greeting.";
     await page.goto(data.chatbot_url);
     await page.getByRole("button", { name: "Chat to the bot" }).hover();
@@ -82,8 +82,8 @@ test(
 test(
   "find the session in the sessions list",
   { annotation: { type: "user-stories", description: "6" } },
-  async ({ page, createData }) => {
-    const data = await createData("session");
+  async ({ page, scenario }) => {
+    const data = await scenario("findSession");
     await page.goto(data.chatbot_url);
     const sessionsTable = page.locator("#sessions-table");
     await expect(sessionsTable).toContainText(data.email);
@@ -92,8 +92,8 @@ test(
   },
 );
 
-test("read the transcript", { annotation: { type: "user-stories", description: "7" } }, async ({ page, createData }) => {
-  const data = await createData("session");
+test("read the transcript", { annotation: { type: "user-stories", description: "7" } }, async ({ page, scenario }) => {
+  const data = await scenario("readTranscript");
   await page.goto(data.session_url);
   const messages = page.locator("#messages-container");
   await messages.scrollIntoViewIfNeeded();

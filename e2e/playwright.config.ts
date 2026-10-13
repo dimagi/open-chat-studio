@@ -19,7 +19,7 @@ export default defineConfig({
   // The tests wait on Celery tasks and LLM calls.
   timeout: 3 * 60 * 1000,
   expect: { timeout: 60 * 1000 },
-  // Each test creates its own data in the server and deletes all E2E data when it ends, so only one runs at a time.
+  // The tests share one Django server and one Celery worker that runs a task at a time, so they run one at a time.
   fullyParallel: false,
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
