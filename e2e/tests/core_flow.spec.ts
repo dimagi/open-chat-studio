@@ -68,6 +68,12 @@ test(
   async ({ page, scenario }) => {
     const data = await scenario("chatWithChatbot");
     const userMessage = "Reply with a short greeting.";
+    const chatResponses: { status: number; url: string }[] = [];
+    page.on("response", (response) => {
+      if (response.url().includes("/api/chat/")) {
+        chatResponses.push({ status: response.status(), url: response.url() });
+      }
+    });
     await page.goto(data.chatbot_url);
     await page.getByRole("button", { name: "Chat to the bot" }).hover();
     await page.getByRole("button", { name: "Unreleased version" }).click();
@@ -75,7 +81,11 @@ test(
     await widget.locator("textarea.message-textarea").fill(userMessage);
     await widget.locator("button.send-button").click();
     await expect(widget.locator(".message-row-user")).toContainText(userMessage);
-    await expect(widget.locator(".message-row-assistant .chat-markdown")).not.toBeEmpty();
+    // "short" makes the mock LLM answer with one lorem ipsum sentence. Checking for it rules out
+    // the "Sorry, something went wrong" reply the chatbot sends when the LLM call fails.
+    await expect(widget.locator(".message-row-assistant .chat-markdown")).toHaveText(/^[A-Z][a-z]+( [a-z]+){7,17}\.\s*$/);
+    expect(chatResponses).not.toHaveLength(0);
+    expect(chatResponses.filter((response) => response.status >= 400)).toEqual([]);
   },
 );
 
