@@ -63,6 +63,7 @@ IGNORED_MODELS = frozenset(
         "sso.ssosession",
         "teams.flag",
         "teams.invitation",
+        "web.superuserelevation",
     }
 )
 

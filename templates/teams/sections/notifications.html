@@ -1,0 +1,20 @@
+{% load i18n team_tags %}
+<section class="app-card" id="notifications">
+  <div class="flex justify-between items-start">
+    <div>
+      <h2 class="pg-subtitle font-bold">{% translate "Notifications" %}</h2>
+      <span class="text-neutral-500 section-subtitle">{% translate "Post this team's notifications to a Slack channel." %}</span>
+    </div>
+    {% has_perm "ocs_notifications" "add_notificationchannel" as can_add_notification_channel %}
+    {% if can_add_notification_channel %}
+      <a data-cy="btn-add-notification-channel" class="btn btn-sm btn-primary whitespace-nowrap"
+         href="{% url 'ocs_notifications_channels:new' request.team.slug %}">
+        <i class="fa-solid fa-bell mr-1"></i>{% translate "Add channel" %}
+      </a>
+    {% endif %}
+  </div>
+  <hr class="my-2">
+  <div id="notification-channels-table-container"
+       hx-get="{% url 'ocs_notifications_channels:table' request.team.slug %}"
+       hx-trigger="load"></div>
+</section>

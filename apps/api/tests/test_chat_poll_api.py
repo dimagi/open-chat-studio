@@ -61,6 +61,27 @@ def test_chat_poll_task_response_with_file_attachments(api_client, session, mock
     assert len(attachments) == 1
     assert attachments[0]["name"] == test_file.name
     assert attachments[0]["content_url"].endswith(f"/api/files/{test_file.id}/content")
+    assert attachments[0]["download_url"] == (
+        f"http://testserver/api/chat/{session.external_id}/files/{test_file.id}/content/"
+    )
+
+
+@pytest.mark.django_db()
+def test_chat_poll_response_includes_attachment_download_url(api_client, session):
+    test_file = FileFactory.create(team=session.chat.team)
+    session.chat.attachments.create(tool_type="ocs_attachments").files.add(test_file)
+    ChatMessage.objects.create(
+        chat=session.chat, message_type="ai", content="Hi", metadata={"ocs_attachment_file_ids": [test_file.id]}
+    )
+
+    url = reverse("api:chat:poll-response", kwargs={"session_id": session.external_id})
+    response = api_client.get(url)
+
+    assert response.status_code == 200
+    [attachment] = response.json()["messages"][0]["attachments"]
+    assert attachment["download_url"] == (
+        f"http://testserver/api/chat/{session.external_id}/files/{test_file.id}/content/"
+    )
 
 
 @pytest.fixture()

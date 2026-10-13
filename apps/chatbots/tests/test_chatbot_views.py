@@ -329,6 +329,38 @@ def test_chatbot_versions_table_view(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_versions_table_query_count_does_not_scale_with_versions(client, team_with_users):
+    """Rendering each version's API URL must not lazily load the working version per row."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user)
+    experiment.create_new_version()
+    url = reverse("chatbots:versions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+
+    def experiment_lookups_by_id(url):
+        client.get(url)  # warm caches that creating versions may have invalidated
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(url)
+        assert response.status_code == 200
+        lookups = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if 'FROM "experiments_experiment" WHERE "experiments_experiment"."id" =' in q["sql"]
+        ]
+        return lookups, response
+
+    single_version_lookups, _ = experiment_lookups_by_id(url)
+
+    experiment.create_new_version()
+    experiment.create_new_version()
+    many_version_lookups, response = experiment_lookups_by_id(url)
+
+    assert response.content.decode().count('id="api-url-') == 3
+    assert len(many_version_lookups) == len(single_version_lookups)
+
+
+@pytest.mark.django_db()
 def test_versions_table_chat_action_opens_widget(client, team_with_users):
     """The per-version chat button launches the embedded widget pinned to that version number."""
     team = team_with_users

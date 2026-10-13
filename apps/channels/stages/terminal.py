@@ -162,7 +162,7 @@ class ResponseSendingStage(ProcessingStage):
         except Exception as e:
             raise MessageDeliveryFailure(
                 e,
-                context="flush",
+                context="message",
             ) from e
 
     def _send_file(self, ctx: MessageProcessingContext, file, recipient: str) -> None:

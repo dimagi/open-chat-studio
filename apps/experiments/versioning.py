@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
 from functools import cached_property
+from itertools import chain
 from typing import Any, Self
 
 from django.core.exceptions import FieldDoesNotExist
@@ -160,6 +161,28 @@ class VersionField:
         else:
             return "primitive"
 
+    @staticmethod
+    def _group_records_by_family(version_fields: list["VersionField"]) -> dict[int, list]:
+        """Group records by version family (records in the same family share a working version id)"""
+        records_by_family: dict[int, list] = defaultdict(list)
+        for version_field in version_fields:
+            record = version_field.raw_value
+            records_by_family[VersionField._get_family_id(record)].append(record)
+        return records_by_family
+
+    @staticmethod
+    def _get_family_id(record) -> int:
+        """Return the working version id for versioned records, or the record's own id for unversioned ones"""
+        if isinstance(record, VersionsMixin):
+            return record.get_working_version_id()
+        return record.id
+
+    @staticmethod
+    def _pop_family_record(records_by_family: dict[int, list], record):
+        """Removes and returns a record from the same version family as `record`, or None if there is none."""
+        family_records = records_by_family.get(VersionField._get_family_id(record))
+        return family_records.pop(0) if family_records else None
+
     def _compare_querysets(self, early_abort=False):
         """
         Compares two querysets by checking the differences between their results.
@@ -176,16 +199,10 @@ class VersionField:
         same "version family". This relationship is identified through the `working_version_id` field of each record,
         which is expected to be present on each result.
         """
-        previous_queryset_results = self.previous_field_version.queryset_results
-        previous_records = {result.raw_value.id: result.raw_value for result in previous_queryset_results}
-        for version_field in self.queryset_results:
-            record = version_field.raw_value
-            previous_record = None
-            for version_id in record.version_family_ids:
-                if version_id in previous_records:
-                    previous_record = previous_records.pop(version_id)
-                    break
+        previous_records_by_family = self._group_records_by_family(self.previous_field_version.queryset_results)
 
+        for version_field in self.queryset_results:
+            previous_record = self._pop_family_record(previous_records_by_family, version_field.raw_value)
             if previous_record:
                 # A version of the current record exists in the previous queryset
                 prev_version_field = VersionField(raw_value=previous_record, to_display=self.to_display)
@@ -198,12 +215,13 @@ class VersionField:
             if early_abort and self.changed:
                 return
 
+        previous_records = list(chain.from_iterable(previous_records_by_family.values()))
         if previous_records:
             self.changed = True
             if early_abort:
                 return
 
-        for record in previous_records.values():
+        for record in previous_records:
             # We need to add version fields for each removed record, but with the current value set to None
             prev_version_field = VersionField(raw_value=record, to_display=self.to_display)
             version_field = VersionField(raw_value=None, previous_field_version=prev_version_field, changed=True)

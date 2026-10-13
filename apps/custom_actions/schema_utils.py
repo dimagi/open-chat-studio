@@ -3,7 +3,7 @@ from typing import Any, Literal
 from django.core.exceptions import ValidationError
 from pydantic import BaseModel, Field
 
-from apps.utils.openapi import OpenAPISpec
+from apps.utils.openapi import HTTP_METHODS, OpenAPISpec
 from apps.utils.schema_utils import resolve_references
 
 
@@ -23,8 +23,11 @@ def get_standalone_spec(server_url: str, openapi_spec: dict, path: str, method: 
     info = openapi_spec["info"]
     info["title"] += f" - {method} {path}"
     info["description"] = f"Standalone OpenAPI spec for {method} {path}"
-    paths = openapi_spec.pop("paths")
-    openapi_spec["paths"] = {path: {method: paths[path][method]}}
+    path_item = openapi_spec.pop("paths")[path]
+    standalone_path_item = {method: path_item[method]}
+    if "parameters" in path_item:
+        standalone_path_item["parameters"] = path_item["parameters"]
+    openapi_spec["paths"] = {path: standalone_path_item}
     openapi_spec["servers"] = [{"url": server_url}]
     return openapi_spec
 
@@ -34,19 +37,29 @@ def trim_spec(openapi_spec: dict) -> dict:
     If there are any refs in the schema, they will be resolved.
     """
     openapi_spec = resolve_references(openapi_spec)
-    top_level_keys = ["openapi", "info", "paths"]
-    for key in list(openapi_spec.keys()):
-        if key not in top_level_keys:
-            del openapi_spec[key]
+    trimmed = {key: value for key, value in openapi_spec.items() if key in TOP_LEVEL_KEYS}
+    trimmed["paths"] = {path: _trim_path_item(path_item) for path, path_item in openapi_spec["paths"].items()}
+    return trimmed
 
-    operation_keys = ["parameters", "requestBody", "tags", "summary", "description", "operationId"]
-    for methods in openapi_spec["paths"].values():
-        for details in methods.values():
-            for key in list(details.keys()):
-                if key not in operation_keys:
-                    del details[key]
 
-    return openapi_spec
+TOP_LEVEL_KEYS = ("openapi", "info", "paths")
+OPERATION_KEYS = ("parameters", "requestBody", "tags", "summary", "description", "operationId")
+
+
+def _trim_path_item(path_item: dict) -> dict:
+    """Keep only the operations of a path item, plus the `parameters` list shared by all of them."""
+    trimmed = {
+        method: _trim_operation(operation)
+        for method, operation in path_item.items()
+        if method in HTTP_METHODS and isinstance(operation, dict)
+    }
+    if "parameters" in path_item:
+        trimmed["parameters"] = path_item["parameters"]
+    return trimmed
+
+
+def _trim_operation(operation: dict) -> dict:
+    return {key: value for key, value in operation.items() if key in OPERATION_KEYS}
 
 
 class ParameterDetail(BaseModel):
@@ -118,7 +131,7 @@ def get_operations_from_spec(spec: OpenAPISpec) -> list[APIOperationDetails]:
                     description=spec.get_operation_description(path, operation),
                     path=path,
                     method=method,
-                    parameters=_extract_parameters(raw_operation, spec_dict),
+                    parameters=_extract_parameters(raw_operation, spec_dict, path_item.get("parameters")),
                 )
             )
     return operations
@@ -189,31 +202,59 @@ def _lookup_pointer(spec_dict: dict, keys: list[str]) -> dict | None:
     return target if isinstance(target, dict) else None
 
 
-def _extract_parameters(raw_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
-    """Read the parameters and JSON request body properties of an operation, following its references."""
-    parameters = []
-    for param in raw_operation.get("parameters", []):
-        param = _follow_ref(param, spec_dict)
-        if not param.get("name") or param.get("in") not in PARAMETER_LOCATIONS:
-            continue
-        schema = _follow_ref(param.get("schema", {}), spec_dict)
-        parameters.append(
-            ParameterDetail(
-                name=param["name"],
-                description=param.get("description"),
-                required=param.get("required", False),
-                schema_type=_resolve_schema_type(schema),
-                default=schema.get("default"),
-                param_in=param["in"],
-            )
-        )
+def _as_list(value) -> list:
+    """`value` if it is a list, else an empty list."""
+    return value if isinstance(value, list) else []
 
+
+def _extract_parameters(
+    raw_operation: dict, spec_dict: dict, path_parameters: list | None = None
+) -> list[ParameterDetail]:
+    """Read the parameters and JSON request body properties of an operation, following its references.
+
+    `path_parameters` are the parameters declared on the path item, which apply to every operation on
+    the path unless the operation declares a parameter with the same name and location.
+    """
+    operation_params = [_follow_ref(p, spec_dict) for p in _as_list(raw_operation.get("parameters"))]
+    overridden = {(p.get("name"), p.get("in")) for p in operation_params}
+    inherited_params = [
+        param
+        for param in (_follow_ref(p, spec_dict) for p in _as_list(path_parameters))
+        if (param.get("name"), param.get("in")) not in overridden
+    ]
+    parameters = [
+        _parameter_detail(param, spec_dict)
+        for param in inherited_params + operation_params
+        if _is_valid_parameter(param)
+    ]
+    return parameters + _extract_body_parameters(raw_operation, spec_dict)
+
+
+def _is_valid_parameter(param: dict) -> bool:
+    return bool(param.get("name")) and param.get("in") in PARAMETER_LOCATIONS
+
+
+def _parameter_detail(param: dict, spec_dict: dict) -> ParameterDetail:
+    schema = _follow_ref(param.get("schema", {}), spec_dict)
+    return ParameterDetail(
+        name=param["name"],
+        description=param.get("description"),
+        required=param.get("required", False),
+        schema_type=_resolve_schema_type(schema),
+        default=schema.get("default"),
+        param_in=param["in"],
+    )
+
+
+def _extract_body_parameters(raw_operation: dict, spec_dict: dict) -> list[ParameterDetail]:
+    """Read the JSON request body properties of an operation as parameters, following its references."""
     request_body = _follow_ref(raw_operation.get("requestBody", {}), spec_dict)
     body_schema = request_body.get("content", {}).get("application/json", {}).get("schema")
     if body_schema is None:
-        return parameters
+        return []
     body_schema = _follow_ref(body_schema, spec_dict)
 
+    parameters = []
     properties = body_schema.get("properties")
     if body_schema.get("type") == "object" and properties:
         required = set(body_schema.get("required", []))

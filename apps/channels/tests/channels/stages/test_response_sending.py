@@ -188,7 +188,7 @@ class TestResponseSendingStage:
         exc = ctx.sending_exceptions[0]
         assert isinstance(exc, MessageDeliveryFailure)
         assert exc.original_exc is error
-        assert exc.context == "flush"
+        assert exc.context == "message"
 
 
 class TestVoiceToTextFallback:

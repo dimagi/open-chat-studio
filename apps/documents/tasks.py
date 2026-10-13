@@ -48,13 +48,13 @@ def index_collection_files_task(collection_file_ids: list[int]):
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
-def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
+def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int | None):
     """Migrate vector stores from one provider to another"""
     collection_files = CollectionFile.objects.filter(collection_id=collection_id)
     previous_remote_ids = index_collection_files(collection_files_queryset=collection_files)
 
     collection = Collection.objects.get(id=collection_id)
-    if collection.is_remote_index:
+    if collection.is_remote_index and from_llm_provider_id is not None:
         _cleanup_old_vector_store(from_llm_provider_id, from_vector_store_id, previous_remote_ids)
 
 

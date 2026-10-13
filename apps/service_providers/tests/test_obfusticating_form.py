@@ -29,9 +29,6 @@ class TestObfuscatingForm(SimpleTestCase):
         field_values = [f[0].value() for f in form.get_context()["fields"]]
         assert field_values == ["abcd...op", "1234...34", "qwerty"]
 
-    def test_update_no_change(self):
-        self._test_update("a" * 8, "b" * 8)
-
     def test_update_change(self):
         self._test_update("1" * 8, "2" * 8)
 

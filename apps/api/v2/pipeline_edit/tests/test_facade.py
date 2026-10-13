@@ -232,7 +232,7 @@ class TestTheResponseEnvelope:
 #: of nodes -- without them each node would read the table itself.
 #: One is ``deprecated_models``, a single statement for the whole graph that does not move with the
 #: number of nodes.
-QUERIES_UNDER_THE_LOCK = 30
+QUERIES_UNDER_THE_LOCK = 29
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.
@@ -241,19 +241,19 @@ QUERIES_UNDER_THE_LOCK = 30
 #: far enough below it to compare favourably either way, because the node path moves by the same
 #: amount per node.
 #:
-#: Two rules, so that a failure says which of the two unrelated causes it is. Restoring the node
-#: reconcile this endpoint does not need costs a flat 7 statements at any graph size, so a failure at
-#: 17 is that revert. Every extra node on the fixture graph costs 2 (``pipeline_state`` validates each
-#: one), so a failure at 12 is someone having changed the fixture. Raising it deliberately is a
-#: decision about how long the row is held: say in the commit what the extra statements buy.
-WIRE_QUERIES_UNDER_THE_LOCK = 11
+#: Restoring the node reconcile this endpoint does not need costs a flat 7 statements at any graph
+#: size, so a failure at 15 is that revert. Extra LLM nodes on the fixture graph cost nothing:
+#: ``pipeline_state`` validates them against provider models fetched in one query. Raising it
+#: deliberately is a decision about how long the row is held: say in the commit what the extra
+#: statements buy.
+WIRE_QUERIES_UNDER_THE_LOCK = 8
 
 
 @pytest.mark.django_db()
 def test_wiring_does_not_reconcile_the_node_rows(client, chatbot, llm, start_node, end_node):
     """An edge-only diff cannot change a node row, so ``_persist`` skips the reconcile -- and with
     it the rebuild that would have discarded the ``node_set`` prefetch the locked read just paid for.
-    The absolute count is what pins that: reverting the skip takes it from 11 to 18, while a
+    The absolute count is what pins that: reverting the skip takes it from 8 to 15, while a
     comparison against the node path would not, wiring being cheaper either way.
     """
     node_id = add_llm_node(client, chatbot, llm)

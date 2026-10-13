@@ -40,6 +40,8 @@ version section when a release is cut.
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
 - New `moderation` app with a `moderation_deniedparticipant` table. Creates a table only; no
   existing rows change. Nothing reads it unless the `flag_abuse_detection` flag is on. (#4698)
+- New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
+  client IP and user agent). Additive only; nothing is backfilled. (#4693)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
   operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
   stripped from stored pipeline node params. Any `Banner` pinned to the removed
@@ -61,6 +63,10 @@ version section when a release is cut.
 ### Configuration
 <!-- New, renamed, retyped or removed environment variables and settings.
      State the default and whether it is required. -->
+- `SENTRY_TRACES_SAMPLE_RATE`: new, optional, defaults to `0` (no tracing).
+  Fraction of requests and Celery tasks sent to Sentry as performance traces;
+  only has an effect when `SENTRY_DSN` is set. Sentry no longer adds
+  `sentry-trace`/`baggage` headers to outbound HTTP requests.
 - `OCS_VERSION`: new, optional, defaults to `latest`. Read by
   `docker-compose.prod.yml` to select which published image tag to run. Pin it
   to the release you intend to run rather than tracking `latest`. (#4283)

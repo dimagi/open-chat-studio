@@ -581,6 +581,9 @@ paths:
                     - 9
                     max_results: 5
                     generate_citations: false
+                    metadata_filters:
+                    - key: district
+                      value: Khayelitsha
                     tools:
                     - update-user-data
                     - one-off-reminder

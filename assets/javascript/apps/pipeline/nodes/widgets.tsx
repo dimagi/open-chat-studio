@@ -12,6 +12,8 @@ import {produce} from "immer";
 import {CodeNodeEditor, JinjaEditor, PromptEditor} from "../components/CodeMirrorEditor";
 import {CodeDiffEditor} from "../components/CodeDiffEditor";
 import {getInputWidget} from "./GetInputWidget";
+import {getEnabledToolNames, ToolCompletion} from "./toolNames";
+import ImprovePromptSection from "./ImprovePromptSection";
 
 
 
@@ -51,6 +53,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return VoiceWidget
     case "jinja_template":
         return JinjaWidget
+    case "key_value_pairs":
+        return KeyValuePairsWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -668,6 +672,76 @@ export function ExpandableTextWidget(props: WidgetParams) {
   );
 }
 
+type KeyValuePair = {key: string; value: string};
+
+function isKeyValuePairList(value: unknown): value is KeyValuePair[] {
+  return Array.isArray(value) && value.every(
+    (item) => typeof item?.key === "string" && typeof item?.value === "string"
+  );
+}
+
+function KeyValuePairsWidget(props: WidgetParams) {
+  const setNode = usePipelineStore((state) => state.setNode);
+  const stored = props.nodeParams[props.name];
+  const pairs = isKeyValuePairList(stored) ? stored : [];
+
+  const setPairs = (update: (current: KeyValuePair[]) => KeyValuePair[]) => {
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        const current = next.data.params[props.name];
+        next.data.params[props.name] = update(isKeyValuePairList(current) ? current : []);
+      })
+    );
+  };
+
+  const addPair = () => setPairs((current) => [...current, {key: "", value: ""}]);
+  const removePair = (index: number) => setPairs((current) => current.filter((_, i) => i !== index));
+  const updatePair = (index: number, field: keyof KeyValuePair, value: string) =>
+    setPairs((current) => current.map((pair, i) => (i === index ? {...pair, [field]: value} : pair)));
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <div className="flex flex-col gap-2">
+        {pairs.map((pair, index) => (
+          <div className="flex items-center gap-2" key={index}>
+            <input
+              className="input input-sm w-full"
+              aria-label={`Key ${index + 1}`}
+              placeholder="Key"
+              value={pair.key}
+              onChange={(event) => updatePair(index, "key", event.target.value)}
+              readOnly={props.readOnly}
+            />
+            <input
+              className="input input-sm w-full"
+              aria-label={`Value ${index + 1}`}
+              placeholder="Value"
+              value={pair.value}
+              onChange={(event) => updatePair(index, "value", event.target.value)}
+              readOnly={props.readOnly}
+            />
+            {!props.readOnly && (
+              <button
+                type="button"
+                className="btn btn-xs btn-ghost"
+                aria-label={`Remove filter ${index + 1}`}
+                onClick={() => removePair(index)}
+              >
+                <i className="fa-solid fa-minus"></i>
+              </button>
+            )}
+          </div>
+        ))}
+        {!props.readOnly && (
+          <button type="button" className="btn btn-xs btn-ghost self-start" onClick={addPair}>
+            <i className="fa-solid fa-plus"></i> Add filter
+          </button>
+        )}
+      </div>
+    </InputField>
+  );
+}
+
 function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: number) {
   return produce(old, next => {
     next.data.params["keywords"] = keywords;
@@ -1257,7 +1331,33 @@ function BuiltInToolsWidget(props: WidgetParams) {
 }
 
 export function TextEditorWidget(props: WidgetParams) {
-  const autocomplete_vars_list: string[] = getAutoCompleteList(getSelectOptions(props.schema));
+  const autocomplete_vars_list: string[] = useMemo(
+    () => getAutoCompleteList(getSelectOptions(props.schema)),
+    [props.schema]
+  );
+  // Keyed on the tool params rather than the whole params object, which changes on every edit to
+  // the prompt and would reconfigure the editor on each keystroke.
+  const hasTools = !!props.nodeSchema.properties.tools;
+  const {tools, custom_actions, mcp_tools, collection_id, collection_index_ids} = props.nodeParams;
+  const toolCompletions: ToolCompletion[] = useMemo(
+    () => hasTools
+      ? getEnabledToolNames(
+        {name: "", tools, custom_actions, mcp_tools, collection_id, collection_index_ids},
+        getCachedData().parameterValues,
+      )
+      : [],
+    [hasTools, tools, custom_actions, mcp_tools, collection_id, collection_index_ids]
+  );
+  const isRouter = props.nodeSchema.title === "RouterNode";
+  const {keywords, default_keyword_index} = props.nodeParams;
+  const {routes, defaultRoute} = useMemo(() => {
+    if (!isRouter || !Array.isArray(keywords)) {
+      return {routes: [], defaultRoute: ""};
+    }
+    // The default is looked up by position before blank keywords (still being typed) are dropped.
+    const defaultRoute = String(keywords[Number(default_keyword_index ?? 0)] ?? "");
+    return {routes: keywords.filter(Boolean).map(String), defaultRoute};
+  }, [isRouter, keywords, default_keyword_index]);
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1317,19 +1417,27 @@ export function TextEditorWidget(props: WidgetParams) {
         label={props.label}
         inputError={props.inputError}
         autocomplete_vars_list={autocomplete_vars_list}
+        toolCompletions={toolCompletions}
+        nodeType={isRouter ? "router" : "llm"}
+        routes={routes}
+        defaultRoute={defaultRoute}
         readOnly={props.readOnly}
       />
     </>
   );
 }
 
-function TextEditorModal({
+export function TextEditorModal({
   modalId,
   value,
   onChange,
   label,
   inputError,
   autocomplete_vars_list,
+  toolCompletions,
+  nodeType,
+  routes,
+  defaultRoute,
   readOnly,
 }: {
   modalId: string;
@@ -1338,10 +1446,21 @@ function TextEditorModal({
   label: string;
   inputError?: string;
   autocomplete_vars_list: string[];
+  toolCompletions: ToolCompletion[];
+  nodeType: "llm" | "router";
+  routes: string[];
+  defaultRoute: string;
   readOnly: boolean;
 }) {
+  const [showImprove, setShowImprove] = useState(false);
+  const toolNames = useMemo(() => toolCompletions.map((tool) => tool.name), [toolCompletions]);
+
   return (
-    <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+    <dialog
+      id={modalId}
+      className="modal nopan nodelete nodrag noflow nowheel"
+      onClose={() => setShowImprove(false)}
+    >
       <div className="modal-box min-w-[85vw] h-[80vh] flex flex-col">
         <form method="dialog">
           <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">
@@ -1350,8 +1469,29 @@ function TextEditorModal({
         </form>
 
         <div className="grow h-full w-full flex flex-col">
-          <h4 className="mb-4 font-bold text-lg capitalize">{label}</h4>
-          <PromptEditor value={value} onChange={onChange} readOnly={readOnly} autocompleteVars={autocomplete_vars_list}/>
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold text-lg capitalize">{label}</h4>
+            {!readOnly && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowImprove(!showImprove)}>
+              <i className="fa-solid fa-wand-magic-sparkles"></i>Help
+            </button>}
+          </div>
+          {!readOnly && <ImprovePromptSection
+            show={showImprove}
+            currentPrompt={value}
+            nodeType={nodeType}
+            toolNames={toolNames}
+            routes={routes}
+            defaultRoute={defaultRoute}
+            autocompleteVars={autocomplete_vars_list}
+            onAccept={onChange}
+          />}
+          <PromptEditor
+            value={value}
+            onChange={onChange}
+            readOnly={readOnly}
+            autocompleteVars={autocomplete_vars_list}
+            toolCompletions={toolCompletions}
+          />
         </div>
 
         {inputError && <div className="text-red-500">{inputError}</div>}
