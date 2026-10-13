@@ -17,6 +17,7 @@ from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
@@ -41,6 +42,12 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
     return " | ".join([str(comment) for comment in user_comments])
+
+
+def _format_annotation_queues(items) -> str:
+    """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name."""
+    ordered = sorted(items, key=lambda item: item.queue.name)
+    return ", ".join(f"{item.queue.name} ({item.get_status_display()})" for item in ordered)
 
 
 def get_filtered_sessions(experiment, query_params, timezone):
@@ -101,6 +108,12 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         label="Session Tags",
         from_session=lambda s: _format_tags(s.chat.tags.all()),
         prefetch=("chat__tags",),
+    ),
+    ExportColumn(
+        key="annotation_queues",
+        label="Annotation Queues",
+        from_session=lambda s: neutralize_csv_formula(_format_annotation_queues(s.annotation_items.all())),
+        prefetch=("chat__experiment_session__annotation_items__queue",),
     ),
     ExportColumn(
         key="session_comments",

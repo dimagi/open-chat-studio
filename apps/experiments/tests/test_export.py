@@ -20,9 +20,11 @@ from apps.experiments.export import (
     resolve_export_columns,
 )
 from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationItemStatus
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -258,6 +260,7 @@ def test_trace_id_resolved_per_message_trace_info():
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
+        annotation_items=Mock(all=Mock(return_value=[])),
     )
     empty_trace = Mock(participant_data={}, participant_data_diff=[])
 
@@ -432,6 +435,7 @@ def test_session_cache_evicts_oldest_beyond_max_entries():
     for session in sessions:
         session.participant = Mock(name=f"p{session.id}", identifier=f"p{session.id}", public_id=f"pub{session.id}")
         session.chat = Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[])))
+        session.annotation_items = Mock(all=Mock(return_value=[]))
 
     first = cache.get(sessions[0])
     cache.get(sessions[1])
@@ -532,6 +536,7 @@ FULL_EXPORT_HEADER = [
     "Message Content",
     "Platform",
     "Session Tags",
+    "Annotation Queues",
     "Session Comments",
     "Session ID",
     "Session State",
@@ -613,8 +618,61 @@ def test_unselected_columns_are_not_computed():
             ["participant_data"], {"input_message_trace", "output_message_trace"}, id="participant_data_traces"
         ),
         pytest.param(["session_tags"], {"chat__tags"}, id="session_tags"),
+        pytest.param(
+            ["annotation_queues"], {"chat__experiment_session__annotation_items__queue"}, id="annotation_queues"
+        ),
     ],
 )
 def test_message_queryset_prefetches_only_selected_columns(columns, expected_prefetches):
     queryset = _build_message_queryset(ExperimentSession.objects.none(), columns=resolve_export_columns(columns))
     assert set(queryset._prefetch_related_lookups) == expected_prefetches
+
+
+def _session_with_one_message():
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+    return session
+
+
+def _export_value(session, label):
+    header, row = list(
+        generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
+    )
+    return dict(zip(header, row, strict=True))[label]
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_lists_each_queue_with_its_status():
+    """Queues are listed by name with the item's status in brackets."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Tone"), team=team, session=session
+    )
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Safety QA"),
+        team=team,
+        session=session,
+        status=AnnotationItemStatus.COMPLETED,
+    )
+
+    assert _export_value(session, "Annotation Queues") == "Safety QA (Completed), Tone (Pending)"
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_is_empty_for_a_session_in_no_queue():
+    session = _session_with_one_message()
+
+    assert _export_value(session, "Annotation Queues") == ""
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_neutralizes_formula_prefixes():
+    """A queue name starting with a formula character cannot execute when the CSV is opened."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="=HYPERLINK(1)"), team=team, session=session
+    )
+
+    assert _export_value(session, "Annotation Queues") == "'=HYPERLINK(1) (Pending)"
