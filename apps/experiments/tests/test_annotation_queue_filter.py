@@ -101,6 +101,7 @@ def test_annotation_queue_filter_does_not_match_another_teams_queue(queued):
 @pytest.mark.django_db()
 def test_annotation_queue_filter_options_start_with_none_then_queues_by_name(queued):
     """The picker shows 'Not in any queue' first, then this team's queues alphabetically."""
+    AnnotationQueueFactory.create(team=TeamFactory.create(), name="Elsewhere")
     options = AnnotationQueueFilter().prepare(queued.team).options
 
     assert options == [

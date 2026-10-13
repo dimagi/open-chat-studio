@@ -16,6 +16,7 @@ from apps.annotations.models import Tag, UserComment
 from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationItem
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.csv_export import neutralize_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -44,7 +45,7 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     return " | ".join([str(comment) for comment in user_comments])
 
 
-def _format_annotation_queues(items) -> str:
+def _format_annotation_queues(items: Iterable[AnnotationItem]) -> str:
     """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name ignoring case."""
     ordered = sorted(items, key=lambda item: item.queue.name.casefold())
     return ", ".join(f"{item.queue.name} ({item.get_status_display()})" for item in ordered)

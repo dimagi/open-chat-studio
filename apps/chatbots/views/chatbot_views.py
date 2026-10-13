@@ -685,20 +685,25 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         bounded to a single page, not the full filtered set.
         """
         table = super().get_table(**kwargs)
-        show_queues = self.show_annotation_queues and flag_is_active_for_team(
-            self.request.team, Flags.HUMAN_ANNOTATIONS.slug
-        )
-        if getattr(table, "page", None) is not None:
-            attach_chat_tagged_items(table.page.object_list)
-            if show_queues:
-                attach_session_annotation_items(table.page.object_list)
+        page_rows = table.page.object_list if getattr(table, "page", None) is not None else []
+        attach_chat_tagged_items(page_rows)
+        if self._show_annotation_queues():
+            attach_session_annotation_items(page_rows)
+        table.exclude = (*table.exclude, *self._hidden_columns())
+        return table
+
+    def _show_annotation_queues(self) -> bool:
+        """Whether this page shows queue membership: the view opts in and the team has the flag."""
+        return self.show_annotation_queues and flag_is_active_for_team(self.request.team, Flags.HUMAN_ANNOTATIONS.slug)
+
+    def _hidden_columns(self) -> tuple[str, ...]:
+        """Columns this request leaves out of the table."""
         hidden = []
         if self.kwargs.get("experiment_id"):
             hidden.append("chatbot")
-        if not show_queues:
+        if not self._show_annotation_queues():
             hidden.append("annotation_queues")
-        table.exclude = (*table.exclude, *hidden)
-        return table
+        return tuple(hidden)
 
 
 class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):

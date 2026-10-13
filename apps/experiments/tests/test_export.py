@@ -5,6 +5,8 @@ import weakref
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments import export as export_mod
@@ -679,3 +681,25 @@ def test_annotation_queues_column_neutralizes_formula_prefixes():
     )
 
     assert _export_value(session, "Annotation Queues") == "'=HYPERLINK(1) (Pending)"
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_does_not_query_per_session():
+    """Queue membership is prefetched, so more sessions do not mean more queries."""
+
+    def export_queries(session_count):
+        experiment = ExperimentFactory.create()
+        for _ in range(session_count):
+            session = ExperimentSessionFactory.create(
+                experiment=experiment, team=experiment.team, chat__team=experiment.team
+            )
+            ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+            AnnotationItemFactory.create(
+                queue=AnnotationQueueFactory.create(team=experiment.team), team=experiment.team, session=session
+            )
+        sessions = ExperimentSession.objects.filter(experiment=experiment)
+        with CaptureQueriesContext(connection) as queries:
+            list(generate_export_rows(experiment, sessions, columns=["annotation_queues"]))
+        return len(queries)
+
+    assert export_queries(1) == export_queries(3)
