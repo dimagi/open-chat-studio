@@ -215,9 +215,9 @@ DELETED_MODELS = [
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
     ("openai", "gpt-4", "gpt-5.6-sol"),
-    ("openai", "gpt-3.5-turbo", "gpt-5.6-luna"),
+    ("openai", "gpt-3.5-turbo", "gpt-5.6-terra"),
     ("openai", "gpt-4.1-nano", "gpt-5.6-luna"),
-    ("openai", "o3-mini", "gpt-5.6-terra"),
+    ("openai", "o3-mini", "gpt-5.6-sol"),
     ("openai", "o4-mini", "gpt-5.6-terra"),
     # o4-mini-high is a ChatGPT effort preset, not an API model: it is absent from OpenAI's
     # catalogue and from its deprecation table, so requests with it already 404. References move
