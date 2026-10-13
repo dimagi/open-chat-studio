@@ -246,6 +246,18 @@ class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         return render_table_row(request, EvaluatorTable, row)
 
 
+class CopyEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "evaluations.add_evaluator"
+
+    def post(self, request, team_slug: str, pk: int):
+        """Duplicate the evaluator and send the client to the copy's edit page."""
+        source = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        duplicate = source.copy()
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = reverse("evaluations:evaluator_edit", args=[team_slug, duplicate.id])
+        return response
+
+
 def _submitted_output_schema(form, instance) -> dict:
     """Best-effort output_schema from submitted params, falling back to the stored schema."""
     schema = _output_schema_from_form_params(form)
