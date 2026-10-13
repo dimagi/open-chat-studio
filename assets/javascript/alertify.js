@@ -37,3 +37,21 @@ window.confirmThenTrigger = function (elementId, message) {
     }
   });
 };
+
+// Confirm before a plain form POST: `onsubmit="confirmThenSubmit(event, '...')"`.
+// Resubmits with the original submit button so its name and value are still posted.
+window.confirmThenSubmit = function (event, message) {
+  const form = event.target;
+  if (form.dataset.confirmed) {
+    delete form.dataset.confirmed;
+    return;
+  }
+  event.preventDefault();
+  const submitter = event.submitter;
+  window.confirmDialog(message).then((confirmed) => {
+    if (confirmed) {
+      form.dataset.confirmed = 'true';
+      form.requestSubmit(submitter);
+    }
+  });
+};

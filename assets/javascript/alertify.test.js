@@ -75,6 +75,48 @@ describe("confirmDialog", () => {
     });
 });
 
+describe("confirmThenSubmit", () => {
+    let form;
+    let submissions;
+
+    beforeEach(() => {
+        document.body.innerHTML = `
+            <form>
+                <button type="submit" name="action_keep">Keep</button>
+                <button type="submit" name="action_remove">Remove</button>
+            </form>`;
+        form = document.querySelector("form");
+        form.addEventListener("submit", (event) => window.confirmThenSubmit(event, "Remove?"));
+        submissions = [];
+        form.addEventListener("submit", (event) => {
+            submissions.push({prevented: event.defaultPrevented, submitter: event.submitter?.name});
+            event.preventDefault();
+        });
+    });
+
+    it("holds the submission until the user confirms", () => {
+        form.querySelector("[name=action_remove]").click();
+
+        expect(submissions).toEqual([{prevented: true, submitter: "action_remove"}]);
+    });
+
+    it("submits with the original submit button once confirmed", async () => {
+        form.querySelector("[name=action_remove]").click();
+        dialogSettings.onok();
+        await Promise.resolve();
+
+        expect(submissions.at(-1)).toEqual({prevented: false, submitter: "action_remove"});
+    });
+
+    it("does not submit when the user cancels", async () => {
+        form.querySelector("[name=action_remove]").click();
+        dialogSettings.oncancel();
+        await Promise.resolve();
+
+        expect(submissions).toHaveLength(1);
+    });
+});
+
 describe("confirmThenTrigger", () => {
     beforeEach(() => {
         document.body.innerHTML = `<button id="archive-button">Archive</button>`;
