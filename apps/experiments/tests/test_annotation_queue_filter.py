@@ -25,6 +25,7 @@ def _filter_sessions(team, value, operator):
 
 
 def _session(team):
+    """A session whose chat and experiment belong to the given team."""
     return ExperimentSessionFactory.create(team=team, chat__team=team, experiment__team=team)
 
 
@@ -51,6 +52,7 @@ def queued(db):
         pytest.param(Operators.ANY_OF, "SAFETY", {"in_safety"}, id="any-of-queue"),
         pytest.param(Operators.EXCLUDES, "SAFETY", {"in_tone", "in_none"}, id="excludes-queue"),
         pytest.param(Operators.ANY_OF, "SAFETY~TONE", {"in_safety", "in_tone"}, id="any-of-two-queues"),
+        pytest.param(Operators.ALL_OF, "SAFETY~TONE", set(), id="all-of-two-queues-no-session-in-both"),
     ],
 )
 def test_annotation_queue_filter_semantics(queued, operator, value, expected):
@@ -128,3 +130,13 @@ def test_annotation_queue_filter_still_applies_when_flag_is_off(queued):
         result = _filter_sessions(queued.team, "none", Operators.ANY_OF)
 
     assert set(result.values_list("id", flat=True)) == {queued.in_none.id}
+
+
+@pytest.mark.django_db()
+def test_annotation_queue_filter_excludes_a_session_that_is_also_in_another_queue(queued):
+    """Excluding one queue drops a session in that queue even when it is in others too."""
+    AnnotationItemFactory.create(queue=queued.tone, team=queued.team, session=queued.in_safety)
+
+    result = _filter_sessions(queued.team, str(queued.safety.id), Operators.EXCLUDES)
+
+    assert set(result.values_list("id", flat=True)) == {queued.in_tone.id, queued.in_none.id}

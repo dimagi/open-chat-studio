@@ -223,6 +223,7 @@ class ChatbotSessionsTable(tables.Table):
         return template.render({"object": record.chat})
 
     def render_annotation_queues(self, record, bound_column):
+        """Render the queue badges without a request context, which would cost a query per cell."""
         template = get_template(bound_column.column.template_name)
         return template.render({"record": record})
 

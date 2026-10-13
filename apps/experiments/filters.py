@@ -9,7 +9,7 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
 from apps.teams.flags import Flags
-from apps.teams.models import Flag
+from apps.teams.utils import flag_is_active_for_team
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     TYPE_CHOICE,
@@ -301,7 +301,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
     def columns(cls, team, **kwargs) -> dict[str, dict]:
         """Offer the annotation queue filter only to teams with human annotations turned on."""
         columns = super().columns(team, **kwargs)
-        if not Flag.get(Flags.HUMAN_ANNOTATIONS.slug).is_active_for_team(team):
+        if not flag_is_active_for_team(team, Flags.HUMAN_ANNOTATIONS.slug):
             columns.pop(AnnotationQueueFilter().query_param, None)
         return columns
 

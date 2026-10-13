@@ -45,8 +45,8 @@ def _format_comments(user_comments: list[UserComment]) -> str:
 
 
 def _format_annotation_queues(items) -> str:
-    """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name."""
-    ordered = sorted(items, key=lambda item: item.queue.name)
+    """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name ignoring case."""
+    ordered = sorted(items, key=lambda item: item.queue.name.casefold())
     return ", ".join(f"{item.queue.name} ({item.get_status_display()})" for item in ordered)
 
 

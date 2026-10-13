@@ -685,7 +685,9 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         bounded to a single page, not the full filtered set.
         """
         table = super().get_table(**kwargs)
-        show_queues = self.show_annotation_queues and flag_is_active(self.request, Flags.HUMAN_ANNOTATIONS.slug)
+        show_queues = self.show_annotation_queues and flag_is_active_for_team(
+            self.request.team, Flags.HUMAN_ANNOTATIONS.slug
+        )
         if getattr(table, "page", None) is not None:
             attach_chat_tagged_items(table.page.object_list)
             if show_queues:

@@ -61,6 +61,8 @@ NOT_IN_ANY_QUEUE = "none"
 
 
 class AnnotationQueueFilter(ChoiceColumnFilter):
+    """Session filter on annotation queue membership, with a fixed 'Not in any queue' option."""
+
     query_param: str = "annotation_queue"
     column: str = "annotation_queue"
     label: str = "Annotation Queue"
@@ -71,12 +73,14 @@ class AnnotationQueueFilter(ChoiceColumnFilter):
     )
 
     def prepare(self, team, **_) -> "AnnotationQueueFilter":
+        """Offer 'Not in any queue' first, then this team's queues by name."""
         queues = AnnotationQueue.objects.filter(team=team).values("id", "name").order_by("name")
         options: list[str | dict] = [{"id": NOT_IN_ANY_QUEUE, "label": "Not in any queue"}]
         options.extend({"id": queue["id"], "label": queue["name"]} for queue in queues)
         return self.model_copy(update={"options": options})
 
     def parse_query_value(self, value) -> list[int | str]:  # ty: ignore[invalid-method-override]
+        """Keep queue ids as ints and the 'none' sentinel; drop anything else."""
         values: list[int | str] = []
         for v in self.values_list(value):
             if v == NOT_IN_ANY_QUEUE:
@@ -99,9 +103,17 @@ class AnnotationQueueFilter(ChoiceColumnFilter):
         return clause
 
     def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        """Sessions matching at least one ticked option."""
         return queryset.filter(self._membership_clause(value))
 
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        """Each ticked option must hold, so chain one membership clause per option."""
+        for single in value:
+            queryset = queryset.filter(self._membership_clause([single]))
+        return queryset
+
     def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        """Sessions matching none of the ticked options."""
         return queryset.exclude(self._membership_clause(value))
 
 

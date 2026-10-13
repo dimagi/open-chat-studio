@@ -15,21 +15,25 @@ COLUMN_HEADER = "Annotation Queues"
 
 @pytest.fixture()
 def logged_in_team(client, team_with_users):
+    """The team whose admin the test client is logged in as."""
     client.force_login(team_with_users.members.first())
     return team_with_users
 
 
 def _session(team):
+    """A session whose chat, experiment and participant belong to the given team."""
     return ExperimentSessionFactory.create(team=team, chat__team=team, experiment__team=team, participant__team=team)
 
 
 def _all_sessions(client, team):
+    """The rendered all-sessions table for the team."""
     return client.get(reverse("chatbots:all_sessions_list", args=[team.slug])).content.decode()
 
 
+@pytest.mark.parametrize("scope", [pytest.param("all", id="all-sessions"), pytest.param("chatbot", id="per-chatbot")])
 @pytest.mark.django_db()
-def test_sessions_table_shows_a_badge_per_queue_with_the_item_status(client, logged_in_team):
-    """Each queue the session is in appears as 'Queue · Status'."""
+def test_sessions_table_shows_a_badge_per_queue_with_the_item_status(client, logged_in_team, scope):
+    """Each queue the session is in appears as 'Queue · Status', on both sessions tables."""
     team = logged_in_team
     session = _session(team)
     AnnotationItemFactory.create(
@@ -41,8 +45,12 @@ def test_sessions_table_shows_a_badge_per_queue_with_the_item_status(client, log
     tone_queue = AnnotationQueueFactory.create(team=team, name="Tone")
     AnnotationItemFactory.create(queue=tone_queue, team=team, session=session)
 
+    if scope == "all":
+        url = reverse("chatbots:all_sessions_list", args=[team.slug])
+    else:
+        url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": session.experiment_id})
     with override_flag("flag_human_annotations", active=True):
-        html = _all_sessions(client, team)
+        html = client.get(url).content.decode()
 
     assert COLUMN_HEADER in html
     assert "Safety QA · Completed" in html

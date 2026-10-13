@@ -629,12 +629,14 @@ def test_message_queryset_prefetches_only_selected_columns(columns, expected_pre
 
 
 def _session_with_one_message():
+    """A session with a single human message, so the export yields one row."""
     session = ExperimentSessionFactory.create()
     ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
     return session
 
 
 def _export_value(session, label):
+    """The exported cell under `label` for the session's single row."""
     header, row = list(
         generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
     )
@@ -661,6 +663,7 @@ def test_annotation_queues_column_lists_each_queue_with_its_status():
 
 @pytest.mark.django_db()
 def test_annotation_queues_column_is_empty_for_a_session_in_no_queue():
+    """A session in no queue exports an empty cell, not a placeholder."""
     session = _session_with_one_message()
 
     assert _export_value(session, "Annotation Queues") == ""
