@@ -474,10 +474,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         all_are_remote = all(is_remote_flags)
         if not all_are_remote and any(is_remote_flags):
             remote_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if collection.is_remote_index
             ]
             local_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if not collection.is_remote_index
             ]
             raise PydanticCustomError(
                 "mixed_collection_types",
