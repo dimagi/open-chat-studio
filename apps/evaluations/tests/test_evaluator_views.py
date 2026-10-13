@@ -457,3 +457,17 @@ def test_config_table_flags_archived_members(team_with_users):
 
     assert "Retired scorer" in html
     assert "Archived" in html
+
+
+@pytest.mark.parametrize("archived", [pytest.param(False, id="active"), pytest.param(True, id="archived")])
+@pytest.mark.django_db()
+def test_every_evaluator_row_offers_a_copy_action(client, team_with_users, archived):
+    """Copying is offered for active and archived evaluators alike."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    if archived:
+        evaluator.archive()
+
+    client.force_login(team_with_users.members.first())
+    html = client.get(reverse("evaluations:evaluator_table", args=[team_with_users.slug])).content.decode()
+
+    assert reverse("evaluations:evaluator_copy", args=[team_with_users.slug, evaluator.id]) in html
