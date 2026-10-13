@@ -4,13 +4,11 @@ import json
 from unittest.mock import patch
 
 import pytest
-from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 from django.test import Client
 from django.urls import reverse
 
 from apps.evaluations import evaluators
-from apps.evaluations.models import ConditionType, EvaluationRunStatus, Evaluator
+from apps.evaluations.models import ConditionType, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
@@ -24,8 +22,7 @@ from apps.utils.factories.evaluations import (
     EvaluatorTagRuleFactory,
 )
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
-from apps.utils.factories.user import GroupFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
@@ -476,16 +473,17 @@ def test_every_evaluator_row_offers_a_copy_action(client, team_with_users, archi
     assert reverse("evaluations:evaluator_copy", args=[team_with_users.slug, evaluator.id]) in html
 
 
+@pytest.mark.parametrize(
+    "codenames",
+    [
+        pytest.param(("view_evaluator",), id="view-only"),
+        pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
+    ],
+)
 @pytest.mark.django_db()
-def test_copy_action_is_hidden_without_add_permission(client, team_with_users):
+def test_copy_action_is_hidden_without_add_and_change_permissions(client, team_with_users, evaluator_member, codenames):
     """A user who could not complete the copy is not offered the button."""
-    view_perm = Permission.objects.get(
-        content_type=ContentType.objects.get_for_model(Evaluator),
-        codename="view_evaluator",
-    )
-    limited_group = GroupFactory.create(name="evaluations-view-only")
-    limited_group.permissions.add(view_perm)
-    membership = MembershipFactory.create(team=team_with_users, groups=[limited_group])
+    membership = evaluator_member(*codenames)
     evaluator = EvaluatorFactory.create(team=team_with_users)
 
     client.force_login(membership.user)

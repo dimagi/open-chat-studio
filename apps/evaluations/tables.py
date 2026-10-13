@@ -222,7 +222,7 @@ class EvaluatorTable(tables.Table):
                 title="Copy",
                 icon_class="fa-solid fa-copy",
                 hx_method="post",
-                required_permissions=["evaluations.add_evaluator"],
+                required_permissions=["evaluations.add_evaluator", "evaluations.change_evaluator"],
             ),
             actions.AjaxAction(
                 "evaluations:evaluator_delete",

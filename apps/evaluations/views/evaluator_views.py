@@ -247,7 +247,7 @@ class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
 
 
 class CopyEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = "evaluations.add_evaluator"
+    permission_required = ("evaluations.add_evaluator", "evaluations.change_evaluator")
 
     def post(self, request, team_slug: str, pk: int):
         """Duplicate the evaluator and send the client to the copy's edit page."""

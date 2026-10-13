@@ -1,5 +1,7 @@
 """Tests for Evaluator.copy(): a new active evaluator with the source's configuration and tag rules."""
 
+from unittest.mock import patch
+
 import pytest
 
 from apps.evaluations.models import ConditionType, EvaluationRunStatus, Evaluator, EvaluatorTagRule
@@ -33,7 +35,7 @@ def test_copy_carries_the_configuration_and_provider_fks(team_with_users):
 def test_copy_clones_the_tag_rules_onto_the_duplicate(team_with_users):
     source = EvaluatorFactory.create(team=team_with_users)
     tag = EvaluationTagFactory.create(team=team_with_users, name="needs-review")
-    rule = EvaluatorTagRuleFactory.create(
+    EvaluatorTagRuleFactory.create(
         team=team_with_users,
         evaluator=source,
         tag=tag,
@@ -41,17 +43,27 @@ def test_copy_clones_the_tag_rules_onto_the_duplicate(team_with_users):
         condition_type=ConditionType.EQUALS,
         condition_value={"value": "negative"},
     )
+    EvaluatorTagRuleFactory.create(
+        team=team_with_users,
+        evaluator=source,
+        tag=tag,
+        field_name="score",
+        condition_type=ConditionType.RANGE,
+        condition_value={"min": 1, "max": 3},
+    )
 
     duplicate = source.copy()
 
-    cloned = EvaluatorTagRule.objects.get(evaluator=duplicate)
-    assert cloned.pk != rule.pk
-    assert cloned.team == team_with_users
-    assert cloned.tag == tag
-    assert cloned.field_name == "sentiment"
-    assert cloned.condition_type == ConditionType.EQUALS
-    assert cloned.condition_value == {"value": "negative"}
-    assert EvaluatorTagRule.objects.filter(evaluator=source).count() == 1
+    cloned = list(
+        duplicate.tag_rules.order_by("field_name").values_list(
+            "team_id", "tag_id", "field_name", "condition_type", "condition_value"
+        )
+    )
+    assert cloned == [
+        (team_with_users.id, tag.id, "score", ConditionType.RANGE, {"min": 1, "max": 3}),
+        (team_with_users.id, tag.id, "sentiment", ConditionType.EQUALS, {"value": "negative"}),
+    ]
+    assert EvaluatorTagRule.objects.filter(evaluator=source).count() == 2
 
 
 @pytest.mark.django_db()
@@ -102,3 +114,15 @@ def test_copy_truncates_a_long_name_so_the_suffix_still_fits(team_with_users):
     assert len(duplicate.name) == 255
     assert duplicate.name.endswith(" (copy)")
     assert Evaluator.objects.filter(pk=duplicate.pk).exists()
+
+
+@pytest.mark.django_db()
+def test_copy_leaves_nothing_behind_when_cloning_the_rules_fails(team_with_users):
+    source = EvaluatorFactory.create(team=team_with_users)
+    EvaluatorTagRuleFactory.create(team=team_with_users, evaluator=source)
+
+    with patch.object(EvaluatorTagRule.objects, "bulk_create", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError):
+            source.copy()
+
+    assert Evaluator.objects.count() == 1

@@ -1,14 +1,11 @@
 """Tests for the evaluator Copy action: POST duplicates the evaluator and redirects to the copy's edit page."""
 
 import pytest
-from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
 from apps.evaluations.models import Evaluator
 from apps.utils.factories.evaluations import EvaluatorFactory
-from apps.utils.factories.team import MembershipFactory, TeamFactory
-from apps.utils.factories.user import GroupFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.mark.django_db()
@@ -37,15 +34,17 @@ def test_copy_of_another_teams_evaluator_is_not_found(client, team_with_users):
     assert Evaluator.objects.count() == 1
 
 
+@pytest.mark.parametrize(
+    "codenames",
+    [
+        pytest.param(("view_evaluator",), id="view-only"),
+        pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
+    ],
+)
 @pytest.mark.django_db()
-def test_copy_without_add_permission_is_forbidden(client, team_with_users):
-    view_perm = Permission.objects.get(
-        content_type=ContentType.objects.get_for_model(Evaluator),
-        codename="view_evaluator",
-    )
-    limited_group = GroupFactory.create(name="evaluations-view-only")
-    limited_group.permissions.add(view_perm)
-    membership = MembershipFactory.create(team=team_with_users, groups=[limited_group])
+def test_copy_without_add_and_change_permissions_is_forbidden(client, team_with_users, evaluator_member, codenames):
+    """A user who could not open the copy afterwards is not allowed to create it."""
+    membership = evaluator_member(*codenames)
     source = EvaluatorFactory.create(team=team_with_users)
 
     client.force_login(membership.user)
