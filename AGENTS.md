@@ -78,6 +78,7 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 * Build any user-triggered export whose size grows with team data as an async Celery task that saves a `FilePurpose.DATA_EXPORT` `File` and returns its id for a polled download link. Follow `docs/agents/data_exports.md`
+* Use the shared UI components in `docs/agents/ui_components.md`. For example, confirm actions with `confirmThenTrigger`, never the browser's `confirm()` or `hx-confirm`
 * A `DeprecationWarning` reported against `apps.*` fails the test that raises it (`filterwarnings` in `pyproject.toml`). Fix the call site. Add an `ignore` line only when the deprecated thing is inside a dependency and we cannot move off it, scoped to the message so the same library raising something new still surfaces
 
 ## Ask first
@@ -106,6 +107,7 @@ Consult these guides when working in the relevant area:
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
 * `docs/agents/pipeline_node_types.md` — when writing code that branches on a pipeline node's type
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
+* `docs/agents/ui_components.md` — when adding UI to templates (confirmation dialogs, notifications)
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests
