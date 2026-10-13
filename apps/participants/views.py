@@ -623,7 +623,10 @@ def block(request, team_slug: str, participant_id: int):
         messages.error(request, "Team members cannot be blocked")
         return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
     form = BlockParticipantForm(request.POST)
-    reason = form.cleaned_data["reason"] if form.is_valid() else ""
+    if not form.is_valid():
+        messages.error(request, "Invalid block reason")
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+    reason = form.cleaned_data["reason"]
     _denial, created = block_participant(
         participant=participant,
         source=DeniedParticipantSource.MANUAL,

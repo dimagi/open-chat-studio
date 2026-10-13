@@ -70,6 +70,17 @@ class TestBlockParticipant:
 
         assert DeniedParticipant.objects.get(participant=participant).reason == ""
 
+    def test_invalid_reason_does_not_block(self, client, team_with_users, team_flag, admin, participant):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        client.force_login(admin)
+
+        response = client.post(_block_url(team=team_with_users, participant=participant), {"reason": "spam\x00"})
+
+        assert response.url == _page_url(team=team_with_users, participant=participant)
+        assert not DeniedParticipant.objects.filter(participant=participant).exists()
+        [message] = get_messages(response.wsgi_request)
+        assert message.level_tag == "error"
+
     def test_already_blocked_keeps_the_existing_denial(self, client, team_with_users, team_flag, admin, participant):
         team_flag(flag_name=FLAG, team=team_with_users)
         existing = DeniedParticipantFactory.create(
