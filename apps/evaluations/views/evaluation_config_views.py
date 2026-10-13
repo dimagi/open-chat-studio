@@ -97,7 +97,12 @@ class EvaluationTableView(PermissionRequiredMixin, SingleTableView):  # ty: igno
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
+        return (
+            EvaluationConfig.objects.filter(team=self.request.team)
+            .order_by("-created_at")
+            .prefetch_related("evaluators")
+            .select_related("dataset")
+        )
 
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):

@@ -12,6 +12,7 @@ from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
 from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
+from apps.pipelines.repository import prefetch_llm_provider_models
 from apps.service_providers.llm_service.retry import get_retry_policy
 
 
@@ -241,16 +242,21 @@ class PipelineGraph(pydantic.BaseModel):
         # build_errors is the single source of truth for what's wrong with the graph; the runtime
         # still fails fast, on the first problem in dependency order. Cached, so a caller that has
         # already read it (Pipeline.validate) doesn't pay for it twice.
-        if errors := self.build_errors:
-            raise errors[0]
+        #
+        # Pre-fetch all LlmProviderModel rows needed by nodes in a single bulk query so that the
+        # Pydantic validators in LLMResponseMixin don't issue one query per node (N+1).
+        llm_model_ids = [model_id for node in self.nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        with prefetch_llm_provider_models(llm_model_ids):
+            if errors := self.build_errors:
+                raise errors[0]
 
-        state_graph = StateGraph(PipelineState)
+            state_graph = StateGraph(PipelineState)
 
-        state_graph.set_entry_point(self.start_node.id)
-        state_graph.set_finish_point(self.end_node.id)
+            state_graph.set_entry_point(self.start_node.id)
+            state_graph.set_finish_point(self.end_node.id)
 
-        self._add_nodes_to_graph(state_graph, self.reachable_nodes)
-        self._add_edges_to_graph(state_graph, self.reachable_nodes)
+            self._add_nodes_to_graph(state_graph, self.reachable_nodes)
+            self._add_edges_to_graph(state_graph, self.reachable_nodes)
 
         try:
             compiled_graph = state_graph.compile()
