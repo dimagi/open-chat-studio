@@ -1,11 +1,11 @@
-"""The source material and consent form endpoints (#4145): behaviour both resources share."""
+"""The source material and consent form endpoints (#4145)."""
 
 import pytest
 
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
-from .conftest import RESOURCES
+from .conftest import CONSENT_FORM, RESOURCES
 
 
 @pytest.mark.django_db()
@@ -153,3 +153,24 @@ class TestReadOnlyKey:
         row.refresh_from_db()
         assert getattr(row, resource.patch_field) != "No"
         assert row.is_archived is False
+
+
+PUBLIC_CHAT_FIELDS = {"capture_identifier": False, "identifier_label": "Name", "identifier_type": "text"}
+
+
+@pytest.mark.django_db()
+def test_consent_form_omits_public_chat_fields(client, team):
+    row = CONSENT_FORM.factory.create(team=team)
+
+    body = client.get(CONSENT_FORM.detail_url(row.id)).json()
+
+    assert not set(PUBLIC_CHAT_FIELDS) & set(body)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("field", "value"), PUBLIC_CHAT_FIELDS.items())
+def test_consent_form_rejects_public_chat_fields(client, field, value):
+    response = client.post(CONSENT_FORM.list_url, {**CONSENT_FORM.create_body, field: value}, format="json")
+
+    assert response.status_code == 400
+    assert field in response.json()
