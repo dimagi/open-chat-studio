@@ -2434,8 +2434,8 @@ components:
       - name
     ConsentFormResource:
       type: object
-      description: The fields the web app's consent form editor edits, plus the id
-        a chatbot references it by.
+      description: The consent form fields that channels show, plus the id a chatbot
+        references it by.
       properties:
         id:
           type: integer
@@ -2446,13 +2446,6 @@ components:
         consent_text:
           type: string
           description: Custom markdown text
-        capture_identifier:
-          type: boolean
-        identifier_label:
-          type: string
-          maxLength: 200
-        identifier_type:
-          $ref: '#/components/schemas/IdentifierTypeEnum'
         confirmation_text:
           type: string
           description: Use this text to tell the user to respond with '1' in order
@@ -3717,8 +3710,8 @@ components:
       additionalProperties: false
     PatchedConsentFormResource:
       type: object
-      description: The fields the web app's consent form editor edits, plus the id
-        a chatbot references it by.
+      description: The consent form fields that channels show, plus the id a chatbot
+        references it by.
       properties:
         id:
           type: integer
@@ -3729,13 +3722,6 @@ components:
         consent_text:
           type: string
           description: Custom markdown text
-        capture_identifier:
-          type: boolean
-        identifier_label:
-          type: string
-          maxLength: 200
-        identifier_type:
-          $ref: '#/components/schemas/IdentifierTypeEnum'
         confirmation_text:
           type: string
           description: Use this text to tell the user to respond with '1' in order

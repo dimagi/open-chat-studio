@@ -22,20 +22,13 @@ class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSeri
 
 
 class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
-    """The fields the web app's consent form editor edits, plus the id a chatbot references it by."""
+    """The consent form fields that channels show, plus the id a chatbot references it by."""
 
     class Meta:
         model = ConsentForm
-        fields = [
-            "id",
-            "name",
-            "consent_text",
-            "capture_identifier",
-            "identifier_label",
-            "identifier_type",
-            "confirmation_text",
-            "is_default",
-        ]
+        # The participant identifier fields are left out: only the public web chat reads them, and it is
+        # being removed (#4209).
+        fields = ["id", "name", "consent_text", "confirmation_text", "is_default"]
         extra_kwargs = {
             "is_default": {
                 "help_text": (
