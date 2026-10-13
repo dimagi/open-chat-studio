@@ -82,16 +82,14 @@
           {% if block_form %}
             {% if denial %}
               {% translate "Unblock this participant? They will be able to use your chatbots again." as unblock_confirm %}
-              <form method="post"
-                    action="{% url 'participants:unblock_participant' request.team.slug participant.id %}"
-                    onsubmit="return confirm('{{ unblock_confirm|escapejs }}')">
-                {% csrf_token %}
-                <button type="submit"
-                        class="btn btn-sm tooltip tooltip-left"
-                        data-tip="{% translate "Let this participant use this team's chatbots again" %}">
-                  {% translate "Unblock" %}
-                </button>
-              </form>
+              <button id="unblock-participant-button"
+                      class="btn btn-sm tooltip tooltip-left"
+                      data-tip="{% translate "Let this participant use this team's chatbots again" %}"
+                      hx-post="{% url 'participants:unblock_participant' request.team.slug participant.id %}"
+                      hx-trigger="confirmed"
+                      onclick="confirmThenTrigger('unblock-participant-button', '{{ unblock_confirm|escapejs }}')">
+                {% translate "Unblock" %}
+              </button>
             {% elif can_block %}
               <button class="btn btn-sm btn-error btn-outline tooltip tooltip-left"
                       data-tip="{% translate "Stop this participant from getting replies from this team's chatbots" %}"

@@ -13,6 +13,7 @@ from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
+from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
 
 from apps.api.tasks import trigger_bot_message_task
@@ -651,7 +652,8 @@ def unblock(request, team_slug: str, participant_id: int):
         messages.success(request, format_html("{} is unblocked", participant))
     else:
         messages.info(request, format_html("{} was not blocked", participant))
-    return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+    url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
+    return HttpResponseClientRedirect(url)
 
 
 def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):

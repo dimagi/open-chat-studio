@@ -172,8 +172,7 @@ class TestUnblockParticipant:
 
         response = client.post(_unblock_url(team=team_with_users, participant=participant))
 
-        assert response.status_code == 302
-        assert response.url == _page_url(team=team_with_users, participant=participant)
+        assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
         assert not DeniedParticipant.objects.filter(participant=participant).exists()
 
     def test_not_blocked_redirects_back(self, client, team_with_users, team_flag, admin, participant):
@@ -182,7 +181,7 @@ class TestUnblockParticipant:
 
         response = client.post(_unblock_url(team=team_with_users, participant=participant))
 
-        assert response.status_code == 302
+        assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
 
     @override_flag(FLAG, active=False)
     def test_not_found_with_flag_off(self, client, team_with_users, admin, participant):
