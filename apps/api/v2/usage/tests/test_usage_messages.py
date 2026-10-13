@@ -7,8 +7,8 @@ import time_machine
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
-from apps.api.v2.usage.param_serializers import UsageQuerySerializer
-from apps.api.v2.usage.services import PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH, _month_bounds
+from apps.api.v2.usage.param_serializers import UsageQuerySerializer, _month_bounds
+from apps.api.v2.usage.services import PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
