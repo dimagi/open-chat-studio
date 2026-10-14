@@ -316,6 +316,8 @@ prod = [
 default-groups = ["dev", "docs"]
 # Keep this up to date with the version in Dockerfile and Dockerfile.dev
 required-version = ">0.11.0"
+# treepeat declares pipdeptree as a dependency but never imports it
+override-dependencies = ["pipdeptree; sys_platform == 'never'"]
 
 [tool.djlint]
 profile="django"
