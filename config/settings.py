@@ -743,6 +743,9 @@ GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'
 SENTRY_DSN = env("SENTRY_DSN", default="")
+# Key of the Sentry browser Loader Script (the hex part of https://js.sentry-cdn.com/<key>.min.js).
+# Leave empty to disable browser-side Sentry.
+SENTRY_BROWSER_LOADER_KEY = env("SENTRY_BROWSER_LOADER_KEY", default="")
 
 if SENTRY_DSN:
     import sentry_sdk

@@ -979,6 +979,15 @@
       "effort_levels": []
     }
   },
+  "google_vertex_ai/gemini-4-argon-cyber-permissive": {
+    "first_seen": "2026-10-14",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity variant of gemini-4-argon, not a general chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": []
+    }
+  },
   "google_vertex_ai/gemini-omni-1.1-flash": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1012,6 +1021,14 @@
     "first_seen": "2026-09-17",
     "verdict": "rejected",
     "reason": "Robotics embodied-reasoning model, not a chat model."
+  },
+  "google_vertex_ai/gemini-robotics-er-2-preview": {
+    "first_seen": "2026-10-14",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning preview, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
   },
   "google_vertex_ai/gemma-4-26b-a4b-it": {
     "first_seen": "2026-09-17",

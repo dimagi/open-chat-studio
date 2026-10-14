@@ -6,7 +6,7 @@ from apps.service_providers.migration_utils import llm_model_migration
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0091_delete_openai_october_2026_models"),
+        ("service_providers", "0092_auto_model_sync_20261014"),
         ("teams", "0013_team_files_export_team_files_export_task_id"),
         ("evaluations", "0018_evaluator_llm_provider_fks"),
     ]

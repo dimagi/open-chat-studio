@@ -191,6 +191,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 | Variable | Description |
 |----------|-------------|
 | `SENTRY_DSN` | Sentry DSN for error tracking. |
+| `SENTRY_BROWSER_LOADER_KEY` | Key of a Sentry browser Loader Script (the hex part of `https://js.sentry-cdn.com/<key>.min.js`). Browser-side Sentry is disabled when empty. |
 | `SENTRY_ENVIRONMENT` | Sentry environment tag, e.g. `production`. |
 | `SENTRY_TRACES_SAMPLE_RATE` | Fraction (0.0-1.0) of requests and Celery tasks sent to Sentry as performance traces. Defaults to `0` (no tracing). Health checks, static files and the high-frequency polling tasks are never traced. |
 | `ENABLE_JSON_LOGGING` | Set to `True` for structured JSON log output (recommended for log aggregation). |

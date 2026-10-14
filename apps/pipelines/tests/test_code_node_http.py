@@ -51,7 +51,7 @@ def main(input, **kwargs):
 
 @pytest.mark.django_db()
 class TestCodeNodeHttpRequests:
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_get_request(self, mock_validate, httpx_mock):
         code = """
 def main(input, **kwargs):
@@ -62,7 +62,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "hello"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_post_request_with_json(self, mock_validate, httpx_mock):
         code = """
 def main(input, **kwargs):
@@ -73,7 +73,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "201"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_error_handling_in_code(self, mock_validate, httpx_mock):
         """User code can check is_error and handle HTTP errors."""
         code = """
@@ -90,7 +90,7 @@ def main(input, **kwargs):
 
 @pytest.mark.django_db()
 class TestCodeNodeHttpWithAuth:
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_auth_provider_integration(self, mock_validate, httpx_mock):
         """End-to-end test: CodeNode uses auth provider for authenticated request."""
         team = TeamFactory.create()
@@ -116,7 +116,7 @@ def main(input, **kwargs):
         assert request.headers.get("x-api-key") == "secret123"
 
     @patch("apps.service_providers.auth_service.oauth.validate_user_input_url")
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_oauth_client_credentials_auth_provider(self, mock_validate, mock_token_validate, httpx_mock):
         """End-to-end: an OAuth provider fetches a token then sends it as a bearer header."""
         team = TeamFactory.create()
@@ -151,7 +151,7 @@ def main(input, **kwargs):
         api_request = httpx_mock.get_request(url="https://api.example.com/data")
         assert api_request.headers.get("authorization") == "Bearer tok-xyz"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_auth_provider_not_found_error(self, mock_validate):
         """AuthProvider not found surfaces as a CodeNodeRunError."""
         team = TeamFactory.create()
@@ -169,7 +169,7 @@ def main(input, **kwargs):
 
 @pytest.mark.django_db()
 class TestCodeNodeHttpLimits:
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_request_limit_error_in_code_node(self, mock_validate, httpx_mock, settings):
         """Request limit exceeded surfaces as CodeNodeRunError."""
         settings.RESTRICTED_HTTP_MAX_REQUESTS = 2
@@ -191,7 +191,7 @@ class TestCodeNodeHttpErrorHandling:
     """Tests that exception classes exposed on the http client can be caught
     inside the restricted Python sandbox using try/except blocks."""
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_timeout_error(self, mock_validate, httpx_mock):
         """Sandbox code can catch http.TimeoutError."""
         code = """
@@ -206,7 +206,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught timeout"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_connection_error(self, mock_validate, httpx_mock):
         """Sandbox code can catch http.ConnectionError."""
         code = """
@@ -222,7 +222,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught connection error"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_response_too_large(self, mock_validate, httpx_mock, settings):
         """Sandbox code can catch http.ResponseTooLarge."""
         settings.RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 10
@@ -238,7 +238,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "response too large"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_request_limit_exceeded(self, mock_validate, httpx_mock, settings):
         """Sandbox code can catch http.RequestLimitExceeded."""
         settings.RESTRICTED_HTTP_MAX_REQUESTS = 1
@@ -255,7 +255,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "limit exceeded"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_request_too_large(self, mock_validate, settings):
         """Sandbox code can catch http.RequestTooLarge."""
         settings.RESTRICTED_HTTP_MAX_REQUEST_BYTES = 10
@@ -283,7 +283,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "blocked by ssrf"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_auth_provider_error(self, mock_validate):
         """Sandbox code can catch http.AuthProviderError."""
         code = """
@@ -297,7 +297,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "auth provider error"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_catch_base_error_class(self, mock_validate, httpx_mock):
         """http.Error catches all HTTP client exceptions."""
         code = """
@@ -312,7 +312,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "caught with base class"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_specific_before_base(self, mock_validate, httpx_mock):
         """Specific exception is caught before the base http.Error."""
         code = """
@@ -328,7 +328,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "specific: timeout"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_error_message_accessible(self, mock_validate, httpx_mock):
         """Exception message is accessible inside the sandbox."""
         code = """
@@ -342,7 +342,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert "read timed out" in result.update["messages"][-1]
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_recovery_after_error(self, mock_validate, httpx_mock, settings):
         """Sandbox code can catch an error and continue making requests."""
         settings.RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 10

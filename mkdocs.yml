@@ -165,6 +165,7 @@ nav:
       - Common Practises: developer_guides/code_systems/common_practises.md
       - Object Versioning: developer_guides/code_systems/versioning.md
       - Feature Flags: developer_guides/code_systems/feature_flags.md
+      - Privilege Elevation: developer_guides/code_systems/privilege_elevation.md
       - WAF Management: developer_guides/code_systems/waf_management.md
       - Dynamic Filters: developer_guides/code_systems/dynamic_filters.md
       - Slack Channel Integration: developer_guides/code_systems/slack_channel_integration.md

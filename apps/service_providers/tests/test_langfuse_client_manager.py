@@ -4,7 +4,7 @@ import time
 from unittest import mock
 
 import pytest
-from langfuse._client.resource_manager import LangfuseResourceManager
+from langfuse._client.resource_manager import LangfuseResourceManager  # noqa: PLC2701
 from opentelemetry.sdk.trace import TracerProvider
 
 from apps.service_providers.tracing.langfuse import ClientManager
