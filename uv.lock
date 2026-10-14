@@ -3190,6 +3190,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+code-analysis = [
+    { name = "treepeat" },
+]
 dev = [
     { name = "django-debug-toolbar" },
     { name = "django-types" },
@@ -3207,7 +3210,6 @@ dev = [
     { name = "ruff" },
     { name = "termcolor" },
     { name = "time-machine" },
-    { name = "treepeat" },
     { name = "ty" },
     { name = "watchfiles" },
 ]
@@ -3314,6 +3316,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+code-analysis = [{ name = "treepeat", specifier = ">=0.9.0" }]
 dev = [
     { name = "django-debug-toolbar", specifier = ">=7.0.0" },
     { name = "django-types" },
@@ -3331,7 +3334,6 @@ dev = [
     { name = "ruff", specifier = ">=0.16.0" },
     { name = "termcolor" },
     { name = "time-machine" },
-    { name = "treepeat", specifier = ">=0.9.0" },
     { name = "ty", specifier = ">=0.0.83" },
     { name = "watchfiles" },
 ]
