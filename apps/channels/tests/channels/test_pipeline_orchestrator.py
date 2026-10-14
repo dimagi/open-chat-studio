@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,7 @@ from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
     PipelineNodeRunError,
 )
+from apps.service_providers.llm_service.error_classification import ProviderErrorKind
 
 from .conftest import make_context
 
@@ -397,8 +399,6 @@ class TestErrorMessageGeneration:
     ):
         """When EventBot itself hits a provider rate-limit, a warning is logged (not an exception),
         so no spurious Sentry alert is raised on top of the original error."""
-        from apps.service_providers.llm_service.error_classification import ProviderErrorKind
-
         mock_bot = MagicMock()
         mock_bot.get_user_message.side_effect = RuntimeError("rate limited")
         mock_event_bot_cls.return_value = mock_bot
@@ -406,8 +406,6 @@ class TestErrorMessageGeneration:
 
         ctx = make_context()
         pipeline = _pipeline()
-
-        import logging
 
         with caplog.at_level(logging.WARNING, logger="ocs.channels"):
             result = pipeline._generate_error_message(ctx, RuntimeError("original"))
@@ -432,8 +430,6 @@ class TestErrorMessageGeneration:
 
         ctx = make_context()
         pipeline = _pipeline()
-
-        import logging
 
         with caplog.at_level(logging.ERROR, logger="ocs.channels"):
             result = pipeline._generate_error_message(ctx, RuntimeError("original"))
