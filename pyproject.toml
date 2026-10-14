@@ -304,6 +304,7 @@ dev = [
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.
+    "treepeat>=0.9.0",
 ]
 docs = [
     "zensical>=0.0.46",
