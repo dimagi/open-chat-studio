@@ -376,6 +376,8 @@ def typecheck(c: Context, paths="", python=False, js=False):
 )
 def duplicates(c: Context, base=None, similarity=80, min_lines=3, json=False, path="apps"):
     """Report duplicate code that overlaps lines changed on this branch."""
+    if not shutil.which("treepeat"):
+        raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
     output_format = "json" if json else "markdown"
     c.run(
         f"python scripts/find_touched_duplicates.py {f'--base {base} ' if base else ''}--similarity {similarity} "
