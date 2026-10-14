@@ -2138,5 +2138,41 @@
         "unit_price": "0.000125"
       }
     ]
+  },
+  {
+    "provider_type": "google",
+    "model_name": "gemini-4-argon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.002"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0001"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-4-argon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.002"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0001"
+      }
+    ]
   }
 ]
