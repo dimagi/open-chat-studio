@@ -1,10 +1,15 @@
 """Fixtures shared by tests in more than one app. Registered in `apps/conftest.py`."""
 
+import base64
+import hashlib
+import hmac
+import json
 from unittest.mock import Mock
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from django.conf import settings
 
 from apps.service_providers.messaging_service import SlackService
 from apps.teams.export import seal as seal_mod
@@ -33,3 +38,16 @@ def slack_service():
     )
     service.client = mock_client
     return service
+
+
+@pytest.fixture()
+def connect_request_headers():
+    """Build the HMAC header that CommCare Connect signs its requests with."""
+
+    def _headers(payload: dict) -> dict:
+        msg = json.dumps(payload).encode("utf-8")
+        key = settings.COMMCARE_CONNECT_SERVER_SECRET.encode()
+        digest = hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).digest()
+        return {"X-MAC-DIGEST": base64.b64encode(digest)}
+
+    return _headers
