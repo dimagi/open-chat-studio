@@ -42,18 +42,20 @@ def main(argv: list[str] | None = None) -> int:
             _run_side(checkouts[side], side, result, create_db=False, extra=args.pytest_args)
             runs[side].append(result)
 
-    summary = compare(
-        [_medians(path) for path in runs["a"]],
-        [_medians(path) for path in runs["b"]],
-    )
+    a_runs = [_medians(path) for path in runs["a"]]
+    b_runs = [_medians(path) for path in runs["b"]]
+    summary = compare(a_runs, b_runs)
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(format_markdown(summary, a=_commit(runs["a"][0]), b=_commit(runs["b"][0])))
     if args.fail_above is not None:
+        unmatched = unmatched_names(a_runs, b_runs)
+        for name, side in unmatched:
+            print(f"::error::{name.split('::', 1)[-1]} ran only on {side.upper()}", file=sys.stderr)
         slow = regressions(summary, args.fail_above)
         for row in slow:
             name = row["name"].split("::", 1)[-1]
             print(f"::error::{name} is {(row['ratio'] - 1) * 100:.0f}% slower than A", file=sys.stderr)
-        if slow:
+        if slow or unmatched:
             return 1
     return 0
 
@@ -127,6 +129,13 @@ def compare(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> l
             }
         )
     return rows
+
+
+def unmatched_names(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> list[tuple[str, str]]:
+    """The (name, side) pairs for benchmarks that ran on only one side, which ``compare`` drops."""
+    a_names = set().union(*a_runs)
+    b_names = set().union(*b_runs)
+    return [(name, "a") for name in sorted(a_names - b_names)] + [(name, "b") for name in sorted(b_names - a_names)]
 
 
 def regressions(rows: list[dict], limit: float) -> list[dict]:

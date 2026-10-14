@@ -42,7 +42,7 @@ The benchmarks run nightly against `main` on a dedicated EC2 runner, and can be 
 
 ## Pull request smoke check
 
-The `Benchmark smoke check` workflow (`.github/workflows/benchmark_smoke.yml`) runs on pull requests that touch code. It checks out the pull request and its base branch, runs N5, P1 (typical history), P2 and P5 on both in one job with `ab.py` (3 pairs, alternating order), and fails when any of them is more than 25% slower than on the base. It runs on a GitHub-hosted runner, which is too noisy to catch anything smaller; the nightly runs track small changes.
+The `Benchmark smoke check` workflow (`.github/workflows/benchmark_smoke.yml`) runs on pull requests that touch code. It checks out the pull request and its base branch, runs N5, P1 (typical history), P2 and P5 on both in one job with `ab.py` (3 pairs, alternating order), and fails when any of them is more than 25% slower than on the base, or when a benchmark ran on only one side. A pull request that renames a selected benchmark must update the `-k` expression in the workflow. It runs on a GitHub-hosted runner, which is too noisy to catch anything smaller; the nightly runs track small changes.
 
 If the check fails on a change that should not slow anything down, re-run it first: a single run on a shared runner can be off by 10-15%. To reproduce locally, use the `ab.py` command in the workflow with the base branch checked out in a worktree.
 
