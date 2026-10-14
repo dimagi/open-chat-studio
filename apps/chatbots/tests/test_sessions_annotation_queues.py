@@ -7,6 +7,7 @@ from django.urls import reverse
 from waffle.testutils import override_flag
 
 from apps.human_annotations.models import AnnotationItemStatus
+from apps.human_annotations.prefetch import attach_session_annotation_items
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 
@@ -113,3 +114,10 @@ def test_queue_badges_cost_one_query_regardless_of_row_count(client, logged_in_t
         AnnotationItemFactory.create(queue=queue, team=team, session=_session(team))
 
     assert queries_added_by_the_column() == one_row == 1
+
+
+@pytest.mark.django_db()
+def test_attaching_items_to_an_empty_page_runs_no_query(django_assert_num_queries):
+    """An empty page returns an empty list without touching the database."""
+    with django_assert_num_queries(0):
+        assert attach_session_annotation_items([]) == []
