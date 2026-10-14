@@ -3,7 +3,8 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 
 from apps.cost_tracking.models import PricingRule, ServiceKind
-from apps.evaluations.models import Evaluator
+from apps.evaluations.models import ConditionType, Evaluator
+from apps.utils.factories.evaluations import EvaluationTagFactory, EvaluatorTagRuleFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import GroupFactory
 
@@ -38,3 +39,20 @@ def seed_llm_pricing():
             )
 
     return _seed
+
+
+@pytest.fixture()
+def tag_a(team):
+    return EvaluationTagFactory.create(team=team, name="tag-a")
+
+
+@pytest.fixture()
+def tag_rule(team, evaluator, tag_a):
+    return EvaluatorTagRuleFactory.create(
+        team=team,
+        evaluator=evaluator,
+        tag=tag_a,
+        field_name="sentiment",
+        condition_type=ConditionType.EQUALS,
+        condition_value={"value": "negative"},
+    )
