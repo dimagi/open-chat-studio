@@ -47,16 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     summary = compare(a_runs, b_runs)
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(format_markdown(summary, a=_commit(runs["a"][0]), b=_commit(runs["b"][0])))
-    if args.fail_above is not None:
-        unmatched = unmatched_names(a_runs, b_runs)
-        for name, side in unmatched:
-            print(f"::error::{name.split('::', 1)[-1]} ran only on {side.upper()}", file=sys.stderr)
-        slow = regressions(summary, args.fail_above)
-        for row in slow:
-            name = row["name"].split("::", 1)[-1]
-            print(f"::error::{name} is {(row['ratio'] - 1) * 100:.0f}% slower than A", file=sys.stderr)
-        if slow or unmatched:
-            return 1
+    if args.fail_above is not None and _report_failures(summary, a_runs, b_runs, args.fail_above):
+        return 1
     return 0
 
 
@@ -96,6 +88,18 @@ def _run_side(checkout: Path, side: str, result: Path, create_db: bool, extra: l
     print(f"[{side}] {checkout}: {' '.join(command)}", file=sys.stderr, flush=True)
     # pytest's output goes to stderr so stdout carries only the report.
     subprocess.run(command, cwd=checkout, env=env, check=True, stdout=sys.stderr)
+
+
+def _report_failures(summary: list[dict], a_runs, b_runs, limit: float) -> bool:
+    """Annotate benchmarks that regressed or ran on only one side, and return whether there were any."""
+    unmatched = unmatched_names(a_runs, b_runs)
+    for name, side in unmatched:
+        print(f"::error::{name.split('::', 1)[-1]} ran only on {side.upper()}", file=sys.stderr)
+    slow = regressions(summary, limit)
+    for row in slow:
+        name = row["name"].split("::", 1)[-1]
+        print(f"::error::{name} is {(row['ratio'] - 1) * 100:.0f}% slower than A", file=sys.stderr)
+    return bool(slow or unmatched)
 
 
 def _medians(path: Path) -> dict[str, float]:
