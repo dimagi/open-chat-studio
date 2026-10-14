@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from apps.utils.factories.experiment import ChatbotFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -32,14 +31,6 @@ def dispatch():
     responsible for is what they asked the worker to do, not what the worker then did."""
     with patch("apps.experiments.tasks.async_create_experiment_version.apply_async") as apply_async:
         yield apply_async
-
-
-@pytest.fixture()
-def llm_provider(team):
-    """A provider and a model of the same type, which is what pairs them for an LLM node."""
-    provider = LlmProviderFactory.create(team=team, type="openai")
-    model = LlmProviderModelFactory.create(team=team, type="openai", name="gpt-4o")
-    return provider, model
 
 
 def versions_url(chatbot) -> str:
