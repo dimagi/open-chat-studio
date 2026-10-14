@@ -16,6 +16,7 @@ from apps.pipelines.exceptions import (
     PipelineBuildError,
     PipelineNodeBuildError,
 )
+from apps.service_providers.llm_service.error_classification import ProviderErrorKind, classify_provider_error
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
@@ -333,6 +334,19 @@ class MessageProcessingPipeline:
 
     def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
         """Ask EventBot for a participant-facing message, falling back to a reply that needs no model."""
+        # When the original error is a provider rate-limit or quota exhaustion, calling EventBot
+        # would invoke the same already-exhausted provider and is guaranteed to fail. Skip it
+        # entirely and return the canned reply to avoid a wasted API call (with its full retry
+        # backoff) and a misleading secondary Sentry error.
+        error_kind = classify_provider_error(exception)
+        if error_kind in (ProviderErrorKind.RATE_LIMIT, ProviderErrorKind.QUOTA_EXHAUSTED):
+            logger.warning(
+                "Skipping EventBot error message generation due to provider %s (%s); using default reply",
+                error_kind,
+                type(exception).__name__,
+            )
+            return self.DEFAULT_ERROR_RESPONSE_TEXT
+
         metadata = {"error": str(exception), **getattr(exception, "trace_metadata", {})}
         trace_info = TraceInfo(name="error", metadata=metadata)
         event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
