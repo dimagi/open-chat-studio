@@ -203,7 +203,10 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "C90", "PLC0415", "TID253"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "C90", "PLC0415", "TID253", "PLC2701"]
+# Only preview rules named explicitly in `select` (PLC2701) are enabled.
+preview = true
+explicit-preview-rules = true
 ignore = [
     "PT019",
     "SIM102",

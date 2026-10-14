@@ -5,9 +5,7 @@ import httpx
 import pytest
 
 from apps.channels.datamodels import Attachment
-from apps.utils.factories.service_provider_factories import AuthProviderFactory
-from apps.utils.factories.team import TeamFactory
-from apps.utils.restricted_http import (
+from apps.pipelines.nodes.restricted_http import (
     HttpAuthProviderError,
     HttpConnectionError,
     HttpError,
@@ -18,6 +16,8 @@ from apps.utils.restricted_http import (
     HttpTimeoutError,
     RestrictedHttpClient,
 )
+from apps.utils.factories.service_provider_factories import AuthProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 
 @pytest.fixture()
@@ -27,7 +27,7 @@ def client():
 
 @pytest.fixture()
 def mock_validate_url():
-    with patch("apps.utils.restricted_http.validate_user_input_url"):
+    with patch("apps.pipelines.nodes.restricted_http.validate_user_input_url"):
         yield
 
 
@@ -121,7 +121,7 @@ class TestURLValidation:
         response = client.get("https://api.example.com/data")
         assert response["status_code"] == 200
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_url_validation_cached_per_host(self, mock_validate, client, httpx_mock):
         """URL validation (DNS resolution) is only performed once per (hostname, port)."""
         httpx_mock.add_response(text="ok")
@@ -132,7 +132,7 @@ class TestURLValidation:
         client.get("https://api.example.com/third?q=1")
         mock_validate.assert_called_once()
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_url_validation_not_cached_across_hosts(self, mock_validate, client, httpx_mock):
         """Different hostnames each trigger their own validation."""
         httpx_mock.add_response(text="ok")
