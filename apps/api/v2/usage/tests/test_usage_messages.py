@@ -227,6 +227,26 @@ def test_tz_shifts_month_boundary():
             "only one of",
             id="all-participant-filters",
         ),
+        pytest.param(
+            {"metric": "messages", "period": "current_month", "start": "2026-07-01", "end": "2026-08-01"},
+            "not both",
+            id="period-and-window",
+        ),
+        pytest.param(
+            {"metric": "messages", "start": "2026-07-01"},
+            "both 'start' and 'end'",
+            id="start-without-end",
+        ),
+        pytest.param(
+            {"metric": "messages", "end": "2026-08-01"},
+            "both 'start' and 'end'",
+            id="end-without-start",
+        ),
+        pytest.param(
+            {"metric": "messages", "start": "2026-08-01", "end": "2026-07-01"},
+            "must be after",
+            id="end-before-start",
+        ),
     ],
 )
 def test_invalid_params_return_400(params, detail_contains):
