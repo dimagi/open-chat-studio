@@ -3,16 +3,14 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 
+from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.resources.serializers import (
-    ArchiveRefusedSerializer,
     ResourceArchivedSerializer,
     SourceMaterialInUseSerializer,
 )
 
 
-def resource_schema(
-    *, noun: str, plural: str, archive_refusal: str, archive_refused_serializer=ArchiveRefusedSerializer
-):
+def resource_schema(*, noun: str, plural: str, archive_refusal: str, archive_refused_serializer=ErrorDetailSerializer):
     """The OpenAPI descriptions shared by both resource viewsets."""
     operation_prefix = noun.lower().replace(" ", "_")
     tag = plural

@@ -3,6 +3,7 @@
 from django.db import models
 from rest_framework import serializers
 
+from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.inspect.serializers import PipelineBuildErrorsSerializer
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import OptionalTextField
@@ -29,10 +30,9 @@ class VersionCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
     )
 
 
-class VersionCreateRefusedSerializer(serializers.Serializer):
+class VersionCreateRefusedSerializer(ErrorDetailSerializer):
     """The 422: why the chatbot's state made the request unanswerable."""
 
-    detail = serializers.CharField()
     pipeline_errors = PipelineBuildErrorsSerializer(
         required=False,
         help_text=(

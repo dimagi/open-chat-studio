@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import OptionalTextField
 from apps.experiments.models import ConsentForm, SourceMaterial
@@ -48,12 +49,6 @@ class ResourceArchivedSerializer(serializers.Serializer):
     archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
 
 
-class ArchiveRefusedSerializer(serializers.Serializer):
-    """The archive 409: why the resource cannot be archived as things stand."""
-
-    detail = serializers.CharField()
-
-
 class ReferencingChatbotSerializer(serializers.Serializer):
     """A chatbot version whose pipeline uses the source material."""
 
@@ -73,7 +68,7 @@ class ReferencingPipelineSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
-class SourceMaterialInUseSerializer(ArchiveRefusedSerializer):
+class SourceMaterialInUseSerializer(ErrorDetailSerializer):
     """The source material archive 409: where it is still used."""
 
     chatbots = ReferencingChatbotSerializer(many=True)

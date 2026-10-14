@@ -16,6 +16,7 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
+from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
 from apps.channels.models import ChannelPlatform
@@ -254,8 +255,7 @@ class ArchivedSerializer(serializers.Serializer):
     )
 
 
-class ChannelsAttachedSerializer(serializers.Serializer):
+class ChannelsAttachedSerializer(ErrorDetailSerializer):
     """The archive 409: why it was refused, and what a person has to do about it."""
 
-    detail = serializers.CharField()
     channels = AttachedChannelSerializer(many=True)
