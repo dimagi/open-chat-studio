@@ -16,7 +16,7 @@ from apps.experiments.sunsets import (
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.sunset import SUNSETS
+from apps.utils.sunset import FIRST_DETECTION, SUNSETS
 
 TOKEN = "public_token_1234567890123456789012"
 NO_TOKEN_KEY = object()
@@ -190,7 +190,19 @@ def test_gone_does_not_name_another_teams_public_link():
     assert "/c/" not in body
 
 
-def test_message_names_the_date_and_the_count():
-    message = LEGACY_WEB_CHAT.build_message([object(), object()], "T-14")
+@pytest.mark.parametrize(
+    ("milestone", "countdown"),
+    [
+        pytest.param(FIRST_DETECTION, None, id="first-detection"),
+        pytest.param("T-14", "in 14 days", id="T-14"),
+        pytest.param("T-1", "in 1 day", id="T-1"),
+    ],
+)
+def test_message_names_the_date_the_count_and_the_countdown(milestone, countdown):
+    message = LEGACY_WEB_CHAT.build_message([object(), object()], milestone)
     assert "2 chatbot(s)" in message
     assert f"{LEGACY_WEB_CHAT_SUNSET_AT:%d %b %Y}" in message
+    if countdown is None:
+        assert " days" not in message
+    else:
+        assert countdown in message

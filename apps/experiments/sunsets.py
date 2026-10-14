@@ -10,7 +10,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.const import LEGACY_WEB_CHAT_SUCCESSOR_URL, LEGACY_WEB_CHAT_SUNSET_AT
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.flags import Flags
-from apps.utils.sunset import HttpSunset, register_sunset
+from apps.utils.sunset import FIRST_DETECTION, HttpSunset, register_sunset
 
 USAGE_WINDOW = timedelta(days=30)
 
@@ -29,6 +29,10 @@ def _enabled_public_channels() -> QuerySet:
     )
 
 
+def _published_versions(working_version) -> QuerySet:
+    return Experiment.objects.filter(working_version=working_version, is_default_version=True)
+
+
 def affected_experiments() -> QuerySet:
     """Chatbots that had a web session in the usage window and have no live public link."""
     recent_web_session = ExperimentSession.objects.filter(
@@ -37,11 +41,10 @@ def affected_experiments() -> QuerySet:
         created_at__gte=timezone.now() - USAGE_WINDOW,
     )
     public_channel = _enabled_public_channels().filter(experiment=OuterRef("pk"))
-    published_version = Experiment.objects.filter(working_version=OuterRef("pk"), is_default_version=True)
     return (
         Experiment.objects.working_versions_queryset()
         .filter(Exists(recent_web_session))
-        .exclude(Exists(public_channel) & Exists(published_version))
+        .exclude(Exists(public_channel) & Exists(_published_versions(OuterRef("pk"))))
     )
 
 
@@ -50,7 +53,7 @@ def live_public_channel(experiment: Experiment) -> ExperimentChannel | None:
     channel = _enabled_public_channels().filter(experiment=experiment).first()
     if channel is None:
         return None
-    if not experiment.versions.filter(is_default_version=True).exists():
+    if not _published_versions(experiment).exists():
         return None
     return channel
 
@@ -65,11 +68,17 @@ def legacy_web_chat_gone(request, team_slug, experiment_id, **kwargs) -> HttpRes
 
 
 def _message(experiments: list, milestone: str) -> str:
+    date = f"{LEGACY_WEB_CHAT_SUNSET_AT:%d %b %Y}"
+    if milestone == FIRST_DETECTION:
+        removal = f"on {date}"
+    else:
+        days = int(milestone.removeprefix("T-"))
+        removal = f"in {days} day{'' if days == 1 else 's'}, on {date}"
     return (
         f"{len(experiments)} chatbot(s) on your team still receive visitors through the legacy web chat link or "
-        f"invitations. The legacy web chat will be removed on {LEGACY_WEB_CHAT_SUNSET_AT:%d %b %Y}. For each "
-        "chatbot: publish a version, add the Public link channel, and replace the old link with the new one. "
-        "Invitations, message rating and the end-of-chat review are not carried over."
+        f"invitations. The legacy web chat will be removed {removal}. For each chatbot: publish a version, add "
+        "the Public link channel, and replace the old link with the new one. Invitations, message rating and the "
+        "end-of-chat review are not carried over."
     )
 
 

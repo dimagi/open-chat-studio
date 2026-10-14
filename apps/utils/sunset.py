@@ -49,7 +49,7 @@ def register_sunset(spec: HttpSunset) -> HttpSunset:
 
 def is_enforced(spec: HttpSunset, team) -> bool:
     """True once the sunset date has passed and the spec's flag is active for the team."""
-    if timezone.now() < spec.sunset_at:
+    if not team or timezone.now() < spec.sunset_at:
         return False
     return flag_is_active_for_team(team, spec.enforce_flag)
 
@@ -78,7 +78,7 @@ def due_milestone(spec: HttpSunset, first_detected_at: datetime, now: datetime) 
     passed = [days for days in MILESTONE_DAYS if spec.sunset_at - timedelta(days=days) <= now]
     if not passed:
         return None
-    latest = min(passed)
-    if spec.sunset_at - timedelta(days=latest) <= first_detected_at:
+    days_before_sunset = min(passed)
+    if spec.sunset_at - timedelta(days=days_before_sunset) <= first_detected_at:
         return None
-    return f"T-{latest}"
+    return f"T-{days_before_sunset}"

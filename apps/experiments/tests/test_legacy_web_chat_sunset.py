@@ -263,6 +263,15 @@ def test_open_gate_returns_gone_naming_the_public_link(mount, client):
 
 
 @pytest.mark.django_db()
+def test_open_gate_still_hides_an_unknown_team(client):
+    experiment = _experiment()
+    url = _start_url(experiment).replace(experiment.team.slug, "no-such-team")
+    with travel(AFTER, tick=False), override_flag(FLAG, active=True):
+        response = client.get(url)
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db()
 def test_open_gate_names_the_docs_without_a_public_link(client):
     experiment = _experiment()
     with travel(AFTER, tick=False), override_flag(FLAG, active=True):
