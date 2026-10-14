@@ -104,13 +104,12 @@ def publish_version(version: Experiment) -> None:
     Locks the working chatbot so two concurrent publishes cannot each unpublish the other's version
     and leave the chatbot with none.
     """
+    if version.is_default_version:
+        return
     with transaction.atomic():
         Experiment.objects.select_for_update().filter(id=version.working_version_id).first()
-        # The caller may have loaded ``version`` before taking the lock, so its flag can be stale.
-        version.refresh_from_db(fields=["is_default_version"])
-        Experiment.objects.filter(working_version_id=version.working_version_id, is_default_version=True).exclude(
-            id=version.id
-        ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
-        if not version.is_default_version:
-            version.is_default_version = True
-            version.save(update_fields=["is_default_version"])
+        Experiment.objects.filter(working_version_id=version.working_version_id, is_default_version=True).update(
+            is_default_version=False, audit_action=AuditAction.AUDIT
+        )
+        version.is_default_version = True
+        version.save(update_fields=["is_default_version"])

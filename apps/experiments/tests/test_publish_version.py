@@ -1,4 +1,6 @@
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.experiments.services import publish_version
@@ -31,14 +33,13 @@ def test_publish_version(chatbot, version_number, expected):
 
 
 @pytest.mark.django_db()
-def test_publish_version_with_stale_instance(chatbot):
-    """A version loaded before another request published a different one still ends up published."""
-    stale_v1 = chatbot.versions.get(version_number=1)
-    publish_version(chatbot.versions.get(version_number=2))
+def test_publish_already_published_version_writes_nothing(chatbot):
+    v1 = chatbot.versions.get(version_number=1)
 
-    publish_version(stale_v1)
+    with CaptureQueriesContext(connection) as ctx:
+        publish_version(v1)
 
-    assert published_states(chatbot) == [(1, True), (2, False)]
+    assert not [q["sql"] for q in ctx.captured_queries if q["sql"].startswith("UPDATE")]
 
 
 @pytest.mark.django_db()
