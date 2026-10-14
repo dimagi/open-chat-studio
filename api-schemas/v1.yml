@@ -88,6 +88,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatConsentStale'
           description: ''
+  /api/chat/{session_id}/files/{file_id}/content/:
+    get:
+      operationId: chat_file_content
+      summary: Download a file attached to a message in a chat session
+      parameters:
+      - in: path
+        name: file_id
+        schema:
+          type: integer
+        description: File ID
+        required: true
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        description: Session ID
+        required: true
+      tags:
+      - Chat
+      security:
+      - cookieAuth: []
+      - embedKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/chat/{session_id}/message/:
     post:
       operationId: chat_send_message
@@ -1280,13 +1310,73 @@ components:
       - code
       - consent
       - error
+    ChatFile:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        size:
+          type: integer
+        content_url:
+          type: string
+          format: uri
+          example: https://example.com/api/files/42/content
+          readOnly: true
+        download_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: URL to download the file, authenticated the same way as the
+            other chat requests.
+      required:
+      - content_url
+      - download_url
+      - name
+      - size
+    ChatMessage:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/MessageRoleEnum'
+        content:
+          type: string
+        metadata:
+          readOnly: true
+          description: |2
+
+            Metadata for the message. Currently documented keys:
+              * `compression_marker`: Slug that marks this message as a checkpoint for session history compression
+        tags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatFile'
+          readOnly: true
+      required:
+      - attachments
+      - content
+      - created_at
+      - metadata
+      - role
+      - tags
     ChatPollResponse:
       type: object
       properties:
         messages:
           type: array
           items:
-            $ref: '#/components/schemas/Message'
+            $ref: '#/components/schemas/ChatMessage'
           title: New messages since last poll
         has_more:
           type: boolean
@@ -1455,7 +1545,7 @@ components:
       type: object
       properties:
         message:
-          $ref: '#/components/schemas/Message'
+          $ref: '#/components/schemas/ChatMessage'
         status:
           $ref: '#/components/schemas/ChatTaskPollStatusEnum'
     ChatTaskPollError:

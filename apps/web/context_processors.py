@@ -33,6 +33,7 @@ def project_meta(request):
         "dark_mode": request.COOKIES.get("theme", "") == "dark",
         "login_url_name": settings.LOGIN_URL,
         "debug": settings.DEBUG,
+        "SENTRY_BROWSER_LOADER_KEY": settings.SENTRY_BROWSER_LOADER_KEY,
     }
 
 

@@ -102,14 +102,14 @@ def create_notification(
     )
 
     existing_event_users = {
-        eu.user: eu for eu in EventUser.objects.filter(team=team, event_type=event_type, user__in=users)
+        eu.user_id: eu for eu in EventUser.objects.filter(team=team, event_type=event_type, user__in=users)
     }
     event_users_to_create = []
     event_users_to_update = []
     users_to_email = []
 
     for user in users:
-        event_user = existing_event_users.get(user)
+        event_user = existing_event_users.get(user.id)
         if is_notification_muted(event_user):
             continue
 

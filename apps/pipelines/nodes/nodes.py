@@ -53,6 +53,7 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.outcomes import provider_reason
@@ -65,7 +66,6 @@ from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
-from apps.utils.restricted_http import RestrictedHttpClient
 
 from .mixins import (
     HISTORY_TYPE_DESCRIPTION,
@@ -396,8 +396,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
-            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.llm_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -474,10 +473,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         all_are_remote = all(is_remote_flags)
         if not all_are_remote and any(is_remote_flags):
             remote_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if collection.is_remote_index
             ]
             local_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if not collection.is_remote_index
             ]
             raise PydanticCustomError(
                 "mixed_collection_types",
@@ -722,8 +721,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(

@@ -149,6 +149,11 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
 
 
 def client_ip(request) -> str:
+    return _bucket_ip(forwarded_client_ip(request))
+
+
+def forwarded_client_ip(request) -> str:
+    """The client address, read through `RATE_LIMIT_TRUSTED_PROXY_COUNT` proxies. Not validated."""
     proxy_count = settings.RATE_LIMIT_TRUSTED_PROXY_COUNT
     ip = request.META.get("REMOTE_ADDR", "")
     if proxy_count > 0:
@@ -156,7 +161,7 @@ def client_ip(request) -> str:
         hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
         if len(hops) >= proxy_count:
             ip = hops[-proxy_count]
-    return _bucket_ip(ip)
+    return ip
 
 
 def _bucket_ip(ip: str) -> str:

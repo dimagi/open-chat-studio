@@ -2,6 +2,8 @@ from unittest import mock
 from unittest.mock import patch
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
@@ -10,6 +12,7 @@ from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SourceMaterial
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
+from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
@@ -772,6 +775,10 @@ class TestPipelineRevert:
         assert working_template.params == {**version_template.params, **version_template.resource_params()}
 
 
+def assert_no_errors(report):
+    assert not has_errors(report)
+
+
 @pytest.mark.django_db()
 class TestPipelineValidation:
     def test_validate_basic(self):
@@ -812,6 +819,33 @@ class TestPipelineValidation:
         pipeline.data = layout.model_dump()
         pipeline.update_nodes_from_data(node_data)
         assert not has_errors(pipeline.validate())
+
+    @pytest.mark.parametrize(
+        "check",
+        [
+            pytest.param(lambda pipeline: assert_no_errors(pipeline.validate()), id="validate"),
+            pytest.param(PipelineGraph.build_runnable_from_pipeline, id="build_runnable"),
+        ],
+    )
+    def test_query_count_does_not_grow_with_llm_nodes(self, check):
+        provider = LlmProviderFactory.create()
+        provider_model = LlmProviderModelFactory.create(team=provider.team)
+
+        def query_count(llm_node_count: int) -> int:
+            llm_nodes = [
+                llm_response_with_prompt_node(provider_id=str(provider.id), provider_model_id=str(provider_model.id))
+                for _ in range(llm_node_count)
+            ]
+            pipeline = create_pipeline_model(
+                nodes=[start_node(), *llm_nodes, end_node()], pipeline=PipelineFactory.create(team=provider.team)
+            )
+            pipeline.save()
+            pipeline.clear_node_caches()
+            with CaptureQueriesContext(connection) as captured:
+                check(pipeline)
+            return len(captured)
+
+        assert query_count(llm_node_count=3) == query_count(llm_node_count=1)
 
 
 class TestNodeDisplayName:

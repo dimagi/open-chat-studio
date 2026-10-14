@@ -514,6 +514,7 @@ SPECTACULAR_SETTINGS = {
         "WidgetAuthLevelEnum": "apps.channels.models.WidgetAuthLevel",
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
         "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
+        "MessageRoleEnum": "apps.api.serializers.MESSAGE_ROLES",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
@@ -742,6 +743,9 @@ GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'
 SENTRY_DSN = env("SENTRY_DSN", default="")
+# Key of the Sentry browser Loader Script (the hex part of https://js.sentry-cdn.com/<key>.min.js).
+# Leave empty to disable browser-side Sentry.
+SENTRY_BROWSER_LOADER_KEY = env("SENTRY_BROWSER_LOADER_KEY", default="")
 
 if SENTRY_DSN:
     import sentry_sdk
@@ -749,7 +753,7 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
-    from config.sentry import get_disabled_integrations, get_event_scrubber
+    from config.sentry import get_disabled_integrations, get_event_scrubber, make_traces_sampler
 
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
@@ -776,6 +780,10 @@ if SENTRY_DSN:
             CeleryIntegration(),
         ],
         disabled_integrations=get_disabled_integrations(),
+        traces_sampler=make_traces_sampler(env.float("SENTRY_TRACES_SAMPLE_RATE", default=0.0)),
+        # Outbound requests go to LLM providers, messaging platforms and customer custom action
+        # endpoints; none of them belong to us, so no trace headers are added to any of them.
+        trace_propagation_targets=[],
     )
 
 # Taskbadger setup

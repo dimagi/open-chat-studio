@@ -13,11 +13,13 @@ apps/help/evals/
 ├── test_code_generate_eval.py
 ├── test_filter_eval.py
 ├── test_progress_messages_eval.py
+├── test_prompt_improve_eval.py
 ├── test_checks.py           # Unit tests for check functions (no LLM)
 └── fixtures/
     ├── code_generate.yml
     ├── filter.yml
-    └── progress_messages.yml
+    ├── progress_messages.yml
+    └── prompt_improve.yml
 ```
 
 ## Running Evals
@@ -73,6 +75,7 @@ Checks are defined in `checks.py` and dispatched in `conftest.py`. Each check re
 | `max_words` | Every list item is under word limit | `per_message` |
 | `filter_params` | Filter columns match expected set | `expected` (list of column names) |
 | `exact_filters` | Filters match exactly (column, operator, value) | `expected` (list of `{column, operator, value}`) |
+| `prompt_vars` | Output `prompt` references exactly the expected template variables | `expected` (list of variable names) |
 
 ### LLM judge
 

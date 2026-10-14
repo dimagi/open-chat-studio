@@ -4,8 +4,10 @@ plain functions plus a thin loop so the transforms can be unit-tested without a 
 
 import contextlib
 import functools
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
@@ -15,8 +17,9 @@ from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
 from apps.events.versioning import get_event_action_param_specs
-from apps.teams.models import Flag, Membership
+from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import set_current_team
+from apps.users.models import CustomUser
 from apps.utils.fields import as_int
 
 from .client import FileContentNotFound
@@ -62,7 +65,12 @@ def mute_signals():
 
 
 class UnresolvedForeignKey(Exception):
-    """A required FK points at a row that should have been synced but wasn't (an ordering bug)."""
+    """A required FK points at a row that has no translation yet: either the source created it after
+    its resource was read, or an ordering bug. ``target_label`` names the model it points at."""
+
+    def __init__(self, message: str, target_label: str | None = None) -> None:
+        super().__init__(message)
+        self.target_label = target_label
 
 
 class MissingGlobalRow(Exception):
@@ -89,7 +97,10 @@ def resolve_fk(field: models.ForeignKey, source_pk: int | None, store: FKTransla
         return target
     if field.null:
         return None
-    raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} -> {target_label}:{source_pk}")
+    raise UnresolvedForeignKey(
+        f"{field.model._meta.label_lower}.{field.name} -> {target_label}:{source_pk}",
+        target_label=target_label,
+    )
 
 
 @functools.cache
@@ -190,12 +201,60 @@ def _match_existing_score(model, row: dict, store: FKTranslationStore, target_te
     return None
 
 
+def _match_existing_tagged_item(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the target row that already applies this tag to this object rather than inserting a
+    duplicate that violates the (content_type, object_id, tag) unique constraint. Deletions don't sync,
+    so a tag removed and re-added on the source arrives as a new row while the old one remains here."""
+    target_tag = store.get_target("annotations.tag", row["tag"])
+    target_object = store.get_target(row["content_type"], row["object_id"])
+    if target_tag is None or target_object is None:
+        return None
+    app_label, model_name = row["content_type"].split(".")
+    content_type = ContentType.objects.get_by_natural_key(app_label, model_name)
+    return model._base_manager.filter(content_type=content_type, object_id=target_object, tag_id=target_tag).first()
+
+
+def _adopt_participant(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
+    return model._base_manager.filter(team=target_team, platform=row["platform"], identifier=row["identifier"]).first()
+
+
+def _adopt_participant_data(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
+    participant = store.get_target("experiments.participant", row["participant"])
+    experiment = store.get_target("experiments.experiment", row["experiment"])
+    if participant is None or experiment is None:
+        return None
+    return model._base_manager.filter(participant_id=participant, experiment_id=experiment).first()
+
+
+# Rows the target can create on its own once a channel is switched to it, while the source still
+# holds the same participant from before the switch. A source row that matches one by its unique
+# key is mapped onto it and the target's row is kept as it is, since it is the newer of the two.
+_ADOPT_EXISTING = {
+    "experiments.participant": _adopt_participant,
+    "experiments.participantdata": _adopt_participant_data,
+}
+
+# Rows the target edits itself once a channel is switched to it. While the source still finishes work
+# it had queued for that conversation, a later source revision would overwrite the target's newer
+# edit, so a row edited on the target since the sync wrote it is kept as it is.
+_KEEP_TARGET_EDITS = {
+    "experiments.participant",
+    "experiments.participantdata",
+    "experiments.experimentsession",
+    "chat.chat",
+}
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
     "experiments.consentform": _match_default_consent_form,
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
     "assessments.score": _match_existing_score,
+    "annotations.customtaggeditem": _match_existing_tagged_item,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
@@ -207,10 +266,10 @@ class Importer:
     def __init__(
         self,
         store: FKTranslationStore,
-        private_key=None,
-        on_user_created=None,
+        private_key: RSAPrivateKey | None = None,
+        on_user_created: Callable[[CustomUser], None] | None = None,
         fetch_file_content: Callable[[int], bytes] | None = None,
-    ):
+    ) -> None:
         """``private_key`` unseals secret fields when supplied; ``on_user_created`` is called once
         per newly created user (e.g. to send an invite); ``fetch_file_content`` is a ``(source_pk) ->
         bytes`` callable used to backfill a file whose blob is missing from this server's storage.
@@ -227,6 +286,11 @@ class Importer:
         self.target_team = None
         # Rows a rerun read again but didn't have to touch (source updated_at unchanged).
         self.skipped_rows = 0
+        # Per model, the source pks mapped onto a row the target created on its own.
+        self.adopted_rows: dict[str, set[int]] = defaultdict(set)
+        # Per model, the source pks of rows edited on the target that a newer source revision was not
+        # applied to.
+        self.kept_target_edits: dict[str, set[int]] = defaultdict(set)
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
@@ -310,6 +374,10 @@ class Importer:
     def _import_team_owned_row(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
     ) -> tuple[models.Model, bool]:
+        if (adopted := self._adopt_existing(model_label, model, source_pk, row)) is not None:
+            return adopted, False
+        if (kept := self._keep_target_edit(model_label, model, source_pk, row)) is not None:
+            return kept, False
         with transaction.atomic():
             field_values, m2m_values, timestamps, nulled_fk = self._build_values(model_label, model, row)
             instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
@@ -331,6 +399,43 @@ class Importer:
         if not nulled_fk and (source_updated_at := row.get("updated_at")) is not None:
             self.store.record(model_label, source_pk, instance.pk, source_updated_at=source_updated_at)
         return instance, created
+
+    def _adopt_existing(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict
+    ) -> models.Model | None:
+        """Map a source row onto a row the target created on its own (see ``_ADOPT_EXISTING``), leaving
+        the target's row untouched. Only a source row the sync has not imported yet is adopted."""
+        adopt = _ADOPT_EXISTING.get(model_label)
+        if adopt is None or self.store.get_target(model_label, source_pk) is not None:
+            return None
+        instance = adopt(model, row, self.store, self.target_team)
+        if instance is None:
+            return None
+        self.store.record(model_label, source_pk, instance.pk, source_updated_at=row.get("updated_at"))
+        self.adopted_rows[model_label].add(source_pk)
+        return instance
+
+    def _keep_target_edit(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict
+    ) -> models.Model | None:
+        """The target row, when the sync did not write its current state (see ``_KEEP_TARGET_EDITS``):
+        the target edited it, or it was adopted. The sync restores the source ``updated_at`` on every
+        row it writes, so a target ``updated_at`` other than the recorded source revision means the
+        sync's write is not the latest. The new source revision is recorded so an unchanged source row
+        is not reconsidered on the next pass; the target's ``updated_at`` still differs from it, so
+        the row stays kept through every later revision."""
+        if model_label not in _KEEP_TARGET_EDITS:
+            return None
+        target_pk = self.store.get_target(model_label, source_pk)
+        synced_at = self.store.get_source_updated_at(model_label, source_pk)
+        if target_pk is None or synced_at is None:
+            return None
+        instance = model._base_manager.filter(pk=target_pk).first()
+        if instance is None or instance.updated_at == parse_datetime(synced_at):
+            return None
+        self.store.record(model_label, source_pk, target_pk, source_updated_at=row.get("updated_at"))
+        self.kept_target_edits[model_label].add(source_pk)
+        return instance
 
     def _create_or_update(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict
@@ -442,7 +547,10 @@ class Importer:
             source_pk = row[fk_field]
             target_pk = self.store.get_target(type_label, source_pk)
             if target_pk is None:
-                raise UnresolvedForeignKey(f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}")
+                raise UnresolvedForeignKey(
+                    f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}",
+                    target_label=type_label,
+                )
             field_values[fk_field] = target_pk
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
@@ -501,12 +609,15 @@ class Importer:
                 m2m_values[field.name] = [self._resolve_m2m_member(field, label, pk) for pk in row[field.name]]
         return m2m_values
 
-    def _resolve_m2m_member(self, field, label: str, source_pk) -> int | None:
+    def _resolve_m2m_member(self, field: models.ManyToManyField, label: str, source_pk: int | str) -> int | None:
         if label not in MANIFEST_LABELS:
             return None  # target model deliberately not synced; leave the member out
         target = self.store.get_target(label, as_int(source_pk))
         if target is None:
-            raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}")
+            raise UnresolvedForeignKey(
+                f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}",
+                target_label=label,
+            )
         return target
 
     def _match_global(self, model: type[models.Model], spec: GlobalSpec, row: dict) -> models.Model | None:

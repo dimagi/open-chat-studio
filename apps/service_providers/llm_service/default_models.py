@@ -71,6 +71,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "anthropic": [
         Model("claude-opus-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-sonnet-5-5", 1000000, parameters=ClaudeOpus47Parameters),
+        Model("claude-haiku-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
@@ -90,16 +91,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
     ],
     "openai": [
-        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
         Model("gpt-4.1", 1000000, is_translation_default=True),
         Model("gpt-4.1-mini", 1000000, is_default=True),
-        Model("gpt-4.1-nano", 1000000, deprecated=True, replacement="gpt-4.1-mini"),
         Model("o3", 128000, parameters=OpenAIReasoningParameters),
-        Model("o3-mini", 128000, parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000),
         Model("gpt-4o", 128000),
-        Model("gpt-4", k(8)),
-        Model("gpt-3.5-turbo", k(16), deprecated=True, replacement="gpt-4.1-mini"),
         Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
         Model("gpt-5", k(400), deprecated=True, replacement="gpt-5.4", parameters=GPT5Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
@@ -164,6 +160,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("MiniMax-M2", 200000),
     ],
     "google": [
+        Model("gemini-4-argon", 1048576),
         Model("gemini-3.8-flash", 1048576),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576, is_translation_default=True),
@@ -175,6 +172,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.5-pro", 1048576, deprecated=True, replacement="gemini-3.6-flash"),
     ],
     "google_vertex_ai": [
+        Model("gemini-4-argon", 1048576),
         Model("gemini-3.8-flash", 1048576),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576, is_translation_default=True),
@@ -218,6 +216,11 @@ DELETED_MODELS = [
     ("openai", "gpt-4-0125-preview", "gpt-4.1"),
     ("openai", "gpt-4-1106-preview", "gpt-4.1"),
     ("openai", "gpt-4-0613", "gpt-4.1"),
+    ("openai", "gpt-4", "gpt-5.6-sol"),
+    ("openai", "gpt-3.5-turbo", "gpt-5.6-terra"),
+    ("openai", "gpt-4.1-nano", "gpt-5.6-luna"),
+    ("openai", "o3-mini", "gpt-5.6-sol"),
+    ("openai", "o4-mini", "gpt-5.6-terra"),
     # o4-mini-high is a ChatGPT effort preset, not an API model: it is absent from OpenAI's
     # catalogue and from its deprecation table, so requests with it already 404. References move
     # to gpt-5.6-terra, the successor OpenAI names for o4-mini, rather than to o4-mini itself,

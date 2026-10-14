@@ -9,7 +9,6 @@ second endpoint here reports the chatbot's version history as that version lands
 from django.db import transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from field_audit.models import AuditAction
 from rest_framework import status
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import get_object_or_404
@@ -20,6 +19,7 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.lookups import get_working_chatbot
 from apps.api.v2.write.base import ChatbotCompositionPermission
 from apps.experiments.models import Experiment
+from apps.experiments.services import publish_version
 from apps.experiments.tasks import start_version_creation
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.pipelines.build_state import pipeline_build_state
@@ -278,7 +278,7 @@ class ChatbotVersionView(APIView):
             chatbot = get_working_chatbot(request.team, id, lock=True)
             enforce_application_chatbot_write(request, chatbot)
             version = get_object_or_404(chatbot.versions, version_number=version_number)
-            _publish_existing_version(chatbot, version)
+            publish_version(version)
         return Response({"version_number": version.version_number, "is_published_version": True})
 
     @extend_schema(
@@ -326,21 +326,6 @@ class ChatbotVersionView(APIView):
                 raise VersionIsDefault()
             version.archive()
         return Response({"archived": True})
-
-
-def _publish_existing_version(chatbot: Experiment, version: Experiment) -> None:
-    """Move the published flag onto ``version``, taking it off whichever version holds it.
-
-    A partial unique constraint allows one published version per family, so the incumbent is
-    demoted in the same statement-pair under the caller's row lock rather than left to collide.
-    Already-published is not an error: the request asked for a state that already holds.
-    """
-    chatbot.versions.filter(is_default_version=True).exclude(id=version.id).update(
-        is_default_version=False, audit_action=AuditAction.AUDIT
-    )
-    if not version.is_default_version:
-        version.is_default_version = True
-        version.save(update_fields=["is_default_version"])
 
 
 def _version_status(chatbot: Experiment) -> dict:

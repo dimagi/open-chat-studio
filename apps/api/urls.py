@@ -21,6 +21,7 @@ chat_patterns = [
     path("<uuid:session_id>/message/", views.chat_send_message, name="send-message"),
     path("<uuid:session_id>/poll/", views.chat_poll_response, name="poll-response"),
     path("<uuid:session_id>/<str:task_id>/poll/", views.chat_poll_task_response, name="task-poll-response"),
+    path("<uuid:session_id>/files/<int:file_id>/content/", views.chat_file_content, name="file-content"),
     path("<uuid:session_id>/consent/", views.chat_record_consent, name="record-consent"),
     path("<uuid:session_id>/token/", views.chat_renew_session_token, name="renew-session-token"),
 ]

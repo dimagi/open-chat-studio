@@ -68,11 +68,13 @@ class EvaluationConfigTable(tables.Table):
 
     def render_evaluators(self, value, record):
         """Render the evaluators column with icons and labels in an unordered list."""
-        if not value.exists():
+        # Use list() so the prefetch cache is consumed rather than issuing a new EXISTS query.
+        evaluators = list(value.all())
+        if not evaluators:
             return "—"
 
         rows = []
-        for evaluator in value.all():
+        for evaluator in evaluators:
             type_info = get_evaluator_type_display(evaluator.type)
             icon_class = type_info.get("icon") or ""
             label = type_info.get("label") or ""
@@ -94,6 +96,10 @@ class EvaluationConfigTable(tables.Table):
             ),
         )
         return format_html('<ul class="list-disc list-inside">{}</ul>', items)
+
+    def render_dataset(self, record):
+        """Render just the dataset name to avoid EvaluationDataset.__str__ calling messages.count()."""
+        return record.dataset.name
 
     def render_generation_chatbot(self, record):
         if not record.base_experiment:
@@ -211,6 +217,13 @@ class EvaluatorTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:evaluator_edit"),
+            actions.AjaxAction(
+                "evaluations:evaluator_copy",
+                title="Copy",
+                icon_class="fa-solid fa-copy",
+                hx_method="post",
+                required_permissions=["evaluations.add_evaluator", "evaluations.change_evaluator"],
+            ),
             actions.AjaxAction(
                 "evaluations:evaluator_delete",
                 title="Delete",
