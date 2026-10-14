@@ -23,8 +23,9 @@ LEGACY_WEB_CHAT_READ_ONLY_MESSAGE = (
 def _enabled_public_channels() -> QuerySet:
     return (
         ExperimentChannel.objects.filter(platform=ChannelPlatform.PUBLIC, enabled=True)
-        .exclude(extra_data__widget_token__in=["", None])
         .filter(extra_data__has_key="widget_token")
+        .exclude(extra_data__widget_token="")
+        .exclude(extra_data__widget_token=None)
     )
 
 
@@ -36,7 +37,7 @@ def affected_experiments() -> QuerySet:
         created_at__gte=timezone.now() - USAGE_WINDOW,
     )
     public_channel = _enabled_public_channels().filter(experiment=OuterRef("pk"))
-    published_version = Experiment.objects.get_all().filter(working_version=OuterRef("pk"), is_default_version=True)
+    published_version = Experiment.objects.filter(working_version=OuterRef("pk"), is_default_version=True)
     return (
         Experiment.objects.working_versions_queryset()
         .filter(Exists(recent_web_session))

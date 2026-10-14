@@ -330,6 +330,7 @@ def test_invitations_page_shows_the_warning_and_no_form(client):
 
     content = response.content.decode()
     assert response.status_code == 200
+    assert f"{experiment.name} Invitations" in content
     assert WARNING_DATE in content
     assert LEGACY_WEB_CHAT_SUCCESSOR_URL in content
     assert "Invite Participant" not in content

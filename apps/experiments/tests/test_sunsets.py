@@ -19,6 +19,7 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.sunset import SUNSETS
 
 TOKEN = "public_token_1234567890123456789012"
+NO_TOKEN_KEY = object()
 
 
 def _web_session(experiment, *, days_ago=1, **kwargs):
@@ -34,7 +35,7 @@ def _public_channel(experiment, *, enabled=True, token=TOKEN):
         experiment=experiment,
         platform=ChannelPlatform.PUBLIC,
         enabled=enabled,
-        extra_data={"widget_token": token} if token else {},
+        extra_data={"widget_token": token} if token is not NO_TOKEN_KEY else {},
     )
 
 
@@ -94,7 +95,9 @@ def test_affected_excludes_a_chatbot_with_a_live_public_link():
     [
         pytest.param(False, {}, id="nothing-published"),
         pytest.param(True, {"enabled": False}, id="channel-disabled"),
-        pytest.param(True, {"token": ""}, id="no-token"),
+        pytest.param(True, {"token": NO_TOKEN_KEY}, id="no-token-key"),
+        pytest.param(True, {"token": ""}, id="empty-token"),
+        pytest.param(True, {"token": None}, id="null-token"),
     ],
 )
 def test_affected_keeps_a_chatbot_whose_public_link_is_not_live(publish, channel_kwargs):
