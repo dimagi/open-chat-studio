@@ -6,7 +6,7 @@ import json
 import tempfile
 from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import dictdiffer
@@ -18,6 +18,8 @@ from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.teams.flags import Flags
+from apps.teams.utils import flag_is_active_for_team
 from apps.utils.csv_export import neutralize_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -170,6 +172,16 @@ def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColu
     return [column for column in EXPORT_COLUMNS if column.required or column.key in selected]
 
 
+def _gate_annotation_queues(columns: list[ExportColumn], experiment) -> list[ExportColumn]:
+    """Blank the Annotation Queues cells, keeping the header, for a team without human annotations."""
+    if flag_is_active_for_team(experiment.team, Flags.HUMAN_ANNOTATIONS.slug):
+        return columns
+    return [
+        replace(column, from_session=lambda s: "", prefetch=()) if column.key == "annotation_queues" else column
+        for column in columns
+    ]
+
+
 def count_export_messages(sessions_queryset) -> int:
     """Total number of messages an export of these sessions will produce.
 
@@ -271,7 +283,7 @@ def generate_export_rows(
 
     ``columns`` is a list of column keys to include (see ``EXPORT_COLUMNS``); ``None`` includes all.
     """
-    export_columns = resolve_export_columns(columns)
+    export_columns = _gate_annotation_queues(resolve_export_columns(columns), experiment)
     yield _get_export_header(columns=export_columns, translation_language=translation_language)
 
     base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)

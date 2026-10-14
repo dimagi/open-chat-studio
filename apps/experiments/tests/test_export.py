@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments import export as export_mod
@@ -311,7 +312,10 @@ def test_trace_id_resolved_per_message_trace_info():
     mock_messages_qs.order_by.return_value = mock_messages_qs
     mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
 
-    with patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs):
+    with (
+        patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs),
+        patch("apps.experiments.export.flag_is_active_for_team", return_value=True),
+    ):
         csv_text = _export_csv_text(experiment, Mock())
         rows = list(csv.reader(io.StringIO(csv_text), delimiter=","))
 
@@ -639,9 +643,10 @@ def _session_with_one_message():
 
 def _export_value(session, label):
     """The exported cell under `label` for the session's single row."""
-    header, row = list(
-        generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
-    )
+    with override_flag("flag_human_annotations", active=True):
+        header, row = list(
+            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
+        )
     return dict(zip(header, row, strict=True))[label]
 
 
@@ -698,8 +703,25 @@ def test_annotation_queues_column_does_not_query_per_session():
                 queue=AnnotationQueueFactory.create(team=experiment.team), team=experiment.team, session=session
             )
         sessions = ExperimentSession.objects.filter(experiment=experiment)
-        with CaptureQueriesContext(connection) as queries:
+        with override_flag("flag_human_annotations", active=True), CaptureQueriesContext(connection) as queries:
             list(generate_export_rows(experiment, sessions, columns=["annotation_queues"]))
         return len(queries)
 
     assert export_queries(1) == export_queries(3)
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_is_empty_when_the_flag_is_off():
+    """Queue items created before the flag was turned off do not reach the export."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Tone"), team=team, session=session
+    )
+
+    with override_flag("flag_human_annotations", active=False):
+        header, row = list(
+            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
+        )
+
+    assert dict(zip(header, row, strict=True))["Annotation Queues"] == ""
