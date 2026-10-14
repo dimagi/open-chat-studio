@@ -315,7 +315,7 @@ jobs:
       - name: Install Dependencies
         run: |
           uv venv
-          uv sync --locked --dev
+          uv sync --locked --dev --group code-analysis
       - name: Configure Postgres for performance
         run: |
           PGPASSWORD=postgres_password psql -h localhost -U postgres \
