@@ -58,12 +58,14 @@ def sunset_view(spec: HttpSunset, gone: Callable[..., HttpResponse]):
     """Add sunset headers to a view, and answer with `gone` once the spec is enforced for the request's team."""
 
     def decorator(view_func):
-        with_headers = sunset(spec.sunset_at, successor_url=spec.successor_url)(view_func)
+        headers = sunset(spec.sunset_at, successor_url=spec.successor_url)
+        with_headers = headers(view_func)
+        gone_with_headers = headers(gone)
 
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             if is_enforced(spec, getattr(request, "team", None)):
-                return gone(request, *args, **kwargs)
+                return gone_with_headers(request, *args, **kwargs)
             return with_headers(request, *args, **kwargs)
 
         return wrapper

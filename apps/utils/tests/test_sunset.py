@@ -107,6 +107,9 @@ def test_view_returns_gone_once_the_gate_is_open():
         response = _view()(_request(TeamFactory.create()))
     assert response.status_code == 410
     assert response.content == b"gone"
+    assert response.headers["Deprecation"] == "true"
+    assert response.headers["Sunset"] == "Tue, 01 Dec 2026 00:00:00 GMT"
+    assert response.headers["Link"] == '<https://example.com/successor/>; rel="successor-version"'
 
 
 @pytest.mark.django_db()
