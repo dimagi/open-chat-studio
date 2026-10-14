@@ -1120,7 +1120,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArchiveRefused'
+                $ref: '#/components/schemas/ErrorDetail'
           description: ''
   /api/v2/me/:
     get:
@@ -1947,15 +1947,6 @@ components:
             type: string
       required:
       - paths
-    ArchiveRefused:
-      type: object
-      description: 'The archive 409: why the resource cannot be archived as things
-        stand.'
-      properties:
-        detail:
-          type: string
-      required:
-      - detail
     Archived:
       type: object
       description: 'The archive response: that it happened, and what it destroyed
@@ -2614,6 +2605,14 @@ components:
       - pipeline_errors
       - pipeline_valid
       - unwired_handles
+    ErrorDetail:
+      type: object
+      description: An error response with a single human-readable message.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     ExtractParticipantDataParams:
       type: object
       properties:
