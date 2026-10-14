@@ -28,14 +28,6 @@ def mock_langfuse_client():
 
 
 @pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
-@pytest.fixture()
 def patched_tracer(mock_langfuse_client):
     """A real LangFuseTracer with the ClientManager boundary mocked."""
     tracer = LangFuseTracer("langfuse", {"public_key": "pk", "secret_key": "sk"})

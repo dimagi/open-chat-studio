@@ -61,14 +61,6 @@ def manager():
     manager.shutdown()
 
 
-@pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
 def _prune_all(manager):
     for entry in manager._entries.values():
         entry.last_used -= manager.stale_timeout + 1

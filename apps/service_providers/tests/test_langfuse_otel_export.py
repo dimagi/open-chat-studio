@@ -64,14 +64,6 @@ def tracer(public_key, exported_spans):
         yield tracer
 
 
-@pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
 def _span_by_name(exporter, name):
     spans = [span for span in exporter.get_finished_spans() if span.name == name]
     assert len(spans) == 1, f"expected exactly one {name!r} span, got {len(spans)}"
