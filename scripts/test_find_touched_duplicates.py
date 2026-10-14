@@ -271,7 +271,7 @@ def test_main_reports_missing_treepeat(repo, capsys, monkeypatch):
     monkeypatch.setattr("find_touched_duplicates.sys.executable", str(repo / "bin" / "python"))
 
     assert main(["--base", "main", "pkg"]) == 2
-    assert "uv sync --dev" in capsys.readouterr().err
+    assert "uv sync --group code-analysis" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

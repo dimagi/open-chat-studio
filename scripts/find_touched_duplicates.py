@@ -118,7 +118,7 @@ def run_treepeat(path: str, similarity: int, min_lines: int, repo_root: Path) ->
     """Run treepeat and return its SARIF output as a dict."""
     treepeat = shutil.which("treepeat") or str(Path(sys.executable).parent / "treepeat")
     if not Path(treepeat).exists():
-        raise FileNotFoundError("treepeat is not installed. Run `uv sync --dev` to install it.")
+        raise FileNotFoundError("treepeat is not installed. Run `uv sync --group code-analysis` to install it.")
     with tempfile.TemporaryDirectory() as tmp:
         output = Path(tmp) / "treepeat.sarif"
         subprocess.run(
