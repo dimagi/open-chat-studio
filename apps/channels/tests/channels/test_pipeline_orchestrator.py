@@ -389,6 +389,58 @@ class TestErrorMessageGeneration:
 
         assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
 
+    @patch("apps.channels.pipeline.classify_provider_error")
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_rate_limit_logs_warning_not_exception(
+        self, mock_trace_info, mock_event_bot_cls, mock_classify, caplog
+    ):
+        """When EventBot itself hits a provider rate-limit, a warning is logged (not an exception),
+        so no spurious Sentry alert is raised on top of the original error."""
+        from apps.service_providers.llm_service.error_classification import ProviderErrorKind
+
+        mock_bot = MagicMock()
+        mock_bot.get_user_message.side_effect = RuntimeError("rate limited")
+        mock_event_bot_cls.return_value = mock_bot
+        mock_classify.return_value = ProviderErrorKind.RATE_LIMIT
+
+        ctx = make_context()
+        pipeline = _pipeline()
+
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="ocs.channels"):
+            result = pipeline._generate_error_message(ctx, RuntimeError("original"))
+
+        assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+        warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert warning_records, "Expected a warning log entry"
+        error_records = [r for r in caplog.records if r.levelname == "ERROR"]
+        assert not error_records, "Expected no error/exception log entry"
+
+    @patch("apps.channels.pipeline.classify_provider_error")
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_non_provider_failure_logs_exception(
+        self, mock_trace_info, mock_event_bot_cls, mock_classify, caplog
+    ):
+        """When EventBot fails for a non-provider-rate-limit reason, logger.exception is still called."""
+        mock_bot = MagicMock()
+        mock_bot.get_user_message.side_effect = RuntimeError("unexpected EventBot failure")
+        mock_event_bot_cls.return_value = mock_bot
+        mock_classify.return_value = None  # not a provider rate-limit error
+
+        ctx = make_context()
+        pipeline = _pipeline()
+
+        import logging
+
+        with caplog.at_level(logging.ERROR, logger="ocs.channels"):
+            result = pipeline._generate_error_message(ctx, RuntimeError("original"))
+
+        assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+        assert any("Failed to generate error message via EventBot" in r.message for r in caplog.records)
+
 
 class TestModelRefusedTurn:
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
