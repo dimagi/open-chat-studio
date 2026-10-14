@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv venv
-          uv sync --locked --dev
+          uv sync --locked --dev --group code-analysis
       - name: Find duplicates in changed lines
         id: report
         run: |
