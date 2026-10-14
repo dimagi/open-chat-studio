@@ -334,29 +334,29 @@ class MessageProcessingPipeline:
 
     def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
         """Ask EventBot for a participant-facing message, falling back to a reply that needs no model."""
-        # When the original error is a provider rate-limit or quota exhaustion, calling EventBot
-        # would invoke the same already-exhausted provider and is guaranteed to fail. Skip it
-        # entirely and return the canned reply to avoid a wasted API call (with its full retry
-        # backoff) and a misleading secondary Sentry error.
-        error_kind = classify_provider_error(exception)
-        if error_kind in (ProviderErrorKind.RATE_LIMIT, ProviderErrorKind.QUOTA_EXHAUSTED):
-            logger.warning(
-                "Skipping EventBot error message generation due to provider %s (%s); using default reply",
-                error_kind,
-                type(exception).__name__,
-            )
-            return self.DEFAULT_ERROR_RESPONSE_TEXT
-
         metadata = {"error": str(exception), **getattr(exception, "trace_metadata", {})}
         trace_info = TraceInfo(name="error", metadata=metadata)
         event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
         try:
             message = event_bot.get_user_message(prompt)
-        except Exception:
+        except Exception as event_bot_exc:
             if isinstance(exception, UserActionableError):
                 logger.info("EventBot could not phrase a %s; replying with its text", type(exception).__name__)
                 return str(exception)
-            logger.exception("Failed to generate error message via EventBot, falling back to default")
+            # If EventBot itself hit a provider rate-limit or quota error, log at warning
+            # level rather than exception level to avoid a spurious Sentry alert on top of
+            # the original error. EventBot uses the team's first provider which may differ
+            # from the one that triggered the original failure, so we still try the call and
+            # only suppress the noise when EventBot itself is rate-limited.
+            event_bot_error_kind = classify_provider_error(event_bot_exc)
+            if event_bot_error_kind in (ProviderErrorKind.RATE_LIMIT, ProviderErrorKind.QUOTA_EXHAUSTED):
+                logger.warning(
+                    "EventBot error message generation hit provider %s (%s); using default reply",
+                    event_bot_error_kind,
+                    type(event_bot_exc).__name__,
+                )
+            else:
+                logger.exception("Failed to generate error message via EventBot, falling back to default")
             return self.DEFAULT_ERROR_RESPONSE_TEXT
         return message or self._fallback_reply(exception)
 
