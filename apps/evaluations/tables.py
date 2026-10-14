@@ -218,6 +218,13 @@ class EvaluatorTable(tables.Table):
         actions=[
             actions.edit_action(url_name="evaluations:evaluator_edit"),
             actions.AjaxAction(
+                "evaluations:evaluator_copy",
+                title="Copy",
+                icon_class="fa-solid fa-copy",
+                hx_method="post",
+                required_permissions=["evaluations.add_evaluator", "evaluations.change_evaluator"],
+            ),
+            actions.AjaxAction(
                 "evaluations:evaluator_delete",
                 title="Delete",
                 icon_class="fa-solid fa-trash",
