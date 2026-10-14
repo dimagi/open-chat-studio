@@ -343,11 +343,8 @@ class MessageProcessingPipeline:
             if isinstance(exception, UserActionableError):
                 logger.info("EventBot could not phrase a %s; replying with its text", type(exception).__name__)
                 return str(exception)
-            # If EventBot itself hit a provider rate-limit or quota error, log at warning
-            # level rather than exception level to avoid a spurious Sentry alert on top of
-            # the original error. EventBot uses the team's first provider which may differ
-            # from the one that triggered the original failure, so we still try the call and
-            # only suppress the noise when EventBot itself is rate-limited.
+            # A provider rate-limit or quota error from EventBot is expected and already
+            # handled by the default reply, so it is logged as a warning, not reported to Sentry.
             event_bot_error_kind = classify_provider_error(event_bot_exc)
             if event_bot_error_kind in (ProviderErrorKind.RATE_LIMIT, ProviderErrorKind.QUOTA_EXHAUSTED):
                 logger.warning(
