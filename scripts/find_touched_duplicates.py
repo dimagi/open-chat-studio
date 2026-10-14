@@ -74,20 +74,27 @@ def parse_diff(diff: str) -> TouchedLines:
         if line.startswith("diff --git "):
             in_header = True
         elif in_header and line.startswith("+++ "):
-            path = line.removeprefix("+++ b/") if line.startswith("+++ b/") else None
+            path = _new_path(line)
         elif match := HUNK_HEADER.match(line):
             in_header = False
-            if not path:
-                continue
-            start = int(match["start"])
-            count = int(match["count"]) if match["count"] is not None else 1
-            if count:
-                line_range = (start, start + count - 1)
-            else:
-                # A pure deletion is reported as the line before the removed lines.
-                line_range = (start, start + 1) if start else (1, 1)
-            touched.setdefault(path, []).append(line_range)
+            if path:
+                touched.setdefault(path, []).append(_hunk_range(match))
     return touched
+
+
+def _new_path(header: str) -> str | None:
+    """Return the path from a ``+++ b/<path>`` header, or None for a deleted file (``+++ /dev/null``)."""
+    return header.removeprefix("+++ b/") if header.startswith("+++ b/") else None
+
+
+def _hunk_range(match: re.Match) -> tuple[int, int]:
+    """Return the line range a hunk header touches in the new version."""
+    start = int(match["start"])
+    count = int(match["count"]) if match["count"] is not None else 1
+    if count:
+        return (start, start + count - 1)
+    # A pure deletion is reported as the line before the removed lines.
+    return (start, start + 1) if start else (1, 1)
 
 
 def resolve_base(base: str | None) -> str:
