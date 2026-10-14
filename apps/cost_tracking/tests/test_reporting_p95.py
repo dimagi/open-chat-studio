@@ -4,7 +4,6 @@ Per-function aggregation behaviour for the other reporting helpers lives in
 """
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 
 import pytest
 from django.db import connection
@@ -12,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.reporting import p95_cost_per_trace
-from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.cost_tracking.tests.utils import make_usage
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -20,13 +19,6 @@ from apps.utils.factories.traces import TraceFactory
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 # The 30-day window most tests read over, named where a test needs it inside a lambda.
 _START = _NOW - timedelta(days=30)
-
-
-def _usage(team, *, cost, when, **kwargs):
-    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
-    and forwards optional kwargs (confidence, experiment, session, quantity).
-    """
-    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
 
 
 @pytest.mark.django_db()
@@ -39,10 +31,10 @@ class TestP95CostPerTrace:
         day = _NOW - timedelta(days=1)
         # One trace split across two records - must sum to a single per-trace total.
         split = TraceFactory.create(team=team)
-        _usage(team, cost="0.60", when=day, experiment=experiment, trace=split)
-        _usage(team, cost="0.40", when=day, experiment=experiment, trace=split)
+        make_usage(team, cost="0.60", when=day, experiment=experiment, trace=split)
+        make_usage(team, cost="0.40", when=day, experiment=experiment, trace=split)
         for cost in ("2.00", "3.00", "5.00"):
-            _usage(team, cost=cost, when=day, experiment=experiment, trace=TraceFactory.create(team=team))
+            make_usage(team, cost=cost, when=day, experiment=experiment, trace=TraceFactory.create(team=team))
 
         series = p95_cost_per_trace(team, start=_START, end=_NOW)
 
@@ -61,8 +53,8 @@ class TestP95CostPerTrace:
         experiment = ExperimentFactory.create(team=team)
         newer = _NOW - timedelta(days=1)
         older = _NOW - timedelta(days=3)
-        _usage(team, cost="2.00", when=newer, experiment=experiment, trace=TraceFactory.create(team=team))
-        _usage(team, cost="1.00", when=older, experiment=experiment, trace=TraceFactory.create(team=team))
+        make_usage(team, cost="2.00", when=newer, experiment=experiment, trace=TraceFactory.create(team=team))
+        make_usage(team, cost="1.00", when=older, experiment=experiment, trace=TraceFactory.create(team=team))
 
         series = p95_cost_per_trace(team, start=_START, end=_NOW)
 
@@ -75,7 +67,7 @@ class TestP95CostPerTrace:
         team = TeamFactory.create()
         experiments = ExperimentFactory.create_batch(3, team=team)
         for cost, experiment in zip(("1.00", "3.00", "2.00"), experiments, strict=True):
-            _usage(
+            make_usage(
                 team,
                 cost=cost,
                 when=_NOW - timedelta(days=1),
@@ -93,8 +85,8 @@ class TestP95CostPerTrace:
         (ADR-0050)."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
-        _usage(
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
+        make_usage(
             team,
             cost="9.00",
             when=_NOW - timedelta(days=1),
@@ -111,7 +103,7 @@ class TestP95CostPerTrace:
         """One grouped scan plus one name lookup - no per-experiment queries."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        _usage(
+        make_usage(
             team,
             cost="1.00",
             when=_NOW - timedelta(days=1),
@@ -130,7 +122,7 @@ class TestP95CostPerTrace:
         leaving its line in the chart with a blank legend entry."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team, name="Archived Bot")
-        _usage(
+        make_usage(
             team,
             cost="1.00",
             when=_NOW - timedelta(days=1),
