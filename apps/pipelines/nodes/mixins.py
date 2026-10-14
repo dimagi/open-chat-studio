@@ -302,6 +302,25 @@ class HistoryMixin(LLMResponseMixin):
         return self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
 
 
+class RouteTagMixin(BaseModel):
+    """Optionally tags a router's output message with the route it selected."""
+
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
+        if self.tag_output_message:
+            tag_name = f"{self.name}:{selected_route}"
+            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
+            if is_default_keyword:
+                tag_name += ":default"
+            return [(tag_name, tag_category)]
+        return []
+
+
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(
         default_factory=list,
@@ -318,11 +337,6 @@ class RouterMixin(BaseModel):
             "Position in `keywords` to fall back to when no route matches. Must be a valid index into `keywords`."
         ),
         json_schema_extra=UiSchema(widget=Widgets.none),
-    )
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
     @field_validator("keywords")
@@ -349,15 +363,6 @@ class RouterMixin(BaseModel):
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
-
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
 
 
 class ExtractStructuredDataNodeMixin:

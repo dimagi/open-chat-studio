@@ -24,7 +24,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython.PrintCollector import PrintCollector
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import BuiltInTools
 from apps.files.models import FilePurpose
@@ -74,6 +73,7 @@ from .mixins import (
     LLMResponseMixin,
     OutputMessageTagMixin,
     RouterMixin,
+    RouteTagMixin,
     StructuredDataSchemaValidatorMixin,
 )
 
@@ -650,17 +650,14 @@ class EndNode(Passthrough):
 
 
 @deprecated_node(message="Use the 'Router' node instead.")
-class BooleanNode(PipelineRouterNode):
+class BooleanNode(RouteTagMixin, PipelineRouterNode):
     """Branches based whether the input matches a certain value"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="Conditional Node", field_order=["input_equals", "tag_output_message"])
+    )
 
     input_equals: str
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
 
     def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
         if self.input_equals == context.input:
@@ -671,17 +668,8 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
 
-
-class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
+class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
@@ -794,7 +782,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         return None
 
 
-class StaticRouterNode(RouterMixin, PipelineRouterNode):
+class StaticRouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode):
     """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):
