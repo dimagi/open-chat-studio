@@ -48,6 +48,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(format_markdown(summary, a=_commit(runs["a"][0]), b=_commit(runs["b"][0])))
+    if args.fail_above is not None:
+        slow = regressions(summary, args.fail_above)
+        for row in slow:
+            name = row["name"].split("::", 1)[-1]
+            print(f"::error::{name} is {(row['ratio'] - 1) * 100:.0f}% slower than A", file=sys.stderr)
+        if slow:
+            return 1
     return 0
 
 
@@ -57,6 +64,11 @@ def _parse_args(argv):
     parser.add_argument("--b", required=True, help="candidate checkout")
     parser.add_argument("--pairs", type=_positive_int, default=2, help="number of A/B pairs (default 2)")
     parser.add_argument("--out", default="ab-results", help="directory for the per-run JSON and summary.json")
+    parser.add_argument(
+        "--fail-above",
+        type=float,
+        help="exit with status 1 when any benchmark's B/A ratio is above this, e.g. 1.25 for 25%% slower",
+    )
     parser.add_argument("pytest_args", nargs="*", help="extra pytest arguments, after --")
     return parser.parse_args(argv)
 
@@ -115,6 +127,11 @@ def compare(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> l
             }
         )
     return rows
+
+
+def regressions(rows: list[dict], limit: float) -> list[dict]:
+    """The rows whose B/A ratio is above ``limit``."""
+    return [row for row in rows if row["ratio"] > limit]
 
 
 def format_markdown(rows: list[dict], a: str, b: str) -> str:
