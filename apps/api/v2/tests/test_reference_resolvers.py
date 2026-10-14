@@ -19,8 +19,9 @@ from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.nodes.node_metadata import RESOLVERS
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
+from apps.utils.tests.fixtures import make_team_with_resources
 
-from .test_pipeline_discovery import add_remaining_resources, make_team_with_resources
+from .test_pipeline_discovery import add_remaining_resources
 
 
 @pytest.fixture()

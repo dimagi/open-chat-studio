@@ -19,12 +19,7 @@ from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
-from apps.utils.factories.service_provider_factories import (
-    LlmProviderFactory,
-    LlmProviderModelFactory,
-    VoiceProviderFactory,
-)
+from apps.utils.factories.experiment import SyntheticVoiceFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -35,27 +30,9 @@ def team(db):
 
 
 @pytest.fixture()
-def team_with_resources(db):
-    return make_team_with_resources()
-
-
-@pytest.fixture()
 def team_with_every_resource(team_with_resources):
     """One entry in every option list, so a shape assertion has something to look at in each."""
     return add_remaining_resources(team_with_resources)
-
-
-def make_team_with_resources():
-    team = TeamWithUsersFactory.create()
-    LlmProviderFactory.create(team=team, type="openai", name="Prod OpenAI")
-    LlmProviderModelFactory.create(team=team, type="openai")
-    VoiceProviderFactory.create(team=team, name="Prod Polly")
-    SourceMaterialFactory.create(team=team, topic="Returns policy")
-    # Pinned to None so CollectionFactory's SubFactories don't add an LlmProvider to this team.
-    CollectionFactory.create(
-        team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
-    )
-    return team
 
 
 def add_remaining_resources(team):
