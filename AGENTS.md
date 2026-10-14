@@ -52,6 +52,7 @@ Facts that reviewers and agents repeatedly get wrong:
 * Type check: `uv run inv typecheck` (runs both `ty` and `tsc`; `--paths` scopes the Python check, `--python`/`--js` limit it to one)
 * Run Django dev server: `uv run inv runserver` (uses `portless` if available, otherwise falls back to `uv run python manage.py runserver`)
 * Run Django, Celery and the asset watcher together: `uv run inv dev`
+* Find duplicated code with treepeat: `uv run --group code-analysis treepeat detect <path>` (the `code-analysis` group is not installed by `uv sync` by default)
 
 ## Verifying changes
 
