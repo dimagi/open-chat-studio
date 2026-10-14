@@ -19,7 +19,7 @@ when git or treepeat cannot run.
 
 Usage:
     uv run inv duplicates
-    uv run python scripts/find_touched_duplicates.py --base origin/main --format json apps
+    uv run python -m scripts.duplicates.find_touched_duplicates --base origin/main --format json apps
 """
 
 import argparse

@@ -380,8 +380,8 @@ def duplicates(c: Context, base=None, similarity=80, min_lines=3, json=False, pa
         raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
     output_format = "json" if json else "markdown"
     c.run(
-        f"python scripts/find_touched_duplicates.py {f'--base {base} ' if base else ''}--similarity {similarity} "
-        f"--min-lines {min_lines} --format {output_format} {path}",
+        f"python -m scripts.duplicates.find_touched_duplicates {f'--base {base} ' if base else ''}"
+        f"--similarity {similarity} --min-lines {min_lines} --format {output_format} {path}",
         pty=sys.stdout.isatty(),
     )
 

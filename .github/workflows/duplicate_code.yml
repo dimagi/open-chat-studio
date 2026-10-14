@@ -49,7 +49,7 @@ jobs:
         id: report
         run: |
           set +e
-          uv run python scripts/find_touched_duplicates.py --fail > report.md
+          uv run python -m scripts.duplicates.find_touched_duplicates --fail > report.md
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
       - name: Update the PR comment
         env:

@@ -1,18 +1,15 @@
 """Tests for find_touched_duplicates.py.
 
-Run with: uv run pytest scripts/test_find_touched_duplicates.py -v
+Run with: uv run pytest scripts/duplicates/test_find_touched_duplicates.py -v
 """
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from find_touched_duplicates import (  # noqa: E402
+from scripts.duplicates.find_touched_duplicates import (
     WHOLE_FILE,
     Group,
     Region,
@@ -267,8 +264,8 @@ def test_main_reports_missing_base(repo, capsys, monkeypatch):
 
 def test_main_reports_missing_treepeat(repo, capsys, monkeypatch):
     monkeypatch.chdir(repo)
-    monkeypatch.setattr("find_touched_duplicates.shutil.which", lambda name: None)
-    monkeypatch.setattr("find_touched_duplicates.sys.executable", str(repo / "bin" / "python"))
+    monkeypatch.setattr("scripts.duplicates.find_touched_duplicates.shutil.which", lambda name: None)
+    monkeypatch.setattr("scripts.duplicates.find_touched_duplicates.sys.executable", str(repo / "bin" / "python"))
 
     assert main(["--base", "main", "pkg"]) == 2
     assert "uv sync --group code-analysis" in capsys.readouterr().err
