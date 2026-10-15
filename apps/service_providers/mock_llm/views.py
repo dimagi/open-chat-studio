@@ -10,7 +10,7 @@ from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import lorem, payloads, schemas
+from . import MODEL_NAME, lorem, payloads, schemas
 from .directives import ErrorDirective, parse_directives
 
 # Rotates the wording so consecutive replies in one conversation aren't identical.
@@ -142,7 +142,7 @@ def chat_completions(request):
         "total_tokens": prompt_tokens + completion_tokens,
     }
     envelope = payloads.chat_completion_envelope(
-        model=payload.get("model") or payloads.MODEL_NAME, text=text, tool_calls=tool_calls, usage=usage
+        model=payload.get("model") or MODEL_NAME, text=text, tool_calls=tool_calls, usage=usage
     )
 
     if payload.get("stream"):
@@ -182,7 +182,7 @@ def responses(request):
         output = [payloads.message_output(output_text)]
 
     envelope = payloads.response_envelope(
-        model=payload.get("model") or payloads.MODEL_NAME,
+        model=payload.get("model") or MODEL_NAME,
         output=output,
         input_tokens=lorem.count_tokens(payloads.prompt_text(items)),
         output_tokens=lorem.count_tokens(output_text),
@@ -202,7 +202,7 @@ def models(request):
             "object": "list",
             "data": [
                 {
-                    "id": payloads.MODEL_NAME,
+                    "id": MODEL_NAME,
                     "object": "model",
                     "created": int(time.time()),
                     "owned_by": "mock-llm",

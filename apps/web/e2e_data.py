@@ -14,6 +14,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.pipelines.models import Pipeline
+from apps.service_providers import mock_llm
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams import backends
 from apps.teams.models import Team
@@ -37,9 +38,6 @@ E2E_PASSWORD = "e2epassword"
 State = Literal["team", "llm_provider", "chatbot", "session"]
 STATES: tuple[State, ...] = get_args(State)
 USER_MESSAGE = "Reply with a short greeting."
-# The mock LLM answers to any model name; a team-scoped one keeps the test off the global model list.
-MOCK_LLM_MODEL_NAME = "stub"
-MOCK_LLM_TOKEN_LIMIT = 128000
 
 
 class SessionCookie(TypedDict):
@@ -111,9 +109,12 @@ def _create_llm_provider(team: Team, base_url: str) -> tuple[LlmProvider, LlmPro
     provider = LlmProviderFactory.create(
         team=team,
         name="Mock OpenAI",
-        config={"openai_api_key": "mock", "openai_api_base": f"{base_url}/mock-llm/v1"},
+        config={"openai_api_key": "mock", "openai_api_base": mock_llm.base_url(base_url)},
     )
-    model = LlmProviderModelFactory.create(team=team, name=MOCK_LLM_MODEL_NAME, max_token_limit=MOCK_LLM_TOKEN_LIMIT)
+    # The mock answers to any model name; a team-scoped one keeps the test off the global model list.
+    model = LlmProviderModelFactory.create(
+        team=team, name=mock_llm.MODEL_NAME, max_token_limit=mock_llm.MODEL_TOKEN_LIMIT
+    )
     return provider, model
 
 

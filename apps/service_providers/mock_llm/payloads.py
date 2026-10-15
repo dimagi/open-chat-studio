@@ -8,8 +8,6 @@ import uuid
 
 from .directives import ErrorDirective
 
-MODEL_NAME = "stub"
-
 # Real OpenAI reports these as the error `type`; the rest fall back to the status family.
 CODE_TYPES = {
     "insufficient_quota": "insufficient_quota",

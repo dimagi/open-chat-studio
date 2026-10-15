@@ -63,3 +63,15 @@ Limitations:
     thread for its duration, which a `runserver --nothreading` dev server does not have
     to spare.
 """
+
+# Where config.urls mounts the endpoints.
+MOUNT_PATH = "mock-llm/"
+MODEL_NAME = "stub"
+# High enough that history compression never kicks in.
+MODEL_TOKEN_LIMIT = 128000
+DEFAULT_SERVER_URL = "http://localhost:8000"
+
+
+def base_url(server_url: str) -> str:
+    """The OpenAI API base URL of the mock served by the server at `server_url`."""
+    return f"{server_url.rstrip('/')}/{MOUNT_PATH}v1"

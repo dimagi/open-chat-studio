@@ -9,7 +9,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.responses import Response, ResponseStreamEvent
 from pydantic import TypeAdapter
 
-from apps.service_providers.mock_llm import schemas, views
+from apps.service_providers.mock_llm import MODEL_NAME, schemas, views
 from apps.service_providers.mock_llm.directives import (
     DEFAULT_SLOW_SECONDS,
     MAX_SLOW_SECONDS,
@@ -22,7 +22,6 @@ from apps.service_providers.mock_llm.lorem import (
     build_response_text,
 )
 from apps.service_providers.mock_llm.payloads import (
-    MODEL_NAME,
     error_body,
     last_user_message,
 )
