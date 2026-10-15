@@ -519,6 +519,9 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    # Redoc 3's standalone bundle uses `import.meta`, which fails in the classic <script> tag
+    # drf-spectacular renders, leaving the docs page blank.
+    "REDOC_DIST": "https://cdn.jsdelivr.net/npm/redoc@2.5.4",
     "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
