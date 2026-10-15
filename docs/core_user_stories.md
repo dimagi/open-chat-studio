@@ -1,6 +1,7 @@
 # Core User Stories
 
 The flows the product must always support. Each story is covered by a [Playwright test](developer_guides/testing/playwright_tests.md).
+Each test starts from its own seeded data rather than from what the previous story created, so, for example, US-6 and US-7 use a seeded session, not the one US-5 produces.
 
 | #    | Story                                                                                                   | Covered by                      |
 |------|---------------------------------------------------------------------------------------------------------|---------------------------------|
