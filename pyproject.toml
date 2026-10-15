@@ -176,6 +176,9 @@ omit = [
     "*/tests/*",
     "*/test_*.py",
     "*/conftest.py",
+    # Run only by the Playwright E2E job, which does not measure coverage.
+    "apps/web/e2e_data.py",
+    "apps/web/management/commands/e2e_seed.py",
     "apps/utils/factories/*",
     # Imported only by a deployed process, so it can never report anything but 0%.
     "config/settings_production.py",

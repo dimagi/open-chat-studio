@@ -146,6 +146,7 @@ nav:
       - 0068 Field order is presentation, stored outside the locked schema: adr/0068-field-order-is-presentation-outside-the-locked-schema.md
       - 0069 Status messages are generated in the background: adr/0069-status-messages-are-generated-in-the-background.md
       - 0070 Client-credentials applications may reach all chatbots: adr/0070-client-credentials-applications-may-reach-all-chatbots.md
+  - Core User Stories: core_user_stories.md
   - Developer Guides:
     - Processes:
       - Release and Ops:
@@ -185,6 +186,7 @@ nav:
       - Testing Twilio Integration Locally: developer_guides/testing/twilio_testing.md
       - Help Agent Evals: developer_guides/testing/help_agent_evals.md
       - Benchmarks: developer_guides/testing/benchmarks.md
+      - Playwright Tests: developer_guides/testing/playwright_tests.md
   - Self-Hosting:
     - Overview: hosting/index.md
     - Releases and Upgrades: hosting/releases.md

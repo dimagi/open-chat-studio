@@ -369,13 +369,13 @@ def typecheck(c: Context, paths="", python=False, js=False):
 @task(
     help={
         "base": "Branch to diff against (default: origin/$GITHUB_BASE_REF if set, else origin/main)",
-        "similarity": "Minimum percent similarity (default: 80)",
-        "min_lines": "Minimum lines in a duplicated region (default: 3)",
+        "similarity": "Minimum percent similarity (default: 90)",
+        "min_lines": "Minimum lines in a duplicated region (default: 5)",
         "json": "Print JSON instead of markdown",
         "path": "Directory to scan (default: apps)",
     }
 )
-def duplicates(c: Context, base=None, similarity=80, min_lines=3, json=False, path="apps"):
+def duplicates(c: Context, base=None, similarity=90, min_lines=5, json=False, path="apps"):
     """Report duplicate code that overlaps lines changed on this branch."""
     if not shutil.which("treepeat"):
         raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
