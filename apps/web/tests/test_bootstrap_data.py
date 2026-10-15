@@ -1,12 +1,11 @@
 import pytest
 
+from apps.service_providers import mock_llm
 from apps.service_providers.llm_service.credentials import ProviderCredentials
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
-from apps.web.management.commands.bootstrap_data import (
-    _STUB_LLM_MODEL_NAME,
-    _STUB_LLM_PROVIDER_NAME,
-    Command,
-)
+from apps.web.management.commands.bootstrap_data import _STUB_LLM_PROVIDER_NAME, Command
+
+SERVER_URL = "http://localhost:8000"
 
 
 @pytest.fixture()
@@ -16,7 +15,7 @@ def command():
 
 @pytest.fixture()
 def openai_credentials():
-    return ProviderCredentials(LlmProviderTypes.openai, "OpenAI", {"openai_api_key": "sk-real-key"})
+    return ProviderCredentials(type=LlmProviderTypes.openai, name="OpenAI", config={"openai_api_key": "sk-real-key"})
 
 
 @pytest.fixture()
@@ -36,11 +35,21 @@ def env_credentials(monkeypatch):
 def test_seeds_the_stub_provider_when_no_env_credentials(command, team, env_credentials):
     env_credentials([])
 
-    provider, model = command._seed_llm_providers(team)
+    provider, model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert provider.name == _STUB_LLM_PROVIDER_NAME
-    assert provider.config["openai_api_base"].endswith("/mock-llm/v1")
-    assert model.name == _STUB_LLM_MODEL_NAME
+    assert provider.config["openai_api_base"] == "http://localhost:8000/mock-llm/v1"
+    assert model.name == mock_llm.MODEL_NAME
+
+
+@pytest.mark.django_db()
+def test_stub_provider_points_at_the_given_server(command, team, env_credentials):
+    """Under portless the dev server is not on localhost:8000."""
+    env_credentials([])
+
+    provider, _model = command._seed_llm_providers(team=team, base_url="https://ocs.localhost/")
+
+    assert provider.config["openai_api_base"] == "https://ocs.localhost/mock-llm/v1"
 
 
 @pytest.mark.django_db()
@@ -52,7 +61,7 @@ def test_real_credentials_win_over_the_stub_provider(command, team, openai_crede
     """
     env_credentials([openai_credentials])
 
-    provider, _model = command._seed_llm_providers(team)
+    provider, _model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert provider.name == "OpenAI"
     assert provider.config["openai_api_key"] == "sk-real-key"
@@ -62,7 +71,7 @@ def test_real_credentials_win_over_the_stub_provider(command, team, openai_crede
 def test_stub_provider_is_still_seeded_alongside_real_credentials(command, team, openai_credentials, env_credentials):
     env_credentials([openai_credentials])
 
-    command._seed_llm_providers(team)
+    command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert LlmProvider.objects.filter(team=team, name=_STUB_LLM_PROVIDER_NAME).exists()
 
@@ -70,9 +79,9 @@ def test_stub_provider_is_still_seeded_alongside_real_credentials(command, team,
 @pytest.mark.django_db()
 def test_an_existing_real_provider_is_reused_rather_than_duplicated(command, team, openai_credentials, env_credentials):
     env_credentials([openai_credentials])
-    command._seed_llm_providers(team)
+    command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
-    provider, _model = command._seed_llm_providers(team)
+    provider, _model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert provider.name == "OpenAI"
     assert LlmProvider.objects.filter(team=team, type=str(LlmProviderTypes.openai)).count() == 2
@@ -81,21 +90,21 @@ def test_an_existing_real_provider_is_reused_rather_than_duplicated(command, tea
 @pytest.mark.django_db()
 def test_seeding_twice_creates_one_stub_provider_and_model(command, team, env_credentials):
     env_credentials([])
-    command._seed_llm_providers(team)
-    command._seed_llm_providers(team)
+    command._seed_llm_providers(team=team, base_url=SERVER_URL)
+    command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert LlmProvider.objects.filter(team=team, name=_STUB_LLM_PROVIDER_NAME).count() == 1
-    assert LlmProviderModel.objects.filter(team=team, name=_STUB_LLM_MODEL_NAME).count() == 1
+    assert LlmProviderModel.objects.filter(team=team, name=mock_llm.MODEL_NAME).count() == 1
 
 
 @pytest.mark.django_db()
 def test_reseeding_repoints_an_existing_stub_provider(command, team, env_credentials):
     env_credentials([])
-    provider, _model = command._seed_llm_providers(team)
+    provider, _model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
     provider.config = {"openai_api_key": "stub", "openai_api_base": "stale"}
     provider.save(update_fields=["config"])
 
-    reseeded, _model = command._seed_llm_providers(team)
+    reseeded, _model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
     assert reseeded.config["openai_api_base"].endswith("/mock-llm/v1")
 
@@ -104,10 +113,10 @@ def test_reseeding_repoints_an_existing_stub_provider(command, team, env_credent
 def test_reseeding_updates_the_stub_model_token_limit(command, team, env_credentials, monkeypatch):
     """The token limit is a value to set, not part of the identity of the stub model."""
     env_credentials([])
-    command._seed_llm_providers(team)
-    monkeypatch.setattr("apps.web.management.commands.bootstrap_data._STUB_LLM_TOKEN_LIMIT", 64000)
+    command._seed_llm_providers(team=team, base_url=SERVER_URL)
+    monkeypatch.setattr("apps.service_providers.mock_llm.MODEL_TOKEN_LIMIT", 64000)
 
-    _provider, model = command._seed_llm_providers(team)
+    _provider, model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
 
-    assert LlmProviderModel.objects.filter(team=team, name=_STUB_LLM_MODEL_NAME).count() == 1
+    assert LlmProviderModel.objects.filter(team=team, name=mock_llm.MODEL_NAME).count() == 1
     assert model.max_token_limit == 64000

@@ -14,9 +14,11 @@ Endpoints, under ``/mock-llm/``:
 
 Wiring it into OCS:
     ``manage.py bootstrap_data`` creates a provider named "Stub LLM" pointing here, along
-    with a model named "stub". To add one by hand instead: Service Providers > LLM > add,
-    choose type "OpenAI", set API Base URL to http://localhost:8000/mock-llm/v1 and any
-    non-empty API key, then add a custom model named "stub".
+    with a model named "stub". Pass ``--base-url`` when the dev server is not at
+    http://localhost:8000, as under portless. To add one by hand instead: Service
+    Providers > LLM > add, choose type "OpenAI", set API Base URL to the dev server's
+    address followed by /mock-llm/v1 and any non-empty API key, then add a custom model
+    named "stub".
 
 Directives:
     The last user message is scanned, case-insensitively and on word boundaries, for the
