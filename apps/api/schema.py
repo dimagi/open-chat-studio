@@ -107,8 +107,8 @@ def mirror_unknown_key_rejection(result, **kwargs):
 
     Those serializers 400 on a key they do not declare, but OpenAPI permits extra properties by
     default, so a generated client or a validator would accept a body the API refuses -- and the
-    consumer this API is built for reads the schema rather than the prose. Every field on the
-    serializers concerned is writable, so the declared properties are exactly the accepted keys.
+    consumer this API is built for reads the schema rather than the prose. They also 400 on a
+    read-only key, which the schema already marks ``readOnly``.
 
     Component names are derived from the serializer classes, including the ``Patched`` prefix
     drf-spectacular gives a PATCH body, so a new closed serializer needs no edit here. A

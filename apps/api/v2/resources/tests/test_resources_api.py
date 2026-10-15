@@ -85,6 +85,26 @@ class TestResources:
         row.refresh_from_db()
         assert row.is_archived is False
 
+    def test_create_rejects_read_only_id(self, client, resource):
+        response = client.post(resource.list_url, {**resource.create_body, "id": 999999}, format="json")
+
+        assert response.status_code == 400
+        assert "Read-only field" in str(response.json()["id"])
+        assert not resource.model.objects.filter(pk=999999).exists()
+
+    def test_patch_rejects_read_only_id(self, client, team, resource):
+        row = resource.factory.create(team=team)
+        before = getattr(row, resource.patch_field)
+
+        response = client.patch(
+            resource.detail_url(row.id), {"id": row.id + 1, resource.patch_field: "Renamed"}, format="json"
+        )
+
+        assert response.status_code == 400
+        assert "Read-only field" in str(response.json()["id"])
+        row.refresh_from_db()
+        assert getattr(row, resource.patch_field) == before
+
     def test_put_is_not_offered(self, client, team, resource):
         row = resource.factory.create(team=team)
 
@@ -174,3 +194,15 @@ def test_consent_form_rejects_public_chat_fields(client, field, value):
 
     assert response.status_code == 400
     assert field in response.json()
+
+
+@pytest.mark.django_db()
+def test_consent_form_patch_rejects_is_default(client, team):
+    row = CONSENT_FORM.factory.create(team=team)
+
+    response = client.patch(CONSENT_FORM.detail_url(row.id), {"is_default": True}, format="json")
+
+    assert response.status_code == 400
+    assert "Read-only field" in str(response.json()["is_default"])
+    row.refresh_from_db()
+    assert row.is_default is False

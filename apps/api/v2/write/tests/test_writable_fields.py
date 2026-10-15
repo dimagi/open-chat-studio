@@ -85,8 +85,8 @@ def test_the_schema_closes_each_body_that_rejects_unknown_keys(pytestconfig, com
     by default -- so left open, a generated client or a validator would accept a body the API
     refuses, and the consumer this API is built for reads the schema rather than the prose.
 
-    The declared properties are compared against `serializer().fields`, which is the set
-    `RejectsUnknownKeys` itself checks against, so the two cannot drift apart.
+    Every field on these serializers is writable, so `serializer().fields` is the set
+    `RejectsUnknownKeys` accepts, and comparing against it keeps the two from drifting apart.
     """
     schema = _v2_components(pytestconfig)[component]
 
