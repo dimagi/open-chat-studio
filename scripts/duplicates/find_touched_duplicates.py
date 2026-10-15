@@ -128,10 +128,16 @@ def _git(args: list[str], repo_root: Path) -> str:
     ).stdout
 
 
+def find_treepeat() -> str | None:
+    """Return the path to the treepeat executable, or None if it is not installed."""
+    treepeat = shutil.which("treepeat") or str(Path(sys.executable).parent / "treepeat")
+    return treepeat if Path(treepeat).exists() else None
+
+
 def run_treepeat(path: str, similarity: int, min_lines: int, repo_root: Path) -> dict:
     """Run treepeat and return its SARIF output as a dict."""
-    treepeat = shutil.which("treepeat") or str(Path(sys.executable).parent / "treepeat")
-    if not Path(treepeat).exists():
+    treepeat = find_treepeat()
+    if treepeat is None:
         raise FileNotFoundError("treepeat is not installed. Run `uv sync --group code-analysis` to install it.")
     with tempfile.TemporaryDirectory() as tmp:
         output = Path(tmp) / "treepeat.sarif"

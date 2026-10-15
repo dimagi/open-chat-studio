@@ -14,6 +14,7 @@ from scripts.duplicates.find_touched_duplicates import (
     Group,
     Region,
     find_touched_groups,
+    find_treepeat,
     format_json,
     format_markdown,
     get_touched_lines,
@@ -21,6 +22,10 @@ from scripts.duplicates.find_touched_duplicates import (
     parse_diff,
     parse_treepeat_sarif,
     resolve_base,
+)
+
+requires_treepeat = pytest.mark.skipif(
+    find_treepeat() is None, reason="treepeat is not installed; run `uv sync --group code-analysis`"
 )
 
 
@@ -250,6 +255,7 @@ def test_get_touched_lines_ignores_changes_on_base(repo):
     assert get_touched_lines(base="main", repo_root=repo) == {}
 
 
+@requires_treepeat
 def test_main_reports_duplicate_of_untouched_code(repo, capsys, monkeypatch):
     (repo / "pkg" / "existing.py").write_text(DUPLICATED_FUNCTION.format(name="existing_total"))
     git(repo, "add", ".")
@@ -266,6 +272,7 @@ def test_main_reports_duplicate_of_untouched_code(repo, capsys, monkeypatch):
     assert [r["path"] for r in group["others"]] == ["pkg/existing.py"]
 
 
+@requires_treepeat
 @pytest.mark.parametrize(
     ("change_function", "expected_exit_code"),
     [
