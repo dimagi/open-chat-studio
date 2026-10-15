@@ -28,7 +28,7 @@ query ──► dense (pgvector)   ─┐
 | Lexical search and RRF fusion | `flag_hybrid_search` | `apps/documents/retrieval.py` |
 | Reranking | `flag_hybrid_search` plus provider/model configuration | `apps/documents/rerankers.py` |
 
-Both are team-aware waffle flags (see [Feature Flags](feature_flags.md)), so they can be
+Both are team-aware waffle flags (see [Feature Flags](../feature_flags.md)), so they can be
 enabled per team, by percentage, or globally, and rolled back without a deploy.
 
 ### Indexing: contextual chunk headers
