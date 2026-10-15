@@ -36,8 +36,8 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.stages.terminal import FileDeliveryFailure, ResponseSendingStage
 from apps.channels.tasks import handle_commcare_connect_message
-from apps.channels.tests._file_helpers import make_mock_file
 from apps.channels.tests.channels.conftest import make_context
+from apps.channels.tests.file_helpers import make_mock_file
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData

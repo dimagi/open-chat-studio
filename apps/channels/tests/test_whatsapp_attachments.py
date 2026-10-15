@@ -17,11 +17,11 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.messaging_service import MetaCloudAPIService, TurnIOService, TwilioService
 from apps.utils.factories.channels import ExperimentChannelFactory
 
-from ._whatsapp_attachment_helpers import (
+from .message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
+from .whatsapp_attachment_helpers import (
     assert_file_resolves_via_download_file_join,
     setup_inbound_bot_response,
 )
-from .message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
 
 # ===========================================================================
 # IMAGE ATTACHMENTS

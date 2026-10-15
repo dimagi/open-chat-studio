@@ -7,7 +7,7 @@ from mock.mock import patch
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.slack_channel import SlackChannel
-from apps.channels.tests._file_helpers import make_mock_file
+from apps.channels.tests.file_helpers import make_mock_file
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.service_providers.tracing import TraceInfo
 from apps.slack.utils import make_session_external_id
