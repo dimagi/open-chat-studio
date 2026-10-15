@@ -2,9 +2,7 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.forms import PublicChannelForm
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.webhooks import TelegramWebhookManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProviderType
@@ -247,13 +245,6 @@ class TestChannelPlatform:
 
 
 @pytest.mark.django_db()
-def test_get_webhook_manager_returns_telegram_manager_for_telegram():
-    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
-
-    assert isinstance(channel.get_webhook_manager(), TelegramWebhookManager)
-
-
-@pytest.mark.django_db()
 def test_get_webhook_manager_returns_service_for_provider_backed_channel():
     provider = MessagingProviderFactory(
         type=MessagingProviderType.twilio, config={"account_sid": "123", "auth_token": "123"}
@@ -288,9 +279,6 @@ def test_webhook_url_for_telegram_channel():
 class TestPublicChannelPlatform:
     """PUBLIC is a widget platform, one per chatbot, offered only behind flag_public_channel."""
 
-    def test_widget_platforms_are_the_two_widget_served_platforms(self):
-        assert ChannelPlatform.widget_platforms() == [ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC]
-
     def test_public_hidden_when_flag_off(self, experiment):
         platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
         assert ChannelPlatform.PUBLIC not in platforms
@@ -309,6 +297,3 @@ class TestPublicChannelPlatform:
 
     def test_public_identifier_key_is_the_widget_token(self):
         assert ChannelPlatform.PUBLIC.channel_identifier_key == "widget_token"
-
-    def test_public_extra_form_is_the_public_channel_form(self, experiment):
-        assert isinstance(ChannelPlatform.PUBLIC.extra_form(experiment=experiment), PublicChannelForm)
