@@ -20,16 +20,35 @@ export type ScenarioName = keyof typeof SCENARIOS;
 /** Global setup stores the seeded scenarios in this env var as JSON, and the test workers inherit it. */
 export const E2E_SCENARIOS_ENV = "E2E_SCENARIOS";
 
-/** One scenario's data. Fields after `session_cookie` exist only from the state that adds them. */
-export interface E2EData {
+/** What every scenario has. */
+interface TeamData {
   email: string;
   password: string;
   team_slug: string;
   team_url: string;
   session_cookie: { name: string; value: string };
+}
+
+interface LlmProviderData extends TeamData {
   llm_provider_name: string;
+}
+
+interface ChatbotData extends LlmProviderData {
   chatbot_name: string;
   chatbot_url: string;
+}
+
+interface SessionData extends ChatbotData {
   session_url: string;
   user_message: string;
 }
+
+interface DataByState {
+  team: TeamData;
+  llm_provider: LlmProviderData;
+  chatbot: ChatbotData;
+  session: SessionData;
+}
+
+/** One scenario's data, with only the fields its state creates. */
+export type E2EData<Name extends ScenarioName = ScenarioName> = DataByState[(typeof SCENARIOS)[Name]];
