@@ -5,6 +5,9 @@ import weakref
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments import export as export_mod
@@ -20,9 +23,11 @@ from apps.experiments.export import (
     resolve_export_columns,
 )
 from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationItemStatus
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -258,6 +263,7 @@ def test_trace_id_resolved_per_message_trace_info():
         get_platform_name=Mock(return_value="TestPlatform"),
         participant=Mock(name="Test Participant", identifier="participant123", public_id="public123"),
         chat=Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[]))),
+        annotation_items=Mock(all=Mock(return_value=[])),
     )
     empty_trace = Mock(participant_data={}, participant_data_diff=[])
 
@@ -306,7 +312,10 @@ def test_trace_id_resolved_per_message_trace_info():
     mock_messages_qs.order_by.return_value = mock_messages_qs
     mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
 
-    with patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs):
+    with (
+        patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs),
+        patch("apps.experiments.export.flag_is_active_for_team", return_value=True),
+    ):
         csv_text = _export_csv_text(experiment, Mock())
         rows = list(csv.reader(io.StringIO(csv_text), delimiter=","))
 
@@ -432,6 +441,7 @@ def test_session_cache_evicts_oldest_beyond_max_entries():
     for session in sessions:
         session.participant = Mock(name=f"p{session.id}", identifier=f"p{session.id}", public_id=f"pub{session.id}")
         session.chat = Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[])))
+        session.annotation_items = Mock(all=Mock(return_value=[]))
 
     first = cache.get(sessions[0])
     cache.get(sessions[1])
@@ -532,6 +542,7 @@ FULL_EXPORT_HEADER = [
     "Message Content",
     "Platform",
     "Session Tags",
+    "Annotation Queues",
     "Session Comments",
     "Session ID",
     "Session State",
@@ -613,8 +624,104 @@ def test_unselected_columns_are_not_computed():
             ["participant_data"], {"input_message_trace", "output_message_trace"}, id="participant_data_traces"
         ),
         pytest.param(["session_tags"], {"chat__tags"}, id="session_tags"),
+        pytest.param(
+            ["annotation_queues"], {"chat__experiment_session__annotation_items__queue"}, id="annotation_queues"
+        ),
     ],
 )
 def test_message_queryset_prefetches_only_selected_columns(columns, expected_prefetches):
     queryset = _build_message_queryset(ExperimentSession.objects.none(), columns=resolve_export_columns(columns))
     assert set(queryset._prefetch_related_lookups) == expected_prefetches
+
+
+def _session_with_one_message():
+    """A session with a single human message, so the export yields one row."""
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+    return session
+
+
+def _export_value(session, label):
+    """The exported cell under `label` for the session's single row."""
+    with override_flag("flag_human_annotations", active=True):
+        header, row = list(
+            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
+        )
+    return dict(zip(header, row, strict=True))[label]
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_lists_each_queue_with_its_status():
+    """Queues are listed by name with the item's status in brackets."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Tone"), team=team, session=session
+    )
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Safety QA"),
+        team=team,
+        session=session,
+        status=AnnotationItemStatus.COMPLETED,
+    )
+
+    assert _export_value(session, "Annotation Queues") == "Safety QA (Completed), Tone (Pending)"
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_is_empty_for_a_session_in_no_queue():
+    """A session in no queue exports an empty cell, not a placeholder."""
+    session = _session_with_one_message()
+
+    assert _export_value(session, "Annotation Queues") == ""
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_neutralizes_formula_prefixes():
+    """A queue name starting with a formula character cannot execute when the CSV is opened."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="=HYPERLINK(1)"), team=team, session=session
+    )
+
+    assert _export_value(session, "Annotation Queues") == "'=HYPERLINK(1) (Pending)"
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_does_not_query_per_session():
+    """Queue membership is prefetched, so more sessions do not mean more queries."""
+
+    def export_queries(session_count):
+        experiment = ExperimentFactory.create()
+        for _ in range(session_count):
+            session = ExperimentSessionFactory.create(
+                experiment=experiment, team=experiment.team, chat__team=experiment.team
+            )
+            ChatMessage.objects.create(chat=session.chat, content="hello", message_type=ChatMessageType.HUMAN)
+            AnnotationItemFactory.create(
+                queue=AnnotationQueueFactory.create(team=experiment.team), team=experiment.team, session=session
+            )
+        sessions = ExperimentSession.objects.filter(experiment=experiment)
+        with override_flag("flag_human_annotations", active=True), CaptureQueriesContext(connection) as queries:
+            list(generate_export_rows(experiment, sessions, columns=["annotation_queues"]))
+        return len(queries)
+
+    assert export_queries(1) == export_queries(3)
+
+
+@pytest.mark.django_db()
+def test_annotation_queues_column_is_empty_when_the_flag_is_off():
+    """Queue items created before the flag was turned off do not reach the export."""
+    session = _session_with_one_message()
+    team = session.team
+    AnnotationItemFactory.create(
+        queue=AnnotationQueueFactory.create(team=team, name="Tone"), team=team, session=session
+    )
+
+    with override_flag("flag_human_annotations", active=False):
+        header, row = list(
+            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["annotation_queues"])
+        )
+
+    assert dict(zip(header, row, strict=True))["Annotation Queues"] == ""
