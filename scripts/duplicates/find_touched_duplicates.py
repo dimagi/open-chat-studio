@@ -84,7 +84,8 @@ def parse_diff(diff: str) -> TouchedLines:
 
 def _new_path(header: str) -> str | None:
     """Return the path from a ``+++ b/<path>`` header, or None for a deleted file (``+++ /dev/null``)."""
-    return header.removeprefix("+++ b/") if header.startswith("+++ b/") else None
+    # Git ends the header with a tab when the path contains a space.
+    return header.removeprefix("+++ b/").removesuffix("\t") if header.startswith("+++ b/") else None
 
 
 def _hunk_range(match: re.Match) -> tuple[int, int]:
@@ -109,7 +110,10 @@ def resolve_base(base: str | None) -> str:
 def get_touched_lines(base: str, repo_root: Path) -> TouchedLines:
     """Return the line ranges changed since the merge base with ``base``, including uncommitted work."""
     merge_base = _git(["merge-base", base, "HEAD"], repo_root=repo_root).strip()
-    diff = _git(["diff", "-U0", "-M", "--no-color", "--no-ext-diff", merge_base], repo_root=repo_root)
+    diff = _git(
+        ["diff", "-U0", "-M", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", merge_base],
+        repo_root=repo_root,
+    )
     touched = parse_diff(diff)
     untracked = _git(["ls-files", "--others", "--exclude-standard"], repo_root=repo_root)
     for path in untracked.splitlines():
@@ -118,7 +122,10 @@ def get_touched_lines(base: str, repo_root: Path) -> TouchedLines:
 
 
 def _git(args: list[str], repo_root: Path) -> str:
-    return subprocess.run(["git", *args], cwd=repo_root, check=True, capture_output=True, text=True).stdout
+    # core.quotePath=false stops git quoting non-ASCII paths, so they match treepeat's paths.
+    return subprocess.run(
+        ["git", "-c", "core.quotePath=false", *args], cwd=repo_root, check=True, capture_output=True, text=True
+    ).stdout
 
 
 def run_treepeat(path: str, similarity: int, min_lines: int, repo_root: Path) -> dict:
@@ -227,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_root = Path(_git(["rev-parse", "--show-toplevel"], repo_root=Path.cwd()).strip())
         touched = get_touched_lines(base=base, repo_root=repo_root)
     except subprocess.CalledProcessError as error:
-        print(f"git {' '.join(error.cmd[1:])} failed: {error.stderr.strip()}", file=sys.stderr)
+        print(f"git {' '.join(error.cmd[3:])} failed: {error.stderr.strip()}", file=sys.stderr)
         print(
             f"Check that '{base}' exists: pass --base <branch>, or run `git fetch origin` to fetch it.",
             file=sys.stderr,

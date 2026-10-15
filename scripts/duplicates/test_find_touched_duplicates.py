@@ -59,6 +59,11 @@ def diff_for(path: str, *hunk_headers: str) -> str:
             {"a.md": [(1, 2), (10, 10)]},
             id="added-line-like-file-header",
         ),
+        pytest.param(
+            "diff --git a/sp ace.py b/sp ace.py\n--- a/sp ace.py\n+++ b/sp ace.py\t\n@@ -1 +1 @@\n-x\n+y\n",
+            {"sp ace.py": [(1, 1)]},
+            id="path-with-space-has-trailing-tab",
+        ),
     ],
 )
 def test_parse_diff(diff, expected):
@@ -206,6 +211,34 @@ def test_get_touched_lines(repo):
     touched = get_touched_lines(base="main", repo_root=repo)
 
     assert touched == {"pkg/a.py": [(1, 2)], "pkg/new.py": [WHOLE_FILE]}
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        pytest.param(("diff.noprefix", "true"), id="noprefix"),
+        pytest.param(("diff.mnemonicPrefix", "true"), id="mnemonic-prefix"),
+        pytest.param(("core.quotePath", "true"), id="quote-path"),
+    ],
+)
+def test_get_touched_lines_ignores_user_git_config(repo, config):
+    (repo / "pkg" / "café.py").write_text("c = 1\n")
+    (repo / "pkg" / "sp ace.py").write_text("s = 1\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "awkward paths")
+    git(repo, "branch", "-f", "main")
+    git(repo, "config", *config)
+    (repo / "pkg" / "a.py").write_text("x = 10\ny = 2\nz = 3\n")
+    (repo / "pkg" / "café.py").write_text("c = 10\n")
+    (repo / "pkg" / "sp ace.py").write_text("s = 10\n")
+    (repo / "pkg" / "naïve.py").write_text("n = 1\n")
+
+    assert get_touched_lines(base="main", repo_root=repo) == {
+        "pkg/a.py": [(1, 1)],
+        "pkg/café.py": [(1, 1)],
+        "pkg/sp ace.py": [(1, 1)],
+        "pkg/naïve.py": [WHOLE_FILE],
+    }
 
 
 def test_get_touched_lines_ignores_changes_on_base(repo):
