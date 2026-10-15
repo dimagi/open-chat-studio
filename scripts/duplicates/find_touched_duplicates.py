@@ -235,10 +235,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         sarif = run_treepeat(path=args.path, similarity=args.similarity, min_lines=args.min_lines, repo_root=repo_root)
+        groups = parse_treepeat_sarif(sarif)
     except FileNotFoundError as error:
         print(error, file=sys.stderr)
         return 2
-    touched_groups = find_touched_groups(groups=parse_treepeat_sarif(sarif), touched=touched)
+    except subprocess.CalledProcessError as error:
+        print(f"treepeat failed with exit code {error.returncode}.", file=sys.stderr)
+        return 2
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        print(f"Could not read treepeat's SARIF output: {error!r}", file=sys.stderr)
+        return 2
+    touched_groups = find_touched_groups(groups=groups, touched=touched)
 
     if args.format == "json":
         print(format_json(touched_groups))

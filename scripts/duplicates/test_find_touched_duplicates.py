@@ -272,6 +272,29 @@ def test_main_reports_missing_treepeat(repo, capsys, monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "treepeat_result",
+    [
+        pytest.param(subprocess.CalledProcessError(returncode=2, cmd=["treepeat"]), id="treepeat-fails"),
+        pytest.param(json.JSONDecodeError("Expecting value", "", 0), id="unreadable-sarif"),
+        pytest.param({"unexpected": []}, id="unexpected-sarif"),
+    ],
+)
+def test_main_reports_treepeat_failure(repo, capsys, monkeypatch, treepeat_result):
+    def fake_run_treepeat(**kwargs):
+        if isinstance(treepeat_result, Exception):
+            raise treepeat_result
+        return treepeat_result
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("scripts.duplicates.find_touched_duplicates.run_treepeat", fake_run_treepeat)
+
+    assert main(["--base", "main", "pkg"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "treepeat" in captured.err
+
+
+@pytest.mark.parametrize(
     ("base", "github_base_ref", "expected"),
     [
         pytest.param("release", "develop", "release", id="explicit-base-wins"),
