@@ -174,32 +174,49 @@ def test_chat_completions():
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("view", "payload"),
     [
-        pytest.param({"model": "stub"}, id="no-messages"),
-        pytest.param({"messages": "hi"}, id="messages-not-a-list"),
-        pytest.param({"messages": ["hi"]}, id="message-not-an-object"),
+        pytest.param(views.chat_completions, {"model": "stub"}, id="chat-no-messages"),
+        pytest.param(views.chat_completions, {"messages": "hi"}, id="chat-messages-not-a-list"),
+        pytest.param(views.chat_completions, {"messages": ["hi"]}, id="chat-message-not-an-object"),
+        pytest.param(views.responses, {"model": "stub"}, id="responses-no-input"),
+        pytest.param(views.responses, {"input": {"role": "user"}}, id="responses-input-not-a-string-or-list"),
     ],
 )
-def test_chat_completions_with_unusable_messages_is_a_bad_request(payload):
-    response = views.chat_completions(_post(payload))
+def test_unusable_request_is_a_bad_request(view, payload):
+    response = view(_post(payload))
 
     assert response.status_code == 400
     assert _json(response)["error"]["code"] == "invalid_request_error"
 
 
+_CHAT_MESSAGES = {"messages": [{"role": "user", "content": "hi"}]}
+
+
 @pytest.mark.parametrize(
-    "extra",
+    ("view", "payload"),
     [
-        pytest.param({"response_format": "json"}, id="response-format-not-an-object"),
-        pytest.param({"stream": True, "stream_options": "usage"}, id="stream-options-not-an-object"),
-        pytest.param({"tools": "all", "tool_choice": "required"}, id="tools-not-a-list"),
+        pytest.param(
+            views.chat_completions,
+            {**_CHAT_MESSAGES, "response_format": "json"},
+            id="chat-response-format-not-an-object",
+        ),
+        pytest.param(
+            views.chat_completions,
+            {**_CHAT_MESSAGES, "stream": True, "stream_options": "usage"},
+            id="chat-stream-options-not-an-object",
+        ),
+        pytest.param(
+            views.chat_completions,
+            {**_CHAT_MESSAGES, "tools": "all", "tool_choice": "required"},
+            id="chat-tools-not-a-list",
+        ),
+        pytest.param(views.responses, {"input": "hi", "text": "plain"}, id="responses-text-not-an-object"),
+        pytest.param(views.responses, {"input": "hi", "text": {"format": "json"}}, id="responses-format-not-an-object"),
     ],
 )
-def test_chat_completions_ignores_malformed_optional_fields(extra):
-    response = views.chat_completions(_post({"messages": [{"role": "user", "content": "hi"}], **extra}))
-
-    assert response.status_code == 200
+def test_malformed_optional_fields_are_ignored(view, payload):
+    assert view(_post(payload)).status_code == 200
 
 
 def test_chat_completions_error_directive():
@@ -249,33 +266,6 @@ def test_responses_accepts_a_bare_string_input():
 
     assert response.status_code == 200
     assert _json(response)["output"][0]["content"][0]["text"]
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        pytest.param({"model": "stub"}, id="no-input"),
-        pytest.param({"input": {"role": "user"}}, id="input-not-a-string-or-list"),
-    ],
-)
-def test_responses_with_unusable_input_is_a_bad_request(payload):
-    response = views.responses(_post(payload))
-
-    assert response.status_code == 400
-    assert _json(response)["error"]["code"] == "invalid_request_error"
-
-
-@pytest.mark.parametrize(
-    "extra",
-    [
-        pytest.param({"text": "plain"}, id="text-not-an-object"),
-        pytest.param({"text": {"format": "json"}}, id="format-not-an-object"),
-    ],
-)
-def test_responses_ignores_malformed_optional_fields(extra):
-    response = views.responses(_post({"input": "hi", **extra}))
-
-    assert response.status_code == 200
 
 
 def test_responses_stream():
