@@ -86,14 +86,14 @@ def create_e2e_data(state: State, base_url: str) -> E2EData:
 
         chatbot = _create_chatbot(team=team, user=user, provider=provider, model=model)
         data["chatbot_name"] = chatbot.name
-        data["chatbot_url"] = reverse("chatbots:single_chatbot_home", args=[team.slug, chatbot.id])
+        data["chatbot_url"] = reverse(viewname="chatbots:single_chatbot_home", args=[team.slug, chatbot.id])
         if state == "chatbot":
             return data
 
         session = _create_session(team=team, user=user, chatbot=chatbot)
         data["user_message"] = USER_MESSAGE
         data["session_url"] = reverse(
-            "chatbots:chatbot_session_view", args=[team.slug, chatbot.public_id, session.external_id]
+            viewname="chatbots:chatbot_session_view", args=[team.slug, chatbot.public_id, session.external_id]
         )
         return data
 

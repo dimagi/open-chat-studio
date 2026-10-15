@@ -179,7 +179,7 @@ def chat_completion_stream(*, envelope: dict, usage: dict, include_usage: bool):
             yield chunk([{"index": 0, "delta": {"content": piece}, "finish_reason": None}])
     yield chunk([{"index": 0, "delta": {}, "finish_reason": choice["finish_reason"]}])
     if include_usage:
-        yield chunk([], {"usage": usage})
+        yield chunk(choices=[], extra={"usage": usage})
     yield "data: [DONE]\n\n"
 
 

@@ -39,7 +39,7 @@ def _dict(value) -> dict:
 
 
 def _fail(error: ErrorDirective) -> JsonResponse:
-    return JsonResponse(payloads.error_body(error), status=error.status)
+    return JsonResponse(data=payloads.error_body(error), status=error.status)
 
 
 def _bad_request() -> JsonResponse:
@@ -100,7 +100,7 @@ def _json_schema(container) -> dict | None:
 
 
 def _structured_text(schema: dict, index: int) -> str:
-    return json.dumps(schemas.sample(schema, index=index))
+    return json.dumps(schemas.sample(schema=schema, index=index))
 
 
 @csrf_exempt
@@ -116,17 +116,18 @@ def chat_completions(request):
         return failure
 
     index = next_response_index()
-    tool = _forced_tool(payload.get("tools"), payload.get("tool_choice"))
+    tool = _forced_tool(tools=payload.get("tools"), tool_choice=payload.get("tool_choice"))
     schema = _json_schema(payload.get("response_format"))
     tool_calls = None
     if tool:
         text = None
-        tool_calls = [payloads.chat_tool_call(name=tool["name"], arguments=_structured_text(tool["parameters"], index))]
-        completion_text = tool_calls[0]["function"]["arguments"]
+        arguments = _structured_text(schema=tool["parameters"], index=index)
+        tool_calls = [payloads.chat_tool_call(name=tool["name"], arguments=arguments)]
+        completion_text = arguments
     elif schema:
-        text = completion_text = _structured_text(schema, index)
+        text = completion_text = _structured_text(schema=schema, index=index)
     else:
-        text = completion_text = lorem.build_response_text(directives.length, index=index)
+        text = completion_text = lorem.build_response_text(length=directives.length, index=index)
 
     prompt_tokens = lorem.count_tokens(payloads.prompt_text(messages))
     completion_tokens = lorem.count_tokens(completion_text)
@@ -142,7 +143,9 @@ def chat_completions(request):
     if payload.get("stream"):
         include_usage = bool(_dict(payload.get("stream_options")).get("include_usage"))
         return StreamingHttpResponse(
-            payloads.chat_completion_stream(envelope=envelope, usage=usage, include_usage=include_usage),
+            streaming_content=payloads.chat_completion_stream(
+                envelope=envelope, usage=usage, include_usage=include_usage
+            ),
             content_type="text/event-stream",
         )
 
@@ -162,15 +165,17 @@ def responses(request):
         return failure
 
     index = next_response_index()
-    tool = _forced_tool(payload.get("tools"), payload.get("tool_choice"))
+    tool = _forced_tool(tools=payload.get("tools"), tool_choice=payload.get("tool_choice"))
     schema = _json_schema(_dict(payload.get("text")).get("format"))
     if tool:
-        arguments = _structured_text(tool["parameters"], index)
+        arguments = _structured_text(schema=tool["parameters"], index=index)
         output = [payloads.function_call_output(name=tool["name"], arguments=arguments)]
         output_text = arguments
     else:
         output_text = (
-            _structured_text(schema, index) if schema else lorem.build_response_text(directives.length, index=index)
+            _structured_text(schema=schema, index=index)
+            if schema
+            else lorem.build_response_text(length=directives.length, index=index)
         )
         output = [payloads.message_output(output_text)]
 
@@ -182,7 +187,9 @@ def responses(request):
     )
 
     if payload.get("stream"):
-        return StreamingHttpResponse(payloads.responses_stream(envelope), content_type="text/event-stream")
+        return StreamingHttpResponse(
+            streaming_content=payloads.responses_stream(envelope), content_type="text/event-stream"
+        )
 
     return JsonResponse(envelope)
 
