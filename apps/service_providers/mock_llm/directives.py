@@ -34,8 +34,9 @@ _LENGTH_RE = re.compile(rf"\b({'|'.join(SENTENCE_COUNTS)})\b", re.IGNORECASE)
 _SLOW_RE = re.compile(r"\bslow\b(?:\s+(\d+(?:\.\d+)?))?", re.IGNORECASE)
 # Only a 4xx or 5xx counts as a status, so "error 200" and "error 999" fall back to the
 # default rather than reaching Django with a status it refuses to serve. The trailing
-# boundary keeps "error 4291" from silently meaning "error 429".
-_ERROR_RE = re.compile(rf"\berror\b(?:\s+([45]\d{{2}}\b|{'|'.join(CODE_STATUSES)}))?", re.IGNORECASE)
+# boundary keeps "error 4291" from silently meaning "error 429", and "error
+# insufficient_quota_x" from meaning "error insufficient_quota".
+_ERROR_RE = re.compile(rf"\berror\b(?:\s+([45]\d{{2}}|{'|'.join(CODE_STATUSES)})\b)?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)

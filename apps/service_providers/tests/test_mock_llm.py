@@ -332,6 +332,7 @@ def test_slow_directive_is_clamped(text, expected):
         pytest.param("error 099", id="below-the-http-range"),
         pytest.param("error 200", id="success-status"),
         pytest.param("error 4291", id="too-many-digits"),
+        pytest.param("error insufficient_quota_x", id="code-with-a-suffix"),
     ],
 )
 def test_error_directive_falls_back_on_an_unusable_status(text):
