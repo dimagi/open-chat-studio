@@ -16,7 +16,10 @@ _LOREM_WORDS = _LOREM_TEXT.split()
 
 
 def _sentence(index: int) -> str:
-    """A lorem sentence that is the same every time for a given index."""
+    """A lorem sentence that is the same every time for a given index.
+
+    The US-5 Playwright test (e2e/tests/core_flow.spec.ts) matches a reply of 8 to 18 words.
+    """
     rng = random.Random(index)
     words = [rng.choice(_LOREM_WORDS) for _ in range(rng.randint(8, 18))]
     return f"{words[0].capitalize()} {' '.join(words[1:])}."
