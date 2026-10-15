@@ -51,10 +51,10 @@ class ChatbotCompositionPermission(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 
 
-class RejectsUnknownKeys:
-    """Refuse a request body carrying keys this serializer does not declare.
+class RejectsUnwritableKeys:
+    """Refuse a request body carrying keys this serializer does not declare, or declares read-only.
 
-    DRF's default is to drop them silently, which for an agent is a 200 that wrote nothing. Hooked
+    DRF's default is to drop both silently, which for an agent is a 200 that wrote nothing. Hooked
     into ``to_internal_value`` rather than ``validate`` because that is where a serializer sees its
     own raw input wherever it is mounted -- ``validate`` would have to read ``initial_data``, which
     DRF sets on the root serializer alone.
@@ -62,10 +62,18 @@ class RejectsUnknownKeys:
 
     def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
-            unknown = sorted(set(data) - set(self.fields))
-            if unknown:
-                accepted = ", ".join(sorted(self.fields))
+            writable = {name for name, field in self.fields.items() if not field.read_only}
+            refused = sorted(set(data) - writable)
+            if refused:
+                accepted = ", ".join(sorted(writable))
                 raise serializers.ValidationError(
-                    {key: f"Unrecognised field. Accepted here: {accepted}." for key in unknown}
+                    {
+                        key: (
+                            f"Read-only field. Accepted here: {accepted}."
+                            if key in self.fields
+                            else f"Unrecognised field. Accepted here: {accepted}."
+                        )
+                        for key in refused
+                    }
                 )
         return super().to_internal_value(data)

@@ -41,6 +41,7 @@ from apps.api.serializers import (
     ChatSessionTokenResponse,
     ChatStartSessionRequest,
     ChatStartSessionResponse,
+    ErrorDetailSerializer,
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token_with_expiry
@@ -881,12 +882,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
-        404: inline_serializer(
-            "ChatTaskPollNotFound",
-            {
-                "detail": serializers.CharField(),
-            },
-        ),
+        404: ErrorDetailSerializer,
         500: inline_serializer(
             "ChatTaskPollError",
             {

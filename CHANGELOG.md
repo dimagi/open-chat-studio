@@ -33,6 +33,11 @@ version section when a release is cut.
 
 ### Migrations
 <!-- One line per migration. Omit the section if there are none. -->
+- `SourceMaterial.owner` becomes nullable, for source material created by a client-credentials API
+  token. Existing rows are unaffected. (#4679)
+- `OAuth2Application` gains an `all_data` boolean column (default `False`, safe DB-level
+  default). Existing applications are unaffected; behavior is unchanged until a team admin enables
+  it. (#4679)
 - `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
   get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
   operator or team sets one. (#4371)

@@ -1,4 +1,4 @@
-"""`allowed_chatbots` is an authorization boundary, so every edit to it is recorded.
+"""`allowed_chatbots` and `all_data` are authorization boundaries, so every edit to them is recorded.
 
 `field_audit` registers `m2m_changed` handlers for audited ManyToManyFields, so `.add()`, `.remove()`
 and `.set()` all produce events. Auditing is off under test (`FIELD_AUDIT_ENABLED = not IS_TESTING`),
@@ -25,9 +25,9 @@ def application(db):
     )
 
 
-def _audited_deltas(application):
+def _audited_deltas(application, field="allowed_chatbots"):
     events = AuditEvent.objects.by_model(OAuth2Application).filter(object_pk=application.pk)
-    return [event.delta for event in events if "allowed_chatbots" in (event.delta or {})]
+    return [event.delta for event in events if field in (event.delta or {})]
 
 
 @pytest.mark.django_db()
@@ -46,3 +46,13 @@ def test_allowed_chatbots_writes_are_audited(application, write):
             application.allowed_chatbots.set([chatbot])
 
     assert _audited_deltas(application), "no audit event recorded for allowed_chatbots"
+
+
+@pytest.mark.django_db()
+def test_all_data_change_is_audited(application):
+    with enable_audit():
+        application = OAuth2Application.objects.get(pk=application.pk)
+        application.all_data = True
+        application.save()
+
+    assert _audited_deltas(application, "all_data"), "no audit event recorded for all_data"
