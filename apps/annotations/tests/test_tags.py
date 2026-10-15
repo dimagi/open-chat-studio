@@ -194,24 +194,14 @@ def test_unlink_tag(tag, chat, client):
 
 
 @pytest.mark.django_db()
-def test_link_tag_returns_404(tag, client):
+@pytest.mark.parametrize("url_name", [pytest.param("link_tag", id="link"), pytest.param("unlink_tag", id="unlink")])
+def test_tag_view_returns_404_for_unknown_object(tag, client, url_name):
     team = tag.team
     user = team.members.first()
     client.login(username=user.username, password="password")
     object_info_json = json.dumps({"app": "non-existent", "model_name": "chat", "id": 1})
     data = {"tag_name": tag.name, "object_info": object_info_json}
-    response = client.post(reverse("annotations:link_tag", kwargs={"team_slug": tag.team.slug}), data=data)
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db()
-def test_unlink_tag_returns_404(tag, client):
-    team = tag.team
-    user = team.members.first()
-    client.login(username=user.username, password="password")
-    object_info_json = json.dumps({"app": "non-existent", "model_name": "chat", "id": 1})
-    data = {"tag_name": tag.name, "object_info": object_info_json}
-    response = client.post(reverse("annotations:unlink_tag", kwargs={"team_slug": tag.team.slug}), data=data)
+    response = client.post(reverse(f"annotations:{url_name}", kwargs={"team_slug": tag.team.slug}), data=data)
     assert response.status_code == 404
 
 

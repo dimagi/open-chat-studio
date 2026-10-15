@@ -7,27 +7,13 @@ publishing is the last step of the same build.
 
 import pytest
 
-from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.utils import set_current_team, unset_current_team
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.experiment import ChatbotFactory
-from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
 
 from .conftest import versions_url
-
-
-@pytest.fixture()
-def team_with_roles(db):
-    """`create_default_groups()` is explicit so the DB-backed groups match backends.py even
-    though pytest runs with --reuse-db."""
-    create_default_groups()
-    team = TeamFactory.create()
-    token = set_current_team(team)
-    try:
-        yield team
-    finally:
-        unset_current_team(token)
 
 
 def publish(client, chatbot):

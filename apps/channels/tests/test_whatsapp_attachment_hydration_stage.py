@@ -6,9 +6,9 @@ from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.files.models import File, FilePurpose
 
-from ._whatsapp_attachment_helpers import make_stage_context
 from .channels.conftest import make_context
 from .message_examples import meta_cloud_api_messages, turnio_messages, twilio_messages
+from .whatsapp_attachment_helpers import make_stage_context
 
 
 class TestWhatsappAttachmentHydrationStageProcess:

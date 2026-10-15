@@ -34,20 +34,6 @@ def team(db):
     return TeamWithUsersFactory.create()
 
 
-@pytest.fixture()
-def team_with_resources(db):
-    team = TeamWithUsersFactory.create()
-    LlmProviderFactory.create(team=team, type="openai", name="Prod OpenAI")
-    LlmProviderModelFactory.create(team=team, type="openai")
-    VoiceProviderFactory.create(team=team, name="Prod Polly")
-    SourceMaterialFactory.create(team=team, topic="Returns policy")
-    # Pinned to None so CollectionFactory's SubFactories don't add an LlmProvider to this team.
-    CollectionFactory.create(
-        team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
-    )
-    return team
-
-
 @pytest.mark.django_db()
 def test_get_node_parameter_values_is_team_scoped():
     """Every list is queried here off the team argument, so that argument is what keeps another team's

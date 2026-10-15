@@ -1,13 +1,10 @@
 import base64
-import hashlib
-import hmac
 import json
 import os
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
-from django.conf import settings
 from django.test import override_settings
 from django.urls import reverse
 
@@ -122,30 +119,22 @@ class TestHandleConnectMessageTask:
 
 @pytest.mark.django_db()
 class TestApiEndpoint:
-    def _get_request_headers(self, payload: dict) -> dict:
-        msg = json.dumps(payload).encode("utf-8")
-        key = settings.COMMCARE_CONNECT_SERVER_SECRET.encode()
-        digest = hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).digest()
-        return {
-            "X-MAC-DIGEST": base64.b64encode(digest),
-        }
-
     @patch("apps.channels.views.tasks.handle_commcare_connect_message", Mock())
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_payload_passes_validation(self, client, experiment):
+    def test_payload_passes_validation(self, client, experiment, connect_request_headers):
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
 
         response = client.post(
             reverse("channels:new_connect_message"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
         assert response.status_code == 200
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_invalid_payload(self, client, experiment):
+    def test_invalid_payload(self, client, experiment, connect_request_headers):
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         payload["messages"][0]["timestamp"] = None
@@ -153,7 +142,7 @@ class TestApiEndpoint:
         response = client.post(
             reverse("channels:new_connect_message"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
         assert response.status_code == 400
@@ -161,7 +150,9 @@ class TestApiEndpoint:
 
     @patch("apps.channels.views.tasks.handle_commcare_connect_message")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_duplicate_rows_route_to_oldest(self, handle_message_mock, client, experiment, caplog):
+    def test_duplicate_rows_route_to_oldest(
+        self, handle_message_mock, client, experiment, caplog, connect_request_headers
+    ):
         """If duplicate rows hold the same channel_id (issue #3620), route the message to the
         oldest row instead of raising MultipleObjectsReturned."""
         commcare_connect_channel_id, encryption_key, _, oldest = _setup_participant(experiment)
@@ -177,7 +168,7 @@ class TestApiEndpoint:
         response = client.post(
             reverse("channels:new_connect_message"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
 
@@ -193,7 +184,7 @@ class TestApiEndpoint:
         ],
     )
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_missing_records(self, missing_record, expected_response, client, experiment):
+    def test_missing_records(self, missing_record, expected_response, client, experiment, connect_request_headers):
         commcare_connect_channel_id, encryption_key, experiment_channel, participant_data = _setup_participant(
             experiment
         )
@@ -206,17 +197,17 @@ class TestApiEndpoint:
         response = client.post(
             reverse("channels:new_connect_message"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
         assert response.status_code == 404
         assert response.json() == expected_response
 
-    def _post(self, client, payload):
+    def _post(self, client, payload, connect_request_headers):
         return client.post(
             reverse("channels:new_connect_message"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
 
@@ -224,13 +215,13 @@ class TestApiEndpoint:
     @patch("apps.channels.views.tasks.handle_commcare_connect_message")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_fully_replayed_batch_is_dropped_without_counting(
-        self, handle_message_mock, count_mock, client, experiment, record_delivery
+        self, handle_message_mock, count_mock, client, experiment, record_delivery, connect_request_headers
     ):
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
         payload = _build_user_message(encryption_key, commcare_connect_channel_id)
         record_delivery(experiment.team, connect_external_ids(payload["messages"]))
 
-        response = self._post(client, payload)
+        response = self._post(client, payload, connect_request_headers)
 
         assert response.status_code == 200
         handle_message_mock.delay.assert_not_called()
@@ -239,7 +230,7 @@ class TestApiEndpoint:
     @patch("apps.channels.views.tasks.handle_commcare_connect_message")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_partially_recorded_batch_forwards_only_the_new_message(
-        self, handle_message_mock, client, experiment, record_delivery
+        self, handle_message_mock, client, experiment, record_delivery, connect_request_headers
     ):
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
         payload = _build_user_message(
@@ -247,14 +238,16 @@ class TestApiEndpoint:
         )
         record_delivery(experiment.team, connect_external_ids(payload["messages"][:2]))
 
-        self._post(client, payload)
+        self._post(client, payload, connect_request_headers)
 
         forwarded = handle_message_mock.delay.call_args.kwargs["messages"]
         assert [m["message_id"] for m in forwarded] == [payload["messages"][2]["message_id"]]
 
     @patch("apps.channels.views.tasks.handle_commcare_connect_message")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_id_repeated_within_one_batch_is_forwarded_once(self, handle_message_mock, client, experiment):
+    def test_id_repeated_within_one_batch_is_forwarded_once(
+        self, handle_message_mock, client, experiment, connect_request_headers
+    ):
         """A duplicate inside one batch has no recorded delivery yet, so the recorded-id lookup
         cannot catch it -- `unseen_connect_messages` discards each id as it forwards it."""
         commcare_connect_channel_id, encryption_key, _, _ = _setup_participant(experiment)
@@ -264,6 +257,6 @@ class TestApiEndpoint:
             "messages": built["messages"] + built["messages"],
         }
 
-        self._post(client, payload)
+        self._post(client, payload, connect_request_headers)
 
         assert len(handle_message_mock.delay.call_args.kwargs["messages"]) == 1

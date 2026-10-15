@@ -11,6 +11,12 @@ from apps.teams.utils import unset_current_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.pytest import restore_serialized_database
+from apps.utils.tests.fixtures import (  # noqa: F401 -- registers the shared fixtures
+    connect_request_headers,
+    keypair,
+    slack_service,
+    team_with_resources,
+)
 
 
 @pytest.fixture()
