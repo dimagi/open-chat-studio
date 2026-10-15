@@ -22,6 +22,7 @@ export default defineConfig({
   // The tests share one Django server and one Celery worker that runs a task at a time, so they run one at a time.
   fullyParallel: false,
   workers: 1,
+  forbidOnly: !!process.env.CI,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: E2E_BASE_URL,
