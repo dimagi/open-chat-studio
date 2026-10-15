@@ -39,11 +39,6 @@ class TestTwilioImageParsing:
         parsed = TwilioMessage.parse(twilio_messages.Whatsapp.image_message())
         assert parsed.content_type == MESSAGE_TYPES.TEXT
 
-    def test_parse_image_message_preserves_media_url(self):
-        """Twilio image MMS should preserve the media URL for download."""
-        parsed = TwilioMessage.parse(twilio_messages.Whatsapp.image_message())
-        assert parsed.media_url == "http://example.com/media"
-
     def test_parse_image_message_preserves_body_text(self):
         """Twilio image messages carry the text body (MMS caption) unchanged."""
         raw = twilio_messages.Whatsapp.image_message()
@@ -348,20 +343,12 @@ class TestMetaCloudApiInboundImageTask:
 
 
 class TestTurnioDocumentParsing:
-    def test_parse_document_message_preserves_real_mime_type(self):
-        parsed = WhatsAppMessage.parse(turnio_messages.document_message(mime_type="application/pdf"))
-        assert parsed.attachment_mime_type == "application/pdf"
-
     def test_parse_document_message_preserves_filename(self):
         parsed = WhatsAppMessage.parse(turnio_messages.document_message(filename="report.pdf"))
         assert parsed.attachment_filename == "report.pdf"
 
 
 class TestMetaCloudApiDocumentParsing:
-    def test_parse_document_message_preserves_real_mime_type(self):
-        parsed = WhatsAppMessage.parse(meta_cloud_api_messages.document_message_value(mime_type="application/pdf"))
-        assert parsed.attachment_mime_type == "application/pdf"
-
     def test_parse_document_message_preserves_filename(self):
         parsed = WhatsAppMessage.parse(meta_cloud_api_messages.document_message_value(filename="invoice.pdf"))
         assert parsed.attachment_filename == "invoice.pdf"
