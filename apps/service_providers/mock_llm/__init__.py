@@ -63,7 +63,7 @@ Limitations:
     tool, so a pipeline that depends on the model choosing a tool by itself won't take
     that branch. There is no embeddings endpoint. A "slow" directive holds a request
     thread for its duration, which a `runserver --nothreading` dev server does not have
-    to spare.
+    to spare. A string with a ``pattern`` gets lorem words, which may not match it.
 """
 
 # Where config.urls mounts the endpoints.

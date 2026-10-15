@@ -6,10 +6,12 @@ swallows that failure and falls back to its default route, which looks like rout
 working. Answering with a conforming value instead lets those paths be exercised.
 
 Choices are deterministic: the first enum member, the lowest allowed number, the
-shortest allowed array. A router schema is a `Literal` of the configured keywords, so
-the first-enum-member rule sends every message down the first branch.
+shortest allowed array, a fixed example for a string `format`. A router schema is a
+`Literal` of the configured keywords, so the first-enum-member rule sends every message
+down the first branch. A string `pattern` is not honoured.
 """
 
+import math
 from functools import reduce
 
 from . import lorem
@@ -20,22 +22,22 @@ MAX_DEPTH = 6
 def sample(schema: dict, index: int = 0) -> object:
     """A value satisfying `schema`. `index` varies the lorem filling between calls."""
     root = schema if isinstance(schema, dict) else {}
-    return _sample(root, root, index, 0)
+    return _sample(schema=root, root=root, index=index, depth=0)
 
 
 def _sample(schema: dict, root: dict, index: int, depth: int) -> object:
     if depth > MAX_DEPTH:
         return None
-    schema = _resolve(schema, root)
+    schema = _resolve(schema=schema, root=root)
 
     if "const" in schema:
         return schema["const"]
     if enum := schema.get("enum"):
         return enum[0]
-    if (branch := _combinator_branch(schema, root)) is not None:
-        return _sample(branch, root, index, depth + 1)
+    if (branch := _combinator_branch(schema=schema, root=root)) is not None:
+        return _sample(schema=branch, root=root, index=index, depth=depth + 1)
 
-    return _by_type(_type_of(schema), schema, root, index, depth)
+    return _by_type(type_name=_type_of(schema), schema=schema, root=root, index=index, depth=depth)
 
 
 def _combinator_branch(schema: dict, root: dict) -> dict | None:
@@ -43,7 +45,7 @@ def _combinator_branch(schema: dict, root: dict) -> dict | None:
     if options := schema.get("anyOf") or schema.get("oneOf"):
         return options[0]
     if all_of := schema.get("allOf"):
-        return reduce(lambda merged, option: _merge(merged, _resolve(option, root)), all_of, {})
+        return reduce(lambda merged, option: _merge(left=merged, right=_resolve(schema=option, root=root)), all_of, {})
     return None
 
 
@@ -54,13 +56,14 @@ def _by_type(type_name: str, schema: dict, root: dict, index: int, depth: int) -
     if type_name in _TYPE_CONSTANTS:
         return _TYPE_CONSTANTS[type_name]
     if type_name == "object":
-        return _object(schema, root, index, depth)
+        return _object(schema=schema, root=root, index=index, depth=depth)
     if type_name == "array":
-        return _array(schema, root, index, depth)
-    if type_name in ("integer", "number"):
-        number = _number(schema)
-        return int(number) if type_name == "integer" else number
-    return _string(schema, index)
+        return _array(schema=schema, root=root, index=index, depth=depth)
+    if type_name == "integer":
+        return _integer(schema)
+    if type_name == "number":
+        return _number(schema)
+    return _string(schema=schema, index=index)
 
 
 def _type_of(schema: dict) -> str:
@@ -81,7 +84,7 @@ def _resolve(schema: dict, root: dict) -> dict:
         if pointer in seen:
             return {}
         seen.add(pointer)
-        target = _dereference(pointer, root)
+        target = _dereference(pointer=pointer, root=root)
         if target is None:
             return {}
         schema = {**target, **{key: value for key, value in schema.items() if key != "$ref"}}
@@ -116,7 +119,12 @@ def _object(schema: dict, root: dict, index: int, depth: int) -> dict:
     # Every declared property is filled, not just the required ones: OpenAI's strict mode
     # requires them all, and a fuller object is more use to whatever consumes it.
     return {
-        name: _sample(subschema if isinstance(subschema, dict) else {}, root, index + position, depth + 1)
+        name: _sample(
+            schema=subschema if isinstance(subschema, dict) else {},
+            root=root,
+            index=index + position,
+            depth=depth + 1,
+        )
         for position, (name, subschema) in enumerate(properties.items())
     }
 
@@ -125,29 +133,86 @@ def _array(schema: dict, root: dict, index: int, depth: int) -> list:
     items = schema.get("items")
     if not isinstance(items, dict):
         return []
-    count = max(int(schema.get("minItems") or 1), 1)
-    if max_items := schema.get("maxItems"):
-        count = min(count, max(int(max_items), 0))
-    return [_sample(items, root, index + position, depth + 1) for position in range(count)]
+    min_items = schema.get("minItems")
+    count = 1 if min_items is None else int(min_items)
+    if (max_items := schema.get("maxItems")) is not None:
+        count = min(count, int(max_items))
+    return [_sample(schema=items, root=root, index=index + position, depth=depth + 1) for position in range(count)]
+
+
+# Fixed examples for the string formats pydantic emits.
+_FORMAT_EXAMPLES = {
+    "date-time": "2024-01-01T00:00:00Z",
+    "date": "2024-01-01",
+    "time": "00:00:00Z",
+    "duration": "P1D",
+    "email": "lorem@example.com",
+    "uri": "https://example.com/lorem",
+    "uuid": "00000000-0000-4000-8000-000000000000",
+    "ipv4": "192.0.2.1",
+    "ipv6": "2001:db8::1",
+    "hostname": "example.com",
+}
 
 
 def _string(schema: dict, index: int) -> str:
-    text = lorem.words(3, index=index)
+    if example := _FORMAT_EXAMPLES.get(schema.get("format")):
+        return example
+    text = lorem.words(count=3, index=index)
     minimum = int(schema.get("minLength") or 0)
     while len(text) < minimum:
-        text = f"{text} {lorem.words(3, index=index + len(text))}"
+        text = f"{text} {lorem.words(count=3, index=index + len(text))}"
     maximum = schema.get("maxLength")
     if maximum is not None:
         text = text[: int(maximum)]
     return text
 
 
-# Each bound with the offset that turns it into an allowed value, lower bounds first.
-_NUMBER_BOUNDS = (("minimum", 0), ("exclusiveMinimum", 1), ("maximum", 0), ("exclusiveMaximum", -1))
+def _bounds(schema: dict) -> tuple[float | None, bool, float | None, bool]:
+    """The lower and upper bound, each with whether it is exclusive. The tighter bound wins."""
+    lower, lower_exclusive = _numeric(schema.get("minimum")), False
+    if (exclusive := _numeric(schema.get("exclusiveMinimum"))) is not None and (lower is None or exclusive >= lower):
+        lower, lower_exclusive = exclusive, True
+    upper, upper_exclusive = _numeric(schema.get("maximum")), False
+    if (exclusive := _numeric(schema.get("exclusiveMaximum"))) is not None and (upper is None or exclusive <= upper):
+        upper, upper_exclusive = exclusive, True
+    return lower, lower_exclusive, upper, upper_exclusive
+
+
+def _numeric(value) -> float | None:
+    """`value` if it is a number. The draft-4 boolean `exclusiveMinimum` reads as absent."""
+    return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def _integer(schema: dict) -> int:
+    """The lowest allowed integer, or the one nearest 0 when there is no lower bound."""
+    step = _numeric(schema.get("multipleOf"))
+    step = int(step) if step is not None and step >= 1 and step == int(step) else 1
+    return int(_stepped(schema=schema, step=step))
 
 
 def _number(schema: dict) -> float:
-    for key, offset in _NUMBER_BOUNDS:
-        if (value := schema.get(key)) is not None:
-            return float(value) + offset
-    return 0.0
+    """The lowest allowed number, or the one nearest 0 when there is no lower bound."""
+    step = _numeric(schema.get("multipleOf"))
+    if step is not None and step > 0:
+        return float(_stepped(schema=schema, step=step))
+    lower, lower_exclusive, upper, upper_exclusive = _bounds(schema)
+    if lower is None:
+        if upper is None or upper > 0 or (upper == 0 and not upper_exclusive):
+            return 0.0
+        return float(upper - 1 if upper_exclusive else upper)
+    if not lower_exclusive:
+        return float(lower)
+    return float((lower + upper) / 2 if upper is not None else lower + 1)
+
+
+def _stepped(schema: dict, step: float) -> float:
+    """The lowest multiple of `step` inside the bounds, or the one nearest 0 without a lower bound."""
+    lower, lower_exclusive, upper, upper_exclusive = _bounds(schema)
+    if lower is not None:
+        value = math.ceil(lower / step) * step
+        return value + step if lower_exclusive and value == lower else value
+    if upper is None or upper > 0 or (upper == 0 and not upper_exclusive):
+        return 0
+    value = math.floor(upper / step) * step
+    return value - step if upper_exclusive and value == upper else value

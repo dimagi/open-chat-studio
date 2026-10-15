@@ -1,12 +1,16 @@
+import datetime
 import importlib
+import ipaddress
 import json
+import uuid
 
 import pytest
+from django.core.validators import validate_email
 from django.test import RequestFactory, override_settings
 from django.urls import Resolver404, clear_url_caches, resolve
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.responses import Response, ResponseStreamEvent
-from pydantic import TypeAdapter
+from pydantic import AnyUrl, TypeAdapter
 
 from apps.service_providers.mock_llm import MODEL_NAME, schemas, views
 from apps.service_providers.mock_llm.directives import (
@@ -361,6 +365,23 @@ def test_error_body_reports_the_type_real_openai_uses(code, expected_type):
         pytest.param({"type": "array", "items": {"const": "x"}}, ["x"], id="array-defaults-to-one-item"),
         pytest.param({"anyOf": [{"const": 1}, {"const": 2}]}, 1, id="any-of-takes-the-first"),
         pytest.param({"oneOf": [{"const": 1}, {"const": 2}]}, 1, id="one-of-takes-the-first"),
+        pytest.param({"type": "array", "items": {"const": "x"}, "maxItems": 0}, [], id="array-max-items-zero"),
+        pytest.param({"type": "array", "items": {"const": "x"}, "minItems": 0}, [], id="array-min-items-zero"),
+        pytest.param(
+            {"type": "array", "items": {"const": "x"}, "minItems": 3, "maxItems": 2}, ["x", "x"], id="array-max-wins"
+        ),
+        pytest.param({"type": "integer", "minimum": 0.5}, 1, id="integer-rounds-a-fractional-minimum-up"),
+        pytest.param({"type": "integer", "exclusiveMinimum": 2.5}, 3, id="integer-fractional-exclusive-minimum"),
+        pytest.param({"type": "integer", "exclusiveMinimum": 2}, 3, id="integer-exclusive-minimum"),
+        pytest.param({"type": "integer", "maximum": -3}, -3, id="integer-only-a-negative-maximum"),
+        pytest.param({"type": "integer", "exclusiveMaximum": 0}, -1, id="integer-exclusive-maximum-zero"),
+        pytest.param({"type": "integer", "maximum": 10}, 0, id="integer-zero-under-a-maximum"),
+        pytest.param({"type": "integer", "minimum": 7, "multipleOf": 5}, 10, id="integer-multiple-of"),
+        pytest.param({"type": "number", "exclusiveMinimum": 0, "maximum": 1}, 0.5, id="number-between-bounds"),
+        pytest.param({"type": "number", "exclusiveMinimum": 0}, 1.0, id="number-exclusive-minimum"),
+        pytest.param({"type": "number", "minimum": 0.1, "multipleOf": 0.25}, 0.25, id="number-multiple-of"),
+        pytest.param({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, 4.0, id="tighter-lower-bound-wins"),
+        pytest.param({"type": "integer", "minimum": 2, "exclusiveMinimum": True}, 2, id="boolean-bound-is-ignored"),
     ],
 )
 def test_schema_sample(schema, expected):
@@ -417,6 +438,29 @@ def test_schema_sample_merges_all_of():
     }
 
     assert schemas.sample(schema) == {"a": 1, "b": 2}
+
+
+@pytest.mark.parametrize(
+    ("string_format", "python_type"),
+    [
+        pytest.param("date-time", datetime.datetime, id="date-time"),
+        pytest.param("date", datetime.date, id="date"),
+        pytest.param("time", datetime.time, id="time"),
+        pytest.param("duration", datetime.timedelta, id="duration"),
+        pytest.param("uri", AnyUrl, id="uri"),
+        pytest.param("uuid", uuid.UUID, id="uuid"),
+        pytest.param("ipv4", ipaddress.IPv4Address, id="ipv4"),
+        pytest.param("ipv6", ipaddress.IPv6Address, id="ipv6"),
+    ],
+)
+def test_schema_sample_string_format_validates(string_format, python_type):
+    value = schemas.sample({"type": "string", "format": string_format})
+
+    TypeAdapter(python_type).validate_python(value)
+
+
+def test_schema_sample_email_format_validates():
+    validate_email(schemas.sample({"type": "string", "format": "email"}))
 
 
 def test_schema_sample_respects_string_length_bounds():
