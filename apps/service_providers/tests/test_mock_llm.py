@@ -169,11 +169,33 @@ def test_chat_completions():
     assert body["usage"]["total_tokens"] == body["usage"]["prompt_tokens"] + body["usage"]["completion_tokens"]
 
 
-def test_chat_completions_without_messages_is_a_bad_request():
-    response = views.chat_completions(_post({"model": "stub"}))
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"model": "stub"}, id="no-messages"),
+        pytest.param({"messages": "hi"}, id="messages-not-a-list"),
+        pytest.param({"messages": ["hi"]}, id="message-not-an-object"),
+    ],
+)
+def test_chat_completions_with_unusable_messages_is_a_bad_request(payload):
+    response = views.chat_completions(_post(payload))
 
     assert response.status_code == 400
     assert _json(response)["error"]["code"] == "invalid_request_error"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param({"response_format": "json"}, id="response-format-not-an-object"),
+        pytest.param({"stream": True, "stream_options": "usage"}, id="stream-options-not-an-object"),
+        pytest.param({"tools": "all", "tool_choice": "required"}, id="tools-not-a-list"),
+    ],
+)
+def test_chat_completions_ignores_malformed_optional_fields(extra):
+    response = views.chat_completions(_post({"messages": [{"role": "user", "content": "hi"}], **extra}))
+
+    assert response.status_code == 200
 
 
 def test_chat_completions_error_directive():
@@ -225,11 +247,31 @@ def test_responses_accepts_a_bare_string_input():
     assert _json(response)["output"][0]["content"][0]["text"]
 
 
-def test_responses_without_input_is_a_bad_request():
-    response = views.responses(_post({"model": "stub"}))
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"model": "stub"}, id="no-input"),
+        pytest.param({"input": {"role": "user"}}, id="input-not-a-string-or-list"),
+    ],
+)
+def test_responses_with_unusable_input_is_a_bad_request(payload):
+    response = views.responses(_post(payload))
 
     assert response.status_code == 400
     assert _json(response)["error"]["code"] == "invalid_request_error"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param({"text": "plain"}, id="text-not-an-object"),
+        pytest.param({"text": {"format": "json"}}, id="format-not-an-object"),
+    ],
+)
+def test_responses_ignores_malformed_optional_fields(extra):
+    response = views.responses(_post({"input": "hi", **extra}))
+
+    assert response.status_code == 200
 
 
 def test_responses_stream():

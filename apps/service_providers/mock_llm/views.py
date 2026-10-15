@@ -33,8 +33,17 @@ def _payload(request) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _dict(value) -> dict:
+    """`value` if it is a JSON object, else an empty one, so a malformed field reads as absent."""
+    return value if isinstance(value, dict) else {}
+
+
 def _fail(error: ErrorDirective) -> JsonResponse:
     return JsonResponse(payloads.error_body(error), status=error.status)
+
+
+def _bad_request() -> JsonResponse:
+    return _fail(ErrorDirective(status=400, code="invalid_request_error"))
 
 
 def _apply(directives) -> JsonResponse | None:
@@ -83,11 +92,11 @@ def _flatten_tool(tool: dict) -> dict:
 
 def _json_schema(container) -> dict | None:
     """The schema out of a `response_format` or a Responses API `text.format`."""
-    if not isinstance(container, dict) or container.get("type") != "json_schema":
+    container = _dict(container)
+    if container.get("type") != "json_schema":
         return None
-    body = container.get("json_schema") if isinstance(container.get("json_schema"), dict) else container
-    schema = body.get("schema")
-    return schema if isinstance(schema, dict) else None
+    body = _dict(container.get("json_schema")) or container
+    return _dict(body.get("schema")) or None
 
 
 def _structured_text(schema: dict, index: int) -> str:
@@ -99,8 +108,8 @@ def _structured_text(schema: dict, index: int) -> str:
 def chat_completions(request):
     payload = _payload(request)
     messages = payload.get("messages")
-    if not messages:
-        return _fail(ErrorDirective(status=400, code="invalid_request_error"))
+    if not messages or not isinstance(messages, list) or not all(isinstance(message, dict) for message in messages):
+        return _bad_request()
 
     directives = parse_directives(payloads.last_user_message(messages))
     if failure := _apply(directives):
@@ -131,7 +140,7 @@ def chat_completions(request):
     )
 
     if payload.get("stream"):
-        include_usage = bool((payload.get("stream_options") or {}).get("include_usage"))
+        include_usage = bool(_dict(payload.get("stream_options")).get("include_usage"))
         return StreamingHttpResponse(
             payloads.chat_completion_stream(envelope=envelope, usage=usage, include_usage=include_usage),
             content_type="text/event-stream",
@@ -144,8 +153,8 @@ def chat_completions(request):
 @require_POST
 def responses(request):
     payload = _payload(request)
-    if not payload.get("input"):
-        return _fail(ErrorDirective(status=400, code="invalid_request_error"))
+    if not payload.get("input") or not isinstance(payload["input"], str | list):
+        return _bad_request()
     items = payloads.input_items(payload["input"])
 
     directives = parse_directives(payloads.last_user_message(items))
@@ -154,7 +163,7 @@ def responses(request):
 
     index = next_response_index()
     tool = _forced_tool(payload.get("tools"), payload.get("tool_choice"))
-    schema = _json_schema((payload.get("text") or {}).get("format"))
+    schema = _json_schema(_dict(payload.get("text")).get("format"))
     if tool:
         arguments = _structured_text(tool["parameters"], index)
         output = [payloads.function_call_output(name=tool["name"], arguments=arguments)]
