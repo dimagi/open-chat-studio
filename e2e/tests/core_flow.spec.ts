@@ -25,6 +25,9 @@ test("create a team", { annotation: { type: "user-stories", description: "2" } }
   await page.locator("input[type=submit][value=Save]").click();
   await expect(page).toHaveURL(/\/a\/[^/]+\/team\/$/);
   await expect(page.locator("h1[data-cy=title]")).toHaveText(teamName);
+  // Only a team admin sees the invite button.
+  await page.goto(`${page.url()}section/members/`);
+  await expect(page.locator("[data-cy=btn-invite]")).toBeVisible();
 });
 
 test(
@@ -57,6 +60,11 @@ test(
     await page.locator("#new_chatbot_form input[name=name]").fill(chatbotName);
     await page.getByRole("button", { name: "Create Chatbot" }).click();
     await expect(page).toHaveURL(new RegExp(`${data.team_url}/chatbots/\\d+/edit/`));
+    // The team has one LLM provider, so a selected provider and model is that provider's.
+    await page.getByRole("button", { name: "Advanced", exact: true }).click();
+    const llmDialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Editing LLM" }) });
+    const modelSelect = llmDialog.locator("select").filter({ has: page.getByRole("option", { name: "Select a model" }) });
+    await expect(modelSelect).toHaveValue(/^\d+\|:\|\d+$/);
     await page.goto(page.url().replace(/edit\/$/, ""));
     await expect(page.locator("#chatbot-name")).toHaveText(chatbotName);
   },
