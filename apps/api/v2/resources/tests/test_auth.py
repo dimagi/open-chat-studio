@@ -79,13 +79,13 @@ class TestMachineTokens:
     """A machine token may always read resources, but may write them only when its application reaches every
     chatbot: the resources are shared by all of the team's chatbots."""
 
-    def _client(self, team, all_chatbots=False):
+    def _client(self, team, all_data=False):
         return ApiTestClient(
             team.members.first(),
             team,
             auth_method="oauth_client_credentials",
             scopes=["chatbots:read", "chatbots:write"],
-            all_chatbots=all_chatbots,
+            all_data=all_data,
         )
 
     def test_may_read(self, team, resource):
@@ -115,16 +115,16 @@ class TestMachineTokens:
         assert getattr(row, resource.patch_field) == "Before"
         assert row.is_archived is False
 
-    def test_all_chatbots_token_may_create(self, team, resource):
-        response = self._client(team, all_chatbots=True).post(resource.list_url, resource.create_body, format="json")
+    def test_all_data_token_may_create(self, team, resource):
+        response = self._client(team, all_data=True).post(resource.list_url, resource.create_body, format="json")
 
         assert response.status_code == 201, response.content
 
     @pytest.mark.parametrize("method", ["patch", "delete"])
-    def test_all_chatbots_token_may_change(self, team, resource, method):
+    def test_all_data_token_may_change(self, team, resource, method):
         row = resource.factory.create(team=team)
 
-        response = getattr(self._client(team, all_chatbots=True), method)(
+        response = getattr(self._client(team, all_data=True), method)(
             resource.detail_url(row.id), {resource.patch_field: "X"}, format="json"
         )
 

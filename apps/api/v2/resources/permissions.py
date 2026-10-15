@@ -2,7 +2,7 @@
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from apps.oauth.permissions import token_reaches_all_chatbots
+from apps.oauth.permissions import token_reaches_all_data
 
 
 class ReadOnlyForLimitedMachineTokens(BasePermission):
@@ -18,4 +18,4 @@ class ReadOnlyForLimitedMachineTokens(BasePermission):
     )
 
     def has_permission(self, request, view) -> bool:
-        return request.method in SAFE_METHODS or token_reaches_all_chatbots(request.auth)
+        return request.method in SAFE_METHODS or token_reaches_all_data(request.auth)

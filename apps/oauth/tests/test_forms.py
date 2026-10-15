@@ -211,16 +211,16 @@ def test_archived_chatbot_survives_an_unrelated_save(user_with_team):
         ),
     ],
 )
-def test_all_chatbots_saved_for_client_credentials_only(user_with_team, grant_type, extra, expected):
+def test_all_data_saved_for_client_credentials_only(user_with_team, grant_type, extra, expected):
     _user, team = user_with_team
     form = RegisterApplicationForm(
         team=team,
-        data=_form_data(authorization_grant_type=grant_type, all_chatbots="on", **extra),
+        data=_form_data(authorization_grant_type=grant_type, all_data="on", **extra),
     )
 
     assert form.is_valid(), form.errors
     form.instance.team = team
-    assert form.save().all_chatbots is expected
+    assert form.save().all_data is expected
 
 
 @pytest.mark.django_db()
@@ -228,7 +228,7 @@ def test_global_form_omits_allowed_chatbots():
     """A global application has no team whose chatbots could be offered."""
     fields = RegisterGlobalApplicationForm().fields
     assert "allowed_chatbots" not in fields
-    assert "all_chatbots" not in fields
+    assert "all_data" not in fields
 
 
 def _authorization_form_data(team_slug=None):

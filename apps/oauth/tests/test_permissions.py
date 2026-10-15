@@ -190,7 +190,7 @@ def test_applications_allowing_chatbot_excludes_other_grants_and_other_teams(cli
         team=TeamWithUsersFactory.create(),
         client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
         authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
-        all_chatbots=True,
+        all_data=True,
     )
     other_team_app.allowed_chatbots.add(chatbot)
 
@@ -198,9 +198,9 @@ def test_applications_allowing_chatbot_excludes_other_grants_and_other_teams(cli
 
 
 @pytest.mark.django_db()
-def test_all_chatbots_application_reaches_every_chatbot(client_credentials_token, team):
+def test_all_data_application_reaches_every_chatbot(client_credentials_token, team):
     application = client_credentials_token.application
-    application.all_chatbots = True
+    application.all_data = True
     application.save()
     chatbot = ExperimentFactory.create(team=team)
 

@@ -12,7 +12,7 @@ Amends: [ADR-0056](0056-client-credentials-applications-name-their-chatbots.md)
 
 ## Decision
 
-We will add `OAuth2Application.all_chatbots`, a boolean that defaults to `False`.
+We will add `OAuth2Application.all_data`, a boolean that defaults to `False`.
 
 - When it is `True`, a client-credentials application reaches every chatbot in its team, including chatbots created later, and `allowed_chatbots` is ignored.
 - Only such an application's tokens may create, change or archive source material and consent forms. A token limited to listed chatbots can still read them.

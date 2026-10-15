@@ -17,7 +17,7 @@ class ApiTestClient(APIClient):
         read_only=False,
         scopes=None,
         allowed_chatbots=None,
-        all_chatbots=False,
+        all_data=False,
     ):
         super().__init__()
         self.user = user
@@ -40,9 +40,9 @@ class ApiTestClient(APIClient):
                 team=team,
                 client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
                 authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
-                all_chatbots=all_chatbots,
+                all_data=all_data,
             )
-            # Without `all_chatbots`, a client-credentials application reaches only the chatbots listed here.
+            # Without `all_data`, a client-credentials application reaches only the chatbots listed here.
             application.allowed_chatbots.set(allowed_chatbots or [])
             self.application = application
             access_token = OAuth2AccessToken.objects.create(

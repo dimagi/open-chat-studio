@@ -87,7 +87,7 @@ def is_client_credentials_request(request) -> bool:
 def token_allows_chatbot(token, experiment) -> bool:
     """True when `token` may start a chat with `experiment`.
 
-    Only client-credentials (machine) applications without `all_chatbots` are pinned to a set of
+    Only client-credentials (machine) applications without `all_data` are pinned to a set of
     chatbots: their token is handed to a machine (and, for the chat widget, to a browser) with no user
     behind it, so the team boundary is too coarse to be the last line. Every other caller -- API key, Django session,
     authorization-code token -- keeps team-membership semantics untouched.
@@ -96,14 +96,14 @@ def token_allows_chatbot(token, experiment) -> bool:
     unique per row and `create_new_version` assigns a fresh one. Normalise to the family head so a
     legitimate versioned call is not denied.
     """
-    if token_reaches_all_chatbots(token):
+    if token_reaches_all_data(token):
         return True
     return token.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
 
 
-def token_reaches_all_chatbots(token) -> bool:
+def token_reaches_all_data(token) -> bool:
     """True unless `token` is a client-credentials token whose application is limited to some chatbots."""
-    return not is_client_credentials_token(token) or token.application.all_chatbots
+    return not is_client_credentials_token(token) or token.application.all_data
 
 
 def applications_allowing_chatbot(experiment):
@@ -113,7 +113,7 @@ def applications_allowing_chatbot(experiment):
     """
     return (
         OAuth2Application.objects.filter(
-            Q(all_chatbots=True) | Q(allowed_chatbots=experiment.get_working_version_id()),
+            Q(all_data=True) | Q(allowed_chatbots=experiment.get_working_version_id()),
             team_id=experiment.team_id,
             authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
         )

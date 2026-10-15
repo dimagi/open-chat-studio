@@ -1,4 +1,4 @@
-"""`allowed_chatbots` and `all_chatbots` are authorization boundaries, so every edit to them is recorded.
+"""`allowed_chatbots` and `all_data` are authorization boundaries, so every edit to them is recorded.
 
 `field_audit` registers `m2m_changed` handlers for audited ManyToManyFields, so `.add()`, `.remove()`
 and `.set()` all produce events. Auditing is off under test (`FIELD_AUDIT_ENABLED = not IS_TESTING`),
@@ -49,10 +49,10 @@ def test_allowed_chatbots_writes_are_audited(application, write):
 
 
 @pytest.mark.django_db()
-def test_all_chatbots_change_is_audited(application):
+def test_all_data_change_is_audited(application):
     with enable_audit():
         application = OAuth2Application.objects.get(pk=application.pk)
-        application.all_chatbots = True
+        application.all_data = True
         application.save()
 
-    assert _audited_deltas(application, "all_chatbots"), "no audit event recorded for all_chatbots"
+    assert _audited_deltas(application, "all_data"), "no audit event recorded for all_data"
