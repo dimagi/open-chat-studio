@@ -1,5 +1,6 @@
 import platform
 import re
+import shlex
 import shutil
 import socket
 import sys
@@ -378,12 +379,12 @@ def duplicates(c: Context, base=None, similarity=80, min_lines=3, json=False, pa
     """Report duplicate code that overlaps lines changed on this branch."""
     if not shutil.which("treepeat"):
         raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
-    output_format = "json" if json else "markdown"
-    c.run(
-        f"python -m scripts.duplicates.find_touched_duplicates {f'--base {base} ' if base else ''}"
-        f"--similarity {similarity} --min-lines {min_lines} --format {output_format} {path}",
-        pty=sys.stdout.isatty(),
-    )
+    args = ["python", "-m", "scripts.duplicates.find_touched_duplicates"]
+    if base:
+        args += ["--base", base]
+    args += ["--similarity", str(similarity), "--min-lines", str(min_lines)]
+    args += ["--format", "json" if json else "markdown", path]
+    c.run(shlex.join(args), pty=sys.stdout.isatty())
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})
