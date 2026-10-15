@@ -6,7 +6,7 @@ from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension, OpenApiSerializerFieldExtension
 from rest_framework.permissions import SAFE_METHODS
 
-from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnwritableKeys
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 # Placeholder hosts baked into the schema: DRF hardcodes ``api.example.org`` in the cursor
@@ -103,7 +103,7 @@ def _closed_serializers(base: type) -> Iterator[type]:
 
 
 def mirror_unknown_key_rejection(result, **kwargs):
-    """Publish ``RejectsUnknownKeys`` as ``additionalProperties: false``.
+    """Publish ``RejectsUnwritableKeys`` as ``additionalProperties: false``.
 
     Those serializers 400 on a key they do not declare, but OpenAPI permits extra properties by
     default, so a generated client or a validator would accept a body the API refuses -- and the
@@ -115,7 +115,7 @@ def mirror_unknown_key_rejection(result, **kwargs):
     postprocessing hook (signature: ``result`` -> ``result``).
     """
     closed: set[str] = set()
-    for cls in _closed_serializers(RejectsUnknownKeys):
+    for cls in _closed_serializers(RejectsUnwritableKeys):
         name = cls.__name__.removesuffix("Serializer")
         closed |= {name, f"Patched{name}"}
 

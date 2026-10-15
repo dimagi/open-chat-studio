@@ -5,11 +5,11 @@ from rest_framework import serializers
 
 from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.inspect.serializers import PipelineBuildErrorsSerializer
-from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnwritableKeys
 from apps.api.v2.write.fields import OptionalTextField
 
 
-class VersionCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
+class VersionCreateSerializer(RejectsUnwritableKeys, serializers.Serializer):
     """The version-create body: whether the snapshot goes live, and what to label it."""
 
     make_default = serializers.BooleanField(
@@ -48,7 +48,7 @@ class VersionArchivedSerializer(serializers.Serializer):
     archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
 
 
-class PublishVersionSerializer(RejectsUnknownKeys, serializers.Serializer):
+class PublishVersionSerializer(RejectsUnwritableKeys, serializers.Serializer):
     """The PATCH body: make this version the one participants are served.
 
     Named as ``chatbot_inspect`` reports it, so an agent that read

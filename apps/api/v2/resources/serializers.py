@@ -3,12 +3,12 @@
 from rest_framework import serializers
 
 from apps.api.serializers import ErrorDetailSerializer
-from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnwritableKeys
 from apps.api.v2.write.fields import OptionalTextField
 from apps.experiments.models import ConsentForm, SourceMaterial
 
 
-class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
+class SourceMaterialResourceSerializer(RejectsUnwritableKeys, serializers.ModelSerializer):
     """The fields the web app's source material form edits, plus the id nodes reference it by."""
 
     description = OptionalTextField(label=SourceMaterial._meta.get_field("description").verbose_name)
@@ -22,7 +22,7 @@ class SourceMaterialResourceSerializer(RejectsUnknownKeys, serializers.ModelSeri
         return SourceMaterial.objects.create(team=request.team, owner=request.user, **validated_data)
 
 
-class ConsentFormResourceSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
+class ConsentFormResourceSerializer(RejectsUnwritableKeys, serializers.ModelSerializer):
     """The consent form fields that channels show, plus the id a chatbot references it by."""
 
     class Meta:

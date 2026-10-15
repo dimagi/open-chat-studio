@@ -51,7 +51,7 @@ class ChatbotCompositionPermission(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 
 
-class RejectsUnknownKeys:
+class RejectsUnwritableKeys:
     """Refuse a request body carrying keys this serializer does not declare, or declares read-only.
 
     DRF's default is to drop both silently, which for an agent is a 200 that wrote nothing. Hooked
