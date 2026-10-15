@@ -1,4 +1,4 @@
-/** What a test starts from. Each state includes the ones before it (see `apps/web/management/commands/e2e_data_service.py`). */
+/** What a test starts from. Each state includes the ones before it (see `apps/web/e2e_data.py`). */
 export type E2EState = "team" | "llm_provider" | "chatbot" | "session";
 
 /**

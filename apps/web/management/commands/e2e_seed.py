@@ -3,7 +3,7 @@ import json
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.web.management.commands.e2e_data_service import STATES, State, create_e2e_data, delete_e2e_data
+from apps.web.e2e_data import STATES, State, create_e2e_data, delete_e2e_data
 
 
 class Command(BaseCommand):

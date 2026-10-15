@@ -53,7 +53,7 @@ The mock LLM is served by the dev server under `/mock-llm/` when `DEBUG` is on o
 
 Each state includes the ones before it, so add the new one after the state it builds on. Update these together:
 
-- `State` in `apps/web/management/commands/e2e_data_service.py`, and a step in `create_e2e_data` that creates the data and returns early for the new state
+- `State` in `apps/web/e2e_data.py`, and a step in `create_e2e_data` that creates the data and returns early for the new state
 - the Python `E2EData` TypedDict in the same file, with a `NotRequired` field for each value a test reads
 - `E2EState` and the `E2EData` interface in `e2e/scenarios.ts`, with the same field names
 - the table of states in this guide
