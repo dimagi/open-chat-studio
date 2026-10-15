@@ -17,11 +17,10 @@ from apps.api.v2.discovery.node_types import (
 from apps.api.v2.discovery.options import _clean_options
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
-from apps.utils.factories.custom_actions import CustomActionFactory
-from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.experiment import SyntheticVoiceFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
+
+from .discovery_helpers import add_remaining_resources
 
 
 @pytest.fixture()
@@ -33,22 +32,6 @@ def team(db):
 def team_with_every_resource(team_with_resources):
     """One entry in every option list, so a shape assertion has something to look at in each."""
     return add_remaining_resources(team_with_resources)
-
-
-def add_remaining_resources(team):
-    CollectionFactory.create(
-        team=team,
-        name="Support KB",
-        is_index=True,
-        is_remote_index=True,
-        llm_provider=None,
-        embedding_provider_model=None,
-    )
-    CustomActionFactory.create(team=team, name="Orders API")
-    # One voice tied to the team's provider and one of the shared AWS voices, which carry no provider.
-    SyntheticVoiceFactory.create(name="Joanna", service="AWS", voice_provider=team.voiceprovider_set.first())
-    SyntheticVoiceFactory.create(name="Matthew", service="AWS")
-    return team
 
 
 @pytest.mark.django_db()
