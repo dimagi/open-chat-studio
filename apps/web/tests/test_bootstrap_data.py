@@ -120,3 +120,16 @@ def test_reseeding_updates_the_stub_model_token_limit(command, team, env_credent
 
     assert LlmProviderModel.objects.filter(team=team, name=mock_llm.MODEL_NAME).count() == 1
     assert model.max_token_limit == 64000
+
+
+@pytest.mark.django_db()
+def test_reseeding_tolerates_another_stub_model_with_a_different_token_limit(command, team, env_credentials):
+    env_credentials([])
+    _provider, seeded = command._seed_llm_providers(team=team, base_url=SERVER_URL)
+    LlmProviderModel.objects.create(
+        team=team, name=mock_llm.MODEL_NAME, type=str(LlmProviderTypes.openai), max_token_limit=8192
+    )
+
+    _provider, model = command._seed_llm_providers(team=team, base_url=SERVER_URL)
+
+    assert model == seeded

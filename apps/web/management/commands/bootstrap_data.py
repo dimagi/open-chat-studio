@@ -273,13 +273,20 @@ class Command(BaseCommand):
 
         # The mock answers to any model name. A team-scoped "stub" model gives pipeline nodes a
         # model to select whose name says where the replies come from.
-        model, created = LlmProviderModel.objects.get_or_create(
-            team=team,
-            name=mock_llm.MODEL_NAME,
-            type=str(LlmProviderTypes.openai),
-            defaults={"max_token_limit": mock_llm.MODEL_TOKEN_LIMIT},
+        # The unique key includes the token limit, so the team may hold more than one "stub" model.
+        stub_models = LlmProviderModel.objects.filter(
+            team=team, name=mock_llm.MODEL_NAME, type=str(LlmProviderTypes.openai)
         )
-        if not created and model.max_token_limit != mock_llm.MODEL_TOKEN_LIMIT:
+        model = stub_models.filter(max_token_limit=mock_llm.MODEL_TOKEN_LIMIT).first() or stub_models.first()
+        created = model is None
+        if created:
+            model = LlmProviderModel.objects.create(
+                team=team,
+                name=mock_llm.MODEL_NAME,
+                type=str(LlmProviderTypes.openai),
+                max_token_limit=mock_llm.MODEL_TOKEN_LIMIT,
+            )
+        elif model.max_token_limit != mock_llm.MODEL_TOKEN_LIMIT:
             model.max_token_limit = mock_llm.MODEL_TOKEN_LIMIT
             model.save(update_fields=["max_token_limit"])
         self._log_created(entity_type="LLM provider model", name=model.name, created=created)
