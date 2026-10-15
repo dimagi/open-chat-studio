@@ -1,13 +1,21 @@
 """Shared plumbing for the v2 chatbot write endpoints -- the settings surface and the pipeline façade."""
 
+from collections.abc import Iterable
 from typing import Any
 
 from django.http import Http404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from rest_framework import exceptions, serializers
 from rest_framework.metadata import SimpleMetadata
 from rest_framework.request import clone_request
 
 from apps.api.permissions import RequiresTeamPermission
+
+#: The path parameter of every endpoint under ``/chatbots/{id}/``.
+CHATBOT_ID = OpenApiParameter(
+    name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+)
 
 
 class DescribesPatch(SimpleMetadata):
@@ -62,10 +70,18 @@ class RejectsUnknownKeys:
 
     def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
-            unknown = sorted(set(data) - set(self.fields))
-            if unknown:
-                accepted = ", ".join(sorted(self.fields))
-                raise serializers.ValidationError(
-                    {key: f"Unrecognised field. Accepted here: {accepted}." for key in unknown}
-                )
+            reject_unknown_keys(data, self.fields)
         return super().to_internal_value(data)
+
+
+def reject_unknown_keys(data: dict, accepted: Iterable[str], *, path: tuple[str, ...] = ()) -> None:
+    """Raise a ``ValidationError`` naming each key of ``data`` not in ``accepted``, nested under ``path``."""
+    accepted = sorted(accepted)
+    unknown = sorted(set(data) - set(accepted))
+    if not unknown:
+        return
+    accepted_text = ", ".join(accepted) or "none"
+    errors: dict = {key: f"Unrecognised field. Accepted here: {accepted_text}." for key in unknown}
+    for key in reversed(path):
+        errors = {key: errors}
+    raise serializers.ValidationError(errors)
