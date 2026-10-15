@@ -107,27 +107,17 @@ def _structured_text(schema: dict, index: int) -> str:
 @require_POST
 def chat_completions(request):
     payload = _payload(request)
-    messages = payload.get("messages")
-    if not messages or not isinstance(messages, list) or not all(isinstance(message, dict) for message in messages):
+    messages = _messages(payload)
+    if messages is None:
         return _bad_request()
 
     directives = parse_directives(payloads.last_user_message(messages))
     if failure := _apply(directives):
         return failure
 
-    index = next_response_index()
-    tool = _forced_tool(tools=payload.get("tools"), tool_choice=payload.get("tool_choice"))
-    schema = _json_schema(payload.get("response_format"))
-    tool_calls = None
-    if tool:
-        text = None
-        arguments = _structured_text(schema=tool["parameters"], index=index)
-        tool_calls = [payloads.chat_tool_call(name=tool["name"], arguments=arguments)]
-        completion_text = arguments
-    elif schema:
-        text = completion_text = _structured_text(schema=schema, index=index)
-    else:
-        text = completion_text = lorem.build_response_text(length=directives.length, index=index)
+    text, tool_calls, completion_text = _chat_answer(
+        payload=payload, length=directives.length, index=next_response_index()
+    )
 
     prompt_tokens = lorem.count_tokens(payloads.prompt_text(messages))
     completion_tokens = lorem.count_tokens(completion_text)
@@ -150,6 +140,26 @@ def chat_completions(request):
         )
 
     return JsonResponse(envelope)
+
+
+def _messages(payload: dict) -> list[dict] | None:
+    """The request's chat messages, or None when they are missing or not a list of objects."""
+    messages = payload.get("messages")
+    if messages and isinstance(messages, list) and all(isinstance(message, dict) for message in messages):
+        return messages
+    return None
+
+
+def _chat_answer(payload: dict, length: str, index: int) -> tuple[str | None, list[dict] | None, str]:
+    """The message text, the tool calls, and the text whose tokens count as the completion."""
+    if tool := _forced_tool(tools=payload.get("tools"), tool_choice=payload.get("tool_choice")):
+        arguments = _structured_text(schema=tool["parameters"], index=index)
+        return None, [payloads.chat_tool_call(name=tool["name"], arguments=arguments)], arguments
+    if schema := _json_schema(payload.get("response_format")):
+        text = _structured_text(schema=schema, index=index)
+    else:
+        text = lorem.build_response_text(length=length, index=index)
+    return text, None, text
 
 
 @csrf_exempt

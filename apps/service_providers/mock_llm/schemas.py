@@ -12,6 +12,7 @@ down the first branch. A string `pattern` is not honoured.
 """
 
 import math
+import operator
 from functools import reduce
 
 from . import lorem
@@ -170,13 +171,23 @@ def _string(schema: dict, index: int) -> str:
 
 def _bounds(schema: dict) -> tuple[float | None, bool, float | None, bool]:
     """The lower and upper bound, each with whether it is exclusive. The tighter bound wins."""
-    lower, lower_exclusive = _numeric(schema.get("minimum")), False
-    if (exclusive := _numeric(schema.get("exclusiveMinimum"))) is not None and (lower is None or exclusive >= lower):
-        lower, lower_exclusive = exclusive, True
-    upper, upper_exclusive = _numeric(schema.get("maximum")), False
-    if (exclusive := _numeric(schema.get("exclusiveMaximum"))) is not None and (upper is None or exclusive <= upper):
-        upper, upper_exclusive = exclusive, True
+    lower, lower_exclusive = _bound(
+        inclusive=schema.get("minimum"), exclusive=schema.get("exclusiveMinimum"), tighter=operator.ge
+    )
+    upper, upper_exclusive = _bound(
+        inclusive=schema.get("maximum"), exclusive=schema.get("exclusiveMaximum"), tighter=operator.le
+    )
     return lower, lower_exclusive, upper, upper_exclusive
+
+
+def _bound(inclusive, exclusive, tighter) -> tuple[float | None, bool]:
+    """One bound and whether it is exclusive. `tighter(a, b)` says whether `a` is at least as tight as `b`."""
+    inclusive, exclusive = _numeric(inclusive), _numeric(exclusive)
+    if exclusive is None:
+        return inclusive, False
+    if inclusive is None or tighter(exclusive, inclusive):
+        return exclusive, True
+    return inclusive, False
 
 
 def _numeric(value) -> float | None:
@@ -186,9 +197,15 @@ def _numeric(value) -> float | None:
 
 def _integer(schema: dict) -> int:
     """The lowest allowed integer, or the one nearest 0 when there is no lower bound."""
+    return int(_stepped(schema=schema, step=_integer_step(schema)))
+
+
+def _integer_step(schema: dict) -> int:
+    """`multipleOf` when it is a whole number of at least 1, otherwise 1."""
     step = _numeric(schema.get("multipleOf"))
-    step = int(step) if step is not None and step >= 1 and step == int(step) else 1
-    return int(_stepped(schema=schema, step=step))
+    if step is None or step < 1 or step != int(step):
+        return 1
+    return int(step)
 
 
 def _number(schema: dict) -> float:
@@ -198,7 +215,7 @@ def _number(schema: dict) -> float:
         return float(_stepped(schema=schema, step=step))
     lower, lower_exclusive, upper, upper_exclusive = _bounds(schema)
     if lower is None:
-        if upper is None or upper > 0 or (upper == 0 and not upper_exclusive):
+        if upper is None or _zero_allowed(upper=upper, upper_exclusive=upper_exclusive):
             return 0.0
         return float(upper - 1 if upper_exclusive else upper)
     if not lower_exclusive:
@@ -212,7 +229,12 @@ def _stepped(schema: dict, step: float) -> float:
     if lower is not None:
         value = math.ceil(lower / step) * step
         return value + step if lower_exclusive and value == lower else value
-    if upper is None or upper > 0 or (upper == 0 and not upper_exclusive):
+    if upper is None or _zero_allowed(upper=upper, upper_exclusive=upper_exclusive):
         return 0
     value = math.floor(upper / step) * step
     return value - step if upper_exclusive and value == upper else value
+
+
+def _zero_allowed(upper: float, upper_exclusive: bool) -> bool:
+    """Whether 0 is under the upper bound."""
+    return upper > 0 if upper_exclusive else upper >= 0
