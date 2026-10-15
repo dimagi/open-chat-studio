@@ -31,7 +31,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
-from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
+from apps.events.models import EventAction, EventActionType, ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.build_state import pipeline_build_state
@@ -696,16 +696,51 @@ class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
         fields = ["id", "delay_seconds", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
 
 
+class InspectScheduledTriggerSerializer(serializers.ModelSerializer):
+    action = InspectTriggerActionSerializer()
+
+    class Meta:
+        model = ScheduledTrigger
+        fields = [
+            "id",
+            "trigger_date",
+            "trigger_time",
+            "timezone",
+            "active_session_window_days",
+            "scheduled_at",
+            "fired_at",
+            "is_active",
+            "action",
+        ]
+        extra_kwargs = {
+            "trigger_date": {"help_text": "The date the trigger fires on (YYYY-MM-DD), in `timezone`."},
+            "trigger_time": {"help_text": "The time the trigger fires at (HH:MM:SS), in `timezone`."},
+            "timezone": {"help_text": "The IANA timezone name the date and time are in, e.g. `Africa/Nairobi`."},
+            "active_session_window_days": {
+                "help_text": (
+                    "Fire only for sessions with participant activity in this many past days. Null fires "
+                    "for every open session."
+                )
+            },
+            "scheduled_at": {"help_text": "When the trigger fires, in UTC."},
+            "fired_at": {
+                "help_text": "When the trigger fired, or null if it has not. Changing the schedule resets it."
+            },
+        }
+
+
 class InspectEventsSerializer(serializers.Serializer):
-    """A chatbot's static and timeout triggers, excluding archived ones.
+    """A chatbot's static, timeout and scheduled triggers, excluding archived ones.
 
     ``static_triggers`` fire on conversation events (start, end, a new message, …); ``timeout_triggers``
     fire after a period of inactivity. The two overlap at the end of a conversation: a ``last_timeout``
-    static trigger fires once the final timeout has elapsed.
+    static trigger fires once the final timeout has elapsed. ``scheduled_triggers`` fire once, at a set
+    date and time, for the published version's open sessions.
     """
 
     static_triggers = serializers.SerializerMethodField()
     timeout_triggers = serializers.SerializerMethodField()
+    scheduled_triggers = serializers.SerializerMethodField()
 
     @extend_schema_field(InspectStaticTriggerSerializer(many=True))
     def get_static_triggers(self, experiment) -> list:
@@ -716,6 +751,11 @@ class InspectEventsSerializer(serializers.Serializer):
     def get_timeout_triggers(self, experiment) -> list:
         triggers = [t for t in experiment.timeout_triggers.all() if not t.is_archived]
         return InspectTimeoutTriggerSerializer(triggers, many=True, context=self.context).data
+
+    @extend_schema_field(InspectScheduledTriggerSerializer(many=True))
+    def get_scheduled_triggers(self, experiment) -> list:
+        triggers = [t for t in experiment.scheduled_triggers.all() if not t.is_archived]
+        return InspectScheduledTriggerSerializer(triggers, many=True, context=self.context).data
 
 
 # ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────
