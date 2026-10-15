@@ -3,6 +3,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.webhooks import TelegramWebhookManager
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.service_providers.models import MessagingProviderType
@@ -242,6 +243,13 @@ class TestChannelPlatform:
             else:
                 # Identifier should be unchanged for other platforms
                 assert normalized_id == "ABC"
+
+
+@pytest.mark.django_db()
+def test_get_webhook_manager_returns_telegram_manager_for_telegram():
+    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
+
+    assert isinstance(channel.get_webhook_manager(), TelegramWebhookManager)
 
 
 @pytest.mark.django_db()
