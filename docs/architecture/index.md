@@ -51,7 +51,7 @@ A couple of conventions worth knowing:
 
 ## Cross-Cutting Concerns
 
-The architectural patterns underlying these concerns — multi-tenancy, [versioning](../developer_guides/code_systems/versioning.md), async tasks, [API design](../developer_guides/api_documentation.md), LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
+The architectural patterns underlying these concerns — multi-tenancy, [versioning](../developer_guides/code_systems/versioning.md), async tasks, [API design](../developer_guides/user_docs/api_documentation.md), LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
 
 ### Authentication and Authorization
 See the [multi-tenancy guide](../agents/multi_tenancy.md) and [view security guide](../agents/django_view_security.md) for team-scoping and permission patterns.

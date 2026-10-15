@@ -28,14 +28,6 @@ def mock_langfuse_client():
 
 
 @pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
-@pytest.fixture()
 def patched_tracer(mock_langfuse_client):
     """A real LangFuseTracer with the ClientManager boundary mocked."""
     tracer = LangFuseTracer("langfuse", {"public_key": "pk", "secret_key": "sk"})
@@ -46,11 +38,11 @@ def patched_tracer(mock_langfuse_client):
         yield tracer
 
 
-def test_get_trace_metadata_returns_langfuse_info(patched_tracer, mock_langfuse_client, mock_session):
+def test_get_trace_metadata_returns_langfuse_info(patched_tracer, mock_langfuse_client, langfuse_session):
     """get_trace_metadata() must return trace_id/trace_url while trace is active."""
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
 
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+    with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
         metadata = patched_tracer.get_trace_metadata()
 
     assert metadata == {
@@ -60,13 +52,15 @@ def test_get_trace_metadata_returns_langfuse_info(patched_tracer, mock_langfuse_
     }
 
 
-def test_tracing_service_exposes_langfuse_metadata_via_trace_info(patched_tracer, mock_langfuse_client, mock_session):
+def test_tracing_service_exposes_langfuse_metadata_via_trace_info(
+    patched_tracer, mock_langfuse_client, langfuse_session
+):
     """TracingService.get_trace_metadata() wraps LangFuseTracer output under
     'trace_info', which is what gets merged into ChatMessage.metadata.
     """
     service = TracingService([patched_tracer], experiment_id=1, team_id=1)
 
-    with service.trace("test-trace", session=mock_session):
+    with service.trace("test-trace", session=langfuse_session):
         metadata = service.get_trace_metadata()
 
     assert metadata == {
@@ -80,12 +74,12 @@ def test_tracing_service_exposes_langfuse_metadata_via_trace_info(patched_tracer
     }
 
 
-def test_tracing_service_recovers_when_trace_url_fetch_fails(patched_tracer, mock_langfuse_client, mock_session):
+def test_tracing_service_recovers_when_trace_url_fetch_fails(patched_tracer, mock_langfuse_client, langfuse_session):
     """A URL-fetch failure must not drop the whole langfuse entry from trace_info."""
     mock_langfuse_client.get_trace_url.side_effect = ConnectionError("boom")
     service = TracingService([patched_tracer], experiment_id=1, team_id=1)
 
-    with service.trace("test-trace", session=mock_session):
+    with service.trace("test-trace", session=langfuse_session):
         metadata = service.get_trace_metadata()
 
     assert metadata.get("trace_info"), "langfuse trace info must survive URL fetch failure"
@@ -102,10 +96,10 @@ def test_add_trace_tags_outside_a_trace_is_an_error(patched_tracer):
         patched_tracer.add_trace_tags(["tag1"])
 
 
-def test_trace_state_resets_on_exit(patched_tracer, mock_langfuse_client, mock_session):
+def test_trace_state_resets_on_exit(patched_tracer, mock_langfuse_client, langfuse_session):
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
 
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+    with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
         assert patched_tracer.ready
         assert patched_tracer._langfuse_trace_id == "trace-abc-123"
 
@@ -116,14 +110,14 @@ def test_trace_state_resets_on_exit(patched_tracer, mock_langfuse_client, mock_s
     assert patched_tracer.session is None
 
 
-def test_span_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, mock_session):
+def test_span_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, langfuse_session):
     """If user code under `with span(...)` raises, the span must surface as ERROR in Langfuse
     instead of looking like a successful span — otherwise failures are invisible in the trace UI.
     """
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
     span_context = TraceContext(id=mock.sentinel.span_id, name="failing-span")
 
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+    with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
         with pytest.raises(RuntimeError, match="boom"):
             with patched_tracer.span(span_context=span_context, inputs={}):
                 raise RuntimeError("boom")
@@ -133,7 +127,7 @@ def test_span_marks_level_error_when_exception_propagates(patched_tracer, mock_l
     assert span_context.error is not None
 
 
-def test_span_marks_level_error_when_marked_without_raising(patched_tracer, mock_langfuse_client, mock_session):
+def test_span_marks_level_error_when_marked_without_raising(patched_tracer, mock_langfuse_client, langfuse_session):
     """A span marked as errored (without raising) must still surface as ERROR in Langfuse.
 
     Stages that catch a failure and recover mark their span via
@@ -142,19 +136,19 @@ def test_span_marks_level_error_when_marked_without_raising(patched_tracer, mock
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
     span_context = TraceContext(id=mock.sentinel.span_id, name="recovered-span")
 
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+    with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
         with patched_tracer.span(span_context=span_context, inputs={}):
             span_context.mark_span_as_error("delivery failed")
 
     mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
 
 
-def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, mock_session):
+def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, langfuse_session):
     """Same guarantee at the trace level: a propagating exception must mark the trace as ERROR."""
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
 
     with pytest.raises(RuntimeError, match="boom"):
-        with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+        with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
             raise RuntimeError("boom")
 
     mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
@@ -162,7 +156,7 @@ def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_
 
 
 def test_span_update_failure_does_not_mask_application_error(
-    patched_tracer, mock_langfuse_client, mock_session, caplog
+    patched_tracer, mock_langfuse_client, langfuse_session, caplog
 ):
     """If span.update() itself raises while syncing state in finally, the original application
     exception must still propagate — Langfuse update failures are best-effort and logged.
@@ -171,7 +165,7 @@ def test_span_update_failure_does_not_mask_application_error(
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
     span_context = TraceContext(id=mock.sentinel.span_id, name="failing-span")
 
-    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+    with patched_tracer.trace(trace_context=trace_context, session=langfuse_session):
         with pytest.raises(ValueError, match="real error"):
             with patched_tracer.span(span_context=span_context, inputs={}):
                 raise ValueError("real error")

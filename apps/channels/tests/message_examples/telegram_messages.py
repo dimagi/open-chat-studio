@@ -92,3 +92,26 @@ def audio_message(chat_id: int = 123, chatbot_id: int = 1) -> TelegramMessage:
     json_data = json.dumps(message_data)
     update = types.Update.de_json(json_data)
     return TelegramMessage.parse(update, chatbot_id=chatbot_id)
+
+
+def document_message(
+    chat_id: int = 123, filename: str = "setup.exe", mime_type: str = "application/x-msdownload", chatbot_id: int = 1
+) -> TelegramMessage:
+    message_data = {
+        "update_id": 432101235,
+        "message": {
+            "message_id": 577,
+            "from": {"id": chat_id, "is_bot": False, "first_name": "John", "language_code": "en"},
+            "chat": {"id": chat_id, "first_name": "John", "type": "private"},
+            "date": 1708022365,
+            "document": {
+                "file_id": "BQACAgQAAxkBAAICAWXOWmA",
+                "file_unique_id": "AgADV4el4",
+                "file_name": filename,
+                "mime_type": mime_type,
+                "file_size": 1443,
+            },
+        },
+    }
+    update = types.Update.de_json(json.dumps(message_data))
+    return TelegramMessage.parse(update, chatbot_id=chatbot_id)

@@ -20,6 +20,7 @@ from apps.evaluations.const import (
     evaluator_prompt_variable_hints,
     evaluator_prompt_variable_names,
 )
+from apps.evaluations.evaluator_copy import copy_evaluator
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import EvaluationResult, EvaluationRunAggregate, Evaluator
@@ -244,6 +245,18 @@ class UnarchiveEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vie
         evaluator.unarchive()
         row = annotated_evaluators(request.team).get(pk=evaluator.pk)
         return render_table_row(request, EvaluatorTable, row)
+
+
+class CopyEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = ("evaluations.add_evaluator", "evaluations.change_evaluator")
+
+    def post(self, request, team_slug: str, pk: int):
+        """Duplicate the evaluator and send the client to the copy's edit page."""
+        source = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        duplicate = copy_evaluator(source)
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = reverse("evaluations:evaluator_edit", args=[team_slug, duplicate.id])
+        return response
 
 
 def _submitted_output_schema(form, instance) -> dict:

@@ -6,6 +6,7 @@ from django.urls import reverse, reverse_lazy
 from pytest_django.asserts import assertRedirects
 from time_machine import travel
 
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS, STASH_MAX_AGE, TOO_MANY_ELEVATIONS_MESSAGE
@@ -122,13 +123,14 @@ def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
 
 
 @pytest.mark.django_db()
-def test_the_prompt_names_the_grant_being_requested(team, superuser, authed_client):
+def test_the_prompt_names_the_grant_being_requested(superuser, authed_client):
     """The prompt has to name the grant, so the user can see what they are confirming."""
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     authed_client.get(reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(REAUTH_URL).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
 
 
 @pytest.mark.django_db()
@@ -358,13 +360,14 @@ def test_acquire_beyond_the_concurrency_cap_reports_an_error(superuser, authed_c
 
 
 @pytest.mark.django_db()
-def test_banner_shows_the_grant_label_and_a_release_link(team, superuser, authed_client):
+def test_banner_names_the_team_and_links_to_release(superuser, authed_client):
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     team_home = reverse("web_team:home", args=[team.slug])
     elevate(authed_client, reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(team_home, follow=True).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
     assert reverse("web:release_elevation", args=[f"team:{team.slug}"]) in content
 
 
@@ -377,3 +380,35 @@ def test_admin_site_shows_a_release_link(superuser, authed_client):
 
     assert "Release Admin Access" in content
     assert reverse("web:release_elevation", args=["django_admin"]) in content
+
+
+@pytest.mark.django_db()
+def test_global_search_sends_a_non_member_superuser_to_elevate(superuser, authed_client):
+    session = ExperimentSessionFactory.create()
+    search_url = f"{reverse('web:global_search')}?q={session.external_id}"
+
+    response = authed_client.get(search_url)
+
+    acquire_url = reverse("web:elevate_team", args=[session.team.slug])
+    assertRedirects(response, f"{acquire_url}?next={quote(search_url, safe='')}", fetch_redirect_response=False)
+
+
+@pytest.mark.django_db()
+def test_global_search_resumes_after_elevation(superuser, authed_client):
+    session = ExperimentSessionFactory.create()
+    search_url = f"{reverse('web:global_search')}?q={session.external_id}"
+
+    response = elevate(authed_client, reverse("web:elevate_team", args=[session.team.slug]), search_url)
+    assert response.url == search_url
+
+    assertRedirects(authed_client.get(search_url), session.get_absolute_url(), fetch_redirect_response=False)
+
+
+@pytest.mark.django_db()
+def test_global_search_is_a_404_for_a_non_member_without_superuser(client):
+    session = ExperimentSessionFactory.create()
+    client.force_login(UserFactory.create(is_staff=True))
+
+    response = client.get(reverse("web:global_search"), {"q": session.external_id})
+
+    assert response.status_code == 404

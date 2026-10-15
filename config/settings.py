@@ -523,6 +523,9 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    # Redoc 3's standalone bundle uses `import.meta`, which fails in the classic <script> tag
+    # drf-spectacular renders, leaving the docs page blank.
+    "REDOC_DIST": "https://cdn.jsdelivr.net/npm/redoc@2.5.4",
     "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
@@ -747,6 +750,9 @@ GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
 
 # populate this to configure sentry. should take the form: 'https://****@sentry.io/12345'
 SENTRY_DSN = env("SENTRY_DSN", default="")
+# Key of the Sentry browser Loader Script (the hex part of https://js.sentry-cdn.com/<key>.min.js).
+# Leave empty to disable browser-side Sentry.
+SENTRY_BROWSER_LOADER_KEY = env("SENTRY_BROWSER_LOADER_KEY", default="")
 
 if SENTRY_DSN:
     import sentry_sdk

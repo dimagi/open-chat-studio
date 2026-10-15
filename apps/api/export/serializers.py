@@ -11,6 +11,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema_field
 from pgvector.django import HalfVectorField, VectorField
 from rest_framework import serializers
 
+from apps.api.serializers import ErrorDetailSerializer
 from apps.teams.export.manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
@@ -267,7 +268,7 @@ def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Seria
     }
     if entry.secret:
         responses[400] = OpenApiResponse(
-            response=SyncErrorDetail,
+            response=ErrorDetailSerializer,
             description=MISSING_PUBLIC_KEY_DETAIL,
         )
     return responses
@@ -288,7 +289,3 @@ def build_resource_response_serializer(entry: ManifestEntry) -> type[serializers
             "results": item(many=True),
         },
     )
-
-
-class SyncErrorDetail(serializers.Serializer):
-    detail = serializers.CharField()

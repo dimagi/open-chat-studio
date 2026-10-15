@@ -971,11 +971,10 @@ def _adversarial_bot():
 # resolves AND prefetches the target with a fixed prefetch set — including each node's resource FK/M2M
 # relations (inspect_node_queryset) — so node fan-out adds no queries. Resolution costs one query in
 # every mode, so folding it into the measured block keeps the count constant. The top-level build-state
-# fields run Pipeline.validate(), whose LLM-node validators each look the provider model up through
-# ORMRepository (not the prefetched relation) — the same cost the builder pays on save; that adds a
-# fixed number of queries for this bot's two LLM-bearing nodes. ``deprecated_models`` adds one more:
-# a single lookup covering every model the graph references, whatever the node fan-out.
-EXPECTED_RENDER_QUERIES = 18
+# fields run Pipeline.validate(), which fetches the provider models of every LLM-bearing node in one
+# query — the same cost the builder pays on save. ``deprecated_models`` adds one more: a single lookup
+# covering every model the graph references, whatever the node fan-out.
+EXPECTED_RENDER_QUERIES = 17
 
 
 @pytest.mark.django_db()

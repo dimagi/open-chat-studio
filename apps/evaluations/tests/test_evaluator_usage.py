@@ -13,7 +13,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord, UsageSource
+from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tasks import _usage_context_for, evaluate_message
@@ -61,17 +61,6 @@ def _judge_service(input_tokens: int = 1000, output_tokens: int = 500):
     return build_fake_llm_service(responses=[response], fake_llm=fake_llm)
 
 
-def _seed_rules():
-    for kind, unit_price in ((ServiceKind.LLM_INPUT, "0.00015"), (ServiceKind.LLM_OUTPUT, "0.00060")):
-        PricingRule.objects.create(
-            team=None,
-            provider_type=_PROVIDER,
-            model_name=_MODEL,
-            service_kind=kind,
-            unit_price=unit_price,
-        )
-
-
 def _emit_usage(collector: MetricsCollector, input_tokens: int = 1000, output_tokens: int = 500) -> None:
     """Drive one exact-usage LLM call through the collector's callbacks."""
     run_id = uuid4()
@@ -117,9 +106,9 @@ def _llm_evaluator(llm_provider, llm_provider_model) -> LlmEvaluator:
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_provider_model):
+def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_provider_model, seed_llm_pricing):
     get_llm_service.return_value = _judge_service()
-    _seed_rules()
+    seed_llm_pricing(_PROVIDER, _MODEL)
 
     evaluator = EvaluatorFactory.create(
         params=_llm_evaluator(llm_provider, llm_provider_model).model_dump(), type="LlmEvaluator"
@@ -162,10 +151,12 @@ def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_prov
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_evaluator_run_without_context_records_nothing(get_llm_service, llm_provider, llm_provider_model):
+def test_evaluator_run_without_context_records_nothing(
+    get_llm_service, llm_provider, llm_provider_model, seed_llm_pricing
+):
     """An evaluator invoked outside a run (no attribution to bill) records nothing."""
     get_llm_service.return_value = _judge_service()
-    _seed_rules()
+    seed_llm_pricing(_PROVIDER, _MODEL)
     message = EvaluationMessageFactory.create(
         input={"content": "Hello", "role": "human"},
         output={"content": "Hi", "role": "ai"},

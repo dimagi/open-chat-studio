@@ -171,7 +171,8 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     Some Source Material on a particular topic.
     """
 
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # Null when created by a client-credentials (machine) API token, which has no user.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()
@@ -201,7 +202,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """Mirrors Collection.archive()'s in-use guard."""
         if has_related_pipeline_references(self, "source_material"):
             return False
@@ -270,10 +271,14 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return reverse("experiments:consent_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
+        """Archive the form and move its chatbots onto the team's default. The default itself is refused."""
+        if self.is_default:
+            return False
         super().archive()
-        consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
+        consent_form_id = ConsentForm.objects.filter(team_id=self.team_id, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+        return True
 
     def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         new_version = super().create_new_version(save=False)
@@ -975,7 +980,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archive the experiment and all versions in the case where this is the working version. The
         linked pipeline for the working version should not be archived.
@@ -991,6 +996,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             if self.pipeline:
                 self.pipeline.archive()
+        return True
 
     @transaction.atomic()
     def unarchive(self):
