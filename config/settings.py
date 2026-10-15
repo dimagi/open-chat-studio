@@ -515,6 +515,8 @@ SPECTACULAR_SETTINGS = {
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
         "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
         "MessageRoleEnum": "apps.api.serializers.MESSAGE_ROLES",
+        "StaticTriggerTypeEnum": "apps.events.models.StaticTriggerType",
+        "TriggerActionTypeEnum": "apps.events.models.EventActionType",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
