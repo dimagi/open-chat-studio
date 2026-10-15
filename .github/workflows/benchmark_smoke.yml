@@ -1,0 +1,109 @@
+name: Benchmark smoke check
+
+# Runs a few stable benchmarks on the pull request and on its base branch, alternating between the
+# two in one job, and fails only on large regressions. GitHub-hosted runners are too noisy for
+# anything finer. Precise tracking runs nightly on a dedicated runner (see
+# docs/developer_guides/testing/benchmarks.md).
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'config/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/benchmark_smoke.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.13'
+  # Fail when a benchmark is more than 25% slower than on the base branch.
+  FAIL_ABOVE: '1.25'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # The benchmarks only exist on main.
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_INITDB_ARGS: "--no-sync"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --tmpfs /var/lib/postgresql/data
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      # The pull request merged into its base, as the other test jobs see it.
+      - name: Check out the pull request
+        uses: actions/checkout@v7
+        with:
+          path: head
+          persist-credentials: false
+      - name: Check out the base branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            head/uv.lock
+            base/uv.lock
+      - name: Install dependencies
+        run: |
+          (cd head && uv sync --locked --dev)
+          (cd base && uv sync --locked --dev)
+      - name: Configure Postgres
+        run: |
+          # Extensions go in template1 so the test databases inherit them, which lets the run use
+          # --no-migrations.
+          PGPASSWORD=postgres_password psql -h localhost -U postgres -d template1 \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - name: Compare the pull request with its base
+        working-directory: head
+        env:
+          DJANGO_DATABASE_USER: postgres
+          DJANGO_DATABASE_PASSWORD: postgres_password
+          SECRET_KEY: secret-test-key
+        run: |
+          set -o pipefail
+          # N5, P1 with a typical history, P2 and P5: the scenarios with the least spread.
+          uv run python apps/benchmarks/ab.py --a ../base --b . --pairs 3 --fail-above "$FAIL_ABOVE" \
+            --out ../ab -- --no-migrations -k "n5_python_node or P1-H2 or p2_linear_chain or p5_deep_chain" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

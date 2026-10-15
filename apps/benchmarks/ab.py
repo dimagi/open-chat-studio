@@ -42,12 +42,13 @@ def main(argv: list[str] | None = None) -> int:
             _run_side(checkouts[side], side, result, create_db=False, extra=args.pytest_args)
             runs[side].append(result)
 
-    summary = compare(
-        [_medians(path) for path in runs["a"]],
-        [_medians(path) for path in runs["b"]],
-    )
+    a_runs = [_medians(path) for path in runs["a"]]
+    b_runs = [_medians(path) for path in runs["b"]]
+    summary = compare(a_runs, b_runs)
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(format_markdown(summary, a=_commit(runs["a"][0]), b=_commit(runs["b"][0])))
+    if args.fail_above is not None and _report_failures(summary, a_runs, b_runs, args.fail_above):
+        return 1
     return 0
 
 
@@ -57,6 +58,11 @@ def _parse_args(argv):
     parser.add_argument("--b", required=True, help="candidate checkout")
     parser.add_argument("--pairs", type=_positive_int, default=2, help="number of A/B pairs (default 2)")
     parser.add_argument("--out", default="ab-results", help="directory for the per-run JSON and summary.json")
+    parser.add_argument(
+        "--fail-above",
+        type=float,
+        help="exit with status 1 when any benchmark's B/A ratio is above this, e.g. 1.25 for 25%% slower",
+    )
     parser.add_argument("pytest_args", nargs="*", help="extra pytest arguments, after --")
     return parser.parse_args(argv)
 
@@ -82,6 +88,18 @@ def _run_side(checkout: Path, side: str, result: Path, create_db: bool, extra: l
     print(f"[{side}] {checkout}: {' '.join(command)}", file=sys.stderr, flush=True)
     # pytest's output goes to stderr so stdout carries only the report.
     subprocess.run(command, cwd=checkout, env=env, check=True, stdout=sys.stderr)
+
+
+def _report_failures(summary: list[dict], a_runs, b_runs, limit: float) -> bool:
+    """Annotate benchmarks that regressed or ran on only one side, and return whether there were any."""
+    unmatched = unmatched_names(a_runs, b_runs)
+    for name, side in unmatched:
+        print(f"::error::{name.split('::', 1)[-1]} ran only on {side.upper()}", file=sys.stderr)
+    slow = regressions(summary, limit)
+    for row in slow:
+        name = row["name"].split("::", 1)[-1]
+        print(f"::error::{name} is {(row['ratio'] - 1) * 100:.0f}% slower than A", file=sys.stderr)
+    return bool(slow or unmatched)
 
 
 def _medians(path: Path) -> dict[str, float]:
@@ -115,6 +133,18 @@ def compare(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> l
             }
         )
     return rows
+
+
+def unmatched_names(a_runs: list[dict[str, float]], b_runs: list[dict[str, float]]) -> list[tuple[str, str]]:
+    """The (name, side) pairs for benchmarks that ran on only one side, which ``compare`` drops."""
+    a_names = set().union(*a_runs)
+    b_names = set().union(*b_runs)
+    return [(name, "a") for name in sorted(a_names - b_names)] + [(name, "b") for name in sorted(b_names - a_names)]
+
+
+def regressions(rows: list[dict], limit: float) -> list[dict]:
+    """The rows whose B/A ratio is above ``limit``."""
+    return [row for row in rows if row["ratio"] > limit]
 
 
 def format_markdown(rows: list[dict], a: str, b: str) -> str:
