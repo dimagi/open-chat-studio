@@ -1,3 +1,4 @@
+import time
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -8,6 +9,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.repository import InMemoryPipelineRepository
+from apps.service_providers.auth_service.oauth import _config_fingerprint
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -360,3 +362,39 @@ def main(input, **kwargs):
         httpx_mock.add_response(text="recovered")  # second: ok
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "recovered"
+
+    @patch("apps.utils.restricted_http.validate_user_input_url")
+    def test_oauth_authorization_code_auth_provider(self, mock_validate, httpx_mock):
+        team = TeamFactory.create()
+        provider = AuthProviderFactory.create(
+            name="Authorization Code OAuth",
+            type="oauth_authorization_code",
+            config={
+                "client_id": "cid",
+                "client_secret": "secret",
+                "authorize_url": "https://auth.example.com/authorize",
+                "token_url": "https://auth.example.com/token",
+                "scope": "read",
+                "token_endpoint_auth_method": "client_secret_basic",
+            },
+            team=team,
+        )
+        provider._auth_data = {
+            "access_token": "pipeline-token",
+            "token_type": "Bearer",
+            "expires_at": time.time() + 3600,
+            "config_fingerprint": _config_fingerprint(provider.config),
+        }
+        provider.save(update_fields=["_auth_data"])
+        session = MagicMock(team=team)
+        httpx_mock.add_response(url="https://api.example.com/data", json={"authenticated": True})
+        result = _run_code_node(
+            """
+def main(input, **kwargs):
+    response = http.get("https://api.example.com/data", auth="Authorization Code OAuth")
+    return str(response["json"]["authenticated"])
+""",
+            experiment_session=session,
+        )
+        assert result.update["messages"][-1] == "True"
+        assert httpx_mock.get_request().headers["authorization"] == "Bearer pipeline-token"
