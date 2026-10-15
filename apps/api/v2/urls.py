@@ -12,6 +12,7 @@ from apps.api.v2.discovery import (
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
 from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
+from apps.api.v2.triggers.views import ScheduledTriggerView, StaticTriggerView, TimeoutTriggerView
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.versions.views import (
     ChatbotVersionCreateView,
@@ -59,6 +60,36 @@ urlpatterns = [
         "chatbots/<str:id>/pipeline/edges/<str:edge_id>/",
         PipelineEdgeEditView.as_view(http_method_names=["delete", "options"]),
         name="pipeline-edge-delete",
+    ),
+    path(
+        "chatbots/<str:id>/static-triggers/",
+        StaticTriggerView.as_view(http_method_names=["post", "options"]),
+        name="chatbot-static-trigger-create",
+    ),
+    path(
+        "chatbots/<str:id>/static-triggers/<int:trigger_id>/",
+        StaticTriggerView.as_view(http_method_names=["patch", "delete", "options"]),
+        name="chatbot-static-trigger-update",
+    ),
+    path(
+        "chatbots/<str:id>/timeout-triggers/",
+        TimeoutTriggerView.as_view(http_method_names=["post", "options"]),
+        name="chatbot-timeout-trigger-create",
+    ),
+    path(
+        "chatbots/<str:id>/timeout-triggers/<int:trigger_id>/",
+        TimeoutTriggerView.as_view(http_method_names=["patch", "delete", "options"]),
+        name="chatbot-timeout-trigger-update",
+    ),
+    path(
+        "chatbots/<str:id>/scheduled-triggers/",
+        ScheduledTriggerView.as_view(http_method_names=["post", "options"]),
+        name="chatbot-scheduled-trigger-create",
+    ),
+    path(
+        "chatbots/<str:id>/scheduled-triggers/<int:trigger_id>/",
+        ScheduledTriggerView.as_view(http_method_names=["patch", "delete", "options"]),
+        name="chatbot-scheduled-trigger-update",
     ),
     path(
         "chatbots/<str:id>/versions/",

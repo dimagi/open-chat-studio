@@ -530,6 +530,13 @@ SPECTACULAR_SETTINGS = {
             "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
         },
         {
+            "name": "Chatbot Triggers",
+            "description": (
+                "Add, change and archive the triggers that run an action on a conversation event, "
+                "after inactivity, or at a set time."
+            ),
+        },
+        {
             "name": "Me",
             "description": "Information about the authenticated user and the team the token is scoped to.",
         },
