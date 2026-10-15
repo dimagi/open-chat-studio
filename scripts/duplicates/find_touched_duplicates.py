@@ -229,8 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--base", help="Branch to diff against (default: origin/$GITHUB_BASE_REF if set, else origin/main)"
     )
-    parser.add_argument("--similarity", type=int, default=80, help="Minimum percent similarity (default: 80)")
-    parser.add_argument("--min-lines", type=int, default=3, help="Minimum lines in a region (default: 3)")
+    parser.add_argument("--similarity", type=int, default=90, help="Minimum percent similarity (default: 90)")
+    parser.add_argument("--min-lines", type=int, default=5, help="Minimum lines in a region (default: 5)")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format")
     parser.add_argument("--fail", action="store_true", help="Exit with code 1 if any duplicates are reported")
     args = parser.parse_args(argv)
