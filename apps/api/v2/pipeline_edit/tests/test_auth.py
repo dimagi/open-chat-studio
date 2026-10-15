@@ -106,13 +106,14 @@ def test_another_teams_chatbot_is_not_found(verb):
     assert response.status_code == 404, response.content
 
 
-def _machine_client(team, allowed_chatbots):
+def _machine_client(team, allowed_chatbots, all_data=False):
     return ApiTestClient(
         UserFactory.create(),
         team,
         auth_method="oauth_client_credentials",
         scopes=["chatbots:write"],
         allowed_chatbots=allowed_chatbots,
+        all_data=all_data,
     )
 
 
@@ -134,6 +135,16 @@ def test_a_machine_token_is_held_to_its_applications_chatbot_allowlist(listed, v
     response = _call(_machine_client(chatbot.team, allowed_chatbots=allowed), chatbot, verb)
 
     assert response.status_code == (ALLOWED_STATUS[verb] if listed else 403), response.content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("verb", PER_VIEW_CLASS)
+def test_a_machine_token_reaching_all_data_may_edit_an_unlisted_one(verb):
+    chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
+
+    response = _call(_machine_client(chatbot.team, allowed_chatbots=[], all_data=True), chatbot, verb)
+
+    assert response.status_code == ALLOWED_STATUS[verb], response.content
 
 
 @pytest.mark.django_db()

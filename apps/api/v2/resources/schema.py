@@ -14,7 +14,10 @@ def resource_schema(*, noun: str, plural: str, archive_refusal: str, archive_ref
     """The OpenAPI descriptions shared by both resource viewsets."""
     operation_prefix = noun.lower().replace(" ", "_")
     tag = plural
-    machine_tokens = " A client-credentials token can read but not write; its writes answer `403`."
+    machine_tokens = (
+        " A client-credentials token can write only when its application has access to all chatbots; "
+        "otherwise its writes answer `403`."
+    )
     id_parameter = OpenApiParameter(
         name="id", type=OpenApiTypes.INT, location=OpenApiParameter.PATH, description=f"{noun} ID"
     )

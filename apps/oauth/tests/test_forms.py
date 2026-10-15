@@ -199,9 +199,36 @@ def test_archived_chatbot_survives_an_unrelated_save(user_with_team):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("grant_type", "extra", "expected"),
+    [
+        pytest.param(OAuth2Application.GRANT_CLIENT_CREDENTIALS, {}, True, id="client-credentials-keeps-it"),
+        pytest.param(
+            OAuth2Application.GRANT_AUTHORIZATION_CODE,
+            {"redirect_uris": "https://example.com/callback"},
+            False,
+            id="authorization-code-clears-it",
+        ),
+    ],
+)
+def test_all_data_saved_for_client_credentials_only(user_with_team, grant_type, extra, expected):
+    _user, team = user_with_team
+    form = RegisterApplicationForm(
+        team=team,
+        data=_form_data(authorization_grant_type=grant_type, all_data="on", **extra),
+    )
+
+    assert form.is_valid(), form.errors
+    form.instance.team = team
+    assert form.save().all_data is expected
+
+
+@pytest.mark.django_db()
 def test_global_form_omits_allowed_chatbots():
     """A global application has no team whose chatbots could be offered."""
-    assert "allowed_chatbots" not in RegisterGlobalApplicationForm().fields
+    fields = RegisterGlobalApplicationForm().fields
+    assert "allowed_chatbots" not in fields
+    assert "all_data" not in fields
 
 
 def _authorization_form_data(team_slug=None):
