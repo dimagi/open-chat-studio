@@ -2,7 +2,6 @@ import importlib
 import json
 
 import pytest
-from django.http import Http404
 from django.test import RequestFactory, override_settings
 from django.urls import Resolver404, clear_url_caches, resolve
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
@@ -25,11 +24,6 @@ from apps.service_providers.mock_llm.payloads import (
     error_body,
     last_user_message,
 )
-
-
-@pytest.fixture(autouse=True)
-def _mock_llm_enabled(settings):
-    settings.MOCK_LLM_ENABLED = True
 
 
 @pytest.fixture(autouse=True)
@@ -263,21 +257,6 @@ def test_models_lists_the_stub_model():
     response = views.models(RequestFactory().get("/mock-llm/v1/models"))
 
     assert [model["id"] for model in _json(response)["data"]] == [MODEL_NAME]
-
-
-@pytest.mark.parametrize(
-    "view",
-    [
-        pytest.param(views.chat_completions, id="chat_completions"),
-        pytest.param(views.responses, id="responses"),
-        pytest.param(views.models, id="models"),
-    ],
-)
-def test_views_are_not_served_when_disabled(view, settings):
-    settings.MOCK_LLM_ENABLED = False
-
-    with pytest.raises(Http404):
-        view(_post({}))
 
 
 def _router_schema(*keywords) -> dict:

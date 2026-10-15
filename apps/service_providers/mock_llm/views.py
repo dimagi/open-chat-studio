@@ -3,10 +3,8 @@
 import itertools
 import json
 import time
-from functools import wraps
 
-from django.conf import settings
-from django.http import Http404, JsonResponse, StreamingHttpResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -25,18 +23,6 @@ def reset_response_index() -> None:
     """Restart the rotation. For tests, which need to know the index a reply was built from."""
     global _responses_served
     _responses_served = itertools.count()
-
-
-def mock_llm_enabled_only(view):
-    """Serve the view only while MOCK_LLM_ENABLED is on."""
-
-    @wraps(view)
-    def wrapper(request, *args, **kwargs):
-        if not settings.MOCK_LLM_ENABLED:
-            raise Http404("The mock LLM provider is served only when DEBUG is on or in CI.")
-        return view(request, *args, **kwargs)
-
-    return wrapper
 
 
 def _payload(request) -> dict:
@@ -109,7 +95,6 @@ def _structured_text(schema: dict, index: int) -> str:
 
 
 @csrf_exempt
-@mock_llm_enabled_only
 @require_POST
 def chat_completions(request):
     payload = _payload(request)
@@ -156,7 +141,6 @@ def chat_completions(request):
 
 
 @csrf_exempt
-@mock_llm_enabled_only
 @require_POST
 def responses(request):
     payload = _payload(request)
@@ -194,7 +178,6 @@ def responses(request):
     return JsonResponse(envelope)
 
 
-@mock_llm_enabled_only
 @require_GET
 def models(request):
     return JsonResponse(
