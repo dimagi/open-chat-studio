@@ -202,7 +202,7 @@ def responses_stream(envelope: dict):
     yield event({"type": "response.created", "response": in_progress})
 
     for output_index, item in enumerate(envelope["output"]):
-        yield event({"type": "response.output_item.added", "output_index": output_index, "item": item})
+        yield event({"type": "response.output_item.added", "output_index": output_index, "item": _unfilled(item)})
         if item["type"] == "function_call":
             position = {"item_id": item["id"], "output_index": output_index}
             for piece in _stream_pieces(item["arguments"]):
@@ -224,3 +224,9 @@ def responses_stream(envelope: dict):
         yield event({"type": "response.output_item.done", "output_index": output_index, "item": item})
 
     yield event({"type": "response.completed", "response": envelope})
+
+
+def _unfilled(item: dict) -> dict:
+    """An output item as it is announced, before its deltas fill it in."""
+    empty = {"arguments": ""} if item["type"] == "function_call" else {"content": []}
+    return {**item, **empty, "status": "in_progress"}

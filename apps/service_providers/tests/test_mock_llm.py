@@ -617,7 +617,10 @@ def test_responses_stream_rejoins_tool_call_arguments():
     )
 
     events = [json.loads(payload) for payload in _sse_payloads(response)]
-    arguments = "".join(event["delta"] for event in events if event["type"] == "response.function_call_arguments.delta")
+    # langchain_openai starts from the arguments on the added item and appends each delta.
+    added = next(event for event in events if event["type"] == "response.output_item.added")
+    deltas = [event["delta"] for event in events if event["type"] == "response.function_call_arguments.delta"]
+    arguments = added["item"]["arguments"] + "".join(deltas)
     assert json.loads(arguments) == {"route": "support"}
     assert events[-1]["type"] == "response.completed"
     assert events[-1]["response"]["output"][0]["arguments"] == arguments
