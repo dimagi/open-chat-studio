@@ -14,7 +14,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.v2.resources.exceptions import ArchiveRefused, SourceMaterialInUse
-from apps.api.v2.resources.permissions import ReadOnlyForMachineTokens
+from apps.api.v2.resources.permissions import ReadOnlyForLimitedMachineTokens
 from apps.api.v2.resources.schema import consent_form_schema, source_material_schema
 from apps.api.v2.resources.serializers import (
     ConsentFormResourceSerializer,
@@ -74,7 +74,7 @@ class BaseResourceViewSet(
         *BASE_PERMISSION_CLASSES,
         DjangoModelPermissionsWithView,
         TokenHasOAuthResourceScope,
-        ReadOnlyForMachineTokens,
+        ReadOnlyForLimitedMachineTokens,
     ]
     required_scopes = ["chatbots"]
     # No PUT: every edit is a partial update.

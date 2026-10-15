@@ -2,16 +2,20 @@
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from apps.oauth.permissions import is_client_credentials_request
+from apps.oauth.permissions import token_reaches_all_chatbots
 
 
-class ReadOnlyForMachineTokens(BasePermission):
-    """Refuse writes from client-credentials (machine) tokens.
+class ReadOnlyForLimitedMachineTokens(BasePermission):
+    """Refuse writes from client-credentials (machine) tokens limited to some of the team's chatbots.
 
-    A machine application is pinned to some of the team's chatbots, but these resources are shared by all of them.
+    These resources are shared by all of the team's chatbots, so only an application that reaches every
+    chatbot may change them.
     """
 
-    message = "Client-credentials tokens cannot modify source material or consent forms."
+    message = (
+        "Client-credentials tokens can modify source material and consent forms only when their application "
+        "has access to all chatbots."
+    )
 
     def has_permission(self, request, view) -> bool:
-        return request.method in SAFE_METHODS or not is_client_credentials_request(request)
+        return request.method in SAFE_METHODS or token_reaches_all_chatbots(request.auth)
