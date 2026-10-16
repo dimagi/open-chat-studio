@@ -3,6 +3,7 @@ from functools import wraps
 from django.conf import settings
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils.http import urlencode
 
 from apps.utils.redirects import safe_redirect_url
 from apps.web.elevation import Elevation, Grant, TooManyElevations, elevate
@@ -28,7 +29,7 @@ def login_and_team_required(view_func):
     def _inner(request, *args, **kwargs):
         if not valid_auth_and_membership(request):
             next_url = safe_redirect_url(request.get_full_path())
-            return HttpResponseRedirect(f"{reverse(settings.LOGIN_URL)}?next={next_url}")
+            return HttpResponseRedirect(f"{reverse(settings.LOGIN_URL)}?{urlencode({'next': next_url})}")
         return view_func(request, *args, **kwargs)
 
     setattr(_inner, ENFORCES_TEAM_AUTH_ATTR, True)
