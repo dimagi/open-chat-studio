@@ -193,8 +193,8 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
         tools.append(search_tool)
 
     if node.disabled_tools:
-        # Model builtin tools doesn't have a name attribute and are dicts
-        return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
+        # Model builtin tools don't have a name attribute and are dicts. Only named tools can be disabled.
+        return [tool for tool in tools if not hasattr(tool, "name") or tool.name not in node.disabled_tools]
     return cast("list[dict | BaseTool]", tools)
 
 
