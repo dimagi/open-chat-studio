@@ -7,6 +7,7 @@ from django.urls import reverse
 from waffle.testutils import override_flag
 
 from apps.experiments.filters import ExperimentSessionFilter
+from apps.experiments.models import ExperimentSession
 from apps.participants.filters import ParticipantFilter
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -58,26 +59,33 @@ BLOCKED_FILTER_QUERY = {
 
 
 def _session_list_queries(*, client, url, query):
-    """The number of queries the session list runs, and the sessions it shows."""
+    """The number of queries the session list runs, and the ids of the sessions it shows."""
     with override_flag(Flags.ABUSE_DETECTION.slug, active=True), CaptureQueriesContext(connection) as queries:
         response = client.get(url, data=query)
     assert response.status_code == 200
-    return len(queries), len(response.context_data["table"].data.data)
+    return len(queries), {session.id for session in response.context_data["table"].data.data}
 
 
-@pytest.mark.parametrize("session_count", [pytest.param(1, id="one-session"), pytest.param(4, id="four-sessions")])
-def test_blocked_filter_adds_no_queries_to_the_session_list(client, team_with_users, session_count):
-    """Every session is blocked, so the filtered and unfiltered lists show the same rows."""
+@pytest.mark.parametrize(
+    "blocked_count", [pytest.param(1, id="one-blocked-session"), pytest.param(4, id="four-blocked-sessions")]
+)
+def test_blocked_filter_adds_no_queries_to_the_session_list(client, team_with_users, blocked_count):
     team = team_with_users
     client.force_login(team.members.first())
     experiment = ExperimentFactory.create(team=team)
-    for _ in range(session_count):
+    blocked_ids = set()
+    for _ in range(blocked_count):
         session = ExperimentSessionFactory.create(experiment=experiment)
         DeniedParticipantFactory.create(team=team, participant=session.participant)
+        blocked_ids.add(session.id)
+    not_blocked = ExperimentSessionFactory.create_batch(2, experiment=experiment)
     url = reverse(viewname="chatbots:all_sessions_list", kwargs={"team_slug": team.slug})
     _session_list_queries(client=client, url=url, query={})  # warm per-process caches such as content types
 
-    unfiltered = _session_list_queries(client=client, url=url, query={})
-    filtered = _session_list_queries(client=client, url=url, query=BLOCKED_FILTER_QUERY)
+    filtered_queries, filtered_ids = _session_list_queries(client=client, url=url, query=BLOCKED_FILTER_QUERY)
+    # The list runs queries per row, so compare against an unfiltered list that shows the same rows.
+    ExperimentSession.objects.filter(id__in=[session.id for session in not_blocked]).delete()
+    unfiltered_queries, unfiltered_ids = _session_list_queries(client=client, url=url, query={})
 
-    assert filtered == unfiltered == (unfiltered[0], session_count)
+    assert filtered_ids == unfiltered_ids == blocked_ids
+    assert filtered_queries == unfiltered_queries
