@@ -52,7 +52,7 @@ class ServiceProviderType:
 
     primary_fields: list[str]
 
-    """Waffle flag that must be active for this provider type to be available. None means always available."""
+    # Waffle flag that must be active for this provider type to be available. None means always available.
     flag: str | None = None
 
     def get_permission(self, action: Literal["view", "add", "change", "delete"]) -> Any:
@@ -137,7 +137,7 @@ def is_provider_enabled(provider: ServiceProvider, request: HttpRequest) -> bool
 
 
 def get_enabled_providers(request: HttpRequest) -> list[ServiceProvider]:
-    return [provider for provider in ServiceProvider if is_provider_enabled(provider, request)]
+    return [provider for provider in ServiceProvider if is_provider_enabled(provider=provider, request=request)]
 
 
 def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> list:

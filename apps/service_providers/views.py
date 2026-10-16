@@ -82,7 +82,7 @@ def _get_provider_type(request, slug: str) -> ServiceProvider:
         provider = ServiceProvider[slug]
     except KeyError:
         raise Http404(f"Unknown provider type: {slug}") from None
-    if not is_provider_enabled(provider, request):
+    if not is_provider_enabled(provider=provider, request=request):
         raise Http404("Provider type is not enabled")
     return provider
 
@@ -90,7 +90,7 @@ def _get_provider_type(request, slug: str) -> ServiceProvider:
 class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
-        return _get_provider_type(self.request, self.kwargs["provider_type"])
+        return _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
 
 
 class ServiceProviderUsagesMixin(LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin):
@@ -152,7 +152,7 @@ def _experiment_chip_label(experiment) -> str:
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
-    provider = _get_provider_type(request, provider_type)
+    provider = _get_provider_type(request=request, slug=provider_type)
     if not request.user.has_perm(provider.get_permission("delete")):
         raise PermissionDenied()
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
@@ -183,14 +183,14 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 class AddFileToProvider(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
-        provider = _get_provider_type(self.request, self.kwargs["provider_type"])
+        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
         provider = get_object_or_404(provider.model, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         provider.add_files([file])
         return file
 
     def get_delete_url(self, file):
-        provider = _get_provider_type(self.request, self.kwargs["provider_type"])
+        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
         return reverse(
             "service_providers:delete_file",
             kwargs={
@@ -206,7 +206,7 @@ class AddFileToProvider(BaseAddFileHtmxView):
 @permission_required("files.delete_file")
 @transaction.atomic()
 def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: int):
-    provider = _get_provider_type(request, provider_type)
+    provider = _get_provider_type(request=request, slug=provider_type)
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.remove_file(file_id)
     return HttpResponse()

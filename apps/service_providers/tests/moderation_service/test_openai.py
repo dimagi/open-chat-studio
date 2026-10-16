@@ -53,7 +53,7 @@ def make_service() -> OpenAIModerationService:
 def test_moderate_keys_every_category_by_slash_name(create):
     categories = dict.fromkeys(CATEGORY_NAMES, False) | {"illicit/violent": True}
     scores = {name: 0.01 for name in CATEGORY_NAMES} | {"illicit/violent": 0.84}
-    create.return_value = moderation_response(categories, scores)
+    create.return_value = moderation_response(categories=categories, scores=scores)
 
     output = make_service().moderate("some text")
 
@@ -67,7 +67,7 @@ def test_moderate_leaves_out_a_category_missing_from_the_response(create):
     categories = dict.fromkeys(CATEGORY_NAMES, False)
     del categories["illicit"]
     scores = {name: 0.01 for name in CATEGORY_NAMES}
-    create.return_value = moderation_response(categories, scores)
+    create.return_value = moderation_response(categories=categories, scores=scores)
 
     output = make_service().moderate("some text")
 

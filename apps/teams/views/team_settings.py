@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
-from apps.service_providers.utils import ServiceProvider
+from apps.service_providers.utils import ServiceProvider, get_enabled_providers
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import (
     FeatureFlagForm,
@@ -233,7 +233,7 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
             set_form_fields_disabled(team_form, True)
     stats = {
         "members": team.membership_set.count(),
-        "integrations": len(get_integration_rows(request, team)),
+        "integrations": len(get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))),
         "pending_invites": Invitation.objects.filter(team=team, is_accepted=False).count(),
     }
     return {
