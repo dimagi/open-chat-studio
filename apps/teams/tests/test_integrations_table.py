@@ -44,7 +44,11 @@ def request_for(team):
 
 
 def _visible_categories(request):
-    return get_visible_categories(request, get_enabled_providers(request))
+    return get_visible_categories(request=request, providers=get_enabled_providers(request))
+
+
+def _rows(request, team):
+    return get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))
 
 
 @pytest.mark.django_db()
@@ -62,7 +66,7 @@ def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, 
     voice = VoiceProviderFactory(team=team)
 
     user = UserFactory()
-    rows = get_integration_rows(request_for(user), team)
+    rows = _rows(request=request_for(user), team=team)
 
     ids = [row["id"] for row in rows]
     assert len(ids) == len(set(ids))
@@ -76,10 +80,12 @@ def test_mcp_rows_excluded_when_flag_off(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
     request = request_for(UserFactory())
 
-    rows = get_integration_rows(request, team)
+    rows = _rows(request=request, team=team)
     assert rows == []
 
-    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing"]
     assert "MCP" not in labels
@@ -92,12 +98,14 @@ def test_mcp_rows_included_when_flag_on(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
     request = request_for(UserFactory())
 
-    rows = get_integration_rows(request, team)
+    rows = _rows(request=request, team=team)
     assert len(rows) == 1
     assert rows[0]["category"] == "MCP"
     assert rows[0]["name"] == "Zapier"
 
-    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
     mcp_pill = pills[-1]
@@ -109,7 +117,7 @@ def moderation_setup(team, request_for):
     """A team with one moderation provider, and a request from a team owner."""
     ModerationProviderFactory(team=team, name="Main moderation")
     admin = UserFactory()
-    make_user_team_owner(team, admin)
+    make_user_team_owner(team=team, user=admin)
     return request_for(admin)
 
 
@@ -119,9 +127,11 @@ def test_moderation_rows_menu_and_pill_shown_with_the_abuse_detection_flag_on(te
     request = moderation_setup
 
     with current_team(team):
-        rows = get_integration_rows(request, team)
-        menu_categories = [group.category for group in get_integration_new_choices(request, team)]
-    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+        rows = _rows(request=request, team=team)
+        menu_categories = [group.category for group in get_integration_new_choices(request=request, team=team)]
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     pill_labels = [pill.label for pill in pills]
 
     assert [(row["name"], row["category"], row["provider"]) for row in rows] == [
@@ -137,9 +147,11 @@ def test_moderation_rows_menu_and_pill_hidden_with_the_abuse_detection_flag_off(
     request = moderation_setup
 
     with current_team(team):
-        rows = get_integration_rows(request, team)
-        menu_categories = [group.category for group in get_integration_new_choices(request, team)]
-    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+        rows = _rows(request=request, team=team)
+        menu_categories = [group.category for group in get_integration_new_choices(request=request, team=team)]
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     pill_labels = [pill.label for pill in pills]
 
     assert rows == []
@@ -151,7 +163,7 @@ def test_moderation_rows_menu_and_pill_hidden_with_the_abuse_detection_flag_off(
 @override_flag(Flags.ABUSE_DETECTION.slug, active=True)
 def test_integrations_table_shows_moderation_provider(client, team):
     admin = UserFactory()
-    make_user_team_owner(team, admin)
+    make_user_team_owner(team=team, user=admin)
     ModerationProviderFactory(team=team, name="Main moderation")
     client.force_login(admin)
 
@@ -251,7 +263,7 @@ def test_integrations_table_edit_action_hidden_without_permission(client, team):
 def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_for):
     provider = LlmProviderFactory(team=team)
 
-    (row,) = get_integration_rows(request_for(UserFactory()), team)
+    (row,) = _rows(request=request_for(UserFactory()), team=team)
 
     assert row["verifiable_provider"] == provider
 
@@ -267,7 +279,7 @@ def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_f
 def test_rows_for_providers_without_a_check_carry_no_verification(team, request_for, make_provider):
     make_provider(team)
 
-    (row,) = get_integration_rows(request_for(UserFactory()), team)
+    (row,) = _rows(request=request_for(UserFactory()), team=team)
 
     assert row["verifiable_provider"] is None
 

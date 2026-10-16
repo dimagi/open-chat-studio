@@ -999,8 +999,8 @@ class ModerationProviderType(models.TextChoices):
                 case ModerationProviderType.openai:
                     return OpenAIModerationService(**config, **service_kwargs)
         except ValidationError as e:
-            raise ServiceProviderConfigError(self, str(e)) from e
-        raise ServiceProviderConfigError(self, "No moderation service configured")
+            raise ServiceProviderConfigError(provider_type=self, message=str(e)) from e
+        raise ServiceProviderConfigError(provider_type=self, message="No moderation service configured")
 
 
 @audit_fields(*model_audit_fields.MODERATION_PROVIDER_FIELDS, audit_special_queryset_writes=True)
