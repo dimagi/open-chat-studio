@@ -21,5 +21,5 @@ def record_rule_hits(
     if rules:
         detail = message.moderation_detail or ModerationDetail()
         message.moderation_detail = detail.model_copy(update={"rules": rules})
-        message.save(update_fields=["moderation_detail"])
+        message.save(update_fields=["moderation_detail", "updated_at"])
     return rules

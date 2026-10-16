@@ -32,3 +32,16 @@ def test_record_rule_hits(text, initial, expected):
 
     message.refresh_from_db()
     assert message.moderation_detail == expected
+
+
+@pytest.mark.django_db()
+def test_record_rule_hits_updates_updated_at():
+    message = ChatMessageFactory.create(
+        chat=ChatFactory.create(), message_type=ChatMessageType.HUMAN, content="<script>"
+    )
+    before = message.updated_at
+
+    record_rule_hits(message=message, text="<script>", attachments=[], participant=None)
+
+    message.refresh_from_db()
+    assert message.updated_at > before
