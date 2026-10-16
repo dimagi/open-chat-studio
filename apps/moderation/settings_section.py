@@ -19,7 +19,7 @@ def _can_view_denylist(request) -> bool:
 
 
 def _can_view_settings_section(request) -> bool:
-    return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug)) and (
+    return bool(flag_is_active(request=request, flag_name=Flags.ABUSE_DETECTION.slug)) and (
         is_team_admin(request) or _can_view_denylist(request)
     )
 
@@ -31,27 +31,27 @@ def moderation_settings_context(request, form: TeamModerationForm | None = None)
     if form is None:
         form = TeamModerationForm(instance=team)
     if not can_edit:
-        set_form_fields_disabled(form, True)
+        set_form_fields_disabled(form=form, disabled=True)
     provider_type = ServiceProvider.moderation
-    subtype = get_available_subtypes(provider_type, request)[0]
+    subtype = get_available_subtypes(provider=provider_type, request=request)[0]
     return {
         "moderation_form": form,
         "moderation_providers": list(form.fields["moderation_provider"].queryset),
         "can_edit_moderation": can_edit,
         "can_add_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("add")),
         "can_change_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("change")),
-        "moderation_provider_new_url": reverse("moderation:provider_new", args=[team.slug, str(subtype)]),
+        "moderation_provider_new_url": reverse(viewname="moderation:provider_new", args=[team.slug, str(subtype)]),
         # The selected provider's id replaces the 0 in the browser.
-        "moderation_provider_edit_url": reverse("moderation:provider_edit", args=[team.slug, 0]),
+        "moderation_provider_edit_url": reverse(viewname="moderation:provider_edit", args=[team.slug, 0]),
         "moderation_subtype_label": subtype.label,
     }
 
 
 def _settings_section_context(request) -> dict:
     return {
-        **moderation_settings_context(request),
+        **moderation_settings_context(request=request),
         "can_view_denylist": _can_view_denylist(request),
-        "denylist_table_url": reverse("moderation:denied_participants_table", args=[request.team.slug]),
+        "denylist_table_url": reverse(viewname="moderation:denied_participants_table", args=[request.team.slug]),
     }
 
 

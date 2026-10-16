@@ -24,23 +24,27 @@ SETTINGS_FORM_TEMPLATE = "moderation/components/settings_form.html"
 
 @login_and_team_required
 @waffle_flag(Flags.ABUSE_DETECTION.slug)
-@permission_required("teams.change_team", raise_exception=True)
+@permission_required(perm="teams.change_team", raise_exception=True)
 @require_POST
 def moderation_settings(request, team_slug: str):
     """Save the team's moderation switches and selected provider."""
-    form = TeamModerationForm(request.POST, instance=request.team)
+    form = TeamModerationForm(data=request.POST, instance=request.team)
     if form.is_valid():
         form.save()
-        messages.success(request, _("Moderation settings saved."))
+        messages.success(request=request, message=_("Moderation settings saved."))
         form = TeamModerationForm(instance=request.team)
     else:
-        messages.error(request, _("Could not save the moderation settings."))
+        messages.error(request=request, message=_("Could not save the moderation settings."))
         # is_valid() has already copied the rejected values onto request.team.
         request.team.refresh_from_db()
-    return render(request, SETTINGS_FORM_TEMPLATE, moderation_settings_context(request, form=form))
+    return render(
+        request=request,
+        template_name=SETTINGS_FORM_TEMPLATE,
+        context=moderation_settings_context(request=request, form=form),
+    )
 
 
-@method_decorator(waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
+@method_decorator(decorator=waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
 class DeniedParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """The team's blocked participants."""
 
@@ -57,7 +61,7 @@ class DeniedParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         )
 
 
-@method_decorator(waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
+@method_decorator(decorator=waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
 class ModerationProviderDialog(CreateServiceProvider):
     """The moderation provider create/edit form, shown in a dialog in the Moderation section.
 
@@ -79,7 +83,7 @@ class ModerationProviderDialog(CreateServiceProvider):
                 "moderation_provider": obj.pk,
             },
         )
-        context = moderation_settings_context(self.request, form=form)
-        response = render(self.request, SETTINGS_FORM_TEMPLATE, context)
-        response = reswap(retarget(response, "#moderation-settings"), "outerHTML")
-        return trigger_client_event(response, PROVIDER_SAVED_EVENT)
+        context = moderation_settings_context(request=self.request, form=form)
+        response = render(request=self.request, template_name=SETTINGS_FORM_TEMPLATE, context=context)
+        response = reswap(response=retarget(response=response, target="#moderation-settings"), method="outerHTML")
+        return trigger_client_event(response=response, name=PROVIDER_SAVED_EVENT)

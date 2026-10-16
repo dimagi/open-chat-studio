@@ -24,7 +24,7 @@ class TeamModerationForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data.get("moderation_enabled") and not cleaned_data.get("moderation_provider"):
-            self.add_error("moderation_provider", _("Select a moderation provider to turn moderation on."))
+            self.add_error(field="moderation_provider", error=_("Select a moderation provider to turn moderation on."))
         return cleaned_data
 
     def save(self, commit=True):
