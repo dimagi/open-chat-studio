@@ -2,7 +2,7 @@ import copy
 from uuid import uuid4
 
 from apps.pipelines.const import END_NODE_TYPE, START_NODE_TYPE
-from apps.pipelines.flow import FlowNode, FlowNodeData
+from apps.pipelines.flow import FlowNode, FlowNodeData, react_flow_edge_id
 from apps.pipelines.node_type import NodeType
 
 
@@ -52,7 +52,7 @@ def create_pipeline_with_nodes(team, name, middle_node=None):
             current_node = all_flow_nodes[i]
             next_node = all_flow_nodes[i + 1]
             edge = {
-                "id": f"edge-{current_node.id}-{next_node.id}",
+                "id": react_flow_edge_id(current_node.id, "output", next_node.id, "input"),
                 "source": current_node.id,
                 "target": next_node.id,
                 "sourceHandle": "output",
