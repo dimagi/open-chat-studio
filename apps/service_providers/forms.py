@@ -2,6 +2,7 @@ import hashlib
 import logging
 from decimal import Decimal
 
+import openai
 import phonenumbers
 from django import forms
 from django.core.validators import URLValidator
@@ -10,9 +11,11 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.exceptions import provider_error_message
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel, MessagingProvider
+from apps.service_providers.moderation_service import OpenAIModerationService
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -98,6 +101,29 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             " one organization or want to use your default organization."
         ),
     )
+
+
+CREDENTIAL_CHECK_TIMEOUT_SECONDS = 5
+
+
+class OpenAIModerationConfigForm(OpenAIConfigForm):
+    def clean(self):
+        """Reject credentials the provider refuses. Other failures are reported as a warning after saving."""
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+        config = {key: value for key, value in cleaned_data.items() if value}
+        service = OpenAIModerationService(**config, timeout=CREDENTIAL_CHECK_TIMEOUT_SECONDS, max_retries=0)
+        try:
+            service.moderate("Hello")
+        except openai.AuthenticationError as e:
+            self.add_error("openai_api_key", f"The provider rejected these credentials: {provider_error_message(e)}")
+        except Exception as e:
+            logger.warning("Could not check moderation provider credentials: %s", e)
+            self.warnings.append(
+                f"Provider saved, but the credentials could not be checked: {provider_error_message(e)}"
+            )
+        return cleaned_data
 
 
 class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

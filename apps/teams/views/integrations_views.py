@@ -7,13 +7,26 @@ from waffle import flag_is_active
 
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import LlmProvider
-from apps.service_providers.utils import ServiceProvider, get_available_subtypes
+from apps.service_providers.utils import (
+    ServiceProvider,
+    get_available_subtypes,
+    get_enabled_providers,
+    is_provider_enabled,
+)
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.tables import IntegrationsTable
 
 MCP_CATEGORY = "MCP"
 
-_CATEGORY_ORDER = ["LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", MCP_CATEGORY]
+_CATEGORY_ORDER = [
+    "LLM & embedding",
+    "Speech",
+    "Messaging",
+    "Authentication",
+    "Tracing",
+    ServiceProvider.moderation.category,
+    MCP_CATEGORY,
+]
 
 _CATEGORY_ICONS = {
     "LLM & embedding": "fa-brain",
@@ -21,6 +34,7 @@ _CATEGORY_ICONS = {
     "Messaging": "fa-comment-sms",
     "Authentication": "fa-key",
     "Tracing": "fa-magnifying-glass-location",
+    ServiceProvider.moderation.category: "fa-shield-halved",
     MCP_CATEGORY: "fa-server",
 }
 
@@ -38,7 +52,7 @@ def get_integration_rows(request, team) -> list[dict]:
     can share the same pk.
     """
     rows = []
-    for provider in ServiceProvider:
+    for provider in get_enabled_providers(request):
         rows.extend(
             {
                 "id": f"{provider.slug}-{obj.pk}",
@@ -116,12 +130,18 @@ class IntegrationFilterPill:
 
 
 def build_integration_filter_pills(
-    rows: list[dict], active_category: str | None, *, show_mcp: bool = False
+    rows: list[dict], active_category: str | None, *, show_mcp: bool = False, show_moderation: bool = False
 ) -> list[IntegrationFilterPill]:
     """Always shows every provider-type category, even at a count of 0, matching the mockup
-    (e.g. "Speech 0"). MCP is the exception: it's only a real category once `flag_mcp` is on."""
+    (e.g. "Speech 0"). MCP and Moderation are the exceptions: each is only a real category
+    once its feature flag is on."""
     counts = Counter(row["category"] for row in rows)
-    categories = [category for category in _CATEGORY_ORDER if category != MCP_CATEGORY or show_mcp]
+    hidden = set()
+    if not show_mcp:
+        hidden.add(MCP_CATEGORY)
+    if not show_moderation:
+        hidden.add(ServiceProvider.moderation.category)
+    categories = [category for category in _CATEGORY_ORDER if category not in hidden]
     pills = [IntegrationFilterPill(label="All", value=None, count=len(rows), active=active_category is None)]
     pills.extend(
         IntegrationFilterPill(
@@ -153,7 +173,10 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["filter_pills"] = build_integration_filter_pills(
-            self.all_rows, self.request.GET.get("category"), show_mcp=flag_is_active(self.request, "flag_mcp")
+            self.all_rows,
+            self.request.GET.get("category"),
+            show_mcp=flag_is_active(self.request, "flag_mcp"),
+            show_moderation=is_provider_enabled(ServiceProvider.moderation, self.request),
         )
         context["table_url"] = self.request.path
         self._table = context["table"]

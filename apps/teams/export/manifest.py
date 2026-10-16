@@ -128,6 +128,9 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
         "files_export_task_id",
         "is_migrating",
         "exportable_experiments",
+        "moderation_enabled",
+        "moderation_provider",
+        "moderation_deleted_provider_name",
     ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.

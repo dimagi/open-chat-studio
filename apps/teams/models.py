@@ -91,6 +91,32 @@ class Team(BaseModel):
         db_default=False,
         help_text="When set, every member of this team must enrol in two-factor authentication.",
     )
+    moderation_enabled = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="When set, participant messages are checked by the moderation provider.",
+    )
+    moderation_provider = models.ForeignKey(
+        "service_providers.ModerationProvider",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        # No reverse relation: the default reverse name ("team") would clash with ModerationProvider.team.
+        related_name="+",
+        help_text="The provider that checks participant messages.",
+    )
+    auto_block_enabled = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="When set, participants who reach the strike limit are blocked automatically.",
+    )
+    moderation_deleted_provider_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Name of the selected moderation provider, if it was deleted. Cleared when a provider is selected.",
+    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models
