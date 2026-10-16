@@ -221,7 +221,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
             models.Index(
-                fields=["moderation_status"],
+                fields=["moderation_status", "created_at"],
                 name="chatmessage_moderation_idx",
                 condition=Q(moderation_status__isnull=False),
             ),

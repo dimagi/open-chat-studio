@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from celery.result import AsyncResult
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F
+from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.chat.models import ModerationStatus
+from apps.chat.models import ChatMessage, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
@@ -25,9 +27,9 @@ from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
     from apps.channels.datamodels import Attachment
-    from apps.chat.models import ChatMessage
     from apps.chat.schemas import ModerationSkipReason
     from apps.experiments.models import Experiment
     from apps.teams.models import Team
@@ -163,3 +165,49 @@ def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_respo
     if bot_response is not None:
         rows = rows.filter(created_at__lte=bot_response.created_at)
     rows.delete()
+
+
+@dataclass(frozen=True)
+class ModerationCounts:
+    """How many moderated messages passed, were flagged or were skipped, and the skips by reason."""
+
+    passed: int = 0
+    flagged: int = 0
+    skipped: int = 0
+    skip_reasons: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def total(self) -> int:
+        return self.passed + self.flagged + self.skipped
+
+    @property
+    def mostly_rate_limited(self) -> bool:
+        """True when more than half of the skipped messages were skipped because of the provider's rate limit."""
+        return self.skip_reasons.get("rate_limited", 0) * 2 > self.skipped
+
+
+def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts:
+    """Count the team's messages moderated since `since`, by status and by skip reason."""
+    rows = (
+        ChatMessage.objects.filter(
+            chat__team=team,
+            # An IN list on the leading column lets the planner use `chatmessage_moderation_idx` for each status.
+            moderation_status__in=ModerationStatus.values,
+            created_at__gte=since,
+        )
+        .values("moderation_status", skip_reason=KeyTextTransform("skip_reason", "moderation_detail"))
+        .annotate(count=Count("id"))
+        .order_by()
+    )
+    by_status = dict.fromkeys(ModerationStatus.values, 0)
+    skip_reasons: dict[str, int] = {}
+    for row in rows:
+        by_status[row["moderation_status"]] += row["count"]
+        if row["moderation_status"] == ModerationStatus.SKIPPED and row["skip_reason"]:
+            skip_reasons[row["skip_reason"]] = skip_reasons.get(row["skip_reason"], 0) + row["count"]
+    return ModerationCounts(
+        passed=by_status[ModerationStatus.PASSED],
+        flagged=by_status[ModerationStatus.FLAGGED],
+        skipped=by_status[ModerationStatus.SKIPPED],
+        skip_reasons=skip_reasons,
+    )

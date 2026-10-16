@@ -1,17 +1,23 @@
 """The Moderation section of the team settings page."""
 
+from datetime import timedelta
+
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from waffle import flag_is_active
 
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
+from apps.moderation.services import ModerationCounts, count_moderated_messages
 from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 from apps.teams.flags import Flags
 from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.web.forms import set_form_fields_disabled
 
 SETTINGS_SECTION_KEY = "moderation"
+COUNTS_PERIOD = timedelta(days=7)
+SKIP_REASON_LABELS = {"rate_limited": _("Rate limit"), "error": _("Error"), "timeout": _("Timeout")}
 
 
 def _can_view_denylist(request) -> bool:
@@ -47,9 +53,28 @@ def moderation_settings_context(request, form: TeamModerationForm | None = None)
     }
 
 
+def _share(*, count: int, total: int) -> int | None:
+    """`count` as a whole percentage of `total`, or None when there is nothing to divide by."""
+    return round(100 * count / total) if total else None
+
+
+def _message_counts_context(counts: ModerationCounts) -> dict:
+    skip_reasons = sorted(counts.skip_reasons.items(), key=lambda item: (-item[1], item[0]))
+    return {
+        "total": counts.total,
+        "passed": {"count": counts.passed, "share": _share(count=counts.passed, total=counts.total)},
+        "flagged": {"count": counts.flagged, "share": _share(count=counts.flagged, total=counts.total)},
+        "skipped": {"count": counts.skipped, "share": _share(count=counts.skipped, total=counts.total)},
+        "skip_reasons": [(SKIP_REASON_LABELS.get(reason, reason), count) for reason, count in skip_reasons],
+        "mostly_rate_limited": counts.mostly_rate_limited,
+    }
+
+
 def _settings_section_context(request) -> dict:
+    counts = count_moderated_messages(team=request.team, since=timezone.now() - COUNTS_PERIOD)
     return {
         **moderation_settings_context(request=request),
+        "message_counts": _message_counts_context(counts),
         "can_view_denylist": _can_view_denylist(request),
         "denylist_table_url": reverse(viewname="moderation:denied_participants_table", args=[request.team.slug]),
     }

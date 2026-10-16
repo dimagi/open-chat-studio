@@ -10,6 +10,8 @@ from django.utils.http import urlencode
 from field_audit.models import AuditAction
 from waffle.testutils import override_flag
 
+from apps.chat.models import ChatMessageType, ModerationStatus
+from apps.chat.schemas import ModerationDetail
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
@@ -18,7 +20,7 @@ from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMI
 from apps.teams.flags import Flags
 from apps.teams.models import Team
 from apps.teams.utils import section_url
-from apps.utils.factories.experiment import ParticipantFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -229,6 +231,75 @@ class TestSectionRendering:
 
         assert ('id="moderation_provider_dialog"' in content) is can_edit
         assert ("denied-participants-table-container" in content) is sees_denylist
+        assert 'id="moderation-message-counts"' in content
+
+
+def _moderated_message(*, team, status, skip_reason=None):
+    detail = ModerationDetail(skip_reason=skip_reason) if skip_reason else None
+    return ChatMessageFactory.create(
+        chat=ChatFactory.create(team=team),
+        message_type=ChatMessageType.HUMAN,
+        content="hi",
+        moderation_status=status,
+        moderation_detail=detail,
+    )
+
+
+@pytest.mark.django_db()
+class TestMessageCounts:
+    def test_shows_counts_shares_and_skip_reasons(self, client, admin, team):
+        _moderated_message(team=team, status=ModerationStatus.PASSED)
+        _moderated_message(team=team, status=ModerationStatus.FLAGGED)
+        for _ in range(2):
+            _moderated_message(team=team, status=ModerationStatus.SKIPPED, skip_reason="timeout")
+        client.force_login(admin)
+
+        response = client.get(_section_url(team))
+
+        counts = response.context["message_counts"]
+        assert counts["passed"] == {"count": 1, "share": 25}
+        assert counts["flagged"] == {"count": 1, "share": 25}
+        assert counts["skipped"] == {"count": 2, "share": 50}
+        assert re.search(r"\(Timeout 2\)", response.content.decode())
+
+    def test_no_shares_without_moderated_messages(self, client, admin, team):
+        client.force_login(admin)
+
+        counts = client.get(_section_url(team)).context["message_counts"]
+
+        assert counts["passed"] == {"count": 0, "share": None}
+        assert counts["skip_reasons"] == []
+
+    @pytest.mark.parametrize(
+        ("skip_reasons", "hint_shown"),
+        [
+            pytest.param(["rate_limited", "rate_limited", "timeout"], True, id="mostly-rate-limited"),
+            pytest.param(["rate_limited", "timeout"], False, id="half-rate-limited"),
+            pytest.param(["error"], False, id="other-reason"),
+        ],
+    )
+    def test_rate_limit_hint(self, client, admin, team, skip_reasons, hint_shown):
+        for reason in skip_reasons:
+            _moderated_message(team=team, status=ModerationStatus.SKIPPED, skip_reason=reason)
+        client.force_login(admin)
+
+        content = client.get(_section_url(team)).content.decode()
+
+        assert ('data-testid="moderation-rate-limit-hint"' in content) is hint_shown
+
+    def test_query_count_does_not_grow_with_messages(self, client, admin, team):
+        client.force_login(admin)
+        client.get(_section_url(team))  # fills the caches (flags, session) that later requests read
+        with CaptureQueriesContext(connection) as empty:
+            client.get(_section_url(team))
+        for status in ModerationStatus.values:
+            _moderated_message(team=team, status=status, skip_reason="error" if status == "skipped" else None)
+            _moderated_message(team=team, status=status, skip_reason="timeout" if status == "skipped" else None)
+
+        with CaptureQueriesContext(connection) as populated:
+            client.get(_section_url(team))
+
+        assert len(populated.captured_queries) == len(empty.captured_queries)
 
 
 @pytest.mark.django_db()
