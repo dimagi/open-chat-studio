@@ -1,5 +1,5 @@
 import django_tables2 as tables
-from django.template import Context, Template
+from django.template import Context
 from django.template.loader import get_template
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
@@ -28,11 +28,34 @@ class ColumnWithCustomHeader(tables.Column):
         return get_template(self.template_path).render(context)
 
 
-class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, tables.TemplateColumn):
+class TemplateColumn(tables.TemplateColumn):
+    """A TemplateColumn that renders `template_name` without building a new `RequestContext` per cell.
+
+    django-tables2 passes `request=` to `Template.render`, which runs every context processor for each cell."""
+
+    def render(self, record, table, value, bound_column, **kwargs):
+        if not self.template_name:
+            return super().render(record=record, table=table, value=value, bound_column=bound_column, **kwargs)
+        context = getattr(table, "context", Context())
+        additional_context = {
+            "default": bound_column.default,
+            "column": bound_column,
+            "record": record,
+            "value": value,
+            "row_counter": kwargs["bound_row"].row_counter,
+            **self.extra_context,
+        }
+        with context.update(additional_context):
+            flat = context.flatten()
+        flat["request"] = getattr(table, "request", None)
+        return get_template(self.template_name).render(flat)
+
+
+class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, TemplateColumn):
     """A Template column that allows custom templates for the column header."""
 
 
-class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):
+class TemplateColumnWithHelp(ColumnWithHelp, TemplateColumn):
     """A TemplateColumn that supports help text in the header."""
 
 
@@ -48,27 +71,8 @@ class TimeAgoColumn(tables.TemplateColumn):
     </time>
     """
 
-    _compiled_template = None
-
     def __init__(self, *args, **kwargs):
         super().__init__(template_code=self.TEMPLATE, *args, **kwargs)  # noqa B026
-
-    @classmethod
-    def _get_template(cls):
-        if cls._compiled_template is None:
-            cls._compiled_template = Template(cls.TEMPLATE)
-        return cls._compiled_template
-
-    def render(self, value, bound_column=None, **kwargs):  # ty: ignore[invalid-method-override]
-        # Render with a plain Context rather than the table's RequestContext. Rendering a
-        # template against a RequestContext re-runs every context processor (DB/cache hits)
-        # for each cell, which causes an N+1 across the table rows.
-        context = {
-            "value": value,
-            "default": bound_column.default if bound_column is not None else self.default,
-            **self.extra_context,
-        }
-        return self._get_template().render(Context(context))
 
 
 class ISOTimeAgoColumn(TimeAgoColumn):

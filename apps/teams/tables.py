@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import Column, Table, TemplateColumn
+from django_tables2 import Column, Table
 
 from apps.generics import actions
+from apps.generics.tables import TemplateColumn
 
 
 def _integration_edit_url(url_name, request, record, value):
