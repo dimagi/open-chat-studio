@@ -1,4 +1,5 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
@@ -78,6 +79,7 @@ def test_notifications_section_shown(client, team, admin):
 
 
 @pytest.mark.django_db()
+@override_settings(SLACK_ENABLED=True)
 def test_notifications_section_shows_notice_without_slack_workspace(client, team, admin):
     client.force_login(admin)
     section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
@@ -85,6 +87,16 @@ def test_notifications_section_shows_notice_without_slack_workspace(client, team
     assert b"no-slack-workspace-notice" in section.content
     assert b"Connect a Slack workspace" in section.content
     assert b"disabled" in section.content.split(b"btn-add-notification-channel")[1].split(b">")[0]
+
+
+@pytest.mark.django_db()
+@override_settings(SLACK_ENABLED=False)
+def test_notifications_section_omits_connect_link_when_slack_disabled(client, team, admin):
+    client.force_login(admin)
+    section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
+
+    assert b"no-slack-workspace-notice" in section.content
+    assert b"Connect a Slack workspace" not in section.content
 
 
 @pytest.mark.django_db()

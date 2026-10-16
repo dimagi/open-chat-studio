@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from celery.result import AsyncResult
 from celery_progress.backend import PROGRESS_STATE
+from django.conf import settings
 from django.contrib import messages
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
@@ -80,7 +81,7 @@ def _can_view_notifications(request) -> bool:
 def _notifications_context(request) -> dict:
     team = request.team
     add_slack_url = None
-    if request.user.has_perm(ServiceProvider.messaging.get_permission("add")):
+    if settings.SLACK_ENABLED and request.user.has_perm(ServiceProvider.messaging.get_permission("add")):
         add_slack_url = reverse(
             "service_providers:new",
             kwargs={
