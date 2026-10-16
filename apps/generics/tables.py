@@ -1,4 +1,5 @@
 import django_tables2 as tables
+from django.template import Context, Template
 from django.template.loader import get_template
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
@@ -47,8 +48,27 @@ class TimeAgoColumn(tables.TemplateColumn):
     </time>
     """
 
+    _compiled_template = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(template_code=self.TEMPLATE, *args, **kwargs)  # noqa B026
+
+    @classmethod
+    def _get_template(cls):
+        if cls._compiled_template is None:
+            cls._compiled_template = Template(cls.TEMPLATE)
+        return cls._compiled_template
+
+    def render(self, value, bound_column=None, **kwargs):  # ty: ignore[invalid-method-override]
+        # Render with a plain Context rather than the table's RequestContext. Rendering a
+        # template against a RequestContext re-runs every context processor (DB/cache hits)
+        # for each cell, which causes an N+1 across the table rows.
+        context = {
+            "value": value,
+            "default": bound_column.default if bound_column is not None else self.default,
+            **self.extra_context,
+        }
+        return self._get_template().render(Context(context))
 
 
 class ISOTimeAgoColumn(TimeAgoColumn):
