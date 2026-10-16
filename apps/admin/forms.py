@@ -13,6 +13,7 @@ PROVIDER_SEARCH_TYPES = (
     ServiceProvider.voice,
     ServiceProvider.messaging,
     ServiceProvider.tracing,
+    ServiceProvider.moderation,
 )
 
 
