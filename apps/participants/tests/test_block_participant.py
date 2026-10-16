@@ -30,11 +30,6 @@ def _page_url(team, participant):
 
 
 @pytest.fixture()
-def admin(team_with_users):
-    return team_with_users.members.first()
-
-
-@pytest.fixture()
 def participant(team_with_users):
     return ParticipantFactory.create(team=team_with_users)
 

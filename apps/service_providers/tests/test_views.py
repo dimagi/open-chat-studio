@@ -4,7 +4,6 @@ from unittest import mock
 
 import httpx
 import pytest
-from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils import timezone
 from waffle.testutils import override_flag
@@ -40,7 +39,7 @@ from apps.utils.factories.service_provider_factories import (
     TraceProviderFactory,
     VoiceProviderFactory,
 )
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.tests.team_helpers import member_with_groups
 
 pytestmark = pytest.mark.usefixtures("abuse_detection_flag_on")
 
@@ -1070,9 +1069,7 @@ class TestWhatsappTestFormAvailability:
 @pytest.mark.parametrize("is_edit", [pytest.param(False, id="create"), pytest.param(True, id="edit")])
 def test_provider_form_requires_provider_permission(client, team_with_users, method, is_edit):
     """A team member without the provider's add/change permission cannot open or submit the form."""
-    user = MembershipFactory.create(
-        team=team_with_users, groups=lambda: list(Group.objects.filter(name=CHAT_VIEWER_GROUP))
-    ).user
+    user = member_with_groups(team=team_with_users, group_names=[CHAT_VIEWER_GROUP])
     client.force_login(user)
     if is_edit:
         provider = LlmProviderFactory.create(team=team_with_users, name="Before")

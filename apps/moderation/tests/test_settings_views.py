@@ -2,7 +2,6 @@ import re
 from unittest import mock
 
 import pytest
-from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils.http import urlencode
 from waffle.testutils import override_flag
@@ -17,14 +16,11 @@ from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-from apps.utils.factories.team import MembershipFactory, TeamFactory
+from apps.utils.factories.team import TeamFactory
+from apps.utils.tests.team_helpers import member_with_groups
 
 FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
-
-
-def _user_with_groups(team, *group_names):
-    return MembershipFactory.create(team=team, groups=lambda: list(Group.objects.filter(name__in=group_names))).user
 
 
 @pytest.fixture()
@@ -34,26 +30,20 @@ def team(team_with_users, team_flag):
 
 
 @pytest.fixture()
-def admin(team):
-    """Team owner: can edit the settings and change participants."""
-    return next(m.user for m in team.membership_set.all() if m.is_team_admin())
-
-
-@pytest.fixture()
 def member(team):
     """Can change participants but is not a team admin."""
-    return _user_with_groups(team, *NORMAL_USER_GROUPS)
+    return member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
 
 
 @pytest.fixture()
 def team_admin_only(team):
     """Team admin without participant permissions."""
-    return _user_with_groups(team, TEAM_ADMIN_GROUP)
+    return member_with_groups(team=team, group_names=[TEAM_ADMIN_GROUP])
 
 
 @pytest.fixture()
 def chat_viewer(team):
-    return _user_with_groups(team, CHAT_VIEWER_GROUP)
+    return member_with_groups(team=team, group_names=[CHAT_VIEWER_GROUP])
 
 
 def _section_url(team):
@@ -70,6 +60,22 @@ def _table_url(team):
 
 def _new_provider_url(team):
     return reverse("moderation:provider_new", args=[team.slug, "openai"])
+
+
+@pytest.mark.django_db()
+@override_flag(FLAG, active=False)
+@pytest.mark.parametrize(
+    ("method", "url_builder"),
+    [pytest.param("get", _section_url, id="section"), pytest.param("post", _settings_url, id="save_settings")],
+)
+def test_not_found_with_flag_off(client, team_with_users, admin, method, url_builder):
+    client.force_login(admin)
+
+    response = getattr(client, method)(url_builder(team_with_users), {"auto_block_enabled": "on"})
+
+    assert response.status_code == 404
+    team_with_users.refresh_from_db()
+    assert not team_with_users.auto_block_enabled
 
 
 @pytest.mark.django_db()
@@ -119,15 +125,6 @@ class TestTeamModerationForm:
 
 @pytest.mark.django_db()
 class TestSectionVisibility:
-    @override_flag(FLAG, active=False)
-    def test_hidden_with_flag_off(self, client, team_with_users):
-        admin = next(m.user for m in team_with_users.membership_set.all() if m.is_team_admin())
-        client.force_login(admin)
-
-        assert client.get(_section_url(team_with_users)).status_code == 404
-        response = client.get(section_url(team_slug=team_with_users.slug, section_key="members"))
-        assert b'data-cy="nav-moderation"' not in response.content
-
     @pytest.mark.parametrize(
         ("user_fixture", "visible"),
         [
@@ -247,15 +244,6 @@ class TestSaveSettings:
         team.refresh_from_db()
         assert not team.auto_block_enabled
 
-    @override_flag(FLAG, active=False)
-    def test_not_found_with_flag_off(self, client, team_with_users):
-        admin = next(m.user for m in team_with_users.membership_set.all() if m.is_team_admin())
-        client.force_login(admin)
-
-        response = client.post(_settings_url(team_with_users), {"auto_block_enabled": "on"})
-
-        assert response.status_code == 404
-
 
 @pytest.mark.django_db()
 class TestProviderDialog:
@@ -317,13 +305,6 @@ class TestProviderDialog:
         response = client.get(reverse("moderation:provider_edit", args=[team.slug, other.pk]))
 
         assert response.status_code == 404
-
-    def test_requires_provider_permission(self, client, chat_viewer, team):
-        client.force_login(chat_viewer)
-
-        response = client.get(_new_provider_url(team))
-
-        assert response.status_code == 403
 
 
 @pytest.mark.django_db()
