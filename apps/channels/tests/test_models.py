@@ -90,80 +90,55 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
     _assert_not_deleted(chat)
 
 
+ALWAYS_AVAILABLE_PLATFORMS = {ChannelPlatform.TELEGRAM, ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC}
+FLAG_GATED_PLATFORMS = {ChannelPlatform.EMAIL, ChannelPlatform.COMMCARE_CONNECT}
+
+
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("slack_enabled", "messaging_provider_types", "channels_enabled"),
+    ("slack_enabled", "messaging_provider_types", "provider_platforms"),
     [
-        (False, [], [ChannelPlatform.TELEGRAM, ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC]),
-        (
+        pytest.param(False, [], set(), id="no-providers"),
+        pytest.param(
             False,
             [MessagingProviderType.twilio],
-            [
-                ChannelPlatform.TELEGRAM,
-                ChannelPlatform.WHATSAPP,
-                ChannelPlatform.FACEBOOK,
-                ChannelPlatform.EMBEDDED_WIDGET,
-                ChannelPlatform.PUBLIC,
-            ],
+            {ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK},
+            id="twilio",
         ),
-        (
-            False,
-            [MessagingProviderType.turnio],
-            [
-                ChannelPlatform.TELEGRAM,
-                ChannelPlatform.WHATSAPP,
-                ChannelPlatform.EMBEDDED_WIDGET,
-                ChannelPlatform.PUBLIC,
-            ],
-        ),
-        (
+        pytest.param(False, [MessagingProviderType.turnio], {ChannelPlatform.WHATSAPP}, id="turnio"),
+        pytest.param(
             False,
             [MessagingProviderType.turnio, MessagingProviderType.twilio],
-            [
-                ChannelPlatform.TELEGRAM,
-                ChannelPlatform.WHATSAPP,
-                ChannelPlatform.FACEBOOK,
-                ChannelPlatform.EMBEDDED_WIDGET,
-                ChannelPlatform.PUBLIC,
-            ],
+            {ChannelPlatform.WHATSAPP, ChannelPlatform.FACEBOOK},
+            id="turnio-and-twilio",
         ),
-        (
-            False,
-            [MessagingProviderType.sureadhere],
-            [
-                ChannelPlatform.TELEGRAM,
-                ChannelPlatform.SUREADHERE,
-                ChannelPlatform.EMBEDDED_WIDGET,
-                ChannelPlatform.PUBLIC,
-            ],
-        ),
-        (
+        pytest.param(False, [MessagingProviderType.sureadhere], {ChannelPlatform.SUREADHERE}, id="sureadhere"),
+        pytest.param(
             True,
             [MessagingProviderType.sureadhere, MessagingProviderType.slack],
-            [
-                ChannelPlatform.TELEGRAM,
-                ChannelPlatform.SLACK,
-                ChannelPlatform.SUREADHERE,
-                ChannelPlatform.EMBEDDED_WIDGET,
-                ChannelPlatform.PUBLIC,
-            ],
+            {ChannelPlatform.SUREADHERE, ChannelPlatform.SLACK},
+            id="sureadhere-and-slack",
         ),
     ],
 )
-def test_available_channels(slack_enabled, messaging_provider_types, channels_enabled, experiment):
+def test_available_channels(slack_enabled, messaging_provider_types, provider_platforms, experiment):
     for provider_type in messaging_provider_types:
         _build_provider(provider_type, team=experiment.team)
 
-    all_platforms = ChannelPlatform.as_list(
-        exclude=[ChannelPlatform.API, ChannelPlatform.WEB, ChannelPlatform.EVALUATIONS]
+    listed_platforms = set(
+        ChannelPlatform.as_list(exclude=[ChannelPlatform.API, ChannelPlatform.WEB, ChannelPlatform.EVALUATIONS])
     )
-    expected_status = {platform: False for platform in all_platforms}
-    for platform in channels_enabled:
-        expected_status[platform] = True
+    listed_platforms -= FLAG_GATED_PLATFORMS
+    if not slack_enabled:
+        listed_platforms.discard(ChannelPlatform.SLACK)
+    expected_status = {
+        platform: platform in ALWAYS_AVAILABLE_PLATFORMS | provider_platforms for platform in listed_platforms
+    }
 
     with override_settings(SLACK_ENABLED=slack_enabled):
-        for platform, enabled in ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team).items():
-            assert expected_status[platform] == enabled
+        available = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
+
+    assert available == expected_status
 
 
 def _build_provider(provider_type: MessagingProviderType, team):
