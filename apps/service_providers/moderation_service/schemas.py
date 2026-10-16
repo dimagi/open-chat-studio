@@ -1,9 +1,9 @@
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, Field, RootModel
 
 
 class ModerationCategory(BaseModel):
     flagged: bool
-    score: float
+    score: float = Field(ge=0, le=1, allow_inf_nan=False)
 
 
 class ModerationOutput(RootModel[dict[str, ModerationCategory]]):

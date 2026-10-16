@@ -29,6 +29,9 @@ def test_flagged_categories(value, expected):
         pytest.param({"hate": {"score": 0.5}}, id="missing_flagged"),
         pytest.param({"hate": {"flagged": True, "score": "high"}}, id="non_numeric_score"),
         pytest.param({"hate": {"flagged": True}}, id="missing_score"),
+        pytest.param({"hate": {"flagged": True, "score": float("nan")}}, id="nan_score"),
+        pytest.param({"hate": {"flagged": True, "score": 1.5}}, id="score_above_one"),
+        pytest.param({"hate": {"flagged": True, "score": -0.1}}, id="negative_score"),
     ],
 )
 def test_invalid_output(value):

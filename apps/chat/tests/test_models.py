@@ -207,6 +207,17 @@ def test_moderation_columns_round_trip(status, detail):
     assert message.moderation_detail == detail
 
 
+@pytest.mark.django_db()
+def test_moderation_columns_default_to_null():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_status is None
+    assert message.moderation_detail is None
+
+
 def test_moderation_detail_rejects_unknown_skip_reason():
     with pytest.raises(ValidationError):
         ModerationDetail.model_validate({"skip_reason": "unknown"})
