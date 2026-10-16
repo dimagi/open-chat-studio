@@ -166,6 +166,8 @@ def test_static_trigger_refuses_an_action_that_cannot_follow_it(client, chatbot,
         ),
         pytest.param({"total_num_triggers": 1, "action": LOG_ACTION}, ("delay",), id="missing-delay"),
         pytest.param(TIMEOUT.body(delay="soon"), ("delay",), id="delay-not-an-integer"),
+        pytest.param(TIMEOUT.body(total_num_triggers=0), ("total_num_triggers",), id="zero-trigger-count"),
+        pytest.param(TIMEOUT.body(total_num_triggers=-5), ("total_num_triggers",), id="negative-trigger-count"),
         pytest.param(
             TIMEOUT.body(action={"action_type": "log", "params": []}),
             ("action", "params"),
