@@ -111,6 +111,15 @@ describe('ocs-chat blocked participant', () => {
     expect(page.rootInstance.messages.at(-1).content).toBe('You can no longer send messages to this chatbot.');
   });
 
+  it('renders the blocked notice as plain text', async () => {
+    const notice = '**Blocked** <em>now</em>';
+    const page = await widgetAfterRefusedStart(new ParticipantBlockedError(notice));
+
+    const bubble = page.root.shadowRoot.querySelector('.message-bubble-system');
+    expect(bubble.querySelector('.chat-plain-text').textContent).toBe(notice);
+    expect(bubble.querySelector('strong, em')).toBeNull();
+  });
+
   describe('when a restored session is refused with participant_blocked', () => {
     it('on send, shows the server detail, locks the widget and clears the stored session', async () => {
       const page = await restoredWidget();
@@ -166,6 +175,7 @@ describe('ocs-chat blocked participant', () => {
     expect(notice.role).toBe('system');
     expect(notice.content).toContain('Failed to start chat session');
     expect(notice.content).toContain('Please try again.');
+    expect(page.root.shadowRoot.querySelector('.message-bubble-system .chat-markdown strong')).not.toBeNull();
     expect(composer(page).hasAttribute('disabled')).toBe(false);
     expect(newChatButton(page)).not.toBeNull();
   });
