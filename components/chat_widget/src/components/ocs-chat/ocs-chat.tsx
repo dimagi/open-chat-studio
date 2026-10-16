@@ -599,6 +599,7 @@ export class OcsChat {
       return;
     }
 
+    const epoch = this.sessionEpoch;
     this.downloadingAttachmentUrls = [...this.downloadingAttachmentUrls, url];
     try {
       const blob = await this.getChatService().downloadAttachment(this.activeSessionId, url);
@@ -614,7 +615,9 @@ export class OcsChat {
       setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
     } catch (error) {
       console.error('[open-chat-studio-widget] attachment download failed', error);
-      this.addErrorMessage(this.translationManager.get('error.download'));
+      if (epoch === this.sessionEpoch) {
+        this.addErrorMessage(this.translationManager.get('error.download'));
+      }
     } finally {
       this.downloadingAttachmentUrls = this.downloadingAttachmentUrls.filter(pending => pending !== url);
     }

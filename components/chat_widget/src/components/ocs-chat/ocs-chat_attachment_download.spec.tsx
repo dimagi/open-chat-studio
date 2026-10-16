@@ -122,6 +122,24 @@ describe('ocs-chat attachment download', () => {
     expect(getSince?.()).toBe(serverMessageAt);
   });
 
+  it('does not report a failed download in a session started after it', async () => {
+    const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
+    const component = page.rootInstance as OcsChat;
+    let rejectDownload: (error: Error) => void = () => undefined;
+    stubChatService(page, {
+      downloadAttachment: jest.fn(() => new Promise<Blob>((_resolve, reject) => (rejectDownload = reject))),
+    });
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    downloadButton(page)?.click();
+    await page.waitForChanges();
+    await component['clearSession']();
+    rejectDownload(new Error('Failed to download file: Not Found'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(component.messages).toEqual([]);
+  });
+
   it('ignores a second click while the file is downloading', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
     const downloadAttachment = jest.fn(() => new Promise<Blob>(() => undefined));
