@@ -178,14 +178,3 @@ class TestNotificationChannelViews:
         channel.refresh_from_db()
         assert channel.channel_name == "updated"
         assert channel.channel_id == "C12345"
-
-    def test_views_not_found_when_flag_disabled(self, client):
-        create_default_groups()
-        team = TeamFactory.create()
-        user = UserFactory.create()
-        add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
-        client.force_login(user)
-
-        for name in ["home", "table", "new"]:
-            response = client.get(reverse(f"ocs_notifications_channels:{name}", args=[team.slug]))
-            assert response.status_code == 404

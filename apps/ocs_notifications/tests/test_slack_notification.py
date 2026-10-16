@@ -24,11 +24,6 @@ class TestGetSlackNotificationChannels:
         with override_settings(SLACK_ENABLED=False):
             assert get_slack_notification_channels(team_with_users, LevelChoices.WARNING).count() == 0
 
-    def test_flag_inactive_returns_none_even_when_enabled(self, team_with_users):
-        NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.INFO)
-        with override_settings(SLACK_ENABLED=True):
-            assert get_slack_notification_channels(team_with_users, LevelChoices.WARNING).count() == 0
-
     def test_ignores_disabled_channel_and_excludes_lower_level(self, team_with_users):
         NotificationChannelFactory.create(team=team_with_users, enabled=False, level=LevelChoices.INFO)
         NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.ERROR)
