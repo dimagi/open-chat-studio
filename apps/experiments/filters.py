@@ -56,6 +56,11 @@ class LastActivityFilter(TimestampFilter):
         )
 
 
+def _session_has_message(**lookups) -> Exists:
+    """``EXISTS`` matching outer rows whose chat has a message that satisfies ``lookups``."""
+    return Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **lookups))
+
+
 class MessageTimestampFilter(TimestampFilter):
     """Timestamp filter that traverses ``chat__messages`` without multiplying rows.
 
@@ -65,9 +70,7 @@ class MessageTimestampFilter(TimestampFilter):
     """
 
     def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
-        return queryset.filter(
-            Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **{f"created_at__{lookup_suffix}": value}))
-        )
+        return queryset.filter(_session_has_message(**{f"created_at__{lookup_suffix}": value}))
 
 
 def get_filter_context_data(
@@ -119,8 +122,7 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
                 tag_id__in=tag_ids,
             )
         )
-        message_tag_exists = Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__in=tag_ids))
-        return chat_tag_exists | message_tag_exists
+        return chat_tag_exists | _session_has_message(tags__in=tag_ids)
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(self._chat_or_message_tag_exists(value))
@@ -268,22 +270,18 @@ class ModerationStatusFilter(ChoiceColumnFilter):
     description: str = "Filter by moderation status. A session matches when any of its messages has the status."
     options: list[str | dict] = [{"id": value, "label": label} for value, label in ModerationStatus.choices]
 
-    def _any_message_has_status(self, statuses):
-        return Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), moderation_status__in=statuses))
-
     def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(self._any_message_has_status(value))
+        return queryset.filter(_session_has_message(moderation_status__in=value))
 
     def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(self._any_message_has_status(value))
-
-
-RULE_HIT = "true"
-NO_RULE_HIT = "false"
+        return queryset.exclude(_session_has_message(moderation_status__in=value))
 
 
 class RuleHitFilter(ChoiceColumnFilter):
     """Session filter on whether an abuse rule fired on any of the session's messages."""
+
+    RULE_HIT: ClassVar[str] = "true"
+    NO_RULE_HIT: ClassVar[str] = "false"
 
     query_param: str = "rule_hit"
     label: str = "Rule Hit"
@@ -295,13 +293,11 @@ class RuleHitFilter(ChoiceColumnFilter):
 
     def _matching(self, value) -> Exists | None:
         """The condition for the selected options, or None when they select every session (or none)."""
-        any_rule_hit = Exists(
-            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), moderation_detail__rules__0__isnull=False)
-        )
-        selected = set(value) & {RULE_HIT, NO_RULE_HIT}
-        if selected == {RULE_HIT}:
+        any_rule_hit = _session_has_message(moderation_detail__rules__0__isnull=False)
+        selected = set(value) & {self.RULE_HIT, self.NO_RULE_HIT}
+        if selected == {self.RULE_HIT}:
             return any_rule_hit
-        if selected == {NO_RULE_HIT}:
+        if selected == {self.NO_RULE_HIT}:
             return ~any_rule_hit
         return None
 
