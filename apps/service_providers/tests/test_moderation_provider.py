@@ -143,7 +143,7 @@ def _urls(team, provider=None):
 @pytest.mark.parametrize("view", ["table", "new", "edit", "delete"])
 def test_views_are_hidden_with_the_flag_off(view, team_with_users, admin_client):
     provider = ModerationProviderFactory.create(team=team_with_users)
-    method, url = _urls(team_with_users, provider)[view]
+    method, url = _urls(team=team_with_users, provider=provider)[view]
 
     with override_flag(FLAG, active=False):
         response = getattr(admin_client, method)(url)
@@ -157,7 +157,7 @@ def test_views_are_hidden_with_the_flag_off(view, team_with_users, admin_client)
 @override_flag(FLAG, active=True)
 def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_client):
     other_provider = ModerationProviderFactory.create(team=TeamFactory.create())
-    method, url = _urls(team_with_users, other_provider)[view]
+    method, url = _urls(team=team_with_users, provider=other_provider)[view]
 
     response = getattr(admin_client, method)(url)
 
@@ -199,7 +199,7 @@ def test_delete_view_turns_moderation_off_and_notifies(
 ):
     provider = ModerationProviderFactory.create(team=team_with_users, name="Main moderation")
     select_moderation_provider(team=team_with_users, provider=provider)
-    method, url = _urls(team_with_users, provider)["delete"]
+    method, url = _urls(team=team_with_users, provider=provider)["delete"]
 
     with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         response = getattr(admin_client, method)(url)

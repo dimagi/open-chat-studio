@@ -43,15 +43,13 @@ def _verifiable(provider) -> LlmProvider | None:
     return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
 
 
-def get_integration_rows(request, team, *, providers: list[ServiceProvider] | None = None) -> list[dict]:
+def get_integration_rows(request, team, *, providers: list[ServiceProvider]) -> list[dict]:
     """One row per configured integration, across all provider types plus MCP servers.
 
     Each row's `id` is a composite key (`{provider_slug}-{pk}`) because provider pks are
     not unique across the five underlying models -- an `LlmProvider` and a `VoiceProvider`
-    can share the same pk. ``providers`` defaults to the provider types enabled for the request.
+    can share the same pk.
     """
-    if providers is None:
-        providers = get_enabled_providers(request)
     rows = []
     for provider in providers:
         rows.extend(
@@ -167,7 +165,7 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
 
     def get_queryset(self):
         self.providers = get_enabled_providers(self.request)
-        self.all_rows = get_integration_rows(self.request, self.request.team, providers=self.providers)
+        self.all_rows = get_integration_rows(request=self.request, team=self.request.team, providers=self.providers)
         category = self.request.GET.get("category")
         if category:
             return [row for row in self.all_rows if row["category"] == category]
@@ -176,9 +174,9 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["filter_pills"] = build_integration_filter_pills(
-            self.all_rows,
-            self.request.GET.get("category"),
-            visible_categories=get_visible_categories(self.request, self.providers),
+            rows=self.all_rows,
+            active_category=self.request.GET.get("category"),
+            visible_categories=get_visible_categories(request=self.request, providers=self.providers),
         )
         context["table_url"] = self.request.path
         self._table = context["table"]
