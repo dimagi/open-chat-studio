@@ -24,6 +24,7 @@ import {
   AuthTokenProvider,
   ChatConsent,
   ConsentRequiredError,
+  ParticipantBlockedError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
@@ -312,6 +313,8 @@ export class OcsChat {
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
   @State() sessionEnded: boolean = false;
+  /** The server refused to start a session because the participant is blocked. */
+  @State() participantBlocked: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -576,6 +579,16 @@ export class OcsChat {
     this.scrollToBottom();
   }
 
+  /** Show the server's blocked notice and lock the composer, with no way to retry or start a new chat. */
+  private handleParticipantBlocked(notice: string): void {
+    this.participantBlocked = true;
+    this.isTyping = false;
+    this.typingProgressMessage = '';
+    this.messages = [...this.messages, { created_at: new Date().toISOString(), role: 'system', content: notice, attachments: [] }];
+    this.saveSessionToStorage();
+    this.scrollToBottom();
+  }
+
   private handleError(errorText: string): void {
     // show as system message
     this.addErrorMessage(errorText);
@@ -796,6 +809,10 @@ export class OcsChat {
         this.handleError(error.message);
         return;
       }
+      if (error instanceof ParticipantBlockedError) {
+        this.handleParticipantBlocked(error.message);
+        return;
+      }
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
@@ -869,7 +886,7 @@ export class OcsChat {
     // Block sending when the widget is disabled so direct calls cannot bypass
     // the hidden composer.
     if (this.disabled) return;
-    if (!message.trim() || this.sessionEnded) return;
+    if (!message.trim() || this.sessionEnded || this.participantBlocked) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -2153,6 +2170,7 @@ export class OcsChat {
     this.messages = [];
     this.isTyping = false;
     this.sessionEnded = false;
+    this.participantBlocked = false;
     this.currentPollTaskId = '';
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
@@ -2212,7 +2230,7 @@ export class OcsChat {
   }
 
   private isComposerLocked(): boolean {
-    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
+    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || this.participantBlocked;
   }
 
   private hasDraft(): boolean {
@@ -2221,7 +2239,7 @@ export class OcsChat {
 
   // Uploading keeps the send button styled as ready while it is disabled, so its label can say so.
   private isSendReady(): boolean {
-    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && this.hasDraft();
+    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !this.participantBlocked && this.hasDraft();
   }
 
   private renderAttachmentControls() {
@@ -2344,8 +2362,8 @@ export class OcsChat {
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
                 <div class="header-buttons">
-                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) */}
-                  {this.messages.length > 0 && !this.isSessionBound() && (
+                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) and for a blocked participant */}
+                  {this.messages.length > 0 && !this.isSessionBound() && !this.participantBlocked && (
                     <button
                       class="header-button"
                       onClick={() => this.showConfirmationDialog()}

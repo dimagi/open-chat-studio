@@ -1,4 +1,4 @@
-import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError } from './chat-session-service';
+import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError, ParticipantBlockedError } from './chat-session-service';
 
 function progressMessage(content: string) {
   return {
@@ -495,6 +495,28 @@ describe('ChatSessionService consent', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(SessionAccessError);
     expect(error.message).not.toMatch(/blocked/i);
+  });
+
+  it('raises ParticipantBlockedError carrying the server detail when the start is refused with 403 participant_blocked', async () => {
+    const service = makeService();
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        jsonResponse({ code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
+      );
+
+    const error = await service.startSession({ chatbot_id: 'c1' }).catch(e => e);
+    expect(error).toBeInstanceOf(ParticipantBlockedError);
+    expect(error.message).toBe('You have been blocked from using this chatbot.');
+  });
+
+  it('still raises SessionAccessError when the start is refused with another 403', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Forbidden', code: 'permission_denied' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    const error = await service.startSession({ chatbot_id: 'c1' }).catch(e => e);
+    expect(error).toBeInstanceOf(SessionAccessError);
+    expect(error).not.toBeInstanceOf(ParticipantBlockedError);
   });
 
   it('posts the accepted form version and resolves on 204', async () => {

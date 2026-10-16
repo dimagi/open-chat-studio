@@ -35,6 +35,18 @@ export class ChatAuthError extends Error {
 }
 
 /**
+ * The server refused to start a session because the participant is on the
+ * team's denylist (403 `participant_blocked`). Raised only by `startSession`;
+ * the message is the server's notice for the participant.
+ */
+export class ParticipantBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ParticipantBlockedError';
+  }
+}
+
+/**
  * The server holds the message until the participant accepts the chatbot's consent
  * form (403 `consent_required`), or refuses a stale acceptance (409 `consent_stale`).
  * Either way `consent` is the block to render; the session itself is still good.
@@ -171,7 +183,10 @@ const CONSENT_REFUSAL_CODES = [CONSENT_REQUIRED_CODE, 'consent_stale'];
 /** The 403 code for a session token that has aged out; the only refusal renewal can answer. */
 const SESSION_EXPIRED_CODE = 'session_expired';
 
-/** The 403 code for a participant on the team's denylist. The widget reports a generic failure and keeps the session. */
+/**
+ * The 403 code for a participant on the team's denylist. A refused start shows the
+ * server's notice; any other refused request reports a generic failure and keeps the session.
+ */
 export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
 
 /** Shown in place of the server's wording when the refusal must not reveal its reason. */
@@ -180,6 +195,7 @@ export const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
 interface ErrorBody {
   message: string;
   code?: string;
+  detail?: string;
   consent?: ChatConsent;
 }
 
@@ -232,7 +248,11 @@ export class ChatSessionService {
     );
 
     if (!response.ok) {
-      await this.raiseForStatus(response, 'Failed to start session');
+      const body = await this.readErrorBody(response, 'Failed to start session');
+      if (response.status === 403 && body.code === PARTICIPANT_BLOCKED_CODE) {
+        throw new ParticipantBlockedError(body.detail || GENERIC_FAILURE_MESSAGE);
+      }
+      throw this.errorFor(response.status, body);
     }
 
     return response.json() as Promise<ChatStartSessionResponse>;
@@ -602,10 +622,11 @@ export class ChatSessionService {
   /** The server's error wording and codes, falling back to the status text on a non-JSON body. */
   private async readErrorBody(response: Response, fallbackPrefix: string): Promise<ErrorBody> {
     try {
-      const data = (await response.json()) as { error?: string; code?: string; consent?: ChatConsent };
+      const data = (await response.json()) as { error?: string; code?: string; detail?: string; consent?: ChatConsent };
       return {
         message: data?.error || `${fallbackPrefix}: ${response.statusText}`,
         code: data?.code,
+        detail: data?.detail,
         consent: data?.consent,
       };
     } catch {
