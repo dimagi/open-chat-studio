@@ -66,6 +66,7 @@ class TestExperimentSessionFilterSchema:
             "annotation_queue",
             "moderation_status",
             "rule_hit",
+            "participant_blocked",
         }
         assert set(schema.keys()) == expected_keys
 
