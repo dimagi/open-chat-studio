@@ -18,33 +18,29 @@ class TestIsParticipantBlocked:
         denial = DeniedParticipantFactory.create()
         team_flag(FLAG, denial.team)
 
-        assert is_participant_blocked(team=denial.team, participant=denial.participant) is True
+        assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is True
 
     @override_flag(FLAG, active=False)
     def test_flag_off_means_not_blocked_even_with_a_row(self):
         denial = DeniedParticipantFactory.create()
 
-        assert is_participant_blocked(team=denial.team, participant=denial.participant) is False
+        assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is False
 
     @override_flag(FLAG, active=True)
     def test_not_blocked_without_a_row(self):
         participant = ParticipantFactory.create()
 
-        assert is_participant_blocked(team=participant.team, participant=participant) is False
+        assert is_participant_blocked(team=participant.team, participant_id=participant.id) is False
 
     @override_flag(FLAG, active=True)
     def test_block_is_scoped_to_its_team(self):
         denial = DeniedParticipantFactory.create()
 
-        assert is_participant_blocked(team=TeamFactory.create(), participant=denial.participant) is False
+        assert is_participant_blocked(team=TeamFactory.create(), participant_id=denial.participant_id) is False
 
     @override_flag(FLAG, active=True)
-    @pytest.mark.parametrize(
-        "participant",
-        [pytest.param(None, id="none"), pytest.param(ParticipantFactory.build(), id="unsaved")],
-    )
-    def test_missing_participant_is_not_blocked(self, participant):
-        assert is_participant_blocked(team=TeamFactory.create(), participant=participant) is False
+    def test_missing_participant_is_not_blocked(self):
+        assert is_participant_blocked(team=TeamFactory.create(), participant_id=None) is False
 
 
 @pytest.mark.django_db()
@@ -66,7 +62,7 @@ class TestBlockParticipant:
 
         assert created is False
         assert row == denial
-        assert DeniedParticipant.objects.filter(participant=denial.participant).count() == 1
+        assert DeniedParticipant.objects.filter(participant_id=denial.participant_id).count() == 1
 
 
 @pytest.mark.django_db()

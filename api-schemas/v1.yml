@@ -37,7 +37,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChatTaskPollNotFound'
+                $ref: '#/components/schemas/ErrorDetail'
           description: ''
         '500':
           content:
@@ -1580,13 +1580,6 @@ components:
           type: string
       required:
       - status
-    ChatTaskPollNotFound:
-      type: object
-      properties:
-        detail:
-          type: string
-      required:
-      - detail
     ChatTaskPollStatusEnum:
       enum:
       - processing
@@ -1661,6 +1654,14 @@ components:
       - id
       - model
       - object
+    ErrorDetail:
+      type: object
+      description: An error response with a single human-readable message.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     Experiment:
       type: object
       properties:

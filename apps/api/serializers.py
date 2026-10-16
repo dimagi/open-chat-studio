@@ -20,6 +20,12 @@ from apps.teams.models import Team
 from apps.trace.models import participant_data_from_trace
 
 
+class ErrorDetailSerializer(serializers.Serializer):
+    """An error response with a single human-readable message."""
+
+    detail = serializers.CharField()
+
+
 class ApiUrlField(serializers.HyperlinkedIdentityField):
     """``HyperlinkedIdentityField`` that documents a concrete ``example`` URL in the OpenAPI schema.
 
@@ -333,7 +339,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             platform=ChannelPlatform.API,
             defaults={"user": acting_user},
         )
-        if is_participant_blocked(team=request.team, participant=participant):
+        if is_participant_blocked(team=request.team, participant_id=participant.id):
             raise ParticipantBlocked()
         validated_data["participant"] = participant
         channel = ExperimentChannel.objects.get_team_api_channel(request.team)

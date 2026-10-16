@@ -40,11 +40,11 @@ def is_on_denylist(team, participant_id: int | None) -> bool:
     return DeniedParticipant.objects.filter(team=team, participant_id=participant_id).exists()
 
 
-def is_participant_blocked(team, participant) -> bool:
+def is_participant_blocked(team, participant_id: int) -> bool:
     """Whether the participant is on the team's denylist. Always False while the feature flag is off."""
-    if participant is None or participant.pk is None:
+    if participant_id is None:
         return False
-    return abuse_detection_enabled(team) and is_on_denylist(team, participant.pk)
+    return abuse_detection_enabled(team) and is_on_denylist(team, participant_id)
 
 
 def is_identifier_blocked(team, identifier: str, platform: str) -> bool:

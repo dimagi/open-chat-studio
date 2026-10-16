@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from markitdown._exceptions import FileConversionException  # noqa: TID253
+from markitdown import FileConversionException  # noqa: TID253
 
 from apps.documents.readers import (
     FileReadException,

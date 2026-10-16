@@ -38,7 +38,6 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import SingleTableView
-from field_audit.models import AuditAction
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
@@ -74,6 +73,7 @@ from apps.experiments.models import (
     SessionStatus,
 )
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.services import publish_version
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
@@ -958,17 +958,12 @@ def get_image_html(request, team_slug: str, session_id: int, pk: int):
 
 
 @require_POST
-@transaction.atomic
 @login_and_team_required
 def set_default_experiment(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    Experiment.objects.exclude(version_number=version_number).filter(
-        team=request.team, working_version_id=experiment_id
-    ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
-    experiment.is_default_version = True
-    experiment.save()
+    publish_version(experiment)
     messages.success(request, f"{experiment.version_display} is now the published version")
     url = (
         reverse(

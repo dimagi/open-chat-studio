@@ -9,22 +9,23 @@ second endpoint here reports the chatbot's version history as that version lands
 from django.db import transaction
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from field_audit.models import AuditAction
 from rest_framework import status
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
+from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.lookups import get_working_chatbot
 from apps.api.v2.write.base import ChatbotCompositionPermission
 from apps.experiments.models import Experiment
+from apps.experiments.services import publish_version
 from apps.experiments.tasks import start_version_creation
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.pipelines.build_state import pipeline_build_state
 
 from .exceptions import NothingToPublish, PipelineIsNotValid, VersionIsDefault, VersionOperationInProgress
+from .permissions import ChatbotVersionDeletePermission
 from .serializers import (
     PublishVersionSerializer,
     VersionArchivedSerializer,
@@ -115,7 +116,7 @@ class ChatbotVersionCreateView(APIView):
         body = VersionCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         chatbot = get_working_chatbot(request.team, id)
-        # A machine token reaches only the chatbots its application was pinned to. After resolution
+        # A machine token reaches only the chatbots its application allows. After resolution
         # because the allowlist is keyed on the chatbot, and before the gate, which reads the graph.
         enforce_application_chatbot_write(request, chatbot)
         make_default = body.validated_data["make_default"]
@@ -218,17 +219,6 @@ class ChatbotVersionStatusView(APIView):
         return Response(_version_status(chatbot))
 
 
-class ChatbotVersionDeletePermission(RequiresTeamPermission):
-    """Archiving a version really is a delete, so this one asks for ``delete_experiment``.
-
-    The other routes under ``/chatbots/{id}/`` deliberately do not: removing a pipeline node is a
-    change to the chatbot rather than a deletion of one. A version is an ``Experiment`` row of its
-    own, and this hides it.
-    """
-
-    required_permissions = ["experiments.delete_experiment"]
-
-
 class ChatbotVersionView(APIView):
     """The two writes that address one published version: promote it, or archive it."""
 
@@ -288,7 +278,7 @@ class ChatbotVersionView(APIView):
             chatbot = get_working_chatbot(request.team, id, lock=True)
             enforce_application_chatbot_write(request, chatbot)
             version = get_object_or_404(chatbot.versions, version_number=version_number)
-            _publish_existing_version(chatbot, version)
+            publish_version(version)
         return Response({"version_number": version.version_number, "is_published_version": True})
 
     @extend_schema(
@@ -327,7 +317,7 @@ class ChatbotVersionView(APIView):
         # live. The second blocks, then re-resolves against the committed `is_archived` and 404s.
         with transaction.atomic():
             chatbot = get_working_chatbot(request.team, id, lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # A machine token reaches only the chatbots its application allows. Checked after
             # resolution because the allowlist is keyed on the chatbot, and before anything written.
             enforce_application_chatbot_write(request, chatbot)
             # `versions` excludes archived rows, so an already-archived version is a 404 here.
@@ -336,21 +326,6 @@ class ChatbotVersionView(APIView):
                 raise VersionIsDefault()
             version.archive()
         return Response({"archived": True})
-
-
-def _publish_existing_version(chatbot: Experiment, version: Experiment) -> None:
-    """Move the published flag onto ``version``, taking it off whichever version holds it.
-
-    A partial unique constraint allows one published version per family, so the incumbent is
-    demoted in the same statement-pair under the caller's row lock rather than left to collide.
-    Already-published is not an error: the request asked for a state that already holds.
-    """
-    chatbot.versions.filter(is_default_version=True).exclude(id=version.id).update(
-        is_default_version=False, audit_action=AuditAction.AUDIT
-    )
-    if not version.is_default_version:
-        version.is_default_version = True
-        version.save(update_fields=["is_default_version"])
 
 
 def _version_status(chatbot: Experiment) -> dict:

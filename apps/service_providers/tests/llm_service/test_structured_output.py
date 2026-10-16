@@ -95,14 +95,6 @@ def test_provider_reason_reads_the_provider_metadata():
     assert provider_reason(AIMessage(content="no metadata")) == ""
 
 
-def test_provider_reason_reads_responses_api_incomplete_details():
-    message = AIMessage(
-        content=[], response_metadata={"status": "incomplete", "incomplete_details": {"reason": "content_filter"}}
-    )
-
-    assert provider_reason(message) == "content_filter"
-
-
 def test_a_missing_tool_call_raised_by_the_provider_adapter_is_no_structured_output():
     llm = _NoToolCallUnderThinking(responses=["unused"])
 

@@ -1,4 +1,4 @@
-"""A client-credentials application reaches only the chatbots it was pinned to.
+"""A client-credentials application without `all_data` reaches only the chatbots it was pinned to.
 
 `chatbots:interact` is team-scoped, so on its own it lets a machine token converse with every chatbot
 in the team. `OAuth2Application.allowed_chatbots` narrows that to the chatbots the application was

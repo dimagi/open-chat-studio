@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from waffle.testutils import override_flag
@@ -8,8 +8,8 @@ from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyAbort
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.stages.core import AttachmentHydrationStage, BlockedParticipantStage, ParticipantResolverStage
-from apps.channels.tests.channels.conftest import StubChannel, make_context, make_trace_service
+from apps.channels.stages.core import BlockedParticipantStage, ParticipantResolverStage
+from apps.channels.tests.channels.conftest import StubChannel, core_stages, make_context, make_trace_service
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -52,20 +52,18 @@ class TestBlockedParticipantStage:
         BlockedParticipantStage()(ctx)
 
     @override_flag(FLAG, active=True)
-    def test_blocked_participant_aborts(self):
+    @pytest.mark.parametrize(
+        "context_kwargs",
+        [
+            pytest.param(lambda session: {"participant": session.participant}, id="resolved_participant"),
+            # Web channels pre-set the session and never resolve ctx.participant.
+            pytest.param(lambda session: {"experiment_session": session}, id="session_participant"),
+        ],
+    )
+    def test_blocked_participant_aborts(self, context_kwargs):
         session = ExperimentSessionFactory.create()
         _block(session)
-        ctx = make_context(experiment=session.experiment, participant=session.participant)
-
-        with pytest.raises(EarlyAbort):
-            BlockedParticipantStage()(ctx)
-
-    @override_flag(FLAG, active=True)
-    def test_falls_back_to_the_session_participant(self):
-        """Web channels pre-set the session and never resolve ctx.participant."""
-        session = ExperimentSessionFactory.create()
-        _block(session)
-        ctx = make_context(experiment=session.experiment, experiment_session=session)
+        ctx = make_context(experiment=session.experiment, **context_kwargs(session))
 
         with pytest.raises(EarlyAbort):
             BlockedParticipantStage()(ctx)
@@ -149,10 +147,6 @@ class TestBlockedParticipantPerChannel:
 
 
 class TestBlockedParticipantStageIsWired:
-    def _core_stages(self, channel_cls):
-        stub_self = MagicMock(attachment_hydration_stage_class=AttachmentHydrationStage)
-        return channel_cls._build_pipeline(stub_self).core_stages
-
     @pytest.mark.parametrize(
         "channel_cls",
         [
@@ -162,7 +156,7 @@ class TestBlockedParticipantStageIsWired:
         ],
     )
     def test_stage_is_in_pipeline(self, channel_cls):
-        stages = [stage for stage in self._core_stages(channel_cls) if isinstance(stage, BlockedParticipantStage)]
+        stages = [stage for stage in core_stages(channel_cls) if isinstance(stage, BlockedParticipantStage)]
 
         assert len(stages) == 1
 
@@ -170,12 +164,12 @@ class TestBlockedParticipantStageIsWired:
         "channel_cls", [pytest.param(ChannelBase, id="messaging"), pytest.param(ApiChannel, id="api")]
     )
     def test_runs_directly_after_participant_resolution(self, channel_cls):
-        types = [type(stage) for stage in self._core_stages(channel_cls)]
+        types = [type(stage) for stage in core_stages(channel_cls)]
 
         assert types.index(BlockedParticipantStage) == types.index(ParticipantResolverStage) + 1
 
     def test_evaluation_channel_is_unaffected(self):
         """Evaluation runs share one internal participant, which must never be blocked."""
-        stages = self._core_stages(EvaluationChannel)
+        stages = core_stages(EvaluationChannel)
 
         assert not any(isinstance(stage, BlockedParticipantStage) for stage in stages)

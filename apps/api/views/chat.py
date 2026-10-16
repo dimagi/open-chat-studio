@@ -47,6 +47,7 @@ from apps.api.serializers import (
     ChatSessionTokenResponse,
     ChatStartSessionRequest,
     ChatStartSessionResponse,
+    ErrorDetailSerializer,
     MessageSerializer,
     ParticipantBlockedResponse,
 )
@@ -701,7 +702,7 @@ def chat_start_session(request):
     participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
     if refusal:
         return refusal
-    if is_participant_blocked(team=team, participant=participant):
+    if is_participant_blocked(team=team, participant_id=participant.id):
         raise ParticipantBlocked()
 
     if name or participant_timezone:
@@ -839,7 +840,7 @@ def chat_send_message(request, session_id):
     if refusal := consent_refusal(request, session):
         return refusal
 
-    if is_participant_blocked(team=session.team, participant=session.participant):
+    if is_participant_blocked(team=session.team, participant_id=session.participant_id):
         raise ParticipantBlocked()
 
     attachment_data = []
@@ -906,12 +907,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
-        404: inline_serializer(
-            "ChatTaskPollNotFound",
-            {
-                "detail": serializers.CharField(),
-            },
-        ),
+        404: ErrorDetailSerializer,
         500: inline_serializer(
             "ChatTaskPollError",
             {
