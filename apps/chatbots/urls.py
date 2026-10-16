@@ -12,6 +12,7 @@ urlpatterns = [
     path("<int:experiment_id>/", views.single_chatbot_home, name="single_chatbot_home"),
     path("<int:pk>/edit/", views.EditChatbot.as_view(), name="edit"),
     path("<int:pk>/delete/", views.archive_chatbot, name="archive"),
+    path("<int:pk>/unarchive/", views.unarchive_chatbot, name="unarchive"),
     path("<int:experiment_id>/versions/create", views.CreateChatbotVersion.as_view(), name="create_version"),
     path("<int:experiment_id>/versions/", views.ChatbotVersionsTableView.as_view(), name="versions-list"),
     path(
