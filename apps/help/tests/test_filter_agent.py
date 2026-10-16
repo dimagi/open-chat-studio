@@ -23,6 +23,12 @@ class TestFilterAgentPrompt:
         assert "channels" in prompt
         assert "state" in prompt
 
+    def test_system_prompt_gives_option_labels(self, team):
+        input_data = FilterInput(query="test", filter_slug="participant", team_id=team.id)
+        with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+            prompt = FilterAgent.get_system_prompt(input_data)
+        assert '"label": "Blocked"' in prompt
+
     def test_system_prompt_contains_operators(self, team):
         input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
         prompt = FilterAgent.get_system_prompt(input_data)
