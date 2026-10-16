@@ -28,6 +28,7 @@ from apps.ocs_notifications.notifications import (
 )
 
 if TYPE_CHECKING:
+    from apps.service_providers.moderation_service.schemas import ModerationOutput
     from apps.service_providers.speech_service import SynthesizedAudio
 
 DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
@@ -104,17 +105,25 @@ class ModerationResultStage(ProcessingStage):
         if skip_reason is not None:
             moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
         elif status == ModerationStatus.FLAGGED:
+            assert output is not None
+            self._add_strike(ctx, output)
             remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
             if ctx.bot_response is not None:
                 self._replace_response(ctx)
-            assert output is not None
-            assert ctx.experiment_session is not None
+
+    def _add_strike(self, ctx: MessageProcessingContext, output: ModerationOutput) -> None:
+        """Give the participant a strike, logging any error so the reply is still replaced."""
+        assert ctx.experiment_session is not None
+        assert ctx.human_message is not None
+        try:
             add_strike(
                 participant=ctx.experiment_session.participant,
                 experiment=ctx.experiment,
                 chat_message=ctx.human_message,
                 categories=strike_categories(output),
             )
+        except Exception:
+            logger.exception("Could not add a strike for message %s", ctx.human_message.id)
 
     def _replace_response(self, ctx: MessageProcessingContext) -> None:
         """Replace the stored bot reply with a notice that the message will not be answered, and send only that.

@@ -300,6 +300,27 @@ class TestModerationResultStageStrikes:
 
         assert _strikes(moderated_session) == 1
 
+    def test_failed_reply_replacement_still_gives_a_strike(self, moderated_session, moderation_task):
+        _turn_on_auto_block(moderated_session)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        bot_response = _bot_response(moderated_session)
+
+        with patch.object(bot_response, "save", side_effect=DatabaseError("connection lost")), _flagged_reply():
+            ModerationResultStage()(_context(moderated_session, bot_response=bot_response))
+
+        assert _strikes(moderated_session) == 1
+
+    def test_failed_strike_still_replaces_the_reply(self, moderated_session, moderation_task):
+        _turn_on_auto_block(moderated_session)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        ctx = _context(moderated_session, bot_response=_bot_response(moderated_session))
+
+        with patch("apps.channels.stages.terminal.add_strike", side_effect=DatabaseError("connection lost")):
+            with _flagged_reply():
+                ModerationResultStage()(ctx)
+
+        assert ctx.formatted_message == "Flagged reply"
+
     def test_auto_block_off_gives_no_strike(self, moderated_session, moderation_task):
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
 
