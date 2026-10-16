@@ -19,7 +19,6 @@ from apps.moderation.services import (
     get_moderation_result,
     record_moderation_result,
     remove_turn_from_pipeline_histories,
-    strike_categories,
 )
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -120,7 +119,7 @@ class ModerationResultStage(ProcessingStage):
                 participant=ctx.experiment_session.participant,
                 experiment=ctx.experiment,
                 chat_message=ctx.human_message,
-                categories=strike_categories(output),
+                output=output,
             )
         except Exception:
             logger.exception("Could not add a strike for message %s", ctx.human_message.id)

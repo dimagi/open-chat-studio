@@ -262,7 +262,10 @@ def auto_block_session():
 def _add_strike(session, categories=("illicit",)):
     message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="text")
     add_strike(
-        participant=session.participant, experiment=session.experiment, chat_message=message, categories=categories
+        participant=session.participant,
+        experiment=session.experiment,
+        chat_message=message,
+        output=_output(dict.fromkeys(categories, True)),
     )
     return message
 
@@ -275,8 +278,8 @@ class TestAddStrike:
         second = Participant.objects.get(id=auto_block_session.participant_id)
         message = _add_strike(auto_block_session)
 
-        add_strike(participant=first, experiment=auto_block_session.experiment, chat_message=message, categories=[])
-        add_strike(participant=second, experiment=auto_block_session.experiment, chat_message=message, categories=[])
+        add_strike(participant=first, experiment=auto_block_session.experiment, chat_message=message, output=OUTPUT)
+        add_strike(participant=second, experiment=auto_block_session.experiment, chat_message=message, output=OUTPUT)
 
         assert second.strikes == 3
         assert Participant.objects.get(id=auto_block_session.participant_id).strikes == 3

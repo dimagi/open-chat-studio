@@ -24,7 +24,7 @@ from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Sequence
 
     from apps.channels.datamodels import Attachment
     from apps.chat.models import ChatMessage
@@ -113,12 +113,12 @@ def record_moderation_result(
 
 
 def add_strike(
-    *, participant: Participant, experiment: Experiment, chat_message: ChatMessage, categories: Iterable[str]
+    *, participant: Participant, experiment: Experiment, chat_message: ChatMessage, output: ModerationOutput
 ) -> None:
     """Give the participant a strike for the flagged `chat_message`, and block them at the strike limit.
 
-    `categories` are the strike categories the message was flagged for. Does nothing when the team has
-    auto-block off or the participant is exempt.
+    `output` is the moderation result for the message. Does nothing when the team has auto-block off or the
+    participant is exempt.
     """
     team = experiment.team
     if not team.auto_block_enabled or is_exempt(participant=participant, team=team):
@@ -126,7 +126,7 @@ def add_strike(
     strikes = _increment_strikes(participant)
     if strikes < STRIKE_LIMIT:
         return
-    reason = ", ".join(sorted(categories))
+    reason = ", ".join(sorted(strike_categories(output)))
     _denial, created = block_participant(
         participant=participant,
         source=DeniedParticipantSource.AUTO,
