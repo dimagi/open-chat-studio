@@ -74,3 +74,20 @@ def test_deleting_the_team_does_not_notify(selected_provider, django_capture_on_
     assert not Team.objects.filter(id=team.id).exists()
     assert not ModerationProvider.objects.filter(id=selected_provider.id).exists()
     notify.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_deleting_the_selected_provider_with_moderation_off_does_not_notify(django_capture_on_commit_callbacks):
+    provider = ModerationProviderFactory.create(name="Main moderation")
+    team = provider.team
+    team.moderation_provider = provider
+    team.save()
+
+    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+        provider.delete()
+
+    team.refresh_from_db()
+    assert team.moderation_enabled is False
+    assert team.moderation_provider is None
+    assert team.moderation_deleted_provider_name == ""
+    notify.assert_not_called()
