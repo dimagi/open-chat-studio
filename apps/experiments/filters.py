@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ModerationStatus
 from apps.experiments.models import Experiment
 from apps.teams.flags import Flags
 from apps.teams.utils import flag_is_active_for_team
@@ -260,6 +260,60 @@ class ChannelsFilter(ChoiceColumnFilter):
         return [val for val in selected_values if val is not None]
 
 
+class ModerationStatusFilter(ChoiceColumnFilter):
+    """Session filter on the moderation status of the session's messages."""
+
+    query_param: str = "moderation_status"
+    label: str = "Moderation Status"
+    description: str = "Filter by moderation status. A session matches when any of its messages has the status."
+    options: list[str | dict] = [{"id": value, "label": label} for value, label in ModerationStatus.choices]
+
+    def _any_message_has_status(self, statuses):
+        return Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), moderation_status__in=statuses))
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(self._any_message_has_status(value))
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(self._any_message_has_status(value))
+
+
+RULE_HIT = "true"
+NO_RULE_HIT = "false"
+
+
+class RuleHitFilter(ChoiceColumnFilter):
+    """Session filter on whether an abuse rule fired on any of the session's messages."""
+
+    query_param: str = "rule_hit"
+    label: str = "Rule Hit"
+    description: str = "Filter by whether an abuse rule fired on any message in the session"
+    options: list[str | dict] = [
+        {"id": RULE_HIT, "label": "A rule fired"},
+        {"id": NO_RULE_HIT, "label": "No rule fired"},
+    ]
+
+    def _matching(self, value) -> Exists | None:
+        """The condition for the selected options, or None when they select every session (or none)."""
+        any_rule_hit = Exists(
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), moderation_detail__rules__0__isnull=False)
+        )
+        selected = set(value) & {RULE_HIT, NO_RULE_HIT}
+        if selected == {RULE_HIT}:
+            return any_rule_hit
+        if selected == {NO_RULE_HIT}:
+            return ~any_rule_hit
+        return None
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.filter(condition)
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.exclude(condition)
+
+
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
@@ -295,14 +349,19 @@ class ExperimentSessionFilter(MultiColumnFilter):
         SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
         SessionIdFilter(),
+        ModerationStatusFilter(),
+        RuleHitFilter(),
     ]
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:
-        """Offer the annotation queue filter only to teams with human annotations turned on."""
+        """Offer the annotation queue and moderation filters only to teams with those features turned on."""
         columns = super().columns(team, **kwargs)
         if not flag_is_active_for_team(team, Flags.HUMAN_ANNOTATIONS.slug):
             columns.pop(AnnotationQueueFilter().query_param, None)
+        if not flag_is_active_for_team(team, Flags.ABUSE_DETECTION.slug):
+            columns.pop(ModerationStatusFilter().query_param, None)
+            columns.pop(RuleHitFilter().query_param, None)
         return columns
 
 

@@ -30,7 +30,7 @@ def test_columns_handles_a_mix_of_overridden_and_default_prepare(team):
     """ExperimentSessionFilter.filters mixes filters that override prepare() (VersionsFilter,
     ChannelsFilter, ...) with ones that rely on the base no-op. columns() must not crash on
     either kind. See #4363."""
-    with override_flag("flag_human_annotations", active=True):
+    with override_flag("flag_human_annotations", active=True), override_flag("flag_abuse_detection", active=True):
         columns = ExperimentSessionFilter.columns(team)
 
     assert set(columns) == {f.query_param for f in ExperimentSessionFilter.filters}
