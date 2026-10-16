@@ -75,7 +75,7 @@ class TestConfigForm:
         with mock.patch(MODERATE, side_effect=error):
             form = OpenAIModerationConfigForm(team=None, data={"openai_api_key": "sk-good"})
             assert form.is_valid()
-        assert len(form.warnings) == 1
+        assert form.warnings == ["Provider saved, but the credentials could not be checked right now."]
 
     @mock.patch(MODERATE, return_value=ModerationOutput({}))
     def test_check_uses_a_short_timeout_and_no_retries(self, moderate):
@@ -87,6 +87,26 @@ class TestConfigForm:
         kwargs = service_cls.call_args.kwargs
         assert kwargs["max_retries"] == 0
         assert kwargs["timeout"] <= 10
+
+    @pytest.mark.parametrize(
+        ("changes", "checked"),
+        [
+            pytest.param({}, False, id="unchanged"),
+            pytest.param({"openai_api_key": "sk-new"}, True, id="api_key"),
+            pytest.param({"openai_api_base": "https://example.com/v1"}, True, id="base_url"),
+            pytest.param({"openai_organization": "org-2"}, True, id="organization"),
+        ],
+    )
+    def test_edit_checks_only_changed_credentials(self, changes, checked):
+        saved = {"openai_api_key": "sk-old", "openai_api_base": "", "openai_organization": "org-1"}
+        masked_key = OpenAIModerationConfigForm(team=None, initial=saved).initial["openai_api_key"]
+        data = {**saved, "openai_api_key": masked_key, **changes}
+
+        with mock.patch(MODERATE, return_value=ModerationOutput({})) as moderate:
+            form = OpenAIModerationConfigForm(team=None, data=data, initial=saved)
+            assert form.is_valid()
+
+        assert moderate.called is checked
 
     def test_field_error_skips_the_check(self):
         with mock.patch(MODERATE) as moderate:
