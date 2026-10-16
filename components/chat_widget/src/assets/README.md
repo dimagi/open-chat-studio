@@ -29,6 +29,7 @@ This directory contains locale bundles for the `open-chat-studio-widget`. Each f
 - `status.starting` — Displayed while the chat session initializes.
 - `status.typing` — Shown while the assistant prepares a response.
 - `status.uploading` — Indicates an attachment upload is in progress.
+- `status.participantBlocked` — Shown when the participant is blocked and the server sends no notice of its own.
 
 ### modal
 - `modal.newChatTitle` — Title for the "start new chat" confirmation dialog.

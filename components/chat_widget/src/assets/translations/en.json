@@ -13,6 +13,7 @@
   "status.sessionExpired": "Your chat session expired. Starting a new chat — please resend your message.",
   "status.sessionError": "This chat session is no longer available.",
   "status.chatEnded": "This chat has ended.",
+  "status.participantBlocked": "You can no longer send messages to this chatbot.",
   "modal.newChatTitle": "Start New Chat",
   "modal.newChatBody": "Starting a new chat will clear your current conversation. Continue?",
   "modal.cancel": "Cancel",

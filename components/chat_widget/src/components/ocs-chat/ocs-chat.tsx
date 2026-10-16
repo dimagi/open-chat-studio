@@ -24,7 +24,6 @@ import {
   AuthTokenProvider,
   ChatConsent,
   ConsentRequiredError,
-  GENERIC_FAILURE_MESSAGE,
   ParticipantBlockedError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
@@ -581,7 +580,7 @@ export class OcsChat {
    * new chat. An unbound widget discards its stored session, so a reload starts a new one,
    * which the server refuses again. The notice is not stored.
    */
-  private handleParticipantBlocked(notice: string): void {
+  private handleParticipantBlocked(error: ParticipantBlockedError): void {
     this.cleanup();
     this.resetBusyState();
     this.participantBlocked = true;
@@ -594,6 +593,7 @@ export class OcsChat {
       this.applySessionToken(undefined);
       this.clearSessionStorage();
     }
+    const notice = error.detail || this.translationManager.get('status.participantBlocked', 'You can no longer send messages to this chatbot.');
     this.appendSystemNotice(notice, { persist: false });
   }
 
@@ -814,7 +814,7 @@ export class OcsChat {
         return;
       }
       if (error instanceof ParticipantBlockedError) {
-        this.handleParticipantBlocked(error.message);
+        this.handleParticipantBlocked(error);
         return;
       }
       this.handleError('Failed to start chat session');
@@ -878,7 +878,7 @@ export class OcsChat {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
       }
       if (uploadResult.participantBlocked) {
-        throw new ParticipantBlockedError(uploadResult.participantBlocked.detail || GENERIC_FAILURE_MESSAGE);
+        throw new ParticipantBlockedError(uploadResult.participantBlocked.detail);
       }
       if (uploadResult.tokenRejected) {
         throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
@@ -1036,7 +1036,7 @@ export class OcsChat {
     }
     if (error instanceof ParticipantBlockedError) {
       this.dropOptimisticUserMessage(optimisticMessage);
-      this.handleParticipantBlocked(error.message);
+      this.handleParticipantBlocked(error);
       return;
     }
     if (error instanceof SessionAccessError) {

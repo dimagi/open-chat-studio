@@ -36,13 +36,17 @@ export class ChatAuthError extends Error {
 
 /**
  * The server refused to start a session or take a message because the participant
- * is on the team's denylist (403 `participant_blocked`). Raised only by `startSession`
- * and `sendMessage`; the message is the server's notice for the participant.
+ * is on the team's denylist (403 `participant_blocked`). Raised by `startSession`
+ * and `sendMessage`, and by the widget for a refused upload.
  */
 export class ParticipantBlockedError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** The server's notice for the participant, when the response carries one. */
+  readonly detail?: string;
+
+  constructor(detail?: string) {
+    super(detail || 'Participant blocked');
     this.name = 'ParticipantBlockedError';
+    this.detail = detail || undefined;
   }
 }
 
@@ -190,7 +194,7 @@ const SESSION_EXPIRED_CODE = 'session_expired';
 export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
 
 /** Shown in place of the server's wording when the refusal must not reveal its reason. */
-export const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
+const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
 
 interface ErrorBody {
   message: string;
@@ -200,7 +204,7 @@ interface ErrorBody {
 }
 
 interface RefusalOptions {
-  /** Raise `ParticipantBlockedError` with the server's notice instead of the generic failure. */
+  /** Raise `ParticipantBlockedError` carrying the server's notice instead of the generic failure. */
   revealBlock?: boolean;
 }
 
@@ -604,7 +608,7 @@ export class ChatSessionService {
       return new ConsentRequiredError(consent, message);
     }
     if (code === PARTICIPANT_BLOCKED_CODE) {
-      return revealBlock ? new ParticipantBlockedError(detail || GENERIC_FAILURE_MESSAGE) : new Error(GENERIC_FAILURE_MESSAGE);
+      return revealBlock ? new ParticipantBlockedError(detail) : new Error(GENERIC_FAILURE_MESSAGE);
     }
     if (status === 403) {
       return new SessionAccessError(status, code, message);

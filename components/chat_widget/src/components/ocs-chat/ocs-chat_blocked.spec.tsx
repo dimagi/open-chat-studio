@@ -101,6 +101,12 @@ describe('ocs-chat blocked participant', () => {
     });
   });
 
+  it('shows the translated blocked notice when the refusal carries no detail', async () => {
+    const page = await widgetAfterRefusedStart(new ParticipantBlockedError());
+
+    expect(page.rootInstance.messages.at(-1).content).toBe('You can no longer send messages to this chatbot.');
+  });
+
   describe('when a restored session is refused with participant_blocked', () => {
     it('on send, shows the server detail, locks the widget and clears the stored session', async () => {
       const page = await restoredWidget();
