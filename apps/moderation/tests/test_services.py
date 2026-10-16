@@ -4,9 +4,7 @@ from unittest import mock
 import pytest
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from django.db import DatabaseError, connections
-from waffle.testutils import override_flag
 
-from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
@@ -14,7 +12,6 @@ from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.moderation.services import (
     add_strike,
-    block_participant_from_code_node,
     get_moderation_result,
     record_moderation_result,
     record_rule_hits,
@@ -25,7 +22,6 @@ from apps.moderation.services import (
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.repository import ORMRepository
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import (
     ChatFactory,
     ChatMessageFactory,
@@ -422,63 +418,3 @@ class TestAddStrike:
 
         assert list(DeniedParticipant.objects.all()) == [existing]
         notification.assert_not_called()
-
-
-@pytest.mark.django_db()
-class TestBlockParticipantFromCodeNode:
-    @pytest.fixture()
-    def session(self, team_flag):
-        session = ExperimentSessionFactory.create()
-        team_flag(Flags.ABUSE_DETECTION.slug, session.team)
-        return session
-
-    def test_blocks_the_participant_without_strikes(self, session):
-        created = block_participant_from_code_node(session=session, reason="Repeated threats")
-
-        assert created is True
-        denial = DeniedParticipant.objects.get()
-        assert denial.team_id == session.team_id
-        assert denial.participant_id == session.participant_id
-        assert denial.source == DeniedParticipantSource.CODE_NODE
-        assert denial.reason == "Repeated threats"
-        assert denial.experiment_id == session.experiment_id
-        assert denial.chat_message_id is None
-        assert denial.created_by_id is None
-        assert Participant.objects.get(id=session.participant_id).strikes == 0
-
-    def test_second_call_keeps_the_first_block(self, session):
-        block_participant_from_code_node(session=session, reason="First")
-
-        created = block_participant_from_code_node(session=session, reason="Second")
-
-        assert created is False
-        assert DeniedParticipant.objects.get().reason == "First"
-
-    @override_flag(Flags.ABUSE_DETECTION.slug, active=False)
-    def test_does_nothing_when_the_flag_is_off(self):
-        session = ExperimentSessionFactory.create()
-
-        assert block_participant_from_code_node(session=session, reason="Spam") is False
-        assert not DeniedParticipant.objects.exists()
-
-    @pytest.mark.parametrize(
-        ("is_member", "blocked"),
-        [
-            pytest.param(True, False, id="team_member_is_exempt"),
-            pytest.param(False, True, id="user_from_another_team_is_not_exempt"),
-        ],
-    )
-    def test_exempt_participant_is_not_blocked(self, session, is_member, blocked):
-        membership = MembershipFactory.create(team=session.team if is_member else TeamFactory.create())
-        session.participant.user = membership.user
-        session.participant.save()
-
-        assert block_participant_from_code_node(session=session, reason="Spam") is blocked
-        assert DeniedParticipant.objects.exists() is blocked
-
-    def test_does_nothing_in_an_evaluation_run(self, session):
-        session.platform = ChannelPlatform.EVALUATIONS
-        session.save()
-
-        assert block_participant_from_code_node(session=session, reason="Spam") is False
-        assert not DeniedParticipant.objects.exists()

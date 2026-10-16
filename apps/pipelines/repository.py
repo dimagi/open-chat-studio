@@ -10,7 +10,7 @@ from apps.chat.models import ChatMessage, ChatMessageMetadataKeys
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
-from apps.moderation.services import block_participant_from_code_node
+from apps.moderation.enforcement import block_participant_from_code_node
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.fields import as_int
