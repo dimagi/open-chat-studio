@@ -620,7 +620,7 @@ def test_block_participant_uses_the_repository():
     output = node._process(state, NodeContext(state))
 
     assert output.update["messages"][-1] == "True False"  # ty: ignore[not-subscriptable]
-    assert repo.blocked_participant_reasons == ["Repeated threats"]
+    assert repo.blocked_reason == "Repeated threats"
 
 
 @pytest.mark.parametrize(
@@ -647,7 +647,7 @@ def test_block_participant_errors(code, session, error):
 
     with pytest.raises(CodeNodeRunError, match=error):
         node._process(state, NodeContext(state))
-    assert repo.blocked_participant_reasons == []
+    assert repo.blocked_reason is None
 
 
 @pytest.mark.django_db()

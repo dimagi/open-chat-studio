@@ -289,7 +289,7 @@ class InMemoryPipelineRepository(ORMRepository):
         self.participant_global_data: dict = {}
         self.compression_checkpoints: list[dict] = []
         self.provider_models: dict[int, Any] = {}
-        self.blocked_participant_reasons: list[str] = []
+        self.blocked_reason: str | None = None
 
     def get_llm_provider(self, provider_id):
         if provider_id not in self.providers:
@@ -404,7 +404,7 @@ class InMemoryPipelineRepository(ORMRepository):
         return list(self.participant_schedules)
 
     def block_participant(self, reason):
-        if self.blocked_participant_reasons:
+        if self.blocked_reason is not None:
             return False
-        self.blocked_participant_reasons.append(reason)
+        self.blocked_reason = reason
         return True

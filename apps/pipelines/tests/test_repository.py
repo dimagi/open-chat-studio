@@ -163,7 +163,7 @@ class TestInMemoryRepository:
     def test_block_participant(self):
         assert self.repo.block_participant("First") is True
         assert self.repo.block_participant("Second") is False
-        assert self.repo.blocked_participant_reasons == ["First"]
+        assert self.repo.blocked_reason == "First"
 
 
 class TestInjectionWiring:
