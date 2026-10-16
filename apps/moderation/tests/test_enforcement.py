@@ -3,6 +3,7 @@ from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
+from apps.moderation.const import MAX_BLOCK_REASON_LENGTH
 from apps.moderation.enforcement import (
     block_participant,
     block_participant_from_code_node,
@@ -149,6 +150,11 @@ class TestBlockParticipantFromCodeNode:
         assert denial.chat_message_id is None
         assert denial.created_by_id is None
         assert Participant.objects.get(id=session.participant_id).strikes == 0
+
+    def test_truncates_a_long_reason(self, session):
+        block_participant_from_code_node(session=session, reason="x" * (MAX_BLOCK_REASON_LENGTH + 1))
+
+        assert DeniedParticipant.objects.get().reason == "x" * MAX_BLOCK_REASON_LENGTH
 
     def test_second_call_keeps_the_first_block(self, session):
         block_participant_from_code_node(session=session, reason="First")

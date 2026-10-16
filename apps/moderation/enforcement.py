@@ -1,6 +1,7 @@
 from django.db import transaction
 from field_audit.models import AuditAction
 
+from apps.moderation.const import MAX_BLOCK_REASON_LENGTH
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
 from apps.teams.models import Membership
@@ -97,7 +98,7 @@ def block_participant_from_code_node(*, session, reason: str) -> bool:
     _denial, created = block_participant(
         participant=participant,
         source=DeniedParticipantSource.CODE_NODE,
-        reason=reason,
+        reason=reason[:MAX_BLOCK_REASON_LENGTH],
         experiment=session.experiment,
     )
     return created
