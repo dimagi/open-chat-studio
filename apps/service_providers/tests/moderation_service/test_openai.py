@@ -75,18 +75,23 @@ def test_moderate_leaves_out_a_category_missing_from_the_response(create):
     assert set(output.root) == set(CATEGORY_NAMES) - {"illicit"}
 
 
+_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/moderations")
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        pytest.param(
+            openai.RateLimitError("Rate limited", response=httpx.Response(429, request=_REQUEST), body=None),
+            ModerationRateLimited,
+            id="rate_limit",
+        ),
+        pytest.param(openai.APIConnectionError(request=_REQUEST), openai.APIConnectionError, id="connection_error"),
+    ],
+)
 @mock.patch("openai.resources.moderations.Moderations.create")
-def test_moderate_raises_rate_limited_on_429(create):
-    response = httpx.Response(429, request=httpx.Request("POST", "https://api.openai.com/v1/moderations"))
-    create.side_effect = openai.RateLimitError("Rate limited", response=response, body=None)
+def test_moderate_errors(create, error, expected):
+    create.side_effect = error
 
-    with pytest.raises(ModerationRateLimited):
-        make_service().moderate("some text")
-
-
-@mock.patch("openai.resources.moderations.Moderations.create")
-def test_moderate_lets_other_errors_propagate(create):
-    create.side_effect = openai.APIConnectionError(request=httpx.Request("POST", "https://api.openai.com"))
-
-    with pytest.raises(openai.APIConnectionError):
+    with pytest.raises(expected):
         make_service().moderate("some text")
