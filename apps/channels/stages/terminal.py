@@ -15,9 +15,11 @@ from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageTy
 from apps.files.models import File, FilePurpose
 from apps.moderation.const import FLAGGED_MESSAGE
 from apps.moderation.services import (
+    add_strike,
     get_moderation_result,
     record_moderation_result,
     remove_turn_from_pipeline_histories,
+    strike_categories,
 )
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -70,7 +72,8 @@ class FileDeliveryFailure(Exception):
 class ModerationResultStage(ProcessingStage):
     """TERMINAL STAGE: Records the moderation result on the human message and replaces the reply to a flagged one.
 
-    A flagged turn is also removed from the pipeline's node and named histories, so it is not replayed.
+    A flagged message also gives the participant a strike (see `add_strike`), and the flagged turn is removed
+    from the pipeline's node and named histories, so it is not replayed.
 
     A terminal stage so that it also runs when a core stage exits early. A failure to get a result is
     recorded as a skip, and the response is sent as normal. Any other error is logged, and the later
@@ -104,6 +107,14 @@ class ModerationResultStage(ProcessingStage):
             remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
             if ctx.bot_response is not None:
                 self._replace_response(ctx)
+            assert output is not None
+            assert ctx.experiment_session is not None
+            add_strike(
+                participant=ctx.experiment_session.participant,
+                experiment=ctx.experiment,
+                chat_message=ctx.human_message,
+                categories=strike_categories(output),
+            )
 
     def _replace_response(self, ctx: MessageProcessingContext) -> None:
         """Replace the stored bot reply with a notice that the message will not be answered, and send only that.

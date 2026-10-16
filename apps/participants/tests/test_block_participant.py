@@ -182,6 +182,26 @@ class TestUnblockParticipant:
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
         assert not DeniedParticipant.objects.filter(participant=participant).exists()
 
+    @pytest.mark.parametrize(
+        "next_url",
+        [
+            pytest.param("", id="participant_page"),
+            pytest.param("/a/team/settings/", id="moderation_settings"),
+        ],
+    )
+    def test_resets_strikes(self, client, team_with_users, team_flag, admin, participant, next_url):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 3
+        participant.save()
+        DeniedParticipantFactory.create(team=team_with_users, participant=participant)
+        client.force_login(admin)
+
+        url = _unblock_url(team=team_with_users, participant=participant)
+        client.post(f"{url}?{urlencode({'next': next_url})}" if next_url else url)
+
+        participant.refresh_from_db()
+        assert participant.strikes == 0
+
     def test_not_blocked_redirects_back(self, client, team_with_users, team_flag, admin, participant):
         team_flag(flag_name=FLAG, team=team_with_users)
         client.force_login(admin)
@@ -341,6 +361,17 @@ class TestParticipantPageBlockControls:
 
         assert _unblock_url(team=team_with_users, participant=participant) in content
 
+    def test_shows_strike_count_with_flag_on(self, client, team_with_users, team_flag, viewer, participant):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 2
+        participant.save()
+        client.force_login(viewer)
+
+        content = client.get(_page_url(team=team_with_users, participant=participant)).content.decode()
+
+        assert '<div class="text-lg font-extrabold self-end" id="participant-strikes">2</div>' in content
+        assert "Strikes" in content
+
     @override_flag(FLAG, active=False)
     def test_hides_block_controls_with_flag_off(self, client, team_with_users, admin, participant):
         DeniedParticipantFactory.create(team=team_with_users, participant=participant, reason="Spamming links")
@@ -349,6 +380,7 @@ class TestParticipantPageBlockControls:
         response = client.get(_page_url(team=team_with_users, participant=participant))
 
         content = response.content.decode()
+        assert 'id="participant-strikes"' not in content
         assert response.context.get("denial") is None
         assert "Spamming links" not in content
         assert _block_url(team=team_with_users, participant=participant) not in content

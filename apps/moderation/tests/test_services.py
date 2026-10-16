@@ -5,22 +5,32 @@ from celery.exceptions import TimeoutError as CeleryTimeoutError
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.moderation.const import MODERATION_WAIT_TIMEOUT
+from apps.experiments.models import Participant
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_LIMIT
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.moderation.services import (
+    add_strike,
     get_moderation_result,
     record_moderation_result,
     record_rule_hits,
     remove_turn_from_pipeline_histories,
     start_moderation,
     strike_categories,
+    unblock_participant,
 )
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.repository import ORMRepository
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
-from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import (
+    ChatFactory,
+    ChatMessageFactory,
+    ExperimentSessionFactory,
+    ParticipantFactory,
+)
+from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 OUTPUT = ModerationOutput({"harassment": ModerationCategory(flagged=False, score=0.1)})
@@ -237,3 +247,136 @@ def test_get_moderation_result_logs_a_failed_task_as_a_warning(error, caplog):
 
     assert [record.levelname for record in caplog.records] == ["WARNING"]
     assert caplog.records[0].exc_info is None
+
+
+BLOCKED_NOTIFICATION = "apps.moderation.services.participant_auto_blocked_notification"
+
+
+@pytest.fixture()
+def auto_block_session():
+    """A session whose team has auto-block on, with a participant who has no linked user."""
+    session = ExperimentSessionFactory.create()
+    session.experiment.team.auto_block_enabled = True
+    session.experiment.team.save()
+    return session
+
+
+def _add_strike(session, categories=("illicit",)):
+    message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="text")
+    add_strike(
+        participant=session.participant, experiment=session.experiment, chat_message=message, categories=categories
+    )
+    return message
+
+
+@pytest.mark.django_db()
+class TestAddStrike:
+    def test_increments_from_the_database_value(self, auto_block_session):
+        """Two increments made through stale copies of the participant both count."""
+        first = Participant.objects.get(id=auto_block_session.participant_id)
+        second = Participant.objects.get(id=auto_block_session.participant_id)
+        message = _add_strike(auto_block_session)
+
+        add_strike(participant=first, experiment=auto_block_session.experiment, chat_message=message, categories=[])
+        add_strike(participant=second, experiment=auto_block_session.experiment, chat_message=message, categories=[])
+
+        assert second.strikes == 3
+        assert Participant.objects.get(id=auto_block_session.participant_id).strikes == 3
+
+    def test_updates_updated_at(self, auto_block_session):
+        before = auto_block_session.participant.updated_at
+
+        _add_strike(auto_block_session)
+
+        assert Participant.objects.get(id=auto_block_session.participant_id).updated_at > before
+
+    def test_auto_block_off_gives_no_strike(self, auto_block_session):
+        auto_block_session.experiment.team.auto_block_enabled = False
+        auto_block_session.experiment.team.save()
+
+        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT):
+                _add_strike(auto_block_session)
+
+        assert Participant.objects.get(id=auto_block_session.participant_id).strikes == 0
+        assert not DeniedParticipant.objects.exists()
+        notification.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "is_member",
+        [
+            pytest.param(True, id="team_member_is_exempt"),
+            pytest.param(False, id="user_from_another_team_is_not_exempt"),
+        ],
+    )
+    def test_exempt_participant_gets_no_strike(self, auto_block_session, is_member):
+        team = auto_block_session.experiment.team
+        membership = MembershipFactory.create(team=team if is_member else TeamFactory.create())
+        participant = auto_block_session.participant
+        participant.user = membership.user
+        participant.save()
+
+        _add_strike(auto_block_session)
+
+        assert Participant.objects.get(id=participant.id).strikes == (0 if is_member else 1)
+
+    def test_blocks_at_the_strike_limit_only(self, auto_block_session):
+        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT - 1):
+                _add_strike(auto_block_session)
+            assert not DeniedParticipant.objects.exists()
+            notification.assert_not_called()
+
+            message = _add_strike(auto_block_session, categories={"illicit/violent", "hate/threatening"})
+
+        denial = DeniedParticipant.objects.get(participant=auto_block_session.participant)
+        assert denial.team == auto_block_session.experiment.team
+        assert denial.source == DeniedParticipantSource.AUTO
+        assert denial.experiment == auto_block_session.experiment
+        assert denial.chat_message == message
+        assert denial.reason == "hate/threatening, illicit/violent"
+        notification.assert_called_once_with(
+            experiment=auto_block_session.experiment,
+            participant=auto_block_session.participant,
+            reason="hate/threatening, illicit/violent",
+        )
+
+    def test_notifies_once(self, auto_block_session):
+        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT + 2):
+                _add_strike(auto_block_session)
+
+        notification.assert_called_once()
+        assert DeniedParticipant.objects.filter(participant=auto_block_session.participant).count() == 1
+        assert Participant.objects.get(id=auto_block_session.participant_id).strikes == STRIKE_LIMIT + 2
+
+    def test_keeps_an_existing_block(self, auto_block_session):
+        existing = DeniedParticipantFactory.create(
+            team=auto_block_session.experiment.team, participant=auto_block_session.participant, reason="Manual"
+        )
+
+        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT):
+                _add_strike(auto_block_session)
+
+        assert list(DeniedParticipant.objects.all()) == [existing]
+        notification.assert_not_called()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("blocked", "expected_strikes"),
+    [
+        pytest.param(True, 0, id="blocked"),
+        pytest.param(False, 2, id="not_blocked"),
+    ],
+)
+def test_unblock_participant(blocked, expected_strikes):
+    participant = ParticipantFactory.create(strikes=2)
+    if blocked:
+        DeniedParticipantFactory.create(team=participant.team, participant=participant)
+
+    assert unblock_participant(participant) is blocked
+
+    assert not DeniedParticipant.objects.filter(participant=participant).exists()
+    assert Participant.objects.get(id=participant.id).strikes == expected_strikes

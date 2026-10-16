@@ -9,6 +9,7 @@ from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyExitResponse
+from apps.channels.models import ChannelPlatform
 from apps.channels.stages.terminal import ModerationResultStage
 from apps.channels.tests.channels.conftest import make_context, make_trace_service, messaging_channel
 from apps.channels.tests.message_examples import base_messages
@@ -16,17 +17,22 @@ from apps.channels.web_channel import WebChannel
 from apps.chat.bots import EventBot
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.experiments.models import SessionStatus
-from apps.moderation.const import FLAGGED_MESSAGE
+from apps.experiments.models import Participant, SessionStatus
+from apps.moderation.const import FLAGGED_MESSAGE, STRIKE_LIMIT
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
-from apps.utils.factories.experiment import ChatMessageFactory
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
+from apps.utils.factories.service_provider_factories import ModerationProviderFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
+from apps.utils.tests.moderation_helpers import select_moderation_provider
 from apps.utils.tests.provider_errors import connection_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
 EVENT_BOT = "apps.channels.pipeline.EventBot"
 NOTIFICATION = "apps.channels.stages.terminal.moderation_skipped_notification"
+BLOCKED_NOTIFICATION = "apps.moderation.services.participant_auto_blocked_notification"
 
 PASSED_OUTPUT = {"illicit": {"flagged": False, "score": 0.01}, "hate": {"flagged": False, "score": 0.02}}
 NON_STRIKE_OUTPUT = {"illicit": {"flagged": False, "score": 0.01}, "harassment": {"flagged": True, "score": 0.7}}
@@ -53,6 +59,31 @@ def _context(session, *, bot_response=None, **kwargs):
         moderation_task_id="task-1",
         **kwargs,
     )
+
+
+def _flagged_reply():
+    return patch(EVENT_BOT, **{"return_value.get_user_message.return_value": "Flagged reply"})
+
+
+def _strikes(session) -> int:
+    return Participant.objects.get(id=session.participant_id).strikes
+
+
+def _turn_on_auto_block(session):
+    session.experiment.team.auto_block_enabled = True
+    session.experiment.team.save()
+
+
+def _in_app_session(team, *, published: bool):
+    """A session started from the app by a team member, on the working or a published version."""
+    experiment = ExperimentFactory.create(team=team)
+    if published:
+        experiment = experiment.create_new_version(make_default=True)
+    session = ExperimentSessionFactory.create(experiment=experiment)
+    session.participant.user = MembershipFactory.create(team=team).user
+    session.participant.platform = ChannelPlatform.WEB
+    session.participant.save()
+    return session
 
 
 def _bot_response(session, content="The bot's answer"):
@@ -244,6 +275,75 @@ class TestModerationResultStage:
 
 
 @pytest.mark.django_db()
+class TestModerationResultStageStrikes:
+    @pytest.mark.parametrize(
+        ("output", "expected_strikes"),
+        [
+            pytest.param(STRIKE_OUTPUT, 1, id="flagged"),
+            pytest.param(NON_STRIKE_OUTPUT, 0, id="passed"),
+        ],
+    )
+    def test_flagged_message_gives_a_strike(self, moderated_session, moderation_task, output, expected_strikes):
+        _turn_on_auto_block(moderated_session)
+        moderation_task.get.return_value = _ok(output)
+
+        with _flagged_reply():
+            ModerationResultStage()(_context(moderated_session, bot_response=_bot_response(moderated_session)))
+
+        assert _strikes(moderated_session) == expected_strikes
+
+    def test_flagged_message_without_a_bot_response_gives_a_strike(self, moderated_session, moderation_task):
+        _turn_on_auto_block(moderated_session)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        ModerationResultStage()(_context(moderated_session, early_exit_response="Something went wrong"))
+
+        assert _strikes(moderated_session) == 1
+
+    def test_auto_block_off_gives_no_strike(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply():
+            ModerationResultStage()(_context(moderated_session, bot_response=_bot_response(moderated_session)))
+
+        assert _strikes(moderated_session) == 0
+
+    @pytest.mark.parametrize(
+        "published",
+        [
+            pytest.param(False, id="working_version"),
+            pytest.param(True, id="published_version"),
+        ],
+    )
+    def test_team_member_in_app_gets_no_strike(self, moderation_task, published):
+        team = TeamFactory.create(auto_block_enabled=True)
+        select_moderation_provider(team, ModerationProviderFactory.create(team=team))
+        session = _in_app_session(team, published=published)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply(), patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT):
+                ModerationResultStage()(_context(session, bot_response=_bot_response(session)))
+
+        assert _strikes(session) == 0
+        assert not DeniedParticipant.objects.filter(participant=session.participant).exists()
+        notification.assert_not_called()
+
+    def test_team_member_on_telegram_gets_a_strike(self, moderated_session, moderation_task):
+        """A team member's Telegram participant has no linked user, so it is not exempt."""
+        _turn_on_auto_block(moderated_session)
+        MembershipFactory.create(team=moderated_session.experiment.team)
+        moderated_session.participant.platform = ChannelPlatform.TELEGRAM
+        moderated_session.participant.save()
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply():
+            ModerationResultStage()(_context(moderated_session, bot_response=_bot_response(moderated_session)))
+
+        assert _strikes(moderated_session) == 1
+
+
+@pytest.mark.django_db()
 class TestModerationInTheChannelPipeline:
     @pytest.fixture(autouse=True)
     def _flag_on(self):
@@ -373,6 +473,24 @@ class TestModerationInTheChannelPipeline:
 
         self.process_input.assert_called_once()
         assert self.process_input.call_args.args[0] == "Hello"
+
+    def test_third_flagged_message_blocks_the_participant(self, moderated_session, moderation_task):
+        _turn_on_auto_block(moderated_session)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply(), patch(BLOCKED_NOTIFICATION) as notification:
+            for _ in range(STRIKE_LIMIT):
+                self._send(moderated_session, process_input=lambda *args, **kwargs: _bot_response(moderated_session))
+
+        denial = DeniedParticipant.objects.get(participant=moderated_session.participant)
+        assert denial.source == DeniedParticipantSource.AUTO
+        assert denial.reason == "illicit/violent"
+        assert (
+            denial.chat_message
+            == ChatMessage.objects.filter(chat=moderated_session.chat, message_type=ChatMessageType.HUMAN).last()
+        )
+        notification.assert_called_once()
+        assert _strikes(moderated_session) == STRIKE_LIMIT
 
     @override_flag(FLAG, active=False)
     def test_flag_off_starts_no_task(self, moderated_session, moderation_task):
