@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from django.http import QueryDict
+from django.urls import reverse
 from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessageType, ModerationStatus
@@ -114,3 +115,29 @@ def test_moderation_filters_still_apply_when_the_flag_is_off(sessions):
         result = ExperimentSessionFilter().apply(queryset, filter_params=FilterParams(query_dict))
 
     assert list(result.values_list("id", flat=True)) == [sessions.flagged.id]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "query_param", [pytest.param("moderation_status", id="status"), pytest.param("rule_hit", id="rule-hit")]
+)
+def test_sessions_table_ignores_an_operator_the_filter_does_not_offer(client, team_with_users, query_param):
+    client.force_login(team_with_users.members.first())
+    url = reverse(viewname="chatbots:all_sessions_list", kwargs={"team_slug": team_with_users.slug})
+    query = {"filter_0_column": query_param, "filter_0_operator": Operators.ALL_OF, "filter_0_value": '["flagged"]'}
+
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        response = client.get(url, data=query)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "query_param", [pytest.param("moderation_status", id="status"), pytest.param("rule_hit", id="rule-hit")]
+)
+def test_all_of_operator_has_no_effect(sessions, query_param):
+    result = _filter_sessions(
+        team=sessions.team, query_param=query_param, value="flagged~true", operator=Operators.ALL_OF
+    )
+
+    assert result.count() == 4

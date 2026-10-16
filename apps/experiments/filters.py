@@ -275,6 +275,10 @@ class ModerationStatusFilter(ChoiceColumnFilter):
     def apply_excludes(self, queryset, value, timezone=None):
         return queryset.exclude(_session_has_message(moderation_status__in=value))
 
+    def apply_all_of(self, queryset, value, timezone=None):
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
+
 
 class RuleHitFilter(ChoiceColumnFilter):
     """Session filter on whether an abuse rule fired on any of the session's messages."""
@@ -307,6 +311,10 @@ class RuleHitFilter(ChoiceColumnFilter):
     def apply_excludes(self, queryset, value, timezone=None):
         condition = self._matching(value)
         return queryset if condition is None else queryset.exclude(condition)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
 
 
 class ExperimentSessionFilter(MultiColumnFilter):
