@@ -1165,11 +1165,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
 
     def _block_participant(self, context):
         def block_participant(reason: str) -> bool:
-            """Add the current participant to the team's denylist, without strikes.
-
-            Returns True when this call blocked the participant, and False when the participant was already
-            blocked or cannot be blocked (abuse detection is off, the participant is a team member, or the
-            session is an evaluation run)."""
+            """Add the current participant to the team's denylist. Returns whether this call blocked them."""
             if not isinstance(reason, str):
                 raise CodeNodeRunError("'reason' must be a string")
             if not context.session:
