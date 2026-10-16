@@ -9,7 +9,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -37,6 +36,7 @@ from apps.participants.forms import (
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.redirects import safe_redirect_url
 
 from ..events.models import ScheduledMessage
 from ..events.tables import SchedulesTable
@@ -656,12 +656,8 @@ def unblock(request, team_slug: str, participant_id: int):
         messages.success(request, format_html("{} is unblocked", participant))
     else:
         messages.info(request, format_html("{} was not blocked", participant))
-    url = request.POST.get("next")
-    if not url or not url_has_allowed_host_and_scheme(
-        url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
-    ):
-        url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
-    return HttpResponseClientRedirect(url)
+    participant_url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
+    return HttpResponseClientRedirect(safe_redirect_url(request.GET.get("next", ""), fallback=participant_url))
 
 
 def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):

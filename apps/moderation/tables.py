@@ -1,11 +1,12 @@
-import json
-
 from django.conf import settings
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.http import urlencode
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from django_tables2 import columns, tables
 
+from apps.generics import actions
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.utils import section_url
 
@@ -19,15 +20,31 @@ def blocked_by_label(denial: DeniedParticipant) -> str:
     return denial.created_by.get_display_name() if denial.created_by else _("Deleted user")
 
 
+def _unblock_url(url_name, request, record, value):
+    url = reverse(url_name, args=[request.team.slug, record.participant_id])
+    return f"{url}?{urlencode({'next': section_url(team_slug=request.team.slug, section_key='moderation')})}"
+
+
 class DeniedParticipantTable(tables.Table):
-    """The team's denylist. Cells are rendered in Python: a template cell would rerun the context processors per row."""
+    """The team's denylist."""
 
     participant = columns.Column(verbose_name="Participant")
     channel = columns.Column(accessor="participant__get_platform_display", verbose_name="Channel")
     blocked_by = columns.Column(empty_values=(), verbose_name="Blocked by")
     reason = columns.Column(verbose_name="Reason", empty_values=())
     created_at = columns.DateTimeColumn(verbose_name="Date", format="Y-m-d H:i")
-    actions = columns.Column(empty_values=(), verbose_name="")
+    actions = actions.ActionsColumn(
+        actions=[
+            actions.AjaxAction(
+                url_name="participants:unblock_participant",
+                url_factory=_unblock_url,
+                label=gettext_lazy("Unblock"),
+                button_style="btn-outline",
+                confirm_message=gettext_lazy("Unblock this participant? They will be able to use your chatbots again."),
+            ),
+        ],
+        verbose_name="",
+    )
 
     def render_participant(self, record):
         url = reverse("participants:single-participant-home", args=[self.request.team.slug, record.participant_id])
@@ -38,20 +55,6 @@ class DeniedParticipantTable(tables.Table):
 
     def render_reason(self, value):
         return value or "—"
-
-    def render_actions(self, record):
-        team_slug = self.request.team.slug
-        button_id = f"unblock-denied-participant-{record.id}"
-        confirm = _("Unblock this participant? They will be able to use your chatbots again.")
-        return format_html(
-            '<button id="{id}" type="button" class="btn btn-xs btn-outline" hx-post="{url}" hx-vals="{vals}"'
-            ' hx-trigger="confirmed" onclick="confirmThenTrigger(\'{id}\', {confirm})">{label}</button>',
-            id=button_id,
-            url=reverse("participants:unblock_participant", args=[team_slug, record.participant_id]),
-            vals=json.dumps({"next": section_url(team_slug=team_slug, section_key="moderation")}),
-            confirm=json.dumps(confirm),
-            label=_("Unblock"),
-        )
 
     class Meta:
         model = DeniedParticipant

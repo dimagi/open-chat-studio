@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.urls import reverse
+from django.utils.http import urlencode
 from field_audit import enable_audit
 from field_audit.models import AuditEvent
 from waffle.testutils import override_flag
@@ -208,7 +209,8 @@ class TestUnblockParticipant:
         DeniedParticipantFactory.create(team=team_with_users, participant=participant)
         client.force_login(admin)
 
-        response = client.post(_unblock_url(team=team_with_users, participant=participant), {"next": next_url})
+        url = f"{_unblock_url(team=team_with_users, participant=participant)}?{urlencode({'next': next_url})}"
+        response = client.post(url)
 
         expected = next_url if follows_next else _page_url(team=team_with_users, participant=participant)
         assert response.headers["HX-Redirect"] == expected

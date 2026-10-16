@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from django.contrib.auth.models import Group
 from django.urls import reverse
+from django.utils.http import urlencode
 from waffle.testutils import override_flag
 
 from apps.moderation.forms import TeamModerationForm
@@ -345,7 +346,8 @@ class TestDenylistTable:
         assert "Pipeline" in content
         assert "Other team" not in content
         assert reverse("participants:unblock_participant", args=[team.slug, participant.pk]) in content
-        assert _section_url(team) in content
+        assert "confirmed" in content
+        assert urlencode({"next": _section_url(team)}) in content
 
     @pytest.mark.parametrize(
         ("user_fixture", "status"),
@@ -365,10 +367,11 @@ class TestDenylistTable:
     def test_query_count_does_not_grow_with_rows(self, client, admin, team, django_assert_max_num_queries):
         DeniedParticipantFactory.create(team=team, created_by=admin)
         client.force_login(admin)
-        client.get(_table_url(team))
+        htmx = {"HX-Request": "true"}
+        client.get(_table_url(team), headers=htmx)
         with django_assert_max_num_queries(100) as one_row:
-            client.get(_table_url(team))
+            client.get(_table_url(team), headers=htmx)
 
         DeniedParticipantFactory.create_batch(5, team=team, created_by=admin)
         with django_assert_max_num_queries(len(one_row.captured_queries)):
-            client.get(_table_url(team))
+            client.get(_table_url(team), headers=htmx)
