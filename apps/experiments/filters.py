@@ -284,87 +284,74 @@ class ModerationStatusFilter(ChoiceColumnFilter):
         return queryset
 
 
-class RuleHitFilter(ChoiceColumnFilter):
-    """Session filter on whether an abuse rule fired on any of the session's messages."""
+class YesNoExistsFilter(ChoiceColumnFilter):
+    """Choice filter with a "true" and a "false" option that select rows where `_condition` holds or not."""
 
-    RULE_HIT: ClassVar[str] = "true"
-    NO_RULE_HIT: ClassVar[str] = "false"
+    YES: ClassVar[str] = "true"
+    NO: ClassVar[str] = "false"
+
+    def _condition(self) -> Exists:
+        raise NotImplementedError
+
+    def _matching(self, value) -> Exists | None:
+        """The condition for the selected options, or None when they select every row (or none)."""
+        selected = set(value) & {self.YES, self.NO}
+        if selected == {self.YES}:
+            return self._condition()
+        if selected == {self.NO}:
+            return ~self._condition()
+        return None
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.filter(condition)
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.exclude(condition)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
+
+
+class RuleHitFilter(YesNoExistsFilter):
+    """Session filter on whether an abuse rule fired on any of the session's messages."""
 
     query_param: str = "rule_hit"
     label: str = "Rule Hit"
     description: str = "Filter by whether an abuse rule fired on any message in the session"
     options: list[str | dict] = [
-        {"id": RULE_HIT, "label": "A rule fired"},
-        {"id": NO_RULE_HIT, "label": "No rule fired"},
+        {"id": YesNoExistsFilter.YES, "label": "A rule fired"},
+        {"id": YesNoExistsFilter.NO, "label": "No rule fired"},
     ]
 
-    def _matching(self, value) -> Exists | None:
-        """The condition for the selected options, or None when they select every session (or none)."""
-        any_rule_hit = _session_has_message(moderation_detail__rules__0__isnull=False)
-        selected = set(value) & {self.RULE_HIT, self.NO_RULE_HIT}
-        if selected == {self.RULE_HIT}:
-            return any_rule_hit
-        if selected == {self.NO_RULE_HIT}:
-            return ~any_rule_hit
-        return None
-
-    def apply_any_of(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.filter(condition)
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.exclude(condition)
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
-        return queryset
+    def _condition(self) -> Exists:
+        return _session_has_message(moderation_detail__rules__0__isnull=False)
 
 
-class ParticipantBlockedFilter(ChoiceColumnFilter):
+class ParticipantBlockedFilter(YesNoExistsFilter):
     """Filter on whether the participant is on the team's denylist.
 
     `participant_column` and `team_column` name the outer row's participant and team id columns.
     """
 
-    BLOCKED: ClassVar[str] = "true"
-    NOT_BLOCKED: ClassVar[str] = "false"
-
     query_param: str = "participant_blocked"
     label: str = "Participant Blocked"
     description: str = "Filter by whether the participant is blocked"
     options: list[str | dict] = [
-        {"id": BLOCKED, "label": "Blocked"},
-        {"id": NOT_BLOCKED, "label": "Not blocked"},
+        {"id": YesNoExistsFilter.YES, "label": "Blocked"},
+        {"id": YesNoExistsFilter.NO, "label": "Not blocked"},
     ]
     participant_column: str = Field(default="participant_id", exclude=True)
     team_column: str = Field(default="team_id", exclude=True)
 
-    def _matching(self, value) -> Exists | None:
-        """The condition for the selected options, or None when they select every row (or none)."""
-        blocked = Exists(
+    def _condition(self) -> Exists:
+        return Exists(
             DeniedParticipant.objects.filter(
                 participant_id=OuterRef(self.participant_column), team_id=OuterRef(self.team_column)
             )
         )
-        selected = set(value) & {self.BLOCKED, self.NOT_BLOCKED}
-        if selected == {self.BLOCKED}:
-            return blocked
-        if selected == {self.NOT_BLOCKED}:
-            return ~blocked
-        return None
-
-    def apply_any_of(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.filter(condition)
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.exclude(condition)
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
-        return queryset
 
 
 class ExperimentSessionFilter(MultiColumnFilter):
