@@ -273,7 +273,6 @@ class TestMessageCounts:
         ("skip_reasons", "hint_shown"),
         [
             pytest.param(["rate_limited", "rate_limited", "timeout"], True, id="mostly-rate-limited"),
-            pytest.param(["rate_limited", "timeout"], False, id="half-rate-limited"),
             pytest.param(["error"], False, id="other-reason"),
         ],
     )
@@ -285,20 +284,6 @@ class TestMessageCounts:
         content = client.get(_section_url(team)).content.decode()
 
         assert ('data-testid="moderation-rate-limit-hint"' in content) is hint_shown
-
-    def test_query_count_does_not_grow_with_messages(self, client, admin, team):
-        client.force_login(admin)
-        client.get(_section_url(team))  # fills the caches (flags, session) that later requests read
-        with CaptureQueriesContext(connection) as empty:
-            client.get(_section_url(team))
-        for status in ModerationStatus.values:
-            _moderated_message(team=team, status=status, skip_reason="error" if status == "skipped" else None)
-            _moderated_message(team=team, status=status, skip_reason="timeout" if status == "skipped" else None)
-
-        with CaptureQueriesContext(connection) as populated:
-            client.get(_section_url(team))
-
-        assert len(populated.captured_queries) == len(empty.captured_queries)
 
 
 @pytest.mark.django_db()

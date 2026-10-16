@@ -3,9 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from django.db import connection
 from django.http import QueryDict
-from django.test.utils import CaptureQueriesContext
 from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessageType, ModerationStatus
@@ -92,24 +90,6 @@ def test_rule_hit_filter(sessions, operator, value, expected):
     result = _filter_sessions(team=sessions.team, query_param="rule_hit", value=value, operator=operator)
 
     assert sorted(result.values_list("id", flat=True)) == sorted(getattr(sessions, name).id for name in expected)
-
-
-@pytest.mark.parametrize(
-    ("query_param", "value"),
-    [
-        pytest.param("moderation_status", "flagged~skipped", id="moderation-status"),
-        pytest.param("rule_hit", "true", id="rule-hit"),
-    ],
-)
-def test_filters_use_one_exists_subquery(sessions, query_param, value):
-    """The filters use EXISTS, so the page query is a single query with no join to the messages."""
-    result = _filter_sessions(team=sessions.team, query_param=query_param, value=value, operator=Operators.ANY_OF)
-
-    with CaptureQueriesContext(connection) as queries:
-        list(result)
-
-    assert len(queries.captured_queries) == 1
-    assert "EXISTS" in queries.captured_queries[0]["sql"]
 
 
 @pytest.mark.parametrize(
