@@ -39,6 +39,8 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 
+pytestmark = pytest.mark.usefixtures("abuse_detection_flag_on")
+
 
 def factory_for_model(model):
     return {
@@ -67,7 +69,6 @@ def authed_client(team_with_users, client):
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
-@pytest.mark.usefixtures("abuse_detection_flag_on")
 def test_table_view(provider, team_with_users, authed_client):
     factory = factory_for_model(provider.model)
     factory.create_batch(5, team=team_with_users)
@@ -82,7 +83,6 @@ def test_table_view(provider, team_with_users, authed_client):
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
-@pytest.mark.usefixtures("abuse_detection_flag_on")
 def test_create_view(provider, team_with_users, authed_client):
     """Test that the create view renders without error."""
     subtype = next(iter(provider.subtype))
@@ -101,7 +101,6 @@ def test_create_view(provider, team_with_users, authed_client):
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
-@pytest.mark.usefixtures("abuse_detection_flag_on")
 def test_update_view(provider, team_with_users, authed_client):
     """Test that the update view renders without error."""
     factory = factory_for_model(provider.model)
@@ -197,7 +196,6 @@ def test_non_llm_provider_edit_view_has_no_verify_affordances(team_with_users, a
 
 @pytest.mark.parametrize("provider", list(ServiceProvider))
 @pytest.mark.django_db()
-@pytest.mark.usefixtures("abuse_detection_flag_on")
 def test_delete_view(provider, team_with_users, authed_client):
     factory = factory_for_model(provider.model)
     provider_instance = factory(team=team_with_users)
