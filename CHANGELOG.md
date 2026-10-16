@@ -43,6 +43,8 @@ version section when a release is cut.
   operator or team sets one. (#4371)
 - `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
+- New `moderation` app with a `moderation_deniedparticipant` table. Creates a table only; no
+  existing rows change. Nothing reads it unless the `flag_abuse_detection` flag is on. (#4698)
 - New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
   client IP and user agent). Additive only; nothing is backfilled. (#4693)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action

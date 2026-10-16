@@ -1,4 +1,6 @@
-from rest_framework.exceptions import APIException, NotAuthenticated
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
+
+from apps.moderation.enforcement import BLOCKED_MESSAGE
 
 
 class EmbeddedWidgetAuthError(Exception):
@@ -24,6 +26,12 @@ class ChatApiAccessDenied(NotAuthenticated):
     """
 
     default_detail = {"error": "Authentication required to chat with this chatbot", "code": "chat_access_denied"}
+
+
+class ParticipantBlocked(PermissionDenied):
+    """The participant is on the team's denylist, so no session is started and no message is sent."""
+
+    default_detail = {"code": "participant_blocked", "detail": BLOCKED_MESSAGE}
 
 
 class ChannelCreationError(APIException):
