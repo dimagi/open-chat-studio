@@ -345,19 +345,19 @@ class ExperimentSessionFilter(MultiColumnFilter):
         SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
         SessionIdFilter(),
-        ModerationStatusFilter(),
-        RuleHitFilter(),
+        ModerationStatusFilter(required_flag=Flags.ABUSE_DETECTION.slug),
+        RuleHitFilter(required_flag=Flags.ABUSE_DETECTION.slug),
     ]
 
     @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:
-        """Offer the annotation queue and moderation filters only to teams with those features turned on."""
+        """Offer the annotation queue filter only to teams with human annotations turned on.
+
+        Applying it is not flag-gated, so saved filters that use it keep working after the flag is turned off.
+        """
         columns = super().columns(team, **kwargs)
         if not flag_is_active_for_team(team, Flags.HUMAN_ANNOTATIONS.slug):
             columns.pop(AnnotationQueueFilter().query_param, None)
-        if not flag_is_active_for_team(team, Flags.ABUSE_DETECTION.slug):
-            columns.pop(ModerationStatusFilter().query_param, None)
-            columns.pop(RuleHitFilter().query_param, None)
         return columns
 
 

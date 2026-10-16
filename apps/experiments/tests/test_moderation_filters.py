@@ -23,7 +23,8 @@ def _filter_sessions(*, team, query_param, value, operator):
     query_dict = QueryDict("", mutable=True)
     query_dict.update({f"f_{query_param}": value, f"op_{query_param}": operator})
     queryset = ExperimentSession.objects.filter(team=team)
-    return ExperimentSessionFilter().apply(queryset, FilterParams(query_dict))
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        return ExperimentSessionFilter().apply(queryset, filter_params=FilterParams(query_dict), team=team)
 
 
 def _session_with_messages(*, team, messages):
@@ -121,3 +122,14 @@ def test_moderation_filters_offered_only_when_the_flag_is_on(sessions, flag_acti
 
     assert ("moderation_status" in columns) is expected
     assert ("rule_hit" in columns) is expected
+
+
+def test_moderation_filters_ignored_when_the_flag_is_off(sessions):
+    query_dict = QueryDict("", mutable=True)
+    query_dict.update({"f_moderation_status": "flagged", "op_moderation_status": Operators.ANY_OF})
+    queryset = ExperimentSession.objects.filter(team=sessions.team)
+
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=False):
+        result = ExperimentSessionFilter().apply(queryset, filter_params=FilterParams(query_dict), team=sessions.team)
+
+    assert result.count() == 4

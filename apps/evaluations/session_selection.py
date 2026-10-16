@@ -27,7 +27,7 @@ def resolve_dataset_available_sessions(
     """
     queryset = ExperimentSession.objects.filter(team=team)
     if filter_params is not None:
-        queryset = ExperimentSessionFilter().apply(queryset, filter_params=filter_params, timezone=timezone)
+        queryset = ExperimentSessionFilter().apply(queryset, filter_params=filter_params, timezone=timezone, team=team)
     if dataset_id is not None:
         existing_session_ids = EvaluationMessage.objects.filter(
             evaluationdataset=dataset_id,

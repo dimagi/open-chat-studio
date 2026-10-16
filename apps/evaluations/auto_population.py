@@ -80,7 +80,7 @@ def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> li
 
     if rule.filter_query_string:
         params = FilterParams(QueryDict(rule.filter_query_string))
-        qs = ExperimentSessionFilter().apply(qs, params, timezone=None)
+        qs = ExperimentSessionFilter().apply(qs, filter_params=params, timezone=None, team=rule.team)
 
     created_ids, _ = rule.dataset.add_messages_stream(iter_session_evaluation_messages_for_sessions(qs))
     return created_ids
