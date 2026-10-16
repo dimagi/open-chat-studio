@@ -20,9 +20,9 @@ NOTIFY = "apps.moderation.signals.moderation_provider_deleted_notification"
 _REQUEST = httpx.Request("POST", "https://api.openai.com/v1/moderations")
 
 
-def _auth_error():
-    response = httpx.Response(401, request=_REQUEST, json={"error": {"message": "Incorrect API key provided"}})
-    return openai.AuthenticationError("Error code: 401", response=response, body=response.json()["error"])
+def _auth_error(error_cls=openai.AuthenticationError, status_code=401):
+    response = httpx.Response(status_code, request=_REQUEST, json={"error": {"message": "Incorrect API key provided"}})
+    return error_cls(f"Error code: {status_code}", response=response, body=response.json()["error"])
 
 
 def _select(team, provider):
@@ -55,11 +55,17 @@ class TestConfigForm:
         assert form.warnings == []
         moderate.assert_called_once()
 
-    @mock.patch(MODERATE, side_effect=_auth_error())
-    def test_rejected_credentials_are_a_form_error(self, moderate):
-        form = _config_form({"openai_api_key": "sk-bad"})
-
-        assert not form.is_valid()
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(_auth_error(), id="authentication"),
+            pytest.param(_auth_error(openai.PermissionDeniedError, status_code=403), id="permission_denied"),
+        ],
+    )
+    def test_rejected_credentials_are_a_form_error(self, error):
+        with mock.patch(MODERATE, side_effect=error):
+            form = _config_form({"openai_api_key": "sk-bad"})
+            assert not form.is_valid()
         assert form.errors["openai_api_key"] == ["The provider rejected these credentials: Incorrect API key provided"]
 
     @pytest.mark.parametrize(
@@ -78,7 +84,7 @@ class TestConfigForm:
     @mock.patch(MODERATE, return_value=ModerationOutput({}))
     def test_check_uses_a_short_timeout_and_no_retries(self, moderate):
         with mock.patch(
-            "apps.service_providers.forms.OpenAIModerationService", wraps=OpenAIModerationService
+            "apps.service_providers.models.OpenAIModerationService", wraps=OpenAIModerationService
         ) as service_cls:
             _config_form({"openai_api_key": "sk-good"}).is_valid()
 

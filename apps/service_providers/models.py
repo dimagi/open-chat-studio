@@ -991,11 +991,13 @@ class ModerationProviderType(models.TextChoices):
                 return forms.OpenAIModerationConfigForm
         raise Exception(f"No config form configured for {self}")
 
-    def get_moderation_service(self, config: dict) -> ModerationService:
+    def get_moderation_service(self, config: dict, **service_kwargs) -> ModerationService:
+        """Build the service from ``config``, ignoring empty values. ``service_kwargs`` are passed through as given."""
+        config = {key: value for key, value in config.items() if value}
         try:
             match self:
                 case ModerationProviderType.openai:
-                    return OpenAIModerationService(**config)
+                    return OpenAIModerationService(**config, **service_kwargs)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No moderation service configured")
@@ -1019,8 +1021,7 @@ class ModerationProvider(BaseTeamModel, ProviderMixin):
         return ModerationProviderType(self.type)
 
     def get_moderation_service(self) -> ModerationService:
-        config = {k: v for k, v in self.config.items() if v}
-        return self.type_enum.get_moderation_service(config)
+        return self.type_enum.get_moderation_service(self.config)
 
 
 class EmbeddingProviderModelManager(models.Manager):

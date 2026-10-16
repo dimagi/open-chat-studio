@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 import openai
 import pydantic
 
+from apps.service_providers.openai_client import build_openai_client
+
 from .schemas import ModerationCategory, ModerationOutput
 
 OPENAI_MODERATION_MODEL = "omni-moderation-latest"
@@ -41,8 +43,8 @@ class OpenAIModerationService(ModerationService):
         )
 
     def _client(self) -> openai.OpenAI:
-        return openai.OpenAI(
-            api_key=self.openai_api_key.get_secret_value(),
+        return build_openai_client(
+            api_key=self.openai_api_key,
             organization=self.openai_organization,
             base_url=self.openai_api_base,
             timeout=self.timeout,
