@@ -150,3 +150,12 @@ class TriggerBotForm(forms.Form):
                 experimentchannel__platform=participant.platform,
                 experimentchannel__deleted=False,
             )
+
+
+class BlockParticipantForm(forms.Form):
+    reason = forms.CharField(
+        label="Reason",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        required=False,
+        help_text="Why this participant is being blocked. Shown on the participant page.",
+    )
