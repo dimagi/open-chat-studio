@@ -15,15 +15,17 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
+from apps.ocs_notifications.notifications import moderation_provider_deleted_notification
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.service_providers.minimax import build_minimax_synthetic_voices
+from apps.service_providers.moderation_service import ModerationService, OpenAIModerationService
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -976,6 +978,68 @@ class TraceProvider(BaseTeamModel):
             return None
         config = {**config, "sample_rate": effective_rate}
         return self.type_enum.get_service(config)
+
+
+class ModerationProviderType(models.TextChoices):
+    openai = "openai", _("OpenAI")
+
+    @property
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
+
+        match self:
+            case ModerationProviderType.openai:
+                return forms.OpenAIModerationConfigForm
+        raise Exception(f"No config form configured for {self}")
+
+    def get_moderation_service(self, config: dict) -> ModerationService:
+        try:
+            match self:
+                case ModerationProviderType.openai:
+                    return OpenAIModerationService(**config)
+        except ValidationError as e:
+            raise ServiceProviderConfigError(self, str(e)) from e
+        raise ServiceProviderConfigError(self, "No moderation service configured")
+
+
+@audit_fields(*model_audit_fields.MODERATION_PROVIDER_FIELDS, audit_special_queryset_writes=True)
+class ModerationProvider(BaseTeamModel, ProviderMixin):
+    objects = AuditingManager()
+    type = models.CharField(max_length=255, choices=ModerationProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return ModerationProviderType(self.type)
+
+    def get_moderation_service(self) -> ModerationService:
+        config = {k: v for k, v in self.config.items() if v}
+        return self.type_enum.get_moderation_service(config)
+
+    @transaction.atomic()
+    def delete(self):  # ty: ignore[invalid-method-override]
+        """Delete the provider. If the team had it selected, turn moderation off and notify the team."""
+        was_selected = Team.objects.filter(id=self.team_id, moderation_provider_id=self.id).update(
+            moderation_enabled=False,
+            moderation_deleted_provider_name=self.name,
+            audit_action=AuditAction.AUDIT,
+        )
+        team, provider_id, provider_name = self.team, self.id, self.name
+        result = super().delete()
+        if was_selected:
+            transaction.on_commit(
+                lambda: moderation_provider_deleted_notification(
+                    team=team, provider_id=provider_id, provider_name=provider_name
+                )
+            )
+        return result
 
 
 class EmbeddingProviderModelManager(models.Manager):

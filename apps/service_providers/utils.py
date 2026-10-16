@@ -12,6 +12,8 @@ from django.http import HttpRequest
 from django_tables2 import tables
 from waffle import flag_is_active
 
+from apps.teams.flags import Flags
+
 from . import const
 from .llm_service.default_models import get_default_model
 from .models import (
@@ -23,6 +25,8 @@ from .models import (
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
+    ModerationProviderType,
     TraceProvider,
     TraceProviderType,
     VoiceProvider,
@@ -99,6 +103,15 @@ class ServiceProvider(ServiceProviderType, Enum):
         TraceProviderType,
         ["name", "type"],
     )
+    moderation = (
+        const.MODERATION,
+        "Moderation Provider",
+        "Moderation Providers",
+        "Moderation",
+        ModerationProvider,
+        ModerationProviderType,
+        ["name", "type"],
+    )
 
     @property
     def table(self) -> tables.Table:
@@ -114,11 +127,24 @@ class ServiceProvider(ServiceProviderType, Enum):
         return instance.config
 
 
+def is_provider_enabled(provider: ServiceProvider, request: HttpRequest) -> bool:
+    """Whether ``provider`` is available to the given request. Some provider types are behind a feature flag."""
+    if provider == ServiceProvider.moderation:
+        return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
+    return True
+
+
+def get_enabled_providers(request: HttpRequest) -> list[ServiceProvider]:
+    return [provider for provider in ServiceProvider if is_provider_enabled(provider, request)]
+
+
 def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> list:
     """Return the subtypes for ``provider`` available to the given request.
 
     Filters out subtypes gated by feature flags / settings.
     """
+    if not is_provider_enabled(provider, request):
+        return []
     excluded = []
     if provider == ServiceProvider.voice and not flag_is_active(request, "flag_open_ai_voice_engine"):
         excluded.append(VoiceProviderType.openai_voice_engine)

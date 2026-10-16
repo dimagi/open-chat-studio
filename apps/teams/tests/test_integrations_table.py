@@ -9,8 +9,18 @@ from waffle.testutils import override_flag
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import LlmProviderTypes
 from apps.teams.backends import add_user_to_team, make_user_team_owner
-from apps.teams.views.integrations_views import build_integration_filter_pills, get_integration_rows
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
+from apps.teams.flags import Flags
+from apps.teams.utils import current_team
+from apps.teams.views.integrations_views import (
+    build_integration_filter_pills,
+    get_integration_new_choices,
+    get_integration_rows,
+)
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    ModerationProviderFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -86,6 +96,47 @@ def test_mcp_rows_included_when_flag_on(team, request_for):
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
     mcp_pill = pills[-1]
     assert mcp_pill.count == 1
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("flag_on", [pytest.param(True, id="flag_on"), pytest.param(False, id="flag_off")])
+def test_moderation_rows_and_menu_follow_the_abuse_detection_flag(flag_on, team, request_for):
+    ModerationProviderFactory(team=team, name="Main moderation")
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    request = request_for(admin)
+
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_on), current_team(team):
+        rows = get_integration_rows(request, team)
+        menu_categories = [group.category for group in get_integration_new_choices(request, team)]
+
+    assert [row["name"] for row in rows] == (["Main moderation"] if flag_on else [])
+    assert ("Moderation" in menu_categories) is flag_on
+    if flag_on:
+        assert rows[0]["category"] == "Moderation"
+        assert rows[0]["provider"] == "OpenAI"
+
+
+def test_moderation_pill_shown_only_when_enabled():
+    labels_off = [pill.label for pill in build_integration_filter_pills([], None)]
+    labels_on = [pill.label for pill in build_integration_filter_pills([], None, show_moderation=True)]
+
+    assert "Moderation" not in labels_off
+    assert labels_on == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
+
+
+@pytest.mark.django_db()
+@override_flag(Flags.ABUSE_DETECTION.slug, active=True)
+def test_integrations_table_shows_moderation_provider(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    ModerationProviderFactory(team=team, name="Main moderation")
+    client.force_login(admin)
+
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"category": "Moderation"})
+
+    assert response.status_code == 200
+    assert b"Main moderation" in response.content
 
 
 @pytest.mark.django_db()
