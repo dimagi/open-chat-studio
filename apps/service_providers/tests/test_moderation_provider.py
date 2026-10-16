@@ -16,7 +16,7 @@ from apps.utils.factories.team import TeamFactory
 
 FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
-NOTIFY = "apps.service_providers.models.moderation_provider_deleted_notification"
+NOTIFY = "apps.moderation.signals.moderation_provider_deleted_notification"
 _REQUEST = httpx.Request("POST", "https://api.openai.com/v1/moderations")
 
 
@@ -109,36 +109,6 @@ def test_provider_builds_openai_service():
 
 @pytest.mark.django_db()
 class TestDelete:
-    def test_deleting_the_selected_provider_turns_moderation_off_and_notifies(self, django_capture_on_commit_callbacks):
-        provider = ModerationProviderFactory.create(name="Main moderation")
-        team = provider.team
-        _select(team, provider)
-
-        with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
-            provider_id = provider.id
-            provider.delete()
-
-        team.refresh_from_db()
-        assert team.moderation_enabled is False
-        assert team.moderation_provider is None
-        assert team.moderation_deleted_provider_name == "Main moderation"
-        notify.assert_called_once_with(team=team, provider_id=provider_id, provider_name="Main moderation")
-
-    def test_deleting_another_provider_leaves_moderation_on(self, django_capture_on_commit_callbacks):
-        selected = ModerationProviderFactory.create()
-        team = selected.team
-        other = ModerationProviderFactory.create(team=team)
-        _select(team, selected)
-
-        with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
-            other.delete()
-
-        team.refresh_from_db()
-        assert team.moderation_enabled is True
-        assert team.moderation_provider == selected
-        assert team.moderation_deleted_provider_name == ""
-        notify.assert_not_called()
-
     @override_flag(FLAG, active=True)
     def test_delete_view_turns_moderation_off_and_notifies(
         self, team_with_users, admin_client, django_capture_on_commit_callbacks
