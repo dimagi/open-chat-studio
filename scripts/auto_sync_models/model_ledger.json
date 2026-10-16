@@ -1520,6 +1520,14 @@
       "reasoning": true
     }
   },
+  "openai/gpt-5.5-cyber-preview": {
+    "first_seen": "2026-10-16",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity specialist preview of gpt-5.5-cyber (already rejected), not a general chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
   "openai/gpt-5.5-pro": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
