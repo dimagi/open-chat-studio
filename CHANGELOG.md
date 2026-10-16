@@ -55,6 +55,9 @@ version section when a release is cut.
   release. (#4254)
 
 ### Deprecations and removals
+- The `flag_public_channel` feature flag is removed. The public link channel is offered to every
+  team; a deployment that kept the flag off now shows it in the channel dropdown. The orphaned
+  flag row can be deleted from the Django admin. (#4793)
 - The OpenAI Assistants feature is fully removed (#4254). The `Assistant Admin` role is gone —
   members holding it lose add/change/delete on files, which no other role grants; re-grant file
   access through another role if a team relied on it. `Attachment.upload_to_assistant` no longer
