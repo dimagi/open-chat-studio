@@ -108,11 +108,11 @@ class MultiColumnFilter:
         """Hook for subclasses to modify the queryset before applying filters."""
         return queryset
 
-    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None, team=None) -> QuerySet:
+    def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
         """Applies the filters to the given queryset based on the `self.filter_params`.
 
-        A filter with a `required_flag` is applied only when `team` is given and the flag is
-        active for it, so a query parameter for a hidden filter has no effect.
+        Every filter is applied, including one whose `required_flag` is off, so saved filters
+        keep working after a flag is turned off.
 
         Contract: every `ColumnFilter` in `self.filters` must produce a queryset with at
         most one row per outer-model row. There is no trailing ``.distinct()`` to dedupe
@@ -125,7 +125,7 @@ class MultiColumnFilter:
         """
         queryset = self.prepare_queryset(queryset)
 
-        for filter_component in self.available_filters(team):
+        for filter_component in self.filters:
             queryset = filter_component.apply(queryset, filter_params, timezone)
 
         return queryset
@@ -143,7 +143,7 @@ class ColumnFilter(BaseModel):
 
     Attributes:
         query_param: The name of the query parameter used in the URL to identify this filter.
-        required_flag: A feature flag that must be active for the team before the filter is offered or applied.
+        required_flag: A feature flag that must be active for the team before the filter is offered.
     """
 
     query_param: str
@@ -159,10 +159,8 @@ class ColumnFilter(BaseModel):
         return FIELD_TYPE_FILTERS[self.type]
 
     def is_available_for(self, team) -> bool:
-        """True when the filter needs no feature flag, or `team` is given and has the flag active."""
-        if self.required_flag is None:
-            return True
-        return team is not None and flag_is_active_for_team(team, self.required_flag)
+        """True when the filter needs no feature flag, or `team` has the flag active."""
+        return self.required_flag is None or flag_is_active_for_team(team, self.required_flag)
 
     def prepare(self, team, **kwargs) -> ColumnFilter:
         """Return this filter, or a copy with options set -- `filters` lists on

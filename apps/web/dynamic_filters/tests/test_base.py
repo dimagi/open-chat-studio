@@ -73,26 +73,17 @@ def test_columns_offer_a_flag_gated_filter_only_when_the_flag_is_on(team, flag_a
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("flag_active", "pass_team", "applied"),
-    [
-        pytest.param(True, True, True, id="flag-on"),
-        pytest.param(False, True, False, id="flag-off"),
-        pytest.param(True, False, False, id="no-team"),
-    ],
-)
-def test_apply_ignores_a_flag_gated_filter_unless_the_flag_is_on(team, flag_active, pass_team, applied):
+@pytest.mark.parametrize("flag_active", [pytest.param(True, id="flag-on"), pytest.param(False, id="flag-off")])
+def test_apply_applies_a_flag_gated_filter_whether_or_not_the_flag_is_on(team, flag_active):
+    """Saved filters that use a hidden filter keep working after its flag is turned off."""
     matching = ExperimentSessionFactory.create(team=team, external_id="match")
-    other = ExperimentSessionFactory.create(team=team, external_id="other")
+    ExperimentSessionFactory.create(team=team, external_id="other")
     params = FilterParams(QueryDict(urlencode({"f_gated": "match", "op_gated": Operators.EQUALS})))
 
     with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
-        result = _FlagGatedFilter().apply(
-            ExperimentSession.objects.filter(team=team), filter_params=params, team=team if pass_team else None
-        )
+        result = _FlagGatedFilter().apply(ExperimentSession.objects.filter(team=team), filter_params=params)
 
-    expected = {matching.id} if applied else {matching.id, other.id}
-    assert set(result.values_list("id", flat=True)) == expected
+    assert set(result.values_list("id", flat=True)) == {matching.id}
 
 
 @pytest.mark.django_db()

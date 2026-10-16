@@ -56,9 +56,7 @@ def _format_annotation_queues(items: Iterable[AnnotationItem]) -> str:
 def get_filtered_sessions(experiment, query_params, timezone):
     sessions_queryset = ExperimentSession.objects.filter(experiment=experiment).select_related("participant__user")
     session_filter = ExperimentSessionFilter()
-    return session_filter.apply(
-        sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone, team=experiment.team
-    )
+    return session_filter.apply(sessions_queryset, filter_params=FilterParams(query_params), timezone=timezone)
 
 
 def _get_participant_data_for_message(message) -> dict:

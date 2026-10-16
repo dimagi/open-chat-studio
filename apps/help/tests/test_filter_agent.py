@@ -182,8 +182,9 @@ class TestMakeGetOptionsTool:
         gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.ABUSE_DETECTION.slug)
         filter_class = self._make_filter_class([gated])
 
-        tool_fn = make_get_options_tool(filter_class, None)
-        result = tool_fn.invoke({"param": "gated"})
+        tool_fn = make_get_options_tool(filter_class, mock.Mock())
+        with mock.patch("apps.web.dynamic_filters.base.flag_is_active_for_team", return_value=False):
+            result = tool_fn.invoke({"param": "gated"})
 
         assert "error" in result
 

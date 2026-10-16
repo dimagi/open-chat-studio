@@ -675,12 +675,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         query_set = query_set.filter(self.extra_filters())
         timezone = self.request.session.get("detected_tz", None)
         session_filter = ExperimentSessionFilter()
-        return session_filter.apply(
-            query_set,
-            filter_params=FilterParams.from_request(self.request),
-            timezone=timezone,
-            team=self.request.team,
-        )
+        return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
         """Configure the table, then attach per-page prefetches and hide columns this page does not show.
