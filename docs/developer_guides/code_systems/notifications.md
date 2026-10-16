@@ -155,16 +155,13 @@ Teams can deliver notifications to a Slack channel in addition to in-app/email. 
 
 ### Delivery Gate
 
-On every `create_notification()`, `get_slack_notification_channels()` (in `apps/ocs_notifications/utils.py`) selects the team's enabled, level-matching channels. Delivery is additionally gated by:
-
-- `settings.SLACK_ENABLED` (configured via `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`/`SLACK_SIGNING_SECRET`)
-- the `Flags.SLACK_NOTIFICATIONS` feature flag being active for the team
+On every `create_notification()`, `get_slack_notification_channels()` (in `apps/ocs_notifications/utils.py`) selects the team's enabled, level-matching channels. Delivery is additionally gated by `settings.SLACK_ENABLED` (configured via `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`/`SLACK_SIGNING_SECRET`).
 
 Each matching channel is dispatched to a worker via `send_slack_notification_async()` (Celery, `Queues.BACKGROUND`), which renders the event with `build_slack_message()` and posts it through the provider's `SlackService`. Failures are logged and swallowed so they never break the notification pipeline.
 
 ### Managing Channels
 
-Team admins configure Slack channels from the **Manage Team** page (flag-gated "Slack Notifications" panel). The CRUD lives under `ocs_notifications_channels` URLs and is scoped to the current team, mirroring the `mcp_integrations` pattern.
+Team admins configure Slack channels from the **Manage Team** page ("Slack Notifications" panel). The CRUD lives under `ocs_notifications_channels` URLs and is scoped to the current team, mirroring the `mcp_integrations` pattern.
 
 
 

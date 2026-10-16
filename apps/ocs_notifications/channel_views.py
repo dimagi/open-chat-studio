@@ -3,21 +3,17 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
-from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
-from waffle.decorators import waffle_flag
 
 from apps.ocs_notifications.forms import NotificationChannelForm
 from apps.ocs_notifications.models import NotificationChannel
 from apps.ocs_notifications.tables import NotificationChannelTable
-from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.utils import section_url
 
 
-@method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
 class NotificationChannelHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "ocs_notifications.view_notificationchannel"
@@ -31,7 +27,6 @@ class NotificationChannelHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         }
 
 
-@method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
 class NotificationChannelTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = NotificationChannel
     table_class = NotificationChannelTable
@@ -46,7 +41,6 @@ class NotificationChannelTableView(LoginAndTeamRequiredMixin, PermissionRequired
         )
 
 
-@method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
 class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
@@ -72,7 +66,6 @@ class CreateNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMix
         return super().form_valid(form)
 
 
-@method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
 class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
     model = NotificationChannel
     form_class = NotificationChannelForm
@@ -96,7 +89,6 @@ class EditNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin
         return section_url(team_slug=self.request.team.slug, section_key="notifications")
 
 
-@method_decorator(waffle_flag(Flags.SLACK_NOTIFICATIONS.slug), name="dispatch")
 class DeleteNotificationChannel(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "ocs_notifications.delete_notificationchannel"
 

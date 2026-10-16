@@ -19,9 +19,7 @@ from apps.ocs_notifications.models import (
     UserNotificationPreferences,
 )
 from apps.ocs_notifications.tasks import send_notification_email_async, send_slack_notification_async
-from apps.teams.flags import Flags
 from apps.teams.models import Team
-from apps.teams.utils import flag_is_active_for_team
 
 logger = logging.getLogger("ocs.notifications")
 
@@ -156,12 +154,12 @@ def _dispatch_slack_notifications(notification_event: NotificationEvent, team: T
 def get_slack_notification_channels(team: Team, event_level: LevelChoices):
     """Return the enabled Slack notification channels for a team that meet the event's level.
 
-    Delivery is gated on both the feature flag and the Slack integration being configured, and
+    Delivery is gated on the Slack integration being configured, and
     each channel posts only events at or above its configured severity threshold, so an event
     fans out to every channel whose level is <= the event's level (e.g. a Warning channel also
     receives Error events).
     """
-    if not settings.SLACK_ENABLED or not flag_is_active_for_team(team, Flags.SLACK_NOTIFICATIONS.slug):
+    if not settings.SLACK_ENABLED:
         return NotificationChannel.objects.none()
     from apps.service_providers.models import MessagingProviderType  # noqa: PLC0415 - circular import avoided
 
