@@ -866,3 +866,19 @@ class TestNodeDisplayName:
     def test_display_name(self, params, expected):
         node = Node(flow_id="LLMResponseWithPrompt-a1b2c", type="LLMResponseWithPrompt", params=params)
         assert node.display_name == expected
+
+
+@pytest.mark.django_db()
+def test_the_default_pipelines_llm_node_holds_its_types_own_params():
+    team = TeamFactory.create()
+    provider = LlmProviderFactory.create(team=team)
+    model = LlmProviderModelFactory.create(team=team)
+
+    pipeline = Pipeline.create_default(team, llm_provider_id=provider.id, llm_provider_model=model)
+
+    node = pipeline.node_set.get(type="LLMResponseWithPrompt")
+    expected = LLMResponseWithPrompt.model_validate(
+        {**node.params, "node_id": node.flow_id, "django_node": None}
+    ).model_dump(mode="json")
+    assert node.params == expected
+    assert node.params["llm_provider_model_id"] == model.id

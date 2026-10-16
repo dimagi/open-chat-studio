@@ -117,22 +117,19 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     id=llm_id,
                     type=llm_node_type.type,
                     label="LLM",
-                    params={
-                        "name": llm_id,
-                        "llm_provider_id": llm_provider_id,
-                        "llm_provider_model_id": llm_provider_model.id,
-                        "llm_temperature": 0.7,
-                        "history_type": "global",
-                        "history_name": None,
-                        "history_mode": "summarize",
-                        "user_max_token_limit": llm_provider_model.max_token_limit,
-                        "max_history_length": 10,
-                        "source_material_id": None,
-                        "prompt": "You are a helpful assistant. Answer the user's query as best you can.",
-                        "tools": None,
-                        "custom_actions": None,
-                        "keywords": [""],
-                    },
+                    params=llm_node_type.node_class.model_validate(
+                        {
+                            **llm_node_type.default_params(),
+                            "node_id": llm_id,
+                            "django_node": None,
+                            "name": llm_id,
+                            "llm_provider_id": llm_provider_id,
+                            "llm_provider_model_id": llm_provider_model.id,
+                            "history_type": "global",
+                            "user_max_token_limit": llm_provider_model.max_token_limit,
+                            "prompt": "You are a helpful assistant. Answer the user's query as best you can.",
+                        }
+                    ).model_dump(mode="json"),
                 ),
             )
 
