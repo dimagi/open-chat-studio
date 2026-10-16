@@ -46,7 +46,7 @@ def sessions(db):
     )
 
 
-@pytest.mark.parametrize(
+FILTER_TABLES = pytest.mark.parametrize(
     ("filter_class", "queryset_factory", "query_param", "row_id"),
     [
         pytest.param(
@@ -65,6 +65,9 @@ def sessions(db):
         ),
     ],
 )
+
+
+@FILTER_TABLES
 @pytest.mark.parametrize(
     ("operator", "value", "expected"),
     [
@@ -102,15 +105,19 @@ def test_participant_blocked_filter(
     assert sorted(result.values_list("id", flat=True)) == expected_ids
 
 
-def test_blocked_filter_still_applies_when_the_flag_is_off(sessions):
+@FILTER_TABLES
+def test_blocked_filter_still_applies_when_the_flag_is_off(
+    sessions, filter_class, queryset_factory, query_param, row_id
+):
     """Saved filters keep filtering after the flag is turned off."""
     result = _apply(
-        filter_class=ExperimentSessionFilter,
-        queryset=ExperimentSession.objects.filter(team=sessions.team),
-        query_param="participant_blocked",
+        filter_class=filter_class,
+        queryset=queryset_factory(sessions.team),
+        query_param=query_param,
         value="true",
         operator=Operators.ANY_OF,
         flag_active=False,
     )
 
-    assert sorted(result.values_list("id", flat=True)) == sorted([sessions.blocked.id, sessions.blocked_again.id])
+    expected_ids = sorted({row_id(sessions.blocked), row_id(sessions.blocked_again)})
+    assert sorted(result.values_list("id", flat=True)) == expected_ids
