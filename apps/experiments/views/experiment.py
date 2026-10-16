@@ -74,6 +74,7 @@ from apps.experiments.models import (
 )
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.services import publish_version
+from apps.experiments.sunsets import LEGACY_WEB_CHAT, legacy_web_chat_gone, live_public_channel
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
@@ -91,7 +92,11 @@ from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
+from apps.utils.sunset import sunset_view
 from apps.web.waf import WafRule, waf_allow
+
+legacy_web_chat_sunset = sunset(LEGACY_WEB_CHAT.sunset_at, successor_url=LEGACY_WEB_CHAT.successor_url)
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
@@ -108,6 +113,7 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
+@legacy_web_chat_sunset
 @public_chat_rate_limited
 @experiment_session_view()
 @verify_session_access_cookie
@@ -201,6 +207,7 @@ def _experiment_session_message(request, version_number: int):
     )
 
 
+@legacy_web_chat_sunset
 @experiment_session_view()
 def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
     experiment = request.experiment
@@ -226,6 +233,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
+@legacy_web_chat_sunset
 @public_chat_rate_limited
 @experiment_session_view()
 @require_GET
@@ -307,6 +315,7 @@ def _resolve_consent_identifier(consent, form, user, team) -> tuple[str, bool]:
     return Participant.create_anonymous(team, ChannelPlatform.WEB).identifier, False
 
 
+@sunset_view(LEGACY_WEB_CHAT, gone=legacy_web_chat_gone)
 @public_chat_rate_limited
 @team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
@@ -315,6 +324,9 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     except ValidationError:
         # old links dont have uuids
         raise Http404() from None
+
+    if channel := live_public_channel(experiment):
+        return HttpResponseRedirect(channel.public_url)
 
     experiment_version = resolve_published_or_working(experiment)
 
@@ -444,6 +456,7 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     )
 
 
+@sunset_view(LEGACY_WEB_CHAT, gone=legacy_web_chat_gone)
 @public_chat_rate_limited
 @team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
@@ -496,6 +509,7 @@ def _record_consent_and_redirect(
     return set_session_access_cookie(response, experiment, experiment_session)
 
 
+@sunset_view(LEGACY_WEB_CHAT, gone=legacy_web_chat_gone)
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -852,6 +866,7 @@ def redirect_to_messages_view(request, session):
     return HttpResponseRedirect(url)
 
 
+@legacy_web_chat_sunset
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
@@ -863,6 +878,7 @@ def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 
+@legacy_web_chat_sunset
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
 @verify_session_access_cookie
@@ -897,6 +913,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
     )
 
 
+@legacy_web_chat_sunset
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
 @verify_session_access_cookie

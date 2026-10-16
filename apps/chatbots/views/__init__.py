@@ -28,7 +28,6 @@ from .chatbot_views import (  # noqa: F401
     revert_chatbot_version,
     send_chatbot_invitation,
     single_chatbot_home,
-    start_authed_web_session,
     start_chatbot_session_public,
 )
 from .public_link import public_link_page  # noqa: F401
