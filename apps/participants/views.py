@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -15,6 +15,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
+from waffle.decorators import waffle_flag
 
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
@@ -33,6 +34,7 @@ from apps.participants.forms import (
     TriggerBotForm,
 )
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..events.models import ScheduledMessage
@@ -612,12 +614,11 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
+@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def block(request, team_slug: str, participant_id: int):
     """Add the participant to the team's denylist."""
-    if not abuse_detection_enabled(request.team):
-        raise Http404()
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
     if is_exempt(participant=participant, team=request.team):
         messages.error(request, "Team members cannot be blocked")
@@ -642,12 +643,11 @@ def block(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
+@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def unblock(request, team_slug: str, participant_id: int):
     """Remove the participant from the team's denylist."""
-    if not abuse_detection_enabled(request.team):
-        raise Http404()
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
     denial = DeniedParticipant.objects.filter(team=request.team, participant=participant).first()
     if denial:
