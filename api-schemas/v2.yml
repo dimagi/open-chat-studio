@@ -767,8 +767,6 @@ paths:
 
         Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
 
-        The `chatbot_inspect` endpoint shows some actions' params in a different shape, so they cannot be sent back as they read there. For `schedule_trigger`, send the keys inspect nests under `params.scheduled_message` directly in `params`. For `pipeline_start`, send the `id` of inspect's `pipeline` as `params.pipeline_id`.
-
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Add a Scheduled trigger
       parameters:
@@ -920,8 +918,6 @@ paths:
 
         Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
 
-        The `chatbot_inspect` endpoint shows some actions' params in a different shape, so they cannot be sent back as they read there. For `schedule_trigger`, send the keys inspect nests under `params.scheduled_message` directly in `params`. For `pipeline_start`, send the `id` of inspect's `pipeline` as `params.pipeline_id`.
-
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Add a Static trigger
       parameters:
@@ -1072,8 +1068,6 @@ paths:
         A timeout trigger runs its action after the participant has been inactive for `delay` seconds, up to `total_num_triggers` times in one session.
 
         Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
-
-        The `chatbot_inspect` endpoint shows some actions' params in a different shape, so they cannot be sent back as they read there. For `schedule_trigger`, send the keys inspect nests under `params.scheduled_message` directly in `params`. For `pipeline_start`, send the `id` of inspect's `pipeline` as `params.pipeline_id`.
 
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Add a Timeout trigger
@@ -2112,7 +2106,7 @@ paths:
               examples:
                 ExperimentNotFound:
                   value:
-                    detail: No Experiment matches the given query.
+                    detail: No chatbot matches the given query.
                   summary: No experiment with the given ID exists in the team
           description: ''
   /api/v2/usage/:
@@ -3663,7 +3657,7 @@ components:
         id:
           type: integer
           readOnly: true
-        delay_seconds:
+        delay:
           type: integer
           description: Seconds of inactivity before the trigger fires.
         total_num_triggers:
@@ -3679,7 +3673,7 @@ components:
           $ref: '#/components/schemas/InspectTriggerAction'
       required:
       - action
-      - delay_seconds
+      - delay
       - id
       - total_num_triggers
       - trigger_from_first_message
@@ -3691,7 +3685,7 @@ components:
         The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline exists in the
         team.
       properties:
-        type:
+        action_type:
           allOf:
           - $ref: '#/components/schemas/TriggerActionTypeEnum'
           description: |-
@@ -3706,14 +3700,15 @@ components:
           type: object
           additionalProperties: {}
           readOnly: true
-          description: Action parameters; keys depend on the action ``type``.
+          description: Action parameters, as the trigger write endpoints take them;
+            keys depend on `action_type`.
         pipeline:
           allOf:
           - $ref: '#/components/schemas/InspectPipeline'
           readOnly: true
       required:
+      - action_type
       - params
-      - type
     KindEnum:
       enum:
       - single
@@ -4379,7 +4374,7 @@ components:
         total_num_triggers:
           type: integer
           maximum: 2147483647
-          minimum: -2147483648
+          minimum: 1
           description: How many times the trigger fires in one session.
         trigger_from_first_message:
           type: boolean
@@ -5028,7 +5023,7 @@ components:
         total_num_triggers:
           type: integer
           maximum: 2147483647
-          minimum: -2147483648
+          minimum: 1
           description: How many times the trigger fires in one session.
         trigger_from_first_message:
           type: boolean

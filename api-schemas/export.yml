@@ -6373,7 +6373,7 @@ components:
         total_num_triggers:
           type: integer
           maximum: 2147483647
-          minimum: -2147483648
+          minimum: 1
           description: The number of times to trigger the action
         is_archived:
           type: boolean
