@@ -64,6 +64,7 @@ class ChannelPlatform(models.TextChoices):
         platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
         platform_availability[cls.EMBEDDED_WIDGET] = True
+        platform_availability[cls.PUBLIC] = True
 
         for provider in MessagingProvider.objects.filter(team=team):
             for platform in provider.get_messaging_service().supported_platforms:
@@ -78,7 +79,6 @@ class ChannelPlatform(models.TextChoices):
             platform_availability[cls.COMMCARE_CONNECT] = True
 
         cls._gate_by_flag(platform_availability, team, cls.EMAIL, "flag_email_channel")
-        cls._gate_by_flag(platform_availability, team, cls.PUBLIC, "flag_public_channel")
 
         # Platforms already used should not be displayed
         for platform in used_platforms:

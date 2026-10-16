@@ -48,8 +48,6 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
-    PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
-
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
         "Testing endpoints for custom actions (internal use only)",

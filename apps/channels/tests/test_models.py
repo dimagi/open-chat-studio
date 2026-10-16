@@ -94,7 +94,7 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
 @pytest.mark.parametrize(
     ("slack_enabled", "messaging_provider_types", "channels_enabled"),
     [
-        (False, [], [ChannelPlatform.TELEGRAM, ChannelPlatform.EMBEDDED_WIDGET]),
+        (False, [], [ChannelPlatform.TELEGRAM, ChannelPlatform.EMBEDDED_WIDGET, ChannelPlatform.PUBLIC]),
         (
             False,
             [MessagingProviderType.twilio],
@@ -103,12 +103,18 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
                 ChannelPlatform.WHATSAPP,
                 ChannelPlatform.FACEBOOK,
                 ChannelPlatform.EMBEDDED_WIDGET,
+                ChannelPlatform.PUBLIC,
             ],
         ),
         (
             False,
             [MessagingProviderType.turnio],
-            [ChannelPlatform.TELEGRAM, ChannelPlatform.WHATSAPP, ChannelPlatform.EMBEDDED_WIDGET],
+            [
+                ChannelPlatform.TELEGRAM,
+                ChannelPlatform.WHATSAPP,
+                ChannelPlatform.EMBEDDED_WIDGET,
+                ChannelPlatform.PUBLIC,
+            ],
         ),
         (
             False,
@@ -118,12 +124,18 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
                 ChannelPlatform.WHATSAPP,
                 ChannelPlatform.FACEBOOK,
                 ChannelPlatform.EMBEDDED_WIDGET,
+                ChannelPlatform.PUBLIC,
             ],
         ),
         (
             False,
             [MessagingProviderType.sureadhere],
-            [ChannelPlatform.TELEGRAM, ChannelPlatform.SUREADHERE, ChannelPlatform.EMBEDDED_WIDGET],
+            [
+                ChannelPlatform.TELEGRAM,
+                ChannelPlatform.SUREADHERE,
+                ChannelPlatform.EMBEDDED_WIDGET,
+                ChannelPlatform.PUBLIC,
+            ],
         ),
         (
             True,
@@ -133,6 +145,7 @@ def test_deleting_experiment_channel_only_removes_the_experiment_channel():
                 ChannelPlatform.SLACK,
                 ChannelPlatform.SUREADHERE,
                 ChannelPlatform.EMBEDDED_WIDGET,
+                ChannelPlatform.PUBLIC,
             ],
         ),
     ],
@@ -285,21 +298,13 @@ def test_webhook_url_for_telegram_channel():
 
 @pytest.mark.django_db()
 class TestPublicChannelPlatform:
-    """PUBLIC is a widget platform, one per chatbot, offered only behind flag_public_channel."""
+    """PUBLIC is a widget platform offered to every team, one per chatbot."""
 
-    def test_public_hidden_when_flag_off(self, experiment):
-        platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
-        assert ChannelPlatform.PUBLIC not in platforms
-
-    def test_public_available_when_flag_on(self, experiment, public_flag):
+    def test_public_available_to_every_team(self, experiment):
         platforms = ChannelPlatform.for_dropdown(used_platforms=set(), team=experiment.team)
         assert platforms[ChannelPlatform.PUBLIC] is True
 
-    def test_public_hidden_once_used(self, experiment, public_flag):
-        platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
-        assert ChannelPlatform.PUBLIC not in platforms
-
-    def test_existing_public_channel_with_flag_off_does_not_raise(self, experiment):
+    def test_public_hidden_once_used(self, experiment):
         platforms = ChannelPlatform.for_dropdown(used_platforms={ChannelPlatform.PUBLIC}, team=experiment.team)
         assert ChannelPlatform.PUBLIC not in platforms
 
