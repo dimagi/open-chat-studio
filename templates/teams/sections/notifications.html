@@ -14,6 +14,17 @@
     {% endif %}
   </div>
   <hr class="my-2">
+  {% if not has_slack_provider %}
+    <div class="alert alert-info my-2" data-cy="no-slack-workspace-notice">
+      <i class="fa-solid fa-circle-info"></i>
+      <span>
+        {% translate "No Slack workspace is linked to this team yet. Notification channels need one to post messages." %}
+        {% if add_slack_provider_url %}
+          <a class="link font-semibold" href="{{ add_slack_provider_url }}">{% translate "Connect a Slack workspace" %}</a>
+        {% endif %}
+      </span>
+    </div>
+  {% endif %}
   <div id="notification-channels-table-container"
        hx-get="{% url 'ocs_notifications_channels:table' request.team.slug %}"
        hx-trigger="load"></div>

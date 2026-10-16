@@ -12,6 +12,8 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.service_providers.models import MessagingProvider, MessagingProviderType
+from apps.service_providers.utils import ServiceProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import (
     FeatureFlagForm,
@@ -73,6 +75,24 @@ def _is_team_admin(request) -> bool:
 
 def _can_view_notifications(request) -> bool:
     return request.user.has_perm("ocs_notifications.view_notificationchannel")
+
+
+def _notifications_context(request) -> dict:
+    team = request.team
+    add_slack_url = None
+    if request.user.has_perm(ServiceProvider.messaging.get_permission("add")):
+        add_slack_url = reverse(
+            "service_providers:new",
+            kwargs={
+                "team_slug": team.slug,
+                "provider_type": ServiceProvider.messaging.slug,
+                "subtype": str(MessagingProviderType.slack),
+            },
+        )
+    return {
+        "has_slack_provider": MessagingProvider.objects.filter(team=team, type=MessagingProviderType.slack).exists(),
+        "add_slack_provider_url": add_slack_url,
+    }
 
 
 def _is_staff(request) -> bool:
@@ -138,6 +158,7 @@ SETTINGS_SECTIONS = [
         icon="fa-bell",
         template="teams/sections/notifications.html",
         is_visible=_can_view_notifications,
+        get_context=_notifications_context,
     ),
     SettingsSection(
         key="members",
