@@ -798,7 +798,7 @@ class AbuseRulesStage(ProcessingStage):
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, text=ctx.user_query)
+        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
 
 
 # ---------------------------------------------------------------------------

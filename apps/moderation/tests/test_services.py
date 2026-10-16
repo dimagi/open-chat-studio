@@ -138,7 +138,6 @@ def test_strike_categories():
         pytest.param(False, True, "hello", False, id="moderation_off"),
         pytest.param(True, False, "hello", False, id="no_provider"),
         pytest.param(True, True, "", False, id="empty_text"),
-        pytest.param(True, True, None, False, id="no_text"),
         pytest.param(True, True, "  ", False, id="whitespace"),
         pytest.param(True, True, EMPTY_MESSAGE_PLACEHOLDER, False, id="empty_message_placeholder"),
     ],
@@ -148,14 +147,19 @@ def test_start_moderation(moderation_enabled, has_provider, text, started):
     if has_provider:
         team.moderation_provider = ModerationProviderFactory.create(team=team)
         team.save()
+    message = ChatMessageFactory.create(
+        chat=ChatFactory.create(team=team), message_type=ChatMessageType.HUMAN, content=text or ""
+    )
 
     with mock.patch("apps.moderation.services.moderate_message") as task:
         task.delay.return_value.id = "task-1"
-        task_id = start_moderation(team=team, text=text)
+        task_id = start_moderation(team=team, message=message)
 
     assert task_id == ("task-1" if started else None)
     if started:
-        task.delay.assert_called_once_with(text=text, moderation_provider_id=team.moderation_provider_id)
+        task.delay.assert_called_once_with(
+            chat_message_id=message.id, moderation_provider_id=team.moderation_provider_id
+        )
     else:
         task.delay.assert_not_called()
 
@@ -217,3 +221,19 @@ def test_remove_turn_from_pipeline_histories(history_type):
     messages = node_history.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
     assert [message.content for message in messages] == ["Earlier", "Earlier answer"]
     assert other_history.messages.count() == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(CeleryTimeoutError(), id="timeout"),
+        pytest.param(RuntimeError("boom"), id="task_raised"),
+    ],
+)
+def test_get_moderation_result_logs_a_failed_task_as_a_warning(error, caplog):
+    with mock.patch("apps.moderation.services.AsyncResult") as async_result:
+        async_result.return_value.get.side_effect = error
+        get_moderation_result("task-1")
+
+    assert [record.levelname for record in caplog.records] == ["WARNING"]
+    assert caplog.records[0].exc_info is None

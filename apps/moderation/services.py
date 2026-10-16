@@ -40,16 +40,17 @@ def record_rule_hits(
     return rules
 
 
-def start_moderation(*, team: Team, text: str | None) -> str | None:
-    """Queue the moderation task when the team has moderation on and there is text. Returns the task id.
+def start_moderation(*, team: Team, message: ChatMessage) -> str | None:
+    """Queue the moderation task when the team has moderation on and the message has text. Returns the task id.
 
-    Does not check the feature flag.
+    Does not check the feature flag. The message must be committed, as the task reads it.
     """
     if not team.moderation_enabled or team.moderation_provider_id is None:
         return None
-    if not text or not text.strip() or text == EMPTY_MESSAGE_PLACEHOLDER:
+    text = message.content
+    if not text.strip() or text == EMPTY_MESSAGE_PLACEHOLDER:
         return None
-    return moderate_message.delay(text=text, moderation_provider_id=team.moderation_provider_id).id
+    return moderate_message.delay(chat_message_id=message.id, moderation_provider_id=team.moderation_provider_id).id
 
 
 def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, ModerationSkipReason | None]:
@@ -61,8 +62,9 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
     except CeleryTimeoutError:
         logger.warning("No moderation result for task %s within %s seconds", task_id, MODERATION_WAIT_TIMEOUT)
         return None, "timeout"
-    except Exception:
-        logger.exception("Moderation task %s failed", task_id)
+    except Exception as error:
+        # The task's own failure is already reported by Celery.
+        logger.warning("Moderation task %s failed: %r", task_id, error)
         return None, "error"
     if result["status"] != "ok":
         return None, result["reason"]

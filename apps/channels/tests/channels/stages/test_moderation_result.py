@@ -273,7 +273,8 @@ class TestModerationInTheChannelPipeline:
             )
 
         moderation_task.task.delay.assert_called_once_with(
-            text="Bad words", moderation_provider_id=moderated_session.experiment.team.moderation_provider_id
+            chat_message_id=self._human_message(moderated_session).id,
+            moderation_provider_id=moderated_session.experiment.team.moderation_provider_id,
         )
         assert channel.text_sent == ["Your message was flagged."]
         assert self._human_message(moderated_session).moderation_status == ModerationStatus.FLAGGED

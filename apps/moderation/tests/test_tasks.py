@@ -3,18 +3,24 @@ from unittest import mock
 import openai
 import pytest
 
+from apps.chat.models import ChatMessageType
 from apps.moderation.tasks import moderate_message
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.moderation_service import ModerationRateLimited
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.tests.provider_errors import connection_error, status_error
 
 MODERATE = "apps.service_providers.moderation_service.OpenAIModerationService.moderate"
 
 
-def _run(provider_id: int):
-    return moderate_message.apply(kwargs={"text": "hello", "moderation_provider_id": provider_id})
+def _run(provider_id: int, message_id: int | None = None):
+    if message_id is None:
+        message_id = ChatMessageFactory.create(
+            chat=ChatFactory.create(), message_type=ChatMessageType.HUMAN, content="hello"
+        ).id
+    return moderate_message.apply(kwargs={"chat_message_id": message_id, "moderation_provider_id": provider_id})
 
 
 @pytest.mark.django_db()
@@ -94,8 +100,20 @@ def test_retry_that_succeeds_returns_the_output():
 
 
 @pytest.mark.django_db()
-def test_writes_nothing_to_the_database(django_assert_num_queries):
+def test_skips_a_deleted_message():
     provider = ModerationProviderFactory.create()
 
-    with mock.patch(MODERATE, return_value=ModerationOutput({})), django_assert_num_queries(1):
-        _run(provider.id)
+    with mock.patch(MODERATE) as moderate:
+        result = _run(provider.id, message_id=0)
+
+    assert result.get() == {"status": "skipped", "reason": "error"}
+    moderate.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_writes_nothing_to_the_database(django_assert_num_queries):
+    provider = ModerationProviderFactory.create()
+    message = ChatMessageFactory.create(chat=ChatFactory.create(), message_type=ChatMessageType.HUMAN, content="hi")
+
+    with mock.patch(MODERATE, return_value=ModerationOutput({})), django_assert_num_queries(2):
+        _run(provider.id, message_id=message.id)
