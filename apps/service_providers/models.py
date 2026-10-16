@@ -15,12 +15,11 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
-from field_audit.models import AuditAction, AuditingManager
+from field_audit.models import AuditingManager
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
-from apps.ocs_notifications.notifications import moderation_provider_deleted_notification
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
@@ -1022,24 +1021,6 @@ class ModerationProvider(BaseTeamModel, ProviderMixin):
     def get_moderation_service(self) -> ModerationService:
         config = {k: v for k, v in self.config.items() if v}
         return self.type_enum.get_moderation_service(config)
-
-    @transaction.atomic()
-    def delete(self):  # ty: ignore[invalid-method-override]
-        """Delete the provider. If the team had it selected, turn moderation off and notify the team."""
-        was_selected = Team.objects.filter(id=self.team_id, moderation_provider_id=self.id).update(
-            moderation_enabled=False,
-            moderation_deleted_provider_name=self.name,
-            audit_action=AuditAction.AUDIT,
-        )
-        team, provider_id, provider_name = self.team, self.id, self.name
-        result = super().delete()
-        if was_selected:
-            transaction.on_commit(
-                lambda: moderation_provider_deleted_notification(
-                    team=team, provider_id=provider_id, provider_name=provider_name
-                )
-            )
-        return result
 
 
 class EmbeddingProviderModelManager(models.Manager):
