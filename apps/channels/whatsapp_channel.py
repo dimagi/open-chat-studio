@@ -11,8 +11,10 @@ from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import AttachmentHydrationStage
+from apps.channels.text_utils import append_skipped_attachment_notes
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.models import MessagingProviderType
 
 if TYPE_CHECKING:
@@ -133,9 +135,10 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
     (including text), so the mime type alone isn't a reliable gate.
     _get_files() downloads the media via the messaging service and persists
     the bytes as a MESSAGE_MEDIA File. The base class then handles
-    ChatAttachment linkage and Attachment construction. Size and
-    content-type policing is the upstream provider's responsibility —
-    Meta already caps what reaches us.
+    ChatAttachment linkage and Attachment construction. A file with a
+    blocked extension or content type is not persisted; a note naming it is
+    appended to the message text instead. Size policing is the upstream
+    provider's responsibility — Meta already caps what reaches us.
     """
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
@@ -167,6 +170,13 @@ class WhatsappAttachmentHydrationStage(AttachmentHydrationStage):
 
         raw_bytes, content_type = media
         filename = self._resolve_filename(ctx, content_type)
+
+        if reason := blocked_file_reason(filename=filename, claimed_type=content_type, content=raw_bytes):
+            ctx.message.message_text = append_skipped_attachment_notes(
+                message_text=ctx.message.message_text,
+                skipped=[{"name": filename, "reason": reason, "size": len(raw_bytes)}],
+            )
+            return []
 
         try:
             file = File.create(

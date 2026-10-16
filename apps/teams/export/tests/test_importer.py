@@ -2,15 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 import requests
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
 from django.db import models
 from django.db.models.signals import post_save
 
-from apps.annotations.models import Tag, UserComment
+from apps.annotations.models import CustomTaggedItem, Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
 from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
@@ -25,6 +23,7 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
+from apps.teams.export.tests.sync_fakes import PAST
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
@@ -118,22 +117,10 @@ def _user_row(source_id, username, **extra):
 
 pytestmark = pytest.mark.django_db
 
-PAST = "2020-01-02T03:04:05+00:00"
-
 
 @pytest.fixture()
 def store(make_store, tmp_path):
     return make_store(tmp_path / "team.sqlite")
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
 
 
 def _team_row(source_id=9001, slug="imported-team-xyz"):
@@ -758,6 +745,38 @@ def test_generic_fk_with_untranslated_target_raises(store):
 
     with pytest.raises(UnresolvedForeignKey):
         importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
+
+
+def _tagged_item_row(source_id, user_src, tag_src=55, object_id=88):
+    return {
+        "id": source_id,
+        "tag": tag_src,
+        "user": user_src,
+        "content_type": "chat.chatmessage",
+        "object_id": object_id,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def test_retagged_item_maps_onto_the_existing_tagged_item(store):
+    """A tag removed and re-added on the source between syncs arrives as a new row for the same object
+    and tag; it maps onto the target's existing row instead of violating the unique constraint."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    store.record("annotations.tag", 55, TagFactory(team_id=store.get_target("teams.team", 9001)).id)
+    store.record("chat.chatmessage", 88, ChatMessageFactory(chat=ChatFactory()).id)
+    first_user, second_user = UserFactory(), UserFactory()
+    store.record("users.customuser", 60, first_user.id)
+    store.record("users.customuser", 61, second_user.id)
+
+    importer.import_rows("annotations.customtaggeditem", [_tagged_item_row(source_id=700, user_src=60)])
+    importer.import_rows("annotations.customtaggeditem", [_tagged_item_row(source_id=701, user_src=61)])
+
+    tagged_item = CustomTaggedItem.objects.get()
+    assert store.get_target("annotations.customtaggeditem", 700) == tagged_item.pk
+    assert store.get_target("annotations.customtaggeditem", 701) == tagged_item.pk
+    assert tagged_item.user_id == second_user.id
 
 
 def _annotation_queue_row(source_id, assignees, name="Queue"):

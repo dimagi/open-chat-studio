@@ -48,8 +48,6 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
-    PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
-
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
         "Testing endpoints for custom actions (internal use only)",
@@ -96,6 +94,11 @@ class Flags(FlagInfo, Enum):
     IGNORE_RATE_LIMITING = (
         "flag_ignore_rate_limiting",
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
+    )
+
+    ABUSE_DETECTION = (
+        "flag_abuse_detection",
+        "Abuse detection - message moderation, strikes and participant blocking (issue #4269)",
     )
 
     @property

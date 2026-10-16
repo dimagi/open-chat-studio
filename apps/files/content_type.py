@@ -69,6 +69,16 @@ def ensure_extension(filename: str, content_type: str) -> str:
     return f"{filename}{extension}" if extension else filename
 
 
+def read_sample(file_obj: BinaryIO) -> bytes:
+    """Read the first 2048 bytes of ``file_obj`` for detection, seeking back to 0 afterwards."""
+    content = b""
+    with contextlib.suppress(Exception):
+        file_obj.seek(0)
+        content = file_obj.read(_MAGIC_SAMPLE_BYTES)
+        file_obj.seek(0)
+    return content
+
+
 def detect_content_type_from_file(file_obj: BinaryIO) -> str:
     """Detect MIME from a file-like object.
 
@@ -76,11 +86,7 @@ def detect_content_type_from_file(file_obj: BinaryIO) -> str:
     then runs the same cascade as :func:`detect_content_type` using the
     object's ``name`` attribute as the filename fallback.
     """
-    content = b""
-    with contextlib.suppress(Exception):
-        file_obj.seek(0)
-        content = file_obj.read(_MAGIC_SAMPLE_BYTES)
-        file_obj.seek(0)
+    content = read_sample(file_obj)
 
     name = getattr(file_obj, "name", "") or ""
     with contextlib.suppress(Exception):

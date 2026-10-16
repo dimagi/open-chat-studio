@@ -6,7 +6,7 @@
          href="{% url 'single_team:team_membership_details' request.team.slug record.membership_pk %}">
         <i class="fa-solid fa-pencil"></i>
       </a>
-      {% translate 'Remove this member from the team?' as confirm_remove_message %}
+      {% translate "Remove this member from the team?" as confirm_remove_message %}
       <form method="post" action="{% url 'single_team:remove_team_membership' request.team.slug record.membership_pk %}"
             onsubmit="return confirm('{{ confirm_remove_message }}');">
         {% csrf_token %}

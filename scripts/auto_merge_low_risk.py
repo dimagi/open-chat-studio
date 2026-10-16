@@ -31,6 +31,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from typing import Any
 
 import pr_risk_gate
@@ -54,6 +55,13 @@ ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 # external integrations post and the Check Runs API below cannot see -- accepting it
 # would let an integration's red signal through the moment one is installed.
 MERGEABLE_STATES = frozenset({"clean"})
+
+# `main` requires an approving review, which GitHub reports as `blocked` until one is
+# given. The merging app bypasses that rule, so a pull request waiting on a review and
+# nothing else is mergeable; the merge API still refuses anything else the app cannot bypass.
+# `blocked` is reported ahead of `unstable`, so a red or pending legacy commit status is
+# checked separately before `blocked` is accepted.
+REVIEW_REQUIRED = "REVIEW_REQUIRED"
 
 
 def latest_check_runs(check_runs: list[dict]) -> dict[str, dict]:
@@ -79,7 +87,29 @@ def latest_review_states(reviews: list[dict]) -> dict[str, str]:
     return states
 
 
-def pull_blockers(pull: dict, repo: str, recomputed_risk: str) -> list[str]:
+@dataclass(frozen=True)
+class Signals:
+    """Facts the pull request payload omits: the recomputed risk, the review decision and the commit status."""
+
+    risk: str
+    decision: str | None = None
+    status_state: str | None = None
+
+
+def mergeability_blockers(pull: dict, signals: Signals) -> list[str]:
+    blockers = []
+    if pull.get("mergeable") is not True:
+        blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
+    state = pull.get("mergeable_state")
+    waiting_on_review = state == "blocked" and signals.decision == REVIEW_REQUIRED
+    if waiting_on_review and signals.status_state != "success":
+        blockers.append(f"the combined commit status is {signals.status_state}")
+    elif state not in MERGEABLE_STATES and not waiting_on_review:
+        blockers.append(f"its mergeable_state is {state}")
+    return blockers
+
+
+def pull_blockers(pull: dict, repo: str, signals: Signals) -> list[str]:
     """Blockers that follow from the pull request itself, before any check is read."""
     blockers = []
     labels = {label["name"] for label in pull.get("labels", [])}
@@ -93,12 +123,9 @@ def pull_blockers(pull: dict, repo: str, recomputed_risk: str) -> list[str]:
         blockers.append(f"it targets {pull['base']['ref']}, not {BASE_BRANCH}")
     if ((pull["head"].get("repo") or {}).get("full_name")) != repo:
         blockers.append("the head branch is on a fork")
-    if pull.get("mergeable") is not True:
-        blockers.append(f"GitHub reports mergeable={pull.get('mergeable')}")
-    if pull.get("mergeable_state") not in MERGEABLE_STATES:
-        blockers.append(f"its mergeable_state is {pull.get('mergeable_state')}")
-    if recomputed_risk != pr_risk_gate.LOW:
-        blockers.append(f"the gate re-runs this as {recomputed_risk}, whatever the label says")
+    blockers.extend(mergeability_blockers(pull, signals))
+    if signals.risk != pr_risk_gate.LOW:
+        blockers.append(f"the gate re-runs this as {signals.risk}, whatever the label says")
     return blockers
 
 
@@ -129,12 +156,10 @@ def review_blockers(reviews: list[dict]) -> list[str]:
     ]
 
 
-def find_blockers(
-    pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, *, recomputed_risk: str
-) -> list[str]:
+def find_blockers(pull: dict, check_runs: list[dict], reviews: list[dict], repo: str, signals: Signals) -> list[str]:
     """Every reason this pull request may not be merged unattended."""
     return [
-        *pull_blockers(pull, repo, recomputed_risk),
+        *pull_blockers(pull, repo, signals),
         *check_blockers(check_runs),
         *review_blockers(reviews),
     ]
@@ -173,6 +198,31 @@ def recompute_risk(repo: str, number: int, head_repo: str | None) -> str:
     return pr_risk_gate.classify(files, untrusted=head_repo != repo).risk
 
 
+def review_decision(repo: str, number: int) -> str | None:
+    """GitHub's overall review verdict (`APPROVED`, `REVIEW_REQUIRED`, ...); the REST API does not expose it."""
+    owner, name = repo.split("/")
+    query = (
+        "query($owner: String!, $name: String!, $number: Int!) {"
+        " repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewDecision } } }"
+    )
+    data = gh_api(
+        "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}", "-F", f"number={number}"
+    )
+    try:
+        return data["data"]["repository"]["pullRequest"]["reviewDecision"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(f"unexpected GraphQL response: {data}") from exc
+
+
+def commit_status_state(repo: str, sha: str) -> str:
+    """The combined legacy commit status, which the Check Runs API cannot see.
+
+    A commit with no statuses reports `pending`; that is read as `success` here.
+    """
+    combined = gh_api(f"repos/{repo}/commits/{sha}/status")
+    return "success" if combined["total_count"] == 0 else combined["state"]
+
+
 def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     """Read everything this pull request is judged on, and return it with its blockers."""
     # The list payload omits mergeable/mergeable_state; only the single-PR read has them.
@@ -180,7 +230,10 @@ def judge(repo: str, number: int) -> tuple[dict, list[str]]:
     check_runs = check_runs_for(repo, pull["head"]["sha"])
     reviews = gh_paginated(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
     risk = recompute_risk(repo, number, (pull["head"].get("repo") or {}).get("full_name"))
-    return pull, find_blockers(pull, check_runs, reviews, repo, recomputed_risk=risk)
+    decision = review_decision(repo, number)
+    status_state = commit_status_state(repo, pull["head"]["sha"])
+    signals = Signals(risk, decision, status_state)
+    return pull, find_blockers(pull, check_runs, reviews, repo, signals)
 
 
 def open_low_risk_pulls(repo: str) -> list[dict]:

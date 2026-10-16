@@ -1,6 +1,8 @@
+import ipaddress
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from functools import wraps
 from typing import ClassVar
@@ -13,6 +15,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.teams.models import Team
+from apps.utils.rate_limit import forwarded_client_ip
+from apps.web.models import SuperuserElevation
+
 logger = logging.getLogger("ocs.audit")
 
 SESSION_KEY = "elevations"
@@ -21,11 +27,12 @@ EXPIRY = 60 * 30  # 30 minutes
 
 MAX_CONCURRENT_ELEVATIONS = 5
 
+USER_AGENT_MAX_LENGTH = SuperuserElevation._meta.get_field("user_agent").max_length
+
 REAUTH_CALLBACK = "apps.web.elevation.complete_elevation"
 
-# Marker attribute stamped on views wrapped by `requires_elevation`. Nothing reads it yet;
-# it is what the architecture guard over the admin surfaces will key off, the way
-# `apps/teams/tests/test_view_auth_guard.py` keys off `ENFORCES_TEAM_AUTH_ATTR`.
+# Marker attribute stamped on views wrapped by `requires_elevation` or `OcsAdminSite.admin_view`.
+# `apps/web/tests/test_elevation_guard.py` reads it to confirm every admin view is gated.
 # `functools.wraps` hides the decorator identity, so the attribute is the only signal.
 ENFORCES_ELEVATION_ATTR = "enforces_elevation"
 
@@ -132,6 +139,13 @@ _ACQUIRE_URL_NAMES = {
 class ActiveElevation:
     grant: Grant
     expires_at: datetime
+    label: str
+
+
+@dataclass(frozen=True)
+class PendingElevation:
+    grant: Grant
+    label: str
 
 
 class Elevation:
@@ -146,38 +160,37 @@ class Elevation:
     def is_full(self) -> bool:
         return len(self._held()) >= MAX_CONCURRENT_ELEVATIONS
 
-    def add(self, grant: Grant) -> None:
+    def add(self, grant: Grant) -> int | None:
+        """Hold `grant`, returning its expiry, or None when it was already held."""
         held = self._held()
         if str(grant) in held:
-            return
+            return None
 
         if len(held) >= MAX_CONCURRENT_ELEVATIONS:
             logger.warning(
-                f"Denied elevation of '{self.request.user.email}' to '{grant}': "
-                f"already holding {len(held)} (max {MAX_CONCURRENT_ELEVATIONS})"
+                "elevation.denied",
+                extra={"user_id": self.request.user.pk, "grant": str(grant), "reason": "too_many"},
             )
             raise TooManyElevations(
                 f"Cannot grant '{grant}': maximum of {MAX_CONCURRENT_ELEVATIONS} concurrent elevations already held"
             )
 
-        logger.info(f"Elevating '{self.request.user.email}' to '{grant}'")
-        self._store(held | {str(grant): _now() + EXPIRY})
+        expires = _now() + EXPIRY
+        self._store(held | {str(grant): expires})
+        return expires
 
-    def drop(self, grant: Grant) -> bool:
-        """Release `grant`, returning whether it was held."""
+    def drop(self, grant: Grant) -> int | None:
+        """Stop holding `grant`, returning the expiry it had, or None when it was not held."""
         held = self._held()
         if str(grant) not in held:
-            return False
+            return None
 
-        logger.info(f"Releasing elevation of '{self.request.user.email}' to '{grant}'")
         self._store({wire_form: expires for wire_form, expires in held.items() if wire_form != str(grant)})
-        return True
+        return held[str(grant)]
 
-    def active(self) -> dict[str, ActiveElevation]:
-        return {
-            wire_form: ActiveElevation(Grant.parse(wire_form), datetime.fromtimestamp(expires))
-            for wire_form, expires in self._held().items()
-        }
+    def active(self) -> dict[str, datetime]:
+        """The expiry of each held grant, keyed by wire form."""
+        return {wire_form: datetime.fromtimestamp(expires) for wire_form, expires in self._held().items()}
 
     def _held(self) -> dict[str, int]:
         """The unexpired entries, pruning the session of anything else."""
@@ -185,8 +198,10 @@ class Elevation:
         now = _now()
         retained = {wire_form: expires for wire_form, expires in stored.items() if expires > now and _parses(wire_form)}
         if len(retained) != len(stored):
-            dropped = sorted(set(stored) - set(retained))
-            logger.info(f"Dropped elevations for '{self.request.user.email}': {','.join(dropped)}")
+            logger.info(
+                "elevation.expired",
+                extra={"user_id": self.request.user.pk, "grants": sorted(set(stored) - set(retained))},
+            )
             self._store(retained)
         return retained
 
@@ -196,10 +211,66 @@ class Elevation:
         self.request.session[SESSION_KEY] = held
 
 
+def elevate(request, grant: Grant) -> None:
+    """Grant `grant` to the request's session and record it. Raises `TooManyElevations` at the cap."""
+    expires = Elevation(request).add(grant)
+    if expires is None:
+        return
+
+    SuperuserElevation.objects.create(
+        user=request.user,
+        grant=str(grant),
+        granted_at=timezone.now(),
+        expires_at=_as_datetime(expires),
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent", "")[:USER_AGENT_MAX_LENGTH],
+    )
+    logger.info("elevation.granted", extra={"user_id": request.user.pk, "grant": str(grant), "expires_at": expires})
+
+
+def release(request, grant: Grant) -> bool:
+    """Release `grant` before it expires, returning whether it was held."""
+    expires = Elevation(request).drop(grant)
+    if expires is None:
+        return False
+
+    # The session keeps only the expiry, so that is what identifies the row.
+    SuperuserElevation.objects.filter(
+        user=request.user, grant=str(grant), expires_at=_as_datetime(expires), released_at__isnull=True
+    ).update(released_at=timezone.now())
+    logger.info("elevation.released", extra={"user_id": request.user.pk, "grant": str(grant)})
+    return True
+
+
+def _as_datetime(timestamp: int) -> datetime:
+    return datetime.fromtimestamp(timestamp, tz=UTC)
+
+
+def _client_ip(request) -> str | None:
+    try:
+        return str(ipaddress.ip_address(forwarded_client_ip(request)))
+    except ValueError:
+        return None
+
+
 def active_elevations(request) -> dict[str, ActiveElevation]:
     if not hasattr(request, "user") or request.user.is_anonymous:
         return {}
-    return Elevation(request).active()
+    active = Elevation(request).active()
+    grants = {wire_form: Grant.parse(wire_form) for wire_form in active}
+    labels = grant_labels(grants.values())
+    return {wire_form: ActiveElevation(grant, active[wire_form], labels[grant]) for wire_form, grant in grants.items()}
+
+
+def grant_labels(grants: Iterable[Grant]) -> dict[Grant, str]:
+    """Labels for `grants`, naming each team alongside its slug, which is what tells same-named teams apart."""
+    grants = list(grants)
+    slugs = {grant.team_slug for grant in grants if grant.kind is GrantKind.TEAM}
+    names = dict(Team.objects.filter(slug__in=slugs).values_list("slug", "name")) if slugs else {}
+    return {
+        grant: f'Team "{names[grant.team_slug]}" ({grant.team_slug})' if grant.team_slug in names else grant.label
+        for grant in grants
+    }
 
 
 def _parses(wire_form: str) -> bool:
@@ -261,6 +332,11 @@ def elevation_redirect(request, grant: Grant, superuser_only: bool = False) -> H
     if Elevation(request).has(grant):
         return None
 
+    return acquire_redirect(request, grant)
+
+
+def acquire_redirect(request, grant: Grant) -> HttpResponseRedirect:
+    """Send the request off to acquire `grant`, returning to the current page once it is held."""
     next_url = safe_redirect_url(request.get_full_path())
     return HttpResponseRedirect(f"{grant.acquire_url()}?{urlencode({'next': next_url})}")
 
@@ -277,7 +353,7 @@ def start_elevation(request, grant: Grant, next_url: str):
     return flows.reauthentication.stash_and_reauthenticate(request, state, REAUTH_CALLBACK)
 
 
-def pending_elevation(request) -> Grant | None:
+def pending_elevation(request) -> PendingElevation | None:
     """The grant waiting on an identity proof, so the re-authentication prompt can name it."""
     if not hasattr(request, "session"):
         return None
@@ -291,7 +367,9 @@ def pending_elevation(request) -> Grant | None:
     except (InvalidGrant, KeyError, TypeError):
         return None
 
-    return None if _is_stale(state) else grant
+    if _is_stale(state):
+        return None
+    return PendingElevation(grant, grant_labels([grant])[grant])
 
 
 def complete_elevation(request, state: dict):
@@ -299,21 +377,24 @@ def complete_elevation(request, state: dict):
     try:
         grant = Grant.parse(state.get("grant", ""))
     except InvalidGrant:
-        logger.warning(f"Discarding elevation of '{request.user.email}': unknown grant {state.get('grant')!r}")
+        logger.warning(
+            "elevation.denied",
+            extra={"user_id": request.user.pk, "grant": state.get("grant"), "reason": "unknown_grant"},
+        )
         return HttpResponseRedirect("/")
 
     if _is_stale(state):
-        logger.warning(f"Discarding stale elevation request of '{request.user.email}' to '{grant}'")
+        logger.warning("elevation.denied", extra={"user_id": request.user.pk, "grant": str(grant), "reason": "stale"})
         messages.error(request, "That request for elevated access expired. Please try again.")
         return HttpResponseRedirect("/")
 
     if not grant.may_be_held_by(request.user):
-        logger.warning(f"Denied elevation of '{request.user.email}' to '{grant}': insufficient role")
+        logger.warning("elevation.denied", extra={"user_id": request.user.pk, "grant": str(grant), "reason": "role"})
         messages.error(request, "You are not allowed to hold that elevated access.")
         return HttpResponseRedirect("/")
 
     try:
-        Elevation(request).add(grant)
+        elevate(request, grant)
     except TooManyElevations:
         messages.error(request, TOO_MANY_ELEVATIONS_MESSAGE)
         return HttpResponseRedirect("/")

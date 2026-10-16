@@ -5,6 +5,7 @@ from django.utils import timezone
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.human_annotations.filters import AnnotationSessionFilter
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -33,3 +34,11 @@ def test_annotation_session_filter_message_date_no_duplicates():
 
     assert filtered.count() == 1
     assert list(filtered) == [session]
+
+
+@pytest.mark.django_db()
+def test_annotation_session_filter_offers_the_annotation_queue_filter():
+    """The queue's own add-sessions picker gets the Annotation Queue filter too."""
+    team = TeamFactory.create()
+
+    assert "annotation_queue" in AnnotationSessionFilter.columns(team)

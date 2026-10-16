@@ -1,5 +1,5 @@
 import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi} from "vitest";
-import {Edge, Node, NodeProps} from "reactflow";
+import {Edge, Node, NodeProps, ReactFlowInstance} from "reactflow";
 import usePipelineStore, {withTemporalPaused} from "./pipelineStore";
 import useEditorStore from "./editorStore";
 import {NodeData} from "../types/nodeParams";
@@ -546,5 +546,93 @@ describe("pipelineStore changeNodeType", () => {
     usePipelineStore.getState().changeNodeType("b", type);
 
     expect(usePipelineStore.getState().nodes.map((node) => node.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("pipelineStore focusNode", () => {
+  const startNode: Node = {id: "start", type: "startNode", position: {x: -100, y: 0}, data: {type: "StartNode", params: {}}};
+  const fitView = vi.fn();
+
+  beforeEach(() => {
+    resetStore();
+    usePipelineStore.getState().resetFlow({nodes: [startNode, {...nodeA, selected: true}, nodeB], edges: [edgeAB]});
+    usePipelineStore.temporal.getState().clear();
+    usePipelineStore.setState({reactFlowInstance: {fitView} as unknown as ReactFlowInstance});
+    fitView.mockClear();
+    useEditorStore.getState().closeEditor();
+  });
+
+  afterAll(() => {
+    usePipelineStore.setState({reactFlowInstance: null});
+    useEditorStore.getState().closeEditor();
+  });
+
+  function selectedIds() {
+    return usePipelineStore.getState().nodes.filter((node) => node.selected).map((node) => node.id);
+  }
+
+  test("selects only the target node", () => {
+    usePipelineStore.getState().focusNode("b");
+
+    expect(selectedIds()).toEqual(["b"]);
+  });
+
+  test("brings the node into view", () => {
+    usePipelineStore.getState().focusNode("b");
+
+    expect(fitView).toHaveBeenCalledWith(expect.objectContaining({nodes: [{id: "b"}]}));
+  });
+
+  test("opens the editor on the node", () => {
+    usePipelineStore.getState().focusNode("b");
+
+    expect(useEditorStore.getState().currentNode?.id).toBe("b");
+  });
+
+  test("asks the editor to show the given field", () => {
+    usePipelineStore.getState().focusNode("b", "prompt");
+
+    expect(useEditorStore.getState().focusField).toEqual({name: "prompt"});
+  });
+
+  test("asks for no field when none is given", () => {
+    usePipelineStore.getState().focusNode("b", "prompt");
+    usePipelineStore.getState().focusNode("a");
+
+    expect(useEditorStore.getState().focusField).toBeNull();
+  });
+
+  test("selects a boundary node without opening the editor", () => {
+    usePipelineStore.getState().focusNode("start");
+
+    expect(selectedIds()).toEqual(["start"]);
+    expect(useEditorStore.getState().currentNode).toBeNull();
+  });
+
+  test("creates no undo step and schedules no save", () => {
+    seedCurrentPipeline();
+    usePipelineStore.setState({dirty: false});
+
+    usePipelineStore.getState().focusNode("b");
+    flushThrottle();
+
+    expect(usePipelineStore.temporal.getState().pastStates).toHaveLength(0);
+    expect(usePipelineStore.getState().dirty).toBe(false);
+  });
+
+  test("works in read-only mode", () => {
+    usePipelineStore.setState({readOnly: true});
+
+    usePipelineStore.getState().focusNode("b");
+
+    expect(selectedIds()).toEqual(["b"]);
+    expect(useEditorStore.getState().currentNode?.id).toBe("b");
+  });
+
+  test("does nothing for an unknown node", () => {
+    usePipelineStore.getState().focusNode("missing");
+
+    expect(selectedIds()).toEqual(["a"]);
+    expect(fitView).not.toHaveBeenCalled();
   });
 });

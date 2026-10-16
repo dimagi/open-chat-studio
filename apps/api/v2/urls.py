@@ -11,6 +11,7 @@ from apps.api.v2.discovery import (
     PipelineOptionsView,
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
+from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.versions.views import (
     ChatbotVersionCreateView,
@@ -22,6 +23,8 @@ app_name = "v2"
 
 router = routers.SimpleRouter()
 router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
+router.register(r"source-material", SourceMaterialViewSet, basename="source-material")
+router.register(r"consent-forms", ConsentFormViewSet, basename="consent-form")
 
 # The v2 API surface: the renamed chatbot surface and all new endpoints (e.g. inspect).
 # Mounted under the capturing ``v2/`` prefix; unlike v1 there is no unversioned alias.

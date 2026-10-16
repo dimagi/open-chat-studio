@@ -8,17 +8,6 @@ from apps.chat.bots import PipelineBot
 from apps.pipelines.nodes.base import PipelineState
 
 
-def test_save_outputs_saves_ai_message():
-    session = mock.Mock()
-    bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"]),
-        output=PipelineState(messages=["Hello"]),
-    )
-    bot._save_message_to_history.assert_called_once()
-
-
 class TestPersistPipelineState:
     """Tests for _persist_pipeline_state, which saves state changes without saving messages to history."""
 
@@ -90,21 +79,6 @@ class TestPersistPipelineState:
         )
 
         trace_service.set_participant_data_diff.assert_not_called()
-
-    def test_no_diff_when_no_trace_service(self):
-        session = mock.Mock()
-        bot = PipelineBot(session, mock.Mock(), None)
-        participant_data = mock.Mock()
-        participant_data.data = None
-        bot.__dict__["participant_data"] = participant_data
-
-        bot._persist_pipeline_state(
-            input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
-            output=PipelineState(messages=["Hello"], participant_data={"plan": "pro"}),
-        )
-
-        # Should not raise even without trace_service
-        assert participant_data.data == {"plan": "pro"}
 
     def test_no_save_when_state_unchanged(self):
         session = mock.Mock()

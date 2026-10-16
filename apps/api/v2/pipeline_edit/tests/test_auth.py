@@ -9,27 +9,13 @@ view class.
 import pytest
 
 from apps.pipelines.models import Node
-from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.utils import set_current_team, unset_current_team
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.experiment import ChatbotFactory
-from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
 
 from .conftest import add_edge, boundary_node, edge_url, node_url, nodes_url, post_wires
-
-
-@pytest.fixture()
-def team_with_roles(db):
-    """`create_default_groups()` is explicit so the DB-backed groups match backends.py even
-    though pytest runs with --reuse-db."""
-    create_default_groups()
-    team = TeamFactory.create()
-    token = set_current_team(team)
-    try:
-        yield team
-    finally:
-        unset_current_team(token)
 
 
 def _call(client, chatbot, verb="post"):
@@ -106,13 +92,14 @@ def test_another_teams_chatbot_is_not_found(verb):
     assert response.status_code == 404, response.content
 
 
-def _machine_client(team, allowed_chatbots):
+def _machine_client(team, allowed_chatbots, all_data=False):
     return ApiTestClient(
         UserFactory.create(),
         team,
         auth_method="oauth_client_credentials",
         scopes=["chatbots:write"],
         allowed_chatbots=allowed_chatbots,
+        all_data=all_data,
     )
 
 
@@ -134,6 +121,16 @@ def test_a_machine_token_is_held_to_its_applications_chatbot_allowlist(listed, v
     response = _call(_machine_client(chatbot.team, allowed_chatbots=allowed), chatbot, verb)
 
     assert response.status_code == (ALLOWED_STATUS[verb] if listed else 403), response.content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("verb", PER_VIEW_CLASS)
+def test_a_machine_token_reaching_all_data_may_edit_an_unlisted_one(verb):
+    chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
+
+    response = _call(_machine_client(chatbot.team, allowed_chatbots=[], all_data=True), chatbot, verb)
+
+    assert response.status_code == ALLOWED_STATUS[verb], response.content
 
 
 @pytest.mark.django_db()

@@ -203,10 +203,6 @@ class TestFeatureFlagsSection:
         assert rendered_state is not None
         assert MANAGEABLE_FLAG in rendered_state.group(1).split(",")
 
-    def test_rejects_get(self, client, team_with_users):
-        client.force_login(self._admin(team_with_users))
-        assert client.get(reverse("single_team:feature_flags", args=[team_with_users.slug])).status_code == 405
-
 
 @pytest.mark.django_db()
 def test_create_missing_flags_row_carries_no_global_override(request, settings):

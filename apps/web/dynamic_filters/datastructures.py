@@ -159,8 +159,13 @@ class FilterParams:
     def from_request_header(cls, request, header: str):
         if header_value := request.headers.get(header):
             parsed_url = urlparse(header_value)
-            return cls(_translate_legacy_query_params(QueryDict(parsed_url.query)))
+            return cls.from_query_params(QueryDict(parsed_url.query))
         return cls()
+
+    @classmethod
+    def from_query_params(cls, query_params: QueryDict) -> Self:
+        """Build from query params, accepting the legacy ``filter_<n>_*`` format."""
+        return cls(_translate_legacy_query_params(query_params))
 
     def get_all(self, column: str) -> list[ColumnFilterData]:
         """All filters targeting ``column``, in the order they were supplied."""

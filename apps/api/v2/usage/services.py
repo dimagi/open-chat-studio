@@ -18,7 +18,6 @@ from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
 from django.db.models import Count, F, QuerySet
-from django.utils import timezone
 
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.services import reporting
@@ -673,15 +672,3 @@ def _truncate_local(dt: datetime, granularity: str) -> datetime:
     if granularity == GRANULARITY_WEEKLY:
         return midnight - timedelta(days=midnight.weekday())  # Monday, matching Django's TruncWeek
     return midnight.replace(day=1)  # monthly
-
-
-def _month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
-    """Half-open ``[start, end)`` for a calendar month, computed in ``tz``. Returns tz-aware
-    datetimes; Django converts them for the UTC-stored ``created_at`` column. ``relativedelta``
-    keeps the same ``tz`` instance, and midnight-on-the-1st stays midnight across a DST transition.
-    """
-    now_local = timezone.now().astimezone(tz)
-    month_start = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if period == PERIOD_PREVIOUS_MONTH:
-        return month_start - relativedelta(months=1), month_start
-    return month_start, month_start + relativedelta(months=1)

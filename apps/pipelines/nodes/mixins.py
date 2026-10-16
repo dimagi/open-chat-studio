@@ -34,7 +34,7 @@ from apps.pipelines.nodes.history_middleware import (
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
-from apps.pipelines.repository import ORMRepository, RepositoryLookupError
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError, get_prefetched_llm_provider_model
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
@@ -100,7 +100,9 @@ class LLMResponseMixin(BaseModel):
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
             try:
-                model = ORMRepository().get_llm_provider_model(llm_provider_model_id)
+                model = get_prefetched_llm_provider_model(
+                    llm_provider_model_id
+                ) or ORMRepository().get_llm_provider_model(llm_provider_model_id)
             except RepositoryLookupError:
                 raise PipelineNodeBuildError(
                     f"LLM provider model with id {llm_provider_model_id} does not exist"
@@ -116,7 +118,9 @@ class LLMResponseMixin(BaseModel):
     @model_validator(mode="after")
     def validate_llm_model(self):
         try:
-            model = ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
+            model = get_prefetched_llm_provider_model(
+                self.llm_provider_model_id
+            ) or ORMRepository().get_llm_provider_model(self.llm_provider_model_id)
         except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",
@@ -298,6 +302,25 @@ class HistoryMixin(LLMResponseMixin):
         return self.repo.save_pipeline_chat_message(history, human_message, ai_message, self.node_id)
 
 
+class RouteTagMixin(BaseModel):
+    """Optionally tags a router's output message with the route it selected."""
+
+    tag_output_message: bool = Field(
+        default=False,
+        description="Tag the output message with the selected route",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
+        if self.tag_output_message:
+            tag_name = f"{self.name}:{selected_route}"
+            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
+            if is_default_keyword:
+                tag_name += ":default"
+            return [(tag_name, tag_category)]
+        return []
+
+
 class RouterMixin(BaseModel):
     keywords: list[str] = Field(
         default_factory=list,
@@ -314,11 +337,6 @@ class RouterMixin(BaseModel):
             "Position in `keywords` to fall back to when no route matches. Must be a valid index into `keywords`."
         ),
         json_schema_extra=UiSchema(widget=Widgets.none),
-    )
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
     @field_validator("keywords")
@@ -345,15 +363,6 @@ class RouterMixin(BaseModel):
         {"output_1": "keyword 1", "output_2": "keyword_2", ...} where keywords are defined by the user
         """
         return {f"output_{output_num}": keyword for output_num, keyword in enumerate(self.keywords)}
-
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
 
 
 class ExtractStructuredDataNodeMixin:
@@ -419,14 +428,23 @@ class ExtractStructuredDataNodeMixin:
     def update_reference_data(self, new_data: dict, reference_data: dict) -> dict:
         return new_data
 
+    def _get_tiktoken_encoding_name(self, model_name: str) -> str:
+        """Return a tiktoken encoding name for the given model, falling back to 'gpt2'."""
+        try:
+            return tiktoken.encoding_for_model(model_name).name
+        except KeyError:
+            return "gpt2"
+
     def _get_prompt_token_count(self, reference_data: dict | str, json_schema: dict) -> int:
-        llm = super().get_chat_model()
+        llm_provider_model = self.repo.get_llm_provider_model(self.llm_provider_model_id)
+        encoding_name = self._get_tiktoken_encoding_name(llm_provider_model.name)
+        encoding = tiktoken.get_encoding(encoding_name)
         prompt_chain = self._prompt_chain(reference_data)
         # If we invoke the chain with an empty input, we get the prompt without the conversation history, which
         # is what we want.
         output = prompt_chain.invoke(input="")
-        json_schema_tokens = llm.get_num_tokens(json.dumps(json_schema))
-        return llm.get_num_tokens(output.text) + json_schema_tokens
+        json_schema_tokens = len(encoding.encode(json.dumps(json_schema)))
+        return len(encoding.encode(output.text)) + json_schema_tokens
 
     def chunk_messages(self, input: str, prompt_token_count: int) -> list[str]:
         """Chunk messages using a splitter that considers the token count.
@@ -445,12 +463,7 @@ class ExtractStructuredDataNodeMixin:
         # TODO: tracing
         # self.logger.debug(f"Chunksize in tokens: {chunk_size_tokens} with {overlap_tokens} tokens overlap")
 
-        try:
-            encoding = tiktoken.encoding_for_model(llm_provider_model.name)
-            encoding_name = encoding.name
-        except KeyError:
-            # The same encoder we use for llm.get_num_tokens_from_messages
-            encoding_name = "gpt2"
+        encoding_name = self._get_tiktoken_encoding_name(llm_provider_model.name)
 
         from langchain_text_splitters import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
             RecursiveCharacterTextSplitter,

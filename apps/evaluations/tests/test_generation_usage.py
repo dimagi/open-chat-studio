@@ -13,7 +13,7 @@ import pytest
 from django.utils import timezone
 from langchain_core.messages import AIMessage
 
-from apps.cost_tracking.models import PricingRule, ServiceKind, UsageRecord, UsageSource
+from apps.cost_tracking.models import ServiceKind, UsageRecord, UsageSource
 from apps.cost_tracking.services.reporting import cost_summary, costs_by_experiment, session_usage
 from apps.evaluations.models import EvaluationRun
 from apps.evaluations.tasks import run_bot_generation
@@ -61,11 +61,8 @@ def llm_experiment(team, db):
 
 
 @pytest.fixture()
-def pricing():
-    for kind, unit_price in ((ServiceKind.LLM_INPUT, "0.00015"), (ServiceKind.LLM_OUTPUT, "0.00060")):
-        PricingRule.objects.create(
-            team=None, provider_type=_PROVIDER, model_name=_MODEL, service_kind=kind, unit_price=unit_price
-        )
+def pricing(seed_llm_pricing):
+    seed_llm_pricing(_PROVIDER, _MODEL)
 
 
 def _generation_service(input_tokens: int = 1000, output_tokens: int = 500):

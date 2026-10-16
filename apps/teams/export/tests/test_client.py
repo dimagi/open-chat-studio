@@ -5,8 +5,9 @@ from apps.teams.export.client import FileContentNotFound, ResourceFetcher
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_data=None, content=b""):
+    def __init__(self, status_code=200, json_data=None, content=b"", headers=None):
         self.status_code = status_code
+        self.headers = headers or {}
         self._json = json_data or {}
         self.content = content
         self.closed = False
@@ -28,7 +29,7 @@ class FakeSession:
         self.calls = []
 
     def get(self, url, params=None, headers=None, timeout=None):
-        self.calls.append({"url": url, "params": params, "headers": headers})
+        self.calls.append({"url": url, "params": params, "headers": headers, "timeout": timeout})
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -110,6 +111,63 @@ def test_client_error_is_not_retried():
     with pytest.raises(requests.HTTPError):
         _client(session).get_manifest()
     assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected_wait"),
+    [
+        pytest.param({"Retry-After": "42"}, 42, id="retry_after_seconds"),
+        pytest.param({"Retry-After": "0"}, 0, id="zero_retry_after_retries_at_once"),
+        pytest.param({"Retry-After": "-5"}, 0, id="negative_retry_after_is_clamped"),
+        pytest.param({}, 1.0, id="no_retry_after_falls_back_to_backoff"),
+        pytest.param({"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}, 1.0, id="unparseable_retry_after_falls_back"),
+    ],
+)
+def test_rate_limited_response_waits_then_retries(headers, expected_wait):
+    limited = FakeResponse(429, headers=headers)
+    session = FakeSession([limited, FakeResponse(json_data={"ok": True})])
+    waits = []
+    client = ResourceFetcher("https://src.example/", "secret-key", session=session, sleep=waits.append)
+    assert client.get_manifest() == {"ok": True}
+    assert waits == [expected_wait]
+    assert limited.closed
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_message"),
+    [
+        pytest.param(
+            FakeResponse(429, headers={"Retry-After": "30"}),
+            "Source server rate limit reached; retrying /api/export/manifest/ in 30s",
+            id="rate-limited",
+        ),
+        pytest.param(
+            FakeResponse(503),
+            "Source server returned 503; retrying /api/export/manifest/ in 1s",
+            id="server-error",
+        ),
+        pytest.param(
+            requests.ConnectionError("boom"),
+            "Could not reach the source server (ConnectionError); retrying /api/export/manifest/ in 1s",
+            id="connection-error",
+        ),
+    ],
+)
+def test_each_retry_is_reported(failure, expected_message):
+    session = FakeSession([failure, FakeResponse(json_data={"ok": True})])
+    messages = []
+    client = ResourceFetcher(
+        "https://src.example/", "secret-key", session=session, sleep=lambda _s: None, on_retry=messages.append
+    )
+    client.get_manifest()
+    assert messages == [expected_message]
+
+
+def test_rate_limited_retries_are_exhausted_and_raise():
+    session = FakeSession([FakeResponse(429, headers={"Retry-After": "1"})] * 10)
+    with pytest.raises(requests.HTTPError):
+        _client(session).get_manifest()
+    assert len(session.calls) == 5
 
 
 def test_get_file_content_hits_file_content_endpoint_and_returns_bytes():

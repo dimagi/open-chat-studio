@@ -21,21 +21,14 @@ from apps.cost_tracking.services.reporting import (
     token_counts,
     usage_by_group,
 )
+from apps.cost_tracking.tests.utils import make_usage
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
-from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 # The 30-day window most tests read over, named where a test needs it inside a lambda.
 _START = _NOW - timedelta(days=30)
-
-
-def _usage(team, *, cost, when, **kwargs):
-    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
-    and forwards optional kwargs (confidence, experiment, session, quantity).
-    """
-    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
 
 
 @pytest.mark.django_db()
@@ -48,8 +41,8 @@ class TestCostFilters:
         team = TeamFactory.create()
         keep = ExperimentFactory.create(team=team)
         drop = ExperimentFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
 
         summary = cost_summary(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
@@ -61,8 +54,8 @@ class TestCostFilters:
         team = TeamFactory.create()
         keep = ExperimentFactory.create(team=team)
         drop = ExperimentFactory.create(team=team)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=45), experiment=keep)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=45), experiment=drop)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=45), experiment=keep)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=45), experiment=drop)
 
         summary = cost_summary(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
@@ -75,8 +68,8 @@ class TestCostFilters:
         exp = ExperimentFactory.create(team=team)
         keep = ExperimentSessionFactory.create(experiment=exp, team=team)
         drop = ExperimentSessionFactory.create(experiment=exp, team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, participant=keep.participant)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, participant=keep.participant)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
 
         series = cost_timeseries(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
@@ -89,8 +82,8 @@ class TestCostFilters:
         exp = ExperimentFactory.create(team=team)
         web = ExperimentSessionFactory.create(experiment=exp, team=team, platform="web")
         api = ExperimentSessionFactory.create(experiment=exp, team=team, platform="api")
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=web)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=web)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
 
         series = cost_timeseries(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
@@ -102,8 +95,8 @@ class TestCostFilters:
         team = TeamFactory.create()
         keep = ExperimentFactory.create(team=team)
         drop = ExperimentFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
 
         costs = costs_by_experiment(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
@@ -115,8 +108,8 @@ class TestCostFilters:
         team = TeamFactory.create()
         keep = ExperimentFactory.create(team=team)
         drop = ExperimentFactory.create(team=team)
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=keep, model_name="keep-model")
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=drop, model_name="drop-model")
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=keep, model_name="keep-model")
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=drop, model_name="drop-model")
 
         gaps = coverage_gaps(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
@@ -135,8 +128,8 @@ class TestCostFilters:
         untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
@@ -150,8 +143,8 @@ class TestCostFilters:
         tag = TagFactory.create(team=team)
         message = ChatMessageFactory.create(chat=tagged.chat)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
@@ -160,7 +153,7 @@ class TestCostFilters:
     def test_tag_filter_excludes_records_without_session(self):
         team = TeamFactory.create()
         tag = TagFactory.create(team=team)
-        _usage(team, cost="5.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="5.00", when=_NOW - timedelta(days=1))
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
@@ -178,10 +171,10 @@ class TestCostFilters:
         other_session = ExperimentSessionFactory.create(team=other_team, experiment=other_exp)
         other_tag = TagFactory.create(team=other_team)
         CustomTaggedItemFactory.create(team=other_team, tag=other_tag, target=other_session.chat)
-        _usage(other_team, cost="9.00", when=_NOW - timedelta(days=1), experiment=other_exp, session=other_session)
+        make_usage(other_team, cost="9.00", when=_NOW - timedelta(days=1), experiment=other_exp, session=other_session)
         exp = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(team=team, experiment=exp)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[other_tag.id]))
 
@@ -214,7 +207,7 @@ class TestCostFilters:
         tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
         link_target = ChatMessageFactory.create(chat=session.chat) if target == "msg" else session.chat
         CustomTaggedItemFactory.create(team=link_team, tag=tag, target=link_target)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
@@ -228,8 +221,8 @@ class TestCostFilters:
         tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
-        _usage(
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        make_usage(
             team,
             cost="0.25",
             when=_NOW - timedelta(days=1),
@@ -249,8 +242,8 @@ class TestCostFilters:
         untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
 
         series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
@@ -268,9 +261,9 @@ class TestCostSummaryWindowBound:
     def test_reads_exactly_the_current_and_previous_periods(self, team):
         start = _NOW - timedelta(days=7)
         end = _NOW
-        _usage(team, cost="1.00", when=start + timedelta(days=1))
-        _usage(team, cost="2.00", when=start - timedelta(days=3))
-        _usage(team, cost="99.00", when=start - timedelta(days=400))
+        make_usage(team, cost="1.00", when=start + timedelta(days=1))
+        make_usage(team, cost="2.00", when=start - timedelta(days=3))
+        make_usage(team, cost="99.00", when=start - timedelta(days=400))
 
         summary = cost_summary(team, start=start, end=end)
 
@@ -295,8 +288,8 @@ class TestEvaluationSourceRule:
         experiment = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(team=team, experiment=experiment)
         when = _NOW - timedelta(days=1)
-        _usage(team, cost="1.00", when=when, experiment=experiment, session=session, quantity=100)
-        _usage(
+        make_usage(team, cost="1.00", when=when, experiment=experiment, session=session, quantity=100)
+        make_usage(
             team,
             cost="0.25",
             when=when,

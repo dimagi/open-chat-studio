@@ -49,6 +49,7 @@ IGNORED_MODELS = frozenset(
         "experiments.promptbuilderhistory",
         "filters.filterset",
         "mcp_integrations.mcpserver",
+        "moderation.deniedparticipant",
         "ocs_notifications.notificationchannel",
         "oauth.oauth2accesstoken",
         "oauth.oauth2application",
@@ -62,6 +63,7 @@ IGNORED_MODELS = frozenset(
         "sso.ssosession",
         "teams.flag",
         "teams.invitation",
+        "web.superuserelevation",
     }
 )
 

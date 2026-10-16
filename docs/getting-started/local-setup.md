@@ -5,7 +5,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 ## Prerequisites
 
 - Python 3.13 (recommended)
-- Node.js >= 24.0.0
+- Node.js >=24.15 <25 or >=26
 - Docker and Docker Compose
 - Git
 

@@ -174,7 +174,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
             # naming different fields would silently clobber one another.
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # A machine token reaches only the chatbots its application allows. Checked after
             # resolution because the allowlist is keyed on the chatbot, and before any write, so the
             # refusal costs nothing but the lock this block releases on the way out.
             enforce_application_chatbot_write(request, chatbot)
@@ -233,7 +233,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         # working-chatbot predicate against the committed `is_archived` and answers 404.
         with transaction.atomic():
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked
+            # A machine token reaches only the chatbots its application allows. Checked
             # after resolution because the allowlist is keyed on the chatbot, and before anything
             # is written.
             enforce_application_chatbot_write(request, chatbot)

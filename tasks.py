@@ -1,5 +1,6 @@
 import platform
 import re
+import shlex
 import shutil
 import socket
 import sys
@@ -12,7 +13,8 @@ from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
 
-MIN_NODE_VERSION = "24"
+MIN_NODE_VERSION = "24.15"
+NODE_VERSION_RANGE = f">={MIN_NODE_VERSION} <25 or >=26"
 DEV_PORT = 8000
 
 
@@ -122,9 +124,9 @@ def setup_dev_env(c: Context, step=False):
 
     _run_with_confirm(c, "Run DB migrations", "python manage.py migrate", step)
 
-    cprint(f"\nChecking node version (>={MIN_NODE_VERSION} required)", "green")
+    cprint(f"\nChecking node version ({NODE_VERSION_RANGE} required)", "green")
     if not _check_node_version(c):
-        cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
+        cprint(f"Node version should be {NODE_VERSION_RANGE}", "red")
         cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
     else:
         cprint("\nInstalling pnpm packages and building front end resources", "green")
@@ -150,7 +152,7 @@ def _check_node_version(c: Context):
     if version.startswith("v"):
         version = version[1:]
     ver = Version(version)
-    return ver >= Version(MIN_NODE_VERSION)
+    return Version(MIN_NODE_VERSION) <= ver < Version("25") or ver >= Version("26")
 
 
 @task
@@ -362,6 +364,27 @@ def typecheck(c: Context, paths="", python=False, js=False):
     if failures:
         raise Exit(f"Type checks failed: {', '.join(failures)}", -1)
     cprint("Type checks passed.", "green")
+
+
+@task(
+    help={
+        "base": "Branch to diff against (default: origin/$GITHUB_BASE_REF if set, else origin/main)",
+        "similarity": "Minimum percent similarity (default: 90)",
+        "min_lines": "Minimum lines in a duplicated region (default: 5)",
+        "json": "Print JSON instead of markdown",
+        "path": "Directory to scan (default: apps)",
+    }
+)
+def duplicates(c: Context, base=None, similarity=90, min_lines=5, json=False, path="apps"):
+    """Report duplicate code that overlaps lines changed on this branch."""
+    if not shutil.which("treepeat"):
+        raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
+    args = ["python", "-m", "scripts.duplicates.find_touched_duplicates"]
+    if base:
+        args += ["--base", base]
+    args += ["--similarity", str(similarity), "--min-lines", str(min_lines)]
+    args += ["--format", "json" if json else "markdown", path]
+    c.run(shlex.join(args), pty=sys.stdout.isatty())
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})
