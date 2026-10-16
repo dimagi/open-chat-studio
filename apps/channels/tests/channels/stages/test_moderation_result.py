@@ -9,7 +9,7 @@ from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyExitResponse
 from apps.channels.stages.terminal import ModerationResultStage
-from apps.channels.tests.channels.conftest import make_context, messaging_channel
+from apps.channels.tests.channels.conftest import make_context, make_trace_service, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
@@ -79,14 +79,14 @@ def test_should_run(human_message, task_id, expected):
 @pytest.mark.django_db()
 class TestModerationResultStage:
     @pytest.mark.parametrize(
-        ("output", "expected_status", "expected_early_exit"),
+        ("output", "expected_status", "expected_reply"),
         [
-            pytest.param(PASSED_OUTPUT, ModerationStatus.PASSED, None, id="passed"),
-            pytest.param(NON_STRIKE_OUTPUT, ModerationStatus.PASSED, None, id="only_non_strike_categories_flagged"),
+            pytest.param(PASSED_OUTPUT, ModerationStatus.PASSED, "answer", id="passed"),
+            pytest.param(NON_STRIKE_OUTPUT, ModerationStatus.PASSED, "answer", id="only_non_strike_categories_flagged"),
             pytest.param(STRIKE_OUTPUT, ModerationStatus.FLAGGED, "Flagged reply", id="strike_category_flagged"),
         ],
     )
-    def test_records_the_output(self, moderated_session, moderation_task, output, expected_status, expected_early_exit):
+    def test_records_the_output(self, moderated_session, moderation_task, output, expected_status, expected_reply):
         moderation_task.get.return_value = _ok(output)
         bot_response = _bot_response(moderated_session)
         ctx = _context(moderated_session, bot_response=bot_response, formatted_message="answer")
@@ -100,8 +100,9 @@ class TestModerationResultStage:
         assert ctx.human_message.moderation_detail == ModerationDetail(output=ModerationOutput.model_validate(output))
         notification.assert_not_called()
         bot_response.refresh_from_db()
-        assert bot_response.content == (expected_early_exit or "The bot's answer")
-        assert ctx.early_exit_response == expected_early_exit
+        assert bot_response.content == ("The bot's answer" if expected_reply == "answer" else expected_reply)
+        assert ctx.formatted_message == expected_reply
+        assert ctx.early_exit_response is None
 
     @pytest.mark.parametrize(
         ("wait", "expected_reason"),
@@ -151,8 +152,8 @@ class TestModerationResultStage:
         bot_response.refresh_from_db()
         assert bot_response.content == "Votre message a été signalé."
         assert bot_response.metadata == {"trace_info": {"trace_id": "t-1"}}
-        assert ctx.early_exit_response == "Votre message a été signalé."
-        assert ctx.formatted_message is None
+        assert ctx.formatted_message == "Votre message a été signalé."
+        assert ctx.early_exit_response is None
         assert ctx.voice_audio is None
         assert ctx.additional_text_message is None
         assert ctx.files_to_send == []
@@ -195,7 +196,7 @@ class TestModerationResultStage:
             event_bot.return_value.get_user_message.configure_mock(**event_bot_reply)
             ModerationResultStage()(ctx)
 
-        assert ctx.early_exit_response == FLAGGED_MESSAGE
+        assert ctx.formatted_message == FLAGGED_MESSAGE
         assert ctx.bot_response.content == FLAGGED_MESSAGE
 
     def test_flagged_message_without_a_bot_response_keeps_the_early_exit(self, moderated_session, moderation_task):
@@ -247,6 +248,54 @@ class TestModerationInTheChannelPipeline:
         assert self._human_message(moderated_session).moderation_status == ModerationStatus.FLAGGED
         ai_messages = ChatMessage.objects.filter(chat=moderated_session.chat, message_type=ChatMessageType.AI)
         assert [message.content for message in ai_messages] == ["Your message was flagged."]
+
+    def test_flagged_message_gets_a_text_reply_instead_of_voice(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        def reply_with_voice(ctx):
+            ctx.formatted_message = ctx.bot_response.content
+            ctx.voice_audio = MagicMock()
+
+        with (
+            patch(EVENT_BOT) as event_bot,
+            patch("apps.channels.stages.core.ResponseFormattingStage.process", side_effect=reply_with_voice),
+        ):
+            event_bot.return_value.get_user_message.return_value = "Your message was flagged."
+            channel = self._send(
+                moderated_session, process_input=lambda *args, **kwargs: _bot_response(moderated_session)
+            )
+
+        assert channel.voice_sent == []
+        assert channel.text_sent == ["Your message was flagged."]
+        ai_message = ChatMessage.objects.get(chat=moderated_session.chat, message_type=ChatMessageType.AI)
+        assert ai_message.content == "Your message was flagged."
+        assert not ai_message.tags.exists()
+
+    def test_web_channel_returns_the_saved_replacement(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        channel = WebChannel(
+            experiment=moderated_session.experiment,
+            experiment_channel=moderated_session.experiment_channel,
+            experiment_session=moderated_session,
+        )
+        channel.trace_service = make_trace_service()
+
+        with (
+            patch(EVENT_BOT) as event_bot,
+            patch("apps.channels.stages.core.get_bot") as get_bot,
+        ):
+            event_bot.return_value.get_user_message.return_value = "Your message was flagged."
+            get_bot.return_value.process_input.side_effect = lambda *args, **kwargs: _bot_response(moderated_session)
+            response = channel.new_user_message(
+                base_messages.text_message(
+                    participant_id=moderated_session.participant.identifier, message_text="Bad words"
+                )
+            )
+
+        ai_message = ChatMessage.objects.get(chat=moderated_session.chat, message_type=ChatMessageType.AI)
+        assert response.id == ai_message.id
+        assert response.created_at == ai_message.created_at
+        assert response.content == ai_message.content == "Your message was flagged."
 
     def test_passed_message_is_answered(self, moderated_session, moderation_task):
         moderation_task.get.return_value = _ok(PASSED_OUTPUT)

@@ -143,13 +143,17 @@ class MessageProcessingContext:
         return timezone.now() if self.message is not None else None
 
     def replace_response(self, text: str) -> None:
-        """Drop the outgoing response, voice, text and files, and send `text` instead."""
-        self.formatted_message = None
+        """Send `text` as the only reply, with no voice, extra text or files.
+
+        The caller saves `text` on `bot_response` first: it is sent on the normal response path, and the
+        channel returns `bot_response`.
+        """
+        self.formatted_message = text
         self.voice_audio = None
         self.additional_text_message = None
         self.files_to_send = []
         self.unsupported_files = []
-        self.early_exit_response = text
+        self.early_exit_response = None
 
 
 def generate_user_message(
