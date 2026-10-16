@@ -102,11 +102,14 @@ def end_session() -> None:
     Ends the current chat session with this response.
 
 def block_participant(reason: str) -> bool:
-    Adds the current participant to the team's denylist, without strikes. A blocked participant
-    gets no further replies from any of the team's chatbots.
+    Adds the current participant to the team's denylist, without strikes. The block applies from the
+    participant's next message: the reply to the current message is still sent unless the code also
+    calls `abort_with_message`. A blocked participant gets no further replies from any of the team's
+    chatbots. The reason is saved, truncated to 500 characters.
     Returns True if this call blocked the participant, and False if the participant was already
     blocked or cannot be blocked (abuse detection is off, the participant is a team member, or
-    the session is an evaluation run).
+    the session is an evaluation run). Nothing is saved in the pipeline editor's test chat.
+    Raises an error if there is no active session or `reason` is not a string.
 
 def abort_with_message(message, tag_name: str = None) -> None:
     Calling this will terminate the pipeline execution. No further nodes will get executed in
