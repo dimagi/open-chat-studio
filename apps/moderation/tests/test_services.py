@@ -250,15 +250,6 @@ def test_get_moderation_result_logs_a_failed_task_as_a_warning(error, caplog):
 BLOCKED_NOTIFICATION = "apps.moderation.services.participant_auto_blocked_notification"
 
 
-@pytest.fixture()
-def auto_block_session():
-    """A session whose team has auto-block on, with a participant who has no linked user."""
-    session = ExperimentSessionFactory.create()
-    session.experiment.team.auto_block_enabled = True
-    session.experiment.team.save()
-    return session
-
-
 def _add_strike(session, categories=("illicit",)):
     message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="text")
     add_strike(

@@ -13,8 +13,10 @@ from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.pytest import restore_serialized_database
 from apps.utils.tests.fixtures import (  # noqa: F401 -- registers the shared fixtures
     admin,
+    auto_block_session,
     connect_request_headers,
     keypair,
+    moderated_session,
     slack_service,
     team_with_resources,
 )
