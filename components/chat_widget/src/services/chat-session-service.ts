@@ -169,10 +169,10 @@ const CONSENT_REFUSAL_CODES = ['consent_required', 'consent_stale'];
 const SESSION_EXPIRED_CODE = 'session_expired';
 
 /** The 403 code for a participant on the team's denylist. The widget reports a generic failure and keeps the session. */
-const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
+export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
 
 /** Shown in place of the server's wording when the refusal must not reveal its reason. */
-const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
+export const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
 
 interface ErrorBody {
   message: string;
