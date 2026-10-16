@@ -7,10 +7,16 @@
     </div>
     {% has_perm "ocs_notifications" "add_notificationchannel" as can_add_notification_channel %}
     {% if can_add_notification_channel %}
-      <a data-cy="btn-add-notification-channel" class="btn btn-sm btn-primary whitespace-nowrap"
-         href="{% url 'ocs_notifications_channels:new' request.team.slug %}">
-        <i class="fa-solid fa-bell mr-1"></i>{% translate "Add channel" %}
-      </a>
+      {% if has_slack_provider %}
+        <a data-cy="btn-add-notification-channel" class="btn btn-sm btn-primary whitespace-nowrap"
+           href="{% url 'ocs_notifications_channels:new' request.team.slug %}">
+          <i class="fa-solid fa-bell mr-1"></i>{% translate "Add channel" %}
+        </a>
+      {% else %}
+        <button type="button" data-cy="btn-add-notification-channel" class="btn btn-sm btn-primary whitespace-nowrap" disabled>
+          <i class="fa-solid fa-bell mr-1"></i>{% translate "Add channel" %}
+        </button>
+      {% endif %}
     {% endif %}
   </div>
   <hr class="my-2">

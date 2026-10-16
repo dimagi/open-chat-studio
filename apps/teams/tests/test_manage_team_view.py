@@ -84,6 +84,7 @@ def test_notifications_section_shows_notice_without_slack_workspace(client, team
 
     assert b"no-slack-workspace-notice" in section.content
     assert b"Connect a Slack workspace" in section.content
+    assert b"disabled" in section.content.split(b"btn-add-notification-channel")[1].split(b">")[0]
 
 
 @pytest.mark.django_db()
@@ -93,6 +94,7 @@ def test_notifications_section_hides_notice_with_slack_workspace(client, team, a
     section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
 
     assert b"no-slack-workspace-notice" not in section.content
+    assert b"disabled" not in section.content.split(b"btn-add-notification-channel")[1].split(b">")[0]
 
 
 @pytest.mark.django_db()
