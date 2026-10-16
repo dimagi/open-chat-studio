@@ -155,13 +155,13 @@ def add_strike(
 def block_participant_from_code_node(*, session: ExperimentSession, reason: str) -> bool:
     """Block the session's participant from a code node, without strikes. Returns whether a new block was created.
 
-    Does nothing when abuse detection is off for the team, the participant is exempt, or the participant is the
-    team's shared evaluations participant.
+    Does nothing when abuse detection is off for the team, the participant is exempt, or the session is an evaluation
+    run.
     """
     participant = session.participant
     team = session.team
     if (
-        participant.platform == ChannelPlatform.EVALUATIONS
+        session.platform == ChannelPlatform.EVALUATIONS
         or not abuse_detection_enabled(team)
         or is_exempt(participant=participant, team=team)
     ):

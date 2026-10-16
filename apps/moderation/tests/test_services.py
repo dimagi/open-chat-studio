@@ -476,9 +476,9 @@ class TestBlockParticipantFromCodeNode:
         assert block_participant_from_code_node(session=session, reason="Spam") is blocked
         assert DeniedParticipant.objects.exists() is blocked
 
-    def test_does_nothing_for_the_evaluations_participant(self, session):
-        session.participant.platform = ChannelPlatform.EVALUATIONS
-        session.participant.save()
+    def test_does_nothing_in_an_evaluation_run(self, session):
+        session.platform = ChannelPlatform.EVALUATIONS
+        session.save()
 
         assert block_participant_from_code_node(session=session, reason="Spam") is False
         assert not DeniedParticipant.objects.exists()
