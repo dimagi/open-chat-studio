@@ -3,16 +3,17 @@
 # When a PR with the "This PR requires docs/changelog update" checkbox ticked is
 # merged, sends an `ocs_changelog_update` repository_dispatch event to
 # dimagi/open-chat-studio-docs. That repo's update-changelog.yml drafts the
-# changelog entry and docs update. The payload includes the PR's title, body and
-# URL, and `is_widget_change` (true if the PR changed files under components/).
+# changelog entry and docs update. The payload (see `client-payload` below)
+# carries the PR's details and `is_widget_change` (true if the PR changed files
+# under components/).
 #
 # Triggered on: a PR to `main` being closed, if it changed files under
 # components/, config/, assets/, apps/ or templates/.
 #
 # Conditions, checked in order:
 # 1. Job `if:` - the PR was merged and its description contains `[x]`. This
-#    skips most PRs without starting a runner.
-# 2. First step - a grep confirms the ticked box is the docs/changelog one, not
+#    SKIPS most PRs without starting a runner.
+# 2. First step - a grep CONFIRMS the ticked box is the docs/changelog one, not
 #    another checkbox such as the operator-impact one. Later steps run only if
 #    it matches.
 #
@@ -50,7 +51,7 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch Docs and Changelog Update
-    # Only run if the PR was merged (not just closed) and has a ticked checkbox
+    # Only run if the PR was merged (not just closed) and has any ticked checkbox
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.body, '[x]')
     runs-on: ubuntu-latest
     timeout-minutes: 5

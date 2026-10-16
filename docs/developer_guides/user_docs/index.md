@@ -4,7 +4,7 @@ OCS uses a Docs-as-Code + LLM Augmentation approach for user documentation: the 
 
 LLM-based automation (with Claude) helps draft changelog entries **and** user documentation updates from merged PRs, while developers still decide when changes are user-facing, provide context in the PR, and review generated output before publishing.
 
-[Weekly release notes](release_notes.md) are then automatically published as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases).
+[Weekly release notes](release_notes.md) are then automatically drafted as [GitHub releases](https://github.com/dimagi/open-chat-studio-docs/releases), and a developer reviews and publishes them.
 
 ## When to update docs
 
@@ -29,7 +29,7 @@ Most PRs fall into one main case, plus two variants. Follow whichever applies:
 
 1. Check the **"This PR requires docs/changelog update"** checkbox.
 2. Add notes in the PR description to help the automation write accurate changelog and user docs content — keep entries brief, but link to any relevant documentation for further details.
-3. Merge as normal. The automation picks up the merge and opens a docs PR on your behalf — see [Changelog Automation](changelog_automation.md) for how that works internally, and what to do if it doesn't fire.
+3. Merge as normal. The automation picks up the merge and opens a docs PR assigned to you (unless Claude finds nothing to change) — see [Changelog Automation](changelog_automation.md) for how that works internally, and what to do if it doesn't fire.
 
 ### 2. Widget changes
 
@@ -37,7 +37,7 @@ If your PR touches the chat widget (files under `components/`):
 
 1. Keep widget changes in a separate PR from any main app changes — a PR touching both is treated as a widget change, and only the widget changelog gets updated.
 2. Check the **"This PR requires docs/changelog update"** checkbox, same as the main case.
-3. Include the widget version number in the PR description (e.g. "v0.4.9").
+3. If the PR releases a new widget version, include the version number in the PR description (e.g. "v0.4.9"). Claude uses it when writing the widget changelog entry.
 4. The automation writes to `docs/chat_widget/changelog.md` instead of `docs/changelog.md` — see [Changelog Automation](changelog_automation.md) for how that works.
 
 ### 3. Self-hosted operator-impacting changes (manual process)
