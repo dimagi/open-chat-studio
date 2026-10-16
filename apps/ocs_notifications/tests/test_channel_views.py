@@ -2,12 +2,10 @@ from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.ocs_notifications.models import NotificationChannel
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.backends import TEAM_ADMIN_GROUP, add_user_to_team, create_default_groups
-from apps.teams.flags import Flags
 from apps.utils.factories.notifications import NotificationChannelFactory, SlackMessagingProviderFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -29,8 +27,7 @@ def admin_client(client):
     user = UserFactory.create()
     add_user_to_team(team, user, groups=[TEAM_ADMIN_GROUP])
     client.force_login(user)
-    with override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
-        yield client, team
+    return client, team
 
 
 @pytest.mark.django_db()
@@ -115,8 +112,7 @@ class TestNotificationChannelViews:
         add_user_to_team(team, user)
         client.force_login(user)
 
-        with override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
-            response = client.get(reverse("ocs_notifications_channels:table", args=[team.slug]))
+        response = client.get(reverse("ocs_notifications_channels:table", args=[team.slug]))
 
         assert response.status_code == 403
 

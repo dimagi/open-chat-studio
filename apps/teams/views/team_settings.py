@@ -11,10 +11,8 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from waffle import flag_is_active
 
 from apps.teams.decorators import login_and_team_required
-from apps.teams.flags import Flags
 from apps.teams.forms import (
     FeatureFlagForm,
     InvitationForm,
@@ -74,9 +72,7 @@ def _is_team_admin(request) -> bool:
 
 
 def _can_view_notifications(request) -> bool:
-    return bool(flag_is_active(request, Flags.SLACK_NOTIFICATIONS.slug)) and request.user.has_perm(
-        "ocs_notifications.view_notificationchannel"
-    )
+    return request.user.has_perm("ocs_notifications.view_notificationchannel")
 
 
 def _is_staff(request) -> bool:

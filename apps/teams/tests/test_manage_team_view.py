@@ -1,9 +1,7 @@
 import pytest
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
-from apps.teams.flags import Flags
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
@@ -68,17 +66,7 @@ def test_data_nav_link_shown_for_admin(client, team, admin):
 
 
 @pytest.mark.django_db()
-def test_notifications_section_hidden_when_flag_off(client, team, admin):
-    client.force_login(admin)
-    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
-
-    assert section_url(team_slug=team.slug, section_key="notifications").encode() not in response.content
-    assert client.get(section_url(team_slug=team.slug, section_key="notifications")).status_code == 404
-
-
-@pytest.mark.django_db()
-@override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True)
-def test_notifications_section_shown_when_flag_on(client, team, admin):
+def test_notifications_section_shown(client, team, admin):
     client.force_login(admin)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
     assert section_url(team_slug=team.slug, section_key="notifications").encode() in response.content
