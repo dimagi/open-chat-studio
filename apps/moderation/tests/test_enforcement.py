@@ -1,7 +1,8 @@
 import pytest
 from waffle.testutils import override_flag
 
-from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked
+from apps.experiments.models import Participant
+from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ParticipantFactory
@@ -63,6 +64,25 @@ class TestBlockParticipant:
         assert created is False
         assert row == denial
         assert DeniedParticipant.objects.filter(participant_id=denial.participant_id).count() == 1
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("blocked", "expected_strikes"),
+    [
+        pytest.param(True, 0, id="blocked"),
+        pytest.param(False, 2, id="not_blocked"),
+    ],
+)
+def test_unblock_participant(blocked, expected_strikes):
+    participant = ParticipantFactory.create(strikes=2)
+    if blocked:
+        DeniedParticipantFactory.create(team=participant.team, participant=participant)
+
+    assert unblock_participant(participant) is blocked
+
+    assert not DeniedParticipant.objects.filter(participant=participant).exists()
+    assert Participant.objects.get(id=participant.id).strikes == expected_strikes
 
 
 @pytest.mark.django_db()

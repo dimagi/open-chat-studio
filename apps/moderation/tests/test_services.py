@@ -16,7 +16,6 @@ from apps.moderation.services import (
     remove_turn_from_pipeline_histories,
     start_moderation,
     strike_categories,
-    unblock_participant,
 )
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.repository import ORMRepository
@@ -25,7 +24,6 @@ from apps.utils.factories.experiment import (
     ChatFactory,
     ChatMessageFactory,
     ExperimentSessionFactory,
-    ParticipantFactory,
 )
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
@@ -361,22 +359,3 @@ class TestAddStrike:
 
         assert list(DeniedParticipant.objects.all()) == [existing]
         notification.assert_not_called()
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("blocked", "expected_strikes"),
-    [
-        pytest.param(True, 0, id="blocked"),
-        pytest.param(False, 2, id="not_blocked"),
-    ],
-)
-def test_unblock_participant(blocked, expected_strikes):
-    participant = ParticipantFactory.create(strikes=2)
-    if blocked:
-        DeniedParticipantFactory.create(team=participant.team, participant=participant)
-
-    assert unblock_participant(participant) is blocked
-
-    assert not DeniedParticipant.objects.filter(participant=participant).exists()
-    assert Participant.objects.get(id=participant.id).strikes == expected_strikes

@@ -24,9 +24,8 @@ from apps.cost_tracking.services.reporting import CostFilters, costs_by_particip
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.generics.breadcrumbs import Crumb
-from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt
+from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
-from apps.moderation.services import unblock_participant
 from apps.participants.forms import (
     BlockParticipantForm,
     ParticipantExportForm,

@@ -15,7 +15,7 @@ from apps.chat.schemas import ModerationDetail
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
 from apps.moderation.enforcement import block_participant, is_exempt
-from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
+from apps.moderation.models import DeniedParticipantSource
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
 from apps.ocs_notifications.notifications import participant_auto_blocked_notification
@@ -146,18 +146,6 @@ def _increment_strikes(participant: Participant) -> int:
         participants.update(strikes=F("strikes") + 1, updated_at=timezone.now())
         participant.strikes = participants.values_list("strikes", flat=True).get()
     return participant.strikes
-
-
-def unblock_participant(participant: Participant) -> bool:
-    """Remove the participant from its team's denylist and reset its strikes. Returns whether it was blocked."""
-    denial = DeniedParticipant.objects.filter(team_id=participant.team_id, participant=participant).first()
-    if denial is None:
-        return False
-    with transaction.atomic():
-        denial.delete()
-        Participant.objects.filter(id=participant.id).update(strikes=0, updated_at=timezone.now())
-    participant.strikes = 0
-    return True
 
 
 def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_response: ChatMessage | None) -> None:

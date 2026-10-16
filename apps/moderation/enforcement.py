@@ -1,3 +1,5 @@
+from django.db import transaction
+
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
 from apps.teams.roles import is_member
@@ -27,6 +29,18 @@ def block_participant(
             "created_by": created_by,
         },
     )
+
+
+def unblock_participant(participant) -> bool:
+    """Remove the participant from its team's denylist and reset its strikes. Returns whether it was blocked."""
+    denial = DeniedParticipant.objects.filter(team_id=participant.team_id, participant=participant).first()
+    if denial is None:
+        return False
+    with transaction.atomic():
+        denial.delete()
+        participant.strikes = 0
+        participant.save(update_fields=["strikes", "updated_at"])
+    return True
 
 
 def abuse_detection_enabled(team) -> bool:
