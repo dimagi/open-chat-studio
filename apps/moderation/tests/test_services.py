@@ -33,6 +33,7 @@ from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 OUTPUT = ModerationOutput({"harassment": ModerationCategory(flagged=False, score=0.1)})
+STRIKE_OUTPUT = ModerationOutput({"illicit": ModerationCategory(flagged=True, score=0.9)})
 
 
 @pytest.mark.django_db()
@@ -268,14 +269,19 @@ class TestAddStrike:
         """Two increments made through stale copies of the participant both count, and update `updated_at`."""
         first = Participant.objects.get(id=auto_block_session.participant_id)
         second = Participant.objects.get(id=auto_block_session.participant_id)
-        message = _add_strike(auto_block_session)
+        message = ChatMessageFactory.create(chat=auto_block_session.chat, message_type=ChatMessageType.HUMAN)
 
-        add_strike(participant=first, experiment=auto_block_session.experiment, chat_message=message, output=OUTPUT)
-        add_strike(participant=second, experiment=auto_block_session.experiment, chat_message=message, output=OUTPUT)
+        for participant in (first, second):
+            add_strike(
+                participant=participant,
+                experiment=auto_block_session.experiment,
+                chat_message=message,
+                output=STRIKE_OUTPUT,
+            )
 
-        assert second.strikes == 3
+        assert second.strikes == 2
         saved = Participant.objects.get(id=auto_block_session.participant_id)
-        assert saved.strikes == 3
+        assert saved.strikes == 2
         assert saved.updated_at > first.updated_at
 
     def test_auto_block_off_gives_no_strike(self, auto_block_session, django_capture_on_commit_callbacks):
