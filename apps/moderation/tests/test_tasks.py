@@ -64,13 +64,14 @@ def test_rate_limited_is_skipped_without_retry():
         pytest.param(status_error(openai.InternalServerError, 500, "boom"), id="server_error"),
     ],
 )
-def test_retries_then_returns_error(error):
+def test_retries_then_raises(error):
     provider = ModerationProviderFactory.create()
 
     with mock.patch(MODERATE, side_effect=error) as moderate:
         result = _run(provider.id)
 
-    assert result.get() == {"status": "skipped", "reason": "error"}
+    with pytest.raises(openai.OpenAIError):
+        result.get()
     assert moderate.call_count == 3
 
 
