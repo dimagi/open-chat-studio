@@ -24,7 +24,7 @@ class _StubNode(ExtractStructuredDataNodeMixin):
         self.chunk_outputs = list(chunk_outputs)
         self.seen_reference_data = []
 
-    def get_tool_class(self, schema):
+    def get_tool_class(self, data):
         return MagicMock()
 
     def get_reference_data(self, context):
