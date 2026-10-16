@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.generics.tables import ISOTimeAgoColumn, TimeAgoColumn
+from apps.teams.models import Team
 
 PROCESSOR_CALLS = []
 
@@ -16,8 +17,6 @@ PROCESSOR_CALLS = []
 def counting_query_processor(request):
     """Test-only context processor that hits the DB, like `user_teams` does in production."""
     PROCESSOR_CALLS.append(request)
-    from apps.teams.models import Team
-
     Team.objects.exists()
     return {}
 
