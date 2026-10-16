@@ -149,6 +149,16 @@ def test_create_dialog_makes_a_public_channel_with_a_token(client, experiment):
 
 
 @pytest.mark.django_db()
+def test_create_dialog_refuses_a_second_public_channel(client, public_channel):
+    _operator(client, public_channel.team, "add_experimentchannel")
+    url = reverse(
+        "channels:channel_create_dialog", args=[public_channel.team.slug, public_channel.experiment_id, "public"]
+    )
+    response = client.get(url)
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db()
 def test_edit_dialog_regenerates_and_ends_sessions(client, public_channel):
     _operator(client, public_channel.team, "change_experimentchannel")
     live = ExperimentSessionFactory.create(
