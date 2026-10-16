@@ -26,6 +26,7 @@ from apps.api.v2.inspect.nodes import (
     nodes_in_render_order,
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
+from apps.api.v2.triggers.params_reference import SERVER_SET_PARAMS
 from apps.api.v2.utils import parse_custom_actions
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
@@ -43,9 +44,6 @@ if TYPE_CHECKING:
 
 
 # Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
-_CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text")
-
-
 @extend_schema_serializer(component_name="InspectFile")
 class FileSerializer(serializers.ModelSerializer):
     """A file's identifying fields only.
@@ -630,13 +628,15 @@ class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSeriali
     # extension marks it optional (see ``_ConditionalRequiredSchemaMixin``).
     CONDITIONAL_RESPONSE_KEYS = ("pipeline",)
 
-    params = serializers.SerializerMethodField(help_text="Action parameters; keys depend on the action ``type``.")
+    params = serializers.SerializerMethodField(
+        help_text="Action parameters, as the trigger write endpoints take them; keys depend on `action_type`."
+    )
     pipeline = serializers.SerializerMethodField()
 
     class Meta:
         model = EventAction
-        fields = ["type", "params", "pipeline"]
-        extra_kwargs = {"type": {"help_text": "What the trigger runs", "source": "action_type"}}
+        fields = ["action_type", "params", "pipeline"]
+        extra_kwargs = {"action_type": {"help_text": "What the trigger runs"}}
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -646,12 +646,7 @@ class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSeriali
 
     @extend_schema_field(serializers.DictField())
     def get_params(self, action) -> dict:
-        params = dict(action.params or {})
-        if action.action_type == EventActionType.SCHEDULETRIGGER:
-            return {"scheduled_message": {key: params.get(key) for key in _CADENCE_KEYS}}
-        if action.action_type == EventActionType.PIPELINE_START:
-            params.pop("pipeline_id", None)
-        return params
+        return {key: value for key, value in (action.params or {}).items() if key not in SERVER_SET_PARAMS}
 
     @extend_schema_field(InspectPipelineSerializer(required=False))
     def get_pipeline(self, action):
@@ -680,9 +675,7 @@ class InspectStaticTriggerSerializer(serializers.ModelSerializer):
 
 
 class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
-    delay_seconds = serializers.IntegerField(
-        source="delay", help_text="Seconds of inactivity before the trigger fires."
-    )
+    delay = serializers.IntegerField(help_text="Seconds of inactivity before the trigger fires.")
     total_num_triggers = serializers.IntegerField(
         help_text="Maximum number of times this timeout fires within a session."
     )
@@ -693,7 +686,7 @@ class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TimeoutTrigger
-        fields = ["id", "delay_seconds", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
+        fields = ["id", "delay", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
 
 
 class InspectScheduledTriggerSerializer(serializers.ModelSerializer):

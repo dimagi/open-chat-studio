@@ -438,11 +438,11 @@ def test_the_24h_timeout_from_the_spec_reads_back_through_inspect(client, chatbo
     assert inspected["events"]["timeout_triggers"] == [
         {
             "id": created["id"],
-            "delay_seconds": 86400,
+            "delay": 86400,
             "total_num_triggers": 1,
             "trigger_from_first_message": False,
             "is_active": True,
-            "action": {"type": "send_message_to_bot", "params": body["action"]["params"]},
+            "action": {"action_type": "send_message_to_bot", "params": body["action"]["params"]},
         }
     ]
 
@@ -463,6 +463,16 @@ def test_a_scheduled_trigger_reads_back_through_inspect(client, chatbot):
             "scheduled_at": created["scheduled_at"],
             "fired_at": None,
             "is_active": True,
-            "action": {"type": "log", "params": {}},
+            "action": {"action_type": "log", "params": {}},
         }
     ]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("kind", KINDS)
+def test_inspect_shows_a_trigger_as_the_write_endpoint_returns_it(client, chatbot, kind):
+    created = client.post(kind.list_url(chatbot), kind.body(), format="json").json()
+
+    inspected = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/").json()
+
+    assert inspected["events"][kind.related_name] == [created]

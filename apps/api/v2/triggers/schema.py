@@ -46,11 +46,7 @@ PUBLISH_NOTE = (
 )
 ACTION_NOTE = (
     "Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the "
-    "`params` field's description lists the keys each type takes.\n\n"
-    "The `chatbot_inspect` endpoint shows some actions' params in a different shape, so they cannot "
-    "be sent back as they read there. For `schedule_trigger`, send the keys inspect nests under "
-    "`params.scheduled_message` directly in `params`. For `pipeline_start`, send the `id` of "
-    "inspect's `pipeline` as `params.pipeline_id`."
+    "`params` field's description lists the keys each type takes."
 )
 
 
