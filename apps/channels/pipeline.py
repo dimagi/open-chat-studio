@@ -70,6 +70,7 @@ class MessageProcessingContext:
     transcript: str | None = None
 
     human_message: ChatMessage | None = None  # DB record of the user's message
+    moderation_task_id: str | None = None  # Set by AbuseRulesStage, read by ModerationResultStage
     bot_response: ChatMessage | None = None
     bot: PipelineBot | None = None  # Lazy -- created in BotInteractionStage
 

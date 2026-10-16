@@ -15,6 +15,7 @@ from apps.chat.schemas import ModerationDetail
 from apps.moderation.models import DeniedParticipant
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.team import MembershipFactory
 
 FLAG = Flags.ABUSE_DETECTION.slug
 
@@ -61,6 +62,32 @@ class TestAbuseRulesStage:
 
         ctx.human_message.refresh_from_db()
         assert ctx.human_message.moderation_detail == expected
+
+    @override_flag(FLAG, active=True)
+    @pytest.mark.parametrize(
+        ("text", "started"),
+        [
+            pytest.param("hello", True, id="text"),
+            pytest.param("", False, id="no_text"),
+        ],
+    )
+    def test_starts_moderation(self, moderated_session, moderation_task, text, started):
+        ctx = _context(moderated_session, text)
+
+        AbuseRulesStage()(ctx)
+
+        assert ctx.moderation_task_id == ("task-1" if started else None)
+
+    @override_flag(FLAG, active=True)
+    def test_moderates_exempt_participants(self, moderated_session, moderation_task):
+        membership = MembershipFactory.create(team=moderated_session.experiment.team)
+        moderated_session.participant.user = membership.user
+        moderated_session.participant.save()
+        ctx = _context(moderated_session, "hello")
+
+        AbuseRulesStage()(ctx)
+
+        assert ctx.moderation_task_id == "task-1"
 
 
 @pytest.mark.django_db()

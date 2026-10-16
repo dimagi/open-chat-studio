@@ -29,7 +29,7 @@ from apps.experiments.models import (
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.services import record_rule_hits
+from apps.moderation.services import record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
@@ -780,10 +780,13 @@ class ErrorGuardStage(ProcessingStage):
 
 
 class AbuseRulesStage(ProcessingStage):
-    """Records the abuse rules the human message triggers on its `moderation_detail`."""
+    """Records the abuse rules the human message triggers and starts moderation of its text.
+
+    Messages from exempt participants are moderated too.
+    """
 
     span_input_fields = ("human_message.id",)
-    span_output_fields = ("human_message.moderation_detail.rules",)
+    span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
@@ -796,8 +799,7 @@ class AbuseRulesStage(ProcessingStage):
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-
-        # Start moderation of the message here.
+        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, text=ctx.user_query)
 
 
 # ---------------------------------------------------------------------------

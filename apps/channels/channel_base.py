@@ -28,6 +28,7 @@ from apps.channels.stages.core import (
 from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     DeliveryErrorHandler,
+    ModerationResultStage,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
@@ -160,6 +161,7 @@ class ChannelBase(ABC):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 ResponseSendingStage(should_voice_fallback_to_text=self._should_voice_fallback_to_text),
                 SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
