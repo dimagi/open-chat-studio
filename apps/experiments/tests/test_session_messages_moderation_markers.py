@@ -66,7 +66,7 @@ def test_transcript_rule_marker(client, experiment, moderation_detail, marker_pr
         ),
     ],
 )
-def test_rule_marker_hidden_from_participant(client, experiment, view_name, status):
+def test_moderation_markers_hidden_from_participant(client, experiment, view_name, status):
     participant_user = UserFactory.create()
     session = _create_session(
         experiment=experiment,
