@@ -693,7 +693,8 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         description=(
             "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
             "to return one of them, so describe when each applies rather than asking for free text. "
-            "A narrower set of template variables is available here than on an LLM node."
+            "The only template variables available are `{participant_data}`, `{temp_state}` and "
+            "`{session_state}`, in single braces."
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
     )
