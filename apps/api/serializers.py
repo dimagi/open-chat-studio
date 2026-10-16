@@ -20,6 +20,12 @@ from apps.teams.models import Team
 from apps.trace.models import participant_data_from_trace
 
 
+class ErrorDetailSerializer(serializers.Serializer):
+    """An error response with a single human-readable message."""
+
+    detail = serializers.CharField()
+
+
 class ApiUrlField(serializers.HyperlinkedIdentityField):
     """``HyperlinkedIdentityField`` that documents a concrete ``example`` URL in the OpenAPI schema.
 

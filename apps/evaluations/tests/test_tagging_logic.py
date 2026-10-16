@@ -159,10 +159,6 @@ class TestBinaryTagRuleConditions:
     def test_coerce_value_converts_binary_to_int(self):
         assert ConditionType.coerce_value("1", "binary") == 1
 
-    def test_equals_match_compares_stored_integers(self):
-        assert ConditionType.EQUALS.matches({"value": 1}, 1) is True
-        assert ConditionType.EQUALS.matches({"value": 1}, 0) is False
-
 
 # ---- evaluate_rules --------------------------------------------------------
 

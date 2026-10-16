@@ -137,23 +137,13 @@ def _unpublish(experiment):
 
 
 @pytest.mark.django_db()
-def test_send_refuses_once_the_published_version_is_gone(team_with_users):
+@pytest.mark.parametrize("call", [pytest.param(_send, id="send"), pytest.param(_upload, id="upload")])
+def test_refuses_once_the_published_version_is_gone(team_with_users, call):
     channel = _public_channel(team_with_users)
     client = APIClient()
     started = _start(client, channel.experiment).json()
     _unpublish(channel.experiment)
-    response = _send(client, started["session_id"], started["session_token"])
-    assert response.status_code == 409
-    assert response.json()["code"] == "no_published_version"
-
-
-@pytest.mark.django_db()
-def test_upload_refuses_once_the_published_version_is_gone(team_with_users):
-    channel = _public_channel(team_with_users)
-    client = APIClient()
-    started = _start(client, channel.experiment).json()
-    _unpublish(channel.experiment)
-    response = _upload(client, started["session_id"], started["session_token"])
+    response = call(client, started["session_id"], started["session_token"])
     assert response.status_code == 409
     assert response.json()["code"] == "no_published_version"
 

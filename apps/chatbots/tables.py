@@ -183,6 +183,11 @@ class ChatbotSessionsTable(tables.Table):
     )
     last_activity = TimeAgoColumn(accessor="last_activity", verbose_name="Last activity", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
+    annotation_queues = columns.TemplateColumn(
+        verbose_name="Annotation Queues",
+        template_name="human_annotations/columns/session_queues.html",
+        orderable=False,
+    )
     versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions")
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
     remote_id = columns.Column(verbose_name="Remote Id", accessor="participant__remote_id")
@@ -216,6 +221,11 @@ class ChatbotSessionsTable(tables.Table):
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
         return template.render({"object": record.chat})
+
+    def render_annotation_queues(self, record, bound_column):
+        """Render the queue badges without a request context, which would cost a query per cell."""
+        template = get_template(bound_column.column.template_name)
+        return template.render({"record": record})
 
     def render_participant(self, record):
         template = get_template("generic/chip.html")
@@ -280,7 +290,7 @@ class ParticipantSessionsTable(ChatbotSessionsTable):
 
     class Meta:
         sequence = ("chatbot", "started", "last_activity", "message_count", "state", "tags", "versions", "actions")
-        exclude = ("participant", "remote_id")
+        exclude = ("participant", "remote_id", "annotation_queues")
         attrs = {
             **settings.DJANGO_TABLES2_TABLE_ATTRS,
             "th": {"class": "py-3 px-3 text-left text-xs"},

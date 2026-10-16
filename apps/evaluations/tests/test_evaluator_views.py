@@ -10,6 +10,7 @@ from django.urls import reverse
 from apps.evaluations import evaluators
 from apps.evaluations.models import ConditionType, EvaluationRunStatus
 from apps.evaluations.tables import EvaluationConfigTable
+from apps.evaluations.tests.conftest import INSUFFICIENT_COPY_PERMISSIONS
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
 from apps.service_providers.llm_service.default_models import get_default_model
 from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
@@ -457,3 +458,31 @@ def test_config_table_flags_archived_members(team_with_users):
 
     assert "Retired scorer" in html
     assert "Archived" in html
+
+
+@pytest.mark.parametrize("archived", [pytest.param(False, id="active"), pytest.param(True, id="archived")])
+@pytest.mark.django_db()
+def test_every_evaluator_row_offers_a_copy_action(client, team_with_users, archived):
+    """Copying is offered for active and archived evaluators alike."""
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    if archived:
+        evaluator.archive()
+
+    client.force_login(team_with_users.members.first())
+    html = client.get(reverse("evaluations:evaluator_table", args=[team_with_users.slug])).content.decode()
+
+    assert reverse("evaluations:evaluator_copy", args=[team_with_users.slug, evaluator.id]) in html
+
+
+@pytest.mark.parametrize("codenames", INSUFFICIENT_COPY_PERMISSIONS)
+@pytest.mark.django_db()
+def test_copy_action_is_hidden_without_add_and_change_permissions(client, team_with_users, evaluator_member, codenames):
+    """A user who could not complete the copy is not offered the button."""
+    membership = evaluator_member(*codenames)
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+
+    client.force_login(membership.user)
+    html = client.get(reverse("evaluations:evaluator_table", args=[team_with_users.slug])).content.decode()
+
+    assert reverse("evaluations:evaluator_edit", args=[team_with_users.slug, evaluator.id]) in html
+    assert reverse("evaluations:evaluator_copy", args=[team_with_users.slug, evaluator.id]) not in html

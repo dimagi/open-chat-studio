@@ -6,7 +6,7 @@ import json
 import tempfile
 from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import dictdiffer
@@ -16,7 +16,11 @@ from apps.annotations.models import Tag, UserComment
 from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationItem
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.teams.flags import Flags
+from apps.teams.utils import flag_is_active_for_team
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
@@ -41,6 +45,12 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
     return " | ".join([str(comment) for comment in user_comments])
+
+
+def _format_annotation_queues(items: Iterable[AnnotationItem]) -> str:
+    """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name ignoring case."""
+    ordered = sorted(items, key=lambda item: item.queue.name.casefold())
+    return ", ".join(f"{item.queue.name} ({item.get_status_display()})" for item in ordered)
 
 
 def get_filtered_sessions(experiment, query_params, timezone):
@@ -103,6 +113,12 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         prefetch=("chat__tags",),
     ),
     ExportColumn(
+        key="annotation_queues",
+        label="Annotation Queues",
+        from_session=lambda s: neutralize_csv_formula(_format_annotation_queues(s.annotation_items.all())),
+        prefetch=("chat__experiment_session__annotation_items__queue",),
+    ),
+    ExportColumn(
         key="session_comments",
         label="Session Comments",
         from_session=lambda s: _format_comments(s.chat.comments.all()),
@@ -154,6 +170,16 @@ def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColu
         return list(EXPORT_COLUMNS)
     selected = set(keys)
     return [column for column in EXPORT_COLUMNS if column.required or column.key in selected]
+
+
+def _gate_annotation_queues(columns: list[ExportColumn], experiment) -> list[ExportColumn]:
+    """Blank the Annotation Queues cells, keeping the header, for a team without human annotations."""
+    if flag_is_active_for_team(experiment.team, Flags.HUMAN_ANNOTATIONS.slug):
+        return columns
+    return [
+        replace(column, from_session=lambda s: "", prefetch=()) if column.key == "annotation_queues" else column
+        for column in columns
+    ]
 
 
 def count_export_messages(sessions_queryset) -> int:
@@ -257,7 +283,7 @@ def generate_export_rows(
 
     ``columns`` is a list of column keys to include (see ``EXPORT_COLUMNS``); ``None`` includes all.
     """
-    export_columns = resolve_export_columns(columns)
+    export_columns = _gate_annotation_queues(resolve_export_columns(columns), experiment)
     yield _get_export_header(columns=export_columns, translation_language=translation_language)
 
     base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)

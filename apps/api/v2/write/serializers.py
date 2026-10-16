@@ -16,7 +16,8 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
-from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.serializers import ErrorDetailSerializer
+from apps.api.v2.write.base import RejectsUnwritableKeys
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
 from apps.channels.models import ChannelPlatform
 from apps.experiments.helpers import excluded_voice_services
@@ -26,7 +27,7 @@ from apps.service_providers.models import TraceProvider, VoiceProvider
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
 
-class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
+class ChatbotCreateSerializer(RejectsUnwritableKeys, serializers.Serializer):
     """The create request: a working draft and its seeded pipeline, nothing published."""
 
     name = NfcCharField(max_length=128)
@@ -62,7 +63,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
         "ids, which can be read from the discovery endpoints."
     )
 )
-class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
+class ChatbotWriteSerializer(RejectsUnwritableKeys, serializers.ModelSerializer):
     """The PATCH request body.
 
     The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
@@ -254,8 +255,7 @@ class ArchivedSerializer(serializers.Serializer):
     )
 
 
-class ChannelsAttachedSerializer(serializers.Serializer):
+class ChannelsAttachedSerializer(ErrorDetailSerializer):
     """The archive 409: why it was refused, and what a person has to do about it."""
 
-    detail = serializers.CharField()
     channels = AttachedChannelSerializer(many=True)

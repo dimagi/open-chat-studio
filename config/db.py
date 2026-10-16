@@ -27,6 +27,8 @@ def get_database_config(env: environ.Env, *, debug: bool) -> dict:
         }
 
     config["CONN_HEALTH_CHECKS"] = True
+    if test_name := env("DJANGO_DATABASE_TEST_NAME", default=""):
+        config["TEST"] = {"NAME": test_name}
     # Server-side cursors (Django's implementation of `QuerySet.iterator()` on Postgres) are
     # declared `WITH HOLD` outside an atomic block, which makes RDS Proxy pin the session to a
     # backend connection for the life of the client connection. Django reads this key from the

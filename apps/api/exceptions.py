@@ -1,4 +1,4 @@
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
 
 from apps.moderation.enforcement import BLOCKED_MESSAGE
 
@@ -32,3 +32,11 @@ class ParticipantBlocked(PermissionDenied):
     """The participant is on the team's denylist, so no session is started and no message is sent."""
 
     default_detail = {"code": "participant_blocked", "detail": BLOCKED_MESSAGE}
+
+
+class ChannelCreationError(APIException):
+    """Channel-creation failure carrying the status code mapped from the upstream error."""
+
+    def __init__(self, detail, status_code):
+        self.status_code = status_code
+        super().__init__(detail)

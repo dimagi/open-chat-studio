@@ -190,3 +190,10 @@ urlpatterns.append(
         name="evaluator_unarchive",
     )
 )
+urlpatterns.append(
+    path(
+        "evaluator/<int:pk>/copy/",
+        evaluator_views.CopyEvaluator.as_view(),
+        name="evaluator_copy",
+    )
+)

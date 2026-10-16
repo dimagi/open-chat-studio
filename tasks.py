@@ -1,5 +1,6 @@
 import platform
 import re
+import shlex
 import shutil
 import socket
 import sys
@@ -363,6 +364,27 @@ def typecheck(c: Context, paths="", python=False, js=False):
     if failures:
         raise Exit(f"Type checks failed: {', '.join(failures)}", -1)
     cprint("Type checks passed.", "green")
+
+
+@task(
+    help={
+        "base": "Branch to diff against (default: origin/$GITHUB_BASE_REF if set, else origin/main)",
+        "similarity": "Minimum percent similarity (default: 90)",
+        "min_lines": "Minimum lines in a duplicated region (default: 5)",
+        "json": "Print JSON instead of markdown",
+        "path": "Directory to scan (default: apps)",
+    }
+)
+def duplicates(c: Context, base=None, similarity=90, min_lines=5, json=False, path="apps"):
+    """Report duplicate code that overlaps lines changed on this branch."""
+    if not shutil.which("treepeat"):
+        raise Exit("treepeat is not installed. Run `uv sync --group code-analysis` to install it.", code=1)
+    args = ["python", "-m", "scripts.duplicates.find_touched_duplicates"]
+    if base:
+        args += ["--base", base]
+    args += ["--similarity", str(similarity), "--min-lines", str(min_lines)]
+    args += ["--format", "json" if json else "markdown", path]
+    c.run(shlex.join(args), pty=sys.stdout.isatty())
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})
