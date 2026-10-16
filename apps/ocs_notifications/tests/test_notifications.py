@@ -20,7 +20,7 @@ from apps.ocs_notifications.notifications import (
     trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -34,11 +34,6 @@ def _function_def():
 def _session():
     experiment = ExperimentFactory.create()
     return experiment, ExperimentSessionFactory.create(experiment=experiment)
-
-
-def _experiment_and_participant():
-    experiment, session = _session()
-    return experiment, session.participant
 
 
 def _pair_for_file_delivery():
@@ -93,7 +88,9 @@ def _pair_for_file_delivery():
             id="moderation-skipped",
         ),
         pytest.param(
-            lambda: participant_auto_blocked_notification(*_experiment_and_participant(), reason="illicit/violent"),
+            lambda: participant_auto_blocked_notification(
+                experiment=ExperimentFactory.create(), participant=ParticipantFactory.create(), reason="illicit/violent"
+            ),
             id="participant-auto-blocked",
         ),
     ],
