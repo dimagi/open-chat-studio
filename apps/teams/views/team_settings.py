@@ -211,10 +211,14 @@ def register_settings_section(section: SettingsSection, *, after: str) -> None:
     SETTINGS_SECTIONS.insert(keys.index(after) + 1, section)
 
 
-def get_section(request, section_key: str | None) -> SettingsSection:
+def _visible_sections(request) -> list[SettingsSection]:
+    return [section for section in SETTINGS_SECTIONS if section.is_visible(request)]
+
+
+def _get_section(visible_sections: list[SettingsSection], section_key: str | None) -> SettingsSection:
     key = section_key or DEFAULT_SETTINGS_SECTION
-    section = next((section for section in SETTINGS_SECTIONS if section.key == key), None)
-    if section is None or not section.is_visible(request):
+    section = next((section for section in visible_sections if section.key == key), None)
+    if section is None:
         raise Http404(f"No team settings section named '{section_key}'")
     return section
 
@@ -225,7 +229,7 @@ def _nav_count(request, section: SettingsSection, stats: dict) -> int | None:
     return stats.get(section.count_key) if section.count_key else None
 
 
-def _nav_items(request, active: SettingsSection, stats: dict) -> list[dict]:
+def _nav_items(request, visible_sections: list[SettingsSection], active: SettingsSection, stats: dict) -> list[dict]:
     return [
         {
             "key": section.key,
@@ -235,12 +239,13 @@ def _nav_items(request, active: SettingsSection, stats: dict) -> list[dict]:
             "count": _nav_count(request=request, section=section, stats=stats),
             "is_active": section.key == active.key,
         }
-        for section in SETTINGS_SECTIONS
-        if section.is_visible(request)
+        for section in visible_sections
     ]
 
 
-def _settings_context(request, section: SettingsSection, team_form=None) -> dict:
+def _settings_context(
+    request, visible_sections: list[SettingsSection], section: SettingsSection, team_form=None
+) -> dict:
     team = request.team
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
@@ -257,7 +262,7 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
         "page_title": _("My Team | {team}").format(team=team),
         "team_form": team_form,
         "active_section": section,
-        "nav_sections": _nav_items(request, section, stats),
+        "nav_sections": _nav_items(request=request, visible_sections=visible_sections, active=section, stats=stats),
         "stats": stats,
         **section.get_context(request),
     }
@@ -265,8 +270,12 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
 
 def render_team_settings(request, section_key: str | None = None, *, team_form=None, **extra_context):
     """Render one settings section: the body alone over htmx, the whole page otherwise."""
-    section = get_section(request, section_key)
-    context = _settings_context(request, section, team_form=team_form) | extra_context
+    visible_sections = _visible_sections(request)
+    section = _get_section(visible_sections=visible_sections, section_key=section_key)
+    context = (
+        _settings_context(request=request, visible_sections=visible_sections, section=section, team_form=team_form)
+        | extra_context
+    )
     # htmx swaps a history-restore response into <body>, so it needs the whole page.
     is_nav_swap = request.htmx and not request.htmx.history_restore_request
     template = "teams/partials/settings_body.html" if is_nav_swap else "teams/manage_team.html"

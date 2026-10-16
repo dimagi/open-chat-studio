@@ -213,9 +213,11 @@ class TestSaveSettings:
         response = client.post(
             _settings_url(team),
             {"moderation_enabled": "on", "moderation_provider": provider.pk, "auto_block_enabled": "on"},
+            headers={"HX-Request": "true"},
         )
 
         assert response.status_code == 200
+        assert response.content.decode().lstrip().startswith('<div class="app-card" id="moderation-settings"')
         team.refresh_from_db()
         assert team.moderation_enabled
         assert team.moderation_provider == provider

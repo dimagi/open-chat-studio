@@ -19,19 +19,16 @@ from apps.service_providers.views import CreateServiceProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.views.team_settings import SettingsSection, render_team_settings
+from apps.teams.views.team_settings import SettingsSection
 from apps.web.forms import set_form_fields_disabled
 
 SETTINGS_SECTION_KEY = "moderation"
 PROVIDER_SAVED_EVENT = "moderation-provider-saved"
-
-
-def _abuse_detection_on(request) -> bool:
-    return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
+SETTINGS_FORM_TEMPLATE = "moderation/components/settings_form.html"
 
 
 def _can_view_settings_section(request) -> bool:
-    return _abuse_detection_on(request) and (
+    return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug)) and (
         request.team_membership.is_team_admin() or request.user.has_perm("experiments.change_participant")
     )
 
@@ -97,7 +94,7 @@ def moderation_settings(request, team_slug: str):
         messages.error(request, _("Could not save the moderation settings."))
         # is_valid() has already copied the rejected values onto request.team.
         request.team.refresh_from_db()
-    return render_team_settings(request, SETTINGS_SECTION_KEY, **moderation_settings_context(request, form=form))
+    return render(request, SETTINGS_FORM_TEMPLATE, moderation_settings_context(request, form=form))
 
 
 @method_decorator(waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
@@ -126,9 +123,6 @@ class ModerationProviderDialog(CreateServiceProvider):
 
     template_name = "moderation/components/provider_dialog.html"
 
-    def _template(self):
-        return self.template_name
-
     def saved_response(self, *, obj, had_connection_test_warning: bool):
         # The settings form's own fields are posted along with the dialog, so unsaved switch changes are kept.
         form = TeamModerationForm(
@@ -140,6 +134,6 @@ class ModerationProviderDialog(CreateServiceProvider):
             },
         )
         context = moderation_settings_context(self.request, form=form)
-        response = render(self.request, "moderation/components/settings_form.html", context)
+        response = render(self.request, SETTINGS_FORM_TEMPLATE, context)
         response = reswap(retarget(response, "#moderation-settings"), "outerHTML")
         return trigger_client_event(response, PROVIDER_SAVED_EVENT)

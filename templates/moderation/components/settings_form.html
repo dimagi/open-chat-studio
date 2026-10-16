@@ -13,21 +13,20 @@
      x-effect="if (!provider) enabled = false">
   <h3 class="pg-subtitle font-bold text-sm">{% translate "Settings" %}</h3>
 
-  {% if team.moderation_deleted_provider_name %}
+  {% if request.team.moderation_deleted_provider_name %}
     <div role="alert" class="alert alert-warning alert-soft text-sm mt-2" data-testid="moderation-provider-deleted">
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span>
-        {% blocktranslate trimmed with name=team.moderation_deleted_provider_name %}
+        {% blocktranslate trimmed with name=request.team.moderation_deleted_provider_name %}
           Moderation was turned off because the provider "{{ name }}" was deleted. Select another provider to turn it back on.
         {% endblocktranslate %}
       </span>
     </div>
   {% endif %}
 
-  <form method="post" id="moderation-settings-form"
-        action="{% url 'moderation:settings' request.team.slug %}"
+  <form id="moderation-settings-form"
         hx-post="{% url 'moderation:settings' request.team.slug %}"
-        hx-target="#team-settings-body" hx-swap="innerHTML"
+        hx-target="#moderation-settings" hx-swap="outerHTML"
         class="flex flex-col gap-4 mt-2">
     {% csrf_token %}
     {{ form.non_field_errors }}
