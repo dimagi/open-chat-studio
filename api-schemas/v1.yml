@@ -515,6 +515,13 @@ paths:
               schema:
                 description: The OAuth application is not authorized for this chatbot
           description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                description: The chatbot asks for conversational consent, which this
+                  endpoint cannot conduct
+          description: ''
         '404':
           content:
             application/json:
@@ -595,6 +602,13 @@ paths:
             application/json:
               schema:
                 description: The OAuth application is not authorized for this chatbot
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                description: The chatbot asks for conversational consent, which this
+                  endpoint cannot conduct
           description: ''
         '404':
           content:

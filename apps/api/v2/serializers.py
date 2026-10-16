@@ -2,16 +2,31 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.api.serializers import ApiUrlField, TeamSerializer
+from apps.api.v2.write.serializers import VERSION_NUMBER_HELP, ChatbotDetailSerializer
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.users.helpers import user_has_confirmed_email_address
 from apps.users.models import CustomUser
 
 
+def _chatbot_url_field() -> ApiUrlField:
+    return ApiUrlField(
+        openapi_example="https://example.com/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:v2:chatbot-detail",
+        lookup_field="public_id",
+        lookup_url_kwarg="id",
+        label="API URL",
+    )
+
+
 class ChatbotVersionSerializer(serializers.ModelSerializer):
+    is_published_version = serializers.BooleanField(
+        source="is_default_version", help_text="True for the version currently served to participants."
+    )
+
     class Meta:
         model = Experiment
-        fields = ["name", "version_number", "is_default_version", "version_description"]
+        fields = ["name", "version_number", "is_published_version", "version_description"]
 
 
 class ChatbotSerializer(serializers.ModelSerializer):
@@ -21,19 +36,24 @@ class ChatbotSerializer(serializers.ModelSerializer):
     "chatbots" rather than "experiments" (ADR-0023).
     """
 
-    url = ApiUrlField(
-        openapi_example="https://example.com/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/",
-        view_name="api:v2:chatbot-detail",
-        lookup_field="public_id",
-        lookup_url_kwarg="id",
-        label="API URL",
-    )
+    url = _chatbot_url_field()
     id = serializers.UUIDField(source="public_id")
+    version_number = serializers.IntegerField(read_only=True, help_text=VERSION_NUMBER_HELP)
     versions = ChatbotVersionSerializer(many=True)
 
     class Meta:
         model = Experiment
         fields = ["id", "name", "url", "version_number", "versions"]
+
+
+class ChatbotRetrieveSerializer(ChatbotDetailSerializer):
+    """The retrieve response: the settings a PATCH returns, plus the chatbot's URL and versions."""
+
+    url = _chatbot_url_field()
+    versions = ChatbotVersionSerializer(many=True, read_only=True)
+
+    class Meta(ChatbotDetailSerializer.Meta):
+        fields = ["id", "url", *ChatbotDetailSerializer.Meta.fields[1:], "versions"]
 
 
 class MeSerializer(serializers.ModelSerializer):

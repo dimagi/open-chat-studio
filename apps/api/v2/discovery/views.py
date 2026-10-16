@@ -19,7 +19,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 
-from .chatbot_settings import chatbot_setting_options
+from .chatbot_settings import chatbot_setting_options, trigger_options
 from .node_types import (
     etag,
     get_node_type_schema,
@@ -289,6 +289,7 @@ CHATBOT_OPTIONS_EXAMPLE = {
     "voice_response_behaviour": [{"value": "reciprocal", "label": "Reciprocal"}],
     "trace_provider": [{"value": 4, "label": "Prod Langfuse", "type": "langfuse"}],
     "consent_form": [{"value": 7, "label": "Returns consent"}],
+    "trigger_pipeline": [{"value": 12, "label": "Escalation"}],
 }
 
 
@@ -313,7 +314,9 @@ class ChatbotOptionsView(DiscoveryView):
             "`voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable "
             "by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that "
             "one provider. Only the voices a listed provider can speak are offered, so a team that "
-            "has configured no voice provider is offered no voice either."
+            "has configured no voice provider is offered no voice either.\n\n"
+            "`trigger_pipeline` is not a setting: it lists the pipelines a trigger's "
+            "`pipeline_start` action may run, for its `params.pipeline_id`."
         ),
         tags=["Chatbots"],
         responses={200: ChatbotOptionsSerializer},
@@ -327,7 +330,7 @@ class ChatbotOptionsView(DiscoveryView):
         ],
     )
     def get(self, request):
-        options = chatbot_setting_options(request)
+        options = {**chatbot_setting_options(request), **trigger_options(request)}
         # Declared keys are served through the serializer, so the documented types hold. A key it
         # does not declare is served as built rather than dropped: a settings field that gains a
         # choice list has to reach clients without an edit here.

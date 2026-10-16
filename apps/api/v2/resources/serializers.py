@@ -49,8 +49,12 @@ class ReferencingChatbotSerializer(serializers.Serializer):
 
     chatbot_id = serializers.UUIDField(help_text="The chatbot's id, as the chatbot endpoints take it.")
     version_number = serializers.IntegerField()
-    published = serializers.BooleanField(
-        help_text="True for the published version, whose nodes cannot be edited; false for the draft."
+    published = serializers.BooleanField(help_text="True for the version participants are served.")
+    is_working_version = serializers.BooleanField(
+        help_text=(
+            "True for the working (draft) version, whose nodes can be edited. Every other version is a "
+            "snapshot that nothing edits."
+        )
     )
     node_ids = serializers.ListField(
         child=serializers.CharField(), help_text="The nodes that use it, as the pipeline node endpoints take them."

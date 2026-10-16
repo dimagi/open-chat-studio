@@ -17,7 +17,7 @@ TRIGGER_ID = OpenApiParameter(
     name="trigger_id",
     type=OpenApiTypes.INT,
     location=OpenApiParameter.PATH,
-    description="The trigger's id, as returned by a create or by the `chatbot_inspect` endpoint.",
+    description="The trigger's id, as returned by a create or a list.",
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
@@ -50,8 +50,11 @@ ACTION_NOTE = (
 )
 
 
-def trigger_schema(*, kind: str, serializer: type[BaseTriggerSerializer], description: str):
-    """The OpenAPI descriptions of one kind of trigger's create, update and archive operations."""
+def trigger_schemas(*, kind: str, serializer: type[BaseTriggerSerializer], description: str):
+    """The OpenAPI descriptions of one kind of trigger's operations, as one decorator per route.
+
+    The first covers list and create, the second retrieve, update and archive.
+    """
     noun = f"{kind} trigger"
     title = noun.capitalize()
 
@@ -60,13 +63,29 @@ def trigger_schema(*, kind: str, serializer: type[BaseTriggerSerializer], descri
             operation_id=f"chatbot_{kind}_trigger_{name}", summary=summary, tags=["Chatbot Triggers"], **kwargs
         )
 
-    return extend_schema_view(
+    list_schema = extend_schema_view(
+        get=operation(
+            "list",
+            f"List {title}s",
+            description=f"The working (draft) chatbot's {noun}s, oldest first. Archived ones are left out.",
+            parameters=[CHATBOT_ID],
+            responses={200: serializer(many=True), 404: CHATBOT_NOT_FOUND},
+        ),
         post=operation(
             "create",
             f"Add a {title}",
             description=f"{description}\n\n{ACTION_NOTE}\n\n{PUBLISH_NOTE}",
             parameters=[CHATBOT_ID],
             responses={201: serializer, 400: BAD_REQUEST, 403: FORBIDDEN, 404: CHATBOT_NOT_FOUND},
+        ),
+    )
+    detail_schema = extend_schema_view(
+        get=operation(
+            "retrieve",
+            f"Retrieve a {title}",
+            description=f"One {noun} on the working (draft) chatbot, in the shape the update endpoint accepts.",
+            parameters=[CHATBOT_ID, TRIGGER_ID],
+            responses={200: serializer, 404: TRIGGER_NOT_FOUND},
         ),
         patch=operation(
             "update",
@@ -92,9 +111,10 @@ def trigger_schema(*, kind: str, serializer: type[BaseTriggerSerializer], descri
             responses={200: ResourceArchivedSerializer, 403: FORBIDDEN, 404: TRIGGER_NOT_FOUND},
         ),
     )
+    return list_schema, detail_schema
 
 
-static_trigger_schema = trigger_schema(
+static_trigger_list_schema, static_trigger_schema = trigger_schemas(
     kind="static",
     serializer=StaticTriggerWriteSerializer,
     description=(
@@ -106,7 +126,7 @@ static_trigger_schema = trigger_schema(
 )
 
 
-timeout_trigger_schema = trigger_schema(
+timeout_trigger_list_schema, timeout_trigger_schema = trigger_schemas(
     kind="timeout",
     serializer=TimeoutTriggerWriteSerializer,
     description=(
@@ -116,7 +136,7 @@ timeout_trigger_schema = trigger_schema(
 )
 
 
-scheduled_trigger_schema = trigger_schema(
+scheduled_trigger_list_schema, scheduled_trigger_schema = trigger_schemas(
     kind="scheduled",
     serializer=ScheduledTriggerWriteSerializer,
     description=(

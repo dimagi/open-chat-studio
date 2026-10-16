@@ -237,3 +237,11 @@ class ChatbotOptionsSerializer(serializers.Serializer):
     consent_form = ResourceOptionSerializer(
         many=True, required=False, help_text="The consent forms the team has written."
     )
+    trigger_pipeline = ResourceOptionSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "The pipelines a `pipeline_start` trigger action may run: write one into the action's "
+            "`params.pipeline_id`. A chatbot's own pipeline is not one of them."
+        ),
+    )
