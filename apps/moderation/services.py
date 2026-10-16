@@ -123,19 +123,22 @@ def add_strike(
     team = experiment.team
     if not team.auto_block_enabled or is_exempt(participant=participant, team=team):
         return
-    strikes = _increment_strikes(participant)
-    if strikes < STRIKE_LIMIT:
-        return
-    reason = ", ".join(sorted(strike_categories(output)))
-    _denial, created = block_participant(
-        participant=participant,
-        source=DeniedParticipantSource.AUTO,
-        reason=reason,
-        experiment=experiment,
-        chat_message=chat_message,
-    )
+    with transaction.atomic():
+        strikes = _increment_strikes(participant)
+        if strikes < STRIKE_LIMIT:
+            return
+        reason = ", ".join(sorted(strike_categories(output)))
+        _denial, created = block_participant(
+            participant=participant,
+            source=DeniedParticipantSource.AUTO,
+            reason=reason,
+            experiment=experiment,
+            chat_message=chat_message,
+        )
     if created:
-        participant_auto_blocked_notification(experiment=experiment, participant=participant, reason=reason)
+        transaction.on_commit(
+            lambda: participant_auto_blocked_notification(experiment=experiment, participant=participant, reason=reason)
+        )
 
 
 def _increment_strikes(participant: Participant) -> int:

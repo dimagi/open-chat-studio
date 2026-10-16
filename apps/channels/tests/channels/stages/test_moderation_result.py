@@ -323,12 +323,18 @@ class TestModerationResultStageStrikes:
             pytest.param(True, id="published_version"),
         ],
     )
-    def test_team_member_in_app_gets_no_strike(self, auto_block_session, moderation_task, published):
+    def test_team_member_in_app_gets_no_strike(
+        self, auto_block_session, moderation_task, published, django_capture_on_commit_callbacks
+    ):
         session = auto_block_session
         _make_in_app_session(session, published=published)
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
 
-        with _flagged_reply(), patch(BLOCKED_NOTIFICATION) as notification:
+        with (
+            _flagged_reply(),
+            patch(BLOCKED_NOTIFICATION) as notification,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
             for _ in range(STRIKE_LIMIT):
                 ModerationResultStage()(_context(session, bot_response=_bot_response(session)))
 
@@ -480,10 +486,16 @@ class TestModerationInTheChannelPipeline:
         self.process_input.assert_called_once()
         assert self.process_input.call_args.args[0] == "Hello"
 
-    def test_third_flagged_message_blocks_the_participant(self, auto_block_session, moderation_task):
+    def test_third_flagged_message_blocks_the_participant(
+        self, auto_block_session, moderation_task, django_capture_on_commit_callbacks
+    ):
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
 
-        with _flagged_reply(), patch(BLOCKED_NOTIFICATION) as notification:
+        with (
+            _flagged_reply(),
+            patch(BLOCKED_NOTIFICATION) as notification,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
             for _ in range(STRIKE_LIMIT):
                 self._send(auto_block_session, process_input=lambda *args, **kwargs: _bot_response(auto_block_session))
 

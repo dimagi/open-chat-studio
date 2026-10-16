@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 from celery.exceptions import TimeoutError as CeleryTimeoutError
+from django.db import DatabaseError
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
@@ -277,11 +278,11 @@ class TestAddStrike:
         assert saved.strikes == 3
         assert saved.updated_at > first.updated_at
 
-    def test_auto_block_off_gives_no_strike(self, auto_block_session):
+    def test_auto_block_off_gives_no_strike(self, auto_block_session, django_capture_on_commit_callbacks):
         auto_block_session.experiment.team.auto_block_enabled = False
         auto_block_session.experiment.team.save()
 
-        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+        with mock.patch(BLOCKED_NOTIFICATION) as notification, django_capture_on_commit_callbacks(execute=True):
             for _ in range(STRIKE_LIMIT):
                 _add_strike(auto_block_session)
 
@@ -307,8 +308,8 @@ class TestAddStrike:
 
         assert Participant.objects.get(id=participant.id).strikes == (0 if is_member else 1)
 
-    def test_blocks_at_the_strike_limit_only(self, auto_block_session):
-        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+    def test_blocks_at_the_strike_limit_only(self, auto_block_session, django_capture_on_commit_callbacks):
+        with mock.patch(BLOCKED_NOTIFICATION) as notification, django_capture_on_commit_callbacks(execute=True):
             for _ in range(STRIKE_LIMIT - 1):
                 _add_strike(auto_block_session)
             assert not DeniedParticipant.objects.exists()
@@ -328,8 +329,8 @@ class TestAddStrike:
             reason="hate/threatening, illicit/violent",
         )
 
-    def test_notifies_once(self, auto_block_session):
-        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+    def test_notifies_once(self, auto_block_session, django_capture_on_commit_callbacks):
+        with mock.patch(BLOCKED_NOTIFICATION) as notification, django_capture_on_commit_callbacks(execute=True):
             for _ in range(STRIKE_LIMIT + 2):
                 _add_strike(auto_block_session)
 
@@ -337,12 +338,36 @@ class TestAddStrike:
         assert DeniedParticipant.objects.filter(participant=auto_block_session.participant).count() == 1
         assert Participant.objects.get(id=auto_block_session.participant_id).strikes == STRIKE_LIMIT + 2
 
-    def test_keeps_an_existing_block(self, auto_block_session):
+    def test_failed_block_rolls_back_the_strike(self, auto_block_session):
+        for _ in range(STRIKE_LIMIT - 1):
+            _add_strike(auto_block_session)
+
+        with (
+            mock.patch("apps.moderation.services.block_participant", side_effect=DatabaseError("connection lost")),
+            pytest.raises(DatabaseError),
+        ):
+            _add_strike(auto_block_session)
+
+        assert Participant.objects.get(id=auto_block_session.participant_id).strikes == STRIKE_LIMIT - 1
+
+    def test_notifies_after_commit(self, auto_block_session, django_capture_on_commit_callbacks):
+        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+            with django_capture_on_commit_callbacks(execute=False) as callbacks:
+                for _ in range(STRIKE_LIMIT):
+                    _add_strike(auto_block_session)
+            notification.assert_not_called()
+
+            for callback in callbacks:
+                callback()
+
+        notification.assert_called_once()
+
+    def test_keeps_an_existing_block(self, auto_block_session, django_capture_on_commit_callbacks):
         existing = DeniedParticipantFactory.create(
             team=auto_block_session.experiment.team, participant=auto_block_session.participant, reason="Manual"
         )
 
-        with mock.patch(BLOCKED_NOTIFICATION) as notification:
+        with mock.patch(BLOCKED_NOTIFICATION) as notification, django_capture_on_commit_callbacks(execute=True):
             for _ in range(STRIKE_LIMIT):
                 _add_strike(auto_block_session)
 
