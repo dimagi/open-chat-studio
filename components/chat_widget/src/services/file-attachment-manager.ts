@@ -1,4 +1,4 @@
-import { GENERIC_FAILURE_MESSAGE, PARTICIPANT_BLOCKED_CODE, type ChatConsent } from './chat-session-service';
+import { CONSENT_REQUIRED_CODE, GENERIC_FAILURE_MESSAGE, PARTICIPANT_BLOCKED_CODE, type ChatConsent } from './chat-session-service';
 
 export interface UploadedFile {
   id: number;
@@ -128,7 +128,7 @@ export class FileAttachmentManager {
         // recorded. A refusal that names consent but carries no block cannot raise the panel,
         // so the files carry the error and stop the send. Neither a consent nor a block
         // refusal is a token rejection.
-        const namesConsent = response.status === 403 && body.code === 'consent_required';
+        const namesConsent = response.status === 403 && body.code === CONSENT_REQUIRED_CODE;
         const consentRefused = namesConsent && !!body.consent;
         return {
           selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),

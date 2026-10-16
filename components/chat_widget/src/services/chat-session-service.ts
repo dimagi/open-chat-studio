@@ -162,8 +162,11 @@ export interface MessagePollingHandle {
   stop: () => void;
 }
 
+/** The 403 code for a participant who has not accepted the current consent form. */
+export const CONSENT_REQUIRED_CODE = 'consent_required';
+
 /** Refusal codes that carry a consent block and leave the session usable. */
-const CONSENT_REFUSAL_CODES = ['consent_required', 'consent_stale'];
+const CONSENT_REFUSAL_CODES = [CONSENT_REQUIRED_CODE, 'consent_stale'];
 
 /** The 403 code for a session token that has aged out; the only refusal renewal can answer. */
 const SESSION_EXPIRED_CODE = 'session_expired';
