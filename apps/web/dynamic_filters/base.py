@@ -227,7 +227,8 @@ class YesNoExistsFilter(ChoiceColumnFilter):
     no_label: ClassVar[str] = "No"
 
     def model_post_init(self, context: Any, /) -> None:
-        if not self.options:
+        super().model_post_init(context)
+        if "options" not in self.model_fields_set:
             self.options = [{"id": self.YES, "label": self.yes_label}, {"id": self.NO, "label": self.no_label}]
 
     def _condition(self) -> Exists:
