@@ -142,12 +142,12 @@ def add_strike(
 
 
 def _increment_strikes(participant: Participant) -> int:
-    """Add one strike in the database and return the new count."""
-    participants = Participant.objects.filter(id=participant.id)
-    # The row stays locked by the update until the transaction ends, so the count read back is this increment's.
-    with transaction.atomic():
-        participants.update(strikes=F("strikes") + 1, updated_at=timezone.now())
-        participant.strikes = participants.values_list("strikes", flat=True).get()
+    """Add one strike in the database and return the new count. Call inside a transaction.
+
+    The update locks the row until the transaction ends, so the count read back is this increment's.
+    """
+    Participant.objects.filter(id=participant.id).update(strikes=F("strikes") + 1, updated_at=timezone.now())
+    participant.refresh_from_db(fields=["strikes"])
     return participant.strikes
 
 
