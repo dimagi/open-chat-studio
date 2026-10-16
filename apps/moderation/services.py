@@ -12,6 +12,7 @@ from apps.chat.schemas import ModerationDetail
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
+from apps.pipelines.models import PipelineChatMessages
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
@@ -100,3 +101,17 @@ def record_moderation_result(
     message.moderation_status = status
     message.save(update_fields=["moderation_status", "moderation_detail", "updated_at"])
     return status
+
+
+def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_response: ChatMessage | None) -> None:
+    """Delete the node and named history rows the pipeline saved while answering `human_message`.
+
+    These are the session's rows created from the human message up to the bot response (or now, when
+    there is none).
+    """
+    rows = PipelineChatMessages.objects.filter(
+        chat_history__session__chat_id=human_message.chat_id, created_at__gte=human_message.created_at
+    )
+    if bot_response is not None:
+        rows = rows.filter(created_at__lte=bot_response.created_at)
+    rows.delete()

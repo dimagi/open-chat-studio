@@ -14,7 +14,11 @@ from apps.channels.stages.core import RESET_COMMAND
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.files.models import File, FilePurpose
 from apps.moderation.const import FLAGGED_MESSAGE
-from apps.moderation.services import get_moderation_result, record_moderation_result
+from apps.moderation.services import (
+    get_moderation_result,
+    record_moderation_result,
+    remove_turn_from_pipeline_histories,
+)
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
     message_delivery_failure_notification,
@@ -66,6 +70,8 @@ class FileDeliveryFailure(Exception):
 class ModerationResultStage(ProcessingStage):
     """TERMINAL STAGE: Records the moderation result on the human message and replaces the reply to a flagged one.
 
+    A flagged turn is also removed from the pipeline's node and named histories, so it is not replayed.
+
     A terminal stage so that it also runs when a core stage exits early. A failure to get a result is
     recorded as a skip, and the response is sent as normal.
     """
@@ -87,8 +93,10 @@ class ModerationResultStage(ProcessingStage):
         status = record_moderation_result(message=ctx.human_message, output=output, skip_reason=skip_reason)
         if skip_reason is not None:
             moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
-        elif status == ModerationStatus.FLAGGED and ctx.bot_response is not None:
-            self._replace_response(ctx)
+        elif status == ModerationStatus.FLAGGED:
+            remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
+            if ctx.bot_response is not None:
+                self._replace_response(ctx)
 
     def _replace_response(self, ctx: MessageProcessingContext) -> None:
         """Replace the stored bot reply with a notice that the message will not be answered, and send only that."""

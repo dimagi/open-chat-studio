@@ -19,6 +19,7 @@ from apps.moderation.const import FLAGGED_MESSAGE
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory
+from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
 from apps.utils.tests.provider_errors import connection_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
@@ -156,6 +157,28 @@ class TestModerationResultStage:
         assert ctx.additional_text_message is None
         assert ctx.files_to_send == []
         assert ctx.unsupported_files == []
+
+    @pytest.mark.parametrize(
+        ("output", "expected_rows"),
+        [
+            pytest.param(PASSED_OUTPUT, ["Bad words"], id="passed_keeps_the_turn"),
+            pytest.param(STRIKE_OUTPUT, [], id="flagged_removes_the_turn"),
+        ],
+    )
+    def test_flagged_turn_is_removed_from_pipeline_histories(
+        self, moderated_session, moderation_task, output, expected_rows
+    ):
+        moderation_task.get.return_value = _ok(output)
+        history = PipelineChatHistoryFactory.create(session=moderated_session)
+        ctx = _context(moderated_session)
+        PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad words", ai_message="Answer")
+        ctx.bot_response = _bot_response(moderated_session)
+
+        with patch(EVENT_BOT) as event_bot:
+            event_bot.return_value.get_user_message.return_value = "Flagged reply"
+            ModerationResultStage()(ctx)
+
+        assert [row.human_message for row in history.messages.all()] == expected_rows
 
     @pytest.mark.parametrize(
         "event_bot_reply",

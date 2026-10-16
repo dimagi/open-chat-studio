@@ -10,11 +10,15 @@ from apps.moderation.services import (
     get_moderation_result,
     record_moderation_result,
     record_rule_hits,
+    remove_turn_from_pipeline_histories,
     start_moderation,
     strike_categories,
 )
+from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
+from apps.pipelines.repository import ORMRepository
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
-from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -186,3 +190,30 @@ def test_get_moderation_result(wait, expected):
     async_result.return_value.get.assert_called_once_with(
         timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1
     )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "history_type",
+    [
+        pytest.param(PipelineChatHistoryTypes.NODE, id="node_history"),
+        pytest.param(PipelineChatHistoryTypes.NAMED, id="named_history"),
+    ],
+)
+def test_remove_turn_from_pipeline_histories(history_type):
+    session = ExperimentSessionFactory.create()
+    other_session = ExperimentSessionFactory.create()
+    history = PipelineChatHistoryFactory.create(session=session, type=history_type, name="history")
+    other_history = PipelineChatHistoryFactory.create(session=other_session, type=history_type, name="history")
+    PipelineChatMessagesFactory.create(chat_history=history, human_message="Earlier", ai_message="Earlier answer")
+    human_message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Bad")
+    PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad", ai_message="Original answer")
+    PipelineChatMessagesFactory.create(chat_history=other_history, human_message="Other", ai_message="Other answer")
+    bot_response = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content="Answer")
+
+    remove_turn_from_pipeline_histories(human_message=human_message, bot_response=bot_response)
+
+    node_history = ORMRepository(session=session).get_pipeline_chat_history(history_type, "history")
+    messages = node_history.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
+    assert [message.content for message in messages] == ["Earlier", "Earlier answer"]
+    assert other_history.messages.count() == 1
