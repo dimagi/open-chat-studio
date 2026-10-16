@@ -75,12 +75,21 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
         logger.warning("Moderation task %s failed: %r", task_id, error)
         return None, ModerationSkipReason.ERROR
     if result["status"] != "ok":
-        return None, ModerationSkipReason(result["reason"])
+        return None, _parse_skip_reason(result.get("reason"))
     try:
         return ModerationOutput.model_validate(result["output"]), None
     except ValidationError:
         logger.exception("Moderation task %s returned an invalid output", task_id)
         return None, ModerationSkipReason.ERROR
+
+
+def _parse_skip_reason(value: str | None) -> ModerationSkipReason:
+    """The skip reason for `value`, or ERROR when it is not a known reason."""
+    try:
+        return ModerationSkipReason(value)
+    except ValueError:
+        logger.warning("Unknown moderation skip reason %r", value)
+        return ModerationSkipReason.ERROR
 
 
 def strike_categories(output: ModerationOutput) -> set[str]:
@@ -203,6 +212,6 @@ def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts
         status = ModerationStatus(row["moderation_status"])
         by_status[status] += row["count"]
         if status == ModerationStatus.SKIPPED and row["skip_reason"]:
-            reason = ModerationSkipReason(row["skip_reason"])
+            reason = _parse_skip_reason(row["skip_reason"])
             skip_reasons[reason] = skip_reasons.get(reason, 0) + row["count"]
     return ModerationCounts(by_status=by_status, skip_reasons=skip_reasons)

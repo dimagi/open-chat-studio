@@ -187,6 +187,10 @@ def test_start_moderation(moderation_enabled, has_provider, text, started):
         pytest.param(
             {"return_value": {"status": "skipped", "reason": "rate_limited"}}, (None, "rate_limited"), id="skipped"
         ),
+        pytest.param(
+            {"return_value": {"status": "skipped", "reason": "quota_exceeded"}}, (None, "error"), id="unknown_reason"
+        ),
+        pytest.param({"return_value": {"status": "skipped"}}, (None, "error"), id="missing_reason"),
         pytest.param({"side_effect": CeleryTimeoutError()}, (None, "timeout"), id="timeout"),
         pytest.param({"side_effect": RuntimeError("boom")}, (None, "error"), id="task_raised"),
         pytest.param(

@@ -49,6 +49,22 @@ def test_counts_messages_by_status_and_skip_reason():
 
 
 @pytest.mark.django_db()
+def test_counts_an_unknown_stored_skip_reason_as_an_error():
+    chat = ChatFactory.create()
+    message = _message(chat=chat, status=ModerationStatus.SKIPPED, skip_reason="error")
+    _message(chat=chat, status=ModerationStatus.SKIPPED, skip_reason="error")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE chat_chatmessage SET moderation_detail = %s::jsonb WHERE id = %s",
+            ['{"skip_reason": "quota_exceeded", "rules": []}', message.id],
+        )
+
+    counts = count_moderated_messages(team=chat.team, since=timezone.now() - timedelta(days=7))
+
+    assert counts.skip_reasons == {ModerationSkipReason.ERROR: 2}
+
+
+@pytest.mark.django_db()
 def test_counts_with_no_moderated_messages():
     counts = count_moderated_messages(team=TeamFactory.create(), since=timezone.now() - timedelta(days=7))
 
