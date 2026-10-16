@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 from django.utils.http import urlencode
+from field_audit.models import AuditAction
 from waffle.testutils import override_flag
 
 from apps.moderation.forms import TeamModerationForm
@@ -12,6 +13,7 @@ from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMIN_GROUP
 from apps.teams.flags import Flags
+from apps.teams.models import Team
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
@@ -121,6 +123,19 @@ class TestTeamModerationForm:
         assert team.moderation_enabled
         assert team.moderation_provider == provider
         assert team.moderation_deleted_provider_name == ""
+
+    def test_save_keeps_concurrent_changes_to_other_team_fields(self):
+        team = TeamFactory.create(name="Before")
+        provider = ModerationProviderFactory.create(team=team)
+        form = TeamModerationForm({"moderation_enabled": True, "moderation_provider": provider.pk}, instance=team)
+        assert form.is_valid()
+        Team.objects.filter(pk=team.pk).update(name="Changed elsewhere", audit_action=AuditAction.IGNORE)
+
+        form.save()
+
+        team.refresh_from_db()
+        assert team.name == "Changed elsewhere"
+        assert team.moderation_enabled
 
 
 @pytest.mark.django_db()

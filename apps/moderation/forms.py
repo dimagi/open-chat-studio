@@ -30,4 +30,8 @@ class TeamModerationForm(forms.ModelForm):
     def save(self, commit=True):
         if self.instance.moderation_provider_id:
             self.instance.moderation_deleted_provider_name = ""
-        return super().save(commit=commit)
+        team = super().save(commit=False)
+        if commit:
+            team.save(update_fields=[*self.Meta.fields, "moderation_deleted_provider_name", "updated_at"])
+            self.save_m2m()
+        return team
