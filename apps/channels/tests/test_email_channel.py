@@ -24,8 +24,9 @@ from apps.channels.email_channel import (
     email_inbound_handler,
     get_email_experiment_channel,
 )
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_email_message
+from apps.channels.tests.email_helpers import make_email_channel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
@@ -87,22 +88,6 @@ def _mime_part(filename="file.bin", content_type="application/octet-stream", con
     part.get_content_type.return_value = content_type
     part.get_content_bytes.return_value = content
     return part
-
-
-def _make_email_channel(team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
-    """Helper to create an email ExperimentChannel."""
-    if experiment is None:
-        experiment = ExperimentFactory(team=team)
-    extra = {"email_address": email_address}
-    if is_default:
-        extra["is_default"] = True
-    return ExperimentChannel.objects.create(
-        team=team,
-        experiment=experiment,
-        platform=ChannelPlatform.EMAIL,
-        extra_data=extra,
-        name=f"email-{email_address}",
-    )
 
 
 def _make_session(team, channel, external_id, participant_email="user@example.com"):
@@ -228,7 +213,7 @@ class TestEmailMessageParse:
 class TestEmailRouting:
     def test_priority_1_in_reply_to_match(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         session = _make_session(team, channel, "<abc123@chat.openchatstudio.com>")
 
         result_channel, result_session = get_email_experiment_channel(
@@ -244,7 +229,7 @@ class TestEmailRouting:
     def test_priority_1_rejects_mismatched_sender(self, team_with_users):
         """Session hijack prevention: spoofed In-Reply-To from wrong sender."""
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         _make_session(team, channel, "<abc123@chat.openchatstudio.com>", participant_email="real-user@example.com")
 
         result_channel, result_session = get_email_experiment_channel(
@@ -260,7 +245,7 @@ class TestEmailRouting:
 
     def test_priority_1b_references_fallback(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         session = _make_session(team, channel, "<root@chat.openchatstudio.com>")
 
         result_channel, result_session = get_email_experiment_channel(
@@ -275,7 +260,7 @@ class TestEmailRouting:
 
     def test_priority_2_to_address_match(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team, email_address="support@chat.openchatstudio.com")
+        channel = make_email_channel(team, email_address="support@chat.openchatstudio.com")
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -288,7 +273,7 @@ class TestEmailRouting:
 
     def test_priority_3_default_fallback(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team, email_address="default@chat.openchatstudio.com", is_default=True)
+        channel = make_email_channel(team, email_address="default@chat.openchatstudio.com", is_default=True)
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -314,7 +299,7 @@ class TestEmailRouting:
     def test_default_fallback_is_global(self, team_with_users):
         """Default fallback channel is found regardless of team parameter."""
         team = team_with_users
-        channel = _make_email_channel(team, is_default=True)
+        channel = make_email_channel(team, is_default=True)
 
         result_channel, result_session = get_email_experiment_channel(
             in_reply_to=None,
@@ -705,7 +690,7 @@ class TestEnsureSessionExistsForParticipant:
 
     def test_creates_session_when_none_exists(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         email_channel = EmailChannel(channel.experiment, channel)
 
         email_channel.ensure_session_exists_for_participant("user@example.com")
@@ -716,7 +701,7 @@ class TestEnsureSessionExistsForParticipant:
 
     def test_reuses_existing_active_session(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
         email_channel = EmailChannel(channel.experiment, channel)
 
@@ -727,7 +712,7 @@ class TestEnsureSessionExistsForParticipant:
 
     def test_new_session_ends_existing_and_creates_fresh(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         existing = _make_session(team, channel, "<existing@chat.openchatstudio.com>")
         email_channel = EmailChannel(channel.experiment, channel)
 
@@ -874,7 +859,7 @@ class TestEmailInboundHandler:
 
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_email_with_no_message_id_is_let_through(self, team_with_users):
-        _make_email_channel(team_with_users, email_address="bot@chat.openchatstudio.com", is_default=True)
+        make_email_channel(team_with_users, email_address="bot@chat.openchatstudio.com", is_default=True)
         inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com", message_id="")
 
         with patch("apps.channels.tasks.handle_email_message") as task_mock:
@@ -886,7 +871,7 @@ class TestEmailInboundHandler:
     def test_thread_reply_allowed_through(self, team_with_users):
         """Reply via In-Reply-To is enqueued even when to-address doesn't match a channel."""
         team = team_with_users
-        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com")
+        channel = make_email_channel(team, email_address="bot@chat.openchatstudio.com")
         _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
 
         inbound = _make_inbound_message(
@@ -904,7 +889,7 @@ class TestEmailInboundHandler:
     def test_default_channel_allowed_through(self, team_with_users):
         """Email to unknown address is enqueued when any email channel exists."""
         team = team_with_users
-        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
 
         inbound = _make_inbound_message(to_email="unknown@chat.openchatstudio.com")
 
@@ -949,7 +934,7 @@ class TestEmailInboundHandler:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_to_address_on_disallowed_domain_dropped(self, team_with_users):
         team = team_with_users
-        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
         inbound = _make_inbound_message(to_email="someone@evil.example.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
@@ -960,7 +945,7 @@ class TestEmailInboundHandler:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["*.example.com"])
     def test_to_address_wildcard_match_allowed(self, team_with_users):
         team = team_with_users
-        _make_email_channel(team, email_address="bot@mail.example.com")
+        make_email_channel(team, email_address="bot@mail.example.com")
         inbound = _make_inbound_message(to_email="bot@mail.example.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
@@ -971,7 +956,7 @@ class TestEmailInboundHandler:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=[])
     def test_empty_setting_drops_inbound(self, team_with_users):
         team = team_with_users
-        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
         inbound = _make_inbound_message(to_email="bot@chat.openchatstudio.com")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
@@ -983,7 +968,7 @@ class TestEmailInboundHandler:
     def test_thread_reply_to_disallowed_domain_still_dropped(self, team_with_users):
         """Even an existing-thread reply is dropped if to_address is not allowed."""
         team = team_with_users
-        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com")
+        channel = make_email_channel(team, email_address="bot@chat.openchatstudio.com")
         _make_session(team, channel, "<outbound-1@chat.openchatstudio.com>")
 
         inbound = _make_inbound_message(
@@ -999,7 +984,7 @@ class TestEmailInboundHandler:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_malformed_to_address_dropped(self, team_with_users):
         team = team_with_users
-        _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
         inbound = _make_inbound_message(to_email="not-an-email")
 
         with patch("apps.channels.tasks.handle_email_message") as mock_task:
@@ -1118,7 +1103,7 @@ class TestEmailEndToEnd:
     def test_task_routes_reply_to_existing_session(self, team_with_users):
         """Task routes a reply to existing session via In-Reply-To."""
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         session = _make_session(
             team, channel, "<outbound-1@chat.openchatstudio.com>", participant_email="user@example.com"
         )
@@ -1270,7 +1255,7 @@ class TestEmailInboundHandlerWithAttachments:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_handler_persists_files_before_enqueue(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
         inbound = _make_inbound_with_attachments([pdf], to_email=channel.extra_data["email_address"])
 
@@ -1288,7 +1273,7 @@ class TestEmailInboundHandlerWithAttachments:
         """The whole reason Email checks at the boundary rather than leaving it to the stage: by the
         time the pipeline runs, the attachments of a replay are already written."""
         team = team_with_users
-        channel = _make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
+        channel = make_email_channel(team, email_address="bot@chat.openchatstudio.com", is_default=True)
         pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-...")
         inbound = _make_inbound_with_attachments(
             [pdf], to_email="bot@chat.openchatstudio.com", message_id="<replay@example.com>"
@@ -1315,7 +1300,7 @@ class TestEmailInboundHandlerWithAttachments:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_skipped_attachments_appended_to_message_text(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         big = b"x" * (21 * 1024 * 1024)
         oversized = _mime_part(filename="huge.pdf", content_type="application/pdf", content=big)
         inbound = _make_inbound_with_attachments(
@@ -1340,7 +1325,7 @@ class TestEmailInboundHandlerWithAttachments:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_handler_passes_session_id_when_thread_continuation(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         session = _make_session(team, channel, external_id="<thread-anchor@example.com>")
         inbound = _make_inbound_message(
             to_email=channel.extra_data["email_address"],
@@ -1361,7 +1346,7 @@ class TestEmailAttachmentsEndToEnd:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_inbound_attachment_persisted_and_visible_to_pipeline(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
 
         pdf = _mime_part(filename="report.pdf", content_type="application/pdf", content=b"%PDF-test")
         inbound = _make_inbound_with_attachments(
@@ -1406,7 +1391,7 @@ class TestEmailAttachmentsEndToEnd:
 
     def test_outbound_attachment_combined_with_text(self, team_with_users):
         team = team_with_users
-        channel = _make_email_channel(team)
+        channel = make_email_channel(team)
         session = _make_session(team, channel, external_id="<thread@chat.openchatstudio.com>")
 
         outbound_file = File.create(

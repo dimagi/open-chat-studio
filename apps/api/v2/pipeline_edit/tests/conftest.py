@@ -15,8 +15,6 @@ from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import ChatbotFactory, SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
-    LlmProviderFactory,
-    LlmProviderModelFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -33,14 +31,6 @@ def chatbot(team):
     """`ChatbotFactory` gives an Experiment with a Start -> End pipeline: the state a chatbot
     created on a team with no LLM provider is in, and the smallest graph to edit."""
     return ChatbotFactory.create(team=team, name="Support bot", description="")
-
-
-@pytest.fixture()
-def llm(team):
-    """A provider and a model of the same type, which is what pairs them in `/pipeline/options/`."""
-    provider = LlmProviderFactory.create(team=team, type="openai")
-    model = LlmProviderModelFactory.create(team=team, type="openai", name="gpt-4o")
-    return provider, model
 
 
 @pytest.fixture()

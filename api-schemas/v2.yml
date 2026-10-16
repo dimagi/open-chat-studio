@@ -1459,7 +1459,8 @@ paths:
     post:
       operationId: consent_form_create
       description: A key that is not listed below is rejected rather than ignored.
-        A client-credentials token can read but not write; its writes answer `403`.
+        A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
       summary: Create Consent Form
       tags:
       - Consent Forms
@@ -1513,8 +1514,8 @@ paths:
       description: Only the keys you send are changed, and a key that is not listed
         below is rejected rather than ignored. Published chatbot versions keep the
         content they were published with; publish the chatbot again to pick up the
-        edit. A client-credentials token can read but not write; its writes answer
-        `403`.
+        edit. A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
       summary: Update Consent Form
       parameters:
       - in: path
@@ -1549,8 +1550,8 @@ paths:
         of this call answers `404`, which makes it safe to retry. Every chatbot draft
         using the form is moved onto the team''s default consent form; published versions
         keep the form they were published with. The default form itself cannot be
-        archived and answers `409`. A client-credentials token can read but not write;
-        its writes answer `403`.'
+        archived and answers `409`. A client-credentials token can write only when
+        its application has access to all chatbots; otherwise its writes answer `403`.'
       summary: Archive Consent Form
       parameters:
       - in: path
@@ -1881,7 +1882,8 @@ paths:
     post:
       operationId: source_material_create
       description: A key that is not listed below is rejected rather than ignored.
-        A client-credentials token can read but not write; its writes answer `403`.
+        A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
       summary: Create Source Material
       tags:
       - Source Material
@@ -1935,8 +1937,8 @@ paths:
       description: Only the keys you send are changed, and a key that is not listed
         below is rejected rather than ignored. Published chatbot versions keep the
         content they were published with; publish the chatbot again to pick up the
-        edit. A client-credentials token can read but not write; its writes answer
-        `403`.
+        edit. A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
       summary: Update Source Material
       parameters:
       - in: path
@@ -1971,7 +1973,8 @@ paths:
         of this call answers `404`, which makes it safe to retry. It is refused with
         `409` while a pipeline node or a live chatbot version still uses it. The response
         lists each chatbot version and node that uses it. A client-credentials token
-        can read but not write; its writes answer `403`.'
+        can write only when its application has access to all chatbots; otherwise
+        its writes answer `403`.'
       summary: Archive Source Material
       parameters:
       - in: path

@@ -8,6 +8,8 @@ from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
+from apps.teams.flags import Flags
+from apps.teams.utils import flag_is_active_for_team
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     TYPE_CHOICE,
@@ -16,6 +18,7 @@ from apps.web.dynamic_filters.base import (
     MultiColumnFilter,
 )
 from apps.web.dynamic_filters.column_filters import (
+    AnnotationQueueFilter,
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
@@ -285,6 +288,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
             description="Filter by message date",
         ),
         ChatMessageTagsFilter(),
+        AnnotationQueueFilter(),
         VersionsFilter(),
         ChannelsFilter(),
         ExperimentFilter(),
@@ -292,6 +296,14 @@ class ExperimentSessionFilter(MultiColumnFilter):
         RemoteIdFilter(),
         SessionIdFilter(),
     ]
+
+    @classmethod
+    def columns(cls, team, **kwargs) -> dict[str, dict]:
+        """Offer the annotation queue filter only to teams with human annotations turned on."""
+        columns = super().columns(team, **kwargs)
+        if not flag_is_active_for_team(team, Flags.HUMAN_ANNOTATIONS.slug):
+            columns.pop(AnnotationQueueFilter().query_param, None)
+        return columns
 
 
 class ChatMessageFilter(MultiColumnFilter):

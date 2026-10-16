@@ -76,14 +76,16 @@ def test_there_is_no_provider_endpoint():
 @pytest.mark.django_db()
 @pytest.mark.parametrize("resource", RESOURCES)
 class TestMachineTokens:
-    """A machine token may read resources but not write them: they are shared by chatbots outside its allowlist."""
+    """A machine token may always read resources, but may write them only when its application reaches every
+    chatbot: the resources are shared by all of the team's chatbots."""
 
-    def _client(self, team):
+    def _client(self, team, all_data=False):
         return ApiTestClient(
             team.members.first(),
             team,
             auth_method="oauth_client_credentials",
             scopes=["chatbots:read", "chatbots:write"],
+            all_data=all_data,
         )
 
     def test_may_read(self, team, resource):
@@ -91,7 +93,7 @@ class TestMachineTokens:
 
         assert self._client(team).get(resource.detail_url(row.id)).status_code == 200
 
-    def test_may_not_create(self, team, resource):
+    def test_limited_token_may_not_create(self, team, resource):
         client = self._client(team)
         count_before = resource.model.objects.filter(team=team).count()
 
@@ -101,7 +103,7 @@ class TestMachineTokens:
         assert resource.model.objects.filter(team=team).count() == count_before
 
     @pytest.mark.parametrize("method", ["patch", "delete"])
-    def test_may_not_change(self, team, resource, method):
+    def test_limited_token_may_not_change(self, team, resource, method):
         row = resource.factory.create(team=team, **{resource.patch_field: "Before"})
 
         client = self._client(team)
@@ -112,3 +114,18 @@ class TestMachineTokens:
         row.refresh_from_db()
         assert getattr(row, resource.patch_field) == "Before"
         assert row.is_archived is False
+
+    def test_all_data_token_may_create(self, team, resource):
+        response = self._client(team, all_data=True).post(resource.list_url, resource.create_body, format="json")
+
+        assert response.status_code == 201, response.content
+
+    @pytest.mark.parametrize("method", ["patch", "delete"])
+    def test_all_data_token_may_change(self, team, resource, method):
+        row = resource.factory.create(team=team)
+
+        response = getattr(self._client(team, all_data=True), method)(
+            resource.detail_url(row.id), {resource.patch_field: "X"}, format="json"
+        )
+
+        assert response.status_code == 200, response.content

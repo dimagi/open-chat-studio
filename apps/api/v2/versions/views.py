@@ -113,7 +113,7 @@ class ChatbotVersionCreateView(APIView):
         body = VersionCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         chatbot = get_working_chatbot(request.team, id)
-        # A machine token reaches only the chatbots its application was pinned to. After resolution
+        # A machine token reaches only the chatbots its application allows. After resolution
         # because the allowlist is keyed on the chatbot, and before the gate, which reads the graph.
         enforce_application_chatbot_write(request, chatbot)
         make_default = body.validated_data["make_default"]
@@ -314,7 +314,7 @@ class ChatbotVersionView(APIView):
         # live. The second blocks, then re-resolves against the committed `is_archived` and 404s.
         with transaction.atomic():
             chatbot = get_working_chatbot(request.team, id, lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # A machine token reaches only the chatbots its application allows. Checked after
             # resolution because the allowlist is keyed on the chatbot, and before anything written.
             enforce_application_chatbot_write(request, chatbot)
             # `versions` excludes archived rows, so an already-archived version is a 404 here.

@@ -20,6 +20,7 @@
     "strictNullChecks": true
   },
   "exclude": [
-    "components/**/*"
+    "components/**/*",
+    "e2e/**/*"
   ]
 }

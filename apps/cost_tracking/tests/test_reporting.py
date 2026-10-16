@@ -28,6 +28,7 @@ from apps.cost_tracking.services.reporting import (
     trace_token_usage,
     usage_timeseries,
 )
+from apps.cost_tracking.tests.utils import make_usage
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -39,22 +40,15 @@ _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 _START = _NOW - timedelta(days=30)
 
 
-def _usage(team, *, cost, when, **kwargs):
-    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
-    and forwards optional kwargs (confidence, experiment, session, quantity).
-    """
-    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
-
-
 @pytest.mark.django_db()
 class TestCostSummary:
     """Period rollup, prior-period delta, confidence split, team scoping."""
 
     def test_sums_period_records_excluding_outside(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=2))
-        _usage(team, cost="9.99", when=_NOW - timedelta(days=40))  # outside window
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=2))
+        make_usage(team, cost="9.99", when=_NOW - timedelta(days=40))  # outside window
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -62,8 +56,8 @@ class TestCostSummary:
 
     def test_previous_period_uses_equal_length_prior_window(self):
         team = TeamFactory.create()
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=1))
-        _usage(team, cost="3.00", when=_NOW - timedelta(days=45))
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="3.00", when=_NOW - timedelta(days=45))
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -82,9 +76,9 @@ class TestCostSummary:
     def test_delta_pct(self, total, previous, expected):
         team = TeamFactory.create()
         if Decimal(total) > 0:
-            _usage(team, cost=total, when=_NOW - timedelta(days=1))
+            make_usage(team, cost=total, when=_NOW - timedelta(days=1))
         if Decimal(previous) > 0:
-            _usage(team, cost=previous, when=_NOW - timedelta(days=45))
+            make_usage(team, cost=previous, when=_NOW - timedelta(days=45))
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -93,8 +87,8 @@ class TestCostSummary:
     def test_team_scoped(self):
         team = TeamFactory.create()
         other = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
-        _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -102,10 +96,10 @@ class TestCostSummary:
 
     def test_splits_cost_by_confidence(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
-        _usage(team, cost="0.20", when=_NOW - timedelta(days=2), confidence=Confidence.ESTIMATED)
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=3), confidence=Confidence.UNKNOWN)
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=4), confidence=Confidence.UNKNOWN)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+        make_usage(team, cost="0.20", when=_NOW - timedelta(days=2), confidence=Confidence.ESTIMATED)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=3), confidence=Confidence.UNKNOWN)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=4), confidence=Confidence.UNKNOWN)
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -120,7 +114,7 @@ class TestCostSummary:
         a Decimal 0 is falsy and would otherwise be indistinguishable from no estimated usage
         at all when a caller checks truthiness of the cost instead."""
         team = TeamFactory.create()
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.ESTIMATED)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.ESTIMATED)
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -140,14 +134,14 @@ class TestCostSummary:
             unit_price="0.0001",
         )
         # Two EXACT rows with no pricing rule - the lead's failure mode.
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=2), confidence=Confidence.EXACT)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=2), confidence=Confidence.EXACT)
         # One ESTIMATED row, also unpriced.
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=3), confidence=Confidence.ESTIMATED)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=3), confidence=Confidence.ESTIMATED)
         # One UNKNOWN-confidence row, also unpriced - must NOT count here.
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=4), confidence=Confidence.UNKNOWN)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=4), confidence=Confidence.UNKNOWN)
         # A priced EXACT row - must not count.
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=5), confidence=Confidence.EXACT, pricing_rule=rule)
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=5), confidence=Confidence.EXACT, pricing_rule=rule)
 
         summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -156,7 +150,7 @@ class TestCostSummary:
 
     def test_single_query_for_aggregate(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
 
         with CaptureQueriesContext(connection) as ctx:
             cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
@@ -173,8 +167,8 @@ class TestCostsByExperiment:
         team = TeamFactory.create()
         exp_a = ExperimentFactory.create(team=team, name="bot-a")
         exp_b = ExperimentFactory.create(team=team, name="bot-b")
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp_a)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp_b)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp_a)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp_b)
 
         with CaptureQueriesContext(connection) as ctx:
             costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
@@ -185,8 +179,8 @@ class TestCostsByExperiment:
     def test_aggregates_per_experiment(self):
         team = TeamFactory.create()
         exp = ExperimentFactory.create(team=team, name="bot")
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp)
 
         costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -194,14 +188,14 @@ class TestCostsByExperiment:
 
     def test_excludes_records_with_null_experiment(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=None)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=None)
 
         assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
     def test_excludes_records_outside_window(self):
         team = TeamFactory.create()
         exp = ExperimentFactory.create(team=team)
-        _usage(team, cost="9.99", when=_NOW - timedelta(days=40), experiment=exp)
+        make_usage(team, cost="9.99", when=_NOW - timedelta(days=40), experiment=exp)
 
         assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
@@ -209,7 +203,7 @@ class TestCostsByExperiment:
         team = TeamFactory.create()
         other = TeamFactory.create()
         exp_other = ExperimentFactory.create(team=other)
-        _usage(other, cost="999.00", when=_NOW - timedelta(days=1), experiment=exp_other)
+        make_usage(other, cost="999.00", when=_NOW - timedelta(days=1), experiment=exp_other)
 
         assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
@@ -400,9 +394,9 @@ class TestSessionUsage:
     def test_groups_by_model_with_total(self):
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
-        _usage(team, cost="2.00", when=_NOW, session=session, model_name="gpt-4o", quantity=200)
-        _usage(team, cost="0.50", when=_NOW, session=session, model_name="gpt-4o-mini", quantity=50)
+        make_usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
+        make_usage(team, cost="2.00", when=_NOW, session=session, model_name="gpt-4o", quantity=200)
+        make_usage(team, cost="0.50", when=_NOW, session=session, model_name="gpt-4o-mini", quantity=50)
 
         usage = session_usage(session)
 
@@ -417,8 +411,8 @@ class TestSessionUsage:
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         other = ExperimentSessionFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o")
-        _usage(team, cost="9.00", when=_NOW, session=other, model_name="gpt-4o")
+        make_usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o")
+        make_usage(team, cost="9.00", when=_NOW, session=other, model_name="gpt-4o")
 
         usage = session_usage(session)
 
@@ -428,7 +422,7 @@ class TestSessionUsage:
     def test_no_pricing_data_when_all_rows_unpriced(self):
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
+        make_usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
 
         usage = session_usage(session)
 
@@ -438,8 +432,8 @@ class TestSessionUsage:
     def test_flags_estimated_and_unknown_confidence(self):
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", confidence=Confidence.ESTIMATED)
-        _usage(
+        make_usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", confidence=Confidence.ESTIMATED)
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -478,8 +472,8 @@ class TestTraceTokenUsage:
     def test_splits_input_and_output(self):
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=1000, service_kind=ServiceKind.LLM_INPUT)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_OUTPUT)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=1000, service_kind=ServiceKind.LLM_INPUT)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_OUTPUT)
 
         usage = trace_token_usage(trace)
 
@@ -492,10 +486,10 @@ class TestTraceTokenUsage:
         total matches what the provider reported for the call."""
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_INPUT)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=300, service_kind=ServiceKind.LLM_CACHED_INPUT)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=200, service_kind=ServiceKind.LLM_CACHE_WRITE)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=400, service_kind=ServiceKind.LLM_OUTPUT)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_INPUT)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=300, service_kind=ServiceKind.LLM_CACHED_INPUT)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=200, service_kind=ServiceKind.LLM_CACHE_WRITE)
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=400, service_kind=ServiceKind.LLM_OUTPUT)
 
         usage = trace_token_usage(trace)
 
@@ -513,7 +507,7 @@ class TestTraceTokenUsage:
             ("openai", "gpt-4o", ServiceKind.LLM_OUTPUT, 40),
             ("anthropic", "claude-haiku-4-5", ServiceKind.LLM_INPUT, 70),
         ]:
-            _usage(
+            make_usage(
                 team,
                 cost="0",
                 when=_NOW,
@@ -535,9 +529,9 @@ class TestTraceTokenUsage:
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
         other = TraceFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, trace=trace, quantity=100, service_kind=ServiceKind.LLM_INPUT)
-        _usage(team, cost="0", when=_NOW, trace=other, quantity=900, service_kind=ServiceKind.LLM_INPUT)
-        _usage(team, cost="0", when=_NOW, quantity=900, service_kind=ServiceKind.LLM_INPUT)  # untraced
+        make_usage(team, cost="0", when=_NOW, trace=trace, quantity=100, service_kind=ServiceKind.LLM_INPUT)
+        make_usage(team, cost="0", when=_NOW, trace=other, quantity=900, service_kind=ServiceKind.LLM_INPUT)
+        make_usage(team, cost="0", when=_NOW, quantity=900, service_kind=ServiceKind.LLM_INPUT)  # untraced
 
         assert trace_token_usage(trace).total == 100
 
@@ -546,7 +540,7 @@ class TestTraceTokenUsage:
         blow up the sum or make the card claim tokens it doesn't have."""
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -571,7 +565,7 @@ class TestTraceTokenUsage:
             service_kind=ServiceKind.LLM_INPUT,
             unit_price="0.00015",
         )
-        _usage(
+        make_usage(
             team,
             cost="1.00",
             when=_NOW,
@@ -581,7 +575,7 @@ class TestTraceTokenUsage:
             quantity=100,
             pricing_rule=rule,
         )
-        _usage(
+        make_usage(
             team,
             cost="0.50",
             when=_NOW,
@@ -607,7 +601,7 @@ class TestTraceTokenUsage:
         the trace detail page renders "no pricing data" for this rather than "$0.00"."""
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(team, cost="0", when=_NOW, trace=trace, service_kind=ServiceKind.LLM_INPUT, quantity=100)
+        make_usage(team, cost="0", when=_NOW, trace=trace, service_kind=ServiceKind.LLM_INPUT, quantity=100)
 
         usage = trace_token_usage(trace)
 
@@ -617,7 +611,7 @@ class TestTraceTokenUsage:
     def test_flags_estimated_and_unknown_confidence(self):
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -626,7 +620,7 @@ class TestTraceTokenUsage:
             quantity=100,
             confidence=Confidence.ESTIMATED,
         )
-        _usage(
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -646,7 +640,7 @@ class TestTraceTokenUsage:
         different model in the same trace has an ESTIMATED row."""
         team = TeamFactory.create()
         trace = TraceFactory.create(team=team)
-        _usage(
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -657,7 +651,7 @@ class TestTraceTokenUsage:
             quantity=100,
             confidence=Confidence.EXACT,
         )
-        _usage(
+        make_usage(
             team,
             cost="0",
             when=_NOW,
@@ -692,18 +686,18 @@ class TestCoverageGaps:
             unit_price="0.0001",
         )
         # Unpriced (no rule, non-UNKNOWN) across two calls of one model.
-        _usage(
+        make_usage(
             team, cost="0.00", when=_NOW - timedelta(days=1), model_name="unpriced-model", confidence=Confidence.EXACT
         )
-        _usage(
+        make_usage(
             team, cost="0.00", when=_NOW - timedelta(days=2), model_name="unpriced-model", confidence=Confidence.EXACT
         )
         # No-usage (UNKNOWN) call of another model.
-        _usage(
+        make_usage(
             team, cost="0.00", when=_NOW - timedelta(days=3), model_name="unknown-model", confidence=Confidence.UNKNOWN
         )
         # A priced call - must not appear in either list.
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=4), model_name="priced-model", pricing_rule=rule)
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=4), model_name="priced-model", pricing_rule=rule)
 
         gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -713,8 +707,8 @@ class TestCoverageGaps:
     def test_sorted_by_call_count_descending(self):
         team = TeamFactory.create()
         for _ in range(3):
-            _usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="loud", confidence=Confidence.EXACT)
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="quiet", confidence=Confidence.EXACT)
+            make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="loud", confidence=Confidence.EXACT)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="quiet", confidence=Confidence.EXACT)
 
         gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -722,7 +716,7 @@ class TestCoverageGaps:
 
     def test_single_query(self):
         team = TeamFactory.create()
-        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+        make_usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
 
         with CaptureQueriesContext(connection) as ctx:
             coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
@@ -738,7 +732,7 @@ class TestCoverageGaps:
             service_kind=ServiceKind.LLM_INPUT,
             unit_price="0.0001",
         )
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=1), model_name="priced-model", pricing_rule=rule)
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=1), model_name="priced-model", pricing_rule=rule)
 
         gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -752,9 +746,9 @@ class TestCostTimeseries:
 
     def test_buckets_by_day_ordered(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=2))
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=2))
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=2))
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=2))
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=1))
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -762,7 +756,7 @@ class TestCostTimeseries:
 
     def test_costs_are_floats(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.25", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.25", when=_NOW - timedelta(days=1))
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -771,8 +765,8 @@ class TestCostTimeseries:
     def test_sources_are_separate_series_in_one_bucket(self):
         team = TeamFactory.create()
         when = _NOW - timedelta(days=1)
-        _usage(team, cost="1.00", when=when)
-        _usage(team, cost="0.25", when=when, source=UsageSource.EVALUATION)
+        make_usage(team, cost="1.00", when=when)
+        make_usage(team, cost="0.25", when=when, source=UsageSource.EVALUATION)
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -784,8 +778,8 @@ class TestCostTimeseries:
         """Stacked series have to line up bucket for bucket, so a bucket with only
         eval spend still reports a chat figure."""
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=2))
-        _usage(team, cost="0.25", when=_NOW - timedelta(days=1), source=UsageSource.EVALUATION)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=2))
+        make_usage(team, cost="0.25", when=_NOW - timedelta(days=1), source=UsageSource.EVALUATION)
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -795,7 +789,7 @@ class TestCostTimeseries:
     def test_team_scoped(self):
         team = TeamFactory.create()
         other = TeamFactory.create()
-        _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
+        make_usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
 
@@ -807,9 +801,9 @@ class TestUsageTimeseries:
     def test_buckets_carry_cost_and_split_tokens(self):
         team = TeamFactory.create()
         day = datetime(2026, 6, 10, 8, tzinfo=UTC)
-        _usage(team, cost="0.10", when=day, service_kind=ServiceKind.LLM_INPUT, quantity=100)
-        _usage(team, cost="0.05", when=day, service_kind=ServiceKind.LLM_OUTPUT, quantity=40)
-        _usage(team, cost="0.20", when=day + timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
+        make_usage(team, cost="0.10", when=day, service_kind=ServiceKind.LLM_INPUT, quantity=100)
+        make_usage(team, cost="0.05", when=day, service_kind=ServiceKind.LLM_OUTPUT, quantity=40)
+        make_usage(team, cost="0.20", when=day + timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
 
         series = usage_timeseries(
             team,
@@ -829,7 +823,7 @@ class TestUsageTimeseries:
     def test_bucket_boundary_honours_tz(self):
         """A record at 23:30 UTC on 10 June is 11 June in Auckland (UTC+12), so the tz decides the bucket."""
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=datetime(2026, 6, 10, 23, 30, tzinfo=UTC), quantity=10)
+        make_usage(team, cost="1.00", when=datetime(2026, 6, 10, 23, 30, tzinfo=UTC), quantity=10)
 
         series = usage_timeseries(
             team,
@@ -919,9 +913,9 @@ class TestTokenCounts:
 class TestCostTotal:
     def test_sums_period_records_excluding_outside(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
-        _usage(team, cost="0.50", when=_NOW - timedelta(days=2))
-        _usage(team, cost="9.99", when=_NOW - timedelta(days=40))  # outside window
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="0.50", when=_NOW - timedelta(days=2))
+        make_usage(team, cost="9.99", when=_NOW - timedelta(days=40))  # outside window
 
         result = cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -930,7 +924,7 @@ class TestCostTotal:
     def test_scoped_to_team(self):
         team = TeamFactory.create()
         other = TeamFactory.create()
-        _usage(other, cost="9.99", when=_NOW - timedelta(days=1))
+        make_usage(other, cost="9.99", when=_NOW - timedelta(days=1))
 
         result = cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -938,7 +932,7 @@ class TestCostTotal:
 
     def test_single_query_for_total_and_currency(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
 
         with CaptureQueriesContext(connection) as ctx:
             cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
@@ -951,8 +945,8 @@ class TestCostTotal:
         exp = ExperimentFactory.create(team=team)
         keep = ExperimentSessionFactory.create(experiment=exp, team=team)
         drop = ExperimentSessionFactory.create(experiment=exp, team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=keep.participant)
-        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), participant=drop.participant)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=keep.participant)
+        make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), participant=drop.participant)
 
         result = cost_total(
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
@@ -971,7 +965,7 @@ class TestCostTotal:
     def test_currency(self, currencies, expected):
         team = TeamFactory.create()
         for currency in currencies:
-            _usage(team, cost="0.10", when=_NOW - timedelta(days=1), currency=currency)
+            make_usage(team, cost="0.10", when=_NOW - timedelta(days=1), currency=currency)
 
         assert cost_total(team, start=_NOW - timedelta(days=30), end=_NOW).currency == expected
 
@@ -982,21 +976,21 @@ class TestCostsByModel:
 
     def test_groups_by_provider_and_model_ordered_by_cost_desc(self):
         team = TeamFactory.create()
-        _usage(
+        make_usage(
             team,
             cost="1.00",
             when=_NOW - timedelta(days=1),
             provider_type="openai",
             model_name="gpt-4o-mini",
         )
-        _usage(
+        make_usage(
             team,
             cost="0.50",
             when=_NOW - timedelta(days=2),
             provider_type="openai",
             model_name="gpt-4o-mini",
         )
-        _usage(
+        make_usage(
             team,
             cost="4.00",
             when=_NOW - timedelta(days=3),
@@ -1013,8 +1007,8 @@ class TestCostsByModel:
 
     def test_excludes_records_outside_window(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
-        _usage(team, cost="9.99", when=_NOW - timedelta(days=40))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="9.99", when=_NOW - timedelta(days=40))
 
         rows = costs_by_model(team, start=_START, end=_NOW)
 
@@ -1023,8 +1017,8 @@ class TestCostsByModel:
     def test_team_scoped(self):
         team = TeamFactory.create()
         other = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
-        _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         rows = costs_by_model(team, start=_START, end=_NOW)
 
@@ -1033,8 +1027,8 @@ class TestCostsByModel:
     def test_unfiltered_read_counts_evaluation_spend(self):
         """A team total counts every source (ADR-0048)."""
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), source=UsageSource.CHAT)
-        _usage(team, cost="0.25", when=_NOW - timedelta(days=2), source=UsageSource.EVALUATION)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), source=UsageSource.CHAT)
+        make_usage(team, cost="0.25", when=_NOW - timedelta(days=2), source=UsageSource.EVALUATION)
 
         rows = costs_by_model(team, start=_START, end=_NOW)
 
@@ -1045,8 +1039,10 @@ class TestCostsByModel:
         drops out even though the eval row carries the experiment id (ADR-0048)."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment, source=UsageSource.CHAT)
-        _usage(team, cost="0.25", when=_NOW - timedelta(days=2), experiment=experiment, source=UsageSource.EVALUATION)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment, source=UsageSource.CHAT)
+        make_usage(
+            team, cost="0.25", when=_NOW - timedelta(days=2), experiment=experiment, source=UsageSource.EVALUATION
+        )
 
         rows = costs_by_model(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
 
@@ -1054,7 +1050,7 @@ class TestCostsByModel:
 
     def test_single_query(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
 
         with CaptureQueriesContext(connection) as ctx:
             costs_by_model(team, start=_START, end=_NOW)
@@ -1068,9 +1064,9 @@ class TestCostsByServiceKind:
 
     def test_groups_cost_and_tokens_per_kind(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=1000)
-        _usage(team, cost="0.10", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
-        _usage(team, cost="0.40", when=_NOW - timedelta(days=2), service_kind=ServiceKind.LLM_OUTPUT, quantity=300)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=1000)
+        make_usage(team, cost="0.10", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
+        make_usage(team, cost="0.40", when=_NOW - timedelta(days=2), service_kind=ServiceKind.LLM_OUTPUT, quantity=300)
 
         rows = costs_by_service_kind(team, start=_START, end=_NOW)
 
@@ -1088,7 +1084,7 @@ class TestCostsByServiceKind:
 
     def test_kinds_with_no_rows_are_absent(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT)
 
         rows = costs_by_service_kind(team, start=_START, end=_NOW)
 
@@ -1098,7 +1094,7 @@ class TestCostsByServiceKind:
         """ADR-0048: a filtered read is per-entity attribution, chat only."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        _usage(
+        make_usage(
             team,
             cost="1.00",
             when=_NOW - timedelta(days=1),
@@ -1106,7 +1102,7 @@ class TestCostsByServiceKind:
             source=UsageSource.CHAT,
             quantity=100,
         )
-        _usage(
+        make_usage(
             team,
             cost="0.25",
             when=_NOW - timedelta(days=2),
@@ -1121,7 +1117,7 @@ class TestCostsByServiceKind:
 
     def test_single_query(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1))
 
         with CaptureQueriesContext(connection) as ctx:
             costs_by_service_kind(team, start=_START, end=_NOW)

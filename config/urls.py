@@ -28,6 +28,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from apps.chatbots.views import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
+from apps.service_providers import mock_llm
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
@@ -124,6 +125,11 @@ urlpatterns = [
     path("silk/", include("silk.urls", namespace="silk")),
     *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
 ]
+
+if settings.MOCK_LLM_ENABLED:
+    # Mounted at the root rather than under ``service_providers/`` because the OpenAI SDK
+    # sends only a bearer token, and that include sits behind the team-scoped login.
+    urlpatterns.append(path(mock_llm.MOUNT_PATH, include("apps.service_providers.mock_llm.urls")))
 
 if settings.USE_DEBUG_TOOLBAR:
     from debug_toolbar.toolbar import debug_toolbar_urls

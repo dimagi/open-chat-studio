@@ -10,6 +10,7 @@ Framework's OAuth2 functionality with team-aware scoping. It ensures that:
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.db.models import Q
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasResourceScope, TokenHasScope
 from rest_framework import exceptions
 
@@ -86,30 +87,39 @@ def is_client_credentials_request(request) -> bool:
 def token_allows_chatbot(token, experiment) -> bool:
     """True when `token` may start a chat with `experiment`.
 
-    Only client-credentials (machine) applications are pinned to a set of chatbots: their token is
-    handed to a machine (and, for the chat widget, to a browser) with no user behind it, so the team
-    boundary is too coarse to be the last line. Every other caller -- API key, Django session,
+    Only client-credentials (machine) applications without `all_data` are pinned to a set of
+    chatbots: their token is handed to a machine (and, for the chat widget, to a browser) with no user
+    behind it, so the team boundary is too coarse to be the last line. Every other caller -- API key, Django session,
     authorization-code token -- keeps team-membership semantics untouched.
 
     The allowlist holds working versions, but a caller may address a version directly: `public_id` is
     unique per row and `create_new_version` assigns a fresh one. Normalise to the family head so a
     legitimate versioned call is not denied.
     """
-    if not is_client_credentials_token(token):
+    if token_reaches_all_data(token):
         return True
     return token.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
 
 
+def token_reaches_all_data(token) -> bool:
+    """True unless `token` is a client-credentials token whose application is limited to some chatbots."""
+    return not is_client_credentials_token(token) or token.application.all_data
+
+
 def applications_allowing_chatbot(experiment):
-    """The team's machine applications whose allowlist names `experiment` -- inverse of `token_allows_chatbot`.
+    """The team's machine applications that may reach `experiment` -- inverse of `token_allows_chatbot`.
 
     Only client-credentials applications are listed.
     """
-    return OAuth2Application.objects.filter(
-        team_id=experiment.team_id,
-        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
-        allowed_chatbots=experiment.get_working_version_id(),
-    ).order_by("name")
+    return (
+        OAuth2Application.objects.filter(
+            Q(all_data=True) | Q(allowed_chatbots=experiment.get_working_version_id()),
+            team_id=experiment.team_id,
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        )
+        .distinct()
+        .order_by("name")
+    )
 
 
 def application_allows_chatbot(request, experiment) -> bool:
@@ -135,7 +145,7 @@ def enforce_application_chatbot_write(request, experiment) -> None:
     """Raise `PermissionDenied` unless the request may modify `experiment`'s configuration.
 
     Same allowlist as the chat path, different message: reconfiguring a chatbot is at least as
-    sensitive as conversing with it, so a machine token reaches only the chatbots it was pinned to.
+    sensitive as conversing with it, so a machine token reaches only the chatbots its application allows.
     Creating a chatbot is deliberately *not* gated -- a chatbot that does not exist yet cannot be on
     any allowlist, so gating it would leave a machine token unable to bootstrap one.
     """
