@@ -2,23 +2,15 @@ from unittest import mock
 
 import openai
 import pytest
-from pydantic import ValidationError
 
 from apps.moderation.tasks import moderate_message
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.moderation_service import ModerationRateLimited
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.tests.provider_errors import connection_error, status_error
 
 MODERATE = "apps.service_providers.moderation_service.OpenAIModerationService.moderate"
-
-
-def _invalid_score_error() -> ValidationError:
-    try:
-        ModerationCategory(flagged=True, score=2)
-    except ValidationError as e:
-        return e
-    raise AssertionError("score=2 was accepted")
 
 
 def _run(provider_id: int):
@@ -46,14 +38,29 @@ def test_returns_the_output():
 
 
 @pytest.mark.django_db()
-def test_rate_limited_is_skipped_without_retry():
+@pytest.mark.parametrize(
+    ("side_effect", "delete_provider", "expected_reason", "expected_calls"),
+    [
+        pytest.param(ModerationRateLimited("429"), False, "rate_limited", 1, id="rate_limited"),
+        pytest.param(
+            lambda text: ModerationCategory(flagged=True, score=2), False, "error", 1, id="invalid_provider_output"
+        ),
+        pytest.param(
+            ServiceProviderConfigError(provider_type="openai", message="bad key"), False, "error", 1, id="config_error"
+        ),
+        pytest.param(None, True, "error", 0, id="deleted_provider"),
+    ],
+)
+def test_is_skipped_without_retry(side_effect, delete_provider, expected_reason, expected_calls):
     provider = ModerationProviderFactory.create()
+    if delete_provider:
+        provider.delete()
 
-    with mock.patch(MODERATE, side_effect=ModerationRateLimited("429")) as moderate:
+    with mock.patch(MODERATE, side_effect=side_effect) as moderate:
         result = _run(provider.id)
 
-    assert result.get() == {"status": "skipped", "reason": "rate_limited"}
-    assert moderate.call_count == 1
+    assert result.get() == {"status": "skipped", "reason": expected_reason}
+    assert moderate.call_count == expected_calls
 
 
 @pytest.mark.django_db()
@@ -84,26 +91,6 @@ def test_retry_that_succeeds_returns_the_output():
         result = _run(provider.id)
 
     assert result.get()["status"] == "ok"
-
-
-@pytest.mark.django_db()
-def test_invalid_provider_output_is_an_error():
-    provider = ModerationProviderFactory.create()
-
-    with mock.patch(MODERATE, side_effect=_invalid_score_error()) as moderate:
-        result = _run(provider.id)
-
-    assert result.get() == {"status": "skipped", "reason": "error"}
-    assert moderate.call_count == 1
-
-
-@pytest.mark.django_db()
-def test_deleted_provider_is_an_error():
-    provider = ModerationProviderFactory.create()
-    provider_id = provider.id
-    provider.delete()
-
-    assert _run(provider_id).get() == {"status": "skipped", "reason": "error"}
 
 
 @pytest.mark.django_db()

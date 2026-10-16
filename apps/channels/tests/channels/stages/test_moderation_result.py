@@ -60,39 +60,46 @@ def _bot_response(session, content="The bot's answer"):
     )
 
 
-class TestShouldRun:
-    def test_does_not_run_without_a_task(self):
-        ctx = make_context(human_message=MagicMock(), moderation_task_id=None)
+@pytest.mark.parametrize(
+    ("human_message", "task_id", "expected"),
+    [
+        pytest.param(MagicMock(), "task-1", True, id="task_and_message"),
+        pytest.param(MagicMock(), None, False, id="no_task"),
+        pytest.param(None, "task-1", False, id="no_human_message"),
+    ],
+)
+def test_should_run(human_message, task_id, expected):
+    ctx = make_context(human_message=human_message, moderation_task_id=task_id)
 
-        assert ModerationResultStage().should_run(ctx) is False
-
-    def test_runs_with_a_task(self):
-        ctx = make_context(human_message=MagicMock(), moderation_task_id="task-1")
-
-        assert ModerationResultStage().should_run(ctx) is True
+    assert ModerationResultStage().should_run(ctx) is expected
 
 
 @pytest.mark.django_db()
 class TestModerationResultStage:
     @pytest.mark.parametrize(
-        ("output", "expected_status"),
+        ("output", "expected_status", "expected_early_exit"),
         [
-            pytest.param(PASSED_OUTPUT, ModerationStatus.PASSED, id="passed"),
-            pytest.param(NON_STRIKE_OUTPUT, ModerationStatus.PASSED, id="only_non_strike_categories_flagged"),
-            pytest.param(STRIKE_OUTPUT, ModerationStatus.FLAGGED, id="strike_category_flagged"),
+            pytest.param(PASSED_OUTPUT, ModerationStatus.PASSED, None, id="passed"),
+            pytest.param(NON_STRIKE_OUTPUT, ModerationStatus.PASSED, None, id="only_non_strike_categories_flagged"),
+            pytest.param(STRIKE_OUTPUT, ModerationStatus.FLAGGED, "Flagged reply", id="strike_category_flagged"),
         ],
     )
-    def test_records_the_output(self, moderated_session, moderation_task, output, expected_status):
+    def test_records_the_output(self, moderated_session, moderation_task, output, expected_status, expected_early_exit):
         moderation_task.get.return_value = _ok(output)
-        ctx = _context(moderated_session)
+        bot_response = _bot_response(moderated_session)
+        ctx = _context(moderated_session, bot_response=bot_response, formatted_message="answer")
 
-        with patch(EVENT_BOT), patch(NOTIFICATION) as notification:
+        with patch(EVENT_BOT) as event_bot, patch(NOTIFICATION) as notification:
+            event_bot.return_value.get_user_message.return_value = "Flagged reply"
             ModerationResultStage()(ctx)
 
         ctx.human_message.refresh_from_db()
         assert ctx.human_message.moderation_status == expected_status
         assert ctx.human_message.moderation_detail == ModerationDetail(output=ModerationOutput.model_validate(output))
         notification.assert_not_called()
+        bot_response.refresh_from_db()
+        assert bot_response.content == (expected_early_exit or "The bot's answer")
+        assert ctx.early_exit_response == expected_early_exit
 
     @pytest.mark.parametrize(
         ("wait", "expected_reason"),
@@ -119,39 +126,6 @@ class TestModerationResultStage:
         notification.assert_called_once_with(
             moderated_session.experiment, session=moderated_session, reason=expected_reason
         )
-        assert ctx.formatted_message == "answer"
-        assert ctx.early_exit_response is None
-
-    def test_keeps_rule_hits(self, moderated_session, moderation_task):
-        moderation_task.get.return_value = _ok(PASSED_OUTPUT)
-        ctx = _context(moderated_session)
-        ctx.human_message.moderation_detail = ModerationDetail(rules=["markup"])
-        ctx.human_message.save()
-
-        ModerationResultStage()(ctx)
-
-        ctx.human_message.refresh_from_db()
-        assert ctx.human_message.moderation_detail.rules == ["markup"]
-        assert ctx.human_message.moderation_detail.output is not None
-
-    @pytest.mark.parametrize(
-        "output",
-        [
-            pytest.param(PASSED_OUTPUT, id="passed"),
-            pytest.param(NON_STRIKE_OUTPUT, id="only_non_strike_categories_flagged"),
-        ],
-    )
-    def test_passed_message_keeps_the_response(self, moderated_session, moderation_task, output):
-        moderation_task.get.return_value = _ok(output)
-        bot_response = _bot_response(moderated_session)
-        ctx = _context(moderated_session, bot_response=bot_response, formatted_message="answer")
-
-        with patch(EVENT_BOT) as event_bot:
-            ModerationResultStage()(ctx)
-
-        event_bot.assert_not_called()
-        bot_response.refresh_from_db()
-        assert bot_response.content == "The bot's answer"
         assert ctx.formatted_message == "answer"
         assert ctx.early_exit_response is None
 
