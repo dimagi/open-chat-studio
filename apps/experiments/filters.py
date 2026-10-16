@@ -3,13 +3,12 @@ from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
-from pydantic import Field
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import MODERATION_STATUS_LABELS, Chat, ChatMessage
 from apps.experiments.models import Experiment
-from apps.moderation.models import DeniedParticipant
+from apps.moderation.filters import ParticipantBlockedFilter
 from apps.teams.flags import Flags
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
@@ -17,6 +16,7 @@ from apps.web.dynamic_filters.base import (
     ChoiceColumnFilter,
     ColumnFilter,
     MultiColumnFilter,
+    YesNoExistsFilter,
 )
 from apps.web.dynamic_filters.column_filters import (
     AnnotationQueueFilter,
@@ -284,74 +284,18 @@ class ModerationStatusFilter(ChoiceColumnFilter):
         return queryset
 
 
-class YesNoExistsFilter(ChoiceColumnFilter):
-    """Choice filter with a "true" and a "false" option that select rows where `_condition` holds or not."""
-
-    YES: ClassVar[str] = "true"
-    NO: ClassVar[str] = "false"
-
-    def _condition(self) -> Exists:
-        raise NotImplementedError
-
-    def _matching(self, value) -> Exists | None:
-        """The condition for the selected options, or None when they select every row (or none)."""
-        selected = set(value) & {self.YES, self.NO}
-        if selected == {self.YES}:
-            return self._condition()
-        if selected == {self.NO}:
-            return ~self._condition()
-        return None
-
-    def apply_any_of(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.filter(condition)
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.exclude(condition)
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
-        return queryset
-
-
 class RuleHitFilter(YesNoExistsFilter):
     """Session filter on whether an abuse rule fired on any of the session's messages."""
+
+    yes_label: ClassVar[str] = "A rule fired"
+    no_label: ClassVar[str] = "No rule fired"
 
     query_param: str = "rule_hit"
     label: str = "Rule Hit"
     description: str = "Filter by whether an abuse rule fired on any message in the session"
-    options: list[str | dict] = [
-        {"id": YesNoExistsFilter.YES, "label": "A rule fired"},
-        {"id": YesNoExistsFilter.NO, "label": "No rule fired"},
-    ]
 
     def _condition(self) -> Exists:
         return _session_has_message(moderation_detail__rules__0__isnull=False)
-
-
-class ParticipantBlockedFilter(YesNoExistsFilter):
-    """Filter on whether the participant is on the team's denylist.
-
-    `participant_column` and `team_column` name the outer row's participant and team id columns.
-    """
-
-    query_param: str = "participant_blocked"
-    label: str = "Participant Blocked"
-    description: str = "Filter by whether the participant is blocked"
-    options: list[str | dict] = [
-        {"id": YesNoExistsFilter.YES, "label": "Blocked"},
-        {"id": YesNoExistsFilter.NO, "label": "Not blocked"},
-    ]
-    participant_column: str = Field(default="participant_id", exclude=True)
-    team_column: str = Field(default="team_id", exclude=True)
-
-    def _condition(self) -> Exists:
-        return Exists(
-            DeniedParticipant.objects.filter(
-                participant_id=OuterRef(self.participant_column), team_id=OuterRef(self.team_column)
-            )
-        )
 
 
 class ExperimentSessionFilter(MultiColumnFilter):

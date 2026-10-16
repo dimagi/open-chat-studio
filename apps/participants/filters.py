@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from typing import ClassVar
 
-from apps.experiments.filters import ChannelsFilter, ParticipantBlockedFilter
+from apps.experiments.filters import ChannelsFilter
+from apps.moderation.filters import ParticipantBlockedFilter
 from apps.teams.flags import Flags
 from apps.web.dynamic_filters.base import ColumnFilter, MultiColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter

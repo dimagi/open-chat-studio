@@ -5,7 +5,7 @@ import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
 from apps.teams.utils import flag_is_active_for_team
@@ -216,6 +216,43 @@ class ChoiceColumnFilter(ColumnFilter):
 
     def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
         return queryset.exclude(**{f"{self.column}__in": value})
+
+
+class YesNoExistsFilter(ChoiceColumnFilter):
+    """Choice filter with a "true" and a "false" option that select rows where `_condition` holds or not."""
+
+    YES: ClassVar[str] = "true"
+    NO: ClassVar[str] = "false"
+    yes_label: ClassVar[str] = "Yes"
+    no_label: ClassVar[str] = "No"
+
+    def model_post_init(self, context: Any, /) -> None:
+        if not self.options:
+            self.options = [{"id": self.YES, "label": self.yes_label}, {"id": self.NO, "label": self.no_label}]
+
+    def _condition(self) -> Exists:
+        raise NotImplementedError
+
+    def _matching(self, value) -> Exists | None:
+        """The condition for the selected options, or None when they select every row (or none)."""
+        selected = set(value) & {self.YES, self.NO}
+        if selected == {self.YES}:
+            return self._condition()
+        if selected == {self.NO}:
+            return ~self._condition()
+        return None
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.filter(condition)
+
+    def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.exclude(condition)
+
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
 
 
 class StringColumnFilter(ColumnFilter):
