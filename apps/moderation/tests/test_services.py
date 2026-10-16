@@ -1,8 +1,9 @@
+import threading
 from unittest import mock
 
 import pytest
 from celery.exceptions import TimeoutError as CeleryTimeoutError
-from django.db import DatabaseError
+from django.db import DatabaseError, connections
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
@@ -31,6 +32,7 @@ from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineC
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
+from apps.utils.pytest import django_db_with_data
 
 OUTPUT = ModerationOutput({"harassment": ModerationCategory(flagged=False, score=0.1)})
 STRIKE_OUTPUT = ModerationOutput({"illicit": ModerationCategory(flagged=True, score=0.9)})
@@ -261,6 +263,41 @@ def _add_strike(session, categories=("illicit",)):
         output=_output(dict.fromkeys(categories, True)),
     )
     return message
+
+
+@django_db_with_data()
+def test_concurrent_increments_both_count(auto_block_session):
+    """Two threads that add a strike at the same time each read back their own count."""
+    message = ChatMessageFactory.create(chat=auto_block_session.chat, message_type=ChatMessageType.HUMAN)
+    barrier = threading.Barrier(2)
+    counts = []
+    errors = []
+
+    def give_strike():
+        try:
+            participant = Participant.objects.get(id=auto_block_session.participant_id)
+            barrier.wait(timeout=5)
+            add_strike(
+                participant=participant,
+                experiment=auto_block_session.experiment,
+                chat_message=message,
+                output=STRIKE_OUTPUT,
+            )
+            counts.append(participant.strikes)
+        except Exception as error:  # noqa: BLE001
+            errors.append(error)
+        finally:
+            connections.close_all()
+
+    threads = [threading.Thread(target=give_strike) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert not errors, errors
+    assert sorted(counts) == [1, 2]
+    assert Participant.objects.get(id=auto_block_session.participant_id).strikes == 2
 
 
 @pytest.mark.django_db()
