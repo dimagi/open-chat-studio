@@ -6,7 +6,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.chat.models import ChatMessageType, ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.moderation.services import ModerationCounts, count_moderated_messages
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.utils.factories.team import TeamFactory
@@ -41,7 +41,10 @@ def test_counts_messages_by_status_and_skip_reason():
 
     counts = count_moderated_messages(team=chat.team, since=timezone.now() - timedelta(days=7))
 
-    assert counts == ModerationCounts(passed=3, flagged=1, skipped=3, skip_reasons={"rate_limited": 2, "timeout": 1})
+    assert counts == ModerationCounts(
+        by_status={ModerationStatus.PASSED: 3, ModerationStatus.FLAGGED: 1, ModerationStatus.SKIPPED: 3},
+        skip_reasons={ModerationSkipReason.RATE_LIMITED: 2, ModerationSkipReason.TIMEOUT: 1},
+    )
     assert counts.total == 7
 
 
@@ -76,6 +79,6 @@ def test_counts_use_one_query():
     ],
 )
 def test_mostly_rate_limited(skip_reasons, skipped, expected):
-    counts = ModerationCounts(skipped=skipped, skip_reasons=skip_reasons)
+    counts = ModerationCounts(by_status={ModerationStatus.SKIPPED: skipped}, skip_reasons=skip_reasons)
 
     assert counts.mostly_rate_limited is expected

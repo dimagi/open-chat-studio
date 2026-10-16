@@ -256,19 +256,18 @@ class TestMessageCounts:
 
         response = client.get(_section_url(team))
 
-        counts = response.context["message_counts"]
-        assert counts["passed"] == {"count": 1, "share": 25}
-        assert counts["flagged"] == {"count": 1, "share": 25}
-        assert counts["skipped"] == {"count": 2, "share": 50}
+        stats = {stat["status"]: stat for stat in response.context["message_counts"]["stats"]}
+        assert (stats["passed"]["count"], stats["passed"]["share"]) == (1, 25)
+        assert (stats["flagged"]["count"], stats["flagged"]["share"]) == (1, 25)
+        assert (stats["skipped"]["count"], stats["skipped"]["share"]) == (2, 50)
         assert re.search(r"\(Timeout 2\)", response.content.decode())
 
     def test_no_shares_without_moderated_messages(self, client, admin, team):
         client.force_login(admin)
 
-        counts = client.get(_section_url(team)).context["message_counts"]
+        stats = client.get(_section_url(team)).context["message_counts"]["stats"]
 
-        assert counts["passed"] == {"count": 0, "share": None}
-        assert counts["skip_reasons"] == []
+        assert [(stat["count"], stat["share"], stat["reasons"]) for stat in stats] == [(0, None, [])] * 3
 
     @pytest.mark.parametrize(
         ("skip_reasons", "hint_shown"),

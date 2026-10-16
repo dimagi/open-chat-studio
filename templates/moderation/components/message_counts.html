@@ -3,34 +3,20 @@
   <h3 class="pg-subtitle font-bold text-sm">{% translate "Last 7 days" %}</h3>
   <span class="text-neutral-500 section-subtitle">{% translate "Participant messages checked by your moderation provider, and messages it could not check." %}</span>
   <div class="stats stats-vertical sm:stats-horizontal bg-base-200 rounded-box mt-2 w-full">
-    {% with counts=message_counts.passed %}
-      <div class="stat" data-testid="moderation-count-passed">
-        <div class="stat-title">{% translate "Passed" %}</div>
-        <div class="stat-value text-2xl">{{ counts.count }}</div>
-        <div class="stat-desc">{% if counts.share is not None %}{{ counts.share }}%{% else %}—{% endif %}</div>
-      </div>
-    {% endwith %}
-    {% with counts=message_counts.flagged %}
-      <div class="stat" data-testid="moderation-count-flagged">
-        <div class="stat-title">{% translate "Flagged" %}</div>
-        <div class="stat-value text-2xl">{{ counts.count }}</div>
-        <div class="stat-desc">{% if counts.share is not None %}{{ counts.share }}%{% else %}—{% endif %}</div>
-      </div>
-    {% endwith %}
-    {% with counts=message_counts.skipped %}
-      <div class="stat" data-testid="moderation-count-skipped">
-        <div class="stat-title">{% translate "Not moderated" %}</div>
-        <div class="stat-value text-2xl">{{ counts.count }}</div>
+    {% for stat in message_counts.stats %}
+      <div class="stat" data-testid="moderation-count-{{ stat.status }}">
+        <div class="stat-title">{{ stat.title }}</div>
+        <div class="stat-value text-2xl">{{ stat.count }}</div>
         <div class="stat-desc">
-          {% if counts.share is not None %}{{ counts.share }}%{% else %}—{% endif %}
-          {% if message_counts.skip_reasons %}
+          {% if stat.share is not None %}{{ stat.share }}%{% else %}—{% endif %}
+          {% if stat.reasons %}
             <span data-testid="moderation-skip-reasons">
-              ({% for label, count in message_counts.skip_reasons %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %})
+              ({% for label, count in stat.reasons %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %})
             </span>
           {% endif %}
         </div>
       </div>
-    {% endwith %}
+    {% endfor %}
   </div>
   {% if message_counts.mostly_rate_limited %}
     <div role="alert" class="alert alert-warning alert-soft text-sm mt-2" data-testid="moderation-rate-limit-hint">

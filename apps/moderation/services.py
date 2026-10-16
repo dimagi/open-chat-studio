@@ -13,7 +13,7 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.chat.models import ChatMessage, ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
 from apps.moderation.enforcement import block_participant, is_exempt
@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from apps.channels.datamodels import Attachment
-    from apps.chat.schemas import ModerationSkipReason
     from apps.experiments.models import Experiment
     from apps.teams.models import Team
 
@@ -70,18 +69,18 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
         result = AsyncResult(task_id).get(timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1)
     except CeleryTimeoutError:
         logger.warning("No moderation result for task %s within %s seconds", task_id, MODERATION_WAIT_TIMEOUT)
-        return None, "timeout"
+        return None, ModerationSkipReason.TIMEOUT
     except Exception as error:
         # The task's own failure is already reported by Celery.
         logger.warning("Moderation task %s failed: %r", task_id, error)
-        return None, "error"
+        return None, ModerationSkipReason.ERROR
     if result["status"] != "ok":
-        return None, result["reason"]
+        return None, ModerationSkipReason(result["reason"])
     try:
         return ModerationOutput.model_validate(result["output"]), None
     except ValidationError:
         logger.exception("Moderation task %s returned an invalid output", task_id)
-        return None, "error"
+        return None, ModerationSkipReason.ERROR
 
 
 def strike_categories(output: ModerationOutput) -> set[str]:
@@ -169,21 +168,20 @@ def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_respo
 
 @dataclass(frozen=True)
 class ModerationCounts:
-    """How many moderated messages passed, were flagged or were skipped, and the skips by reason."""
+    """How many moderated messages had each moderation status, and the skips by reason."""
 
-    passed: int = 0
-    flagged: int = 0
-    skipped: int = 0
-    skip_reasons: dict[str, int] = field(default_factory=dict)
+    by_status: dict[ModerationStatus, int] = field(default_factory=lambda: dict.fromkeys(ModerationStatus, 0))
+    skip_reasons: dict[ModerationSkipReason, int] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
-        return self.passed + self.flagged + self.skipped
+        return sum(self.by_status.values())
 
     @property
     def mostly_rate_limited(self) -> bool:
         """True when more than half of the skipped messages were skipped because of the provider's rate limit."""
-        return self.skip_reasons.get("rate_limited", 0) * 2 > self.skipped
+        skipped = self.by_status.get(ModerationStatus.SKIPPED, 0)
+        return self.skip_reasons.get(ModerationSkipReason.RATE_LIMITED, 0) * 2 > skipped
 
 
 def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts:
@@ -199,15 +197,12 @@ def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts
         .annotate(count=Count("id"))
         .order_by()
     )
-    by_status = dict.fromkeys(ModerationStatus.values, 0)
-    skip_reasons: dict[str, int] = {}
+    by_status = dict.fromkeys(ModerationStatus, 0)
+    skip_reasons: dict[ModerationSkipReason, int] = {}
     for row in rows:
-        by_status[row["moderation_status"]] += row["count"]
-        if row["moderation_status"] == ModerationStatus.SKIPPED and row["skip_reason"]:
-            skip_reasons[row["skip_reason"]] = skip_reasons.get(row["skip_reason"], 0) + row["count"]
-    return ModerationCounts(
-        passed=by_status[ModerationStatus.PASSED],
-        flagged=by_status[ModerationStatus.FLAGGED],
-        skipped=by_status[ModerationStatus.SKIPPED],
-        skip_reasons=skip_reasons,
-    )
+        status = ModerationStatus(row["moderation_status"])
+        by_status[status] += row["count"]
+        if status == ModerationStatus.SKIPPED and row["skip_reason"]:
+            reason = ModerationSkipReason(row["skip_reason"])
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + row["count"]
+    return ModerationCounts(by_status=by_status, skip_reasons=skip_reasons)

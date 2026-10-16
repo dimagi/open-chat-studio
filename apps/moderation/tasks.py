@@ -5,6 +5,7 @@ from openai import APIConnectionError, InternalServerError
 from pydantic import ValidationError
 
 from apps.chat.models import ChatMessage
+from apps.chat.schemas import ModerationSkipReason
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service import ModerationRateLimited
@@ -40,12 +41,12 @@ def moderate_message(*, chat_message_id: int, moderation_provider_id: int) -> di
         output = service.moderate(text)
     except ModerationRateLimited:
         logger.warning("Moderation provider %s is rate limited", moderation_provider_id)
-        return _skipped("rate_limited")
+        return _skipped(ModerationSkipReason.RATE_LIMITED)
     except (ChatMessage.DoesNotExist, ModerationProvider.DoesNotExist, ServiceProviderConfigError, ValidationError):
         logger.exception("Could not moderate message %s with provider %s", chat_message_id, moderation_provider_id)
-        return _skipped("error")
+        return _skipped(ModerationSkipReason.ERROR)
     return {"status": "ok", "output": output.model_dump(mode="json")}
 
 
-def _skipped(reason: str) -> dict:
+def _skipped(reason: ModerationSkipReason) -> dict:
     return {"status": "skipped", "reason": reason}

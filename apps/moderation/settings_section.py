@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from waffle import flag_is_active
 
+from apps.chat.models import ModerationStatus
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
 from apps.moderation.services import ModerationCounts, count_moderated_messages
@@ -17,7 +18,11 @@ from apps.web.forms import set_form_fields_disabled
 
 SETTINGS_SECTION_KEY = "moderation"
 COUNTS_PERIOD = timedelta(days=7)
-SKIP_REASON_LABELS = {"rate_limited": _("Rate limit"), "error": _("Error"), "timeout": _("Timeout")}
+STATUS_TITLES = {
+    ModerationStatus.PASSED: _("Passed"),
+    ModerationStatus.FLAGGED: _("Flagged"),
+    ModerationStatus.SKIPPED: _("Not moderated"),
+}
 
 
 def _can_view_denylist(request) -> bool:
@@ -60,14 +65,20 @@ def _share(*, count: int, total: int) -> int | None:
 
 def _message_counts_context(counts: ModerationCounts) -> dict:
     skip_reasons = sorted(counts.skip_reasons.items(), key=lambda item: (-item[1], item[0]))
-    return {
-        "total": counts.total,
-        "passed": {"count": counts.passed, "share": _share(count=counts.passed, total=counts.total)},
-        "flagged": {"count": counts.flagged, "share": _share(count=counts.flagged, total=counts.total)},
-        "skipped": {"count": counts.skipped, "share": _share(count=counts.skipped, total=counts.total)},
-        "skip_reasons": [(SKIP_REASON_LABELS.get(reason, reason), count) for reason, count in skip_reasons],
-        "mostly_rate_limited": counts.mostly_rate_limited,
-    }
+    reason_counts = [(reason.label, count) for reason, count in skip_reasons]
+    stats = []
+    for status, title in STATUS_TITLES.items():
+        count = counts.by_status.get(status, 0)
+        stats.append(
+            {
+                "status": status.value,
+                "title": title,
+                "count": count,
+                "share": _share(count=count, total=counts.total),
+                "reasons": reason_counts if status == ModerationStatus.SKIPPED else [],
+            }
+        )
+    return {"total": counts.total, "stats": stats, "mostly_rate_limited": counts.mostly_rate_limited}
 
 
 def _settings_section_context(request) -> dict:

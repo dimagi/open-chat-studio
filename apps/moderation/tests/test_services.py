@@ -6,7 +6,7 @@ from celery.exceptions import TimeoutError as CeleryTimeoutError
 from django.db import DatabaseError, connections
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
@@ -100,7 +100,7 @@ def _human_message(detail: ModerationDetail | None = None):
         pytest.param(
             _output({"harassment": True, "illicit": True}), None, ModerationStatus.FLAGGED, id="strike_flagged"
         ),
-        pytest.param(None, "timeout", ModerationStatus.SKIPPED, id="skipped"),
+        pytest.param(None, ModerationSkipReason.TIMEOUT, ModerationStatus.SKIPPED, id="skipped"),
     ],
 )
 def test_record_moderation_result(output, skip_reason, expected_status):
