@@ -497,26 +497,21 @@ describe('ChatSessionService consent', () => {
     expect(error.message).not.toMatch(/blocked/i);
   });
 
-  it('raises ParticipantBlockedError carrying the server detail when the start is refused with 403 participant_blocked', async () => {
+  it.each([
+    [
+      'participant_blocked',
+      { code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' },
+      ParticipantBlockedError,
+      'You have been blocked from using this chatbot.',
+    ],
+    ['another code', { error: 'Forbidden', code: 'permission_denied' }, SessionAccessError, 'Forbidden'],
+  ])('raises the matching error when the start is refused with 403 %s', async (_label, body, errorClass, message) => {
     const service = makeService();
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        jsonResponse({ code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
-      );
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(body, { ok: false, status: 403, statusText: 'Forbidden' }));
 
     const error = await service.startSession({ chatbot_id: 'c1' }).catch(e => e);
-    expect(error).toBeInstanceOf(ParticipantBlockedError);
-    expect(error.message).toBe('You have been blocked from using this chatbot.');
-  });
-
-  it('still raises SessionAccessError when the start is refused with another 403', async () => {
-    const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Forbidden', code: 'permission_denied' }, { ok: false, status: 403, statusText: 'Forbidden' }));
-
-    const error = await service.startSession({ chatbot_id: 'c1' }).catch(e => e);
-    expect(error).toBeInstanceOf(SessionAccessError);
-    expect(error).not.toBeInstanceOf(ParticipantBlockedError);
+    expect(error).toBeInstanceOf(errorClass);
+    expect(error.message).toBe(message);
   });
 
   it('posts the accepted form version and resolves on 204', async () => {
