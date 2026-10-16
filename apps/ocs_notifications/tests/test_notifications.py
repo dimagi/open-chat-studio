@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.ocs_notifications.models import LevelChoices
+from apps.ocs_notifications.models import EventUser, LevelChoices
 from apps.ocs_notifications.notifications import (
     AffectedResources,
     audio_synthesis_failure_notification,
@@ -21,6 +21,7 @@ from apps.ocs_notifications.notifications import (
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -89,7 +90,7 @@ def _pair_for_file_delivery():
         ),
         pytest.param(
             lambda: participant_auto_blocked_notification(
-                experiment=ExperimentFactory.create(), participant=ParticipantFactory.create(), reason="illicit/violent"
+                experiment=ExperimentFactory.create(), denial=DeniedParticipantFactory.create(), reason="illicit"
             ),
             id="participant-auto-blocked",
         ),
@@ -105,6 +106,21 @@ def test_builder_reaches_create_notification(build):
     mock_create_notification.assert_called_once()
 
 
+@pytest.mark.django_db()
+def test_second_auto_block_notifies_users_who_have_not_read_the_first(team_with_users, admin):
+    """Each block is a new event, so an unread notification for an earlier block does not hide it."""
+    experiment = ExperimentFactory.create(team=team_with_users)
+    participant = ParticipantFactory.create(team=team_with_users)
+
+    for _ in range(2):
+        denial = DeniedParticipantFactory.create(team=team_with_users, participant=participant)
+        participant_auto_blocked_notification(experiment=experiment, denial=denial, reason="illicit")
+        denial.delete()
+
+    assert EventUser.objects.filter(user=admin, read=False, event_type__team=team_with_users).count() == 2
+
+
+@pytest.mark.django_db()
 class TestMessageDeliveryFailureNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")

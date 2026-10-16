@@ -419,8 +419,9 @@ def moderation_provider_deleted_notification(team, provider_id: int, provider_na
 
 
 @silence_exceptions(logger, log_message="Failed to create participant blocked notification")
-def participant_auto_blocked_notification(experiment, participant, reason: str) -> None:
-    """Notify a team that a participant reached the strike limit and was blocked."""
+def participant_auto_blocked_notification(experiment, denial, reason: str) -> None:
+    """Notify a team that a participant reached the strike limit and was blocked by the `denial` row."""
+    participant = denial.participant
     create_notification(
         title="Participant blocked automatically",
         message=(
@@ -430,7 +431,7 @@ def participant_auto_blocked_notification(experiment, participant, reason: str) 
         level=LevelChoices.WARNING,
         team=experiment.team,
         slug="participant-auto-blocked",
-        event_data={"participant_id": participant.id},
+        event_data={"participant_id": participant.id, "denied_participant_id": denial.id},
         permissions=["experiments.change_experiment", "experiments.change_participant"],
         links={"View Participant": participant.get_absolute_url(), "View Bot": experiment.get_absolute_url()},
     )

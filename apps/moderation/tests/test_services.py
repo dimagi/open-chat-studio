@@ -324,9 +324,7 @@ class TestAddStrike:
         assert denial.chat_message == message
         assert denial.reason == "hate/threatening, illicit/violent"
         notification.assert_called_once_with(
-            experiment=auto_block_session.experiment,
-            participant=auto_block_session.participant,
-            reason="hate/threatening, illicit/violent",
+            experiment=auto_block_session.experiment, denial=denial, reason="hate/threatening, illicit/violent"
         )
 
     def test_notifies_once(self, auto_block_session, django_capture_on_commit_callbacks):

@@ -128,7 +128,7 @@ def add_strike(
         if strikes < STRIKE_LIMIT:
             return
         reason = ", ".join(sorted(strike_categories(output)))
-        _denial, created = block_participant(
+        denial, created = block_participant(
             participant=participant,
             source=DeniedParticipantSource.AUTO,
             reason=reason,
@@ -137,7 +137,7 @@ def add_strike(
         )
     if created:
         transaction.on_commit(
-            lambda: participant_auto_blocked_notification(experiment=experiment, participant=participant, reason=reason)
+            lambda: participant_auto_blocked_notification(experiment=experiment, denial=denial, reason=reason)
         )
 
 
