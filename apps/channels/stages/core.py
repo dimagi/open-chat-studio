@@ -17,7 +17,6 @@ from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
-from apps.chat.schemas import ModerationDetail
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -30,7 +29,7 @@ from apps.experiments.models import (
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.rules import run_rules
+from apps.moderation.services import record_rule_hits
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
@@ -791,14 +790,12 @@ class AbuseRulesStage(ProcessingStage):
 
     def process(self, ctx: MessageProcessingContext) -> None:
         assert ctx.human_message is not None
-        rules = run_rules(
+        record_rule_hits(
+            message=ctx.human_message,
             text=ctx.user_query or "",
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-        if rules:
-            ctx.human_message.moderation_detail = ModerationDetail(rules=rules)
-            ctx.human_message.save(update_fields=["moderation_detail"])
 
         # Start moderation of the message here.
 
