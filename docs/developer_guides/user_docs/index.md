@@ -29,7 +29,7 @@ Most PRs fall into one main case, plus two variants. Follow whichever applies:
 
 1. Check the **"This PR requires docs/changelog update"** checkbox.
 2. Add notes in the PR description to help the automation write accurate changelog and user docs content — keep entries brief, but link to any relevant documentation for further details.
-3. Merge as normal. The automation picks up the merge and opens a docs PR assigned to you (unless Claude finds nothing to change) — see [Changelog Automation](changelog_automation.md) for how that works internally, and what to do if it doesn't fire.
+3. Merge as normal. The automation picks up the merge and opens a docs PR and tries to assign it to you (unless Claude finds nothing to change) — see [Changelog Automation](changelog_automation.md) for how that works internally, and what to do if it doesn't fire.
 
 ### 2. Widget changes
 
