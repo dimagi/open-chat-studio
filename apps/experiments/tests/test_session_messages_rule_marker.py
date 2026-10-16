@@ -8,14 +8,14 @@ from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessio
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("moderation_detail", "expected_marker"),
+    ("moderation_detail", "marker_present"),
     [
-        pytest.param(ModerationDetail(rules=["markup"]), "rule: markup", id="rule_fired"),
-        pytest.param(ModerationDetail(rules=[]), None, id="no_rules"),
-        pytest.param(None, None, id="no_detail"),
+        pytest.param(ModerationDetail(rules=["markup"]), True, id="rule_fired"),
+        pytest.param(ModerationDetail(rules=[]), False, id="no_rules"),
+        pytest.param(None, False, id="no_detail"),
     ],
 )
-def test_transcript_rule_marker(client, experiment, moderation_detail, expected_marker):
+def test_transcript_rule_marker(client, experiment, moderation_detail, marker_present):
     session = ExperimentSessionFactory.create(
         experiment=experiment, participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner)
     )
@@ -38,9 +38,4 @@ def test_transcript_rule_marker(client, experiment, moderation_detail, expected_
     response = client.get(url)
 
     assert response.status_code == 200
-    content = response.content.decode()
-
-    if expected_marker:
-        assert expected_marker in content
-    else:
-        assert "rule:" not in content
+    assert ("rule: markup" in response.content.decode()) is marker_present

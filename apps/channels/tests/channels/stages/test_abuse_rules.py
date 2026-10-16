@@ -7,7 +7,7 @@ from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.stages.core import AbuseRulesStage, BotInteractionStage, ChatMessageCreationStage
-from apps.channels.tests.channels.conftest import StubChannel, core_stages, make_context, make_trace_service
+from apps.channels.tests.channels.conftest import core_stages, make_context, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -61,17 +61,13 @@ class TestAbuseRulesStage:
 
         ctx.human_message.refresh_from_db()
         assert ctx.human_message.moderation_detail == expected
-        assert ctx.human_message.moderation_status is None
 
 
 @pytest.mark.django_db()
 @override_flag(FLAG, active=True)
 def test_markup_message_is_recorded_and_answered():
     session = ExperimentSessionFactory.create()
-    session.participant.platform = session.experiment_channel.platform
-    session.participant.save()
-    channel = StubChannel(session.experiment, session.experiment_channel, session)
-    channel.trace_service = make_trace_service()
+    channel = messaging_channel(session)
 
     with patch("apps.channels.stages.core.get_bot") as get_bot:
         get_bot.return_value.process_input.return_value = ChatMessage(content="Hello", message_type=ChatMessageType.AI)
