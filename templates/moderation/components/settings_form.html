@@ -25,8 +25,8 @@
   {% endif %}
 
   <form method="post" id="moderation-settings-form"
-        action="{% url 'single_team:moderation_settings' request.team.slug %}"
-        hx-post="{% url 'single_team:moderation_settings' request.team.slug %}"
+        action="{% url 'moderation:settings' request.team.slug %}"
+        hx-post="{% url 'moderation:settings' request.team.slug %}"
         hx-target="#team-settings-body" hx-swap="innerHTML"
         class="flex flex-col gap-4 mt-2">
     {% csrf_token %}

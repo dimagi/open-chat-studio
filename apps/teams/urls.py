@@ -1,9 +1,6 @@
 from django.urls import path
 
 from . import views
-from .views import moderation_views
-
-_MODERATION_PROVIDER = {"provider_type": "moderation"}
 
 app_name = "teams"
 
@@ -32,24 +29,6 @@ team_urlpatterns = (
         path("files/download/", views.download_team_files, name="download_team_files"),
         path("flags/", views.feature_flags, name="feature_flags"),
         path("internal-metadata/", views.internal_metadata, name="internal_metadata"),
-        path("moderation/", moderation_views.moderation_settings, name="moderation_settings"),
-        path(
-            "moderation/blocked/table/",
-            moderation_views.DeniedParticipantTableView.as_view(),
-            name="denied_participants_table",
-        ),
-        path(
-            "moderation/provider/create/<str:subtype>/",
-            moderation_views.ModerationProviderDialog.as_view(),
-            _MODERATION_PROVIDER,
-            name="moderation_provider_new",
-        ),
-        path(
-            "moderation/provider/<int:pk>/",
-            moderation_views.ModerationProviderDialog.as_view(),
-            _MODERATION_PROVIDER,
-            name="moderation_provider_edit",
-        ),
     ],
     "single_team",
 )

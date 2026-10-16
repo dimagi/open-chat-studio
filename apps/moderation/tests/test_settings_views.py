@@ -6,12 +6,12 @@ from django.contrib.auth.models import Group
 from django.urls import reverse
 from waffle.testutils import override_flag
 
+from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMIN_GROUP
 from apps.teams.flags import Flags
-from apps.teams.forms import TeamModerationForm
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
@@ -60,15 +60,15 @@ def _section_url(team):
 
 
 def _settings_url(team):
-    return reverse("single_team:moderation_settings", args=[team.slug])
+    return reverse("moderation:settings", args=[team.slug])
 
 
 def _table_url(team):
-    return reverse("single_team:denied_participants_table", args=[team.slug])
+    return reverse("moderation:denied_participants_table", args=[team.slug])
 
 
 def _new_provider_url(team):
-    return reverse("single_team:moderation_provider_new", args=[team.slug, "openai"])
+    return reverse("moderation:provider_new", args=[team.slug, "openai"])
 
 
 @pytest.mark.django_db()
@@ -298,7 +298,7 @@ class TestProviderDialog:
     def test_edit_selected_provider(self, _moderate, client, admin, team):
         provider = ModerationProviderFactory.create(team=team, name="Before")
         client.force_login(admin)
-        url = reverse("single_team:moderation_provider_edit", args=[team.slug, provider.pk])
+        url = reverse("moderation:provider_edit", args=[team.slug, provider.pk])
 
         response = client.post(url, {"name": "After", "openai_api_key": "sk-new"})
 
@@ -311,7 +311,7 @@ class TestProviderDialog:
         other = ModerationProviderFactory.create()
         client.force_login(admin)
 
-        response = client.get(reverse("single_team:moderation_provider_edit", args=[team.slug, other.pk]))
+        response = client.get(reverse("moderation:provider_edit", args=[team.slug, other.pk]))
 
         assert response.status_code == 404
 

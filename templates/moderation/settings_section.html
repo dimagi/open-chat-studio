@@ -4,7 +4,7 @@
   <span class="text-neutral-500 section-subtitle">{% translate "Check participant messages for abuse and block participants from this team's chatbots." %}</span>
 
   <div class="flex flex-col gap-4 mt-2">
-    {% include "teams/components/moderation_settings_form.html" %}
+    {% include "moderation/components/settings_form.html" %}
 
     {% if can_view_denylist %}
       <div class="app-card" id="blocked-participants">

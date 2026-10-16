@@ -2,27 +2,84 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 from django_htmx.http import reswap, retarget, trigger_client_event
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 from waffle.decorators import waffle_flag
 
+from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
 from apps.moderation.tables import DeniedParticipantTable
+from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 from apps.service_providers.views import CreateServiceProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
-from apps.teams.forms import TeamModerationForm
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.views.team_settings import (
-    MODERATION_SECTION,
-    moderation_settings_context,
-    render_team_settings,
-)
+from apps.teams.views.team_settings import SettingsSection, render_team_settings
+from apps.web.forms import set_form_fields_disabled
 
+SETTINGS_SECTION_KEY = "moderation"
 PROVIDER_SAVED_EVENT = "moderation-provider-saved"
+
+
+def _abuse_detection_on(request) -> bool:
+    return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
+
+
+def _can_view_settings_section(request) -> bool:
+    return _abuse_detection_on(request) and (
+        request.team_membership.is_team_admin() or request.user.has_perm("experiments.change_participant")
+    )
+
+
+def moderation_settings_context(request, form: TeamModerationForm | None = None) -> dict:
+    """Context for the Moderation section's settings form."""
+    team = request.team
+    can_edit = request.team_membership.is_team_admin()
+    if form is None:
+        form = TeamModerationForm(instance=team)
+    if not can_edit:
+        set_form_fields_disabled(form, True)
+    provider_type = ServiceProvider.moderation
+    subtype = get_available_subtypes(provider_type, request)[0]
+    return {
+        "moderation_form": form,
+        "moderation_providers": list(form.fields["moderation_provider"].queryset),
+        "can_edit_moderation": can_edit,
+        "can_add_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("add")),
+        "can_change_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("change")),
+        "moderation_provider_new_url": reverse("moderation:provider_new", args=[team.slug, str(subtype)]),
+        # The selected provider's id replaces the 0 in the browser.
+        "moderation_provider_edit_url": reverse("moderation:provider_edit", args=[team.slug, 0]),
+        "moderation_subtype_label": subtype.label,
+    }
+
+
+def _settings_section_context(request) -> dict:
+    return {
+        **moderation_settings_context(request),
+        "can_view_denylist": request.user.has_perm("experiments.change_participant"),
+        "denylist_table_url": reverse("moderation:denied_participants_table", args=[request.team.slug]),
+    }
+
+
+def _blocked_participant_count(request) -> int:
+    return DeniedParticipant.objects.filter(team=request.team).count()
+
+
+SETTINGS_SECTION = SettingsSection(
+    key=SETTINGS_SECTION_KEY,
+    label=_("Moderation"),
+    icon="fa-shield-halved",
+    template="moderation/settings_section.html",
+    is_visible=_can_view_settings_section,
+    get_context=_settings_section_context,
+    get_count=_blocked_participant_count,
+)
 
 
 @login_and_team_required
@@ -40,7 +97,7 @@ def moderation_settings(request, team_slug: str):
         messages.error(request, _("Could not save the moderation settings."))
         # is_valid() has already copied the rejected values onto request.team.
         request.team.refresh_from_db()
-    return render_team_settings(request, MODERATION_SECTION, **moderation_settings_context(request, form=form))
+    return render_team_settings(request, SETTINGS_SECTION_KEY, **moderation_settings_context(request, form=form))
 
 
 @method_decorator(waffle_flag(Flags.ABUSE_DETECTION.slug), name="dispatch")
@@ -67,7 +124,7 @@ class ModerationProviderDialog(CreateServiceProvider):
     A successful save replaces the section's settings form, with the saved provider selected.
     """
 
-    template_name = "teams/components/moderation_provider_dialog.html"
+    template_name = "moderation/components/provider_dialog.html"
 
     def _template(self):
         return self.template_name
@@ -83,6 +140,6 @@ class ModerationProviderDialog(CreateServiceProvider):
             },
         )
         context = moderation_settings_context(self.request, form=form)
-        response = render(self.request, "teams/components/moderation_settings_form.html", context)
+        response = render(self.request, "moderation/components/settings_form.html", context)
         response = reswap(retarget(response, "#moderation-settings"), "outerHTML")
         return trigger_client_event(response, PROVIDER_SAVED_EVENT)
