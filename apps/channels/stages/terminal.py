@@ -106,16 +106,35 @@ class ModerationResultStage(ProcessingStage):
                 self._replace_response(ctx)
 
     def _replace_response(self, ctx: MessageProcessingContext) -> None:
-        """Replace the stored bot reply with a notice that the message will not be answered, and send only that."""
-        assert ctx.bot_response is not None
+        """Replace the stored bot reply with a notice that the message will not be answered, and send only that.
+
+        The fixed notice is saved before EventBot writes one, so the original reply is not in the
+        conversation history EventBot reads.
+        """
+        self._save_reply(ctx, FLAGGED_MESSAGE)
         reply = generate_user_message(
             ctx=ctx, prompt=self.FLAGGED_PROMPT, trace_name="moderation flagged", fallback=FLAGGED_MESSAGE
         )
+        if reply != FLAGGED_MESSAGE:
+            self._save_reply(ctx, reply)
+
+    def _save_reply(self, ctx: MessageProcessingContext, reply: str) -> None:
+        """Save `reply` as the bot response, without attachments, and make it the reply to send."""
         bot_response = ctx.bot_response
+        assert bot_response is not None
+        previous_content, previous_metadata = bot_response.content, bot_response.metadata
         bot_response.content = reply
-        for key in ChatMessageMetadataKeys.attachment_keys():
-            bot_response.metadata.pop(key, None)
-        bot_response.save(update_fields=["content", "metadata", "updated_at"])
+        bot_response.metadata = {
+            key: value
+            for key, value in previous_metadata.items()
+            if key not in ChatMessageMetadataKeys.attachment_keys()
+        }
+        try:
+            bot_response.save(update_fields=["content", "metadata", "updated_at"])
+        except Exception:
+            # Keep the in-memory message, which web and API channels return, matching the database.
+            bot_response.content, bot_response.metadata = previous_content, previous_metadata
+            raise
         ctx.replace_response(reply)
 
 

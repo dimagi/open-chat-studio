@@ -13,6 +13,7 @@ from apps.channels.stages.terminal import ModerationResultStage
 from apps.channels.tests.channels.conftest import make_context, make_trace_service, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
+from apps.chat.bots import EventBot
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.experiments.models import SessionStatus
@@ -181,6 +182,35 @@ class TestModerationResultStage:
             ModerationResultStage()(ctx)
 
         assert [row.human_message for row in history.messages.all()] == expected_rows
+
+    def test_event_bot_history_omits_the_original_answer(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        ctx = _context(moderated_session, bot_response=_bot_response(moderated_session))
+        histories = []
+
+        def get_user_message(event_bot, prompt):
+            histories.append(event_bot.get_conversation_history())
+            return "Flagged reply"
+
+        with patch.object(EventBot, "get_user_message", autospec=True, side_effect=get_user_message):
+            ModerationResultStage()(ctx)
+
+        assert len(histories) == 1
+        assert "The bot's answer" not in histories[0]
+        assert ctx.bot_response.content == "Flagged reply"
+        assert ctx.formatted_message == "Flagged reply"
+
+    def test_failed_save_keeps_the_original_reply(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        bot_response = _bot_response(moderated_session)
+        ctx = _context(moderated_session, bot_response=bot_response, formatted_message="answer")
+
+        with patch.object(bot_response, "save", side_effect=DatabaseError("connection lost")), patch(EVENT_BOT):
+            ModerationResultStage()(ctx)
+
+        assert ctx.bot_response.content == "The bot's answer"
+        assert ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS in ctx.bot_response.metadata
+        assert ctx.formatted_message == "answer"
 
     @pytest.mark.parametrize(
         "event_bot_reply",
