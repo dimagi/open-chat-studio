@@ -670,6 +670,18 @@ def main(input, **kwargs):
     assert denial.reason == "test"
 
 
+@pytest.mark.django_db()
+def test_block_participant_uses_the_session_from_the_pipeline_state(experiment_session, team_flag):
+    team_flag(Flags.ABUSE_DETECTION.slug, experiment_session.team)
+    node = CodeNode(name="test", node_id="123", django_node=None, code=BLOCK_PARTICIPANT_CODE)
+    node._repo = ORMRepository(session=None)
+    state = PipelineState(outputs={}, experiment_session=experiment_session, last_node_input="hi", node_inputs=["hi"])
+
+    node._process(state, NodeContext(state))
+
+    assert DeniedParticipant.objects.get().participant_id == experiment_session.participant_id
+
+
 def _run_sandbox(code, state=None):
     node = CodeNode(name="test", node_id="123", django_node=None, code=code)
     node._repo = InMemoryPipelineRepository()

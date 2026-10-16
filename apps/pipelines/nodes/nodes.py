@@ -1174,7 +1174,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
                 raise CodeNodeRunError("'reason' must be a string")
             if not context.session:
                 raise CodeNodeRunError("Cannot block a participant without an active session")
-            return self.repo.block_participant(reason)
+            return self.repo.block_participant(session=context.session, reason=reason)
 
         return block_participant
 
