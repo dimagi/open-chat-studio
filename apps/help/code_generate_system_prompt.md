@@ -101,6 +101,13 @@ def get_node_output(node_name: str) -> Any:
 def end_session() -> None:
     Ends the current chat session with this response.
 
+def block_participant(reason: str) -> bool:
+    Adds the current participant to the team's denylist, without strikes. A blocked participant
+    gets no further replies from any of the team's chatbots.
+    Returns True if this call blocked the participant, and False if the participant was already
+    blocked or cannot be blocked (abuse detection is off, the participant is a team member, or
+    the session is an evaluation run).
+
 def abort_with_message(message, tag_name: str = None) -> None:
     Calling this will terminate the pipeline execution. No further nodes will get executed in
     any branch of the pipeline graph.

@@ -207,6 +207,13 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Session Control",
     }),
+    block_participant: snip("block_participant(\"${reason}\")", {
+      label: "block_participant",
+      type: "function",
+      detail: "Adds the current participant to the team's denylist, without strikes. Does nothing for team members, in evaluation runs, or when abuse detection is off.",
+      boost: 1,
+      section: "Session Control",
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {

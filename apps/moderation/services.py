@@ -12,11 +12,12 @@ from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 from pydantic import ValidationError
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
-from apps.moderation.enforcement import block_participant, is_exempt
+from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt
 from apps.moderation.models import DeniedParticipantSource
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from apps.channels.datamodels import Attachment
-    from apps.experiments.models import Experiment
+    from apps.experiments.models import Experiment, ExperimentSession
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.moderation")
@@ -149,6 +150,29 @@ def add_strike(
         transaction.on_commit(
             lambda: participant_auto_blocked_notification(experiment=experiment, denial=denial, reason=reason)
         )
+
+
+def block_participant_from_code_node(*, session: ExperimentSession, reason: str) -> bool:
+    """Block the session's participant from a code node, without strikes. Returns whether a new block was created.
+
+    Does nothing when abuse detection is off for the team, the participant is exempt, or the participant is the
+    team's shared evaluations participant.
+    """
+    participant = session.participant
+    team = session.team
+    if (
+        participant.platform == ChannelPlatform.EVALUATIONS
+        or not abuse_detection_enabled(team)
+        or is_exempt(participant=participant, team=team)
+    ):
+        return False
+    _denial, created = block_participant(
+        participant=participant,
+        source=DeniedParticipantSource.CODE_NODE,
+        reason=reason,
+        experiment=session.experiment,
+    )
+    return created
 
 
 def _increment_strikes(participant: Participant) -> int:

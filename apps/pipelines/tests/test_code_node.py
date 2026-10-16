@@ -8,11 +8,12 @@ from pydantic import ValidationError
 from apps.channels.datamodels import Attachment
 from apps.events.models import EventActionType, TimePeriod
 from apps.files.models import File
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.pipelines.exceptions import CodeNodeRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
-from apps.pipelines.repository import InMemoryPipelineRepository
+from apps.pipelines.repository import InMemoryPipelineRepository, ORMRepository
 from apps.pipelines.tests.utils import (
     code_node,
     create_runnable,
@@ -21,6 +22,7 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
+from apps.teams.flags import Flags
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -599,6 +601,73 @@ def main(input, **kwargs):
     )
     with pytest.raises(CodeNodeRunError, match="'content' must be bytes"):
         node._process(state, NodeContext(state))
+
+
+BLOCK_PARTICIPANT_CODE = """
+def main(input, **kwargs):
+    return f"{block_participant('Repeated threats')} {block_participant('Again')}"
+"""
+
+
+def test_block_participant_uses_the_repository():
+    repo = InMemoryPipelineRepository()
+    node = CodeNode(name="test", node_id="123", django_node=None, code=BLOCK_PARTICIPANT_CODE)
+    node._repo = repo
+    state = PipelineState(
+        outputs={}, experiment_session=ExperimentSessionFactory.build(), last_node_input="hi", node_inputs=["hi"]
+    )
+
+    output = node._process(state, NodeContext(state))
+
+    assert output.update["messages"][-1] == "True False"  # ty: ignore[not-subscriptable]
+    assert repo.blocked_participant_reasons == ["Repeated threats"]
+
+
+@pytest.mark.parametrize(
+    ("code", "session", "error"),
+    [
+        pytest.param(
+            BLOCK_PARTICIPANT_CODE, None, "Cannot block a participant without an active session", id="no_session"
+        ),
+        pytest.param(
+            "def main(input, **kwargs):\n\treturn block_participant(1)",
+            ExperimentSessionFactory.build,
+            "'reason' must be a string",
+            id="reason_not_a_string",
+        ),
+    ],
+)
+def test_block_participant_errors(code, session, error):
+    repo = InMemoryPipelineRepository()
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = repo
+    state = PipelineState(
+        outputs={}, experiment_session=session() if session else None, last_node_input="hi", node_inputs=["hi"]
+    )
+
+    with pytest.raises(CodeNodeRunError, match=error):
+        node._process(state, NodeContext(state))
+    assert repo.blocked_participant_reasons == []
+
+
+@pytest.mark.django_db()
+def test_block_participant_in_a_pipeline(pipeline, experiment_session, team_flag):
+    team_flag(Flags.ABUSE_DETECTION.slug, experiment_session.team)
+    code = """
+def main(input, **kwargs):
+    block_participant("test")
+    return input
+"""
+    nodes = [start_node(), code_node(code), end_node()]
+
+    create_runnable(pipeline, nodes).invoke(
+        PipelineState(experiment_session=experiment_session, messages=["hi"]),
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
+    )
+
+    denial = DeniedParticipant.objects.get(participant=experiment_session.participant)
+    assert denial.source == DeniedParticipantSource.CODE_NODE
+    assert denial.reason == "test"
 
 
 def _run_sandbox(code, state=None):
