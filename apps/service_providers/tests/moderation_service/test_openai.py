@@ -1,6 +1,5 @@
 from unittest import mock
 
-import httpx
 import openai
 import pytest
 from openai.types import ModerationCreateResponse
@@ -10,6 +9,7 @@ from apps.service_providers.moderation_service import (
     OpenAIModerationService,
 )
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
+from apps.utils.tests.provider_errors import connection_error, status_error
 
 CATEGORY_NAMES = [
     "harassment",
@@ -75,18 +75,15 @@ def test_moderate_leaves_out_a_category_missing_from_the_response(create):
     assert set(output.root) == set(CATEGORY_NAMES) - {"illicit"}
 
 
-_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/moderations")
-
-
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
         pytest.param(
-            openai.RateLimitError("Rate limited", response=httpx.Response(429, request=_REQUEST), body=None),
+            status_error(cls=openai.RateLimitError, status=429, message="Rate limited"),
             ModerationRateLimited,
             id="rate_limit",
         ),
-        pytest.param(openai.APIConnectionError(request=_REQUEST), openai.APIConnectionError, id="connection_error"),
+        pytest.param(connection_error(openai.APIConnectionError), openai.APIConnectionError, id="connection_error"),
     ],
 )
 @mock.patch("openai.resources.moderations.Moderations.create")
