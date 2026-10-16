@@ -488,7 +488,7 @@ describe('ChatSessionService consent', () => {
     jest
       .spyOn(global, 'fetch')
       .mockResolvedValue(
-        jsonResponse({ code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
+        jsonResponse({ code: 'participant_blocked', error: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
       );
 
     const error = await service.sendMessage('s1', { message: 'hi' }).catch(e => e);

@@ -171,6 +171,9 @@ const SESSION_EXPIRED_CODE = 'session_expired';
 /** The 403 code for a participant on the team's denylist. The widget reports a generic failure and keeps the session. */
 const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
 
+/** Shown in place of the server's wording when the refusal must not reveal its reason. */
+const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
+
 interface ErrorBody {
   message: string;
   code?: string;
@@ -576,7 +579,7 @@ export class ChatSessionService {
       return new ConsentRequiredError(consent, message);
     }
     if (code === PARTICIPANT_BLOCKED_CODE) {
-      return new Error(message);
+      return new Error(GENERIC_FAILURE_MESSAGE);
     }
     if (status === 403) {
       return new SessionAccessError(status, code, message);
