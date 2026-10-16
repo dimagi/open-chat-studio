@@ -98,7 +98,8 @@ class BaseTriggerSerializer(serializers.ModelSerializer):
         action_type, params = self._action_data(data)
         return {**params, **trigger_data, "action_type": action_type}
 
-    def _action_data(self, data: dict) -> tuple[str | None, dict]:
+    def _action_data(self, data: dict) -> tuple[str, dict]:
+        """The action type and params to validate: those sent, or the stored ones when ``action`` is left out."""
         stored_action = self.instance.action if self.instance else None
         if "action" not in data and stored_action:
             return stored_action.action_type, stored_action.params
@@ -107,18 +108,8 @@ class BaseTriggerSerializer(serializers.ModelSerializer):
             message = "This field is required." if action is None else "Expected a JSON object."
             raise serializers.ValidationError({"action": [message]})
         reject_unknown_keys(action, self.fields["action"].fields, path=("action",))
-        action_type = action.get("action_type") or (stored_action.action_type if stored_action else None)
-        if action_type is None:
-            raise serializers.ValidationError({"action": {"action_type": ["This field is required."]}})
-        # Checked here because the params form, and so the params a type accepts, is chosen by type.
-        if not isinstance(action_type, str) or action_type not in ACTION_PARAMS_FORMS:
-            raise serializers.ValidationError({"action": {"action_type": [f'"{action_type}" is not a valid choice.']}})
-        params = action.get("params", {})
-        if not isinstance(params, dict):
-            raise serializers.ValidationError({"action": {"params": ["Expected a JSON object."]}})
-        accepted = set(ACTION_PARAMS_FORMS[action_type].base_fields) - set(SERVER_SET_PARAMS)
-        reject_unknown_keys(params, accepted, path=("action", "params"))
-        return action_type, params
+        action_type = _valid_action_type(action.get("action_type") or getattr(stored_action, "action_type", None))
+        return action_type, _valid_params(action.get("params", {}), action_type=action_type)
 
 
 class StaticTriggerWriteSerializer(BaseTriggerSerializer):
@@ -156,6 +147,23 @@ class ScheduledTriggerWriteSerializer(BaseTriggerSerializer):
         fields = InspectScheduledTriggerSerializer.Meta.fields
         read_only_fields = ["scheduled_at", "fired_at"]
         extra_kwargs = InspectScheduledTriggerSerializer.Meta.extra_kwargs
+
+
+def _valid_action_type(action_type: Any) -> str:
+    """Checked before the forms run because the params form, and so the params accepted, is chosen by type."""
+    if action_type is None:
+        raise serializers.ValidationError({"action": {"action_type": ["This field is required."]}})
+    if not isinstance(action_type, str) or action_type not in ACTION_PARAMS_FORMS:
+        raise serializers.ValidationError({"action": {"action_type": [f'"{action_type}" is not a valid choice.']}})
+    return action_type
+
+
+def _valid_params(params: Any, *, action_type: str) -> dict:
+    if not isinstance(params, dict):
+        raise serializers.ValidationError({"action": {"params": ["Expected a JSON object."]}})
+    accepted = set(ACTION_PARAMS_FORMS[action_type].base_fields) - set(SERVER_SET_PARAMS)
+    reject_unknown_keys(params, accepted, path=("action", "params"))
+    return params
 
 
 def _form_errors(trigger_forms: TriggerForms) -> dict:
