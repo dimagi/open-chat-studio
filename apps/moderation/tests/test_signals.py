@@ -6,20 +6,13 @@ from field_audit.models import AuditAction
 from apps.service_providers.models import ModerationProvider
 from apps.teams.models import Team
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-
-NOTIFY = "apps.moderation.signals.moderation_provider_deleted_notification"
-
-
-def _select(team, provider):
-    team.moderation_enabled = True
-    team.moderation_provider = provider
-    team.save()
+from apps.utils.tests.moderation_helpers import DELETED_PROVIDER_NOTIFICATION, select_moderation_provider
 
 
 @pytest.fixture()
 def selected_provider(db):
     provider = ModerationProviderFactory.create(name="Main moderation")
-    _select(provider.team, provider)
+    select_moderation_provider(team=provider.team, provider=provider)
     return provider
 
 
@@ -41,7 +34,7 @@ def test_deleting_the_selected_provider_turns_moderation_off_and_notifies(
     team = selected_provider.team
     provider_id = selected_provider.id
 
-    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         delete(selected_provider)
 
     team.refresh_from_db()
@@ -55,7 +48,7 @@ def test_deleting_another_provider_leaves_moderation_on(selected_provider, djang
     team = selected_provider.team
     other = ModerationProviderFactory.create(team=team)
 
-    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         other.delete()
 
     team.refresh_from_db()
@@ -68,7 +61,7 @@ def test_deleting_another_provider_leaves_moderation_on(selected_provider, djang
 def test_deleting_the_team_does_not_notify(selected_provider, django_capture_on_commit_callbacks):
     team = selected_provider.team
 
-    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         team.delete()
 
     assert not Team.objects.filter(id=team.id).exists()
@@ -83,7 +76,7 @@ def test_deleting_the_selected_provider_with_moderation_off_does_not_notify(djan
     team.moderation_provider = provider
     team.save()
 
-    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         provider.delete()
 
     team.refresh_from_db()
