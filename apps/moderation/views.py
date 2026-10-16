@@ -27,9 +27,13 @@ PROVIDER_SAVED_EVENT = "moderation-provider-saved"
 SETTINGS_FORM_TEMPLATE = "moderation/components/settings_form.html"
 
 
+def _can_view_denylist(request) -> bool:
+    return request.user.has_perm("experiments.change_participant")
+
+
 def _can_view_settings_section(request) -> bool:
     return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug)) and (
-        request.team_membership.is_team_admin() or request.user.has_perm("experiments.change_participant")
+        request.team_membership.is_team_admin() or _can_view_denylist(request)
     )
 
 
@@ -59,12 +63,14 @@ def moderation_settings_context(request, form: TeamModerationForm | None = None)
 def _settings_section_context(request) -> dict:
     return {
         **moderation_settings_context(request),
-        "can_view_denylist": request.user.has_perm("experiments.change_participant"),
+        "can_view_denylist": _can_view_denylist(request),
         "denylist_table_url": reverse("moderation:denied_participants_table", args=[request.team.slug]),
     }
 
 
-def _blocked_participant_count(request) -> int:
+def _blocked_participant_count(request) -> int | None:
+    if not _can_view_denylist(request):
+        return None
     return DeniedParticipant.objects.filter(team=request.team).count()
 
 

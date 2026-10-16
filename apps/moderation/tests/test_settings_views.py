@@ -2,13 +2,15 @@ import re
 from unittest import mock
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.http import urlencode
 from field_audit.models import AuditAction
 from waffle.testutils import override_flag
 
 from apps.moderation.forms import TeamModerationForm
-from apps.moderation.models import DeniedParticipantSource
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMIN_GROUP
@@ -165,6 +167,17 @@ class TestSectionVisibility:
 
         nav_items = {item["key"]: item for item in response.context["nav_sections"]}
         assert nav_items["moderation"]["count"] == 2
+
+    def test_nav_count_hidden_from_users_who_cannot_view_the_denylist(self, client, team_admin_only, team):
+        DeniedParticipantFactory.create(team=team)
+        client.force_login(team_admin_only)
+
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get(_section_url(team))
+
+        nav_items = {item["key"]: item for item in response.context["nav_sections"]}
+        assert nav_items["moderation"]["count"] is None
+        assert not any(DeniedParticipant._meta.db_table in query["sql"] for query in queries.captured_queries)
 
 
 @pytest.mark.django_db()

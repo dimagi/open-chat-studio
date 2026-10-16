@@ -69,7 +69,7 @@ class SettingsSection:
     is_visible: Callable[..., bool] = _always_visible
     get_context: Callable[..., dict] = _no_context
     #: Returns the nav badge count for sections whose count is not in `stats`.
-    get_count: Callable[..., int] | None = None
+    get_count: Callable[..., int | None] | None = None
 
 
 def _is_team_admin(request) -> bool:
