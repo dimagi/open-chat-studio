@@ -102,6 +102,14 @@ class TestIsExempt:
 
         assert is_exempt(participant=participant, team=membership.team) is expected
 
+    def test_uses_one_query(self, django_assert_num_queries):
+        membership = MembershipFactory.create()
+        participant = ParticipantFactory.create(team=membership.team, user=membership.user)
+        participant = Participant.objects.get(id=participant.id)
+
+        with django_assert_num_queries(1):
+            assert is_exempt(participant=participant, team=membership.team) is True
+
     def test_user_who_is_not_a_member_is_not_exempt(self):
         participant = ParticipantFactory.create(user=UserFactory.create())
 

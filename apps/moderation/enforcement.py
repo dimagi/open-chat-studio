@@ -3,7 +3,7 @@ from field_audit.models import AuditAction
 
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
-from apps.teams.roles import is_member
+from apps.teams.models import Membership
 from apps.teams.utils import flag_is_active_for_team
 
 BLOCKED_MESSAGE = "You have been blocked from using this chatbot."
@@ -71,4 +71,6 @@ def is_identifier_blocked(team, identifier: str, platform: str) -> bool:
 
 def is_exempt(participant, team) -> bool:
     """Whether the participant is linked to a user who is currently a member of the team."""
-    return participant.user_id is not None and is_member(participant.user, team)
+    return (
+        participant.user_id is not None and Membership.objects.filter(team=team, user_id=participant.user_id).exists()
+    )
