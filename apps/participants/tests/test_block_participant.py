@@ -194,6 +194,25 @@ class TestUnblockParticipant:
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
 
+    @pytest.mark.parametrize(
+        ("next_url", "follows_next"),
+        [
+            pytest.param("/a/team/settings/", True, id="same_site"),
+            pytest.param("https://evil.example.com/", False, id="other_host"),
+        ],
+    )
+    def test_redirects_to_safe_next_url(
+        self, client, team_with_users, team_flag, admin, participant, next_url, follows_next
+    ):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        DeniedParticipantFactory.create(team=team_with_users, participant=participant)
+        client.force_login(admin)
+
+        response = client.post(_unblock_url(team=team_with_users, participant=participant), {"next": next_url})
+
+        expected = next_url if follows_next else _page_url(team=team_with_users, participant=participant)
+        assert response.headers["HX-Redirect"] == expected
+
     @override_flag(FLAG, active=False)
     def test_not_found_with_flag_off(self, client, team_with_users, admin, participant):
         DeniedParticipantFactory.create(team=team_with_users, participant=participant)

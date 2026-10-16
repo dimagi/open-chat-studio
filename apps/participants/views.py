@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -647,7 +648,7 @@ def block(request, team_slug: str, participant_id: int):
 @permission_required("experiments.change_participant")
 @require_POST
 def unblock(request, team_slug: str, participant_id: int):
-    """Remove the participant from the team's denylist."""
+    """Remove the participant from the team's denylist, then go to `next` if given, otherwise the participant page."""
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
     denial = DeniedParticipant.objects.filter(team=request.team, participant=participant).first()
     if denial:
@@ -655,7 +656,11 @@ def unblock(request, team_slug: str, participant_id: int):
         messages.success(request, format_html("{} is unblocked", participant))
     else:
         messages.info(request, format_html("{} was not blocked", participant))
-    url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
+    url = request.POST.get("next")
+    if not url or not url_has_allowed_host_and_scheme(
+        url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
     return HttpResponseClientRedirect(url)
 
 

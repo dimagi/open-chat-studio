@@ -12,16 +12,20 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from waffle import flag_is_active
 
+from apps.moderation.models import DeniedParticipant
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
-from apps.service_providers.utils import ServiceProvider, get_enabled_providers
+from apps.service_providers.utils import ServiceProvider, get_available_subtypes, get_enabled_providers
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.forms import (
     FeatureFlagForm,
     InvitationForm,
     NotifyRecipientsForm,
     TeamChangeForm,
     TeamMetadataForm,
+    TeamModerationForm,
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
@@ -29,6 +33,8 @@ from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
 from apps.web.forms import set_form_fields_disabled
+
+MODERATION_SECTION = "moderation"
 
 _ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
 
@@ -96,6 +102,16 @@ def _notifications_context(request) -> dict:
     }
 
 
+def _abuse_detection_on(request) -> bool:
+    return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
+
+
+def _can_view_moderation(request) -> bool:
+    return _abuse_detection_on(request) and (
+        _is_team_admin(request) or request.user.has_perm("experiments.change_participant")
+    )
+
+
 def _is_staff(request) -> bool:
     return request.user.is_staff
 
@@ -104,6 +120,37 @@ def _integrations_context(request) -> dict:
     return {
         "integration_new_choices": get_integration_new_choices(request, request.team),
         "integrations_table_url": reverse("single_team:integrations_table", args=[request.team.slug]),
+    }
+
+
+def moderation_settings_context(request, form: TeamModerationForm | None = None) -> dict:
+    """Context for the Moderation section's settings form."""
+    team = request.team
+    can_edit = _is_team_admin(request)
+    if form is None:
+        form = TeamModerationForm(instance=team)
+    if not can_edit:
+        set_form_fields_disabled(form, True)
+    provider_type = ServiceProvider.moderation
+    subtype = get_available_subtypes(provider_type, request)[0]
+    return {
+        "moderation_form": form,
+        "moderation_providers": list(form.fields["moderation_provider"].queryset),
+        "can_edit_moderation": can_edit,
+        "can_add_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("add")),
+        "can_change_moderation_provider": can_edit and request.user.has_perm(provider_type.get_permission("change")),
+        "moderation_provider_new_url": reverse("single_team:moderation_provider_new", args=[team.slug, str(subtype)]),
+        # The selected provider's id replaces the 0 in the browser.
+        "moderation_provider_edit_url": reverse("single_team:moderation_provider_edit", args=[team.slug, 0]),
+        "moderation_subtype_label": subtype.label,
+    }
+
+
+def _moderation_context(request) -> dict:
+    return {
+        **moderation_settings_context(request),
+        "can_view_denylist": request.user.has_perm("experiments.change_participant"),
+        "denylist_table_url": reverse("single_team:denied_participants_table", args=[request.team.slug]),
     }
 
 
@@ -160,6 +207,15 @@ SETTINGS_SECTIONS = [
         template="teams/sections/notifications.html",
         is_visible=_can_view_notifications,
         get_context=_notifications_context,
+    ),
+    SettingsSection(
+        key=MODERATION_SECTION,
+        label=_("Moderation"),
+        icon="fa-shield-halved",
+        template="teams/sections/moderation.html",
+        count_key="blocked_participants",
+        is_visible=_can_view_moderation,
+        get_context=_moderation_context,
     ),
     SettingsSection(
         key="members",
@@ -236,6 +292,8 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
         "integrations": len(get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))),
         "pending_invites": Invitation.objects.filter(team=team, is_accepted=False).count(),
     }
+    if _can_view_moderation(request):
+        stats["blocked_participants"] = DeniedParticipant.objects.filter(team=team).count()
     return {
         "team": team,
         "active_tab": "manage-team",

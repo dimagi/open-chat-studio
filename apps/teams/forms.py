@@ -9,6 +9,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from apps.experiments.models import Experiment
+from apps.service_providers.models import ModerationProvider
 
 from .export.selection import selectable_chatbots, selected_experiment_ids
 from .flags import get_all_flag_info
@@ -253,6 +254,34 @@ class TeamMfaForm(forms.ModelForm):
         help_texts = {
             "require_mfa": _("Every member of this team must enrol in two-factor authentication to keep access."),
         }
+
+
+class TeamModerationForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("moderation_enabled", "moderation_provider", "auto_block_enabled")
+        labels = {
+            "moderation_enabled": _("Moderate participant messages"),
+            "moderation_provider": _("Moderation provider"),
+            "auto_block_enabled": _("Auto-block"),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["moderation_provider"].queryset = ModerationProvider.objects.filter(team=self.instance).order_by(
+            "name"
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("moderation_enabled") and not cleaned_data.get("moderation_provider"):
+            self.add_error("moderation_provider", _("Select a moderation provider to turn moderation on."))
+        return cleaned_data
+
+    def save(self, commit=True):
+        if self.instance.moderation_provider_id:
+            self.instance.moderation_deleted_provider_name = ""
+        return super().save(commit=commit)
 
 
 class NotifyRecipientsForm(forms.Form):
