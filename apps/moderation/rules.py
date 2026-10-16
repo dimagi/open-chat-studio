@@ -13,8 +13,20 @@ if TYPE_CHECKING:
 type Rule = Callable[[str, Sequence[Attachment], Participant | None], str | None]
 
 MARKUP_PATTERN = re.compile(
-    r"<script|<iframe|\bon\w{1,30}\s*=|javascript:|data:text/html|<svg|<img\b[^>]{0,500}\bsrc\s*=",
-    re.IGNORECASE,
+    r"""
+    <script
+    | <iframe
+    | <object
+    | <embed
+    | <svg
+    | <img\b[^>]{0,500}\bsrc\s*=
+    | <[a-z][^>]{0,500}?[\s"'/]on[a-z]{2,30}\s*=   # event handler attribute inside a tag
+    | ["'/]\s*on[a-z]{2,30}\s*=                    # event handler attribute after a quote or slash
+    | java[\s\x00-\x1f]{0,10}script[\s\x00-\x1f]{0,10}:
+    | vbscript[\s\x00-\x1f]{0,10}:
+    | data:text/html
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
