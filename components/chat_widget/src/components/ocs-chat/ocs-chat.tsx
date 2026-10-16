@@ -25,6 +25,7 @@ import {
   AuthTokenProvider,
   ChatConsent,
   ConsentRequiredError,
+  GENERIC_FAILURE_MESSAGE,
   ParticipantBlockedError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
@@ -319,7 +320,7 @@ export class OcsChat {
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
   @State() sessionEnded: boolean = false;
-  /** The server refused to start a session because the participant is blocked. */
+  /** The server refused a start, send or upload because the participant is blocked. */
   @State() participantBlocked: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
@@ -514,7 +515,7 @@ export class OcsChat {
   }
 
   /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
-  private addNotice(content: string): void {
+  private addNotice(content: string, { persist = true }: { persist?: boolean } = {}): void {
     const notice: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
@@ -523,7 +524,9 @@ export class OcsChat {
       local: true,
     };
     this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
+    if (persist) {
+      this.saveSessionToStorage();
+    }
     this.scrollToBottom();
   }
 
@@ -658,11 +661,25 @@ export class OcsChat {
     }
   }
 
-  /** Show the server's blocked notice and lock the composer, with no way to retry or start a new chat. */
+  /**
+   * Show the server's blocked notice and lock the widget, with no way to retry or start a
+   * new chat. An unbound widget discards its stored session, so a reload starts a new one,
+   * which the server refuses again. The notice is not stored.
+   */
   private handleParticipantBlocked(notice: string): void {
-    this.participantBlocked = true;
+    this.cleanup();
     this.resetBusyState();
-    this.addNotice(notice);
+    this.participantBlocked = true;
+    this.selectedFiles = [];
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    if (!this.isSessionBound()) {
+      this.sessionEpoch += 1;
+      this.activeSessionId = undefined;
+      this.applySessionToken(undefined);
+      this.clearSessionStorage();
+    }
+    this.addNotice(notice, { persist: false });
   }
 
   private handleError(errorText: string): void {
@@ -945,6 +962,9 @@ export class OcsChat {
       if (uploadResult.consent) {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
       }
+      if (uploadResult.participantBlocked) {
+        throw new ParticipantBlockedError(uploadResult.participantBlocked.detail || GENERIC_FAILURE_MESSAGE);
+      }
       if (uploadResult.tokenRejected) {
         throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
       }
@@ -1087,7 +1107,7 @@ export class OcsChat {
 
   /**
    * A consent refusal keeps the session and puts the send back the way it was, so accepting
-   * retries it whole. A token refusal ends the session. Anything else is reported as is.
+   * retries it whole. A block or token refusal ends the session. Anything else is reported as is.
    */
   private handleSendFailure(error: unknown, message: string, optimisticMessage: ChatMessage | undefined, filesBeforeSend: SelectedFile[]): void {
     if (error instanceof ConsentRequiredError) {
@@ -1098,6 +1118,11 @@ export class OcsChat {
         this.selectedFiles = filesBeforeSend;
       }
       this.holdForConsent(message);
+      return;
+    }
+    if (error instanceof ParticipantBlockedError) {
+      this.dropOptimisticUserMessage(optimisticMessage);
+      this.handleParticipantBlocked(error.message);
       return;
     }
     if (error instanceof SessionAccessError) {

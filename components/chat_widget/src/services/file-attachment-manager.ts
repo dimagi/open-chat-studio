@@ -1,4 +1,4 @@
-import { CONSENT_REQUIRED_CODE, GENERIC_FAILURE_MESSAGE, PARTICIPANT_BLOCKED_CODE, type ChatConsent } from './chat-session-service';
+import { CONSENT_REQUIRED_CODE, PARTICIPANT_BLOCKED_CODE, type ChatConsent } from './chat-session-service';
 
 export interface UploadedFile {
   id: number;
@@ -35,6 +35,8 @@ export interface UploadResult {
   tokenRejected?: boolean;
   /** Set when the upload was refused for consent (403 `consent_required`); the files are kept for retry. */
   consent?: ChatConsent;
+  /** Set when the upload was refused because the participant is blocked (403 `participant_blocked`). */
+  participantBlocked?: { detail?: string };
 }
 
 export class FileAttachmentManager {
@@ -120,21 +122,22 @@ export class FileAttachmentManager {
 
       if (!response.ok) {
         const errorData = await this.safeJson(response);
-        const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; consent?: ChatConsent };
-        // A blocked participant sees a generic failure that does not reveal the block.
-        const blocked = response.status === 403 && body.code === PARTICIPANT_BLOCKED_CODE;
-        const errorMessage = blocked ? GENERIC_FAILURE_MESSAGE : body.error || 'Failed to upload files';
+        const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; detail?: string; consent?: ChatConsent };
+        if (response.status === 403 && body.code === PARTICIPANT_BLOCKED_CODE) {
+          return { selectedFiles: existingFiles, uploadedIds, tokenRejected: false, participantBlocked: { detail: body.detail } };
+        }
+        const errorMessage = body.error || 'Failed to upload files';
         // Files are left unmarked on a consent refusal: they are re-uploaded once consent is
         // recorded. A refusal that names consent but carries no block cannot raise the panel,
-        // so the files carry the error and stop the send. Neither a consent nor a block
-        // refusal is a token rejection.
+        // so the files carry the error and stop the send. Either way it is not a token
+        // rejection.
         const namesConsent = response.status === 403 && body.code === CONSENT_REQUIRED_CODE;
         const consentRefused = namesConsent && !!body.consent;
         return {
           selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
           errorMessage,
-          tokenRejected: response.status === 403 && !namesConsent && !blocked,
+          tokenRejected: response.status === 403 && !namesConsent,
           consent: consentRefused ? body.consent : undefined,
         };
       }
