@@ -31,10 +31,6 @@ def _select(team, provider):
     team.save()
 
 
-def _config_form(data, team=None):
-    return OpenAIModerationConfigForm(team=team, data=data)
-
-
 @pytest.fixture()
 def admin(team_with_users):
     return team_with_users.members.first()
@@ -49,7 +45,7 @@ def admin_client(client, admin):
 class TestConfigForm:
     @mock.patch(MODERATE, return_value=ModerationOutput({}))
     def test_valid_credentials_are_accepted(self, moderate):
-        form = _config_form({"openai_api_key": "sk-good"})
+        form = OpenAIModerationConfigForm(team=None, data={"openai_api_key": "sk-good"})
 
         assert form.is_valid()
         assert form.warnings == []
@@ -64,7 +60,7 @@ class TestConfigForm:
     )
     def test_rejected_credentials_are_a_form_error(self, error):
         with mock.patch(MODERATE, side_effect=error):
-            form = _config_form({"openai_api_key": "sk-bad"})
+            form = OpenAIModerationConfigForm(team=None, data={"openai_api_key": "sk-bad"})
             assert not form.is_valid()
         assert form.errors["openai_api_key"] == ["The provider rejected these credentials: Incorrect API key provided"]
 
@@ -77,7 +73,7 @@ class TestConfigForm:
     )
     def test_other_errors_do_not_block_saving(self, error):
         with mock.patch(MODERATE, side_effect=error):
-            form = _config_form({"openai_api_key": "sk-good"})
+            form = OpenAIModerationConfigForm(team=None, data={"openai_api_key": "sk-good"})
             assert form.is_valid()
         assert len(form.warnings) == 1
 
@@ -86,7 +82,7 @@ class TestConfigForm:
         with mock.patch(
             "apps.service_providers.models.OpenAIModerationService", wraps=OpenAIModerationService
         ) as service_cls:
-            _config_form({"openai_api_key": "sk-good"}).is_valid()
+            OpenAIModerationConfigForm(team=None, data={"openai_api_key": "sk-good"}).is_valid()
 
         kwargs = service_cls.call_args.kwargs
         assert kwargs["max_retries"] == 0
@@ -94,7 +90,7 @@ class TestConfigForm:
 
     def test_field_error_skips_the_check(self):
         with mock.patch(MODERATE) as moderate:
-            form = _config_form({"openai_api_key": ""})
+            form = OpenAIModerationConfigForm(team=None, data={"openai_api_key": ""})
             assert not form.is_valid()
         moderate.assert_not_called()
 
@@ -113,38 +109,17 @@ def test_provider_builds_openai_service():
     assert service.openai_organization == "org-1"
 
 
-@pytest.mark.django_db()
-class TestDelete:
-    @override_flag(FLAG, active=True)
-    def test_delete_view_turns_moderation_off_and_notifies(
-        self, team_with_users, admin_client, django_capture_on_commit_callbacks
-    ):
-        provider = ModerationProviderFactory.create(team=team_with_users, name="Main moderation")
-        _select(team_with_users, provider)
-        url = reverse(
-            "service_providers:delete",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": "moderation", "pk": provider.pk},
-        )
-
-        with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
-            response = admin_client.delete(url)
-
-        assert response.status_code == 200
-        assert not ModerationProvider.objects.filter(id=provider.id).exists()
-        team_with_users.refresh_from_db()
-        assert team_with_users.moderation_enabled is False
-        assert team_with_users.moderation_deleted_provider_name == "Main moderation"
-        notify.assert_called_once()
-
-
-def _urls(team, provider):
+def _urls(team, provider=None):
+    """Moderation provider URLs for ``team``, as ``(http_method, url)``. Edit and delete need ``provider``."""
     kwargs = {"team_slug": team.slug, "provider_type": "moderation"}
-    return {
+    urls = {
         "table": ("get", reverse("service_providers:table", kwargs=kwargs)),
         "new": ("get", reverse("service_providers:new", kwargs={**kwargs, "subtype": "openai"})),
-        "edit": ("get", reverse("service_providers:edit", kwargs={**kwargs, "pk": provider.pk})),
-        "delete": ("delete", reverse("service_providers:delete", kwargs={**kwargs, "pk": provider.pk})),
     }
+    if provider:
+        urls["edit"] = ("get", reverse("service_providers:edit", kwargs={**kwargs, "pk": provider.pk}))
+        urls["delete"] = ("delete", reverse("service_providers:delete", kwargs={**kwargs, "pk": provider.pk}))
+    return urls
 
 
 @pytest.mark.django_db()
@@ -176,10 +151,7 @@ def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_
 @pytest.mark.django_db()
 @override_flag(FLAG, active=True)
 def test_create_view_saves_a_provider(team_with_users, admin_client):
-    url = reverse(
-        "service_providers:new",
-        kwargs={"team_slug": team_with_users.slug, "provider_type": "moderation", "subtype": "openai"},
-    )
+    _, url = _urls(team_with_users)["new"]
 
     with mock.patch(MODERATE, return_value=ModerationOutput({})):
         response = admin_client.post(url, data={"name": "Main moderation", "openai_api_key": "sk-good"})
@@ -193,10 +165,7 @@ def test_create_view_saves_a_provider(team_with_users, admin_client):
 @pytest.mark.django_db()
 @override_flag(FLAG, active=True)
 def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
-    url = reverse(
-        "service_providers:new",
-        kwargs={"team_slug": team_with_users.slug, "provider_type": "moderation", "subtype": "openai"},
-    )
+    _, url = _urls(team_with_users)["new"]
 
     with mock.patch(MODERATE, side_effect=_auth_error()):
         response = admin_client.post(url, data={"name": "Main moderation", "openai_api_key": "sk-bad"})
@@ -204,3 +173,23 @@ def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
     assert response.status_code == 200
     assert "The provider rejected these credentials: Incorrect API key provided" in response.content.decode()
     assert not ModerationProvider.objects.filter(team=team_with_users).exists()
+
+
+@pytest.mark.django_db()
+@override_flag(FLAG, active=True)
+def test_delete_view_turns_moderation_off_and_notifies(
+    team_with_users, admin_client, django_capture_on_commit_callbacks
+):
+    provider = ModerationProviderFactory.create(team=team_with_users, name="Main moderation")
+    _select(team_with_users, provider)
+    method, url = _urls(team_with_users, provider)["delete"]
+
+    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+        response = getattr(admin_client, method)(url)
+
+    assert response.status_code == 200
+    assert not ModerationProvider.objects.filter(id=provider.id).exists()
+    team_with_users.refresh_from_db()
+    assert team_with_users.moderation_enabled is False
+    assert team_with_users.moderation_deleted_provider_name == "Main moderation"
+    notify.assert_called_once()
